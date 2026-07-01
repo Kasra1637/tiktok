@@ -1,0 +1,22 @@
+[
+  {
+    "content": "Phase 1: Core POC - TikTok download + frame extraction + vision LLM hook analysis + Nano Banana face-swap generation",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 2: Get design guidelines from design_agent",
+    "status": "in_progress"
+  },
+  {
+    "content": "Phase 2: Backend - niche seed data, video ingestion, hook analysis endpoint, customization endpoint, history",
+    "status": "pending"
+  },
+  {
+    "content": "Phase 2: Frontend - niche feed, URL paste, analysis page, customization workflow, history page",
+    "status": "pending"
+  },
+  {
+    "content": "Phase 2: End to End Testing using Testing Agent",
+    "status": "pending"
+  }
+]
