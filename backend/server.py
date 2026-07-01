@@ -1,88 +1,421 @@
-from fastapi import FastAPI, APIRouter
-from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-import os
+import io
 import logging
-from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
+import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Optional
 
+from dotenv import load_dotenv
+from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Form
+from fastapi.staticfiles import StaticFiles
+from motor.motor_asyncio import AsyncIOMotorClient
+from PIL import Image
+from starlette.middleware.cors import CORSMiddleware
+
+import pipeline
+from ai_service import analyze_hook, generate_customized_preview
+from models import IngestVideoRequest, now_iso, serialize_doc
+from niches_config import NICHES, NICHE_MAP
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+load_dotenv(ROOT_DIR / ".env")
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
+mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+db = client[os.environ["DB_NAME"]]
 
-# Create the main app without a prefix
-app = FastAPI()
-
-# Create a router with the /api prefix
+app = FastAPI(title="HookForge API")
 api_router = APIRouter(prefix="/api")
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+NICHE_CACHE_TTL = timedelta(hours=6)
+FRAME_COUNT = 8
+HOOK_DURATION_SECONDS = 3.0
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
 
-# Add your routes to the router instead of directly to app
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+def frame_media_url(video_hash: str, filename: str) -> str:
+    return f"/api/media/frames/{video_hash}/{filename}"
+
+
+def build_frame_docs(video_hash: str, frame_paths: list) -> list:
+    docs = []
+    fps = FRAME_COUNT / HOOK_DURATION_SECONDS
+    for idx, fp in enumerate(frame_paths):
+        docs.append({
+            "index": idx + 1,
+            "timestamp_seconds": round(idx / fps, 2),
+            "media_url": frame_media_url(video_hash, fp.name),
+        })
+    return docs
+
+
+async def get_video_or_404(video_id: str) -> dict:
+    video = await db.videos.find_one({"id": video_id})
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    return video
+
+
+async def get_latest_analysis_or_404(video_id: str) -> dict:
+    analysis = await db.analyses.find_one({"video_id": video_id}, sort=[("created_at", -1)])
+    if not analysis:
+        raise HTTPException(status_code=404, detail="No analysis found for this video yet. Analyze the hook first.")
+    return analysis
+
+
+def validate_and_normalize_photo(raw_bytes: bytes) -> bytes:
+    """Ensure uploaded photo is a real, non-blank JPEG/PNG/WEBP; convert to PNG if needed."""
+    try:
+        img = Image.open(io.BytesIO(raw_bytes))
+        img.seek(0)  # first frame if animated
+    except Exception:
+        raise HTTPException(status_code=400, detail="Uploaded file is not a valid image.")
+
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+
+    extrema = img.getextrema()
+    if isinstance(extrema[0], tuple):
+        flat_range = sum((c[1] - c[0]) for c in extrema)
+    else:
+        flat_range = extrema[1] - extrema[0]
+    if flat_range < 3:
+        raise HTTPException(status_code=400, detail="Uploaded image appears blank/solid-color. Please upload a real photo.")
+
+    max_dim = 1600
+    if max(img.size) > max_dim:
+        ratio = max_dim / max(img.size)
+        img = img.resize((int(img.width * ratio), int(img.height * ratio)))
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Niches + curated feed
+# ---------------------------------------------------------------------------
+@api_router.get("/niches")
+async def list_niches():
+    return [{"key": n["key"], "label": n["label"], "icon": n["icon"], "description": n["description"]} for n in NICHES]
+
+
+@api_router.get("/niches/{niche_key}/videos")
+async def get_niche_videos(niche_key: str, refresh: bool = False):
+    if niche_key not in NICHE_MAP:
+        raise HTTPException(status_code=404, detail="Unknown niche")
+
+    cache_meta = await db.niche_cache_meta.find_one({"niche": niche_key})
+    is_stale = True
+    if cache_meta and not refresh:
+        cached_at = datetime.fromisoformat(cache_meta["cached_at"])
+        is_stale = (datetime.now(timezone.utc) - cached_at) > NICHE_CACHE_TTL
+
+    if is_stale:
+        creators = NICHE_MAP[niche_key]["creators"]
+        import asyncio
+        creator_results = await asyncio.gather(
+            *[pipeline.fetch_creator_videos(handle, limit=2) for handle in creators],
+            return_exceptions=True,
+        )
+        fetched_any = False
+        for handle, videos in zip(creators, creator_results):
+            if isinstance(videos, Exception):
+                logger.warning(f"Creator fetch failed for {handle}: {videos!r}")
+                continue
+            if not videos:
+                continue
+            fetched_any = True
+            for v in videos:
+                if not v.get("tiktok_url"):
+                    continue
+                doc = {
+                    **v,
+                    "niche": niche_key,
+                    "cached_at": now_iso(),
+                }
+                await db.curated_videos.update_one(
+                    {"tiktok_url": v["tiktok_url"]}, {"$set": doc}, upsert=True
+                )
+        if fetched_any or not cache_meta:
+            await db.niche_cache_meta.update_one(
+                {"niche": niche_key}, {"$set": {"niche": niche_key, "cached_at": now_iso()}}, upsert=True
+            )
+
+    videos = await db.curated_videos.find({"niche": niche_key}).sort("view_count", -1).to_list(50)
+    return [serialize_doc(v) for v in videos]
+
+
+# ---------------------------------------------------------------------------
+# Video ingestion + analysis
+# ---------------------------------------------------------------------------
+@api_router.post("/videos/ingest")
+async def ingest_video(payload: IngestVideoRequest):
+    tiktok_url = payload.tiktok_url.strip()
+    if "tiktok.com" not in tiktok_url:
+        raise HTTPException(status_code=400, detail="Please provide a valid TikTok video URL.")
+
+    existing = await db.videos.find_one({"tiktok_url": tiktok_url})
+    if existing:
+        return serialize_doc(existing)
+
+    curated = await db.curated_videos.find_one({"tiktok_url": tiktok_url})
+    if curated:
+        meta = {k: curated.get(k) for k in [
+            "video_platform_id", "creator", "creator_display", "title",
+            "view_count", "like_count", "comment_count", "duration", "thumbnail_url",
+        ]}
+        niche = curated.get("niche") or payload.niche
+    else:
+        try:
+            meta = await pipeline.fetch_video_metadata(tiktok_url)
+        except Exception as e:
+            logger.error(f"Metadata fetch failed for {tiktok_url}: {e}")
+            raise HTTPException(status_code=400, detail=f"Could not fetch this TikTok video. Please check the URL and try again. ({str(e)[:150]})")
+        niche = payload.niche
+
+    video_doc = {
+        "id": str(uuid.uuid4()),
+        "tiktok_url": tiktok_url,
+        "niche": niche,
+        **meta,
+        "status": "metadata_ready",
+        "local_video_path": None,
+        "created_at": now_iso(),
+    }
+    await db.videos.insert_one(video_doc)
+    return serialize_doc(video_doc)
+
+
+@api_router.get("/videos/{video_id}")
+async def get_video(video_id: str):
+    video = await get_video_or_404(video_id)
+    return serialize_doc(video)
+
+
+@api_router.post("/videos/{video_id}/analyze-hook")
+async def analyze_video_hook(video_id: str):
+    video = await get_video_or_404(video_id)
+    tiktok_url = video["tiktok_url"]
+    video_hash = pipeline.url_hash(tiktok_url)
+
+    try:
+        video_path = await pipeline.download_video(tiktok_url)
+    except Exception as e:
+        logger.error(f"Download failed for {tiktok_url}: {e}")
+        await db.videos.update_one({"id": video_id}, {"$set": {"status": "failed", "error": str(e)[:400]}})
+        raise HTTPException(status_code=502, detail=f"Failed to download the video. It may be private or removed. ({str(e)[:150]})")
+
+    try:
+        frame_paths = await pipeline.extract_hook_frames(video_path, num_frames=FRAME_COUNT, duration=HOOK_DURATION_SECONDS)
+    except Exception as e:
+        logger.error(f"Frame extraction failed for {video_id}: {e}")
+        await db.videos.update_one({"id": video_id}, {"$set": {"status": "failed", "error": str(e)[:400]}})
+        raise HTTPException(status_code=500, detail=f"Failed to extract frames from the video. ({str(e)[:150]})")
+
+    frame_docs = build_frame_docs(video_hash, frame_paths)
+
+    try:
+        analysis_result = await analyze_hook(frame_paths, session_id=f"hook-{video_id}")
+    except Exception as e:
+        logger.error(f"Hook analysis failed for {video_id}: {e}")
+        await db.videos.update_one({"id": video_id}, {"$set": {"status": "failed", "error": str(e)[:400]}})
+        raise HTTPException(status_code=502, detail=f"AI hook analysis failed. Please try again. ({str(e)[:150]})")
+
+    analysis_doc = {
+        "id": str(uuid.uuid4()),
+        "video_id": video_id,
+        "frames": frame_docs,
+        **analysis_result,
+        "created_at": now_iso(),
+    }
+    await db.analyses.insert_one(analysis_doc)
+    await db.videos.update_one(
+        {"id": video_id},
+        {"$set": {"status": "analyzed", "local_video_path": str(video_path), "last_analysis_id": analysis_doc["id"]}},
+    )
+    return serialize_doc(analysis_doc)
+
+
+@api_router.get("/videos/{video_id}/analysis")
+async def get_video_analysis(video_id: str):
+    analysis = await get_latest_analysis_or_404(video_id)
+    return serialize_doc(analysis)
+
+
+# ---------------------------------------------------------------------------
+# Customization / face-swap preview
+# ---------------------------------------------------------------------------
+@api_router.post("/videos/{video_id}/customize")
+async def customize_video(
+    video_id: str,
+    person_photo: UploadFile = File(...),
+    environment: str = Form(""),
+    background: str = Form(""),
+    clothing: str = Form(""),
+    custom_instructions: str = Form(""),
+):
+    video = await get_video_or_404(video_id)
+    analysis = await get_latest_analysis_or_404(video_id)
+
+    raw_bytes = await person_photo.read()
+    if len(raw_bytes) == 0:
+        raise HTTPException(status_code=400, detail="Uploaded photo is empty.")
+    if len(raw_bytes) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Uploaded photo is too large (max 12MB).")
+
+    normalized_bytes = validate_and_normalize_photo(raw_bytes)
+    photo_id = str(uuid.uuid4())
+    photo_path = pipeline.UPLOADS_DIR / f"{photo_id}.png"
+    with open(photo_path, "wb") as f:
+        f.write(normalized_bytes)
+
+    frames = analysis.get("frames", [])
+    key_idx = max(1, min(len(frames), int(analysis.get("key_hook_frame_index", 1)))) if frames else 1
+    key_frame_meta = frames[key_idx - 1] if frames else None
+    if not key_frame_meta:
+        raise HTTPException(status_code=400, detail="No reference frame available for this analysis.")
+
+    video_hash = pipeline.url_hash(video["tiktok_url"])
+    frame_filename = key_frame_meta["media_url"].split("/")[-1]
+    reference_frame_path = pipeline.FRAMES_DIR / video_hash / frame_filename
+    if not reference_frame_path.exists():
+        raise HTTPException(status_code=400, detail="Reference hook frame is missing. Please re-analyze the video.")
+
+    customization_prompt_parts = []
+    if environment:
+        customization_prompt_parts.append(f"Environment: {environment}.")
+    if background:
+        customization_prompt_parts.append(f"Background: {background}.")
+    if clothing:
+        customization_prompt_parts.append(f"Clothing: {clothing}.")
+    if custom_instructions:
+        customization_prompt_parts.append(custom_instructions)
+    customization_prompt = " ".join(customization_prompt_parts) or "Keep a similar environment and styling to the original."
+
+    try:
+        image_bytes = await generate_customized_preview(
+            reference_frame_path=reference_frame_path,
+            person_photo_path=photo_path,
+            customization_prompt=customization_prompt,
+            session_id=f"custom-{video_id}-{photo_id}",
+        )
+    except Exception as e:
+        logger.error(f"Customization generation failed for {video_id}: {e}")
+        raise HTTPException(status_code=502, detail=f"AI preview generation failed. Please try again. ({str(e)[:150]})")
+
+    generated_id = str(uuid.uuid4())
+    generated_path = pipeline.GENERATED_DIR / f"{generated_id}.png"
+    with open(generated_path, "wb") as f:
+        f.write(image_bytes)
+
+    generation_spec = {
+        "source_video": {
+            "tiktok_url": video["tiktok_url"],
+            "creator": video.get("creator"),
+            "niche": video.get("niche"),
+        },
+        "hook_mechanics_to_preserve": {
+            "facial_expressions": analysis.get("facial_expressions"),
+            "body_language_gestures": analysis.get("body_language_gestures"),
+            "replicable_mechanics": analysis.get("replicable_mechanics", []),
+            "key_hook_frame_index": key_idx,
+            "key_hook_frame_timestamp_seconds": key_frame_meta.get("timestamp_seconds"),
+        },
+        "pacing_notes": analysis.get("pacing_cuts"),
+        "text_overlay_plan": analysis.get("text_overlays_timing"),
+        "audio_plan": analysis.get("audio_cues_inferred"),
+        "customization": {
+            "environment": environment,
+            "background": background,
+            "clothing": clothing,
+            "custom_instructions": custom_instructions,
+        },
+        "subject": {"source": "user_uploaded_photo", "photo_ref": f"{photo_id}.png"},
+        "target_duration_seconds": HOOK_DURATION_SECONDS,
+        "status": "ready_for_video_generation_integration",
+        "note": "TikTok API + AI video-generation integrations are deferred; this spec is ready to feed into that pipeline once connected.",
+    }
+
+    customization_doc = {
+        "id": str(uuid.uuid4()),
+        "video_id": video_id,
+        "analysis_id": analysis["id"],
+        "person_photo_url": f"/api/media/uploads/{photo_id}.png",
+        "reference_frame_url": key_frame_meta["media_url"],
+        "environment": environment,
+        "background": background,
+        "clothing": clothing,
+        "custom_instructions": custom_instructions,
+        "generation_spec": generation_spec,
+        "generated_image_url": f"/api/media/generated/{generated_id}.png",
+        "video_title": video.get("title"),
+        "video_niche": video.get("niche"),
+        "created_at": now_iso(),
+    }
+    await db.customizations.insert_one(customization_doc)
+    return serialize_doc(customization_doc)
+
+
+@api_router.get("/customizations")
+async def list_customizations():
+    items = await db.customizations.find().sort("created_at", -1).to_list(200)
+    return [serialize_doc(i) for i in items]
+
+
+@api_router.get("/customizations/{customization_id}")
+async def get_customization(customization_id: str):
+    item = await db.customizations.find_one({"id": customization_id})
+    if not item:
+        raise HTTPException(status_code=404, detail="Customization not found")
+    return serialize_doc(item)
+
+
+@api_router.get("/history")
+async def get_history():
+    videos = await db.videos.find({"status": {"$in": ["analyzed", "failed"]}}).sort("created_at", -1).to_list(200)
+    video_ids = [v["id"] for v in videos]
+    analyses = await db.analyses.find({"video_id": {"$in": video_ids}}).to_list(500)
+    analyses_by_video = {}
+    for a in analyses:
+        analyses_by_video.setdefault(a["video_id"], []).append(a)
+    customizations = await db.customizations.find({"video_id": {"$in": video_ids}}).to_list(500)
+    customizations_by_video = {}
+    for c in customizations:
+        customizations_by_video.setdefault(c["video_id"], []).append(serialize_doc(c))
+
+    results = []
+    for v in videos:
+        results.append({
+            "video": serialize_doc(v),
+            "analysis_count": len(analyses_by_video.get(v["id"], [])),
+            "customizations": customizations_by_video.get(v["id"], []),
+        })
+    return results
+
+
 @api_router.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"message": "HookForge API"}
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
-
-# Include the router in the main app
 app.include_router(api_router)
+app.mount("/api/media", StaticFiles(directory=str(pipeline.STORAGE_DIR)), name="media")
 
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
