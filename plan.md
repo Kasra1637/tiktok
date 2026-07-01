@@ -5,125 +5,171 @@
 - Implement a **real hook-analysis pipeline** for the first 2–3 seconds: frames → vision LLM → **structured JSON** insights.
 - Provide a **customization workflow** that outputs:
   - (a) a **Generation Spec JSON** for future video-gen integration, and
-  - (b) a **still-image preview** generated now (Gemini image model) using uploaded person photo + key hook frame.
+  - (b) a **still-image preview** generated now (Gemini Nano Banana image model) using uploaded person photo + key hook frame.
 - Ensure reliable caching/storage of downloads, frames, analyses, and customizations.
+
+**Current status:** Objectives are fully achieved in V1 and verified end-to-end with real data.
+
+---
 
 ## 2) Implementation Steps
 
 ### Phase 1 — Core POC (must pass before app build)
 **Goal:** Prove the end-to-end core pipeline works with real calls.
 
-1. **Websearch best practices**
-   - Confirm current best approach for: TikTok download via `yt-dlp`, frame extraction via `ffmpeg`, and safe caching patterns.
+✅ **Status: COMPLETE**
 
-2. **Build `/app/backend/test_core.py`** (single script)
-   - Input: (a) one known public TikTok URL, (b) one local fallback video path, (c) one test portrait image.
-   - Step A: Download TikTok video via `yt-dlp` into `/app/backend/storage/videos/{hash}.mp4` (skip if cached).
-   - Step B: Extract frames for first 2–3s via `ffmpeg` (e.g., 8 frames) into `/storage/frames/{video_hash}/`.
-   - Step C: Send frames (base64) to a **vision-capable LLM** using `emergentintegrations` + `EMERGENT_LLM_KEY`; return **strict JSON**:
-     - `facial_expressions`, `micro_expressions`, `body_language_gestures`, `pacing_cuts`, `text_overlays_timing`, `audio_cues_inferred`, `hook_summary`, `effectiveness_score`, `key_hook_frame_timestamp`, `replicable_mechanics[]`.
-   - Step D: Generate still-image preview using **Gemini image editing** (gemini image model) with:
-     - reference key frame + uploaded person photo + customization prompt (env/background/clothing) → output image base64.
-   - Save outputs locally and print paths + JSON summary (no base64 logging).
+**Delivered artifact:** `/app/backend/test_core.py`
+- Step A: Download public TikTok video via `yt-dlp`.
+- Step B: Extract frames from first 2–3 seconds via `ffmpeg`.
+- Step C: Vision LLM hook analysis (Gemini vision model via `emergentintegrations` + `EMERGENT_LLM_KEY`) returning strict structured JSON.
+- Step D: Still-image face-swap/customized preview (Gemini Nano Banana: `gemini-3.1-flash-image-preview`) using reference hook frame + uploaded portrait.
 
-3. **POC hardening**
-   - Handle failures: invalid URL, download blocked, ffmpeg missing, model errors.
-   - Implement fallback: if TikTok download fails, run analysis on a bundled sample mp4.
-
-**Exit criteria:** Script reliably produces (1) extracted frames, (2) valid structured hook JSON, (3) generated preview image.
+**Exit criteria achieved:** Script reliably produces (1) extracted frames, (2) valid structured hook JSON, (3) generated preview image.
 
 ---
 
 ### Phase 2 — V1 App Development (build around proven core)
 
+✅ **Status: COMPLETE**
+
 #### Backend (FastAPI + MongoDB)
-1. Data model + seed
-   - Seed 10 niches with 3–4 curated videos each (URL + title/creator/stats + thumbnail url if available).
+1. **Curated niche configuration (real creators)**
+   - Implemented `niches_config.py`: **10 niches × 3 verified public creator handles** per niche.
+   - Curated feed is built by **live fetching** latest videos for each creator via yt-dlp (no TikTok API).
 
-2. Storage + caching
-   - Local storage folders: `storage/videos`, `storage/frames`, `storage/uploads`, `storage/generated`.
-   - Cache by `sha256(url)`; store metadata in Mongo.
+2. **Storage + caching**
+   - Local storage folders:
+     - `storage/videos` (yt-dlp downloaded mp4)
+     - `storage/frames` (ffmpeg extracted hook frames)
+     - `storage/uploads` (normalized user portraits)
+     - `storage/generated` (AI-generated preview images)
+   - Cached by `sha256(url)`-derived hash.
+   - Niche feed caching:
+     - `GET /api/niches/{niche}/videos` uses **6-hour TTL** cache in Mongo with optional refresh.
 
-3. API endpoints
+3. **Media pipeline implementation**
+   - Implemented `pipeline.py`:
+     - Async subprocess wrappers for `ffmpeg` and yt-dlp.
+     - Uses `python -m yt_dlp` (not `yt-dlp` binary) to fix PATH issues under supervisor.
+
+4. **AI services**
+   - Implemented `ai_service.py`:
+     - Hook analysis via Gemini vision model returning required structured JSON fields.
+     - Still-image generation via Gemini Nano Banana image model.
+
+5. **API endpoints (implemented)**
    - `GET /api/niches` → list niches.
-   - `GET /api/niches/{niche}/videos` → curated feed.
-   - `POST /api/videos/ingest` {`tiktok_url`} → download (yt-dlp), create video doc.
-   - `POST /api/videos/{id}/analyze-hook` → extract frames (if needed) + vision LLM JSON; store analysis.
-   - `GET /api/videos/{id}` and `GET /api/videos/{id}/analysis`.
-   - `POST /api/videos/{id}/customize` (multipart: person image + preset fields + free text) →
-     - build/store **Generation Spec JSON**
-     - call Gemini image model to generate preview; store and return.
+   - `GET /api/niches/{niche}/videos` → curated feed (live via yt-dlp + cached).
+   - `POST /api/videos/ingest` → ingest a TikTok URL (metadata).
+   - `GET /api/videos/{id}` → video doc.
+   - `POST /api/videos/{id}/analyze-hook` → download + extract frames + AI hook analysis.
+   - `GET /api/videos/{id}/analysis` → latest analysis.
+   - `POST /api/videos/{id}/customize` (multipart) → validate portrait + generate preview + persist Generation Spec.
    - `GET /api/customizations` + `GET /api/customizations/{id}`.
-   - Serve images via `GET /media/...` (static file serving).
+   - `GET /api/history` → videos + counts + customizations.
+   - Static media serving: `/api/media/...`.
 
 #### Frontend (React)
-1. App shell (no landing/auth)
-   - Default route: **Niche Feed**.
+1. **App shell (no landing/auth)**
+   - Root route `/` renders **Niche Feed**.
+   - Global AppShell includes:
+     - Paste TikTok URL bar (ingest → route to analysis)
+     - History navigation
 
-2. Niche feed + URL paste
-   - Niche selector (top).
-   - Cards for curated videos + “Analyze Hook”.
-   - URL input bar: paste TikTok URL → ingest → navigate to analysis.
+2. **Niche feed + URL paste**
+   - Niche selector chips (10 niches).
+   - Trending feed grid using live curated data.
+   - “Analyze Hook” CTA per card.
 
-3. Analysis page
-   - Video preview (embedded if possible) + extracted frames strip.
-   - Hook analysis sections rendered from JSON (cards for each dimension) + overall score + hook summary.
+3. **Analysis page**
+   - Loads video metadata + runs analysis.
+   - Filmstrip showing extracted frames (first ~3 seconds) with timestamps.
+   - Hook breakdown cards:
+     - Facial expressions
+     - Body language & gestures
+     - Pacing & cuts
+     - Text overlays timing
+     - Audio cues (inferred)
+     - Hook summary
+     - Replicable mechanics checklist
+   - Effectiveness score badge.
    - CTA: “Customize this Hook”.
 
-4. Customization page
-   - Upload portrait.
-   - Presets: environment/background/clothing + optional free-text.
-   - Show reference key frame + generate button.
-   - Results: side-by-side original key frame vs generated preview + collapsible Generation Spec JSON.
+4. **Customization page**
+   - Photo upload (file input / dropzone) + validation.
+   - Preset chips + text inputs for:
+     - environment
+     - background/lighting
+     - clothing
+   - Optional custom instructions.
+   - Generates:
+     - Still preview image (AI)
+     - Collapsible Generation Spec JSON (copy-to-clipboard)
+   - Side-by-side comparison: original hook frame vs generated preview.
 
-5. History page
-   - List analyses + customizations; open detail.
+5. **History page**
+   - Lists prior analyses + customization thumbnails.
+   - Dialog detail view: comparison + Generation Spec JSON.
 
-6. UX states (must-have)
-   - Progress UI for: download, frame extraction, LLM analysis, image generation.
-   - Clear error UI with retry.
+6. **UX states**
+   - Multi-stage progress UI for:
+     - download
+     - frame extraction
+     - AI analysis
+     - AI generation
+   - Error states with retry.
+   - `data-testid` attributes added for key UI elements.
 
-**Phase 2 user stories (minimum)**
-1. As a user, I can pick a niche and browse curated trending videos.
-2. As a user, I can paste a TikTok URL and ingest it for analysis.
-3. As a user, I can analyze the first 2–3 seconds and see extracted frames.
-4. As a user, I can read a structured hook breakdown and understand what to replicate.
-5. As a user, I can upload my photo, customize styling, and generate a still preview + spec.
-
-**End of Phase 2:** run `testing_agent_v3` for one full E2E pass.
+**End of Phase 2 verification:** ✅ Completed.
 
 ---
 
 ### Phase 3 — Iteration + Quality Improvements
-1. Improve analysis quality
-   - Better frame selection (include motion changes), add optional transcript extraction if feasible.
-   - Add “Hook mechanics checklist” derived from `replicable_mechanics`.
+⏳ **Status: NOT STARTED (future work if requested)**
 
-2. Better customization controls
-   - More presets, lock toggles (lock pose/expression vs allow variation).
-   - Re-generate with tweaks without re-upload.
+1. **Improve analysis quality**
+   - Smarter frame selection (motion-aware).
+   - Optional transcript/caption extraction if feasible.
+   - Expand “Replicable mechanics” into a more structured hook checklist.
 
-3. Reliability + cost controls
-   - Deduplicate LLM calls, store analysis hash, rate-limit endpoints.
+2. **Better customization controls**
+   - Re-generate with tweaks without re-analyzing.
+   - “Lock” toggles for specific hook mechanics (gesture/expression/pose).
+   - Compare multiple previews side-by-side.
+   - Reuse prior uploaded portraits across multiple hooks.
 
-**Phase 3 user stories (minimum)**
-1. As a user, I can re-run generation with new styling without re-analyzing the video.
-2. As a user, I can lock specific hook mechanics (gesture/expression) while changing background.
-3. As a user, I can compare multiple generated previews for the same hook.
-4. As a user, I can quickly reuse a prior uploaded portrait for new hooks.
-5. As a user, I can see which exact frame/time was used as the “key hook frame”.
+3. **Reliability + cost controls**
+   - Deduplicate LLM calls via analysis hashing.
+   - Rate limiting for heavy endpoints.
+   - Background job queue (optional) for long operations.
 
-**End of Phase 3:** run `testing_agent_v3` again.
+4. **Deferred integrations (explicitly out of scope for V1)**
+   - Official TikTok API integration.
+   - Full AI video-generation integration.
+   - Current handoff artifact: **Generation Spec JSON**.
+
+---
 
 ## 3) Next Actions
-1. Save the image integration testing rules to `/app/image_testing.md`.
-2. Implement and run `test_core.py` until the core pipeline passes reliably.
-3. Once POC passes, scaffold backend routes + Mongo schemas + storage, then build React UI in one cohesive pass.
-4. Seed curated niche dataset and verify feed → analyze → customize → history flows.
+✅ **V1 delivered**. Recommended next steps only if/when requested:
+1. Add Phase 3 features (lock mechanics, re-generate, compare outputs, portrait reuse).
+2. Add reliability/cost controls (rate limiting, dedup hashes, optional queue).
+3. Plan integrations:
+   - TikTok API (official discovery/trending)
+   - AI video-generation API (use Generation Spec as prompt/spec contract)
+
+---
 
 ## 4) Success Criteria
+✅ **Met in V1**
 - POC script consistently succeeds: download/frames/analysis JSON/preview image.
 - V1 app supports: niche feed + URL paste ingestion + hook analysis page + customization preview + history.
-- Stored artifacts persist and are re-used (no re-downloading or re-analyzing unnecessarily).
+- Stored artifacts persist and are reused (caching for videos, frames, niche feed).
 - Clear progress + error handling for each long-running step.
 - No auth/landing present; app opens directly into core workflow.
+
+✅ **Testing evidence**
+- `testing_agent_v3` iteration report: **97.6% overall pass** (40/41).
+  - Frontend: **100%** (30/30)
+  - Backend: **90.9%** (10/11; one non-issue noting generation quality depends on uploading a real face photo)
