@@ -4,16 +4,16 @@ import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import EmptyState from "../components/EmptyState";
-import SideBySideCompare from "../components/SideBySideCompare";
 import JsonSpecPanel from "../components/JsonSpecPanel";
 import { api, mediaUrl, getErrorMessage } from "../lib/api";
-import { Clock, Eye, Heart, ImageOff, History as HistoryIcon } from "lucide-react";
+import { Clock, Eye, Heart, ImageOff, History as HistoryIcon, Clapperboard, Film } from "lucide-react";
 import { toast } from "sonner";
 
 export default function History() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeCustomization, setActiveCustomization] = useState(null);
+  const [activeVideoJob, setActiveVideoJob] = useState(null);
 
   useEffect(() => {
     api
@@ -39,11 +39,11 @@ export default function History() {
     <div className="space-y-6">
       <div>
         <h1 className="font-display text-2xl md:text-3xl font-semibold tracking-tight">History</h1>
-        <p className="text-muted-foreground mt-1">Revisit past hook analyses and customizations.</p>
+        <p className="text-muted-foreground mt-1">Revisit past hook analyses, face swaps, and video briefs.</p>
       </div>
 
       <div className="space-y-4" data-testid="history-list">
-        {items.map(({ video, analysis_count, customizations }) => (
+        {items.map(({ video, customizations, video_jobs }) => (
           <Card key={video.id} className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)]">
             <div className="flex flex-col md:flex-row gap-4">
               {video.thumbnail_url && (
@@ -88,22 +88,51 @@ export default function History() {
                 )}
 
                 {customizations.length > 0 ? (
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    {customizations.map((c) => (
-                      <button
-                        key={c.id}
-                        onClick={() => setActiveCustomization(c)}
-                        className="rounded-xl overflow-hidden border border-border hover:border-[color:var(--brand-teal)] transition-colors w-16 h-16"
-                        data-testid="history-customization-thumb"
-                      >
-                        <img src={mediaUrl(c.generated_image_url)} alt="Customization preview" className="w-full h-full object-cover" />
-                      </button>
-                    ))}
+                  <div className="space-y-1.5 pt-1">
+                    <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                      <Film className="h-3 w-3" /> Face swaps
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {customizations.map((c) =>
+                        (c.generated_images && c.generated_images.length > 0 ? c.generated_images : [{ id: c.id, image_url: c.generated_image_url }]).map(
+                          (img) => (
+                            <button
+                              key={img.id}
+                              onClick={() => setActiveCustomization(c)}
+                              className="rounded-xl overflow-hidden border border-border hover:border-[color:var(--brand-teal)] transition-colors w-16 h-16"
+                              data-testid="history-customization-thumb"
+                            >
+                              <img src={mediaUrl(img.image_url)} alt="Customization preview" className="w-full h-full object-cover" />
+                            </button>
+                          )
+                        )
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <ImageOff className="h-3 w-3" /> No customizations yet
+                    <ImageOff className="h-3 w-3" /> No face swaps yet
                   </p>
+                )}
+
+                {video_jobs && video_jobs.length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                      <Clapperboard className="h-3 w-3" /> Video briefs
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {video_jobs.map((j) => (
+                        <button
+                          key={j.id}
+                          onClick={() => setActiveVideoJob(j)}
+                          data-testid="history-video-job-item"
+                          className="text-xs rounded-full border border-border hover:border-[color:var(--brand-teal)] px-3 py-1.5 transition-colors"
+                        >
+                          {j.brand_name || "Untitled brief"} • {j.status === "pending_provider_selection" ? "Ready" : "Draft"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -114,15 +143,39 @@ export default function History() {
       <Dialog open={!!activeCustomization} onOpenChange={(o) => !o && setActiveCustomization(null)}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Customization detail</DialogTitle>
+            <DialogTitle>Face swap detail</DialogTitle>
           </DialogHeader>
           {activeCustomization && (
             <div className="space-y-4">
-              <SideBySideCompare
-                originalUrl={activeCustomization.reference_frame_url}
-                generatedUrl={activeCustomization.generated_image_url}
-              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {(activeCustomization.generated_images || []).map((img) => (
+                  <div key={img.id} className="rounded-2xl overflow-hidden border border-border">
+                    <img src={mediaUrl(img.image_url)} alt="Generated preview" className="w-full object-contain bg-black/5 max-h-[400px]" />
+                  </div>
+                ))}
+              </div>
               <JsonSpecPanel spec={activeCustomization.generation_spec} />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!activeVideoJob} onOpenChange={(o) => !o && setActiveVideoJob(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Video brief detail</DialogTitle>
+          </DialogHeader>
+          {activeVideoJob && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Badge variant="secondary" className="rounded-full">{activeVideoJob.target_duration_seconds}s</Badge>
+                <Badge variant="secondary" className="rounded-full">{activeVideoJob.status}</Badge>
+              </div>
+              <p className="text-sm font-medium">{activeVideoJob.brand_name}</p>
+              <p className="text-xs text-muted-foreground">{activeVideoJob.brand_goal}</p>
+              <pre className="font-mono text-xs leading-relaxed p-3 rounded-xl bg-muted whitespace-pre-wrap break-words max-h-[300px] overflow-y-auto">
+                {activeVideoJob.full_prompt_text}
+              </pre>
             </div>
           )}
         </DialogContent>

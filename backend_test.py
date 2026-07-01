@@ -1,10 +1,11 @@
 """
-Backend API testing for HookForge - TikTok Hook Analyzer
-Tests all CRUD operations, video ingestion, hook analysis, and customization endpoints.
+Backend API testing for HookForge - TikTok Hook Analyzer (V2 with video generation)
+Tests all CRUD operations, video ingestion, hook analysis, customization, and video prompt generation endpoints.
 """
 import requests
 import sys
 import time
+import json
 from pathlib import Path
 
 # Use the public backend URL from frontend/.env
@@ -259,10 +260,11 @@ class HookForgeAPITester:
             self.log_test(f"GET /api/videos/{video_id}/analysis", False, f"Error: {str(e)}")
             return None
 
-    def test_customize(self, video_id, photo_path):
-        """Test POST /api/videos/{video_id}/customize - may take 10-20s"""
+    def test_customize(self, video_id, photo_path, mode="preserve", frame_indices=None):
+        """Test POST /api/videos/{video_id}/customize - may take 10-20s per frame"""
         try:
-            print(f"\n⏳ Generating customized preview for video {video_id} (may take 10-20s)...")
+            frame_count = len(frame_indices) if frame_indices else 1
+            print(f"\n⏳ Generating {frame_count} customized preview(s) for video {video_id} in {mode} mode (may take {frame_count * 10}-{frame_count * 20}s)...")
             
             # Create a simple test image if photo_path doesn't exist
             if not Path(photo_path).exists():
@@ -274,17 +276,25 @@ class HookForgeAPITester:
             with open(photo_path, 'rb') as f:
                 files = {'person_photo': ('test_photo.jpg', f, 'image/jpeg')}
                 data = {
-                    'environment': 'Cozy bedroom',
-                    'background': 'Warm afternoon light',
-                    'clothing': 'Casual streetwear',
-                    'custom_instructions': 'Test customization'
+                    'mode': mode,
                 }
+                
+                if frame_indices:
+                    data['frame_indices'] = json.dumps(frame_indices)
+                
+                if mode == 'custom':
+                    data.update({
+                        'environment': 'Cozy bedroom',
+                        'background': 'Warm afternoon light',
+                        'clothing': 'Casual streetwear',
+                        'custom_instructions': 'Test customization'
+                    })
                 
                 response = requests.post(
                     f"{self.base_url}/videos/{video_id}/customize",
                     files=files,
                     data=data,
-                    timeout=60
+                    timeout=120
                 )
             
             success = response.status_code == 200
@@ -293,18 +303,22 @@ class HookForgeAPITester:
                 result = response.json()
                 has_required = all(
                     field in result for field in [
-                        "id", "video_id", "generated_image_url",
-                        "reference_frame_url", "generation_spec"
+                        "id", "video_id", "generated_images",
+                        "generation_spec", "mode"
                     ]
                 )
                 
+                generated_count = len(result.get("generated_images", []))
+                expected_count = len(frame_indices) if frame_indices else 1
+                
                 self.log_test(
-                    f"POST /api/videos/{video_id}/customize",
-                    has_required,
-                    f"Customization complete, ID: {result.get('id')}, Has all required fields: {has_required}",
+                    f"POST /api/videos/{video_id}/customize (mode={mode}, frames={frame_count})",
+                    has_required and generated_count == expected_count,
+                    f"Customization complete, ID: {result.get('id')}, Mode: {result.get('mode')}, Generated images: {generated_count}/{expected_count}",
                     {
                         "customization_id": result.get("id"),
-                        "generated_image_url": result.get("generated_image_url"),
+                        "mode": result.get("mode"),
+                        "generated_images_count": generated_count,
                         "has_generation_spec": "generation_spec" in result
                     }
                 )
@@ -312,13 +326,13 @@ class HookForgeAPITester:
             else:
                 error_msg = response.text[:200] if response.text else "No error message"
                 self.log_test(
-                    f"POST /api/videos/{video_id}/customize",
+                    f"POST /api/videos/{video_id}/customize (mode={mode}, frames={frame_count})",
                     False,
                     f"Status: {response.status_code}, Error: {error_msg}"
                 )
                 return None
         except Exception as e:
-            self.log_test(f"POST /api/videos/{video_id}/customize", False, f"Error: {str(e)}")
+            self.log_test(f"POST /api/videos/{video_id}/customize (mode={mode})", False, f"Error: {str(e)}")
             return None
 
     def test_get_customizations(self):
@@ -341,6 +355,161 @@ class HookForgeAPITester:
                 return []
         except Exception as e:
             self.log_test("GET /api/customizations", False, f"Error: {str(e)}")
+            return []
+
+    def test_generate_video_prompt(self, customization_id):
+        """Test POST /api/customizations/{customization_id}/generate-video-prompt - may take 10-20s"""
+        try:
+            print(f"\n⏳ Generating video prompt for customization {customization_id} (may take 10-20s)...")
+            response = requests.post(
+                f"{self.base_url}/customizations/{customization_id}/generate-video-prompt",
+                json={
+                    "brand_name": "Test Brand",
+                    "brand_goal": "Drive app installs",
+                    "brand_details": "A revolutionary app that changes lives",
+                    "duration_seconds": 30
+                },
+                timeout=60
+            )
+            success = response.status_code == 200
+            
+            if success:
+                data = response.json()
+                required_fields = [
+                    "id", "customization_id", "brand_name", "brand_goal",
+                    "brand_details", "target_duration_seconds", "prompt_breakdown",
+                    "full_prompt_text", "status"
+                ]
+                has_all_fields = all(field in data for field in required_fields)
+                
+                # Check prompt_breakdown has required keys
+                breakdown = data.get("prompt_breakdown", {})
+                breakdown_keys = [
+                    "content", "camera_angle", "view_position", "character_behavior",
+                    "scene_details", "brand_narrative", "full_video_prompt"
+                ]
+                has_breakdown = all(key in breakdown for key in breakdown_keys)
+                
+                success = has_all_fields and has_breakdown
+                
+                self.log_test(
+                    f"POST /api/customizations/{customization_id}/generate-video-prompt",
+                    success,
+                    f"Video prompt generated, Job ID: {data.get('id')}, Status: {data.get('status')}, Has all fields: {has_all_fields}, Has breakdown: {has_breakdown}",
+                    {
+                        "job_id": data.get("id"),
+                        "status": data.get("status"),
+                        "target_duration": data.get("target_duration_seconds"),
+                        "prompt_length": len(data.get("full_prompt_text", ""))
+                    }
+                )
+                return data if success else None
+            else:
+                error_msg = response.text[:200] if response.text else "No error message"
+                self.log_test(
+                    f"POST /api/customizations/{customization_id}/generate-video-prompt",
+                    False,
+                    f"Status: {response.status_code}, Error: {error_msg}"
+                )
+                return None
+        except Exception as e:
+            self.log_test(f"POST /api/customizations/{customization_id}/generate-video-prompt", False, f"Error: {str(e)}")
+            return None
+
+    def test_generate_video(self, job_id, image_ids, edited_prompt=None):
+        """Test POST /api/video-jobs/{job_id}/generate-video"""
+        try:
+            print(f"\n⏳ Saving video brief for job {job_id}...")
+            response = requests.post(
+                f"{self.base_url}/video-jobs/{job_id}/generate-video",
+                json={
+                    "image_ids": image_ids,
+                    "edited_prompt": edited_prompt,
+                    "duration_seconds": 30
+                },
+                timeout=10
+            )
+            success = response.status_code == 200
+            
+            if success:
+                data = response.json()
+                # Should have status "pending_provider_selection"
+                is_pending = data.get("status") == "pending_provider_selection"
+                has_prompt = "full_prompt_text" in data
+                
+                self.log_test(
+                    f"POST /api/video-jobs/{job_id}/generate-video",
+                    is_pending and has_prompt,
+                    f"Video brief saved, Status: {data.get('status')}, Has prompt: {has_prompt}",
+                    {
+                        "job_id": data.get("id"),
+                        "status": data.get("status"),
+                        "has_prompt": has_prompt
+                    }
+                )
+                return data if is_pending else None
+            else:
+                error_msg = response.text[:200] if response.text else "No error message"
+                self.log_test(
+                    f"POST /api/video-jobs/{job_id}/generate-video",
+                    False,
+                    f"Status: {response.status_code}, Error: {error_msg}"
+                )
+                return None
+        except Exception as e:
+            self.log_test(f"POST /api/video-jobs/{job_id}/generate-video", False, f"Error: {str(e)}")
+            return None
+
+    def test_get_video_job(self, job_id):
+        """Test GET /api/video-jobs/{job_id}"""
+        try:
+            response = requests.get(f"{self.base_url}/video-jobs/{job_id}", timeout=10)
+            success = response.status_code == 200
+            
+            if success:
+                data = response.json()
+                self.log_test(
+                    f"GET /api/video-jobs/{job_id}",
+                    True,
+                    f"Video job retrieved, Status: {data.get('status')}",
+                    data
+                )
+                return data
+            else:
+                self.log_test(
+                    f"GET /api/video-jobs/{job_id}",
+                    False,
+                    f"Status: {response.status_code}"
+                )
+                return None
+        except Exception as e:
+            self.log_test(f"GET /api/video-jobs/{job_id}", False, f"Error: {str(e)}")
+            return None
+
+    def test_get_customization_video_jobs(self, customization_id):
+        """Test GET /api/customizations/{customization_id}/video-jobs"""
+        try:
+            response = requests.get(f"{self.base_url}/customizations/{customization_id}/video-jobs", timeout=10)
+            success = response.status_code == 200
+            
+            if success:
+                data = response.json()
+                self.log_test(
+                    f"GET /api/customizations/{customization_id}/video-jobs",
+                    True,
+                    f"Retrieved {len(data)} video jobs for customization",
+                    {"count": len(data)}
+                )
+                return data
+            else:
+                self.log_test(
+                    f"GET /api/customizations/{customization_id}/video-jobs",
+                    False,
+                    f"Status: {response.status_code}"
+                )
+                return []
+        except Exception as e:
+            self.log_test(f"GET /api/customizations/{customization_id}/video-jobs", False, f"Error: {str(e)}")
             return []
 
     def test_get_history(self):
@@ -401,7 +570,7 @@ class HookForgeAPITester:
 
 def main():
     print("="*70)
-    print("🚀 HookForge Backend API Testing")
+    print("🚀 HookForge Backend API Testing (V2 with Video Generation)")
     print(f"Backend URL: {BASE_URL}")
     print("="*70)
     
@@ -421,7 +590,7 @@ def main():
     # Test 4: Invalid URL error handling
     tester.test_invalid_tiktok_url()
     
-    # Test 5-10: Full workflow with a real TikTok URL
+    # Test 5-16: Full workflow with a real TikTok URL
     # Using the suggested test URL from the review request
     test_url = "https://www.tiktok.com/@scout2015/video/6718335390845095173"
     
@@ -434,21 +603,53 @@ def main():
         # Test 6: Get video
         tester.test_get_video(video_id)
         
-        # Test 7: Analyze hook (may take 15-40s)
-        analysis = tester.test_analyze_hook(video_id)
+        # Test 7: Analyze hook (may take 15-40s) - only if not already analyzed
+        if video.get("status") != "analyzed":
+            analysis = tester.test_analyze_hook(video_id)
+        else:
+            print(f"\n✓ Video {video_id} already analyzed, skipping analysis step")
+            analysis = tester.test_get_analysis(video_id)
         
         if analysis:
-            # Test 8: Get analysis
-            tester.test_get_analysis(video_id)
+            # Test 8: Get analysis (if we just analyzed)
+            if video.get("status") != "analyzed":
+                tester.test_get_analysis(video_id)
             
-            # Test 9: Customize (may take 10-20s)
+            # Test 9: Customize in preserve mode with 1 frame (may take 10-20s)
             photo_path = "/tmp/test_photo.jpg"
-            customization = tester.test_customize(video_id, photo_path)
+            key_frame = analysis.get("key_hook_frame_index", 1)
+            customization = tester.test_customize(video_id, photo_path, mode="preserve", frame_indices=[key_frame])
+            
+            if customization:
+                customization_id = customization.get("id")
+                
+                # Test 10: Customize in custom mode with 2 frames (may take 20-40s)
+                # Select 2 frames: key frame and 1 other
+                frames = analysis.get("frames", [])
+                if len(frames) >= 2:
+                    frame_indices = [key_frame, min(key_frame + 2, len(frames))]
+                    tester.test_customize(video_id, photo_path, mode="custom", frame_indices=frame_indices)
+                
+                # Test 11: Generate video prompt (may take 10-20s)
+                video_job = tester.test_generate_video_prompt(customization_id)
+                
+                if video_job:
+                    job_id = video_job.get("id")
+                    image_ids = [img["id"] for img in customization.get("generated_images", [])]
+                    
+                    # Test 12: Get video job
+                    tester.test_get_video_job(job_id)
+                    
+                    # Test 13: Generate video (save brief)
+                    tester.test_generate_video(job_id, image_ids, edited_prompt=video_job.get("full_prompt_text"))
+                    
+                    # Test 14: Get customization video jobs
+                    tester.test_get_customization_video_jobs(customization_id)
     
-    # Test 10: Get customizations list
+    # Test 15: Get customizations list
     tester.test_get_customizations()
     
-    # Test 11: Get history
+    # Test 16: Get history
     tester.test_get_history()
     
     # Print summary

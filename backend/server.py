@@ -1,4 +1,5 @@
 import io
+import json
 import logging
 import os
 import uuid
@@ -14,8 +15,8 @@ from PIL import Image
 from starlette.middleware.cors import CORSMiddleware
 
 import pipeline
-from ai_service import analyze_hook, generate_customized_preview
-from models import IngestVideoRequest, now_iso, serialize_doc
+from ai_service import analyze_hook, generate_customized_preview, generate_video_prompt
+from models import IngestVideoRequest, BrandContextRequest, GenerateVideoRequest, now_iso, serialize_doc
 from niches_config import NICHES, NICHE_MAP
 
 ROOT_DIR = Path(__file__).parent
@@ -256,6 +257,8 @@ async def get_video_analysis(video_id: str):
 async def customize_video(
     video_id: str,
     person_photo: UploadFile = File(...),
+    mode: str = Form("preserve"),
+    frame_indices: str = Form(""),
     environment: str = Form(""),
     background: str = Form(""),
     clothing: str = Form(""),
@@ -263,6 +266,9 @@ async def customize_video(
 ):
     video = await get_video_or_404(video_id)
     analysis = await get_latest_analysis_or_404(video_id)
+
+    if mode not in ("preserve", "custom"):
+        mode = "preserve"
 
     raw_bytes = await person_photo.read()
     if len(raw_bytes) == 0:
@@ -277,43 +283,65 @@ async def customize_video(
         f.write(normalized_bytes)
 
     frames = analysis.get("frames", [])
-    key_idx = max(1, min(len(frames), int(analysis.get("key_hook_frame_index", 1)))) if frames else 1
-    key_frame_meta = frames[key_idx - 1] if frames else None
-    if not key_frame_meta:
-        raise HTTPException(status_code=400, detail="No reference frame available for this analysis.")
-
-    video_hash = pipeline.url_hash(video["tiktok_url"])
-    frame_filename = key_frame_meta["media_url"].split("/")[-1]
-    reference_frame_path = pipeline.FRAMES_DIR / video_hash / frame_filename
-    if not reference_frame_path.exists():
-        raise HTTPException(status_code=400, detail="Reference hook frame is missing. Please re-analyze the video.")
-
-    customization_prompt_parts = []
-    if environment:
-        customization_prompt_parts.append(f"Environment: {environment}.")
-    if background:
-        customization_prompt_parts.append(f"Background: {background}.")
-    if clothing:
-        customization_prompt_parts.append(f"Clothing: {clothing}.")
-    if custom_instructions:
-        customization_prompt_parts.append(custom_instructions)
-    customization_prompt = " ".join(customization_prompt_parts) or "Keep a similar environment and styling to the original."
+    if not frames:
+        raise HTTPException(status_code=400, detail="No reference frames available for this analysis.")
+    key_idx = max(1, min(len(frames), int(analysis.get("key_hook_frame_index", 1))))
 
     try:
-        image_bytes = await generate_customized_preview(
-            reference_frame_path=reference_frame_path,
-            person_photo_path=photo_path,
-            customization_prompt=customization_prompt,
-            session_id=f"custom-{video_id}-{photo_id}",
-        )
-    except Exception as e:
-        logger.error(f"Customization generation failed for {video_id}: {e}")
-        raise HTTPException(status_code=502, detail=f"AI preview generation failed. Please try again. ({str(e)[:150]})")
+        selected_indices = json.loads(frame_indices) if frame_indices else []
+        selected_indices = [int(i) for i in selected_indices if isinstance(i, (int, float, str))]
+    except (json.JSONDecodeError, ValueError, TypeError):
+        selected_indices = []
+    if not selected_indices:
+        selected_indices = [key_idx]
+    # De-dupe, clamp to valid range, cap at 3 images per user request (generate 1-3 images)
+    valid_indices = sorted({max(1, min(len(frames), i)) for i in selected_indices})[:3]
 
-    generated_id = str(uuid.uuid4())
-    generated_path = pipeline.GENERATED_DIR / f"{generated_id}.png"
-    with open(generated_path, "wb") as f:
-        f.write(image_bytes)
+    video_hash = pipeline.url_hash(video["tiktok_url"])
+
+    customization_prompt_parts = []
+    if mode == "custom":
+        if environment:
+            customization_prompt_parts.append(f"Environment: {environment}.")
+        if background:
+            customization_prompt_parts.append(f"Background: {background}.")
+        if clothing:
+            customization_prompt_parts.append(f"Clothing: {clothing}.")
+        if custom_instructions:
+            customization_prompt_parts.append(custom_instructions)
+    customization_prompt = " ".join(customization_prompt_parts)
+
+    generated_images = []
+    for idx in valid_indices:
+        frame_meta = frames[idx - 1]
+        frame_filename = frame_meta["media_url"].split("/")[-1]
+        reference_frame_path = pipeline.FRAMES_DIR / video_hash / frame_filename
+        if not reference_frame_path.exists():
+            raise HTTPException(status_code=400, detail="Reference hook frame is missing. Please re-analyze the video.")
+        try:
+            image_bytes = await generate_customized_preview(
+                reference_frame_path=reference_frame_path,
+                person_photo_path=photo_path,
+                mode=mode,
+                customization_prompt=customization_prompt,
+                session_id=f"custom-{video_id}-{photo_id}-{idx}",
+            )
+        except Exception as e:
+            logger.error(f"Customization generation failed for {video_id} frame {idx}: {e}")
+            raise HTTPException(status_code=502, detail=f"AI preview generation failed. Please try again. ({str(e)[:150]})")
+
+        generated_id = str(uuid.uuid4())
+        generated_path = pipeline.GENERATED_DIR / f"{generated_id}.png"
+        with open(generated_path, "wb") as f:
+            f.write(image_bytes)
+
+        generated_images.append({
+            "id": generated_id,
+            "frame_index": idx,
+            "timestamp_seconds": frame_meta.get("timestamp_seconds"),
+            "reference_frame_url": frame_meta["media_url"],
+            "image_url": f"/api/media/generated/{generated_id}.png",
+        })
 
     generation_spec = {
         "source_video": {
@@ -321,40 +349,43 @@ async def customize_video(
             "creator": video.get("creator"),
             "niche": video.get("niche"),
         },
+        "mode": mode,
         "hook_mechanics_to_preserve": {
             "facial_expressions": analysis.get("facial_expressions"),
             "body_language_gestures": analysis.get("body_language_gestures"),
             "replicable_mechanics": analysis.get("replicable_mechanics", []),
             "key_hook_frame_index": key_idx,
-            "key_hook_frame_timestamp_seconds": key_frame_meta.get("timestamp_seconds"),
         },
         "pacing_notes": analysis.get("pacing_cuts"),
         "text_overlay_plan": analysis.get("text_overlays_timing"),
         "audio_plan": analysis.get("audio_cues_inferred"),
         "customization": {
-            "environment": environment,
-            "background": background,
-            "clothing": clothing,
-            "custom_instructions": custom_instructions,
+            "environment": environment if mode == "custom" else "(kept identical to original)",
+            "background": background if mode == "custom" else "(kept identical to original)",
+            "clothing": clothing if mode == "custom" else "(kept identical to original)",
+            "custom_instructions": custom_instructions if mode == "custom" else "",
         },
         "subject": {"source": "user_uploaded_photo", "photo_ref": f"{photo_id}.png"},
-        "target_duration_seconds": HOOK_DURATION_SECONDS,
-        "status": "ready_for_video_generation_integration",
-        "note": "TikTok API + AI video-generation integrations are deferred; this spec is ready to feed into that pipeline once connected.",
+        "generated_frame_count": len(generated_images),
+        "status": "ready_for_video_generation",
+        "note": "This face-swapped still frame is ready to be used as a reference image for AI video generation once a provider is connected.",
     }
 
     customization_doc = {
         "id": str(uuid.uuid4()),
         "video_id": video_id,
         "analysis_id": analysis["id"],
+        "mode": mode,
         "person_photo_url": f"/api/media/uploads/{photo_id}.png",
-        "reference_frame_url": key_frame_meta["media_url"],
+        "reference_frame_url": generated_images[0]["reference_frame_url"] if generated_images else None,
         "environment": environment,
         "background": background,
         "clothing": clothing,
         "custom_instructions": custom_instructions,
         "generation_spec": generation_spec,
-        "generated_image_url": f"/api/media/generated/{generated_id}.png",
+        "generated_images": generated_images,
+        # Kept for backwards-compat with any UI that expects a single result image.
+        "generated_image_url": generated_images[0]["image_url"] if generated_images else None,
         "video_title": video.get("title"),
         "video_niche": video.get("niche"),
         "created_at": now_iso(),
@@ -377,6 +408,81 @@ async def get_customization(customization_id: str):
     return serialize_doc(item)
 
 
+# ---------------------------------------------------------------------------
+# Step 4: Video generation (prompt auto-generation + provider-pending job)
+# ---------------------------------------------------------------------------
+@api_router.post("/customizations/{customization_id}/generate-video-prompt")
+async def generate_video_prompt_endpoint(customization_id: str, payload: BrandContextRequest):
+    customization = await db.customizations.find_one({"id": customization_id})
+    if not customization:
+        raise HTTPException(status_code=404, detail="Customization not found")
+    analysis = await db.analyses.find_one({"id": customization["analysis_id"]})
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Related hook analysis not found")
+
+    duration = max(5, min(30, payload.duration_seconds or 30))
+
+    try:
+        prompt_result = await generate_video_prompt(
+            analysis=analysis,
+            brand_context=payload.model_dump(),
+            target_duration=duration,
+            session_id=f"videoprompt-{customization_id}",
+        )
+    except Exception as e:
+        logger.error(f"Video prompt generation failed for {customization_id}: {e}")
+        raise HTTPException(status_code=502, detail=f"AI prompt generation failed. Please try again. ({str(e)[:150]})")
+
+    video_job_doc = {
+        "id": str(uuid.uuid4()),
+        "customization_id": customization_id,
+        "video_id": customization["video_id"],
+        "brand_name": payload.brand_name,
+        "brand_goal": payload.brand_goal,
+        "brand_details": payload.brand_details,
+        "target_duration_seconds": duration,
+        "prompt_breakdown": prompt_result,
+        "full_prompt_text": prompt_result.get("full_video_prompt"),
+        "reference_image_ids": [img["id"] for img in customization.get("generated_images", [])],
+        "status": "prompt_ready",
+        "created_at": now_iso(),
+    }
+    await db.video_jobs.insert_one(video_job_doc)
+    return serialize_doc(video_job_doc)
+
+
+@api_router.post("/video-jobs/{job_id}/generate-video")
+async def generate_video_endpoint(job_id: str, payload: GenerateVideoRequest):
+    job = await db.video_jobs.find_one({"id": job_id})
+    if not job:
+        raise HTTPException(status_code=404, detail="Video job not found")
+
+    update = {
+        "full_prompt_text": payload.edited_prompt or job.get("full_prompt_text"),
+        "selected_image_ids": payload.image_ids or job.get("reference_image_ids", []),
+        "target_duration_seconds": max(5, min(30, payload.duration_seconds or job.get("target_duration_seconds", 30))),
+        "status": "pending_provider_selection",
+        "requested_at": now_iso(),
+    }
+    await db.video_jobs.update_one({"id": job_id}, {"$set": update})
+    updated = await db.video_jobs.find_one({"id": job_id})
+    return serialize_doc(updated)
+
+
+@api_router.get("/video-jobs/{job_id}")
+async def get_video_job(job_id: str):
+    job = await db.video_jobs.find_one({"id": job_id})
+    if not job:
+        raise HTTPException(status_code=404, detail="Video job not found")
+    return serialize_doc(job)
+
+
+@api_router.get("/customizations/{customization_id}/video-jobs")
+async def get_customization_video_jobs(customization_id: str):
+    jobs = await db.video_jobs.find({"customization_id": customization_id}).sort("created_at", -1).to_list(50)
+    return [serialize_doc(j) for j in jobs]
+
+
 @api_router.get("/history")
 async def get_history():
     videos = await db.videos.find({"status": {"$in": ["analyzed", "failed"]}}).sort("created_at", -1).to_list(200)
@@ -389,6 +495,10 @@ async def get_history():
     customizations_by_video = {}
     for c in customizations:
         customizations_by_video.setdefault(c["video_id"], []).append(serialize_doc(c))
+    video_jobs = await db.video_jobs.find({"video_id": {"$in": video_ids}}).to_list(500)
+    video_jobs_by_video = {}
+    for j in video_jobs:
+        video_jobs_by_video.setdefault(j["video_id"], []).append(serialize_doc(j))
 
     results = []
     for v in videos:
@@ -396,6 +506,7 @@ async def get_history():
             "video": serialize_doc(v),
             "analysis_count": len(analyses_by_video.get(v["id"], [])),
             "customizations": customizations_by_video.get(v["id"], []),
+            "video_jobs": video_jobs_by_video.get(v["id"], []),
         })
     return results
 

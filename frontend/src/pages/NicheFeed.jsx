@@ -6,6 +6,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import { Card } from "../components/ui/card";
 import VideoCard from "../components/VideoCard";
 import EmptyState from "../components/EmptyState";
+import Stepper from "../components/Stepper";
 import { api, getErrorMessage } from "../lib/api";
 import { toast } from "sonner";
 
@@ -54,6 +55,7 @@ export default function NicheFeed() {
 
   return (
     <div className="space-y-6">
+      <Stepper current="find" />
       <div>
         <h1 className="font-display text-3xl md:text-4xl font-semibold tracking-tight">Discover trending hooks</h1>
         <p className="text-muted-foreground mt-1 max-w-2xl">

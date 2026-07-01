@@ -103,6 +103,7 @@ async def analyze_hook(frame_paths: list, session_id: str) -> dict:
 async def generate_customized_preview(
     reference_frame_path: Path,
     person_photo_path: Path,
+    mode: str,
     customization_prompt: str,
     session_id: str,
 ) -> bytes:
@@ -115,14 +116,26 @@ async def generate_customized_preview(
     )
     chat.with_model(*IMAGE_GEN_MODEL).with_params(modalities=["image", "text"])
 
+    if mode == "custom" and customization_prompt.strip():
+        scene_instruction = (
+            f"Apply the following customization to the environment/background/clothing: {customization_prompt}. "
+        )
+    else:
+        scene_instruction = (
+            "Keep the environment, background, lighting, clothing, camera framing, angle, and every other "
+            "visual detail EXACTLY as shown in Image 1 - do not change anything about the scene, placement, "
+            "or styling. "
+        )
+
     prompt = (
-        "Image 1 is a reference frame from a video showing a person's pose, facial expression, "
-        "and hand gesture during a viral hook moment. Image 2 is a photo of a different person. "
-        "Generate a new photorealistic image that keeps the EXACT pose, facial expression, and hand "
-        "gesture from Image 1, but replaces the person's face/identity with the person from Image 2. "
-        f"Apply the following customization to environment/background/clothing: {customization_prompt}. "
-        "Preserve the core hook mechanic (the expression + gesture) exactly - this is the most "
-        "important constraint."
+        "Image 1 is a reference frame from a video showing a person's exact pose, facial expression, and hand "
+        "gesture during a viral hook moment (e.g. lying on a bed, a hand touching the mouth, wide eyes, an open "
+        "mouth, etc). Image 2 is a photo of a different person. Generate a new photorealistic image that keeps "
+        "the EXACT pose, facial expression, hand gesture, and body placement from Image 1 permanently unchanged, "
+        "but replaces the person's face/identity with the person from Image 2. "
+        f"{scene_instruction}"
+        "Preserve the core hook mechanic (the expression + gesture + body position + placement) exactly - this "
+        "is the most important constraint and must never be altered."
     )
 
     image_contents = [
@@ -136,3 +149,79 @@ async def generate_customized_preview(
         raise RuntimeError(f"No image returned from generation model. {(text or '')[:200]}")
 
     return base64.b64decode(images[0]["data"])
+
+
+REQUIRED_VIDEO_PROMPT_KEYS = {
+    "content", "camera_angle", "view_position", "character_behavior",
+    "scene_details", "brand_narrative", "full_video_prompt", "suggested_duration_seconds",
+}
+
+
+async def generate_video_prompt(analysis: dict, brand_context: dict, target_duration: int, session_id: str) -> dict:
+    """Auto-generate a production-ready video prompt from the hook analysis + brand context."""
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone
+
+    system_message = (
+        "You are an expert short-form video creative director who writes precise, production-ready prompts for "
+        "AI image-to-video generation models. You take the analyzed 'hook' (the juicy emotional/attention-grabbing "
+        "moment) of a viral video and a brand's context, and produce a full video generation prompt that recreates "
+        "the same content, camera angle, view position, character behavior, and scene details from the hook, then "
+        "extends the narrative to serve the brand's goal. Respond with STRICT JSON only, no markdown fences."
+    )
+
+    prompt = (
+        "Hook analysis of the original viral video's first 2-3 seconds (the 'juicy' emotional hook):\n"
+        f"- Facial expressions/micro-expressions: {analysis.get('facial_expressions')}\n"
+        f"- Body language & gestures: {analysis.get('body_language_gestures')}\n"
+        f"- Pacing & cuts: {analysis.get('pacing_cuts')}\n"
+        f"- Text overlays & timing: {analysis.get('text_overlays_timing')}\n"
+        f"- Audio cues (inferred): {analysis.get('audio_cues_inferred')}\n"
+        f"- Hook summary: {analysis.get('hook_summary')}\n"
+        f"- Replicable mechanics: {analysis.get('replicable_mechanics')}\n\n"
+        "Brand context to weave into the rest of the video:\n"
+        f"- Brand name: {brand_context.get('brand_name') or '(not provided)'}\n"
+        f"- Brand goal: {brand_context.get('brand_goal') or '(not provided)'}\n"
+        f"- Brand details: {brand_context.get('brand_details') or '(not provided)'}\n\n"
+        f"Target video duration: up to {target_duration} seconds.\n\n"
+        "Return ONLY a JSON object with this exact schema:\n"
+        "{\n"
+        '  "content": "what happens in the video, moment by moment, starting from the exact hook moment",\n'
+        '  "camera_angle": "camera angle(s), matching the original hook then evolving naturally",\n'
+        '  "view_position": "framing/view position (close-up, POV, etc.), matching the original hook",\n'
+        '  "character_behavior": "how the character behaves/moves, preserving the original hook mechanics (pose, gesture, expression) at the start",\n'
+        '  "scene_details": "environment/background/lighting/props details, consistent with the reference image(s)",\n'
+        '  "brand_narrative": "how the video narrative ties into the brand goal and message after the hook",\n'
+        '  "full_video_prompt": "a single, cohesive, production-ready prompt string (150-300 words) combining all of the above, ready to feed directly into an image-to-video AI model",\n'
+        '  "suggested_duration_seconds": integer up to ' + str(target_duration) + "\n"
+        "}\n"
+        "Return ONLY valid JSON."
+    )
+
+    chat = LlmChat(
+        api_key=EMERGENT_LLM_KEY,
+        session_id=session_id,
+        system_message=system_message,
+    ).with_model("openai", "gpt-5.4")
+
+    full_text = ""
+    async for event in chat.stream_message(UserMessage(text=prompt)):
+        if isinstance(event, TextDelta):
+            full_text += event.content
+        elif isinstance(event, StreamDone):
+            break
+
+    full_text = _clean_json_text(full_text)
+    try:
+        result = json.loads(full_text)
+    except json.JSONDecodeError:
+        start = full_text.find("{")
+        end = full_text.rfind("}")
+        if start == -1 or end == -1:
+            raise RuntimeError("Video prompt model did not return valid JSON")
+        result = json.loads(full_text[start:end + 1])
+
+    missing = REQUIRED_VIDEO_PROMPT_KEYS - set(result.keys())
+    if missing:
+        raise RuntimeError(f"Video prompt generation missing required fields: {missing}")
+
+    return result

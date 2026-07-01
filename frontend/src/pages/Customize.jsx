@@ -6,17 +6,17 @@ import { Textarea } from "../components/ui/textarea";
 import { Input } from "../components/ui/input";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import GenerationProgress from "../components/GenerationProgress";
-import SideBySideCompare from "../components/SideBySideCompare";
 import JsonSpecPanel from "../components/JsonSpecPanel";
+import Stepper from "../components/Stepper";
 import { api, mediaUrl, getErrorMessage } from "../lib/api";
-import { ArrowLeft, Upload, Sparkles, ImageIcon, AlertTriangle, RotateCcw, X } from "lucide-react";
+import { ArrowLeft, Upload, Sparkles, ImageIcon, AlertTriangle, RotateCcw, X, Lock, Palette, Check, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 
 const ENVIRONMENT_PRESETS = ["Cozy bedroom", "Modern living room", "Outdoor park", "Coffee shop", "Home office", "Kitchen"];
 const BACKGROUND_PRESETS = ["Warm afternoon light", "Neon city night", "Minimalist white studio", "Bookshelf backdrop", "Beach sunset"];
 const CLOTHING_PRESETS = ["Casual streetwear", "Business casual", "Athletic wear", "Cozy hoodie", "Elegant evening outfit"];
 
-const CUSTOMIZE_STAGES = ["Uploading your photo", "Preparing generation spec", "Generating your customized preview"];
+const CUSTOMIZE_STAGES = ["Uploading your photo", "Preparing generation spec", "Generating your customized preview(s)"];
 
 function ChipGroup({ label, presets, value, onChange, testIdPrefix }) {
   return (
@@ -60,6 +60,8 @@ export default function Customize() {
 
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
+  const [mode, setMode] = useState("preserve"); // "preserve" | "custom"
+  const [selectedFrames, setSelectedFrames] = useState([]);
   const [environment, setEnvironment] = useState("Cozy bedroom");
   const [background, setBackground] = useState("Warm afternoon light");
   const [clothing, setClothing] = useState("Casual streetwear");
@@ -74,6 +76,7 @@ export default function Customize() {
       .then(([v, a]) => {
         setVideo(v);
         setAnalysis(a);
+        setSelectedFrames([a.key_hook_frame_index]);
       })
       .catch((err) => setLoadError(getErrorMessage(err)));
   }, [videoId]);
@@ -89,9 +92,24 @@ export default function Customize() {
     setPhotoPreview(URL.createObjectURL(file));
   };
 
+  const toggleFrame = (idx) => {
+    setSelectedFrames((prev) => {
+      if (prev.includes(idx)) return prev.filter((i) => i !== idx);
+      if (prev.length >= 3) {
+        toast.info("You can generate up to 3 images at a time.");
+        return prev;
+      }
+      return [...prev, idx];
+    });
+  };
+
   const handleGenerate = async () => {
     if (!photoFile) {
       toast.error("Please upload a photo first.");
+      return;
+    }
+    if (selectedFrames.length === 0) {
+      toast.error("Select at least one frame to generate.");
       return;
     }
     setGenerating(true);
@@ -100,13 +118,17 @@ export default function Customize() {
     try {
       const formData = new FormData();
       formData.append("person_photo", photoFile);
-      formData.append("environment", environment);
-      formData.append("background", background);
-      formData.append("clothing", clothing);
-      formData.append("custom_instructions", customInstructions);
+      formData.append("mode", mode);
+      formData.append("frame_indices", JSON.stringify(selectedFrames));
+      if (mode === "custom") {
+        formData.append("environment", environment);
+        formData.append("background", background);
+        formData.append("clothing", clothing);
+        formData.append("custom_instructions", customInstructions);
+      }
       const data = await api.customize(videoId, formData);
       setResult(data);
-      toast.success("Customized preview generated!");
+      toast.success("Customized preview(s) generated!");
     } catch (err) {
       setGenError(getErrorMessage(err));
     } finally {
@@ -133,11 +155,9 @@ export default function Customize() {
     return <p className="text-muted-foreground">Loading...</p>;
   }
 
-  const referenceFrame =
-    analysis.frames?.find((f) => f.index === analysis.key_hook_frame_index) || analysis.frames?.[0];
-
   return (
     <div className="space-y-6">
+      <Stepper current="swap" />
       <Button
         variant="ghost"
         onClick={() => navigate(`/analysis/${videoId}`)}
@@ -148,10 +168,10 @@ export default function Customize() {
       </Button>
 
       <div>
-        <h1 className="font-display text-2xl md:text-3xl font-semibold tracking-tight">Customize this hook</h1>
+        <h1 className="font-display text-2xl md:text-3xl font-semibold tracking-tight">Face swap this hook</h1>
         <p className="text-muted-foreground mt-1 max-w-2xl">
-          Upload your photo and we'll swap it into the hook moment while preserving the expression and gesture that
-          made it work.
+          Upload your photo and we'll swap it into the hook moment. By default we keep the pose, gesture, environment,
+          background, and clothing exactly as the original — only the face/character changes.
         </p>
       </div>
 
@@ -196,37 +216,106 @@ export default function Customize() {
             )}
           </div>
 
-          <ChipGroup
-            label="Environment"
-            presets={ENVIRONMENT_PRESETS}
-            value={environment}
-            onChange={setEnvironment}
-            testIdPrefix="environment-preset"
-          />
-          <ChipGroup
-            label="Background / Lighting"
-            presets={BACKGROUND_PRESETS}
-            value={background}
-            onChange={setBackground}
-            testIdPrefix="background-preset"
-          />
-          <ChipGroup
-            label="Clothing"
-            presets={CLOTHING_PRESETS}
-            value={clothing}
-            onChange={setClothing}
-            testIdPrefix="clothing-preset"
-          />
-
           <div className="space-y-2">
-            <label className="text-sm font-medium">Additional instructions (optional)</label>
-            <Textarea
-              value={customInstructions}
-              onChange={(e) => setCustomInstructions(e.target.value)}
-              placeholder="e.g. add a golden retriever in the background, keep hair color natural..."
-              className="min-h-[90px]"
-              data-testid="custom-instructions-textarea"
-            />
+            <label className="text-sm font-medium">Frames to generate ({selectedFrames.length}/3)</label>
+            <p className="text-xs text-muted-foreground">Pick up to 3 frames from the hook to face-swap.</p>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {analysis.frames.map((f) => {
+                const isSelected = selectedFrames.includes(f.index);
+                return (
+                  <button
+                    key={f.index}
+                    type="button"
+                    onClick={() => toggleFrame(f.index)}
+                    data-testid={`select-frame-${f.index}`}
+                    className={`relative shrink-0 w-16 h-20 rounded-lg overflow-hidden border-2 transition-colors ${
+                      isSelected ? "border-[color:var(--brand-teal)]" : "border-border"
+                    }`}
+                  >
+                    <img src={mediaUrl(f.media_url)} alt={`Frame ${f.index}`} className="w-full h-full object-cover" />
+                    {isSelected && (
+                      <span className="absolute top-1 right-1 rounded-full bg-[color:var(--brand-teal)] text-white p-0.5">
+                        <Check className="h-2.5 w-2.5" />
+                      </span>
+                    )}
+                    {f.index === analysis.key_hook_frame_index && (
+                      <span className="absolute bottom-1 left-1 rounded-full bg-[color:var(--brand-coral)] text-white text-[8px] px-1">
+                        Hook
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-2 rounded-2xl border border-border p-3 bg-white/40">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setMode("preserve")}
+                data-testid="mode-preserve-button"
+                className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold border transition-colors ${
+                  mode === "preserve"
+                    ? "bg-[color:var(--brand-teal)] text-white border-transparent"
+                    : "bg-white border-border text-muted-foreground"
+                }`}
+              >
+                <Lock className="h-3.5 w-3.5" /> Keep Original (Recommended)
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("custom")}
+                data-testid="mode-custom-button"
+                className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold border transition-colors ${
+                  mode === "custom"
+                    ? "bg-[color:var(--brand-coral)] text-white border-transparent"
+                    : "bg-white border-border text-muted-foreground"
+                }`}
+              >
+                <Palette className="h-3.5 w-3.5" /> Customize Scene
+              </button>
+            </div>
+            {mode === "preserve" ? (
+              <p className="text-xs text-muted-foreground pt-1">
+                Placement, pose, gesture, environment, background, and clothing stay exactly as in the original video —
+                only the face/character is swapped.
+              </p>
+            ) : (
+              <div className="space-y-4 pt-2">
+                <ChipGroup
+                  label="Environment"
+                  presets={ENVIRONMENT_PRESETS}
+                  value={environment}
+                  onChange={setEnvironment}
+                  testIdPrefix="environment-preset"
+                />
+                <ChipGroup
+                  label="Background / Lighting"
+                  presets={BACKGROUND_PRESETS}
+                  value={background}
+                  onChange={setBackground}
+                  testIdPrefix="background-preset"
+                />
+                <ChipGroup
+                  label="Clothing"
+                  presets={CLOTHING_PRESETS}
+                  value={clothing}
+                  onChange={setClothing}
+                  testIdPrefix="clothing-preset"
+                />
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Additional instructions (optional)</label>
+                  <Textarea
+                    value={customInstructions}
+                    onChange={(e) => setCustomInstructions(e.target.value)}
+                    placeholder="e.g. add a golden retriever in the background..."
+                    className="min-h-[70px]"
+                    data-testid="custom-instructions-textarea"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <Button
@@ -243,15 +332,21 @@ export default function Customize() {
           {!result && !generating && (
             <Card className="overflow-hidden rounded-2xl border-border" data-testid="reference-frame-preview">
               <div className="px-4 py-2 text-xs font-medium text-muted-foreground border-b border-border">
-                Reference hook frame (what we'll preserve)
+                Selected reference frame(s)
               </div>
-              {referenceFrame && (
-                <img
-                  src={mediaUrl(referenceFrame.media_url)}
-                  alt="Reference hook frame"
-                  className="w-full object-contain bg-black/5 max-h-[480px]"
-                />
-              )}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-3">
+                {selectedFrames.map((idx) => {
+                  const f = analysis.frames.find((fr) => fr.index === idx);
+                  return f ? (
+                    <img
+                      key={idx}
+                      src={mediaUrl(f.media_url)}
+                      alt={`Reference frame ${idx}`}
+                      className="w-full object-contain bg-black/5 rounded-lg max-h-[380px]"
+                    />
+                  ) : null;
+                })}
+              </div>
             </Card>
           )}
 
@@ -279,15 +374,35 @@ export default function Customize() {
 
           {result && (
             <>
-              <SideBySideCompare originalUrl={result.reference_frame_url} generatedUrl={result.generated_image_url} />
-              <div className="flex gap-2">
-                <a href={mediaUrl(result.generated_image_url)} download target="_blank" rel="noreferrer">
-                  <Button variant="secondary" className="gap-1.5 rounded-xl" data-testid="download-preview-button">
-                    Download Preview
-                  </Button>
-                </a>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-testid="generated-images-gallery">
+                {result.generated_images.map((img) => (
+                  <Card key={img.id} className="overflow-hidden rounded-2xl border-[color:var(--brand-teal)]" data-testid="generated-preview-image">
+                    <div className="px-4 py-2 text-xs font-medium text-[color:var(--brand-teal-dark)] border-b border-border">
+                      Frame {img.frame_index} • {img.timestamp_seconds}s
+                    </div>
+                    <img
+                      src={mediaUrl(img.image_url)}
+                      alt="Generated customized preview"
+                      className="w-full object-contain bg-black/5 max-h-[420px]"
+                    />
+                    <div className="p-3">
+                      <a href={mediaUrl(img.image_url)} download target="_blank" rel="noreferrer">
+                        <Button variant="secondary" size="sm" className="w-full gap-1.5 rounded-lg">
+                          Download
+                        </Button>
+                      </a>
+                    </div>
+                  </Card>
+                ))}
               </div>
               <JsonSpecPanel spec={result.generation_spec} />
+              <Button
+                onClick={() => navigate(`/generate-video/${result.id}`)}
+                className="w-full gap-2 rounded-xl bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white"
+                data-testid="continue-to-video-button"
+              >
+                Continue to Generate Video <ArrowRight className="h-4 w-4" />
+              </Button>
             </>
           )}
         </div>

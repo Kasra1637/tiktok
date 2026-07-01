@@ -7,6 +7,7 @@ import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import Filmstrip from "../components/Filmstrip";
 import HookBreakdown from "../components/HookBreakdown";
 import GenerationProgress from "../components/GenerationProgress";
+import Stepper from "../components/Stepper";
 import { api, getErrorMessage } from "../lib/api";
 import { ArrowLeft, Eye, Heart, MessageCircle, Wand2, AlertTriangle, RotateCcw, ExternalLink } from "lucide-react";
 
@@ -93,6 +94,7 @@ export default function AnalysisDetail() {
 
   return (
     <div className="space-y-6">
+      <Stepper current="analyze" />
       <Button variant="ghost" onClick={() => navigate("/")} className="gap-1.5 -ml-2" data-testid="back-to-feed-button">
         <ArrowLeft className="h-4 w-4" /> Back to feed
       </Button>

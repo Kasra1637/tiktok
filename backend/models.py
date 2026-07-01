@@ -1,6 +1,6 @@
 """Shared helpers for Mongo document serialization and Pydantic request models."""
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel
 
 
@@ -37,3 +37,17 @@ class CustomizeRequest(BaseModel):
     background: Optional[str] = ""
     clothing: Optional[str] = ""
     custom_instructions: Optional[str] = ""
+
+
+class BrandContextRequest(BaseModel):
+    brand_name: str = ""
+    brand_goal: str = ""
+    brand_details: str = ""
+    duration_seconds: int = 30
+
+
+class GenerateVideoRequest(BaseModel):
+    image_ids: List[str] = []
+    edited_prompt: Optional[str] = None
+    duration_seconds: Optional[int] = None
+

@@ -28,6 +28,11 @@ export const api = {
   getCustomizations: () => client.get("/customizations").then((r) => r.data),
   getCustomization: (id) => client.get(`/customizations/${id}`).then((r) => r.data),
   getHistory: () => client.get("/history").then((r) => r.data),
+  generateVideoPrompt: (customizationId, payload) =>
+    client.post(`/customizations/${customizationId}/generate-video-prompt`, payload).then((r) => r.data),
+  generateVideo: (jobId, payload) =>
+    client.post(`/video-jobs/${jobId}/generate-video`, payload).then((r) => r.data),
+  getVideoJob: (jobId) => client.get(`/video-jobs/${jobId}`).then((r) => r.data),
 };
 
 export const getErrorMessage = (err) => {
