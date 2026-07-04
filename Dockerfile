@@ -41,4 +41,4 @@ EXPOSE 8080
 # Run from backend directory so uvicorn can find server:app
 WORKDIR /app/backend
 
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["sh", "-c", "uvicorn server:app --host 0.0.0.0 --port ${PORT:-8080}"]
