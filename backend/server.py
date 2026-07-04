@@ -653,6 +653,23 @@ async def root():
 app.include_router(api_router)
 app.mount("/api/media", StaticFiles(directory=str(pipeline.STORAGE_DIR)), name="media")
 
+# ---------------------------------------------------------------------------
+# Serve frontend static build (in container deployment)
+# ---------------------------------------------------------------------------
+FRONTEND_BUILD_DIR = Path(__file__).parent.parent / "frontend_build"
+if FRONTEND_BUILD_DIR.exists():
+    from starlette.responses import FileResponse
+
+    app.mount("/static", StaticFiles(directory=str(FRONTEND_BUILD_DIR / "static")), name="frontend_static")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        """Serve index.html for any non-API, non-static path (SPA routing)."""
+        file_path = FRONTEND_BUILD_DIR / full_path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(str(file_path))
+        return FileResponse(str(FRONTEND_BUILD_DIR / "index.html"))
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
