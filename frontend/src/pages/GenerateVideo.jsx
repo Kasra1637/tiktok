@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -9,7 +9,7 @@ import { Badge } from "../components/ui/badge";
 import GenerationProgress from "../components/GenerationProgress";
 import Stepper from "../components/Stepper";
 import { api, mediaUrl, getErrorMessage } from "../lib/api";
-import { ArrowLeft, Wand2, Clapperboard, AlertTriangle, RotateCcw, Clock, Film, Camera, Eye, Users, MapPinned, Megaphone, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Wand2, Clapperboard, AlertTriangle, RotateCcw, Clock, Film, Camera, Eye, Users, MapPinned, Megaphone, CheckCircle2, Sparkles, Briefcase } from "lucide-react";
 import { toast } from "sonner";
 
 const PROMPT_STAGES = ["Reading the hook analysis", "Weaving in your brand context", "Writing the video prompt"];
@@ -30,6 +30,9 @@ export default function GenerateVideo() {
   const [customization, setCustomization] = useState(null);
   const [loadError, setLoadError] = useState(null);
 
+  const [brandProfile, setBrandProfile] = useState(null);
+  const [brandLoading, setBrandLoading] = useState(true);
+
   const [brandName, setBrandName] = useState("");
   const [brandGoal, setBrandGoal] = useState("");
   const [brandDetails, setBrandDetails] = useState("");
@@ -39,6 +42,7 @@ export default function GenerateVideo() {
   const [promptError, setPromptError] = useState(null);
   const [job, setJob] = useState(null);
   const [editedPrompt, setEditedPrompt] = useState("");
+  const [usingRemix, setUsingRemix] = useState(false);
 
   const [submittingVideo, setSubmittingVideo] = useState(false);
   const [videoJob, setVideoJob] = useState(null);
@@ -50,16 +54,54 @@ export default function GenerateVideo() {
       .catch((err) => setLoadError(getErrorMessage(err)));
   }, [customizationId]);
 
+  useEffect(() => {
+    api
+      .getActiveBrand()
+      .then((brand) => {
+        setBrandProfile(brand);
+        // Pre-fill manual fields from the saved brand profile so they stay editable.
+        setBrandName(brand.brand_name || "");
+        setBrandGoal(brand.target_audience ? `Reach: ${brand.target_audience}` : "");
+        const products = Array.isArray(brand.products_services)
+          ? brand.products_services.join(", ")
+          : brand.products_services || "";
+        const detailParts = [brand.brand_description, products ? `Products/services: ${products}` : "", brand.tone_voice ? `Tone: ${brand.tone_voice}` : ""].filter(Boolean);
+        setBrandDetails(detailParts.join(" "));
+      })
+      .catch(() => setBrandProfile(null))
+      .finally(() => setBrandLoading(false));
+  }, []);
+
   const handleGeneratePrompt = async () => {
     setGeneratingPrompt(true);
     setPromptError(null);
     setJob(null);
     setVideoJob(null);
+    setUsingRemix(false);
     try {
       const data = await api.generateVideoPrompt(customizationId, {
         brand_name: brandName,
         brand_goal: brandGoal,
         brand_details: brandDetails,
+        duration_seconds: Number(duration) || 30,
+      });
+      setJob(data);
+      setEditedPrompt(data.full_prompt_text || "");
+    } catch (err) {
+      setPromptError(getErrorMessage(err));
+    } finally {
+      setGeneratingPrompt(false);
+    }
+  };
+
+  const handleRemixForBrand = async () => {
+    setGeneratingPrompt(true);
+    setPromptError(null);
+    setJob(null);
+    setVideoJob(null);
+    setUsingRemix(true);
+    try {
+      const data = await api.generateRemixScript(customizationId, {
         duration_seconds: Number(duration) || 30,
       });
       setJob(data);
@@ -122,12 +164,32 @@ export default function GenerateVideo() {
       </Button>
 
       <div>
-        <h1 className="font-display text-2xl md:text-3xl font-semibold tracking-tight">Generate your video</h1>
+        <h1 className="font-display text-2xl md:text-3xl font-semibold tracking-tight flex items-center gap-2">
+          <Sparkles className="h-6 w-6 text-[color:var(--brand-coral)]" /> Content Remixer
+        </h1>
         <p className="text-muted-foreground mt-1 max-w-2xl">
+          Remix this viral hook and adapt it to your specific product and niche with AI-powered scriptwriting.
           We'll auto-write a video prompt from the original hook's content, camera angle, view position, character
           behavior, and scene details — then tailor the rest of the video to your brand.
         </p>
       </div>
+
+      {!brandLoading && !brandProfile && (
+        <Alert className="rounded-2xl" data-testid="no-brand-profile-notice">
+          <Briefcase className="h-4 w-4" />
+          <AlertTitle>No brand profile set up yet</AlertTitle>
+          <AlertDescription className="flex flex-col sm:flex-row sm:items-center gap-2 justify-between">
+            <span>
+              Set up your brand once and we'll pre-fill these fields (and unlock one-click remixing) every time.
+            </span>
+            <Link to="/brand">
+              <Button size="sm" variant="secondary" className="gap-1.5 rounded-lg shrink-0" data-testid="go-to-brand-setup-button">
+                <Briefcase className="h-3.5 w-3.5" /> Set up your brand
+              </Button>
+            </Link>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6">
         <Card className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] space-y-4 h-fit">
@@ -184,14 +246,37 @@ export default function GenerateVideo() {
             />
           </div>
 
-          <Button
-            onClick={handleGeneratePrompt}
-            disabled={generatingPrompt}
-            className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#EA580C] text-white"
-            data-testid="generate-prompt-button"
-          >
-            <Wand2 className="h-4 w-4" /> {generatingPrompt ? "Writing prompt..." : "Generate Video Prompt"}
-          </Button>
+          {brandProfile ? (
+            <Button
+              onClick={handleRemixForBrand}
+              disabled={generatingPrompt}
+              className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#EA580C] text-white"
+              data-testid="remix-for-brand-button"
+            >
+              <Sparkles className="h-4 w-4" />
+              {generatingPrompt ? "Remixing..." : `Remix this hook for ${brandProfile.brand_name || "your brand"}`}
+            </Button>
+          ) : (
+            <Button
+              onClick={handleGeneratePrompt}
+              disabled={generatingPrompt}
+              className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#EA580C] text-white"
+              data-testid="generate-prompt-button"
+            >
+              <Wand2 className="h-4 w-4" /> {generatingPrompt ? "Writing prompt..." : "Generate Video Prompt"}
+            </Button>
+          )}
+          {brandProfile && (
+            <Button
+              onClick={handleGeneratePrompt}
+              disabled={generatingPrompt}
+              variant="secondary"
+              className="w-full gap-2 rounded-xl"
+              data-testid="generate-prompt-manual-button"
+            >
+              <Wand2 className="h-4 w-4" /> {generatingPrompt ? "Writing prompt..." : "Generate with manual fields instead"}
+            </Button>
+          )}
         </Card>
 
         <div className="space-y-6">
@@ -210,7 +295,12 @@ export default function GenerateVideo() {
               <AlertTitle>Prompt generation failed</AlertTitle>
               <AlertDescription className="space-y-2">
                 <p>{promptError}</p>
-                <Button size="sm" onClick={handleGeneratePrompt} className="gap-1.5" data-testid="retry-prompt-button">
+                <Button
+                  size="sm"
+                  onClick={usingRemix ? handleRemixForBrand : handleGeneratePrompt}
+                  className="gap-1.5"
+                  data-testid="retry-prompt-button"
+                >
                   <RotateCcw className="h-3.5 w-3.5" /> Retry
                 </Button>
               </AlertDescription>
@@ -236,9 +326,16 @@ export default function GenerateVideo() {
               <Card className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] space-y-2">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-semibold">Full video prompt (editable)</h4>
-                  <Badge variant="secondary" className="rounded-full text-[10px]">
-                    ~{job.target_duration_seconds}s
-                  </Badge>
+                  <div className="flex items-center gap-1.5">
+                    {usingRemix && (
+                      <Badge className="rounded-full text-[10px] bg-[color:var(--brand-coral)] text-white border-transparent">
+                        Content Remix
+                      </Badge>
+                    )}
+                    <Badge variant="secondary" className="rounded-full text-[10px]">
+                      ~{job.target_duration_seconds}s
+                    </Badge>
+                  </div>
                 </div>
                 <Textarea
                   value={editedPrompt}

@@ -11,7 +11,7 @@ def now_iso() -> str:
 
 def row_to_dict(row, columns: list) -> dict:
     """Convert an sqlite3.Row to a dict, parsing JSON fields."""
-    JSON_FIELDS = {"frames", "generation_spec", "generated_images", "prompt_breakdown", "reference_image_ids", "selected_image_ids", "replicable_mechanics"}
+    JSON_FIELDS = {"frames", "generation_spec", "generated_images", "prompt_breakdown", "reference_image_ids", "selected_image_ids", "replicable_mechanics", "products_services"}
     d = {}
     for i, col in enumerate(columns):
         val = row[i]
@@ -47,3 +47,22 @@ class GenerateVideoRequest(BaseModel):
     image_ids: List[str] = []
     edited_prompt: Optional[str] = None
     duration_seconds: Optional[int] = None
+
+
+class AnalyzeBrandUrlRequest(BaseModel):
+    url: str
+
+
+class BrandProfileUpdateRequest(BaseModel):
+    website_url: Optional[str] = None
+    brand_name: Optional[str] = None
+    brand_description: Optional[str] = None
+    niche: Optional[str] = None
+    products_services: Optional[List[str]] = None
+    target_audience: Optional[str] = None
+    tone_voice: Optional[str] = None
+    raw_extracted_text: Optional[str] = None
+
+
+class GenerateRemixScriptRequest(BaseModel):
+    duration_seconds: int = 30

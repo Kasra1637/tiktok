@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { Sparkles, History as HistoryIcon, Loader2 } from "lucide-react";
+import { Sparkles, History as HistoryIcon, Loader2, Briefcase } from "lucide-react";
 import { toast } from "sonner";
 import { api, getErrorMessage } from "../lib/api";
 
@@ -52,9 +52,17 @@ export function AppShell({ children }) {
           </form>
 
           <Link
+            to="/brand"
+            data-testid="brand-nav-link"
+            className={`flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(13,148,136,0.08)] transition-colors shrink-0 ${location.pathname === "/brand" ? "text-[color:var(--brand-teal)]" : "text-foreground"}`}
+          >
+            <Briefcase className="h-4 w-4" /> Your Brand
+          </Link>
+
+          <Link
             to="/history"
             data-testid="history-nav-link"
-            className={`flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(13,148,136,0.08)] transition-colors ${location.pathname === "/history" ? "text-[color:var(--brand-teal)]" : "text-foreground"}`}
+            className={`flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(13,148,136,0.08)] transition-colors shrink-0 ${location.pathname === "/history" ? "text-[color:var(--brand-teal)]" : "text-foreground"}`}
           >
             <HistoryIcon className="h-4 w-4" /> History
           </Link>

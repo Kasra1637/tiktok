@@ -7,6 +7,7 @@ import AnalysisDetail from "./pages/AnalysisDetail";
 import Customize from "./pages/Customize";
 import GenerateVideo from "./pages/GenerateVideo";
 import History from "./pages/History";
+import BrandSetup from "./pages/BrandSetup";
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
           <Route path="/customize/:videoId" element={<Customize />} />
           <Route path="/generate-video/:customizationId" element={<GenerateVideo />} />
           <Route path="/history" element={<History />} />
+          <Route path="/brand" element={<BrandSetup />} />
         </Routes>
       </AppShell>
       <Toaster />
