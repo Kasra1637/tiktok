@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 import aiosqlite
+import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
@@ -21,10 +22,12 @@ import pipeline
 import viral_detection
 from ai_service import (
     analyze_hook, generate_customized_preview, generate_video_prompt,
-    generate_video, poll_video_job,
+    generate_video, poll_video_job, analyze_brand_from_text, generate_remix_script,
+    strip_html_to_text,
 )
 from models import (
     IngestVideoRequest, BrandContextRequest, GenerateVideoRequest,
+    AnalyzeBrandUrlRequest, BrandProfileUpdateRequest, GenerateRemixScriptRequest,
     now_iso, row_to_dict,
 )
 from niches_config import NICHES, NICHE_MAP
@@ -48,6 +51,7 @@ TRENDING_CACHE_TTL = timedelta(hours=2)
 FRAME_COUNT = 8
 HOOK_DURATION_SECONDS = 3.0
 SEARCH_QUERY_MAX_LENGTH = 100
+BRAND_URL_TEXT_MAX_CHARS = 8000
 
 _ytdlp_semaphore = asyncio.Semaphore(3)
 
@@ -190,7 +194,32 @@ async def init_db():
                 niche TEXT PRIMARY KEY,
                 cached_at TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS brand_profiles (
+                id TEXT PRIMARY KEY,
+                website_url TEXT,
+                brand_name TEXT,
+                brand_description TEXT,
+                niche TEXT,
+                products_services TEXT,
+                target_audience TEXT,
+                ideal_customer_profile TEXT,
+                differentiation TEXT,
+                tone_voice TEXT,
+                raw_extracted_text TEXT,
+                created_at TEXT,
+                updated_at TEXT
+            );
         """)
+        await conn.commit()
+
+        # Migration: add columns that may be missing on a pre-existing DB (e.g. on Render's
+        # persistent-ish free-tier disk from a previous deploy of this table).
+        cursor = await conn.execute("PRAGMA table_info(brand_profiles)")
+        existing_cols = {row[1] for row in await cursor.fetchall()}
+        for col in ("ideal_customer_profile", "differentiation"):
+            if col not in existing_cols:
+                await conn.execute(f"ALTER TABLE brand_profiles ADD COLUMN {col} TEXT")
         await conn.commit()
 
 
@@ -310,6 +339,16 @@ async def get_latest_analysis_or_404(video_id: str) -> dict:
             detail="No analysis found for this video yet. Analyze the hook first.",
         )
     return analysis
+
+
+async def get_active_brand_or_404() -> dict:
+    brand = await _fetch_one("SELECT * FROM brand_profiles ORDER BY created_at DESC LIMIT 1")
+    if not brand:
+        raise HTTPException(
+            status_code=404,
+            detail="No brand profile yet. Analyze your website URL first.",
+        )
+    return brand
 
 
 def require_ai_configured():
@@ -814,6 +853,49 @@ async def generate_video_prompt_endpoint(customization_id: str, payload: BrandCo
     return await _fetch_one("SELECT * FROM video_jobs WHERE id = ?", (job_id,))
 
 
+@api_router.post("/customizations/{customization_id}/generate-remix-script")
+async def generate_remix_script_endpoint(customization_id: str, payload: GenerateRemixScriptRequest):
+    """Content Remixer: adapt this hook's script to the active brand profile's niche/products/tone."""
+    require_ai_configured()
+    brand_profile = await get_active_brand_or_404()
+
+    customization = await _fetch_one("SELECT * FROM customizations WHERE id = ?", (customization_id,))
+    if not customization:
+        raise HTTPException(status_code=404, detail="Customization not found")
+    analysis = await _fetch_one("SELECT * FROM analyses WHERE id = ?", (customization["analysis_id"],))
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Related hook analysis not found")
+
+    duration = max(5, min(30, payload.duration_seconds or 30))
+
+    try:
+        prompt_result = await generate_remix_script(
+            analysis=analysis,
+            brand_profile=brand_profile,
+            target_duration=duration,
+            session_id=f"remix-{customization_id}",
+        )
+    except Exception as e:
+        logger.error(f"Remix script generation failed for {customization_id}: {e}")
+        raise HTTPException(status_code=502, detail=f"AI remix script generation failed. Please try again. ({str(e)[:150]})")
+
+    job_id = str(uuid.uuid4())
+    created_at = now_iso()
+    reference_image_ids = [img["id"] for img in customization.get("generated_images", [])]
+    await _execute(
+        """INSERT INTO video_jobs
+           (id, customization_id, video_id, brand_name, brand_goal, brand_details,
+            target_duration_seconds, prompt_breakdown, full_prompt_text, reference_image_ids,
+            status, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (job_id, customization_id, customization["video_id"], brand_profile.get("brand_name"),
+         "Content Remixer: adapt viral hook to brand", brand_profile.get("brand_description"),
+         duration, json.dumps(prompt_result), prompt_result.get("full_video_prompt"),
+         json.dumps(reference_image_ids), "prompt_ready", created_at),
+    )
+    return await _fetch_one("SELECT * FROM video_jobs WHERE id = ?", (job_id,))
+
+
 @api_router.post("/video-jobs/{job_id}/generate-video")
 async def generate_video_endpoint(job_id: str, payload: GenerateVideoRequest):
     job = await _fetch_one("SELECT * FROM video_jobs WHERE id = ?", (job_id,))
@@ -921,6 +1003,107 @@ async def get_customization_video_jobs(customization_id: str):
         "SELECT * FROM video_jobs WHERE customization_id = ? ORDER BY created_at DESC LIMIT 50",
         (customization_id,),
     )
+
+
+# ---------------------------------------------------------------------------
+# Brand profile ("Your Brand" — URL analysis + manual editing)
+# ---------------------------------------------------------------------------
+@api_router.post("/brand/analyze-url")
+async def analyze_brand_url(payload: AnalyzeBrandUrlRequest):
+    require_ai_configured()
+    url = payload.url.strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="Please provide a website URL.")
+    if not url.lower().startswith(("http://", "https://")):
+        url = f"https://{url}"
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        )
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers=headers) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            html = resp.text
+    except Exception as e:
+        logger.error(f"Failed to fetch brand URL {url}: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not fetch this URL. Please check it and try again. ({str(e)[:150]})",
+        )
+
+    page_text = strip_html_to_text(html)[:BRAND_URL_TEXT_MAX_CHARS]
+    if not page_text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Could not extract any readable text from this URL. Please try a different page.",
+        )
+
+    try:
+        extracted = await analyze_brand_from_text(url, page_text)
+    except Exception as e:
+        logger.error(f"Brand analysis failed for {url}: {e}")
+        raise HTTPException(status_code=502, detail=f"AI brand analysis failed. Please try again. ({str(e)[:150]})")
+
+    brand_id = str(uuid.uuid4())
+    created_at = now_iso()
+    await _execute(
+        """INSERT INTO brand_profiles
+           (id, website_url, brand_name, brand_description, niche, products_services,
+            target_audience, ideal_customer_profile, differentiation, tone_voice,
+            raw_extracted_text, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (brand_id, url, extracted.get("brand_name"), extracted.get("brand_description"),
+         extracted.get("niche"), json.dumps(extracted.get("products_or_services", [])),
+         extracted.get("target_audience"), extracted.get("ideal_customer_profile"),
+         extracted.get("differentiation"), extracted.get("tone_voice"), page_text,
+         created_at, created_at),
+    )
+    return await _fetch_one("SELECT * FROM brand_profiles WHERE id = ?", (brand_id,))
+
+
+@api_router.get("/brand/active")
+async def get_active_brand():
+    return await get_active_brand_or_404()
+
+
+@api_router.get("/brand/{brand_id}")
+async def get_brand(brand_id: str):
+    brand = await _fetch_one("SELECT * FROM brand_profiles WHERE id = ?", (brand_id,))
+    if not brand:
+        raise HTTPException(status_code=404, detail="Brand profile not found")
+    return brand
+
+
+@api_router.patch("/brand/{brand_id}")
+async def update_brand(brand_id: str, payload: BrandProfileUpdateRequest):
+    existing = await _fetch_one("SELECT * FROM brand_profiles WHERE id = ?", (brand_id,))
+    if not existing:
+        raise HTTPException(status_code=404, detail="Brand profile not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        return existing
+
+    set_clauses = []
+    values = []
+    for key, value in updates.items():
+        if key == "products_services":
+            value = json.dumps(value if isinstance(value, list) else [value] if value else [])
+        set_clauses.append(f"{key} = ?")
+        values.append(value)
+    set_clauses.append("updated_at = ?")
+    values.append(now_iso())
+    values.append(brand_id)
+
+    await _execute(
+        f"UPDATE brand_profiles SET {', '.join(set_clauses)} WHERE id = ?",
+        tuple(values),
+    )
+    return await _fetch_one("SELECT * FROM brand_profiles WHERE id = ?", (brand_id,))
 
 
 # ---------------------------------------------------------------------------

@@ -38,6 +38,14 @@ export const api = {
   generateVideo: (jobId, payload) =>
     client.post(`/video-jobs/${jobId}/generate-video`, payload).then((r) => r.data),
   getVideoJob: (jobId) => client.get(`/video-jobs/${jobId}`).then((r) => r.data),
+
+  // Brand profile / Content Remixer
+  analyzeBrandUrl: (url) => client.post("/brand/analyze-url", { url }).then((r) => r.data),
+  getActiveBrand: () => client.get("/brand/active").then((r) => r.data),
+  getBrand: (id) => client.get(`/brand/${id}`).then((r) => r.data),
+  updateBrand: (id, payload) => client.patch(`/brand/${id}`, payload).then((r) => r.data),
+  generateRemixScript: (customizationId, payload) =>
+    client.post(`/customizations/${customizationId}/generate-remix-script`, payload).then((r) => r.data),
 };
 
 export const getErrorMessage = (err) => {

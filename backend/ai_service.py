@@ -35,6 +35,11 @@ REQUIRED_VIDEO_PROMPT_KEYS = {
     "scene_details", "brand_narrative", "full_video_prompt", "suggested_duration_seconds",
 }
 
+REQUIRED_BRAND_ANALYSIS_KEYS = {
+    "brand_name", "brand_description", "niche", "products_or_services",
+    "target_audience", "ideal_customer_profile", "differentiation", "tone_voice",
+}
+
 
 def _headers():
     return {
@@ -281,3 +286,193 @@ async def poll_video_job(job_id: str) -> dict:
         )
         resp.raise_for_status()
         return resp.json()
+
+
+
+async def analyze_brand_from_text(url: str, page_text: str) -> dict:
+    """Extract structured brand information from a website's scraped text using OpenRouter."""
+    system_message = (
+        "You are an expert brand strategist and audience researcher. You read raw text scraped from a "
+        "company's website and extract a clear, structured summary of the brand — including a deep read "
+        "on their ideal customer and what makes them different from competitors — for use in short-form "
+        "video scriptwriting. Respond with STRICT JSON only, no markdown fences, no extra commentary."
+    )
+
+    prompt = (
+        f"Website URL: {url}\n\n"
+        "Raw scraped page text:\n"
+        f"\"\"\"\n{page_text}\n\"\"\"\n\n"
+        "Based on the above, return ONLY a JSON object with this exact schema:\n"
+        "{\n"
+        '  "brand_name": "the brand/company/channel name",\n'
+        '  "brand_description": "1-3 sentence description of what the brand does",\n'
+        '  "niche": "the brand\'s niche/category/industry",\n'
+        '  "products_or_services": ["short list of specific products or services offered"],\n'
+        '  "target_audience": "short label for who the brand is trying to reach (e.g. \'busy professionals 25-40\')",\n'
+        '  "ideal_customer_profile": "Who are you trying to reach? A rich 2-4 sentence description of the '
+        'ideal customer/viewer covering demographics (age range, gender skew, income/life-stage if inferable), '
+        'interests, pain points this brand solves for them, and where they likely spend time online '
+        '(e.g. TikTok, Instagram Reels, YouTube Shorts, specific communities/forums)",\n'
+        '  "differentiation": "What Sets You Apart? A 2-4 sentence description of what makes this brand '
+        'different from others in its space — standout strengths, unique selling propositions, or signature '
+        'angles that competitors don\'t have",\n'
+        '  "tone_voice": "a short description of the brand\'s tone/voice (e.g. playful, premium, no-nonsense)"\n'
+        "}\n"
+        "If any field cannot be determined from the text, make a reasonable best-effort guess based on "
+        "context rather than leaving it empty. Return ONLY valid JSON."
+    )
+
+    payload = {
+        "model": TEXT_MODEL,
+        "messages": [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.3,
+        "max_tokens": 1500,
+    }
+
+    async with httpx.AsyncClient(timeout=60) as client:
+        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+
+    full_text = data["choices"][0]["message"]["content"]
+    full_text = _clean_json_text(full_text)
+
+    try:
+        result = json.loads(full_text)
+    except json.JSONDecodeError:
+        start = full_text.find("{")
+        end = full_text.rfind("}")
+        if start == -1 or end == -1:
+            raise RuntimeError("Brand analysis model did not return valid JSON")
+        result = json.loads(full_text[start:end + 1])
+
+    missing = REQUIRED_BRAND_ANALYSIS_KEYS - set(result.keys())
+    if missing:
+        raise RuntimeError(f"Brand analysis missing required fields: {missing}")
+
+    if not isinstance(result.get("products_or_services"), list):
+        raw = result.get("products_or_services")
+        result["products_or_services"] = [raw] if raw else []
+
+    return result
+
+
+async def generate_remix_script(analysis: dict, brand_profile: dict, target_duration: int, session_id: str) -> dict:
+    """
+    Auto-generate a production-ready video prompt ("Content Remixer") from hook analysis +
+    a structured brand profile (niche, products/services, target audience, tone/voice).
+    The resulting script is explicitly adapted to weave in the brand's actual niche and
+    product/service, rather than generic brand copy.
+    """
+    system_message = (
+        "You are an expert short-form video creative director and brand scriptwriter. You take the "
+        "analyzed 'hook' of a viral video and a brand's structured profile, and remix/adapt that hook "
+        "into a new, production-ready video prompt that explicitly promotes the brand's real "
+        "niche/products/services in a natural, on-brand way — not generic copy. Respond with STRICT "
+        "JSON only, no markdown fences."
+    )
+
+    products = brand_profile.get("products_services") or []
+    if isinstance(products, list):
+        products_str = ", ".join(str(p) for p in products) or "(not specified)"
+    else:
+        products_str = str(products) or "(not specified)"
+
+    prompt = (
+        "Hook analysis of the original viral video's first 2-3 seconds:\n"
+        f"- Facial expressions: {analysis.get('facial_expressions')}\n"
+        f"- Body language & gestures: {analysis.get('body_language_gestures')}\n"
+        f"- Pacing & cuts: {analysis.get('pacing_cuts')}\n"
+        f"- Text overlays & timing: {analysis.get('text_overlays_timing')}\n"
+        f"- Audio cues (inferred): {analysis.get('audio_cues_inferred')}\n"
+        f"- Hook summary: {analysis.get('hook_summary')}\n"
+        f"- Replicable mechanics: {analysis.get('replicable_mechanics')}\n\n"
+        "Brand profile to remix this hook for:\n"
+        f"- Brand name: {brand_profile.get('brand_name') or '(not provided)'}\n"
+        f"- Brand description: {brand_profile.get('brand_description') or '(not provided)'}\n"
+        f"- Niche: {brand_profile.get('niche') or '(not provided)'}\n"
+        f"- Products/services: {products_str}\n"
+        f"- Target audience: {brand_profile.get('target_audience') or '(not provided)'}\n"
+        f"- Ideal customer profile (demographics, interests, pain points, where they spend time online): "
+        f"{brand_profile.get('ideal_customer_profile') or '(not provided)'}\n"
+        f"- What sets this brand apart (standout strengths / USPs / signature angle): "
+        f"{brand_profile.get('differentiation') or '(not provided)'}\n"
+        f"- Tone/voice: {brand_profile.get('tone_voice') or '(not provided)'}\n\n"
+        f"Target video duration: up to {target_duration} seconds.\n\n"
+        "Remix the original hook's mechanics into a new script that naturally features this brand's "
+        "specific product(s)/service(s) — e.g. if the brand sells fitness supplements, the narrative should "
+        "naturally weave in that specific product, not generic brand copy. Speak directly to the ideal "
+        "customer profile's pain points and where they spend time online, and lean into the brand's stated "
+        "differentiation/USP as the emotional payoff or twist of the remixed script. Return ONLY a JSON "
+        "object with this exact schema:\n"
+        "{\n"
+        '  "content": "what happens in the video moment by moment",\n'
+        '  "camera_angle": "camera angles matching the original hook",\n'
+        '  "view_position": "framing/view position",\n'
+        '  "character_behavior": "how the character behaves/moves",\n'
+        '  "scene_details": "environment/background/lighting/props",\n'
+        '  "brand_narrative": "how the video ties into the brand\'s specific niche/products/services/tone",\n'
+        '  "full_video_prompt": "cohesive production-ready prompt (150-300 words)",\n'
+        '  "suggested_duration_seconds": integer up to ' + str(target_duration) + "\n"
+        "}\n"
+        "Return ONLY valid JSON."
+    )
+
+    payload = {
+        "model": TEXT_MODEL,
+        "messages": [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.5,
+        "max_tokens": 3000,
+    }
+
+    async with httpx.AsyncClient(timeout=60) as client:
+        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+
+    full_text = data["choices"][0]["message"]["content"]
+    full_text = _clean_json_text(full_text)
+
+    try:
+        result = json.loads(full_text)
+    except json.JSONDecodeError:
+        start = full_text.find("{")
+        end = full_text.rfind("}")
+        if start == -1 or end == -1:
+            raise RuntimeError("Remix script model did not return valid JSON")
+        result = json.loads(full_text[start:end + 1])
+
+    missing = REQUIRED_VIDEO_PROMPT_KEYS - set(result.keys())
+    if missing:
+        raise RuntimeError(f"Remix script generation missing required fields: {missing}")
+
+    return result
+
+
+def strip_html_to_text(html: str) -> str:
+    """Basic regex-based HTML-to-text stripper (no external HTML parsing dependency)."""
+    import re
+
+    # Remove script/style/head blocks entirely (including their content)
+    text = re.sub(r"(?is)<(script|style|head|noscript)[^>]*>.*?</\1>", " ", html)
+    # Replace common block-level tags with newlines to preserve some structure
+    text = re.sub(r"(?i)<(br|/p|/div|/li|/h[1-6]|/tr)\s*/?>", "\n", text)
+    # Strip all remaining tags
+    text = re.sub(r"(?s)<[^>]+>", " ", text)
+    # Unescape common HTML entities
+    entities = {
+        "&nbsp;": " ", "&amp;": "&", "&lt;": "<", "&gt;": ">",
+        "&quot;": '"', "&#39;": "'", "&rsquo;": "'", "&ldquo;": '"', "&rdquo;": '"',
+    }
+    for ent, repl in entities.items():
+        text = text.replace(ent, repl)
+    # Collapse whitespace
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n\s*\n+", "\n", text)
+    return text.strip()
