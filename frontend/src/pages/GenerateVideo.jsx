@@ -4,6 +4,7 @@ import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
+import { Skeleton } from "../components/ui/skeleton";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import GenerationProgress from "../components/GenerationProgress";
@@ -148,7 +149,29 @@ export default function GenerateVideo() {
   }
 
   if (!customization) {
-    return <p className="text-muted-foreground">Loading...</p>;
+    return (
+      <div className="space-y-6" data-testid="generate-video-loading">
+        <Stepper current="video" />
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-4 w-full max-w-2xl" />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6">
+          <Card className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] space-y-4 h-fit">
+            <div className="flex gap-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="w-16 h-20 rounded-lg shrink-0" />
+              ))}
+            </div>
+            <Skeleton className="h-9 w-full rounded-md" />
+            <Skeleton className="h-9 w-full rounded-md" />
+            <Skeleton className="h-24 w-full rounded-md" />
+            <Skeleton className="h-10 w-full rounded-xl" />
+          </Card>
+          <Skeleton className="h-64 rounded-2xl" />
+        </div>
+      </div>
+    );
   }
 
   return (
