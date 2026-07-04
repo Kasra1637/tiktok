@@ -273,7 +273,7 @@ export default function GenerateVideo() {
             <Button
               onClick={handleRemixForBrand}
               disabled={generatingPrompt}
-              className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#EA580C] text-white"
+              className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white"
               data-testid="remix-for-brand-button"
             >
               <Sparkles className="h-4 w-4" />
@@ -283,7 +283,7 @@ export default function GenerateVideo() {
             <Button
               onClick={handleGeneratePrompt}
               disabled={generatingPrompt}
-              className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#EA580C] text-white"
+              className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white"
               data-testid="generate-prompt-button"
             >
               <Wand2 className="h-4 w-4" /> {generatingPrompt ? "Writing prompt..." : "Generate Video Prompt"}

@@ -51,49 +51,49 @@
   },
   "color_system": {
     "palette": {
-      "bg_sand": "#FEFCE8",
-      "surface_cream": "#FEF9F3",
-      "ink_charcoal": "#292524",
+      "bg_lavender_white": "#F8F7FF",
+      "surface_white": "#FDFBFF",
+      "ink_charcoal": "#26243D",
       "muted_gray": "#6B7280",
-      "border_taupe": "#E5E0D8",
-      "brand_teal": "#0D9488",
-      "brand_teal_dark": "#0F766E",
-      "accent_coral": "#F97316",
-      "mint": "#B2F2BB",
+      "border_lavender": "#DDD9F5",
+      "brand_indigo": "#6366F1",
+      "brand_indigo_dark": "#4F46E5",
+      "accent_rose": "#F43F5E",
+      "mint": "#E0E7FF",
       "danger": "#DC2626",
       "warning": "#D97706",
       "info": "#0284C7"
     },
     "semantic_tokens_hsl_for_shadcn": {
-      "notes": "Update /app/frontend/src/index.css :root tokens to match these HSL values. Keep cards light for readability; use teal/coral as accents only.",
+      "notes": "Update /app/frontend/src/index.css :root tokens to match these HSL values. Keep cards light for readability; use indigo/rose as accents only.",
       "root": {
-        "--background": "54 100% 95%",
-        "--foreground": "20 6% 16%",
-        "--card": "36 100% 97%",
-        "--card-foreground": "20 6% 16%",
-        "--popover": "36 100% 97%",
-        "--popover-foreground": "20 6% 16%",
-        "--primary": "174 83% 32%",
+        "--background": "245 50% 98%",
+        "--foreground": "240 10% 15%",
+        "--card": "240 40% 99%",
+        "--card-foreground": "240 10% 15%",
+        "--popover": "240 40% 99%",
+        "--popover-foreground": "240 10% 15%",
+        "--primary": "244 75% 59%",
         "--primary-foreground": "0 0% 100%",
-        "--secondary": "36 33% 92%",
-        "--secondary-foreground": "20 6% 16%",
-        "--muted": "36 33% 92%",
-        "--muted-foreground": "215 16% 47%",
-        "--accent": "36 33% 92%",
-        "--accent-foreground": "20 6% 16%",
+        "--secondary": "240 20% 94%",
+        "--secondary-foreground": "240 10% 15%",
+        "--muted": "240 20% 94%",
+        "--muted-foreground": "240 8% 46%",
+        "--accent": "240 20% 94%",
+        "--accent-foreground": "240 10% 15%",
         "--destructive": "0 72% 51%",
         "--destructive-foreground": "0 0% 100%",
-        "--border": "30 20% 86%",
-        "--input": "30 20% 86%",
-        "--ring": "174 83% 32%",
+        "--border": "240 25% 89%",
+        "--input": "240 25% 89%",
+        "--ring": "244 75% 59%",
         "--radius": "0.75rem"
       },
       "extra_css_custom_properties": {
-        "--brand-teal": "#0D9488",
-        "--brand-coral": "#F97316",
-        "--brand-mint": "#B2F2BB",
-        "--shadow-soft": "0 10px 30px rgba(41, 37, 36, 0.08)",
-        "--shadow-tight": "0 6px 16px rgba(41, 37, 36, 0.10)",
+        "--brand-teal": "#6366F1",
+        "--brand-coral": "#F43F5E",
+        "--brand-mint": "#E0E7FF",
+        "--shadow-soft": "0 10px 30px rgba(30, 27, 75, 0.08)",
+        "--shadow-tight": "0 6px 16px rgba(30, 27, 75, 0.10)",
         "--noise-opacity": "0.06"
       }
     },
@@ -101,8 +101,8 @@
       "rule": "Gradients only as section backgrounds / decorative overlays; never on small UI elements; never exceed 20% viewport.",
       "allowed_gradients": [
         {
-          "name": "Sand → Cream (hero wash)",
-          "css": "radial-gradient(1200px circle at 20% 10%, rgba(13,148,136,0.10), transparent 55%), radial-gradient(900px circle at 80% 0%, rgba(249,115,22,0.10), transparent 50%), linear-gradient(180deg, #FEFCE8 0%, #FEF9F3 60%, #FEFCE8 100%)"
+          "name": "Indigo → Rose (hero wash)",
+          "css": "radial-gradient(1200px circle at 20% 10%, rgba(99,102,241,0.12), transparent 55%), radial-gradient(900px circle at 80% 0%, rgba(244,63,94,0.10), transparent 50%), linear-gradient(180deg, #F8F7FF 0%, #FDFBFF 60%, #F8F7FF 100%)"
         }
       ],
       "noise_overlay_css": "background-image: url('data:image/svg+xml,%3Csvg xmlns=\"http://www.w3.org/2000/svg\" width=\"160\" height=\"160\"%3E%3Cfilter id=\"n\"%3E%3CfeTurbulence type=\"fractalNoise\" baseFrequency=\"0.9\" numOctaves=\"3\" stitchTiles=\"stitch\"/%3E%3C/filter%3E%3Crect width=\"160\" height=\"160\" filter=\"url(%23n)\" opacity=\"0.35\"/%3E%3C/svg%3E'); mix-blend-mode: multiply; opacity: var(--noise-opacity); pointer-events:none;"
@@ -269,7 +269,7 @@
       "shape": "rounded-xl (12px)",
       "variants": {
         "primary": "bg-[color:var(--brand-teal)] text-white hover:bg-[color:var(--brand-teal-dark)] focus-visible:ring-2 focus-visible:ring-[color:var(--brand-teal)]",
-        "secondary": "bg-white border border-[color:var(--border)] text-[color:var(--foreground)] hover:bg-[color:rgba(13,148,136,0.06)]",
+        "secondary": "bg-white border border-[color:var(--border)] text-[color:var(--foreground)] hover:bg-[color:rgba(99,102,241,0.06)]",
         "ghost": "hover:bg-[color:rgba(41,37,36,0.06)]"
       },
       "motion": "hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98] transition-colors transition-shadow (no transition-all)",
@@ -280,14 +280,14 @@
       ]
     },
     "cards": {
-      "base": "bg-[color:var(--surface_cream)] border border-[color:var(--border)] rounded-2xl shadow-[var(--shadow-soft)]",
-      "hover": "hover:shadow-[var(--shadow-tight)] hover:border-[color:rgba(13,148,136,0.35)] transition-shadow transition-colors",
+      "base": "bg-[color:var(--surface_white)] border border-[color:var(--border)] rounded-2xl shadow-[var(--shadow-soft)]",
+      "hover": "hover:shadow-[var(--shadow-tight)] hover:border-[color:rgba(99,102,241,0.35)] transition-shadow transition-colors",
       "header": "space-y-1",
       "padding": "p-4 md:p-5"
     },
     "chips_and_badges": {
-      "niche_chip": "rounded-full px-3 py-1 text-xs font-medium bg-white border border-[color:var(--border)] hover:border-[color:rgba(13,148,136,0.45)]",
-      "score_badge": "rounded-full px-2.5 py-1 text-xs font-semibold bg-[color:rgba(242,153,74,0.18)] text-[color:#9A3412]"
+      "niche_chip": "rounded-full px-3 py-1 text-xs font-medium bg-white border border-[color:var(--border)] hover:border-[color:rgba(99,102,241,0.45)]",
+      "score_badge": "rounded-full px-2.5 py-1 text-xs font-semibold bg-[color:rgba(244,63,94,0.15)] text-[color:#9F1239]"
     },
     "filmstrip_frames": {
       "frame_button": "relative shrink-0 w-[120px] md:w-[140px] rounded-xl overflow-hidden border border-[color:var(--border)] focus-visible:ring-2 focus-visible:ring-[color:var(--brand-teal)]",
