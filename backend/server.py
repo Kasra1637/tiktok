@@ -1,3 +1,4 @@
+import asyncio
 import io
 import json
 import logging
@@ -15,6 +16,7 @@ from PIL import Image
 from starlette.middleware.cors import CORSMiddleware
 
 import pipeline
+import viral_detection
 from ai_service import analyze_hook, generate_customized_preview, generate_video_prompt
 from models import IngestVideoRequest, BrandContextRequest, GenerateVideoRequest, now_iso, serialize_doc
 from niches_config import NICHES, NICHE_MAP
@@ -33,8 +35,62 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 NICHE_CACHE_TTL = timedelta(hours=6)
+TRENDING_CACHE_TTL = timedelta(hours=2)
 FRAME_COUNT = 8
 HOOK_DURATION_SECONDS = 3.0
+SEARCH_QUERY_MAX_LENGTH = 100
+
+# Limit concurrent yt-dlp subprocesses to prevent resource exhaustion
+_ytdlp_semaphore = asyncio.Semaphore(3)
+
+
+# ---------------------------------------------------------------------------
+# Trending cache helper
+# ---------------------------------------------------------------------------
+async def _refresh_trending_cache(niche_key: str, force: bool = False):
+    """
+    Refresh the trending video cache for a niche by fetching from its hashtags,
+    scoring, ranking, and bulk-writing results to MongoDB.
+    Returns True if a refresh was performed, False if cache is still fresh.
+    """
+    trending_cache = await db.trending_videos.find_one({"niche": niche_key, "type": "cache_meta"})
+    trending_is_stale = True
+    if trending_cache and not force:
+        cached_at = datetime.fromisoformat(trending_cache["cached_at"])
+        trending_is_stale = (datetime.now(timezone.utc) - cached_at) > TRENDING_CACHE_TTL
+
+    if not trending_is_stale:
+        return False
+
+    hashtags = NICHE_MAP[niche_key].get("hashtags", [])
+    hashtag_results = await asyncio.gather(
+        *[viral_detection.fetch_hashtag_videos(tag, limit=10) for tag in hashtags],
+        return_exceptions=True,
+    )
+    all_videos = []
+    for tag, result in zip(hashtags, hashtag_results):
+        if isinstance(result, Exception):
+            logger.warning(f"Hashtag fetch failed for #{tag}: {result!r}")
+            continue
+        all_videos.extend(result)
+
+    if all_videos:
+        ranked = viral_detection.rank_videos(all_videos)
+        # Store in trending_videos collection using bulk insert
+        await db.trending_videos.delete_many({"niche": niche_key, "type": {"$ne": "cache_meta"}})
+        docs = [
+            {**v, "niche": niche_key, "cached_at": now_iso()}
+            for v in ranked[:50]
+        ]
+        await db.trending_videos.insert_many(docs)
+        # Update cache meta
+        await db.trending_videos.update_one(
+            {"niche": niche_key, "type": "cache_meta"},
+            {"$set": {"niche": niche_key, "type": "cache_meta", "cached_at": now_iso()}},
+            upsert=True,
+        )
+
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -108,49 +164,127 @@ async def list_niches():
 
 
 @api_router.get("/niches/{niche_key}/videos")
-async def get_niche_videos(niche_key: str, refresh: bool = False):
+async def get_niche_videos(niche_key: str, refresh: bool = False, mode: str = "curated"):
     if niche_key not in NICHE_MAP:
         raise HTTPException(status_code=404, detail="Unknown niche")
 
-    cache_meta = await db.niche_cache_meta.find_one({"niche": niche_key})
-    is_stale = True
-    if cache_meta and not refresh:
-        cached_at = datetime.fromisoformat(cache_meta["cached_at"])
-        is_stale = (datetime.now(timezone.utc) - cached_at) > NICHE_CACHE_TTL
+    if mode not in ("curated", "trending", "mixed"):
+        mode = "curated"
 
-    if is_stale:
-        creators = NICHE_MAP[niche_key]["creators"]
-        import asyncio
-        creator_results = await asyncio.gather(
-            *[pipeline.fetch_creator_videos(handle, limit=2) for handle in creators],
-            return_exceptions=True,
-        )
-        fetched_any = False
-        for handle, videos in zip(creators, creator_results):
-            if isinstance(videos, Exception):
-                logger.warning(f"Creator fetch failed for {handle}: {videos!r}")
-                continue
-            if not videos:
-                continue
-            fetched_any = True
-            for v in videos:
-                if not v.get("tiktok_url"):
-                    continue
-                doc = {
-                    **v,
-                    "niche": niche_key,
-                    "cached_at": now_iso(),
-                }
-                await db.curated_videos.update_one(
-                    {"tiktok_url": v["tiktok_url"]}, {"$set": doc}, upsert=True
-                )
-        if fetched_any or not cache_meta:
-            await db.niche_cache_meta.update_one(
-                {"niche": niche_key}, {"$set": {"niche": niche_key, "cached_at": now_iso()}}, upsert=True
+    curated_videos = []
+    trending_videos = []
+
+    # Fetch curated videos (existing behavior)
+    if mode in ("curated", "mixed"):
+        cache_meta = await db.niche_cache_meta.find_one({"niche": niche_key})
+        is_stale = True
+        if cache_meta and not refresh:
+            cached_at = datetime.fromisoformat(cache_meta["cached_at"])
+            is_stale = (datetime.now(timezone.utc) - cached_at) > NICHE_CACHE_TTL
+
+        if is_stale:
+            creators = NICHE_MAP[niche_key]["creators"]
+            creator_results = await asyncio.gather(
+                *[pipeline.fetch_creator_videos(handle, limit=2) for handle in creators],
+                return_exceptions=True,
             )
+            fetched_any = False
+            for handle, videos in zip(creators, creator_results):
+                if isinstance(videos, Exception):
+                    logger.warning(f"Creator fetch failed for {handle}: {videos!r}")
+                    continue
+                if not videos:
+                    continue
+                fetched_any = True
+                for v in videos:
+                    if not v.get("tiktok_url"):
+                        continue
+                    doc = {
+                        **v,
+                        "niche": niche_key,
+                        "cached_at": now_iso(),
+                    }
+                    await db.curated_videos.update_one(
+                        {"tiktok_url": v["tiktok_url"]}, {"$set": doc}, upsert=True
+                    )
+            if fetched_any or not cache_meta:
+                await db.niche_cache_meta.update_one(
+                    {"niche": niche_key}, {"$set": {"niche": niche_key, "cached_at": now_iso()}}, upsert=True
+                )
 
-    videos = await db.curated_videos.find({"niche": niche_key}).sort("view_count", -1).to_list(50)
+        raw_curated = await db.curated_videos.find({"niche": niche_key}).sort("view_count", -1).to_list(50)
+        # Add virality_score to curated videos
+        for v in raw_curated:
+            v["virality_score"] = viral_detection.compute_virality_score(v)
+            v["source"] = "curated"
+        curated_videos = raw_curated
+
+    # Fetch trending videos
+    if mode in ("trending", "mixed"):
+        await _refresh_trending_cache(niche_key, force=refresh)
+
+        raw_trending = await db.trending_videos.find(
+            {"niche": niche_key, "type": {"$ne": "cache_meta"}}
+        ).sort("virality_score", -1).to_list(50)
+        for v in raw_trending:
+            v["source"] = "trending"
+        trending_videos = raw_trending
+
+    # Build response based on mode
+    if mode == "curated":
+        return [serialize_doc(v) for v in curated_videos]
+    elif mode == "trending":
+        return [serialize_doc(v) for v in trending_videos]
+    else:  # mixed
+        # Merge and re-rank by virality_score
+        combined = curated_videos + trending_videos
+        # Deduplicate by tiktok_url
+        seen_urls = set()
+        unique = []
+        for v in combined:
+            url = v.get("tiktok_url")
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                unique.append(v)
+            elif not url:
+                unique.append(v)
+        # Sort by virality_score descending
+        unique.sort(key=lambda v: v.get("virality_score", 0), reverse=True)
+        return [serialize_doc(v) for v in unique[:50]]
+
+
+@api_router.get("/niches/{niche_key}/trending")
+async def get_niche_trending(niche_key: str, refresh: bool = False):
+    """Fetch trending videos for a niche from its hashtags, scored and cached."""
+    if niche_key not in NICHE_MAP:
+        raise HTTPException(status_code=404, detail="Unknown niche")
+
+    await _refresh_trending_cache(niche_key, force=refresh)
+
+    videos = await db.trending_videos.find(
+        {"niche": niche_key, "type": {"$ne": "cache_meta"}}
+    ).sort("virality_score", -1).to_list(50)
     return [serialize_doc(v) for v in videos]
+
+
+@api_router.get("/trending/search")
+async def trending_search(q: str = "", limit: int = 20):
+    """Search TikTok for videos matching a keyword, return scored results."""
+    q = q.strip()
+    if not q:
+        raise HTTPException(status_code=400, detail="Query parameter 'q' is required")
+
+    if len(q) > SEARCH_QUERY_MAX_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Query too long (max {SEARCH_QUERY_MAX_LENGTH} characters)"
+        )
+
+    limit = max(1, min(50, limit))
+    async with _ytdlp_semaphore:
+        videos = await viral_detection.fetch_keyword_videos(q, limit=limit)
+    ranked = viral_detection.rank_videos(videos)
+    return ranked
 
 
 # ---------------------------------------------------------------------------
@@ -518,6 +652,23 @@ async def root():
 
 app.include_router(api_router)
 app.mount("/api/media", StaticFiles(directory=str(pipeline.STORAGE_DIR)), name="media")
+
+# ---------------------------------------------------------------------------
+# Serve frontend static build (in container deployment)
+# ---------------------------------------------------------------------------
+FRONTEND_BUILD_DIR = Path(__file__).parent.parent / "frontend_build"
+if FRONTEND_BUILD_DIR.exists():
+    from starlette.responses import FileResponse
+
+    app.mount("/static", StaticFiles(directory=str(FRONTEND_BUILD_DIR / "static")), name="frontend_static")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        """Serve index.html for any non-API, non-static path (SPA routing)."""
+        file_path = FRONTEND_BUILD_DIR / full_path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(str(file_path))
+        return FileResponse(str(FRONTEND_BUILD_DIR / "index.html"))
 
 app.add_middleware(
     CORSMiddleware,

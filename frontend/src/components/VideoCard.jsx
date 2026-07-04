@@ -2,13 +2,19 @@ import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { AspectRatio } from "./ui/aspect-ratio";
 import { Button } from "./ui/button";
-import { Eye, Heart, Sparkles } from "lucide-react";
+import { Eye, Heart, Sparkles, Flame } from "lucide-react";
 
 function formatCount(n) {
   if (!n) return "0";
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
   return `${n}`;
+}
+
+function getViralityStyle(score) {
+  if (score >= 70) return "bg-gradient-to-r from-orange-500 to-red-500 text-white";
+  if (score >= 40) return "bg-gradient-to-r from-yellow-400 to-orange-400 text-white";
+  return "bg-gray-500/80 text-white";
 }
 
 export function VideoCard({ video, onAnalyze, analyzing }) {
@@ -29,6 +35,17 @@ export function VideoCard({ video, onAnalyze, analyzing }) {
             }}
           />
         ) : null}
+        {video.virality_score != null && (
+          <div className="absolute top-2 right-2">
+            <Badge
+              className={`border-none gap-1 text-xs font-semibold shadow-md ${getViralityStyle(video.virality_score)}`}
+              data-testid="virality-badge"
+            >
+              <Flame className="h-3 w-3" />
+              {Math.round(video.virality_score)}
+            </Badge>
+          </div>
+        )}
         <div className="absolute bottom-2 left-2 right-2 flex items-center gap-1.5 text-[11px] text-white">
           <Badge className="bg-black/70 border-none text-white gap-1">
             <Eye className="h-3 w-3" />

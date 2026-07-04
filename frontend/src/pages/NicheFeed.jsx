@@ -1,14 +1,21 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import * as LucideIcons from "lucide-react";
-import { Compass } from "lucide-react";
+import { Compass, Search, Flame, TrendingUp } from "lucide-react";
 import { Skeleton } from "../components/ui/skeleton";
 import { Card } from "../components/ui/card";
+import { Input } from "../components/ui/input";
 import VideoCard from "../components/VideoCard";
 import EmptyState from "../components/EmptyState";
 import Stepper from "../components/Stepper";
 import { api, getErrorMessage } from "../lib/api";
 import { toast } from "sonner";
+
+const MODES = [
+  { key: "trending", label: "Trending" },
+  { key: "curated", label: "Curated" },
+  { key: "mixed", label: "Mixed" },
+];
 
 export default function NicheFeed() {
   const [niches, setNiches] = useState([]);
@@ -16,6 +23,10 @@ export default function NicheFeed() {
   const [videos, setVideos] = useState([]);
   const [loadingVideos, setLoadingVideos] = useState(false);
   const [analyzingId, setAnalyzingId] = useState(null);
+  const [mode, setMode] = useState("trending");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState(null);
+  const [searchLoading, setSearchLoading] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -28,18 +39,60 @@ export default function NicheFeed() {
       .catch((err) => toast.error(getErrorMessage(err)));
   }, []);
 
-  const loadVideos = useCallback((nicheKey) => {
-    setLoadingVideos(true);
-    api
-      .getNicheVideos(nicheKey)
-      .then(setVideos)
-      .catch((err) => toast.error(getErrorMessage(err)))
-      .finally(() => setLoadingVideos(false));
-  }, []);
+  const loadVideos = useCallback(
+    (nicheKey, currentMode) => {
+      setLoadingVideos(true);
+      setSearchResults(null);
+
+      let request;
+      if (currentMode === "trending") {
+        request = api.getTrendingVideos(nicheKey);
+      } else if (currentMode === "mixed") {
+        request = api.getNicheVideos(nicheKey, "mixed");
+      } else {
+        request = api.getNicheVideos(nicheKey, "curated");
+      }
+
+      request
+        .then((data) => {
+          if (currentMode === "trending" || currentMode === "mixed") {
+            data.sort((a, b) => (b.virality_score || 0) - (a.virality_score || 0));
+          }
+          setVideos(data);
+        })
+        .catch((err) => toast.error(getErrorMessage(err)))
+        .finally(() => setLoadingVideos(false));
+    },
+    []
+  );
 
   useEffect(() => {
-    if (activeNiche) loadVideos(activeNiche);
-  }, [activeNiche, loadVideos]);
+    if (activeNiche) loadVideos(activeNiche, mode);
+  }, [activeNiche, mode, loadVideos]);
+
+  const handleSearch = useCallback(
+    (e) => {
+      e.preventDefault();
+      const query = searchQuery.trim();
+      if (!query) return;
+
+      setSearchLoading(true);
+      api
+        .searchTrending(query, 20)
+        .then((data) => {
+          data.sort((a, b) => (b.virality_score || 0) - (a.virality_score || 0));
+          setSearchResults(data);
+        })
+        .catch((err) => toast.error(getErrorMessage(err)))
+        .finally(() => setSearchLoading(false));
+    },
+    [searchQuery]
+  );
+
+  const clearSearch = useCallback(() => {
+    setSearchResults(null);
+    setSearchQuery("");
+  }, []);
 
   const handleAnalyze = async (video) => {
     setAnalyzingId(video.tiktok_url);
@@ -53,6 +106,15 @@ export default function NicheFeed() {
     }
   };
 
+  const displayVideos = searchResults !== null ? searchResults : videos;
+
+  const loadingText =
+    mode === "trending"
+      ? "Finding viral videos..."
+      : mode === "mixed"
+      ? "Finding viral and curated videos..."
+      : "Fetching curated videos...";
+
   return (
     <div className="space-y-6">
       <Stepper current="find" />
@@ -62,6 +124,70 @@ export default function NicheFeed() {
           Pick a niche to browse trending TikTok videos, then analyze the first 2-3 seconds to see exactly what makes
           the hook work.
         </p>
+      </div>
+
+      {/* Search bar */}
+      <form onSubmit={handleSearch} className="flex items-center gap-2 max-w-lg">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="text"
+            placeholder="Search by keyword or hashtag..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 rounded-xl"
+            data-testid="search-input"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={searchLoading || !searchQuery.trim()}
+          className="rounded-xl px-4 py-2 text-sm font-medium bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white disabled:opacity-50 transition-colors"
+          data-testid="search-button"
+        >
+          {searchLoading ? "Searching..." : "Search"}
+        </button>
+        {searchResults !== null && (
+          <button
+            type="button"
+            onClick={clearSearch}
+            className="rounded-xl px-3 py-2 text-sm font-medium border border-border hover:bg-muted transition-colors"
+          >
+            Clear
+          </button>
+        )}
+      </form>
+
+      {/* Mode toggle */}
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-1 rounded-full border border-border p-1 bg-white" data-testid="mode-toggle">
+          {MODES.map((m) => (
+            <button
+              key={m.key}
+              onClick={() => setMode(m.key)}
+              data-testid={`mode-${m.key}`}
+              className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                mode === m.key
+                  ? "bg-[color:var(--brand-teal)] text-white"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        {(mode === "trending" || mode === "mixed") && searchResults === null && (
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <TrendingUp className="h-3 w-3" />
+            Sorted by virality
+          </span>
+        )}
+        {searchResults !== null && (
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Search className="h-3 w-3" />
+            Showing search results for &quot;{searchQuery}&quot;
+          </span>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2" data-testid="niche-selector-tabs">
@@ -85,10 +211,10 @@ export default function NicheFeed() {
         })}
       </div>
 
-      {loadingVideos ? (
+      {loadingVideos || searchLoading ? (
         <div>
           <p className="text-sm text-muted-foreground mb-4">
-            Fetching trending videos for this niche... this can take up to 20 seconds the first time.
+            {searchLoading ? "Searching for videos..." : loadingText} This can take up to 20 seconds the first time.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -103,15 +229,19 @@ export default function NicheFeed() {
             ))}
           </div>
         </div>
-      ) : videos.length === 0 ? (
+      ) : displayVideos.length === 0 ? (
         <EmptyState
-          icon={Compass}
-          title="No trending videos found right now"
-          description="This niche's creators may be temporarily unavailable. Try another niche or paste a TikTok URL directly above."
+          icon={searchResults !== null ? Search : Compass}
+          title={searchResults !== null ? "No results found" : "No trending videos found right now"}
+          description={
+            searchResults !== null
+              ? "Try a different keyword or hashtag."
+              : "This niche's creators may be temporarily unavailable. Try another niche or paste a TikTok URL directly above."
+          }
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4" data-testid="video-feed-grid">
-          {videos.map((v) => (
+          {displayVideos.map((v) => (
             <VideoCard key={v.tiktok_url} video={v} onAnalyze={handleAnalyze} analyzing={analyzingId === v.tiktok_url} />
           ))}
         </div>

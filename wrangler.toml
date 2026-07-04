@@ -1,0 +1,9 @@
+name = "tiktok"
+compatibility_date = "2024-12-01"
+
+[containers]
+image = "./Dockerfile"
+max_instances = 3
+
+[[containers.port]]
+port = 8080
