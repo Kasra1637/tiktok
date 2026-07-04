@@ -1,0 +1,23 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Frontend UI updates: display virality scores on video cards, add trending/curated mode toggle to NicheFeed, and add keyword search functionality",
+  "status": "in_progress",
+  "steps": [
+    "Update frontend/src/lib/api.js to add new API methods: (a) getTrendingVideos(nicheKey) calling GET /api/niches/{nicheKey}/trending, (b) searchTrending(query, limit) calling GET /api/trending/search?q={query}&limit={limit}, (c) Update getNicheVideos to accept optional mode param: getNicheVideos(nicheKey, mode='curated') calling GET /api/niches/{nicheKey}/videos?mode={mode}.",
+    "Update frontend/src/components/VideoCard.jsx to display a virality score badge: (a) Add a new badge in the top-right corner of the thumbnail area showing the virality_score as a flame icon + score (e.g., flame icon 87). Style with gradient background (orange-to-red for scores >= 70, yellow for 40-69, gray for < 40). (b) Keep existing view/like badges at bottom-left unchanged.",
+    "Update frontend/src/pages/NicheFeed.jsx to: (a) Add a mode toggle (segmented control/tabs) above the video grid with options: 'Curated' (existing behavior), 'Trending' (uses getTrendingVideos), 'Mixed' (uses getNicheVideos with mode=mixed). Default to 'Trending'. (b) Add a search bar at the top that allows typing a keyword/hashtag and calls searchTrending(). Show search results in the same grid format. (c) When in Trending or Mixed mode, sort videos by virality_score descending and show a subtle 'Sorted by virality' indicator. (d) Update the loading text to reflect the mode ('Finding viral videos...' vs 'Fetching curated videos...')."
+  ],
+  "acceptance_criteria": [
+    "VideoCard shows a virality score badge with flame icon when virality_score is present on the video object",
+    "NicheFeed has a mode toggle (Curated/Trending/Mixed) that switches between API modes",
+    "Search bar in NicheFeed allows keyword search and displays results",
+    "Frontend builds without errors: cd frontend && yarn build",
+    "api.js exports getTrendingVideos, searchTrending, and updated getNicheVideos functions"
+  ],
+  "verification": [
+    "cd /projects/sandbox/tiktok/frontend && yarn build"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
