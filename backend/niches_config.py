@@ -14,6 +14,7 @@ NICHES = [
         "icon": "Dumbbell",
         "description": "Workout routines, transformations, and training hacks",
         "creators": ["mattdoesfitness", "pamela_rf", "heather.robertson"],
+        "hashtags": ["fitness", "workout", "gymtok"],
     },
     {
         "key": "comedy",
@@ -21,6 +22,7 @@ NICHES = [
         "icon": "Laugh",
         "description": "Skits, reactions, and viral comedic bits",
         "creators": ["khaby.lame", "brittany_broski", "zachking"],
+        "hashtags": ["comedy", "funny", "skit"],
     },
     {
         "key": "beauty",
@@ -28,6 +30,7 @@ NICHES = [
         "icon": "Sparkles",
         "description": "Makeup, skincare, and beauty tutorials",
         "creators": ["hyram", "mikaylanogueira", "jamescharles"],
+        "hashtags": ["beauty", "makeup", "skincare"],
     },
     {
         "key": "food",
@@ -35,6 +38,7 @@ NICHES = [
         "icon": "UtensilsCrossed",
         "description": "Recipes, cooking hacks, and food reviews",
         "creators": ["gordonramsayofficial", "cookingwithshereen", "cookingwithlynja"],
+        "hashtags": ["food", "recipe", "foodtok"],
     },
     {
         "key": "fashion",
@@ -42,6 +46,7 @@ NICHES = [
         "icon": "Shirt",
         "description": "Outfits, styling tips, and fashion hauls",
         "creators": ["addisonre", "wisdm8", "wolfiecindy"],
+        "hashtags": ["fashion", "ootd", "style"],
     },
     {
         "key": "tech",
@@ -49,6 +54,7 @@ NICHES = [
         "icon": "Cpu",
         "description": "Gadgets, apps, and tech reviews",
         "creators": ["mkbhd", "ijustine", "mrwhosetheboss"],
+        "hashtags": ["tech", "techtok", "gadgets"],
     },
     {
         "key": "pets",
@@ -56,6 +62,7 @@ NICHES = [
         "icon": "PawPrint",
         "description": "Cute, funny, and heartwarming pet moments",
         "creators": ["scout2015", "thedodo", "loki_the_wolfdog"],
+        "hashtags": ["pets", "dogsoftiktok", "catsoftiktok"],
     },
     {
         "key": "travel",
@@ -63,6 +70,7 @@ NICHES = [
         "icon": "Plane",
         "description": "Destinations, travel hacks, and adventures",
         "creators": ["doyoutravel", "hobopeeba", "kara_and_nate"],
+        "hashtags": ["travel", "traveltok", "wanderlust"],
     },
     {
         "key": "finance",
@@ -70,6 +78,7 @@ NICHES = [
         "icon": "TrendingUp",
         "description": "Money tips, business advice, and entrepreneurship",
         "creators": ["garyvee", "humphreytalks", "thebudgetmom"],
+        "hashtags": ["finance", "moneytok", "entrepreneur"],
     },
     {
         "key": "education",
@@ -77,6 +86,7 @@ NICHES = [
         "icon": "GraduationCap",
         "description": "Life hacks, facts, and quick learning",
         "creators": ["aliabdaal", "5.minute.crafts", "factsdaily"],
+        "hashtags": ["education", "lifehacks", "learnontiktok"],
     },
 ]
 
