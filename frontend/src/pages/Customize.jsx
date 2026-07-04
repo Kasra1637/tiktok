@@ -4,6 +4,7 @@ import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
 import { Input } from "../components/ui/input";
+import { Skeleton } from "../components/ui/skeleton";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import GenerationProgress from "../components/GenerationProgress";
 import JsonSpecPanel from "../components/JsonSpecPanel";
@@ -29,7 +30,8 @@ function ChipGroup({ label, presets, value, onChange, testIdPrefix }) {
             type="button"
             onClick={() => onChange(p)}
             data-testid={`${testIdPrefix}-${p.toLowerCase().replace(/\s+/g, "-")}`}
-            className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-colors ${
+            aria-pressed={value === p}
+            className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-colors hover:-translate-y-[1px] active:translate-y-0 active:scale-95 ${
               value === p
                 ? "bg-[color:var(--brand-teal)] text-white border-transparent"
                 : "bg-white border-border hover:border-[color:rgba(13,148,136,0.45)]"
@@ -152,7 +154,27 @@ export default function Customize() {
   }
 
   if (!video || !analysis) {
-    return <p className="text-muted-foreground">Loading...</p>;
+    return (
+      <div className="space-y-6" data-testid="customize-loading">
+        <Stepper current="swap" />
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-4 w-full max-w-2xl" />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6">
+          <Card className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] space-y-5 h-fit">
+            <Skeleton className="h-40 w-full rounded-2xl" />
+            <div className="flex gap-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="w-16 h-20 rounded-lg shrink-0" />
+              ))}
+            </div>
+            <Skeleton className="h-10 w-full rounded-xl" />
+          </Card>
+          <Skeleton className="h-80 rounded-2xl" />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -195,7 +217,7 @@ export default function Customize() {
                     setPhotoFile(null);
                     setPhotoPreview(null);
                   }}
-                  className="absolute top-2 right-2 rounded-full bg-black/70 text-white p-1"
+                  className="absolute top-2 right-2 rounded-full bg-black/70 text-white p-1 transition-colors transition-transform hover:bg-black/85 hover:scale-105 active:scale-95"
                   data-testid="remove-photo-button"
                   aria-label="Remove photo"
                 >
@@ -228,8 +250,8 @@ export default function Customize() {
                     type="button"
                     onClick={() => toggleFrame(f.index)}
                     data-testid={`select-frame-${f.index}`}
-                    className={`relative shrink-0 w-16 h-20 rounded-lg overflow-hidden border-2 transition-colors ${
-                      isSelected ? "border-[color:var(--brand-teal)]" : "border-border"
+                    className={`group relative shrink-0 w-16 h-20 rounded-lg overflow-hidden border-2 transition-colors hover:-translate-y-[1px] active:translate-y-0 ${
+                      isSelected ? "border-[color:var(--brand-teal)]" : "border-border hover:border-[color:rgba(13,148,136,0.45)]"
                     }`}
                   >
                     <img src={mediaUrl(f.media_url)} alt={`Frame ${f.index}`} className="w-full h-full object-cover" />
@@ -255,10 +277,11 @@ export default function Customize() {
                 type="button"
                 onClick={() => setMode("preserve")}
                 data-testid="mode-preserve-button"
-                className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold border transition-colors ${
+                aria-pressed={mode === "preserve"}
+                className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold border transition-colors hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98] ${
                   mode === "preserve"
                     ? "bg-[color:var(--brand-teal)] text-white border-transparent"
-                    : "bg-white border-border text-muted-foreground"
+                    : "bg-white border-border text-muted-foreground hover:border-[color:rgba(13,148,136,0.45)]"
                 }`}
               >
                 <Lock className="h-3.5 w-3.5" /> Keep Original (Recommended)
@@ -267,10 +290,11 @@ export default function Customize() {
                 type="button"
                 onClick={() => setMode("custom")}
                 data-testid="mode-custom-button"
-                className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold border transition-colors ${
+                aria-pressed={mode === "custom"}
+                className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold border transition-colors hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98] ${
                   mode === "custom"
                     ? "bg-[color:var(--brand-coral)] text-white border-transparent"
-                    : "bg-white border-border text-muted-foreground"
+                    : "bg-white border-border text-muted-foreground hover:border-[color:rgba(249,115,22,0.4)]"
                 }`}
               >
                 <Palette className="h-3.5 w-3.5" /> Customize Scene
