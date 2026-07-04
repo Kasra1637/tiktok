@@ -47,7 +47,7 @@ export function AppShell({ children }) {
                 to="/brand"
                 data-testid="brand-nav-link"
                 aria-current={isBrand ? "page" : undefined}
-                className={`flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(13,148,136,0.08)] transition-colors ${
+                className={`flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(99,102,241,0.08)] transition-colors ${
                   isBrand ? "text-[color:var(--brand-teal)]" : "text-foreground"
                 }`}
               >
@@ -58,7 +58,7 @@ export function AppShell({ children }) {
                 to="/history"
                 data-testid="history-nav-link"
                 aria-current={isHistory ? "page" : undefined}
-                className={`flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(13,148,136,0.08)] transition-colors ${
+                className={`flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(99,102,241,0.08)] transition-colors ${
                   isHistory ? "text-[color:var(--brand-teal)]" : "text-foreground"
                 }`}
               >
@@ -96,7 +96,7 @@ export function AppShell({ children }) {
             to="/brand"
             data-testid="brand-nav-link-desktop"
             aria-current={isBrand ? "page" : undefined}
-            className={`hidden md:flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(13,148,136,0.08)] transition-colors shrink-0 ${
+            className={`hidden md:flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(99,102,241,0.08)] transition-colors shrink-0 ${
               isBrand ? "text-[color:var(--brand-teal)]" : "text-foreground"
             }`}
           >
@@ -107,7 +107,7 @@ export function AppShell({ children }) {
             to="/history"
             data-testid="history-nav-link-desktop"
             aria-current={isHistory ? "page" : undefined}
-            className={`hidden md:flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(13,148,136,0.08)] transition-colors shrink-0 ${
+            className={`hidden md:flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(99,102,241,0.08)] transition-colors shrink-0 ${
               isHistory ? "text-[color:var(--brand-teal)]" : "text-foreground"
             }`}
           >

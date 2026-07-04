@@ -167,7 +167,7 @@ export default function BrandSetup() {
           <Button
             type="submit"
             disabled={analyzing}
-            className="gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#EA580C] text-white shrink-0"
+            className="gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white shrink-0"
             data-testid="analyze-brand-url-button"
           >
             {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
@@ -308,7 +308,7 @@ export default function BrandSetup() {
               {saving ? "Saving..." : "Save Brand Profile"}
             </Button>
 
-            <Alert className="rounded-2xl border-[color:var(--brand-teal)] bg-[color:rgba(13,148,136,0.06)]">
+            <Alert className="rounded-2xl border-[color:var(--brand-teal)] bg-[color:rgba(99,102,241,0.06)]">
               <CheckCircle2 className="h-4 w-4 text-[color:var(--brand-teal)]" />
               <AlertTitle>Ready for the Content Remixer</AlertTitle>
               <AlertDescription className="flex flex-col sm:flex-row sm:items-center gap-2 justify-between">

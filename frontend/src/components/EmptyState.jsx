@@ -16,7 +16,7 @@ export function EmptyState({ icon: Icon, title, description, action }) {
             initial={reduceMotion ? { scale: 1 } : { scale: 0.85 }}
             animate={{ scale: 1 }}
             transition={{ duration: 0.3, ease: "easeOut", delay: 0.05 }}
-            className="flex h-12 w-12 items-center justify-center rounded-full bg-[color:rgba(13,148,136,0.10)] text-[color:var(--brand-teal)]"
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-[color:rgba(99,102,241,0.10)] text-[color:var(--brand-teal)]"
           >
             <Icon className="h-6 w-6" />
           </motion.span>
