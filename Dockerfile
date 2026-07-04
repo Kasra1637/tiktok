@@ -1,5 +1,5 @@
 # Stage 1: Build React frontend
-FROM node:18-slim AS builder
+FROM node:20-slim AS builder
 
 WORKDIR /app/frontend
 
@@ -32,6 +32,10 @@ RUN pip install --no-cache-dir yt-dlp
 # Copy backend source
 COPY backend/ /app/backend/
 
+# Ensure storage directories exist (videos/frames/uploads/generated/db)
+RUN mkdir -p /app/backend/storage/videos /app/backend/storage/frames \
+             /app/backend/storage/uploads /app/backend/storage/generated
+
 # Copy built frontend from builder stage
 COPY --from=builder /app/frontend/build /app/frontend_build/
 
@@ -41,4 +45,4 @@ EXPOSE 8080
 # Run from backend directory so uvicorn can find server:app
 WORKDIR /app/backend
 
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["sh", "-c", "uvicorn server:app --host 0.0.0.0 --port ${PORT:-8080}"]

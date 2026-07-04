@@ -1,4 +1,5 @@
-"""Shared helpers for Mongo document serialization and Pydantic request models."""
+"""Shared helpers and Pydantic request models."""
+import json
 from datetime import datetime, timezone
 from typing import List, Optional
 from pydantic import BaseModel
@@ -8,23 +9,19 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def serialize_doc(doc: dict) -> dict:
-    """Recursively strip Mongo's _id and convert datetime objects to ISO strings."""
-    if doc is None:
-        return None
-    clean = {}
-    for k, v in doc.items():
-        if k == "_id":
-            continue
-        if isinstance(v, datetime):
-            clean[k] = v.isoformat()
-        elif isinstance(v, dict):
-            clean[k] = serialize_doc(v)
-        elif isinstance(v, list):
-            clean[k] = [serialize_doc(i) if isinstance(i, dict) else i for i in v]
-        else:
-            clean[k] = v
-    return clean
+def row_to_dict(row, columns: list) -> dict:
+    """Convert an sqlite3.Row to a dict, parsing JSON fields."""
+    JSON_FIELDS = {"frames", "generation_spec", "generated_images", "prompt_breakdown", "reference_image_ids", "selected_image_ids", "replicable_mechanics"}
+    d = {}
+    for i, col in enumerate(columns):
+        val = row[i]
+        if col in JSON_FIELDS and isinstance(val, str):
+            try:
+                val = json.loads(val)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        d[col] = val
+    return d
 
 
 class IngestVideoRequest(BaseModel):
@@ -50,4 +47,3 @@ class GenerateVideoRequest(BaseModel):
     image_ids: List[str] = []
     edited_prompt: Optional[str] = None
     duration_seconds: Optional[int] = None
-
