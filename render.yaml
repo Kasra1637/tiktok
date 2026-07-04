@@ -5,11 +5,7 @@ services:
     dockerfilePath: ./Dockerfile
     plan: free
     envVars:
-      - key: MONGO_URL
-        sync: false
-      - key: DB_NAME
-        value: hookforge
-      - key: EMERGENT_LLM_KEY
+      - key: OPENROUTER_API_KEY
         sync: false
       - key: PORT
         value: "8080"

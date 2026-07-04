@@ -32,6 +32,10 @@ RUN pip install --no-cache-dir yt-dlp
 # Copy backend source
 COPY backend/ /app/backend/
 
+# Ensure storage directories exist (videos/frames/uploads/generated/db)
+RUN mkdir -p /app/backend/storage/videos /app/backend/storage/frames \
+             /app/backend/storage/uploads /app/backend/storage/generated
+
 # Copy built frontend from builder stage
 COPY --from=builder /app/frontend/build /app/frontend_build/
 
