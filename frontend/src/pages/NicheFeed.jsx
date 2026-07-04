@@ -126,89 +126,98 @@ export default function NicheFeed() {
         </p>
       </div>
 
-      {/* Search bar */}
-      <form onSubmit={handleSearch} className="flex items-center gap-2 max-w-lg">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder="Search by keyword or hashtag..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 rounded-xl"
-            data-testid="search-input"
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={searchLoading || !searchQuery.trim()}
-          className="rounded-xl px-4 py-2 text-sm font-medium bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white disabled:opacity-50 transition-colors"
-          data-testid="search-button"
-        >
-          {searchLoading ? "Searching..." : "Search"}
-        </button>
-        {searchResults !== null && (
-          <button
-            type="button"
-            onClick={clearSearch}
-            className="rounded-xl px-3 py-2 text-sm font-medium border border-border hover:bg-muted transition-colors"
-          >
-            Clear
-          </button>
-        )}
-      </form>
-
-      {/* Mode toggle */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-1 rounded-full border border-border p-1 bg-white" data-testid="mode-toggle">
-          {MODES.map((m) => (
+      {/* Filter bar: search + mode + niche selector, grouped as one cohesive unit */}
+      <div className="rounded-2xl border border-border bg-white/60 p-4 md:p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <form onSubmit={handleSearch} className="flex items-center gap-2 w-full sm:max-w-lg">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search by keyword or hashtag..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 rounded-xl bg-white"
+                data-testid="search-input"
+              />
+            </div>
             <button
-              key={m.key}
-              onClick={() => setMode(m.key)}
-              data-testid={`mode-${m.key}`}
-              className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
-                mode === m.key
-                  ? "bg-[color:var(--brand-teal)] text-white"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
+              type="submit"
+              disabled={searchLoading || !searchQuery.trim()}
+              className="rounded-xl px-4 py-2 text-sm font-medium bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white disabled:opacity-50 transition-colors hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98]"
+              data-testid="search-button"
             >
-              {m.label}
+              {searchLoading ? "Searching..." : "Search"}
             </button>
-          ))}
-        </div>
-        {(mode === "trending" || mode === "mixed") && searchResults === null && (
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <TrendingUp className="h-3 w-3" />
-            Sorted by virality
-          </span>
-        )}
-        {searchResults !== null && (
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Search className="h-3 w-3" />
-            Showing search results for &quot;{searchQuery}&quot;
-          </span>
-        )}
-      </div>
+            {searchResults !== null && (
+              <button
+                type="button"
+                onClick={clearSearch}
+                className="rounded-xl px-3 py-2 text-sm font-medium border border-border hover:bg-muted transition-colors"
+              >
+                Clear
+              </button>
+            )}
+          </form>
 
-      <div className="flex flex-wrap gap-2" data-testid="niche-selector-tabs">
-        {niches.map((n) => {
-          const Icon = LucideIcons[n.icon] || Compass;
-          const isActive = activeNiche === n.key;
-          return (
-            <button
-              key={n.key}
-              onClick={() => setActiveNiche(n.key)}
-              data-testid={`niche-chip-${n.key}`}
-              className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium border transition-colors ${
-                isActive
-                  ? "bg-[color:var(--brand-teal)] text-white border-transparent"
-                  : "bg-white border-border hover:border-[color:rgba(13,148,136,0.45)]"
-              }`}
-            >
-              <Icon className="h-4 w-4" /> {n.label}
-            </button>
-          );
-        })}
+          <div className="flex items-center gap-1 rounded-full border border-border p-1 bg-white shrink-0" data-testid="mode-toggle">
+            {MODES.map((m) => (
+              <button
+                key={m.key}
+                onClick={() => setMode(m.key)}
+                data-testid={`mode-${m.key}`}
+                aria-pressed={mode === m.key}
+                className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors active:scale-95 ${
+                  mode === m.key
+                    ? "bg-[color:var(--brand-teal)] text-white"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {((mode === "trending" || mode === "mixed") && searchResults === null) || searchResults !== null ? (
+          <div>
+            {searchResults !== null ? (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Search className="h-3 w-3" />
+                Showing search results for &quot;{searchQuery}&quot;
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <TrendingUp className="h-3 w-3" />
+                Sorted by virality
+              </span>
+            )}
+          </div>
+        ) : null}
+
+        <div className="h-px bg-border" />
+
+        <div className="flex flex-wrap gap-2" data-testid="niche-selector-tabs">
+          {niches.map((n) => {
+            const Icon = LucideIcons[n.icon] || Compass;
+            const isActive = activeNiche === n.key;
+            return (
+              <button
+                key={n.key}
+                onClick={() => setActiveNiche(n.key)}
+                data-testid={`niche-chip-${n.key}`}
+                aria-pressed={isActive}
+                className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium border transition-colors hover:-translate-y-[1px] active:translate-y-0 ${
+                  isActive
+                    ? "bg-[color:var(--brand-teal)] text-white border-transparent"
+                    : "bg-white border-border hover:border-[color:rgba(13,148,136,0.45)]"
+                }`}
+              >
+                <Icon className="h-4 w-4" /> {n.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {loadingVideos || searchLoading ? (
@@ -241,8 +250,14 @@ export default function NicheFeed() {
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4" data-testid="video-feed-grid">
-          {displayVideos.map((v) => (
-            <VideoCard key={v.tiktok_url} video={v} onAnalyze={handleAnalyze} analyzing={analyzingId === v.tiktok_url} />
+          {displayVideos.map((v, i) => (
+            <VideoCard
+              key={v.tiktok_url}
+              video={v}
+              onAnalyze={handleAnalyze}
+              analyzing={analyzingId === v.tiktok_url}
+              index={i}
+            />
           ))}
         </div>
       )}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
+import { Skeleton } from "../components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import EmptyState from "../components/EmptyState";
 import JsonSpecPanel from "../components/JsonSpecPanel";
@@ -23,7 +24,30 @@ export default function History() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <p className="text-muted-foreground">Loading history...</p>;
+  if (loading) {
+    return (
+      <div className="space-y-6" data-testid="history-loading">
+        <div>
+          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-4 w-72 mt-2" />
+        </div>
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i} className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)]">
+              <div className="flex flex-col md:flex-row gap-4">
+                <Skeleton className="w-full md:w-28 h-40 md:h-28 rounded-xl shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
+                  <Skeleton className="h-3 w-2/3" />
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (items.length === 0) {
     return (
@@ -44,7 +68,10 @@ export default function History() {
 
       <div className="space-y-4" data-testid="history-list">
         {items.map(({ video, customizations, video_jobs }) => (
-          <Card key={video.id} className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)]">
+          <Card
+            key={video.id}
+            className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] hover:shadow-[var(--shadow-tight)] hover:border-[color:rgba(13,148,136,0.3)] transition-shadow transition-colors"
+          >
             <div className="flex flex-col md:flex-row gap-4">
               {video.thumbnail_url && (
                 <img
@@ -59,7 +86,7 @@ export default function History() {
               <div className="flex-1 space-y-2">
                 <Link
                   to={`/analysis/${video.id}`}
-                  className="font-medium hover:text-[color:var(--brand-teal-dark)] hover:underline line-clamp-2 block"
+                  className="font-medium hover:text-[color:var(--brand-teal-dark)] hover:underline line-clamp-2 block transition-colors"
                   data-testid="history-video-link"
                 >
                   {video.title}
@@ -99,10 +126,14 @@ export default function History() {
                             <button
                               key={img.id}
                               onClick={() => setActiveCustomization(c)}
-                              className="rounded-xl overflow-hidden border border-border hover:border-[color:var(--brand-teal)] transition-colors w-16 h-16"
+                              className="group rounded-xl overflow-hidden border border-border hover:border-[color:var(--brand-teal)] hover:shadow-[var(--shadow-tight)] transition-shadow transition-colors w-16 h-16"
                               data-testid="history-customization-thumb"
                             >
-                              <img src={mediaUrl(img.image_url)} alt="Customization preview" className="w-full h-full object-cover" />
+                              <img
+                                src={mediaUrl(img.image_url)}
+                                alt="Customization preview"
+                                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.08]"
+                              />
                             </button>
                           )
                         )
@@ -126,7 +157,7 @@ export default function History() {
                           key={j.id}
                           onClick={() => setActiveVideoJob(j)}
                           data-testid="history-video-job-item"
-                          className="text-xs rounded-full border border-border hover:border-[color:var(--brand-teal)] px-3 py-1.5 transition-colors"
+                          className="text-xs rounded-full border border-border hover:border-[color:var(--brand-teal)] hover:bg-[color:rgba(13,148,136,0.06)] px-3 py-1.5 transition-colors"
                         >
                           {j.brand_name || "Untitled brief"} • {j.status === "pending_provider_selection" ? "Ready" : "Draft"}
                         </button>

@@ -1,3 +1,4 @@
+import { motion, useReducedMotion } from "framer-motion";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { AspectRatio } from "./ui/aspect-ratio";
@@ -12,13 +13,20 @@ function formatCount(n) {
 }
 
 function getViralityStyle(score) {
-  if (score >= 70) return "bg-gradient-to-r from-orange-500 to-red-500 text-white";
-  if (score >= 40) return "bg-gradient-to-r from-yellow-400 to-orange-400 text-white";
+  if (score >= 70) return "bg-[color:var(--brand-coral)] text-white";
+  if (score >= 40) return "bg-amber-500 text-white";
   return "bg-gray-500/80 text-white";
 }
 
-export function VideoCard({ video, onAnalyze, analyzing }) {
+export function VideoCard({ video, onAnalyze, analyzing, index = 0 }) {
+  const reduceMotion = useReducedMotion();
+
   return (
+    <motion.div
+      initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.24, ease: "easeOut", delay: Math.min(index * 0.04, 0.32) }}
+    >
     <Card
       className="group overflow-hidden bg-[color:var(--card)] border border-border rounded-2xl shadow-[var(--shadow-soft)] hover:shadow-[var(--shadow-tight)] hover:border-[color:rgba(13,148,136,0.35)] hover:-translate-y-0.5 transition-shadow transition-colors transition-transform"
       data-testid="video-card"
@@ -63,13 +71,14 @@ export function VideoCard({ video, onAnalyze, analyzing }) {
         <Button
           onClick={() => onAnalyze(video)}
           disabled={analyzing}
-          className="w-full rounded-xl bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white gap-2"
+          className="w-full bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white gap-2"
           data-testid="analyze-hook-button"
         >
-          <Sparkles className="h-4 w-4" /> {analyzing ? "Analyzing..." : "Analyze Hook"}
+          <Sparkles className={`h-4 w-4 ${analyzing ? "animate-pulse" : ""}`} /> {analyzing ? "Analyzing..." : "Analyze Hook"}
         </Button>
       </div>
     </Card>
+    </motion.div>
   );
 }
 export default VideoCard;

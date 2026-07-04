@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import { Skeleton } from "../components/ui/skeleton";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import Filmstrip from "../components/Filmstrip";
 import HookBreakdown from "../components/HookBreakdown";
@@ -89,7 +90,33 @@ export default function AnalysisDetail() {
   }
 
   if (!video) {
-    return <p className="text-muted-foreground">Loading video...</p>;
+    return (
+      <div className="space-y-6" data-testid="analysis-detail-loading">
+        <Stepper current="analyze" />
+        <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6">
+          <Card className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] space-y-3 h-fit">
+            <Skeleton className="w-full aspect-[9/16] rounded-xl" />
+            <Skeleton className="h-5 w-4/5" />
+            <Skeleton className="h-3 w-1/3" />
+            <Skeleton className="h-3 w-2/3" />
+            <Skeleton className="h-9 w-full rounded-xl" />
+          </Card>
+          <div className="space-y-4">
+            <Skeleton className="h-4 w-64" />
+            <div className="flex gap-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="w-[120px] md:w-[140px] h-[160px] md:h-[190px] rounded-xl shrink-0" />
+              ))}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-24 rounded-2xl" />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
