@@ -16,6 +16,8 @@ const EMPTY_FORM = {
   niche: "",
   products_services: "",
   target_audience: "",
+  ideal_customer_profile: "",
+  differentiation: "",
   tone_voice: "",
 };
 
@@ -54,6 +56,8 @@ export default function BrandSetup() {
           niche: data.niche || "",
           products_services: productsToText(data.products_services),
           target_audience: data.target_audience || "",
+          ideal_customer_profile: data.ideal_customer_profile || "",
+          differentiation: data.differentiation || "",
           tone_voice: data.tone_voice || "",
         });
         setWebsiteUrl(data.website_url || "");
@@ -82,6 +86,8 @@ export default function BrandSetup() {
         niche: data.niche || "",
         products_services: productsToText(data.products_services),
         target_audience: data.target_audience || "",
+        ideal_customer_profile: data.ideal_customer_profile || "",
+        differentiation: data.differentiation || "",
         tone_voice: data.tone_voice || "",
       });
       toast.success("We analyzed your website and pre-filled your brand profile below!");
@@ -107,6 +113,8 @@ export default function BrandSetup() {
         niche: form.niche,
         products_services: textToProducts(form.products_services),
         target_audience: form.target_audience,
+        ideal_customer_profile: form.ideal_customer_profile,
+        differentiation: form.differentiation,
         tone_voice: form.tone_voice,
       };
       if (brand?.id) {
@@ -250,6 +258,36 @@ export default function BrandSetup() {
                 data-testid="brand-products-field"
               />
             </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Who are you trying to reach?</label>
+              <p className="text-xs text-muted-foreground">
+                Describe your ideal customers or viewers — their demographics, interests, pain points, and
+                where they spend time online.
+              </p>
+              <Textarea
+                value={form.ideal_customer_profile}
+                onChange={handleFieldChange("ideal_customer_profile")}
+                placeholder="e.g. Women 22-35 interested in home workouts, struggling to stay consistent with fitness routines while juggling work — mostly active on TikTok and Instagram Reels in the evenings."
+                className="min-h-[100px]"
+                data-testid="brand-ideal-customer-field"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">What Sets You Apart</label>
+              <p className="text-xs text-muted-foreground">
+                What makes you different from others in your space? What are your standout strengths, selling
+                propositions, or signature angles?
+              </p>
+              <Textarea
+                value={form.differentiation}
+                onChange={handleFieldChange("differentiation")}
+                placeholder="e.g. Only supplement brand with third-party lab-tested batches published publicly, same-day shipping, and a no-BS ingredient list with zero fillers."
+                className="min-h-[100px]"
+                data-testid="brand-differentiation-field"
+              />
+            </div>
+
             <div className="space-y-2">
               <label className="text-sm font-medium">Tone / voice</label>
               <Input

@@ -203,12 +203,23 @@ async def init_db():
                 niche TEXT,
                 products_services TEXT,
                 target_audience TEXT,
+                ideal_customer_profile TEXT,
+                differentiation TEXT,
                 tone_voice TEXT,
                 raw_extracted_text TEXT,
                 created_at TEXT,
                 updated_at TEXT
             );
         """)
+        await conn.commit()
+
+        # Migration: add columns that may be missing on a pre-existing DB (e.g. on Render's
+        # persistent-ish free-tier disk from a previous deploy of this table).
+        cursor = await conn.execute("PRAGMA table_info(brand_profiles)")
+        existing_cols = {row[1] for row in await cursor.fetchall()}
+        for col in ("ideal_customer_profile", "differentiation"):
+            if col not in existing_cols:
+                await conn.execute(f"ALTER TABLE brand_profiles ADD COLUMN {col} TEXT")
         await conn.commit()
 
 
@@ -1042,11 +1053,13 @@ async def analyze_brand_url(payload: AnalyzeBrandUrlRequest):
     await _execute(
         """INSERT INTO brand_profiles
            (id, website_url, brand_name, brand_description, niche, products_services,
-            target_audience, tone_voice, raw_extracted_text, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            target_audience, ideal_customer_profile, differentiation, tone_voice,
+            raw_extracted_text, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (brand_id, url, extracted.get("brand_name"), extracted.get("brand_description"),
          extracted.get("niche"), json.dumps(extracted.get("products_or_services", [])),
-         extracted.get("target_audience"), extracted.get("tone_voice"), page_text,
+         extracted.get("target_audience"), extracted.get("ideal_customer_profile"),
+         extracted.get("differentiation"), extracted.get("tone_voice"), page_text,
          created_at, created_at),
     )
     return await _fetch_one("SELECT * FROM brand_profiles WHERE id = ?", (brand_id,))

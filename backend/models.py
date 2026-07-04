@@ -60,6 +60,8 @@ class BrandProfileUpdateRequest(BaseModel):
     niche: Optional[str] = None
     products_services: Optional[List[str]] = None
     target_audience: Optional[str] = None
+    ideal_customer_profile: Optional[str] = None
+    differentiation: Optional[str] = None
     tone_voice: Optional[str] = None
     raw_extracted_text: Optional[str] = None
 

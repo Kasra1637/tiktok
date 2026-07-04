@@ -37,7 +37,7 @@ REQUIRED_VIDEO_PROMPT_KEYS = {
 
 REQUIRED_BRAND_ANALYSIS_KEYS = {
     "brand_name", "brand_description", "niche", "products_or_services",
-    "target_audience", "tone_voice",
+    "target_audience", "ideal_customer_profile", "differentiation", "tone_voice",
 }
 
 
@@ -292,9 +292,10 @@ async def poll_video_job(job_id: str) -> dict:
 async def analyze_brand_from_text(url: str, page_text: str) -> dict:
     """Extract structured brand information from a website's scraped text using OpenRouter."""
     system_message = (
-        "You are an expert brand strategist. You read raw text scraped from a company's website "
-        "and extract a clear, structured summary of the brand for use in short-form video "
-        "scriptwriting. Respond with STRICT JSON only, no markdown fences, no extra commentary."
+        "You are an expert brand strategist and audience researcher. You read raw text scraped from a "
+        "company's website and extract a clear, structured summary of the brand — including a deep read "
+        "on their ideal customer and what makes them different from competitors — for use in short-form "
+        "video scriptwriting. Respond with STRICT JSON only, no markdown fences, no extra commentary."
     )
 
     prompt = (
@@ -307,7 +308,14 @@ async def analyze_brand_from_text(url: str, page_text: str) -> dict:
         '  "brand_description": "1-3 sentence description of what the brand does",\n'
         '  "niche": "the brand\'s niche/category/industry",\n'
         '  "products_or_services": ["short list of specific products or services offered"],\n'
-        '  "target_audience": "who the brand is trying to reach",\n'
+        '  "target_audience": "short label for who the brand is trying to reach (e.g. \'busy professionals 25-40\')",\n'
+        '  "ideal_customer_profile": "Who are you trying to reach? A rich 2-4 sentence description of the '
+        'ideal customer/viewer covering demographics (age range, gender skew, income/life-stage if inferable), '
+        'interests, pain points this brand solves for them, and where they likely spend time online '
+        '(e.g. TikTok, Instagram Reels, YouTube Shorts, specific communities/forums)",\n'
+        '  "differentiation": "What Sets You Apart? A 2-4 sentence description of what makes this brand '
+        'different from others in its space — standout strengths, unique selling propositions, or signature '
+        'angles that competitors don\'t have",\n'
         '  "tone_voice": "a short description of the brand\'s tone/voice (e.g. playful, premium, no-nonsense)"\n'
         "}\n"
         "If any field cannot be determined from the text, make a reasonable best-effort guess based on "
@@ -388,12 +396,18 @@ async def generate_remix_script(analysis: dict, brand_profile: dict, target_dura
         f"- Niche: {brand_profile.get('niche') or '(not provided)'}\n"
         f"- Products/services: {products_str}\n"
         f"- Target audience: {brand_profile.get('target_audience') or '(not provided)'}\n"
+        f"- Ideal customer profile (demographics, interests, pain points, where they spend time online): "
+        f"{brand_profile.get('ideal_customer_profile') or '(not provided)'}\n"
+        f"- What sets this brand apart (standout strengths / USPs / signature angle): "
+        f"{brand_profile.get('differentiation') or '(not provided)'}\n"
         f"- Tone/voice: {brand_profile.get('tone_voice') or '(not provided)'}\n\n"
         f"Target video duration: up to {target_duration} seconds.\n\n"
         "Remix the original hook's mechanics into a new script that naturally features this brand's "
         "specific product(s)/service(s) — e.g. if the brand sells fitness supplements, the narrative should "
-        "naturally weave in that specific product, not generic brand copy. Return ONLY a JSON object with "
-        "this exact schema:\n"
+        "naturally weave in that specific product, not generic brand copy. Speak directly to the ideal "
+        "customer profile's pain points and where they spend time online, and lean into the brand's stated "
+        "differentiation/USP as the emotional payoff or twist of the remixed script. Return ONLY a JSON "
+        "object with this exact schema:\n"
         "{\n"
         '  "content": "what happens in the video moment by moment",\n'
         '  "camera_angle": "camera angles matching the original hook",\n'
