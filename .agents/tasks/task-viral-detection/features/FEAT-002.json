@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "feat",
   "description": "Frontend UI updates: display virality scores on video cards, add trending/curated mode toggle to NicheFeed, and add keyword search functionality",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Update frontend/src/lib/api.js to add new API methods: (a) getTrendingVideos(nicheKey) calling GET /api/niches/{nicheKey}/trending, (b) searchTrending(query, limit) calling GET /api/trending/search?q={query}&limit={limit}, (c) Update getNicheVideos to accept optional mode param: getNicheVideos(nicheKey, mode='curated') calling GET /api/niches/{nicheKey}/videos?mode={mode}.",
     "Update frontend/src/components/VideoCard.jsx to display a virality score badge: (a) Add a new badge in the top-right corner of the thumbnail area showing the virality_score as a flame icon + score (e.g., flame icon 87). Style with gradient background (orange-to-red for scores >= 70, yellow for 40-69, gray for < 40). (b) Keep existing view/like badges at bottom-left unchanged.",
@@ -19,5 +19,5 @@
     "cd /projects/sandbox/tiktok/frontend && yarn build"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "Frontend builds successfully with yarn build. Used shadcn Input component for search bar. Flame icon from lucide-react for virality badge. Mode defaults to trending. yarn install was required before build (node_modules not pre-existing). yarn.lock was updated but not committed as it was untracked and may already be in .gitignore."
 }
