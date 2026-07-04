@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "feat",
   "description": "Backend viral detection engine: hashtag/keyword discovery via yt-dlp, virality scoring algorithm, and new API endpoints for trending video discovery",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Create backend/viral_detection.py with: (a) fetch_hashtag_videos(hashtag, limit=20) function that uses yt-dlp to scrape https://www.tiktok.com/tag/{hashtag} with --flat-playlist and -j flags, returning video metadata (id, url, creator, title, view_count, like_count, comment_count, share_count, duration, upload_date, thumbnail). Follow the same async subprocess pattern as pipeline.fetch_creator_videos(). (b) fetch_keyword_videos(keyword, limit=20) function using yt-dlp TikTok search URL pattern. (c) compute_virality_score(video_meta) function that calculates a 0-100 virality score based on: engagement_rate = (likes + comments + shares) / views, velocity = views / age_in_hours, recency_boost = exponential decay favoring videos < 48 hours old, raw_scale = log-scaled view count bonus. The formula should weight velocity highest (40%), engagement_rate (30%), recency (20%), raw_scale (10%). (d) rank_videos(videos_list) that scores and sorts videos descending by virality_score.",
     "Update backend/niches_config.py to add a 'hashtags' list to each niche (e.g., fitness: ['fitness', 'workout', 'gymtok'], comedy: ['comedy', 'funny', 'skit'], etc.). Keep the existing 'creators' field intact.",
@@ -24,5 +24,5 @@
     "cd /projects/sandbox/tiktok/backend && python -m pytest test_viral_detection.py -v -n 0"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "Python 3.11.15 via pyenv used. emergentintegrations package from custom URL could not be installed but is not needed for our module. All 20 unit tests pass. Server syntax validated. The import of server.py requires MONGO_URL env var but that is expected in production."
 }
