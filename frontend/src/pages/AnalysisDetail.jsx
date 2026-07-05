@@ -173,7 +173,7 @@ export default function AnalysisDetail() {
               className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white"
               data-testid="face-swap-hook-button"
             >
-              <Repeat2 className="h-4 w-4" /> Face Swap This Frame
+              <Repeat2 className="h-4 w-4" /> Face Swap
             </Button>
           )}
         </Card>
