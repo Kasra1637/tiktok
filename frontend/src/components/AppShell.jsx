@@ -36,7 +36,7 @@ export function AppShell({ children }) {
       <header className="sticky top-0 z-20 border-b border-border/60 bg-[color:var(--card)]/80 backdrop-blur-sm">
         <div className="max-w-[1400px] mx-auto px-4 md:px-6 lg:px-8 py-2 md:h-14 md:py-0 flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
           <div className="flex items-center justify-between md:justify-start gap-3 md:shrink-0">
-            <Link to="/" className="flex items-center gap-1.5 shrink-0" data-testid="logo-home-link">
+            <Link to="/discover" className="flex items-center gap-1.5 shrink-0" data-testid="logo-home-link">
               <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[color:var(--brand-teal)] text-white transition-transform hover:scale-105">
                 <Sparkles className="h-3.5 w-3.5" />
               </span>

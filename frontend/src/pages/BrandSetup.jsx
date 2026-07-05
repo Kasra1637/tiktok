@@ -295,7 +295,7 @@ export default function BrandSetup() {
                   variant="secondary"
                   size="sm"
                   className="gap-1.5 rounded-lg shrink-0"
-                  onClick={() => navigate("/")}
+                  onClick={() => navigate("/discover")}
                   data-testid="find-video-to-remix-button"
                 >
                   Find a video to remix <ArrowRight className="h-3.5 w-3.5" />

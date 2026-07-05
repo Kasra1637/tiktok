@@ -363,7 +363,7 @@ export default function FaceSwap() {
                     <p className="text-sm font-medium">No video selected</p>
                     <p className="text-xs text-muted-foreground">Pick a viral video from your niche — that frame becomes your target automatically.</p>
                   </div>
-                  <a href="/" className="shrink-0">
+                  <a href="/discover" className="shrink-0">
                     <Button size="sm" className="gap-1.5 rounded-lg bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white" data-testid="go-to-discover-cta">
                       <ArrowRight className="h-3.5 w-3.5" /> Discover Hooks
                     </Button>

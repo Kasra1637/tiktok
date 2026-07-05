@@ -73,7 +73,7 @@ export default function AnalysisDetail() {
   if (error) {
     return (
       <div className="max-w-2xl mx-auto space-y-4">
-        <Button variant="ghost" onClick={() => navigate("/")} className="gap-1.5" data-testid="back-to-feed-button">
+        <Button variant="ghost" onClick={() => navigate("/discover")} className="gap-1.5" data-testid="back-to-feed-button">
           <ArrowLeft className="h-4 w-4" /> Back to feed
         </Button>
         <Alert variant="destructive" className="rounded-2xl" data-testid="analysis-error-alert">
@@ -111,7 +111,7 @@ export default function AnalysisDetail() {
 
   return (
     <div className="space-y-5">
-      <Button variant="ghost" size="sm" onClick={() => navigate("/")} className="gap-1 -ml-2 text-muted-foreground" data-testid="back-to-feed-button">
+      <Button variant="ghost" size="sm" onClick={() => navigate("/discover")} className="gap-1 -ml-2 text-muted-foreground" data-testid="back-to-feed-button">
         <ArrowLeft className="h-3.5 w-3.5" /> Back
       </Button>
 

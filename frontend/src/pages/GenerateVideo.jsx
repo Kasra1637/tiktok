@@ -209,7 +209,7 @@ export default function GenerateVideo() {
           <AlertTitle>Could not load this customization</AlertTitle>
           <AlertDescription>{loadError}</AlertDescription>
         </Alert>
-        <Button onClick={() => navigate("/")} className="gap-1.5">
+        <Button onClick={() => navigate("/discover")} className="gap-1.5">
           <ArrowLeft className="h-4 w-4" /> Back to feed
         </Button>
       </div>
