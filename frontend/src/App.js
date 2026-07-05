@@ -4,6 +4,8 @@ import { Toaster } from "./components/ui/sonner";
 import AppShell from "./components/AppShell";
 import PageTransition from "./components/PageTransition";
 import Landing from "./pages/Landing";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
 import NicheFeed from "./pages/NicheFeed";
 import AnalysisDetail from "./pages/AnalysisDetail";
 import GenerateVideo from "./pages/GenerateVideo";
@@ -22,8 +24,10 @@ function App() {
     <BrowserRouter>
       <div className="noise-overlay" />
       <Routes>
-        {/* Landing page — no AppShell wrapper */}
+        {/* Landing + legal pages — no AppShell wrapper */}
         <Route path="/" element={<Landing />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
 
         {/* App pages — wrapped in AppShell */}
         <Route path="/*" element={

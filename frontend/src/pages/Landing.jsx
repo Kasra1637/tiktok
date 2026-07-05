@@ -179,13 +179,29 @@ export default function Landing() {
       </section>
 
       {/* CTA */}
-      <section className="relative z-10 max-w-4xl mx-auto px-4 pb-20 text-center">
+      <section className="relative z-10 max-w-4xl mx-auto px-4 pb-12 text-center">
         <Link to="/discover">
           <Button size="lg" className="gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white px-10 py-5 text-base font-semibold shadow-lg">
             <Sparkles className="h-5 w-5" /> Enter App
           </Button>
         </Link>
       </section>
+
+      {/* Footer */}
+      <footer className="relative z-10 border-t border-border/50 bg-white/40">
+        <div className="max-w-5xl mx-auto px-4 py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span className="flex h-5 w-5 items-center justify-center rounded bg-[color:var(--brand-teal)] text-white">
+              <Sparkles className="h-2.5 w-2.5" />
+            </span>
+            <span className="font-medium">HookForge</span>
+          </div>
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
+            <Link to="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
