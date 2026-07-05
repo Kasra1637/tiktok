@@ -10,7 +10,7 @@ import HookBreakdown from "../components/HookBreakdown";
 import GenerationProgress from "../components/GenerationProgress";
 import Stepper from "../components/Stepper";
 import { api, getErrorMessage } from "../lib/api";
-import { ArrowLeft, Eye, Heart, MessageCircle, Wand2, AlertTriangle, RotateCcw, ExternalLink } from "lucide-react";
+import { ArrowLeft, Eye, Heart, MessageCircle, Wand2, AlertTriangle, RotateCcw, ExternalLink, Repeat2 } from "lucide-react";
 
 const ANALYZE_STAGES = ["Downloading video", "Extracting first 2-3 seconds", "Analyzing hook mechanics with AI"];
 
@@ -180,6 +180,21 @@ export default function AnalysisDetail() {
               data-testid="customize-hook-button"
             >
               <Wand2 className="h-4 w-4" /> Customize this Hook
+            </Button>
+          )}
+          {analysis && selectedFrame && (
+            <Button
+              onClick={() => {
+                const frame = analysis.frames.find((f) => f.index === selectedFrame);
+                if (frame) {
+                  navigate(`/face-swap?target=${encodeURIComponent(frame.media_url)}&videoId=${videoId}&frame=${selectedFrame}`);
+                }
+              }}
+              variant="outline"
+              className="w-full gap-2 rounded-xl border-[color:var(--brand-teal)] text-[color:var(--brand-teal-dark)] hover:bg-[color:rgba(99,102,241,0.06)]"
+              data-testid="face-swap-hook-button"
+            >
+              <Repeat2 className="h-4 w-4" /> Face Swap Selected Frame
             </Button>
           )}
         </Card>

@@ -669,22 +669,45 @@ async def get_video_analysis(video_id: str):
 # ---------------------------------------------------------------------------
 @api_router.post("/face-swap")
 async def face_swap(
-    target_image: UploadFile = File(...),
+    target_image: UploadFile = File(None),
     source_face: UploadFile = File(...),
+    target_frame_url: str = Form(""),
 ):
     """
-    Standalone face swap endpoint. Accepts a target image and a source face image,
-    performs high-fidelity face swap with facial geometry tracking, skin tone matching,
-    and lighting adaptation.
+    Standalone face swap endpoint. Accepts a target image (uploaded file OR server-side
+    frame URL from a video analysis) and a source face image, performs high-fidelity
+    face swap with facial geometry tracking, skin tone matching, and lighting adaptation.
     """
     require_ai_configured()
 
-    # Validate target image
-    target_bytes = await target_image.read()
-    if len(target_bytes) == 0:
-        raise HTTPException(status_code=400, detail="Target image is empty.")
-    if len(target_bytes) > 12 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Target image is too large (max 12MB).")
+    # Resolve target image path (either from upload or from existing server-side frame)
+    if target_frame_url and target_frame_url.strip():
+        # Target comes from an analyzed video frame already on the server
+        # e.g. /api/media/frames/abc123/frame_003.jpg
+        url_path = target_frame_url.strip()
+        # Extract the actual file path from the media URL
+        if url_path.startswith("/api/media/"):
+            relative_path = url_path[len("/api/media/"):]
+            target_path = pipeline.STORAGE_DIR / relative_path
+        else:
+            raise HTTPException(status_code=400, detail="Invalid target frame URL.")
+
+        if not target_path.exists():
+            raise HTTPException(status_code=400, detail="Target frame not found on server. Please re-analyze the video.")
+    elif target_image:
+        # Target is a freshly uploaded file
+        target_bytes = await target_image.read()
+        if len(target_bytes) == 0:
+            raise HTTPException(status_code=400, detail="Target image is empty.")
+        if len(target_bytes) > 12 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Target image is too large (max 12MB).")
+        normalized_target = validate_and_normalize_photo(target_bytes)
+        target_id = str(uuid.uuid4())
+        target_path = pipeline.UPLOADS_DIR / f"{target_id}.png"
+        with open(target_path, "wb") as f:
+            f.write(normalized_target)
+    else:
+        raise HTTPException(status_code=400, detail="Please provide either a target image upload or a target frame URL.")
 
     # Validate source face
     source_bytes = await source_face.read()
@@ -693,18 +716,10 @@ async def face_swap(
     if len(source_bytes) > 12 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Source face image is too large (max 12MB).")
 
-    # Normalize both images
-    normalized_target = validate_and_normalize_photo(target_bytes)
+    # Normalize source face
     normalized_source = validate_and_normalize_photo(source_bytes)
-
-    # Save to disk
-    target_id = str(uuid.uuid4())
     source_id = str(uuid.uuid4())
-    target_path = pipeline.UPLOADS_DIR / f"{target_id}.png"
     source_path = pipeline.UPLOADS_DIR / f"{source_id}.png"
-
-    with open(target_path, "wb") as f:
-        f.write(normalized_target)
     with open(source_path, "wb") as f:
         f.write(normalized_source)
 
@@ -713,7 +728,7 @@ async def face_swap(
         image_bytes = await generate_face_swap(
             target_image_path=target_path,
             source_face_path=source_path,
-            session_id=f"face-swap-{target_id}-{source_id}",
+            session_id=f"face-swap-{source_id}",
         )
     except Exception as e:
         logger.error(f"Face swap generation failed: {e}")
@@ -736,7 +751,7 @@ async def face_swap(
     return {
         "id": generated_id,
         "generated_image_url": f"/api/media/generated/{generated_id}.png",
-        "target_image_url": f"/api/media/uploads/{target_id}.png",
+        "target_image_url": target_frame_url.strip() if target_frame_url and target_frame_url.strip() else f"/api/media/uploads/{target_id}.png",
         "source_face_url": f"/api/media/uploads/{source_id}.png",
         "resolution": f"{width}x{height}",
         "format": "PNG",
