@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { Sparkles, History as HistoryIcon, Loader2, Link2 } from "lucide-react";
+import { Sparkles, History as HistoryIcon, Loader2, Link2, Briefcase } from "lucide-react";
 import { toast } from "sonner";
 import { api, getErrorMessage } from "../lib/api";
 
@@ -28,6 +28,7 @@ export function AppShell({ children }) {
   };
 
   const isHistory = location.pathname === "/history";
+  const isBrand = location.pathname === "/brand";
 
   return (
     <div className="relative min-h-screen hero-wash">
@@ -41,16 +42,29 @@ export function AppShell({ children }) {
               <span className="font-display text-lg font-semibold tracking-tight">HookForge</span>
             </Link>
 
-            <Link
-              to="/history"
-              data-testid="history-nav-link"
-              aria-current={isHistory ? "page" : undefined}
-              className={`md:hidden flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(13,148,136,0.08)] transition-colors ${
-                isHistory ? "text-[color:var(--brand-teal)]" : "text-foreground"
-              }`}
-            >
-              <HistoryIcon className="h-4 w-4" /> History
-            </Link>
+            <div className="md:hidden flex items-center gap-1">
+              <Link
+                to="/brand"
+                data-testid="brand-nav-link"
+                aria-current={isBrand ? "page" : undefined}
+                className={`flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(99,102,241,0.08)] transition-colors ${
+                  isBrand ? "text-[color:var(--brand-teal)]" : "text-foreground"
+                }`}
+              >
+                <Briefcase className="h-4 w-4" /> Brand
+              </Link>
+
+              <Link
+                to="/history"
+                data-testid="history-nav-link"
+                aria-current={isHistory ? "page" : undefined}
+                className={`flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(99,102,241,0.08)] transition-colors ${
+                  isHistory ? "text-[color:var(--brand-teal)]" : "text-foreground"
+                }`}
+              >
+                <HistoryIcon className="h-4 w-4" /> History
+              </Link>
+            </div>
           </div>
 
           <form onSubmit={handleSubmit} className="flex-1 flex items-center gap-2 md:max-w-xl" role="search">
@@ -79,10 +93,21 @@ export function AppShell({ children }) {
           </form>
 
           <Link
+            to="/brand"
+            data-testid="brand-nav-link-desktop"
+            aria-current={isBrand ? "page" : undefined}
+            className={`hidden md:flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(99,102,241,0.08)] transition-colors shrink-0 ${
+              isBrand ? "text-[color:var(--brand-teal)]" : "text-foreground"
+            }`}
+          >
+            <Briefcase className="h-4 w-4" /> Your Brand
+          </Link>
+
+          <Link
             to="/history"
             data-testid="history-nav-link-desktop"
             aria-current={isHistory ? "page" : undefined}
-            className={`hidden md:flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(13,148,136,0.08)] transition-colors shrink-0 ${
+            className={`hidden md:flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(99,102,241,0.08)] transition-colors shrink-0 ${
               isHistory ? "text-[color:var(--brand-teal)]" : "text-foreground"
             }`}
           >

@@ -34,7 +34,7 @@ function ChipGroup({ label, presets, value, onChange, testIdPrefix }) {
             className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-colors hover:-translate-y-[1px] active:translate-y-0 active:scale-95 ${
               value === p
                 ? "bg-[color:var(--brand-teal)] text-white border-transparent"
-                : "bg-white border-border hover:border-[color:rgba(13,148,136,0.45)]"
+                : "bg-white border-border hover:border-[color:rgba(99,102,241,0.45)]"
             }`}
           >
             {p}
@@ -251,7 +251,7 @@ export default function Customize() {
                     onClick={() => toggleFrame(f.index)}
                     data-testid={`select-frame-${f.index}`}
                     className={`group relative shrink-0 w-16 h-20 rounded-lg overflow-hidden border-2 transition-colors hover:-translate-y-[1px] active:translate-y-0 ${
-                      isSelected ? "border-[color:var(--brand-teal)]" : "border-border hover:border-[color:rgba(13,148,136,0.45)]"
+                      isSelected ? "border-[color:var(--brand-teal)]" : "border-border hover:border-[color:rgba(99,102,241,0.45)]"
                     }`}
                   >
                     <img src={mediaUrl(f.media_url)} alt={`Frame ${f.index}`} className="w-full h-full object-cover" />
@@ -281,7 +281,7 @@ export default function Customize() {
                 className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold border transition-colors hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98] ${
                   mode === "preserve"
                     ? "bg-[color:var(--brand-teal)] text-white border-transparent"
-                    : "bg-white border-border text-muted-foreground hover:border-[color:rgba(13,148,136,0.45)]"
+                    : "bg-white border-border text-muted-foreground hover:border-[color:rgba(99,102,241,0.45)]"
                 }`}
               >
                 <Lock className="h-3.5 w-3.5" /> Keep Original (Recommended)
@@ -294,7 +294,7 @@ export default function Customize() {
                 className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold border transition-colors hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98] ${
                   mode === "custom"
                     ? "bg-[color:var(--brand-coral)] text-white border-transparent"
-                    : "bg-white border-border text-muted-foreground hover:border-[color:rgba(249,115,22,0.4)]"
+                    : "bg-white border-border text-muted-foreground hover:border-[color:rgba(244,63,94,0.4)]"
                 }`}
               >
                 <Palette className="h-3.5 w-3.5" /> Customize Scene
@@ -345,7 +345,7 @@ export default function Customize() {
           <Button
             onClick={handleGenerate}
             disabled={generating}
-            className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#EA580C] text-white"
+            className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white"
             data-testid="generate-preview-button"
           >
             <Sparkles className="h-4 w-4" /> {generating ? "Generating..." : "Generate Preview"}

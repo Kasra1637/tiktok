@@ -77,7 +77,7 @@ export default function History() {
         {items.map(({ video, customizations, video_jobs }) => (
           <Card
             key={video.id}
-            className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] hover:shadow-[var(--shadow-tight)] hover:border-[color:rgba(13,148,136,0.3)] transition-shadow transition-colors"
+            className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] hover:shadow-[var(--shadow-tight)] hover:border-[color:rgba(99,102,241,0.3)] transition-shadow transition-colors"
           >
             <div className="flex flex-col md:flex-row gap-4">
               {video.thumbnail_url && (
@@ -167,7 +167,7 @@ export default function History() {
                           key={j.id}
                           onClick={() => setActiveVideoJob(j)}
                           data-testid="history-video-job-item"
-                          className="text-xs rounded-full border border-border hover:border-[color:var(--brand-teal)] hover:bg-[color:rgba(13,148,136,0.06)] px-3 py-1.5 transition-colors"
+                          className="text-xs rounded-full border border-border hover:border-[color:var(--brand-teal)] hover:bg-[color:rgba(99,102,241,0.06)] px-3 py-1.5 transition-colors"
                         >
                           {j.brand_name || "Untitled brief"} • {j.status === "pending_provider_selection" ? "Ready" : "Draft"}
                         </button>

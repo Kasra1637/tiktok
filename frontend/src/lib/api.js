@@ -37,13 +37,19 @@ export const api = {
     client.get(`/customizations/${customizationId}/remix-chat`).then((r) => r.data),
   sendRemixChatMessage: (customizationId, message) =>
     client.post(`/customizations/${customizationId}/remix-chat`, { message }).then((r) => r.data),
-  analyzeBrandWebsite: (websiteUrl) =>
-    client.post("/brand/analyze-website", { website_url: websiteUrl }).then((r) => r.data),
   generateVideoPrompt: (customizationId, payload) =>
     client.post(`/customizations/${customizationId}/generate-video-prompt`, payload).then((r) => r.data),
   generateVideo: (jobId, payload) =>
     client.post(`/video-jobs/${jobId}/generate-video`, payload).then((r) => r.data),
   getVideoJob: (jobId) => client.get(`/video-jobs/${jobId}`).then((r) => r.data),
+
+  // Brand profile / Content Remixer
+  analyzeBrandUrl: (url) => client.post("/brand/analyze-url", { url }).then((r) => r.data),
+  getActiveBrand: () => client.get("/brand/active").then((r) => r.data),
+  getBrand: (id) => client.get(`/brand/${id}`).then((r) => r.data),
+  updateBrand: (id, payload) => client.patch(`/brand/${id}`, payload).then((r) => r.data),
+  generateRemixScript: (customizationId, payload) =>
+    client.post(`/customizations/${customizationId}/generate-remix-script`, payload).then((r) => r.data),
 };
 
 export const getErrorMessage = (err) => {

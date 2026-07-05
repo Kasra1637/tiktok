@@ -21,65 +21,65 @@ code, .font-mono {
 
 @layer base {
     :root {
-        --background: 54 100% 95%;
-        --foreground: 20 6% 16%;
-        --card: 36 100% 97%;
-        --card-foreground: 20 6% 16%;
-        --popover: 36 100% 97%;
-        --popover-foreground: 20 6% 16%;
-        --primary: 174 83% 32%;
+        --background: 245 50% 98%;
+        --foreground: 240 10% 15%;
+        --card: 240 40% 99%;
+        --card-foreground: 240 10% 15%;
+        --popover: 240 40% 99%;
+        --popover-foreground: 240 10% 15%;
+        --primary: 244 75% 59%;
         --primary-foreground: 0 0% 100%;
-        --secondary: 36 33% 92%;
-        --secondary-foreground: 20 6% 16%;
-        --muted: 36 33% 92%;
-        --muted-foreground: 215 16% 47%;
-        --accent: 36 33% 92%;
-        --accent-foreground: 20 6% 16%;
+        --secondary: 240 20% 94%;
+        --secondary-foreground: 240 10% 15%;
+        --muted: 240 20% 94%;
+        --muted-foreground: 240 8% 46%;
+        --accent: 240 20% 94%;
+        --accent-foreground: 240 10% 15%;
         --destructive: 0 72% 51%;
         --destructive-foreground: 0 0% 100%;
-        --border: 30 20% 86%;
-        --input: 30 20% 86%;
-        --ring: 174 83% 32%;
-        --chart-1: 174 83% 32%;
-        --chart-2: 24 95% 53%;
-        --chart-3: 197 37% 24%;
-        --chart-4: 43 74% 66%;
-        --chart-5: 27 87% 67%;
+        --border: 240 25% 89%;
+        --input: 240 25% 89%;
+        --ring: 244 75% 59%;
+        --chart-1: 244 75% 59%;
+        --chart-2: 350 89% 60%;
+        --chart-3: 262 60% 55%;
+        --chart-4: 330 70% 60%;
+        --chart-5: 220 15% 55%;
         --radius: 0.75rem;
 
-        --brand-teal: #0D9488;
-        --brand-teal-dark: #0F766E;
-        --brand-coral: #F97316;
-        --brand-mint: #B2F2BB;
-        --shadow-soft: 0 10px 30px rgba(41, 37, 36, 0.08);
-        --shadow-tight: 0 6px 16px rgba(41, 37, 36, 0.10);
+        --brand-teal: #6366F1;
+        --brand-teal-dark: #4F46E5;
+        --brand-coral: #F43F5E;
+        --brand-mint: #E0E7FF;
+        --shadow-soft: 0 10px 30px rgba(30, 27, 75, 0.08);
+        --shadow-tight: 0 6px 16px rgba(30, 27, 75, 0.10);
         --noise-opacity: 0.05;
     }
     .dark {
-        --background: 20 14% 8%;
-        --foreground: 36 33% 92%;
-        --card: 20 12% 11%;
-        --card-foreground: 36 33% 92%;
-        --popover: 20 12% 11%;
-        --popover-foreground: 36 33% 92%;
-        --primary: 174 70% 45%;
+        --background: 240 20% 9%;
+        --foreground: 240 20% 92%;
+        --card: 240 15% 12%;
+        --card-foreground: 240 20% 92%;
+        --popover: 240 15% 12%;
+        --popover-foreground: 240 20% 92%;
+        --primary: 239 84% 67%;
         --primary-foreground: 0 0% 100%;
-        --secondary: 20 10% 16%;
-        --secondary-foreground: 36 33% 92%;
-        --muted: 20 10% 16%;
-        --muted-foreground: 30 10% 65%;
-        --accent: 20 10% 16%;
-        --accent-foreground: 36 33% 92%;
+        --secondary: 240 12% 18%;
+        --secondary-foreground: 240 20% 92%;
+        --muted: 240 12% 18%;
+        --muted-foreground: 240 10% 65%;
+        --accent: 240 12% 18%;
+        --accent-foreground: 240 20% 92%;
         --destructive: 0 62.8% 30.6%;
         --destructive-foreground: 0 0% 98%;
-        --border: 20 10% 20%;
-        --input: 20 10% 20%;
-        --ring: 174 70% 45%;
-        --chart-1: 174 70% 45%;
-        --chart-2: 24 95% 53%;
-        --chart-3: 30 80% 55%;
-        --chart-4: 280 65% 60%;
-        --chart-5: 340 75% 55%;
+        --border: 240 12% 22%;
+        --input: 240 12% 22%;
+        --ring: 239 84% 67%;
+        --chart-1: 239 84% 67%;
+        --chart-2: 350 89% 65%;
+        --chart-3: 262 60% 60%;
+        --chart-4: 330 70% 65%;
+        --chart-5: 220 15% 60%;
     }
 }
 
@@ -103,7 +103,7 @@ code, .font-mono {
 }
 
 .hero-wash {
-    background: radial-gradient(1200px circle at 20% 10%, rgba(13,148,136,0.10), transparent 55%), radial-gradient(900px circle at 80% 0%, rgba(249,115,22,0.10), transparent 50%), linear-gradient(180deg, #FEFCE8 0%, #FEF9F3 60%, #FEFCE8 100%);
+    background: radial-gradient(1200px circle at 20% 10%, rgba(99,102,241,0.12), transparent 55%), radial-gradient(900px circle at 80% 0%, rgba(244,63,94,0.10), transparent 50%), linear-gradient(180deg, #F8F7FF 0%, #FDFBFF 60%, #F8F7FF 100%);
 }
 
 .filmstrip-scroll {

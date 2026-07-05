@@ -14,7 +14,7 @@ export function HookBreakdown({ analysis }) {
     <div className="space-y-4">
       <Card className="p-4 md:p-5 rounded-2xl border-border bg-[color:var(--card)] shadow-[var(--shadow-soft)]">
         <div className="flex items-start gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[color:rgba(249,115,22,0.15)] text-[color:#9A3412] shrink-0">
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[color:rgba(244,63,94,0.15)] text-[color:#9F1239] shrink-0">
             <Lightbulb className="h-4 w-4" />
           </span>
           <div>

@@ -1,4 +1,5 @@
-"""Shared helpers for Mongo document serialization and Pydantic request models."""
+"""Shared helpers and Pydantic request models."""
+import json
 from datetime import datetime, timezone
 from typing import List, Optional
 from pydantic import BaseModel
@@ -8,23 +9,19 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def serialize_doc(doc: dict) -> dict:
-    """Recursively strip Mongo's _id and convert datetime objects to ISO strings."""
-    if doc is None:
-        return None
-    clean = {}
-    for k, v in doc.items():
-        if k == "_id":
-            continue
-        if isinstance(v, datetime):
-            clean[k] = v.isoformat()
-        elif isinstance(v, dict):
-            clean[k] = serialize_doc(v)
-        elif isinstance(v, list):
-            clean[k] = [serialize_doc(i) if isinstance(i, dict) else i for i in v]
-        else:
-            clean[k] = v
-    return clean
+def row_to_dict(row, columns: list) -> dict:
+    """Convert an sqlite3.Row to a dict, parsing JSON fields."""
+    JSON_FIELDS = {"frames", "generation_spec", "generated_images", "prompt_breakdown", "reference_image_ids", "selected_image_ids", "replicable_mechanics", "products_services", "messages", "brief"}
+    d = {}
+    for i, col in enumerate(columns):
+        val = row[i]
+        if col in JSON_FIELDS and isinstance(val, str):
+            try:
+                val = json.loads(val)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        d[col] = val
+    return d
 
 
 class IngestVideoRequest(BaseModel):
@@ -44,18 +41,6 @@ class BrandContextRequest(BaseModel):
     brand_goal: str = ""
     brand_details: str = ""
     duration_seconds: int = 30
-    # Optional structured brand fields, typically pre-filled by analyzing the
-    # brand's website (see BrandWebsiteRequest / /api/brand/analyze-website)
-    # but always editable by the user before generating the prompt.
-    website_url: Optional[str] = ""
-    brand_overview: Optional[str] = ""
-    unique_selling_propositions: List[str] = []
-    brand_voice_tone: Optional[str] = ""
-    target_audience: Optional[str] = ""
-
-
-class BrandWebsiteRequest(BaseModel):
-    website_url: str
 
 
 class GenerateVideoRequest(BaseModel):
@@ -64,7 +49,27 @@ class GenerateVideoRequest(BaseModel):
     duration_seconds: Optional[int] = None
 
 
+class AnalyzeBrandUrlRequest(BaseModel):
+    url: str
+
+
+class BrandProfileUpdateRequest(BaseModel):
+    website_url: Optional[str] = None
+    brand_name: Optional[str] = None
+    brand_description: Optional[str] = None
+    niche: Optional[str] = None
+    products_services: Optional[List[str]] = None
+    target_audience: Optional[str] = None
+    ideal_customer_profile: Optional[str] = None
+    differentiation: Optional[str] = None
+    tone_voice: Optional[str] = None
+    raw_extracted_text: Optional[str] = None
+
+
+class GenerateRemixScriptRequest(BaseModel):
+    duration_seconds: int = 30
+
+
 class RemixChatMessageRequest(BaseModel):
     """A single user turn in the conversational remix chat for a customization."""
     message: str
-

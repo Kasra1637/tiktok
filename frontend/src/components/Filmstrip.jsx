@@ -10,7 +10,7 @@ export function Filmstrip({ frames, selectedIndex, onSelect }) {
             onClick={() => onSelect(frame.index)}
             data-testid={`filmstrip-frame-button-${frame.index}`}
             className={`group relative shrink-0 w-[120px] md:w-[140px] rounded-xl overflow-hidden border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-teal)] transition-shadow transition-colors hover:shadow-[var(--shadow-tight)] ${
-              selectedIndex === frame.index ? "ring-2 ring-[color:var(--brand-teal)] border-transparent" : "border-border hover:border-[color:rgba(13,148,136,0.45)]"
+              selectedIndex === frame.index ? "ring-2 ring-[color:var(--brand-teal)] border-transparent" : "border-border hover:border-[color:rgba(99,102,241,0.45)]"
             }`}
           >
             <img

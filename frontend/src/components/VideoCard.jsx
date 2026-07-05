@@ -14,7 +14,7 @@ function formatCount(n) {
 
 function getViralityStyle(score) {
   if (score >= 70) return "bg-[color:var(--brand-coral)] text-white";
-  if (score >= 40) return "bg-amber-500 text-white";
+  if (score >= 40) return "bg-[color:var(--brand-teal)] text-white";
   return "bg-gray-500/80 text-white";
 }
 
@@ -28,7 +28,7 @@ export function VideoCard({ video, onAnalyze, analyzing, index = 0 }) {
       transition={{ duration: 0.24, ease: "easeOut", delay: Math.min(index * 0.04, 0.32) }}
     >
     <Card
-      className="group overflow-hidden bg-[color:var(--card)] border border-border rounded-2xl shadow-[var(--shadow-soft)] hover:shadow-[var(--shadow-tight)] hover:border-[color:rgba(13,148,136,0.35)] hover:-translate-y-0.5 transition-shadow transition-colors transition-transform"
+      className="group overflow-hidden bg-[color:var(--card)] border border-border rounded-2xl shadow-[var(--shadow-soft)] hover:shadow-[var(--shadow-tight)] hover:border-[color:rgba(99,102,241,0.35)] hover:-translate-y-0.5 transition-shadow transition-colors transition-transform"
       data-testid="video-card"
     >
       <AspectRatio ratio={9 / 16} className="bg-muted overflow-hidden relative">
