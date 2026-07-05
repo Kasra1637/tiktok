@@ -225,7 +225,9 @@ export default function FaceSwap() {
       {/* ---------- HEADER ---------- */}
       <div className="text-center space-y-1.5 pt-2">
         <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight">Face Swap</h1>
-        <p className="text-sm text-muted-foreground">Upload a target photo and your face. We handle the rest.</p>
+        <p className="text-sm text-muted-foreground">
+          {videoInfo ? "Your video frame is ready. Upload your face to swap." : "Select a viral video frame or upload a target, then add your face."}
+        </p>
       </div>
 
       {/* ---------- STEP INDICATOR (minimal) ---------- */}
@@ -243,26 +245,62 @@ export default function FaceSwap() {
       {/* ---------- UPLOAD PHASE ---------- */}
       {!result && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {/* Target */}
-            <div className="space-y-2.5">
-              <div className="flex items-center gap-2">
-                <span className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${targetFile ? "bg-[color:var(--brand-teal)] text-white" : "bg-muted text-muted-foreground"}`}>1</span>
-                <span className="text-sm font-semibold">Target Photo</span>
-                {videoInfo && <span className="text-[10px] px-2 py-0.5 rounded-full bg-[color:rgba(99,102,241,0.08)] text-[color:var(--brand-teal-dark)] font-medium flex items-center gap-1"><Film className="h-3 w-3" /> From video</span>}
+          {videoInfo && targetPreview ? (
+            /* --- VIDEO FRAME ALREADY SELECTED (from discovery) --- */
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Selected frame (locked in, not an upload zone) */}
+              <div className="space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold bg-[color:var(--brand-teal)] text-white"><Check className="h-3 w-3" /></span>
+                  <span className="text-sm font-semibold">Video Frame Selected</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[color:rgba(99,102,241,0.08)] text-[color:var(--brand-teal-dark)] font-medium flex items-center gap-1"><Film className="h-3 w-3" /> Frame {videoInfo.frameIndex}</span>
+                </div>
+                <div className="relative">
+                  <img src={targetPreview} alt="Selected video frame" className="w-full rounded-xl object-cover aspect-[3/4]" />
+                  <button
+                    onClick={handleRemoveTarget}
+                    className="absolute top-2 right-2 rounded-full bg-black/60 text-white p-1.5 opacity-0 hover:opacity-100 transition-opacity hover:bg-black/80"
+                    aria-label="Change target"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                  <div className="absolute bottom-2 left-2 rounded-full bg-[color:var(--brand-teal)] text-white px-2 py-0.5 text-[10px] font-semibold flex items-center gap-1">
+                    <Check className="h-2.5 w-2.5" /> From discovery
+                  </div>
+                </div>
               </div>
-              <DropZone onFileSelect={handleTargetSelect} accept="image/jpeg,image/png,image/webp" label="Drop target image here" sublabel="The photo to swap a face onto" preview={targetPreview} onRemove={handleRemoveTarget} testId="target" icon={ImageIcon} />
-            </div>
 
-            {/* Source */}
-            <div className="space-y-2.5">
-              <div className="flex items-center gap-2">
-                <span className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${sourceFile ? "bg-[color:var(--brand-teal)] text-white" : targetFile ? "bg-[color:var(--brand-teal)] text-white" : "bg-muted text-muted-foreground"}`}>2</span>
-                <span className={`text-sm font-semibold ${!targetFile ? "text-muted-foreground" : ""}`}>Your Face</span>
+              {/* Source face (the only thing user needs to upload) */}
+              <div className="space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <span className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${sourceFile ? "bg-[color:var(--brand-teal)] text-white" : "bg-[color:var(--brand-coral)] text-white"}`}>{sourceFile ? <Check className="h-3 w-3" /> : "2"}</span>
+                  <span className="text-sm font-semibold">Upload Your Face</span>
+                </div>
+                <DropZone onFileSelect={handleSourceSelect} accept="image/jpeg,image/png,image/webp" label="Drop your face photo here" sublabel="Clear, frontal view works best" preview={sourcePreview} onRemove={handleRemoveSource} testId="source" icon={User} />
               </div>
-              <DropZone onFileSelect={handleSourceSelect} accept="image/jpeg,image/png,image/webp" label="Drop your face photo here" sublabel="Clear, frontal view works best" preview={sourcePreview} onRemove={handleRemoveSource} testId="source" icon={User} />
             </div>
-          </div>
+          ) : (
+            /* --- MANUAL MODE (no video selected, user uploads both) --- */
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Target */}
+              <div className="space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <span className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${targetFile ? "bg-[color:var(--brand-teal)] text-white" : "bg-muted text-muted-foreground"}`}>1</span>
+                  <span className="text-sm font-semibold">Target Image</span>
+                </div>
+                <DropZone onFileSelect={handleTargetSelect} accept="image/jpeg,image/png,image/webp" label="Drop target image here" sublabel="Or select a video from Discover Hooks" preview={targetPreview} onRemove={handleRemoveTarget} testId="target" icon={ImageIcon} />
+              </div>
+
+              {/* Source */}
+              <div className="space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <span className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${sourceFile ? "bg-[color:var(--brand-teal)] text-white" : targetFile ? "bg-[color:var(--brand-teal)] text-white" : "bg-muted text-muted-foreground"}`}>2</span>
+                  <span className={`text-sm font-semibold ${!targetFile ? "text-muted-foreground" : ""}`}>Your Face</span>
+                </div>
+                <DropZone onFileSelect={handleSourceSelect} accept="image/jpeg,image/png,image/webp" label="Drop your face photo here" sublabel="Clear, frontal view works best" preview={sourcePreview} onRemove={handleRemoveSource} testId="source" icon={User} />
+              </div>
+            </div>
+          )}
 
           {/* Generate button */}
           {targetFile && sourceFile && (
