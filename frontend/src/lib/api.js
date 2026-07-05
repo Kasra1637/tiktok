@@ -52,6 +52,22 @@ export const api = {
       })
       .then((r) => r.data),
 
+  // Face Swap → Video Generation (Phase 2)
+  faceSwapGenerateVideo: (imageId, prompt, duration) => {
+    const formData = new FormData();
+    formData.append("image_id", imageId);
+    formData.append("prompt", prompt || "");
+    formData.append("duration", String(duration || 10));
+    return client
+      .post("/face-swap/generate-video", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 60000,
+      })
+      .then((r) => r.data);
+  },
+  faceSwapVideoStatus: (jobId) =>
+    client.get(`/face-swap/video-status/${jobId}`).then((r) => r.data),
+
   // Brand profile / Content Remixer
   analyzeBrandUrl: (url) => client.post("/brand/analyze-url", { url }).then((r) => r.data),
   getActiveBrand: () => client.get("/brand/active").then((r) => r.data),

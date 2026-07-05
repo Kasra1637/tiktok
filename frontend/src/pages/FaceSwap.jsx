@@ -2,6 +2,8 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Textarea } from "../components/ui/textarea";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import GenerationProgress from "../components/GenerationProgress";
 import { api, mediaUrl, getErrorMessage } from "../lib/api";
@@ -19,6 +21,10 @@ import {
   Check,
   ZoomIn,
   Film,
+  Clapperboard,
+  Play,
+  Clock,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -203,6 +209,16 @@ export default function FaceSwap() {
   const [genError, setGenError] = useState(null);
   const [result, setResult] = useState(null);
 
+  // Phase 2: Video generation state
+  const [videoDuration, setVideoDuration] = useState(10);
+  const [videoPrompt, setVideoPrompt] = useState("");
+  const [generatingVideo, setGeneratingVideo] = useState(false);
+  const [videoJobId, setVideoJobId] = useState(null);
+  const [videoStatus, setVideoStatus] = useState(null); // "pending" | "in_progress" | "completed" | "failed"
+  const [videoUrl, setVideoUrl] = useState(null);
+  const [videoError, setVideoError] = useState(null);
+  const pollingRef = useRef(null);
+
   // Pre-load target frame from query params (when coming from video analysis)
   useEffect(() => {
     const frameUrl = searchParams.get("target");
@@ -286,6 +302,59 @@ export default function FaceSwap() {
     }
   };
 
+  // Phase 2: Generate video from swapped image
+  const handleGenerateVideo = async () => {
+    if (!result?.id) return;
+    setGeneratingVideo(true);
+    setVideoError(null);
+    setVideoUrl(null);
+    setVideoStatus("pending");
+    try {
+      const data = await api.faceSwapGenerateVideo(result.id, videoPrompt, videoDuration);
+      setVideoJobId(data.job_id);
+      setVideoStatus("pending");
+      toast.success("Video generation started!");
+      // Start polling
+      startPolling(data.job_id);
+    } catch (err) {
+      setVideoError(getErrorMessage(err));
+      setVideoStatus(null);
+      setGeneratingVideo(false);
+    }
+  };
+
+  const startPolling = (jobId) => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+    pollingRef.current = setInterval(async () => {
+      try {
+        const status = await api.faceSwapVideoStatus(jobId);
+        setVideoStatus(status.status);
+        if (status.status === "completed") {
+          setVideoUrl(status.video_url || status.video_urls?.[0]);
+          setGeneratingVideo(false);
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+          toast.success("Video generated successfully!");
+        } else if (status.status === "failed") {
+          setVideoError(status.error || "Video generation failed.");
+          setGeneratingVideo(false);
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+      } catch (err) {
+        // Don't stop polling on transient errors
+        console.warn("Polling error:", err);
+      }
+    }, 5000); // Poll every 5 seconds
+  };
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, []);
+
   const handleReset = () => {
     setTargetFile(null);
     setTargetPreview(null);
@@ -295,6 +364,18 @@ export default function FaceSwap() {
     setSourcePreview(null);
     setResult(null);
     setGenError(null);
+    // Reset video state
+    setVideoDuration(10);
+    setVideoPrompt("");
+    setGeneratingVideo(false);
+    setVideoJobId(null);
+    setVideoStatus(null);
+    setVideoUrl(null);
+    setVideoError(null);
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
   };
 
   return (
@@ -461,7 +542,7 @@ export default function FaceSwap() {
                 className="flex-1"
               >
                 <Button className="w-full gap-2 rounded-xl bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white" data-testid="download-swap-button">
-                  <Download className="h-4 w-4" /> Download Result
+                  <Download className="h-4 w-4" /> Download Image
                 </Button>
               </a>
               <Button
@@ -473,6 +554,142 @@ export default function FaceSwap() {
                 <RotateCcw className="h-4 w-4" /> New Face Swap
               </Button>
             </div>
+
+            {/* Phase 2: Generate Video from Swapped Image */}
+            <Card className="p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] space-y-4" data-testid="phase2-video-section">
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[color:var(--brand-coral)] text-white">
+                  <Clapperboard className="h-4 w-4" />
+                </span>
+                <div>
+                  <h3 className="font-display font-semibold text-lg">Generate Video</h3>
+                  <p className="text-xs text-muted-foreground">Animate your face-swapped image into a full video</p>
+                </div>
+              </div>
+
+              <p className="text-sm text-muted-foreground">
+                Your swapped face will be used as the first frame. The AI will animate it into a natural video,
+                keeping the face consistent throughout the entire duration.
+              </p>
+
+              {!videoUrl && (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5" /> Duration (seconds)
+                      </label>
+                      <Input
+                        type="number"
+                        min={3}
+                        max={15}
+                        value={videoDuration}
+                        onChange={(e) => setVideoDuration(Math.max(3, Math.min(15, Number(e.target.value) || 10)))}
+                        data-testid="video-duration-input"
+                      />
+                      <p className="text-[10px] text-muted-foreground">3–15 seconds</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Motion prompt (optional)</label>
+                    <Textarea
+                      value={videoPrompt}
+                      onChange={(e) => setVideoPrompt(e.target.value)}
+                      placeholder="Describe the motion you want (e.g. 'Person looks at camera, smiles, then turns head slightly to the right'). Leave empty for natural default motion."
+                      className="min-h-[70px] text-sm"
+                      data-testid="video-prompt-textarea"
+                    />
+                  </div>
+
+                  {videoStatus === "pending" || videoStatus === "in_progress" ? (
+                    <Card className="p-4 rounded-xl border-border bg-muted/30">
+                      <div className="flex items-center gap-3">
+                        <Loader2 className="h-5 w-5 animate-spin text-[color:var(--brand-teal)]" />
+                        <div>
+                          <p className="text-sm font-medium">
+                            {videoStatus === "pending" ? "Video queued..." : "Generating video..."}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            This typically takes 30 seconds to 2 minutes. Please wait.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <GenerationProgress
+                          stages={[
+                            "Submitting to video engine",
+                            "Processing first frame (face-swapped image)",
+                            "Animating with face consistency",
+                            "Rendering final video",
+                          ]}
+                          active={true}
+                        />
+                      </div>
+                    </Card>
+                  ) : (
+                    <Button
+                      onClick={handleGenerateVideo}
+                      disabled={generatingVideo}
+                      className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white"
+                      data-testid="generate-video-button"
+                    >
+                      <Clapperboard className="h-4 w-4" />
+                      {generatingVideo ? "Submitting..." : "Generate Video from Swapped Face"}
+                    </Button>
+                  )}
+
+                  {videoError && (
+                    <Alert variant="destructive" className="rounded-xl" data-testid="video-error">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertTitle>Video generation failed</AlertTitle>
+                      <AlertDescription className="space-y-2">
+                        <p>{videoError}</p>
+                        <Button size="sm" onClick={handleGenerateVideo} className="gap-1.5">
+                          <RotateCcw className="h-3.5 w-3.5" /> Retry
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </>
+              )}
+
+              {/* Video Result */}
+              {videoUrl && (
+                <div className="space-y-4" data-testid="video-result">
+                  <div className="rounded-xl overflow-hidden border border-[color:var(--brand-teal)] shadow-lg">
+                    <video
+                      src={videoUrl}
+                      controls
+                      autoPlay
+                      loop
+                      className="w-full"
+                      data-testid="generated-video-player"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-green-50 border border-green-200">
+                    <Check className="h-4 w-4 text-green-600" />
+                    <span className="text-xs font-medium text-green-700">
+                      Video generated successfully — face consistency maintained throughout {videoDuration}s
+                    </span>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <a href={videoUrl} download target="_blank" rel="noreferrer" className="flex-1">
+                      <Button className="w-full gap-2 rounded-xl bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white" data-testid="download-video-button">
+                        <Download className="h-4 w-4" /> Download Video
+                      </Button>
+                    </a>
+                    <Button
+                      onClick={handleReset}
+                      variant="outline"
+                      className="flex-1 gap-2 rounded-xl"
+                    >
+                      <RotateCcw className="h-4 w-4" /> Start Over
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </Card>
           </div>
         )}
 
