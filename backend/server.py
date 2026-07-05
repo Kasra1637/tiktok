@@ -894,8 +894,32 @@ async def face_swap_video_status(job_id: str):
     }
 
     if status == "completed" and video_urls:
-        response["video_url"] = video_urls[0]
-        response["video_urls"] = video_urls
+        # Download the video to local storage for a stable, non-expiring URL
+        remote_url = video_urls[0]
+        local_video_path = pipeline.STORAGE_DIR / "videos" / f"{job_id}.mp4"
+        local_video_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if not local_video_path.exists():
+            try:
+                async with httpx.AsyncClient(timeout=120, follow_redirects=True) as dl_client:
+                    dl_resp = await dl_client.get(
+                        remote_url,
+                        headers={"Authorization": f"Bearer {os.environ.get('OPENROUTER_API_KEY', '')}"},
+                    )
+                    dl_resp.raise_for_status()
+                    with open(local_video_path, "wb") as f:
+                        f.write(dl_resp.content)
+                logger.info(f"Downloaded video {job_id} to {local_video_path} ({local_video_path.stat().st_size} bytes)")
+            except Exception as e:
+                logger.warning(f"Could not download video {job_id} to local storage: {e}")
+                # Fall back to the remote URL if download fails
+                response["video_url"] = remote_url
+                response["video_urls"] = video_urls
+                return response
+
+        # Serve from our own stable URL
+        response["video_url"] = f"/api/media/videos/{job_id}.mp4"
+        response["video_urls"] = [f"/api/media/videos/{job_id}.mp4"]
 
     if status == "failed":
         response["error"] = result.get("error", "Video generation failed.")

@@ -354,7 +354,24 @@ export default function FaceSwap() {
             </div>
           ) : (
             /* --- MANUAL MODE (no video selected, user uploads both) --- */
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="space-y-4">
+              {/* Prominent CTA to go to discovery */}
+              {!targetFile && (
+                <div className="flex items-center gap-3 p-4 rounded-xl border border-[color:var(--brand-teal)] bg-[color:rgba(99,102,241,0.04)]">
+                  <Film className="h-5 w-5 text-[color:var(--brand-teal)] shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">No video selected</p>
+                    <p className="text-xs text-muted-foreground">Pick a viral video from your niche — that frame becomes your target automatically.</p>
+                  </div>
+                  <a href="/" className="shrink-0">
+                    <Button size="sm" className="gap-1.5 rounded-lg bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white" data-testid="go-to-discover-cta">
+                      <ArrowRight className="h-3.5 w-3.5" /> Discover Hooks
+                    </Button>
+                  </a>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {/* Target */}
               <div className="space-y-2.5">
                 <div className="flex items-center gap-2">
@@ -382,6 +399,7 @@ export default function FaceSwap() {
                     <Trash2 className="h-3 w-3" /> Remove saved face
                   </button>
                 )}
+              </div>
               </div>
             </div>
           )}
