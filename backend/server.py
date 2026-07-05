@@ -220,6 +220,18 @@ async def init_db():
                 created_at TEXT,
                 updated_at TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS face_swap_video_jobs (
+                id TEXT PRIMARY KEY,
+                image_id TEXT,
+                prompt TEXT,
+                duration INTEGER,
+                status TEXT DEFAULT 'pending',
+                polling_url TEXT,
+                video_url TEXT,
+                error TEXT,
+                created_at TEXT
+            );
         """)
         await conn.commit()
 
@@ -757,6 +769,124 @@ async def face_swap(
         "format": "PNG",
         "status": "completed",
     }
+
+
+# ---------------------------------------------------------------------------
+# Face Swap → Video Generation (Phase 2)
+# Uses the face-swapped image as first_frame to generate a video via
+# OpenRouter's async video API. This is the Higgsfield-style two-phase flow:
+#   Phase 1: Image generation (face swap with Gemini image model)
+#   Phase 2: Video generation (animate the swapped frame into a full video)
+# ---------------------------------------------------------------------------
+@api_router.post("/face-swap/generate-video")
+async def face_swap_generate_video(
+    image_id: str = Form(...),
+    prompt: str = Form(""),
+    duration: int = Form(10),
+):
+    """
+    Phase 2 of the face swap pipeline: take a face-swapped image (from Phase 1)
+    and generate a video using it as the first frame. The video will maintain the
+    swapped face throughout its entire duration.
+    """
+    require_ai_configured()
+
+    # Validate the generated image exists
+    image_path = pipeline.GENERATED_DIR / f"{image_id}.png"
+    if not image_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Generated face-swap image not found. Please generate the image first.",
+        )
+
+    # Build video prompt if not provided
+    if not prompt.strip():
+        prompt = (
+            "Animate this person naturally from the first frame. Keep the same face, pose, and environment. "
+            "Add subtle natural motion: slight head movement, blinking, breathing, and gentle body sway. "
+            "Maintain perfect face consistency throughout. The scene should feel like a real person in a "
+            "natural video — smooth, lifelike motion with no flickering or face changes. "
+            "Camera holds steady, matching the original framing."
+        )
+
+    # Clamp duration
+    duration = max(3, min(duration, 15))
+
+    try:
+        result = await generate_video(
+            prompt=prompt,
+            reference_image_path=image_path,
+            duration=duration,
+        )
+    except Exception as e:
+        logger.error(f"Video generation submission failed: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Video generation failed to submit. Please try again. ({str(e)[:150]})",
+        )
+
+    # Store the video job in DB for tracking
+    job_id = result.get("id", "")
+    polling_url = result.get("polling_url", "")
+
+    await _execute(
+        """INSERT OR REPLACE INTO face_swap_video_jobs
+           (id, image_id, prompt, duration, status, polling_url, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (job_id, image_id, prompt, duration, "pending", polling_url, now_iso()),
+    )
+
+    return {
+        "job_id": job_id,
+        "status": "pending",
+        "polling_url": polling_url,
+        "image_id": image_id,
+        "duration": duration,
+    }
+
+
+@api_router.get("/face-swap/video-status/{job_id}")
+async def face_swap_video_status(job_id: str):
+    """
+    Poll the status of a face-swap video generation job.
+    Returns the current status and, when completed, the video URL.
+    """
+    require_ai_configured()
+
+    try:
+        result = await poll_video_job(job_id)
+    except Exception as e:
+        logger.error(f"Video job polling failed for {job_id}: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to check video status. ({str(e)[:150]})",
+        )
+
+    status = result.get("status", "pending")
+    video_urls = result.get("unsigned_urls", [])
+
+    # Update DB with latest status
+    await _execute(
+        "UPDATE face_swap_video_jobs SET status = ? WHERE id = ?",
+        (status, job_id),
+    )
+
+    response = {
+        "job_id": job_id,
+        "status": status,
+    }
+
+    if status == "completed" and video_urls:
+        response["video_url"] = video_urls[0]
+        response["video_urls"] = video_urls
+
+    if status == "failed":
+        response["error"] = result.get("error", "Video generation failed.")
+
+    if result.get("usage"):
+        response["usage"] = result["usage"]
+
+    return response
 
 
 # ---------------------------------------------------------------------------
