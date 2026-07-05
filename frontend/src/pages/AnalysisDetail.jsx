@@ -9,7 +9,7 @@ import Filmstrip from "../components/Filmstrip";
 import HookBreakdown from "../components/HookBreakdown";
 import GenerationProgress from "../components/GenerationProgress";
 import { api, getErrorMessage } from "../lib/api";
-import { ArrowLeft, Eye, Heart, MessageCircle, Wand2, AlertTriangle, RotateCcw, ExternalLink, Repeat2 } from "lucide-react";
+import { ArrowLeft, Eye, Heart, MessageCircle, AlertTriangle, RotateCcw, ExternalLink, Repeat2 } from "lucide-react";
 
 const ANALYZE_STAGES = ["Downloading video", "Extracting first 2-3 seconds", "Analyzing hook mechanics with AI"];
 
@@ -162,15 +162,6 @@ export default function AnalysisDetail() {
               </div>
             </div>
           )}
-          {analysis && (
-            <Button
-              onClick={() => navigate(`/customize/${videoId}`)}
-              className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white"
-              data-testid="customize-hook-button"
-            >
-              <Wand2 className="h-4 w-4" /> Customize this Hook
-            </Button>
-          )}
           {analysis && selectedFrame && (
             <Button
               onClick={() => {
@@ -179,11 +170,10 @@ export default function AnalysisDetail() {
                   navigate(`/face-swap?target=${encodeURIComponent(frame.media_url)}&videoId=${videoId}&frame=${selectedFrame}`);
                 }
               }}
-              variant="outline"
-              className="w-full gap-2 rounded-xl border-[color:var(--brand-teal)] text-[color:var(--brand-teal-dark)] hover:bg-[color:rgba(99,102,241,0.06)]"
+              className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white"
               data-testid="face-swap-hook-button"
             >
-              <Repeat2 className="h-4 w-4" /> Face Swap Selected Frame
+              <Repeat2 className="h-4 w-4" /> Face Swap This Frame
             </Button>
           )}
         </Card>

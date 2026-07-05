@@ -25,6 +25,8 @@ import {
   Loader2,
   Globe,
   ArrowRight,
+  Save,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -98,6 +100,7 @@ export default function FaceSwap() {
   const [sourceFile, setSourceFile] = useState(null);
   const [sourcePreview, setSourcePreview] = useState(null);
   const [videoInfo, setVideoInfo] = useState(null);
+  const [savedFaceLoaded, setSavedFaceLoaded] = useState(false);
 
   // Generation state
   const [generating, setGenerating] = useState(false);
@@ -144,6 +147,30 @@ export default function FaceSwap() {
     api.getActiveBrand().then(setBrandProfile).catch(() => setBrandProfile(null));
   }, []);
 
+  // Load saved face from localStorage
+  useEffect(() => {
+    try {
+      const savedFace = localStorage.getItem("hookforge_saved_face");
+      if (savedFace) {
+        const { dataUrl, name } = JSON.parse(savedFace);
+        if (dataUrl) {
+          // Convert data URL back to a File object
+          fetch(dataUrl)
+            .then((res) => res.blob())
+            .then((blob) => {
+              const file = new File([blob], name || "saved_face.png", { type: blob.type });
+              setSourceFile(file);
+              setSourcePreview(dataUrl);
+              setSavedFaceLoaded(true);
+            })
+            .catch(() => {}); // Silently fail if corrupt
+        }
+      }
+    } catch (e) {
+      // localStorage might be unavailable or data corrupt — ignore
+    }
+  }, []);
+
   // Cleanup polling
   useEffect(() => () => { if (pollingRef.current) clearInterval(pollingRef.current); }, []);
 
@@ -151,9 +178,37 @@ export default function FaceSwap() {
 
   /* --- Handlers --- */
   const handleTargetSelect = (file) => { setTargetFile(file); setTargetPreview(URL.createObjectURL(file)); setTargetFrameUrl(null); setVideoInfo(null); setResult(null); setGenError(null); };
-  const handleSourceSelect = (file) => { setSourceFile(file); setSourcePreview(URL.createObjectURL(file)); setResult(null); setGenError(null); };
+  const handleSourceSelect = (file) => { setSourceFile(file); setSourcePreview(URL.createObjectURL(file)); setSavedFaceLoaded(false); setResult(null); setGenError(null); };
   const handleRemoveTarget = () => { setTargetFile(null); setTargetPreview(null); setTargetFrameUrl(null); setVideoInfo(null); setResult(null); };
-  const handleRemoveSource = () => { setSourceFile(null); setSourcePreview(null); setResult(null); };
+  const handleRemoveSource = () => { setSourceFile(null); setSourcePreview(null); setSavedFaceLoaded(false); setResult(null); };
+
+  const handleSaveFace = () => {
+    if (!sourcePreview || !sourceFile) return;
+    try {
+      // Read the file as data URL and store in localStorage
+      const reader = new FileReader();
+      reader.onload = () => {
+        localStorage.setItem("hookforge_saved_face", JSON.stringify({
+          dataUrl: reader.result,
+          name: sourceFile.name || "saved_face.png",
+          savedAt: new Date().toISOString(),
+        }));
+        setSavedFaceLoaded(true);
+        toast.success("Face saved! It will auto-load next time.");
+      };
+      reader.readAsDataURL(sourceFile);
+    } catch (e) {
+      toast.error("Could not save face. Storage may be full.");
+    }
+  };
+
+  const handleRemoveSavedFace = () => {
+    localStorage.removeItem("hookforge_saved_face");
+    setSourceFile(null);
+    setSourcePreview(null);
+    setSavedFaceLoaded(false);
+    toast.success("Saved face removed.");
+  };
 
   const handleGenerate = async () => {
     if (!targetFile || !sourceFile) { toast.error("Upload both images first."); return; }
@@ -226,7 +281,13 @@ export default function FaceSwap() {
       <div className="text-center space-y-1.5 pt-2">
         <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight">Face Swap</h1>
         <p className="text-sm text-muted-foreground">
-          {videoInfo ? "Your video frame is ready. Upload your face to swap." : "Select a viral video frame or upload a target, then add your face."}
+          {videoInfo && savedFaceLoaded
+            ? "Your video frame and saved face are ready. Hit Generate."
+            : videoInfo
+            ? "Your video frame is ready. Upload your face to swap."
+            : savedFaceLoaded
+            ? "Your saved face is loaded. Select a viral video or upload a target."
+            : "Select a viral video frame or upload a target, then add your face."}
         </p>
       </div>
 
@@ -274,9 +335,20 @@ export default function FaceSwap() {
               <div className="space-y-2.5">
                 <div className="flex items-center gap-2">
                   <span className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${sourceFile ? "bg-[color:var(--brand-teal)] text-white" : "bg-[color:var(--brand-coral)] text-white"}`}>{sourceFile ? <Check className="h-3 w-3" /> : "2"}</span>
-                  <span className="text-sm font-semibold">Upload Your Face</span>
+                  <span className="text-sm font-semibold">Your Face</span>
+                  {savedFaceLoaded && <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-medium flex items-center gap-1"><Save className="h-2.5 w-2.5" /> Saved</span>}
                 </div>
                 <DropZone onFileSelect={handleSourceSelect} accept="image/jpeg,image/png,image/webp" label="Drop your face photo here" sublabel="Clear, frontal view works best" preview={sourcePreview} onRemove={handleRemoveSource} testId="source" icon={User} />
+                {sourceFile && !savedFaceLoaded && (
+                  <button onClick={handleSaveFace} className="flex items-center gap-1.5 text-xs text-[color:var(--brand-teal-dark)] hover:underline font-medium" data-testid="save-face-button">
+                    <Save className="h-3 w-3" /> Save this face for next time
+                  </button>
+                )}
+                {savedFaceLoaded && (
+                  <button onClick={handleRemoveSavedFace} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-red-600 font-medium" data-testid="remove-saved-face-button">
+                    <Trash2 className="h-3 w-3" /> Remove saved face
+                  </button>
+                )}
               </div>
             </div>
           ) : (
@@ -296,8 +368,19 @@ export default function FaceSwap() {
                 <div className="flex items-center gap-2">
                   <span className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${sourceFile ? "bg-[color:var(--brand-teal)] text-white" : targetFile ? "bg-[color:var(--brand-teal)] text-white" : "bg-muted text-muted-foreground"}`}>2</span>
                   <span className={`text-sm font-semibold ${!targetFile ? "text-muted-foreground" : ""}`}>Your Face</span>
+                  {savedFaceLoaded && <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-medium flex items-center gap-1"><Save className="h-2.5 w-2.5" /> Saved</span>}
                 </div>
                 <DropZone onFileSelect={handleSourceSelect} accept="image/jpeg,image/png,image/webp" label="Drop your face photo here" sublabel="Clear, frontal view works best" preview={sourcePreview} onRemove={handleRemoveSource} testId="source" icon={User} />
+                {sourceFile && !savedFaceLoaded && (
+                  <button onClick={handleSaveFace} className="flex items-center gap-1.5 text-xs text-[color:var(--brand-teal-dark)] hover:underline font-medium" data-testid="save-face-button">
+                    <Save className="h-3 w-3" /> Save this face for next time
+                  </button>
+                )}
+                {savedFaceLoaded && (
+                  <button onClick={handleRemoveSavedFace} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-red-600 font-medium" data-testid="remove-saved-face-button">
+                    <Trash2 className="h-3 w-3" /> Remove saved face
+                  </button>
+                )}
               </div>
             </div>
           )}
