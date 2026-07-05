@@ -18,12 +18,20 @@ from starlette.middleware.cors import CORSMiddleware
 import brand_analysis
 import pipeline
 import viral_detection
-from ai_service import analyze_brand_website, analyze_hook, generate_customized_preview, generate_video_prompt
+from ai_service import (
+    analyze_brand_website,
+    analyze_hook,
+    empty_remix_brief,
+    generate_customized_preview,
+    generate_video_prompt,
+    remix_chat_turn,
+)
 from models import (
     BrandContextRequest,
     BrandWebsiteRequest,
     GenerateVideoRequest,
     IngestVideoRequest,
+    RemixChatMessageRequest,
     now_iso,
     serialize_doc,
 )
@@ -548,6 +556,86 @@ async def get_customization(customization_id: str):
     if not item:
         raise HTTPException(status_code=404, detail="Customization not found")
     return serialize_doc(item)
+
+
+# ---------------------------------------------------------------------------
+# Remix chat: conversational back-and-forth to turn a viral hook into a
+# personalized brief (goal, audience fit, USPs, etc.) before generating the
+# video prompt. One chat thread per customization.
+# ---------------------------------------------------------------------------
+async def _get_or_create_remix_chat(customization_id: str) -> dict:
+    chat = await db.remix_chats.find_one({"customization_id": customization_id})
+    if chat:
+        return chat
+    chat = {
+        "id": str(uuid.uuid4()),
+        "customization_id": customization_id,
+        "messages": [],
+        "brief": empty_remix_brief(),
+        "ready_to_generate": False,
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    await db.remix_chats.insert_one(chat)
+    return chat
+
+
+@api_router.get("/customizations/{customization_id}/remix-chat")
+async def get_remix_chat(customization_id: str):
+    customization = await db.customizations.find_one({"id": customization_id})
+    if not customization:
+        raise HTTPException(status_code=404, detail="Customization not found")
+    chat = await _get_or_create_remix_chat(customization_id)
+    return serialize_doc(chat)
+
+
+@api_router.post("/customizations/{customization_id}/remix-chat")
+async def post_remix_chat_message(customization_id: str, payload: RemixChatMessageRequest):
+    message = payload.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Message cannot be empty.")
+    if len(message) > 4000:
+        raise HTTPException(status_code=400, detail="Message is too long (max 4000 characters).")
+
+    customization = await db.customizations.find_one({"id": customization_id})
+    if not customization:
+        raise HTTPException(status_code=404, detail="Customization not found")
+    video = await get_video_or_404(customization["video_id"])
+    analysis = await db.analyses.find_one({"id": customization["analysis_id"]})
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Related hook analysis not found")
+
+    chat = await _get_or_create_remix_chat(customization_id)
+    history = chat.get("messages", [])
+    history_for_llm = history + [{"role": "user", "content": message}]
+
+    try:
+        turn_result = await remix_chat_turn(
+            analysis=analysis,
+            video=video,
+            conversation_history=history_for_llm,
+            existing_brief=chat.get("brief") or empty_remix_brief(),
+            session_id=f"remixchat-{customization_id}",
+        )
+    except Exception as e:
+        logger.error(f"Remix chat turn failed for {customization_id}: {e}")
+        raise HTTPException(status_code=502, detail=f"AI reply failed. Please try again. ({str(e)[:150]})")
+
+    now = now_iso()
+    new_messages = history + [
+        {"role": "user", "content": message, "created_at": now},
+        {"role": "assistant", "content": turn_result["reply"], "created_at": now},
+    ]
+
+    update = {
+        "messages": new_messages,
+        "brief": turn_result["brief"],
+        "ready_to_generate": bool(turn_result.get("ready_to_generate")),
+        "updated_at": now,
+    }
+    await db.remix_chats.update_one({"id": chat["id"]}, {"$set": update})
+    updated_chat = await db.remix_chats.find_one({"id": chat["id"]})
+    return serialize_doc(updated_chat)
 
 
 # ---------------------------------------------------------------------------

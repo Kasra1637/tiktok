@@ -63,3 +63,8 @@ class GenerateVideoRequest(BaseModel):
     edited_prompt: Optional[str] = None
     duration_seconds: Optional[int] = None
 
+
+class RemixChatMessageRequest(BaseModel):
+    """A single user turn in the conversational remix chat for a customization."""
+    message: str
+
