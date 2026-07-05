@@ -53,11 +53,12 @@ export const api = {
       .then((r) => r.data),
 
   // Face Swap → Video Generation (Phase 2)
-  faceSwapGenerateVideo: (imageId, prompt, duration) => {
+  faceSwapGenerateVideo: (imageId, prompt, duration, model) => {
     const formData = new FormData();
     formData.append("image_id", imageId);
     formData.append("prompt", prompt || "");
     formData.append("duration", String(duration || 10));
+    formData.append("model", model || "");
     return client
       .post("/face-swap/generate-video", formData, {
         headers: { "Content-Type": "multipart/form-data" },
@@ -67,6 +68,7 @@ export const api = {
   },
   faceSwapVideoStatus: (jobId) =>
     client.get(`/face-swap/video-status/${jobId}`).then((r) => r.data),
+  getVideoModels: () => client.get("/video-models").then((r) => r.data),
 
   // Face Swap → Branded Video (Content Remixer)
   faceSwapBrandedPrompt: (imageId, brandUrl, videoId, duration) => {

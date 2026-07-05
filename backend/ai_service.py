@@ -22,7 +22,31 @@ logger = logging.getLogger(__name__)
 VISION_MODEL = "google/gemini-2.5-flash"
 IMAGE_GEN_MODEL = "google/gemini-2.5-flash-preview-image-generation"
 TEXT_MODEL = "google/gemini-2.5-flash"
-VIDEO_MODEL = "alibaba/happyhorse-1.1"
+
+# Video generation models (user-selectable)
+VIDEO_MODELS = {
+    "seedance-2.0": {
+        "id": "bytedance/seedance-2.0",
+        "name": "Seedance 2.0",
+        "description": "Best quality. Character consistency, native audio, cinematic camera.",
+        "max_duration": 15,
+    },
+    "seedance-2.0-fast": {
+        "id": "bytedance/seedance-2.0-fast",
+        "name": "Seedance 2.0 Fast",
+        "description": "Faster generation, lower cost. Good for previews.",
+        "max_duration": 15,
+    },
+    "wan-2.7": {
+        "id": "alibaba/wan-2.7",
+        "name": "Wan 2.7",
+        "description": "Strong image-to-video. Reference style preservation.",
+        "max_duration": 15,
+    },
+}
+DEFAULT_VIDEO_MODEL = "seedance-2.0"
+# Legacy fallback
+VIDEO_MODEL = VIDEO_MODELS[DEFAULT_VIDEO_MODEL]["id"]
 
 REQUIRED_ANALYSIS_KEYS = {
     "facial_expressions", "body_language_gestures", "pacing_cuts",
@@ -308,12 +332,20 @@ async def generate_video_prompt(analysis: dict, brand_context: dict, target_dura
     return result
 
 
-async def generate_video(prompt: str, reference_image_path: Path = None, duration: int = 10) -> dict:
-    """Submit a video generation job to OpenRouter (HappyHorse). Returns job info for polling."""
+async def generate_video(prompt: str, reference_image_path: Path = None, duration: int = 10, model: str = None) -> dict:
+    """Submit a video generation job to OpenRouter. Returns job info for polling."""
+    # Resolve model
+    if model and model in VIDEO_MODELS:
+        model_id = VIDEO_MODELS[model]["id"]
+        max_dur = VIDEO_MODELS[model]["max_duration"]
+    else:
+        model_id = VIDEO_MODELS[DEFAULT_VIDEO_MODEL]["id"]
+        max_dur = VIDEO_MODELS[DEFAULT_VIDEO_MODEL]["max_duration"]
+
     payload = {
-        "model": VIDEO_MODEL,
+        "model": model_id,
         "prompt": prompt,
-        "duration": min(duration, 15),
+        "duration": min(duration, max_dur),
         "resolution": "1080p",
         "aspect_ratio": "9:16",
     }

@@ -128,6 +128,7 @@ export default function FaceSwap() {
 
   // Video mode tab
   const [videoMode, setVideoMode] = useState("branded"); // "preview" | "branded"
+  const [videoModel, setVideoModel] = useState("seedance-2.0"); // default to best quality
 
   // Load target from query params
   useEffect(() => {
@@ -240,7 +241,7 @@ export default function FaceSwap() {
   const handleQuickPreview = async () => {
     if (!result?.id) return;
     setVideoDuration(5); setVideoPrompt(""); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
-    try { const d = await api.faceSwapGenerateVideo(result.id, "", 5); setVideoJobId(d.job_id); startPolling(d.job_id); }
+    try { const d = await api.faceSwapGenerateVideo(result.id, "", 5, "seedance-2.0-fast"); setVideoJobId(d.job_id); startPolling(d.job_id); }
     catch (err) { setVideoError(getErrorMessage(err)); setVideoStatus(null); setGeneratingVideo(false); }
   };
 
@@ -259,7 +260,7 @@ export default function FaceSwap() {
   const handleGenerateBrandedVideo = async () => {
     if (!result?.id || !brandedPrompt) return;
     setVideoDuration(brandedDuration); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
-    try { const d = await api.faceSwapGenerateVideo(result.id, brandedPrompt, brandedDuration); setVideoJobId(d.job_id); startPolling(d.job_id); }
+    try { const d = await api.faceSwapGenerateVideo(result.id, brandedPrompt, brandedDuration, videoModel); setVideoJobId(d.job_id); startPolling(d.job_id); }
     catch (err) { setVideoError(getErrorMessage(err)); setVideoStatus(null); setGeneratingVideo(false); }
   };
 
@@ -523,6 +524,25 @@ export default function FaceSwap() {
                         <Input type="number" min={5} max={30} value={brandedDuration} onChange={(e) => setBrandedDuration(Math.max(5, Math.min(30, Number(e.target.value) || 15)))} className="text-sm text-center" data-testid="branded-duration-input" />
                         <p className="text-[9px] text-muted-foreground text-center mt-0.5">{brandedDuration}s</p>
                       </div>
+                    </div>
+
+                    {/* Model selector */}
+                    <div className="flex gap-1 rounded-lg bg-muted/50 p-0.5" data-testid="video-model-selector">
+                      {[
+                        { key: "seedance-2.0", label: "Seedance 2.0", sub: "Best quality" },
+                        { key: "wan-2.7", label: "Wan 2.7", sub: "Style preservation" },
+                        { key: "seedance-2.0-fast", label: "Fast", sub: "Quick & cheap" },
+                      ].map((m) => (
+                        <button
+                          key={m.key}
+                          onClick={() => setVideoModel(m.key)}
+                          className={`flex-1 text-center py-1.5 px-2 rounded-md transition-all ${videoModel === m.key ? "bg-white shadow-sm" : "hover:bg-white/50"}`}
+                          data-testid={`model-${m.key}`}
+                        >
+                          <span className={`text-[11px] font-semibold block ${videoModel === m.key ? "text-foreground" : "text-muted-foreground"}`}>{m.label}</span>
+                          <span className="text-[9px] text-muted-foreground">{m.sub}</span>
+                        </button>
+                      ))}
                     </div>
 
                     {brandedPrompt && (

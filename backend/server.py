@@ -23,7 +23,7 @@ import viral_detection
 from ai_service import (
     analyze_hook, generate_customized_preview, generate_face_swap, generate_video_prompt,
     generate_video, poll_video_job, analyze_brand_from_text, generate_remix_script,
-    strip_html_to_text, remix_chat_turn, empty_remix_brief,
+    strip_html_to_text, remix_chat_turn, empty_remix_brief, VIDEO_MODELS, DEFAULT_VIDEO_MODEL,
 )
 from models import (
     IngestVideoRequest, BrandContextRequest, GenerateVideoRequest,
@@ -677,6 +677,21 @@ async def get_video_analysis(video_id: str):
 
 
 # ---------------------------------------------------------------------------
+# Video Models (available for video generation)
+# ---------------------------------------------------------------------------
+@api_router.get("/video-models")
+async def list_video_models():
+    """Return available video generation models with their capabilities."""
+    return {
+        "models": [
+            {"key": k, **{mk: mv for mk, mv in v.items() if mk != "id"}}
+            for k, v in VIDEO_MODELS.items()
+        ],
+        "default": DEFAULT_VIDEO_MODEL,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Standalone Face Swap (Higgsfield-style 3-step flow)
 # ---------------------------------------------------------------------------
 @api_router.post("/face-swap")
@@ -783,6 +798,7 @@ async def face_swap_generate_video(
     image_id: str = Form(...),
     prompt: str = Form(""),
     duration: int = Form(10),
+    model: str = Form(""),
 ):
     """
     Phase 2 of the face swap pipeline: take a face-swapped image (from Phase 1)
@@ -817,6 +833,7 @@ async def face_swap_generate_video(
             prompt=prompt,
             reference_image_path=image_path,
             duration=duration,
+            model=model.strip() if model else None,
         )
     except Exception as e:
         logger.error(f"Video generation submission failed: {e}")
