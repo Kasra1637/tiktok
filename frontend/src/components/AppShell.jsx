@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { Sparkles, History as HistoryIcon, Loader2, Link2, Briefcase } from "lucide-react";
+import { Sparkles, History as HistoryIcon, Loader2, Link2, Briefcase, Repeat2 } from "lucide-react";
 import { toast } from "sonner";
 import { api, getErrorMessage } from "../lib/api";
 
@@ -29,6 +29,7 @@ export function AppShell({ children }) {
 
   const isHistory = location.pathname === "/history";
   const isBrand = location.pathname === "/brand";
+  const isFaceSwap = location.pathname === "/face-swap";
 
   return (
     <div className="relative min-h-screen hero-wash">
@@ -43,6 +44,17 @@ export function AppShell({ children }) {
             </Link>
 
             <div className="md:hidden flex items-center gap-1">
+              <Link
+                to="/face-swap"
+                data-testid="face-swap-nav-link"
+                aria-current={isFaceSwap ? "page" : undefined}
+                className={`flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(99,102,241,0.08)] transition-colors ${
+                  isFaceSwap ? "text-[color:var(--brand-teal)]" : "text-foreground"
+                }`}
+              >
+                <Repeat2 className="h-4 w-4" /> Swap
+              </Link>
+
               <Link
                 to="/brand"
                 data-testid="brand-nav-link"
@@ -91,6 +103,17 @@ export function AppShell({ children }) {
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Analyze"}
             </Button>
           </form>
+
+          <Link
+            to="/face-swap"
+            data-testid="face-swap-nav-link-desktop"
+            aria-current={isFaceSwap ? "page" : undefined}
+            className={`hidden md:flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(99,102,241,0.08)] transition-colors shrink-0 ${
+              isFaceSwap ? "text-[color:var(--brand-teal)]" : "text-foreground"
+            }`}
+          >
+            <Repeat2 className="h-4 w-4" /> Face Swap
+          </Link>
 
           <Link
             to="/brand"

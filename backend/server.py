@@ -21,7 +21,7 @@ from starlette.middleware.cors import CORSMiddleware
 import pipeline
 import viral_detection
 from ai_service import (
-    analyze_hook, generate_customized_preview, generate_video_prompt,
+    analyze_hook, generate_customized_preview, generate_face_swap, generate_video_prompt,
     generate_video, poll_video_job, analyze_brand_from_text, generate_remix_script,
     strip_html_to_text, remix_chat_turn, empty_remix_brief,
 )
@@ -662,6 +662,86 @@ async def analyze_video_hook(video_id: str):
 @api_router.get("/videos/{video_id}/analysis")
 async def get_video_analysis(video_id: str):
     return await get_latest_analysis_or_404(video_id)
+
+
+# ---------------------------------------------------------------------------
+# Standalone Face Swap (Higgsfield-style 3-step flow)
+# ---------------------------------------------------------------------------
+@api_router.post("/face-swap")
+async def face_swap(
+    target_image: UploadFile = File(...),
+    source_face: UploadFile = File(...),
+):
+    """
+    Standalone face swap endpoint. Accepts a target image and a source face image,
+    performs high-fidelity face swap with facial geometry tracking, skin tone matching,
+    and lighting adaptation.
+    """
+    require_ai_configured()
+
+    # Validate target image
+    target_bytes = await target_image.read()
+    if len(target_bytes) == 0:
+        raise HTTPException(status_code=400, detail="Target image is empty.")
+    if len(target_bytes) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Target image is too large (max 12MB).")
+
+    # Validate source face
+    source_bytes = await source_face.read()
+    if len(source_bytes) == 0:
+        raise HTTPException(status_code=400, detail="Source face image is empty.")
+    if len(source_bytes) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Source face image is too large (max 12MB).")
+
+    # Normalize both images
+    normalized_target = validate_and_normalize_photo(target_bytes)
+    normalized_source = validate_and_normalize_photo(source_bytes)
+
+    # Save to disk
+    target_id = str(uuid.uuid4())
+    source_id = str(uuid.uuid4())
+    target_path = pipeline.UPLOADS_DIR / f"{target_id}.png"
+    source_path = pipeline.UPLOADS_DIR / f"{source_id}.png"
+
+    with open(target_path, "wb") as f:
+        f.write(normalized_target)
+    with open(source_path, "wb") as f:
+        f.write(normalized_source)
+
+    # Generate face swap
+    try:
+        image_bytes = await generate_face_swap(
+            target_image_path=target_path,
+            source_face_path=source_path,
+            session_id=f"face-swap-{target_id}-{source_id}",
+        )
+    except Exception as e:
+        logger.error(f"Face swap generation failed: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI face swap generation failed. Please try again. ({str(e)[:150]})",
+        )
+
+    # Save generated result
+    generated_id = str(uuid.uuid4())
+    generated_path = pipeline.GENERATED_DIR / f"{generated_id}.png"
+    with open(generated_path, "wb") as f:
+        f.write(image_bytes)
+
+    # Get image dimensions for resolution info
+    from PIL import Image as PILImage
+    img = PILImage.open(generated_path)
+    width, height = img.size
+
+    return {
+        "id": generated_id,
+        "generated_image_url": f"/api/media/generated/{generated_id}.png",
+        "target_image_url": f"/api/media/uploads/{target_id}.png",
+        "source_face_url": f"/api/media/uploads/{source_id}.png",
+        "resolution": f"{width}x{height}",
+        "format": "PNG",
+        "status": "completed",
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -154,7 +154,12 @@ async def generate_customized_preview(
         "and body placement from the first reference image (a viral hook frame), but replaces the person's "
         "face/identity with the person from the second reference image. "
         f"{scene_instruction}"
-        "Preserve the core hook mechanic (expression + gesture + body position) exactly."
+        "Critical quality requirements: "
+        "1) Track facial geometry precisely — map bone structure, jawline, and proportions to match the head angle. "
+        "2) Match skin tone to the scene's lighting — adapt shadows, highlights, and color temperature naturally. "
+        "3) Ensure lighting coherence — light direction and shadow casting must be consistent across the entire image. "
+        "4) Natural blending — no visible seams or color discontinuities at face boundaries. "
+        "5) Preserve the core hook mechanic (expression + gesture + body position) exactly."
     )
 
     ref_b64 = image_to_base64(reference_frame_path)
@@ -177,6 +182,58 @@ async def generate_customized_preview(
 
     if not data.get("data") or not data["data"][0].get("b64_json"):
         raise RuntimeError("No image returned from generation model.")
+
+    return base64.b64decode(data["data"][0]["b64_json"])
+
+
+async def generate_face_swap(
+    target_image_path: Path,
+    source_face_path: Path,
+    session_id: str,
+) -> bytes:
+    """
+    Standalone face swap: swap the face from source_face into the target image.
+    Uses advanced prompt engineering for facial geometry tracking, skin tone matching,
+    and lighting adaptation — inspired by Higgsfield's production-quality approach.
+    """
+    prompt = (
+        "Perform a high-fidelity face swap. Image 1 is the TARGET — keep everything about this image "
+        "exactly as-is (pose, body, hands, clothing, background, scene, camera angle, lighting setup, "
+        "color grading, style, and composition). Image 2 is the SOURCE FACE — use ONLY the facial "
+        "identity (face shape, features, skin texture) from this person.\n\n"
+        "Critical requirements for production-ready output:\n"
+        "1. FACIAL GEOMETRY: Precisely map the source face's bone structure, jawline, cheekbones, "
+        "and facial proportions onto the target's head position and angle.\n"
+        "2. SKIN TONE MATCHING: Adapt the source face's skin tone to seamlessly blend with the "
+        "target image's lighting conditions — match shadows, highlights, and color temperature.\n"
+        "3. LIGHTING COHERENCE: Ensure light direction, intensity, and shadow casting on the "
+        "swapped face are consistent with the rest of the target scene.\n"
+        "4. NATURAL BLENDING: The boundary between the swapped face and the target body/hair "
+        "must be completely invisible — no seams, no color discontinuities, no artifacts.\n"
+        "5. EXPRESSION PRESERVATION: Keep the facial expression and head angle from the TARGET image, "
+        "only replacing the identity/features with the SOURCE face.\n\n"
+        "Output a single photorealistic image at the highest possible quality."
+    )
+
+    target_b64 = image_to_base64(target_image_path)
+    source_b64 = image_to_base64(source_face_path)
+
+    payload = {
+        "model": IMAGE_GEN_MODEL,
+        "prompt": prompt,
+        "input_references": [
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{target_b64}"}},
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{source_b64}"}},
+        ],
+    }
+
+    async with httpx.AsyncClient(timeout=120) as client:
+        resp = await client.post(f"{OPENROUTER_BASE}/images", headers=_headers(), json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+
+    if not data.get("data") or not data["data"][0].get("b64_json"):
+        raise RuntimeError("No image returned from face swap model.")
 
     return base64.b64decode(data["data"][0]["b64_json"])
 
