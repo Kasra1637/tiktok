@@ -455,6 +455,143 @@ async def generate_remix_script(analysis: dict, brand_profile: dict, target_dura
     return result
 
 
+REQUIRED_REMIX_CHAT_KEYS = {"reply", "brief", "ready_to_generate"}
+REMIX_BRIEF_KEYS = {
+    "brand_name", "brand_goal", "brand_details", "brand_overview",
+    "unique_selling_propositions", "brand_voice_tone", "target_audience",
+}
+
+
+def empty_remix_brief() -> dict:
+    return {
+        "brand_name": "",
+        "brand_goal": "",
+        "brand_details": "",
+        "brand_overview": "",
+        "unique_selling_propositions": [],
+        "brand_voice_tone": "",
+        "target_audience": "",
+    }
+
+
+async def remix_chat_turn(
+    analysis: dict,
+    video: dict,
+    conversation_history: list,
+    existing_brief: dict,
+    session_id: str,
+) -> dict:
+    """
+    One turn of the conversational "remix this video for my brand" chat.
+    Acts like a creative strategist: it checks audience fit between the
+    original hook's implied audience and the brand described so far, asks
+    focused clarifying questions (one or two at a time, not a checklist
+    dump), and incrementally builds a structured brief. `conversation_history`
+    is a list of {"role": "user"|"assistant", "content": str} in chronological
+    order (the latest user message is the last entry). `existing_brief`
+    carries forward fields already captured in prior turns so the model only
+    needs to fill in gaps or apply corrections, not restart from scratch.
+    """
+    system_message = (
+        "You are an expert short-form video creative strategist helping a user remix a viral TikTok hook for "
+        "their own brand/product. You already know exactly what makes the ORIGINAL video's hook work (given "
+        "below) and who it likely targets. Your job, turn by turn, is to:\n"
+        "1. Briefly acknowledge what the user is asking for.\n"
+        "2. Proactively sanity-check AUDIENCE FIT between the original video's implied audience and the "
+        "brand/product described so far - call out if it's a strong match, a stretch, or a mismatch, and why, "
+        "in 2-4 sentences. Use a checkmark or note when the fit is good.\n"
+        "3. Ask ONLY the 1-2 most important missing clarifying questions next (never a long checklist) - things "
+        "like the specific goal (installs, awareness, sales), what's most unique/compelling about the offer, or "
+        "who exactly the target customer is - whichever is least clear so far.\n"
+        "4. Keep responses conversational, concise (under ~120 words), and genuinely helpful - never robotic or "
+        "overly formal boilerplate.\n"
+        "As you go, maintain a structured brief in the background with whatever the user has told you so far. "
+        "Only set ready_to_generate=true once you have a reasonably clear sense of the brand/product, the goal, "
+        "and the target audience (either stated or reasonably inferred) - or the user explicitly says to proceed/"
+        "skip further questions. Respond with STRICT JSON only, no markdown fences, no extra commentary."
+    )
+
+    history_lines = []
+    for turn in conversation_history:
+        role_label = "User" if turn.get("role") == "user" else "Assistant"
+        history_lines.append(f"{role_label}: {turn.get('content', '')}")
+    history_text = "\n".join(history_lines) if history_lines else "(no messages yet)"
+
+    prompt = (
+        "Original viral video context:\n"
+        f"- Title: {video.get('title') or '(unknown)'}\n"
+        f"- Niche: {video.get('niche') or '(unknown)'}\n"
+        f"- Hook summary: {analysis.get('hook_summary')}\n"
+        f"- Replicable mechanics: {analysis.get('replicable_mechanics')}\n\n"
+        "Brief captured so far from this conversation (empty strings/lists = not yet known):\n"
+        f"{json.dumps(existing_brief, ensure_ascii=False)}\n\n"
+        "Conversation so far (latest user message is last):\n"
+        f"{history_text}\n\n"
+        "Return ONLY a JSON object with this exact schema:\n"
+        "{\n"
+        '  "reply": "your conversational reply to the user for this turn, following the instructions above",\n'
+        '  "brief": {\n'
+        '    "brand_name": "string, best known brand/product name, or empty string",\n'
+        '    "brand_goal": "string, the goal of the video (e.g. drive installs), or empty string",\n'
+        '    "brand_details": "string, what the brand/product offers and what the video should communicate, or empty string",\n'
+        '    "brand_overview": "string, 1-3 sentence overview of the brand, or empty string",\n'
+        '    "unique_selling_propositions": ["short bullet", "..."] concrete USPs mentioned so far, or empty list,\n'
+        '    "brand_voice_tone": "string describing desired voice/tone, or empty string",\n'
+        '    "target_audience": "string describing the target audience, or empty string"\n'
+        "  },\n"
+        '  "ready_to_generate": boolean, true only once enough context exists to write a strong video prompt\n'
+        "}\n"
+        "Carry forward every field from the existing brief unless this conversation clearly updates it. "
+        "Return ONLY valid JSON."
+    )
+
+    payload = {
+        "model": TEXT_MODEL,
+        "messages": [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.5,
+        "max_tokens": 2000,
+    }
+
+    async with httpx.AsyncClient(timeout=60) as client:
+        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+
+    full_text = data["choices"][0]["message"]["content"]
+    full_text = _clean_json_text(full_text)
+    try:
+        result = json.loads(full_text)
+    except json.JSONDecodeError:
+        start = full_text.find("{")
+        end = full_text.rfind("}")
+        if start == -1 or end == -1:
+            raise RuntimeError("Remix chat model did not return valid JSON")
+        result = json.loads(full_text[start:end + 1])
+
+    missing = REQUIRED_REMIX_CHAT_KEYS - set(result.keys())
+    if missing:
+        raise RuntimeError(f"Remix chat response missing required fields: {missing}")
+
+    brief = result.get("brief") or {}
+    if not isinstance(brief, dict):
+        brief = {}
+    merged_brief = empty_remix_brief()
+    merged_brief.update(existing_brief or {})
+    for key in REMIX_BRIEF_KEYS:
+        if key in brief and brief[key]:
+            merged_brief[key] = brief[key]
+    if not isinstance(merged_brief.get("unique_selling_propositions"), list):
+        merged_brief["unique_selling_propositions"] = (
+            [str(merged_brief["unique_selling_propositions"])] if merged_brief.get("unique_selling_propositions") else []
+        )
+    result["brief"] = merged_brief
+
+    return result
+
+
 def strip_html_to_text(html: str) -> str:
     """Basic regex-based HTML-to-text stripper (no external HTML parsing dependency)."""
     import re

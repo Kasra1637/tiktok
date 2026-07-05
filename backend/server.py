@@ -23,12 +23,12 @@ import viral_detection
 from ai_service import (
     analyze_hook, generate_customized_preview, generate_video_prompt,
     generate_video, poll_video_job, analyze_brand_from_text, generate_remix_script,
-    strip_html_to_text,
+    strip_html_to_text, remix_chat_turn, empty_remix_brief,
 )
 from models import (
     IngestVideoRequest, BrandContextRequest, GenerateVideoRequest,
     AnalyzeBrandUrlRequest, BrandProfileUpdateRequest, GenerateRemixScriptRequest,
-    now_iso, row_to_dict,
+    RemixChatMessageRequest, now_iso, row_to_dict,
 )
 from niches_config import NICHES, NICHE_MAP
 
@@ -207,6 +207,16 @@ async def init_db():
                 differentiation TEXT,
                 tone_voice TEXT,
                 raw_extracted_text TEXT,
+                created_at TEXT,
+                updated_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS remix_chats (
+                id TEXT PRIMARY KEY,
+                customization_id TEXT UNIQUE,
+                messages TEXT,
+                brief TEXT,
+                ready_to_generate INTEGER DEFAULT 0,
                 created_at TEXT,
                 updated_at TEXT
             );
@@ -809,6 +819,95 @@ async def get_customization(customization_id: str):
     if not item:
         raise HTTPException(status_code=404, detail="Customization not found")
     return item
+
+
+# ---------------------------------------------------------------------------
+# Remix chat: conversational back-and-forth to turn a viral hook into a
+# personalized brief (goal, audience fit, USPs, etc.) before generating the
+# video prompt. One chat thread per customization. This complements (rather
+# than replaces) the one-click "Content Remixer" brand-profile flow above -
+# it's for users who want to describe their goal in their own words and get
+# clarifying questions back, instead of relying on a saved brand profile.
+# ---------------------------------------------------------------------------
+def _serialize_remix_chat(row: dict) -> dict:
+    row = dict(row)
+    row["ready_to_generate"] = bool(row.get("ready_to_generate"))
+    if not isinstance(row.get("messages"), list):
+        row["messages"] = []
+    if not isinstance(row.get("brief"), dict):
+        row["brief"] = empty_remix_brief()
+    return row
+
+
+async def _get_or_create_remix_chat(customization_id: str) -> dict:
+    chat = await _fetch_one("SELECT * FROM remix_chats WHERE customization_id = ?", (customization_id,))
+    if chat:
+        return _serialize_remix_chat(chat)
+    chat_id = str(uuid.uuid4())
+    created_at = now_iso()
+    await _execute(
+        """INSERT INTO remix_chats (id, customization_id, messages, brief, ready_to_generate, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (chat_id, customization_id, json.dumps([]), json.dumps(empty_remix_brief()), 0, created_at, created_at),
+    )
+    return _serialize_remix_chat(await _fetch_one("SELECT * FROM remix_chats WHERE id = ?", (chat_id,)))
+
+
+@api_router.get("/customizations/{customization_id}/remix-chat")
+async def get_remix_chat(customization_id: str):
+    customization = await _fetch_one("SELECT * FROM customizations WHERE id = ?", (customization_id,))
+    if not customization:
+        raise HTTPException(status_code=404, detail="Customization not found")
+    return await _get_or_create_remix_chat(customization_id)
+
+
+@api_router.post("/customizations/{customization_id}/remix-chat")
+async def post_remix_chat_message(customization_id: str, payload: RemixChatMessageRequest):
+    require_ai_configured()
+    message = payload.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Message cannot be empty.")
+    if len(message) > 4000:
+        raise HTTPException(status_code=400, detail="Message is too long (max 4000 characters).")
+
+    customization = await _fetch_one("SELECT * FROM customizations WHERE id = ?", (customization_id,))
+    if not customization:
+        raise HTTPException(status_code=404, detail="Customization not found")
+    video = await get_video_or_404(customization["video_id"])
+    analysis = await _fetch_one("SELECT * FROM analyses WHERE id = ?", (customization["analysis_id"],))
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Related hook analysis not found")
+
+    chat = await _get_or_create_remix_chat(customization_id)
+    history = chat.get("messages", [])
+    history_for_llm = history + [{"role": "user", "content": message}]
+
+    try:
+        turn_result = await remix_chat_turn(
+            analysis=analysis,
+            video=video,
+            conversation_history=history_for_llm,
+            existing_brief=chat.get("brief") or empty_remix_brief(),
+            session_id=f"remixchat-{customization_id}",
+        )
+    except Exception as e:
+        logger.error(f"Remix chat turn failed for {customization_id}: {e}")
+        raise HTTPException(status_code=502, detail=f"AI reply failed. Please try again. ({str(e)[:150]})")
+
+    now = now_iso()
+    new_messages = history + [
+        {"role": "user", "content": message, "created_at": now},
+        {"role": "assistant", "content": turn_result["reply"], "created_at": now},
+    ]
+
+    await _execute(
+        """UPDATE remix_chats SET messages = ?, brief = ?, ready_to_generate = ?, updated_at = ?
+           WHERE customization_id = ?""",
+        (json.dumps(new_messages), json.dumps(turn_result["brief"]),
+         1 if turn_result.get("ready_to_generate") else 0, now, customization_id),
+    )
+    updated = await _fetch_one("SELECT * FROM remix_chats WHERE customization_id = ?", (customization_id,))
+    return _serialize_remix_chat(updated)
 
 
 # ---------------------------------------------------------------------------

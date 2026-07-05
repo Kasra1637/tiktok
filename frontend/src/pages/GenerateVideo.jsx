@@ -8,10 +8,27 @@ import { Skeleton } from "../components/ui/skeleton";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import GenerationProgress from "../components/GenerationProgress";
+import RemixChat from "../components/RemixChat";
 import Stepper from "../components/Stepper";
 import { api, mediaUrl, getErrorMessage } from "../lib/api";
-import { ArrowLeft, Wand2, Clapperboard, AlertTriangle, RotateCcw, Clock, Film, Camera, Eye, Users, MapPinned, Megaphone, CheckCircle2, Sparkles, Briefcase } from "lucide-react";
+import { ArrowLeft, Wand2, Clapperboard, AlertTriangle, RotateCcw, Clock, Film, Camera, Eye, Users, MapPinned, Megaphone, CheckCircle2, Sparkles, Briefcase, MessageSquareText } from "lucide-react";
 import { toast } from "sonner";
+
+function RemixChatEmptyState() {
+  return (
+    <div className="text-center px-6 max-w-sm mx-auto" data-testid="remix-chat-empty-state">
+      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[color:rgba(99,102,241,0.10)] text-[color:var(--brand-teal)] mx-auto mb-3">
+        <Sparkles className="h-5 w-5" />
+      </span>
+      <p className="text-sm font-medium">Tell us how you want to remix this hook</p>
+      <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+        e.g. "Remix this for my dating app that gives feedback on profile screenshots" — we'll check the
+        audience fit against the original video and ask a couple of quick questions before writing your video
+        prompt.
+      </p>
+    </div>
+  );
+}
 
 const PROMPT_STAGES = ["Reading the hook analysis", "Weaving in your brand context", "Writing the video prompt"];
 
@@ -48,12 +65,64 @@ export default function GenerateVideo() {
   const [submittingVideo, setSubmittingVideo] = useState(false);
   const [videoJob, setVideoJob] = useState(null);
 
+  // Conversational remix chat: an alternative to the saved brand-profile
+  // "Content Remixer" button above, for describing your goal in your own
+  // words and getting clarifying questions back. Replies incrementally
+  // fill in the manual brand fields below, which stay fully editable.
+  const [remixMessages, setRemixMessages] = useState([]);
+  const [remixSending, setRemixSending] = useState(false);
+  const [remixReady, setRemixReady] = useState(false);
+
+  const applyChatBriefToFields = (brief) => {
+    if (!brief) return;
+    if (brief.brand_name) setBrandName(brief.brand_name);
+    if (brief.brand_goal) setBrandGoal(brief.brand_goal);
+    const detailParts = [
+      brief.brand_details,
+      brief.brand_overview,
+      (brief.unique_selling_propositions || []).length
+        ? `USPs: ${(brief.unique_selling_propositions || []).join("; ")}`
+        : "",
+      brief.brand_voice_tone ? `Tone: ${brief.brand_voice_tone}` : "",
+      brief.target_audience ? `Target audience: ${brief.target_audience}` : "",
+    ].filter(Boolean);
+    if (detailParts.length) setBrandDetails(detailParts.join(" "));
+  };
+
   useEffect(() => {
     api
       .getCustomization(customizationId)
       .then(setCustomization)
       .catch((err) => setLoadError(getErrorMessage(err)));
+
+    api
+      .getRemixChat(customizationId)
+      .then((chat) => {
+        setRemixMessages(chat.messages || []);
+        setRemixReady(!!chat.ready_to_generate);
+        applyChatBriefToFields(chat.brief);
+      })
+      .catch(() => {
+        // Non-fatal: the chat just starts empty if it can't be loaded yet.
+      });
   }, [customizationId]);
+
+  const handleSendRemixMessage = async (text) => {
+    const optimisticUser = { role: "user", content: text };
+    setRemixMessages((prev) => [...prev, optimisticUser]);
+    setRemixSending(true);
+    try {
+      const chat = await api.sendRemixChatMessage(customizationId, text);
+      setRemixMessages(chat.messages || []);
+      setRemixReady(!!chat.ready_to_generate);
+      applyChatBriefToFields(chat.brief);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+      setRemixMessages((prev) => prev.filter((m) => m !== optimisticUser));
+    } finally {
+      setRemixSending(false);
+    }
+  };
 
   useEffect(() => {
     api
@@ -213,6 +282,25 @@ export default function GenerateVideo() {
           </AlertDescription>
         </Alert>
       )}
+
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold flex items-center gap-1.5">
+          <MessageSquareText className="h-4 w-4 text-[color:var(--brand-teal)]" /> Or describe your remix goal in chat
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          Prefer to just tell us what you're going for? Chat below — we'll check the audience fit against the
+          original hook and ask a couple of quick questions, then fill in the brand fields for you.
+        </p>
+        <div className="h-[420px] md:h-[480px]">
+          <RemixChat
+            messages={remixMessages}
+            onSend={handleSendRemixMessage}
+            sending={remixSending}
+            readyToGenerate={remixReady}
+            emptyState={<RemixChatEmptyState />}
+          />
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6">
         <Card className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] space-y-4 h-fit">

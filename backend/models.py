@@ -11,7 +11,7 @@ def now_iso() -> str:
 
 def row_to_dict(row, columns: list) -> dict:
     """Convert an sqlite3.Row to a dict, parsing JSON fields."""
-    JSON_FIELDS = {"frames", "generation_spec", "generated_images", "prompt_breakdown", "reference_image_ids", "selected_image_ids", "replicable_mechanics", "products_services"}
+    JSON_FIELDS = {"frames", "generation_spec", "generated_images", "prompt_breakdown", "reference_image_ids", "selected_image_ids", "replicable_mechanics", "products_services", "messages", "brief"}
     d = {}
     for i, col in enumerate(columns):
         val = row[i]
@@ -68,3 +68,8 @@ class BrandProfileUpdateRequest(BaseModel):
 
 class GenerateRemixScriptRequest(BaseModel):
     duration_seconds: int = 30
+
+
+class RemixChatMessageRequest(BaseModel):
+    """A single user turn in the conversational remix chat for a customization."""
+    message: str
