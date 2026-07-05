@@ -22,7 +22,7 @@
 **Delivered artifact:** `/app/backend/test_core.py`
 - Step A: Download public TikTok video via `yt-dlp`.
 - Step B: Extract frames from first 2–3 seconds via `ffmpeg`.
-- Step C: Vision LLM hook analysis (Gemini vision model via `emergentintegrations` + `EMERGENT_LLM_KEY`) returning strict structured JSON.
+- Step C: Vision LLM hook analysis (Gemini vision model + `AI_API_KEY`) returning strict structured JSON.
 - Step D: Still-image face-swap/customized preview (Gemini Nano Banana: `gemini-3.1-flash-image-preview`) using reference hook frame + uploaded portrait.
 
 **Exit criteria achieved:** Script reliably produces (1) extracted frames, (2) valid structured hook JSON, (3) generated preview image.

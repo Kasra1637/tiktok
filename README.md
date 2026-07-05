@@ -11,7 +11,7 @@ Discover trending TikTok hooks, analyze what makes them work, face-swap yourself
 5. Set environment variables:
    - `MONGO_URL` — Your MongoDB Atlas connection string ([free tier](https://www.mongodb.com/atlas))
    - `DB_NAME` — `hookforge`
-   - `EMERGENT_LLM_KEY` — Your AI API key
+   - `AI_API_KEY` — Your AI API key (Gemini)
 6. Click **Deploy**
 
 Your app will be live at `https://tiktok-hookforge.onrender.com`
