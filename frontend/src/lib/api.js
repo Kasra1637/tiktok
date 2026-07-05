@@ -43,6 +43,15 @@ export const api = {
     client.post(`/video-jobs/${jobId}/generate-video`, payload).then((r) => r.data),
   getVideoJob: (jobId) => client.get(`/video-jobs/${jobId}`).then((r) => r.data),
 
+  // Standalone face swap (Higgsfield-style 3-step flow)
+  faceSwap: (formData) =>
+    client
+      .post("/face-swap", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 180000,
+      })
+      .then((r) => r.data),
+
   // Brand profile / Content Remixer
   analyzeBrandUrl: (url) => client.post("/brand/analyze-url", { url }).then((r) => r.data),
   getActiveBrand: () => client.get("/brand/active").then((r) => r.data),

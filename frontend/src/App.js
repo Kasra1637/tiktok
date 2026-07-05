@@ -9,6 +9,7 @@ import Customize from "./pages/Customize";
 import GenerateVideo from "./pages/GenerateVideo";
 import History from "./pages/History";
 import BrandSetup from "./pages/BrandSetup";
+import FaceSwap from "./pages/FaceSwap";
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
         <PageTransition>
           <Routes>
             <Route path="/" element={<NicheFeed />} />
+            <Route path="/face-swap" element={<FaceSwap />} />
             <Route path="/analysis/:videoId" element={<AnalysisDetail />} />
             <Route path="/customize/:videoId" element={<Customize />} />
             <Route path="/generate-video/:customizationId" element={<GenerateVideo />} />
