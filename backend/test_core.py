@@ -4,10 +4,11 @@ Proves the end-to-end pipeline for the TikTok Hook Analyzer + Customization app:
 
   A. Download a public TikTok video via yt-dlp
   B. Extract frames from the first 2-3 seconds via ffmpeg
-  C. Vision LLM structured hook analysis (emergentintegrations + EMERGENT_LLM_KEY)
-  D. Face-swap / customization still-image generation (Gemini Nano Banana image model)
+  C. Vision LLM structured hook analysis (OpenRouter API + AI_API_KEY)
+  D. Face-swap / customization still-image generation (Gemini image model)
 
 Run: python3 test_core.py
+NOTE: This is a legacy POC script. The production backend uses ai_service.py with OpenRouter.
 """
 import asyncio
 import base64
@@ -31,7 +32,7 @@ SAMPLES_DIR = STORAGE / "samples"
 for d in [VIDEOS_DIR, FRAMES_DIR, SAMPLES_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
-EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY")
+AI_API_KEY = os.environ.get("AI_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
 
 TEST_TIKTOK_URL = "https://www.tiktok.com/@scout2015/video/6718335390845095173"
 TEST_PORTRAIT_URL = "https://images.unsplash.com/photo-1580489944761-15a19d654956?fm=jpg&q=85&w=800"
@@ -121,119 +122,30 @@ def image_to_base64(path: Path) -> str:
 # STEP C: Vision LLM structured hook analysis
 # ---------------------------------------------------------------------------
 async def analyze_hook(frames: list) -> dict:
-    from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
-
+    """Legacy POC hook analysis - production code uses ai_service.py instead."""
     log(f"Step C: Sending {len(frames)} frames to vision LLM for hook analysis")
-
-    system_message = (
-        "You are an expert short-form video (TikTok/Reels) hook analyst. You examine the "
-        "first 2-3 seconds of a video (given as a sequence of frames in chronological order) "
-        "and identify exactly what makes the hook effective at grabbing attention. "
-        "Respond with STRICT JSON only, no markdown fences, no extra commentary."
-    )
-
-    prompt = (
-        "Here are sequential frames from the first ~3 seconds of a short-form video "
-        "(frame_001 is earliest). Analyze the hook and return ONLY a JSON object with this "
-        "exact schema:\n"
-        "{\n"
-        '  "facial_expressions": "string describing facial expressions/micro-expressions observed (surprise, delight, confusion etc)",\n'
-        '  "body_language_gestures": "string describing body language and hand gestures (pointing, touching face, sudden movements)",\n'
-        '  "pacing_cuts": "string describing pacing and cut speed/escalation across the frames",\n'
-        '  "text_overlays_timing": "string describing any on-screen text/elements and when they appear/reveal",\n'
-        '  "audio_cues_inferred": "string inferring likely audio cues (tone shifts, pauses, emphasis) based on visual context (mouth position, motion blur, captions)",\n'
-        '  "hook_summary": "1-2 sentence summary of why this hook works",\n'
-        '  "effectiveness_score": integer 1-10,\n'
-        '  "key_hook_frame_index": integer index (1-based) of the single frame that best represents the peak hook moment,\n'
-        '  "replicable_mechanics": ["short bullet", "short bullet", "..."] list of concrete mechanics to preserve when recreating this hook with a different person\n'
-        "}\n"
-        "Return ONLY valid JSON."
-    )
-
-    chat = LlmChat(
-        api_key=EMERGENT_LLM_KEY,
-        session_id="poc-hook-analysis",
-        system_message=system_message,
-    ).with_model("gemini", "gemini-3-flash-preview")
-
-    image_contents = [ImageContent(image_to_base64(fp)) for fp in frames]
-    user_message = UserMessage(text=prompt, file_contents=image_contents)
-
-    full_text = ""
-    async for event in chat.stream_message(user_message):
-        cls_name = event.__class__.__name__
-        if cls_name == "TextDelta":
-            full_text += event.content
-        elif cls_name == "StreamDone":
-            break
-
-    full_text = full_text.strip()
-    if full_text.startswith("```"):
-        full_text = full_text.strip("`")
-        if full_text.startswith("json"):
-            full_text = full_text[4:]
-    full_text = full_text.strip()
-
-    try:
-        analysis = json.loads(full_text)
-    except json.JSONDecodeError:
-        start = full_text.find("{")
-        end = full_text.rfind("}")
-        analysis = json.loads(full_text[start:end + 1])
-
-    log("Step C: SUCCESS - received structured hook analysis JSON")
-    log(json.dumps(analysis, indent=2)[:1200])
-    return analysis
+    log("NOTE: This POC function requires 'emergentintegrations' package which is deprecated.")
+    log("The production backend uses OpenRouter via ai_service.py.")
+    raise RuntimeError("Legacy POC - use the production ai_service.analyze_hook() instead")
 
 
 # ---------------------------------------------------------------------------
 # STEP D: Face-swap / customization still-image generation (Nano Banana)
 # ---------------------------------------------------------------------------
 async def generate_customized_preview(reference_frame: Path, person_photo: Path, customization_prompt: str) -> bytes:
-    from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
-
-    log("Step D: Generating face-swapped customized preview image (Gemini Nano Banana)")
-
-    chat = LlmChat(
-        api_key=EMERGENT_LLM_KEY,
-        session_id="poc-customization",
-        system_message="You are an expert visual content creator that composites reference images.",
-    )
-    chat.with_model("gemini", "gemini-3.1-flash-image-preview").with_params(modalities=["image", "text"])
-
-    prompt = (
-        "Image 1 is a reference frame from a video showing a person's pose, facial expression, "
-        "and hand gesture during a hook moment. Image 2 is a photo of a different person. "
-        "Generate a new image that keeps the EXACT pose, facial expression, and hand gesture from "
-        "Image 1, but replaces the person's face/identity with the person from Image 2. "
-        f"Apply the following customization to environment/background/clothing: {customization_prompt}. "
-        "Preserve the core hook mechanic (the expression + gesture) exactly."
-    )
-
-    image_contents = [
-        ImageContent(image_to_base64(reference_frame)),
-        ImageContent(image_to_base64(person_photo)),
-    ]
-    msg = UserMessage(text=prompt, file_contents=image_contents)
-
-    text, images = await chat.send_message_multimodal_response(msg)
-    if not images:
-        raise RuntimeError(f"No image returned from Nano Banana. Text response: {text[:300]}")
-
-    img_bytes = base64.b64decode(images[0]["data"])
-    out_path = SAMPLES_DIR / "poc_generated_preview.png"
-    with open(out_path, "wb") as f:
-        f.write(img_bytes)
-    log(f"Step D: SUCCESS - generated preview saved to {out_path} ({len(img_bytes)} bytes)")
-    return img_bytes
+    """Legacy POC customization - production code uses ai_service.py instead."""
+    log("Step D: Generating face-swapped customized preview image")
+    log("NOTE: This POC function requires 'emergentintegrations' package which is deprecated.")
+    log("The production backend uses OpenRouter via ai_service.py.")
+    raise RuntimeError("Legacy POC - use the production ai_service.generate_customized_preview() instead")
 
 
 # ---------------------------------------------------------------------------
 # MAIN
 # ---------------------------------------------------------------------------
 async def main():
-    if not EMERGENT_LLM_KEY:
-        log("ERROR: EMERGENT_LLM_KEY not set in environment")
+    if not AI_API_KEY:
+        log("ERROR: AI_API_KEY or OPENROUTER_API_KEY not set in environment")
         sys.exit(1)
 
     # Step A

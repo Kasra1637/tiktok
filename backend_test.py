@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 
 # Use the public backend URL from frontend/.env
-BASE_URL = "https://viral-swap-1.preview.emergentagent.com/api"
+BASE_URL = "http://localhost:8000/api"
 
 class HookForgeAPITester:
     def __init__(self, base_url=BASE_URL):
