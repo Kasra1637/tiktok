@@ -1,13 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import * as LucideIcons from "lucide-react";
-import { Compass, Search, Flame, TrendingUp } from "lucide-react";
+import { Compass, Search, TrendingUp } from "lucide-react";
 import { Skeleton } from "../components/ui/skeleton";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import VideoCard from "../components/VideoCard";
 import EmptyState from "../components/EmptyState";
-import Stepper from "../components/Stepper";
 import { api, getErrorMessage } from "../lib/api";
 import { toast } from "sonner";
 
@@ -116,20 +115,16 @@ export default function NicheFeed() {
       : "Fetching curated videos...";
 
   return (
-    <div className="space-y-6">
-      <Stepper current="find" />
+    <div className="space-y-4">
       <div>
-        <h1 className="font-display text-3xl md:text-4xl font-semibold tracking-tight">Discover trending hooks</h1>
-        <p className="text-muted-foreground mt-1 max-w-2xl">
-          Pick a niche to browse trending TikTok videos, then analyze the first 2-3 seconds to see exactly what makes
-          the hook work.
-        </p>
+        <h1 className="font-display text-2xl md:text-3xl font-semibold tracking-tight">Discover Hooks</h1>
+        <p className="text-muted-foreground text-sm mt-0.5">Browse trending TikToks and analyze what makes their hooks work.</p>
       </div>
 
-      {/* Filter bar: search + mode + niche selector, grouped as one cohesive unit */}
-      <div className="rounded-2xl border border-border bg-white/60 p-4 md:p-5 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <form onSubmit={handleSearch} className="flex items-center gap-2 w-full sm:max-w-lg">
+      {/* Filter bar */}
+      <div className="rounded-xl border border-border bg-white/60 p-3 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <form onSubmit={handleSearch} className="flex items-center gap-2 flex-1 min-w-0">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -137,14 +132,14 @@ export default function NicheFeed() {
                 placeholder="Search by keyword or hashtag..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 rounded-xl bg-white"
+                className="pl-9 rounded-lg bg-white h-9 text-sm"
                 data-testid="search-input"
               />
             </div>
             <button
               type="submit"
               disabled={searchLoading || !searchQuery.trim()}
-              className="rounded-xl px-4 py-2 text-sm font-medium bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white disabled:opacity-50 transition-colors hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98]"
+              className="rounded-lg px-3 py-1.5 text-sm font-medium bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white disabled:opacity-50 transition-colors hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98]"
               data-testid="search-button"
             >
               {searchLoading ? "Searching..." : "Search"}
@@ -153,21 +148,21 @@ export default function NicheFeed() {
               <button
                 type="button"
                 onClick={clearSearch}
-                className="rounded-xl px-3 py-2 text-sm font-medium border border-border hover:bg-muted transition-colors"
+                className="rounded-lg px-3 py-1.5 text-sm font-medium border border-border hover:bg-muted transition-colors"
               >
                 Clear
               </button>
             )}
           </form>
 
-          <div className="flex items-center gap-1 rounded-full border border-border p-1 bg-white shrink-0" data-testid="mode-toggle">
+          <div className="flex items-center gap-1 rounded-full border border-border p-0.5 bg-white shrink-0" data-testid="mode-toggle">
             {MODES.map((m) => (
               <button
                 key={m.key}
                 onClick={() => setMode(m.key)}
                 data-testid={`mode-${m.key}`}
                 aria-pressed={mode === m.key}
-                className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors active:scale-95 ${
+                className={`rounded-full px-3 py-1 text-sm font-medium transition-colors active:scale-95 ${
                   mode === m.key
                     ? "bg-[color:var(--brand-teal)] text-white"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -179,25 +174,14 @@ export default function NicheFeed() {
           </div>
         </div>
 
-        {((mode === "trending" || mode === "mixed") && searchResults === null) || searchResults !== null ? (
-          <div>
-            {searchResults !== null ? (
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Search className="h-3 w-3" />
-                Showing search results for &quot;{searchQuery}&quot;
-              </span>
-            ) : (
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                <TrendingUp className="h-3 w-3" />
-                Sorted by virality
-              </span>
-            )}
-          </div>
-        ) : null}
+        {searchResults !== null && (
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Search className="h-3 w-3" />
+            Results for &quot;{searchQuery}&quot;
+          </span>
+        )}
 
-        <div className="h-px bg-border" />
-
-        <div className="flex flex-wrap gap-2" data-testid="niche-selector-tabs">
+        <div className="flex flex-wrap gap-1.5" data-testid="niche-selector-tabs">
           {niches.map((n) => {
             const Icon = LucideIcons[n.icon] || Compass;
             const isActive = activeNiche === n.key;
@@ -207,13 +191,13 @@ export default function NicheFeed() {
                 onClick={() => setActiveNiche(n.key)}
                 data-testid={`niche-chip-${n.key}`}
                 aria-pressed={isActive}
-                className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium border transition-colors hover:-translate-y-[1px] active:translate-y-0 ${
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium border transition-colors hover:-translate-y-[1px] active:translate-y-0 ${
                   isActive
                     ? "bg-[color:var(--brand-teal)] text-white border-transparent"
                     : "bg-white border-border hover:border-[color:rgba(13,148,136,0.45)]"
                 }`}
               >
-                <Icon className="h-4 w-4" /> {n.label}
+                <Icon className="h-3.5 w-3.5" /> {n.label}
               </button>
             );
           })}
@@ -221,22 +205,17 @@ export default function NicheFeed() {
       </div>
 
       {loadingVideos || searchLoading ? (
-        <div>
-          <p className="text-sm text-muted-foreground mb-4">
-            {searchLoading ? "Searching for videos..." : loadingText} This can take up to 20 seconds the first time.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Card key={i} className="overflow-hidden rounded-2xl border-border">
-                <Skeleton className="h-[280px] w-full" />
-                <div className="p-4 space-y-2">
-                  <Skeleton className="h-4 w-3/4" />
-                  <Skeleton className="h-3 w-1/2" />
-                  <Skeleton className="h-9 w-full rounded-xl" />
-                </div>
-              </Card>
-            ))}
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i} className="overflow-hidden rounded-2xl border-border">
+              <Skeleton className="h-[280px] w-full" />
+              <div className="p-4 space-y-2">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+                <Skeleton className="h-9 w-full rounded-xl" />
+              </div>
+            </Card>
+          ))}
         </div>
       ) : displayVideos.length === 0 ? (
         <EmptyState

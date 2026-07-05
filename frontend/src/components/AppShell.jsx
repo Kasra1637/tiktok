@@ -33,50 +33,15 @@ export function AppShell({ children }) {
 
   return (
     <div className="relative min-h-screen hero-wash">
-      <header className="sticky top-0 z-20 border-b border-border bg-[color:var(--card)]/90 backdrop-blur-sm">
-        <div className="max-w-[1400px] mx-auto px-4 md:px-6 lg:px-8 py-3 md:h-16 md:py-0 flex flex-col md:flex-row md:items-center gap-3 md:gap-4">
-          <div className="flex items-center justify-between md:justify-start gap-4 md:shrink-0">
-            <Link to="/" className="flex items-center gap-2 shrink-0" data-testid="logo-home-link">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--brand-teal)] text-white transition-transform hover:scale-105">
-                <Sparkles className="h-4 w-4" />
+      <header className="sticky top-0 z-20 border-b border-border/60 bg-[color:var(--card)]/80 backdrop-blur-sm">
+        <div className="max-w-[1400px] mx-auto px-4 md:px-6 lg:px-8 py-2 md:h-14 md:py-0 flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
+          <div className="flex items-center justify-between md:justify-start gap-3 md:shrink-0">
+            <Link to="/" className="flex items-center gap-1.5 shrink-0" data-testid="logo-home-link">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[color:var(--brand-teal)] text-white transition-transform hover:scale-105">
+                <Sparkles className="h-3.5 w-3.5" />
               </span>
-              <span className="font-display text-lg font-semibold tracking-tight">HookForge</span>
+              <span className="font-display text-base font-semibold tracking-tight">HookForge</span>
             </Link>
-
-            <div className="md:hidden flex items-center gap-1">
-              <Link
-                to="/face-swap"
-                data-testid="face-swap-nav-link"
-                aria-current={isFaceSwap ? "page" : undefined}
-                className={`flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(99,102,241,0.08)] transition-colors ${
-                  isFaceSwap ? "text-[color:var(--brand-teal)]" : "text-foreground"
-                }`}
-              >
-                <Repeat2 className="h-4 w-4" /> Swap
-              </Link>
-
-              <Link
-                to="/brand"
-                data-testid="brand-nav-link"
-                aria-current={isBrand ? "page" : undefined}
-                className={`flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(99,102,241,0.08)] transition-colors ${
-                  isBrand ? "text-[color:var(--brand-teal)]" : "text-foreground"
-                }`}
-              >
-                <Briefcase className="h-4 w-4" /> Brand
-              </Link>
-
-              <Link
-                to="/history"
-                data-testid="history-nav-link"
-                aria-current={isHistory ? "page" : undefined}
-                className={`flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(99,102,241,0.08)] transition-colors ${
-                  isHistory ? "text-[color:var(--brand-teal)]" : "text-foreground"
-                }`}
-              >
-                <HistoryIcon className="h-4 w-4" /> History
-              </Link>
-            </div>
           </div>
 
           <form onSubmit={handleSubmit} className="flex-1 flex items-center gap-2 md:max-w-xl" role="search">
@@ -104,38 +69,43 @@ export function AppShell({ children }) {
             </Button>
           </form>
 
-          <Link
-            to="/face-swap"
-            data-testid="face-swap-nav-link-desktop"
-            aria-current={isFaceSwap ? "page" : undefined}
-            className={`hidden md:flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(99,102,241,0.08)] transition-colors shrink-0 ${
-              isFaceSwap ? "text-[color:var(--brand-teal)]" : "text-foreground"
-            }`}
-          >
-            <Repeat2 className="h-4 w-4" /> Face Swap
-          </Link>
+          <nav className="flex items-center gap-1 shrink-0">
+            <Link
+              to="/face-swap"
+              data-testid="face-swap-nav-link"
+              aria-current={isFaceSwap ? "page" : undefined}
+              className={`flex items-center gap-1.5 text-sm font-medium px-2.5 py-1.5 rounded-xl hover:bg-[color:rgba(99,102,241,0.08)] transition-colors ${
+                isFaceSwap ? "text-[color:var(--brand-teal)]" : "text-foreground"
+              }`}
+            >
+              <Repeat2 className="h-4 w-4" />
+              <span className="hidden md:inline">Face Swap</span>
+            </Link>
 
-          <Link
-            to="/brand"
-            data-testid="brand-nav-link-desktop"
-            aria-current={isBrand ? "page" : undefined}
-            className={`hidden md:flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(99,102,241,0.08)] transition-colors shrink-0 ${
-              isBrand ? "text-[color:var(--brand-teal)]" : "text-foreground"
-            }`}
-          >
-            <Briefcase className="h-4 w-4" /> Your Brand
-          </Link>
+            <Link
+              to="/brand"
+              data-testid="brand-nav-link"
+              aria-current={isBrand ? "page" : undefined}
+              className={`flex items-center gap-1.5 text-sm font-medium px-2.5 py-1.5 rounded-xl hover:bg-[color:rgba(99,102,241,0.08)] transition-colors ${
+                isBrand ? "text-[color:var(--brand-teal)]" : "text-foreground"
+              }`}
+            >
+              <Briefcase className="h-4 w-4" />
+              <span className="hidden md:inline">Your Brand</span>
+            </Link>
 
-          <Link
-            to="/history"
-            data-testid="history-nav-link-desktop"
-            aria-current={isHistory ? "page" : undefined}
-            className={`hidden md:flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl hover:bg-[color:rgba(99,102,241,0.08)] transition-colors shrink-0 ${
-              isHistory ? "text-[color:var(--brand-teal)]" : "text-foreground"
-            }`}
-          >
-            <HistoryIcon className="h-4 w-4" /> History
-          </Link>
+            <Link
+              to="/history"
+              data-testid="history-nav-link"
+              aria-current={isHistory ? "page" : undefined}
+              className={`flex items-center gap-1.5 text-sm font-medium px-2.5 py-1.5 rounded-xl hover:bg-[color:rgba(99,102,241,0.08)] transition-colors ${
+                isHistory ? "text-[color:var(--brand-teal)]" : "text-foreground"
+              }`}
+            >
+              <HistoryIcon className="h-4 w-4" />
+              <span className="hidden md:inline">History</span>
+            </Link>
+          </nav>
         </div>
       </header>
       <main className="relative z-10 max-w-[1400px] mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">

@@ -9,7 +9,6 @@ import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import GenerationProgress from "../components/GenerationProgress";
 import RemixChat from "../components/RemixChat";
-import Stepper from "../components/Stepper";
 import { api, mediaUrl, getErrorMessage } from "../lib/api";
 import { ArrowLeft, Wand2, Clapperboard, AlertTriangle, RotateCcw, Clock, Film, Camera, Eye, Users, MapPinned, Megaphone, CheckCircle2, Sparkles, Briefcase, MessageSquareText } from "lucide-react";
 import { toast } from "sonner";
@@ -219,14 +218,13 @@ export default function GenerateVideo() {
 
   if (!customization) {
     return (
-      <div className="space-y-6" data-testid="generate-video-loading">
-        <Stepper current="video" />
+      <div className="space-y-4" data-testid="generate-video-loading">
         <div className="space-y-2">
           <Skeleton className="h-8 w-64" />
           <Skeleton className="h-4 w-full max-w-2xl" />
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6">
-          <Card className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] space-y-4 h-fit">
+          <Card className="p-4 md:p-5 rounded-2xl border-border space-y-3 h-fit">
             <div className="flex gap-2">
               {Array.from({ length: 3 }).map((_, i) => (
                 <Skeleton key={i} className="w-16 h-20 rounded-lg shrink-0" />
@@ -244,15 +242,15 @@ export default function GenerateVideo() {
   }
 
   return (
-    <div className="space-y-6">
-      <Stepper current="video" />
+    <div className="space-y-4">
       <Button
         variant="ghost"
+        size="sm"
         onClick={() => navigate(`/customize/${customization.video_id}`)}
-        className="gap-1.5 -ml-2"
+        className="gap-1 -ml-2"
         data-testid="back-to-customize-button"
       >
-        <ArrowLeft className="h-4 w-4" /> Back to face swap
+        <ArrowLeft className="h-3.5 w-3.5" /> Back
       </Button>
 
       <div>
@@ -260,37 +258,14 @@ export default function GenerateVideo() {
           <Sparkles className="h-6 w-6 text-[color:var(--brand-coral)]" /> Content Remixer
         </h1>
         <p className="text-muted-foreground mt-1 max-w-2xl">
-          Remix this viral hook and adapt it to your specific product and niche with AI-powered scriptwriting.
-          We'll auto-write a video prompt from the original hook's content, camera angle, view position, character
-          behavior, and scene details — then tailor the rest of the video to your brand.
+          Remix this viral hook for your brand with AI-powered scriptwriting.
         </p>
       </div>
 
-      {!brandLoading && !brandProfile && (
-        <Alert className="rounded-2xl" data-testid="no-brand-profile-notice">
-          <Briefcase className="h-4 w-4" />
-          <AlertTitle>No brand profile set up yet</AlertTitle>
-          <AlertDescription className="flex flex-col sm:flex-row sm:items-center gap-2 justify-between">
-            <span>
-              Set up your brand once and we'll pre-fill these fields (and unlock one-click remixing) every time.
-            </span>
-            <Link to="/brand">
-              <Button size="sm" variant="secondary" className="gap-1.5 rounded-lg shrink-0" data-testid="go-to-brand-setup-button">
-                <Briefcase className="h-3.5 w-3.5" /> Set up your brand
-              </Button>
-            </Link>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <div className="space-y-2">
-        <h3 className="text-sm font-semibold flex items-center gap-1.5">
-          <MessageSquareText className="h-4 w-4 text-[color:var(--brand-teal)]" /> Or describe your remix goal in chat
-        </h3>
-        <p className="text-xs text-muted-foreground">
-          Prefer to just tell us what you're going for? Chat below — we'll check the audience fit against the
-          original hook and ask a couple of quick questions, then fill in the brand fields for you.
-        </p>
+      <div className="space-y-1.5">
+        <span className="text-xs font-medium flex items-center gap-1.5 text-muted-foreground">
+          <MessageSquareText className="h-3.5 w-3.5 text-[color:var(--brand-teal)]" /> Chat with AI
+        </span>
         <div className="h-[420px] md:h-[480px]">
           <RemixChat
             messages={remixMessages}
@@ -302,8 +277,8 @@ export default function GenerateVideo() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6">
-        <Card className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] space-y-4 h-fit">
+      <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-4">
+        <Card className="p-4 md:p-5 rounded-2xl border-border space-y-3 h-fit">
           <div className="flex gap-2 overflow-x-auto pb-1" data-testid="reference-images-row">
             {(customization.generated_images || []).map((img) => (
               <img
@@ -315,7 +290,7 @@ export default function GenerateVideo() {
             ))}
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <label className="text-sm font-medium">Brand name</label>
             <Input
               value={brandName}
@@ -324,7 +299,7 @@ export default function GenerateVideo() {
               data-testid="brand-name-input"
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <label className="text-sm font-medium">Brand goal</label>
             <Input
               value={brandGoal}
@@ -333,7 +308,7 @@ export default function GenerateVideo() {
               data-testid="brand-goal-input"
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <label className="text-sm font-medium">Brand details</label>
             <Textarea
               value={brandDetails}
@@ -343,7 +318,7 @@ export default function GenerateVideo() {
               data-testid="brand-details-textarea"
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <label className="text-sm font-medium flex items-center gap-1.5">
               <Clock className="h-3.5 w-3.5" /> Target duration (seconds, max 30)
             </label>
@@ -390,9 +365,9 @@ export default function GenerateVideo() {
           )}
         </Card>
 
-        <div className="space-y-6">
+        <div className="space-y-4">
           {generatingPrompt && (
-            <Card className="p-6 rounded-2xl border-border shadow-[var(--shadow-soft)]">
+            <Card className="p-6 rounded-2xl border-border">
               <h3 className="font-display font-semibold mb-3 flex items-center gap-2">
                 <Clapperboard className="h-4 w-4" /> Writing your video prompt...
               </h3>
@@ -422,7 +397,7 @@ export default function GenerateVideo() {
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3" data-testid="prompt-breakdown">
                 {BREAKDOWN_SECTIONS.map(({ key, label, icon: Icon }) => (
-                  <Card key={key} className="p-4 rounded-2xl border-border shadow-[var(--shadow-soft)]">
+                  <Card key={key} className="p-4 rounded-2xl border-border">
                     <div className="flex items-center gap-2 mb-1.5">
                       <Icon className="h-4 w-4 text-[color:var(--brand-teal)]" />
                       <h4 className="text-sm font-semibold">{label}</h4>
@@ -434,7 +409,7 @@ export default function GenerateVideo() {
                 ))}
               </div>
 
-              <Card className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] space-y-2">
+              <Card className="p-4 md:p-5 rounded-2xl border-border space-y-2">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-semibold">Full video prompt (editable)</h4>
                   <div className="flex items-center gap-1.5">

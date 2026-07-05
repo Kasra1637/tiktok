@@ -33,20 +33,16 @@ export default function History() {
 
   if (loading) {
     return (
-      <div className="space-y-6" data-testid="history-loading">
-        <div>
-          <Skeleton className="h-8 w-40" />
-          <Skeleton className="h-4 w-72 mt-2" />
-        </div>
-        <div className="space-y-4">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Card key={i} className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)]">
-              <div className="flex flex-col md:flex-row gap-4">
-                <Skeleton className="w-full md:w-28 h-40 md:h-28 rounded-xl shrink-0" />
+      <div className="space-y-4" data-testid="history-loading">
+        <Skeleton className="h-8 w-40" />
+        <div className="space-y-3">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Card key={i} className="p-3 rounded-xl border-border">
+              <div className="flex flex-col md:flex-row gap-3">
+                <Skeleton className="w-full md:w-24 h-32 md:h-24 rounded-lg shrink-0" />
                 <div className="flex-1 space-y-2">
                   <Skeleton className="h-4 w-3/4" />
                   <Skeleton className="h-3 w-1/2" />
-                  <Skeleton className="h-3 w-2/3" />
                 </div>
               </div>
             </Card>
@@ -67,30 +63,27 @@ export default function History() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl md:text-3xl font-semibold tracking-tight">History</h1>
-        <p className="text-muted-foreground mt-1">Revisit past hook analyses, face swaps, and video briefs.</p>
-      </div>
+    <div className="space-y-4">
+      <h1 className="font-display text-2xl md:text-3xl font-semibold tracking-tight">History</h1>
 
-      <div className="space-y-4" data-testid="history-list">
+      <div className="space-y-3" data-testid="history-list">
         {items.map(({ video, customizations, video_jobs }) => (
           <Card
             key={video.id}
-            className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] hover:shadow-[var(--shadow-tight)] hover:border-[color:rgba(99,102,241,0.3)] transition-shadow transition-colors"
+            className="p-3 rounded-xl border-border hover:border-[color:rgba(99,102,241,0.3)] transition-colors"
           >
-            <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex flex-col md:flex-row gap-3">
               {video.thumbnail_url && (
                 <img
                   src={video.thumbnail_url}
                   alt={video.title}
-                  className="w-full md:w-28 h-40 md:h-28 rounded-xl object-cover shrink-0"
+                  className="w-full md:w-28 h-40 md:h-28 rounded-lg object-cover shrink-0"
                   onError={(e) => {
                     e.currentTarget.style.display = "none";
                   }}
                 />
               )}
-              <div className="flex-1 space-y-2">
+              <div className="flex-1 space-y-1.5">
                 <Link
                   to={`/analysis/${video.id}`}
                   className="font-medium hover:text-[color:var(--brand-teal-dark)] hover:underline line-clamp-2 block transition-colors"
@@ -136,7 +129,7 @@ export default function History() {
                             <button
                               key={img.id}
                               onClick={() => setActiveCustomization(c)}
-                              className="group rounded-xl overflow-hidden border border-border hover:border-[color:var(--brand-teal)] hover:shadow-[var(--shadow-tight)] transition-shadow transition-colors w-16 h-16"
+                              className="group rounded-xl overflow-hidden border border-border hover:border-[color:var(--brand-teal)] transition-colors w-16 h-16"
                               data-testid="history-customization-thumb"
                             >
                               <img

@@ -8,7 +8,6 @@ import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import Filmstrip from "../components/Filmstrip";
 import HookBreakdown from "../components/HookBreakdown";
 import GenerationProgress from "../components/GenerationProgress";
-import Stepper from "../components/Stepper";
 import { api, getErrorMessage } from "../lib/api";
 import { ArrowLeft, Eye, Heart, MessageCircle, Wand2, AlertTriangle, RotateCcw, ExternalLink, Repeat2 } from "lucide-react";
 
@@ -91,26 +90,17 @@ export default function AnalysisDetail() {
 
   if (!video) {
     return (
-      <div className="space-y-6" data-testid="analysis-detail-loading">
-        <Stepper current="analyze" />
-        <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6">
-          <Card className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] space-y-3 h-fit">
+      <div className="space-y-5" data-testid="analysis-detail-loading">
+        <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-5">
+          <Card className="p-3 rounded-2xl border-border shadow-[var(--shadow-soft)] space-y-2 h-fit">
             <Skeleton className="w-full aspect-[9/16] rounded-xl" />
             <Skeleton className="h-5 w-4/5" />
             <Skeleton className="h-3 w-1/3" />
-            <Skeleton className="h-3 w-2/3" />
-            <Skeleton className="h-9 w-full rounded-xl" />
           </Card>
           <div className="space-y-4">
-            <Skeleton className="h-4 w-64" />
             <div className="flex gap-3">
               {Array.from({ length: 4 }).map((_, i) => (
                 <Skeleton key={i} className="w-[120px] md:w-[140px] h-[160px] md:h-[190px] rounded-xl shrink-0" />
-              ))}
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-24 rounded-2xl" />
               ))}
             </div>
           </div>
@@ -120,14 +110,13 @@ export default function AnalysisDetail() {
   }
 
   return (
-    <div className="space-y-6">
-      <Stepper current="analyze" />
-      <Button variant="ghost" onClick={() => navigate("/")} className="gap-1.5 -ml-2" data-testid="back-to-feed-button">
-        <ArrowLeft className="h-4 w-4" /> Back to feed
+    <div className="space-y-5">
+      <Button variant="ghost" size="sm" onClick={() => navigate("/")} className="gap-1 -ml-2 text-muted-foreground" data-testid="back-to-feed-button">
+        <ArrowLeft className="h-3.5 w-3.5" /> Back
       </Button>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6">
-        <Card className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] space-y-3 h-fit">
+      <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-5">
+        <Card className="p-3 rounded-2xl border-border shadow-[var(--shadow-soft)] space-y-2.5 h-fit">
           {video.thumbnail_url && (
             <img
               src={video.thumbnail_url}
@@ -199,7 +188,7 @@ export default function AnalysisDetail() {
           )}
         </Card>
 
-        <div className="space-y-6">
+        <div className="space-y-5">
           {analyzing || !analysis ? (
             <Card className="p-6 rounded-2xl border-border shadow-[var(--shadow-soft)]">
               <h3 className="font-display font-semibold mb-3">Analyzing hook...</h3>
@@ -207,10 +196,7 @@ export default function AnalysisDetail() {
             </Card>
           ) : (
             <>
-              <div>
-                <h3 className="text-sm font-semibold text-muted-foreground mb-2">First 2-3 seconds — key frames</h3>
-                <Filmstrip frames={analysis.frames} selectedIndex={selectedFrame} onSelect={setSelectedFrame} />
-              </div>
+              <Filmstrip frames={analysis.frames} selectedIndex={selectedFrame} onSelect={setSelectedFrame} />
               <HookBreakdown analysis={analysis} />
             </>
           )}

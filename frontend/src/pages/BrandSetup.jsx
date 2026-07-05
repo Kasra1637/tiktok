@@ -136,66 +136,51 @@ export default function BrandSetup() {
   };
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
+    <div className="space-y-4 max-w-3xl mx-auto">
       <div>
-        <h1 className="font-display text-2xl md:text-3xl font-semibold tracking-tight flex items-center gap-2">
-          <Briefcase className="h-6 w-6 text-[color:var(--brand-teal)]" /> Your Brand
-        </h1>
-        <p className="text-muted-foreground mt-1 max-w-2xl">
-          The Content Remixer uses this brand profile to adapt any viral hook — from our discovery feed or a
-          pasted URL — into a script tailored to your niche, products, and tone.
+        <h1 className="font-display text-2xl font-semibold tracking-tight">Your Brand</h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          This profile powers brand-adapted scripts across the Content Remixer.
         </p>
       </div>
 
-      <Card className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] space-y-3" data-testid="brand-url-card">
-        <div className="flex items-center gap-2">
-          <Globe className="h-4 w-4 text-[color:var(--brand-teal)]" />
-          <h3 className="font-display font-semibold">Enter your website URL</h3>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          We'll read your website and automatically extract your brand name, description, niche, products/services,
-          target audience, and tone of voice.
-        </p>
-        <form onSubmit={handleAnalyzeUrl} className="flex flex-col sm:flex-row gap-2">
-          <Input
-            value={websiteUrl}
-            onChange={(e) => setWebsiteUrl(e.target.value)}
-            placeholder="https://yourbrand.com"
-            data-testid="brand-url-input"
-            className="flex-1"
-          />
-          <Button
-            type="submit"
-            disabled={analyzing}
-            className="gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white shrink-0"
-            data-testid="analyze-brand-url-button"
-          >
-            {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {analyzing ? "Analyzing..." : "Analyze My Brand"}
-          </Button>
-        </form>
+      <form onSubmit={handleAnalyzeUrl} className="flex items-center gap-2" data-testid="brand-url-card">
+        <Globe className="h-4 w-4 text-[color:var(--brand-teal)] shrink-0" />
+        <Input
+          value={websiteUrl}
+          onChange={(e) => setWebsiteUrl(e.target.value)}
+          placeholder="https://yourbrand.com"
+          data-testid="brand-url-input"
+          className="flex-1"
+        />
+        <Button
+          type="submit"
+          disabled={analyzing}
+          className="gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white shrink-0"
+          data-testid="analyze-brand-url-button"
+        >
+          {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          {analyzing ? "Analyzing..." : "Analyze"}
+        </Button>
+      </form>
 
-        {analyzeError && (
-          <Alert variant="destructive" className="rounded-2xl" data-testid="brand-analyze-error-alert">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Could not analyze this URL</AlertTitle>
-            <AlertDescription>{analyzeError}</AlertDescription>
-          </Alert>
-        )}
-      </Card>
+      {analyzeError && (
+        <Alert variant="destructive" className="rounded-2xl" data-testid="brand-analyze-error-alert">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Could not analyze this URL</AlertTitle>
+          <AlertDescription>{analyzeError}</AlertDescription>
+        </Alert>
+      )}
 
-      <Card className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] space-y-4" data-testid="brand-manual-card">
+      <Card className="p-4 md:p-5 rounded-2xl border-border space-y-4" data-testid="brand-manual-card">
         <div className="flex items-center justify-between">
-          <h3 className="font-display font-semibold">Your Brand</h3>
+          <h3 className="font-display font-semibold text-sm">Brand Details</h3>
           {brand?.id && (
             <Badge variant="secondary" className="rounded-full text-[10px]">
               {brand.website_url ? "From website + edits" : "Manually entered"}
             </Badge>
           )}
         </div>
-        <p className="text-sm text-muted-foreground">
-          What do you create or offer? Tell us about your brand, channel, products, services, niche, or industry.
-        </p>
 
         {loadingActive ? (
           <p className="text-sm text-muted-foreground">Loading your brand profile...</p>
@@ -204,13 +189,12 @@ export default function BrandSetup() {
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>No brand profile yet</AlertTitle>
             <AlertDescription>
-              Analyze your website URL above to create your brand profile. Once created, you can edit any field
-              manually right here.
+              Analyze your website URL above to get started.
             </AlertDescription>
           </Alert>
         ) : (
           <>
-            <div className="space-y-2">
+            <div className="space-y-1">
               <label className="text-sm font-medium">Brand name</label>
               <Input
                 value={form.brand_name}
@@ -219,19 +203,19 @@ export default function BrandSetup() {
                 data-testid="brand-name-field"
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Brand description</label>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Description</label>
               <Textarea
                 value={form.brand_description}
                 onChange={handleFieldChange("brand_description")}
-                placeholder="What do you create or offer? Tell us about your brand, channel, products, services, niche, or industry."
+                placeholder="What do you create or offer?"
                 className="min-h-[90px]"
                 data-testid="brand-description-field"
               />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Niche / Industry</label>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Niche</label>
                 <Input
                   value={form.niche}
                   onChange={handleFieldChange("niche")}
@@ -239,7 +223,7 @@ export default function BrandSetup() {
                   data-testid="brand-niche-field"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1">
                 <label className="text-sm font-medium">Target audience</label>
                 <Input
                   value={form.target_audience}
@@ -249,46 +233,38 @@ export default function BrandSetup() {
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Products / services (comma-separated)</label>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Products / services</label>
               <Input
                 value={form.products_services}
                 onChange={handleFieldChange("products_services")}
-                placeholder="e.g. Protein powder, pre-workout, recovery gummies"
+                placeholder="Comma-separated, e.g. Protein powder, pre-workout"
                 data-testid="brand-products-field"
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Who are you trying to reach?</label>
-              <p className="text-xs text-muted-foreground">
-                Describe your ideal customers or viewers — their demographics, interests, pain points, and
-                where they spend time online.
-              </p>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Ideal Customer</label>
               <Textarea
                 value={form.ideal_customer_profile}
                 onChange={handleFieldChange("ideal_customer_profile")}
-                placeholder="e.g. Women 22-35 interested in home workouts, struggling to stay consistent with fitness routines while juggling work — mostly active on TikTok and Instagram Reels in the evenings."
-                className="min-h-[100px]"
+                placeholder="Demographics, interests, pain points..."
+                className="min-h-[80px]"
                 data-testid="brand-ideal-customer-field"
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1">
               <label className="text-sm font-medium">What Sets You Apart</label>
-              <p className="text-xs text-muted-foreground">
-                What makes you different from others in your space? What are your standout strengths, selling
-                propositions, or signature angles?
-              </p>
               <Textarea
                 value={form.differentiation}
                 onChange={handleFieldChange("differentiation")}
-                placeholder="e.g. Only supplement brand with third-party lab-tested batches published publicly, same-day shipping, and a no-BS ingredient list with zero fillers."
-                className="min-h-[100px]"
+                placeholder="Unique strengths, selling propositions, signature angles..."
+                className="min-h-[80px]"
                 data-testid="brand-differentiation-field"
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1">
               <label className="text-sm font-medium">Tone / voice</label>
               <Input
                 value={form.tone_voice}

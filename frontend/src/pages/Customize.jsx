@@ -8,7 +8,6 @@ import { Skeleton } from "../components/ui/skeleton";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import GenerationProgress from "../components/GenerationProgress";
 import JsonSpecPanel from "../components/JsonSpecPanel";
-import Stepper from "../components/Stepper";
 import { api, mediaUrl, getErrorMessage } from "../lib/api";
 import { ArrowLeft, Upload, Sparkles, ImageIcon, AlertTriangle, RotateCcw, X, Lock, Palette, Check, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
@@ -155,14 +154,13 @@ export default function Customize() {
 
   if (!video || !analysis) {
     return (
-      <div className="space-y-6" data-testid="customize-loading">
-        <Stepper current="swap" />
+      <div className="space-y-4" data-testid="customize-loading">
         <div className="space-y-2">
           <Skeleton className="h-8 w-64" />
           <Skeleton className="h-4 w-full max-w-2xl" />
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6">
-          <Card className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] space-y-5 h-fit">
+        <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-4">
+          <Card className="p-4 md:p-5 rounded-2xl border-border space-y-4 h-fit">
             <Skeleton className="h-40 w-full rounded-2xl" />
             <div className="flex gap-2">
               {Array.from({ length: 4 }).map((_, i) => (
@@ -178,27 +176,21 @@ export default function Customize() {
   }
 
   return (
-    <div className="space-y-6">
-      <Stepper current="swap" />
+    <div className="space-y-4">
       <Button
         variant="ghost"
+        size="sm"
         onClick={() => navigate(`/analysis/${videoId}`)}
         className="gap-1.5 -ml-2"
         data-testid="back-to-analysis-button"
       >
-        <ArrowLeft className="h-4 w-4" /> Back to analysis
+        <ArrowLeft className="h-4 w-4" /> Back
       </Button>
 
-      <div>
-        <h1 className="font-display text-2xl md:text-3xl font-semibold tracking-tight">Face swap this hook</h1>
-        <p className="text-muted-foreground mt-1 max-w-2xl">
-          Upload your photo and we'll swap it into the hook moment. By default we keep the pose, gesture, environment,
-          background, and clothing exactly as the original — only the face/character changes.
-        </p>
-      </div>
+      <h1 className="font-display text-2xl md:text-3xl font-semibold tracking-tight">Face Swap</h1>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6">
-        <Card className="p-4 md:p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] space-y-5 h-fit">
+      <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-4">
+        <Card className="p-4 md:p-5 rounded-2xl border-border space-y-4 h-fit">
           <div className="space-y-2">
             <label className="text-sm font-medium">Your photo</label>
             <input
@@ -239,8 +231,7 @@ export default function Customize() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Frames to generate ({selectedFrames.length}/3)</label>
-            <p className="text-xs text-muted-foreground">Pick up to 3 frames from the hook to face-swap.</p>
+            <label className="text-sm font-medium">Frames ({selectedFrames.length}/3)</label>
             <div className="flex gap-2 overflow-x-auto pb-1">
               {analysis.frames.map((f) => {
                 const isSelected = selectedFrames.includes(f.index);
@@ -284,7 +275,7 @@ export default function Customize() {
                     : "bg-white border-border text-muted-foreground hover:border-[color:rgba(99,102,241,0.45)]"
                 }`}
               >
-                <Lock className="h-3.5 w-3.5" /> Keep Original (Recommended)
+                <Lock className="h-3.5 w-3.5" /> Keep Original
               </button>
               <button
                 type="button"
@@ -297,15 +288,10 @@ export default function Customize() {
                     : "bg-white border-border text-muted-foreground hover:border-[color:rgba(244,63,94,0.4)]"
                 }`}
               >
-                <Palette className="h-3.5 w-3.5" /> Customize Scene
+                <Palette className="h-3.5 w-3.5" /> Customize
               </button>
             </div>
-            {mode === "preserve" ? (
-              <p className="text-xs text-muted-foreground pt-1">
-                Placement, pose, gesture, environment, background, and clothing stay exactly as in the original video —
-                only the face/character is swapped.
-              </p>
-            ) : (
+            {mode === "custom" && (
               <div className="space-y-4 pt-2">
                 <ChipGroup
                   label="Environment"
@@ -352,7 +338,7 @@ export default function Customize() {
           </Button>
         </Card>
 
-        <div className="space-y-6">
+        <div className="space-y-4">
           {!result && !generating && (
             <Card className="overflow-hidden rounded-2xl border-border" data-testid="reference-frame-preview">
               <div className="px-4 py-2 text-xs font-medium text-muted-foreground border-b border-border">
@@ -375,7 +361,7 @@ export default function Customize() {
           )}
 
           {generating && (
-            <Card className="p-6 rounded-2xl border-border shadow-[var(--shadow-soft)]">
+            <Card className="p-6 rounded-2xl border-border">
               <h3 className="font-display font-semibold mb-3 flex items-center gap-2">
                 <ImageIcon className="h-4 w-4" /> Generating your customized preview...
               </h3>
