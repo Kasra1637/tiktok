@@ -151,6 +151,78 @@ async def generate_customized_preview(
     return base64.b64decode(images[0]["data"])
 
 
+REQUIRED_BRAND_ANALYSIS_KEYS = {
+    "brand_name", "brand_overview", "unique_selling_propositions",
+    "brand_voice_tone", "target_audience",
+}
+
+
+async def analyze_brand_website(site: dict, session_id: str) -> dict:
+    """
+    Derive structured brand context (overview, USPs, voice/tone, target
+    audience) from a brand's own website content. `site` is the dict
+    returned by brand_analysis.fetch_website_text().
+    """
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone
+
+    system_message = (
+        "You are an expert brand strategist and copywriter. Given the raw text scraped from a brand's "
+        "website, you distill it into a concise, actionable brand brief for a short-form video creative team. "
+        "Be specific and concrete - avoid generic marketing filler. If the site text does not clearly support "
+        "a field, make a reasonable best-effort inference from context rather than leaving it empty. "
+        "Respond with STRICT JSON only, no markdown fences, no extra commentary."
+    )
+
+    prompt = (
+        f"Website URL: {site.get('url')}\n"
+        f"Page title: {site.get('title') or '(none)'}\n"
+        f"Meta description: {site.get('meta_description') or '(none)'}\n\n"
+        "Extracted page text:\n"
+        f"{site.get('text')}\n\n"
+        "Return ONLY a JSON object with this exact schema:\n"
+        "{\n"
+        '  "brand_name": "the brand/company name",\n'
+        '  "brand_overview": "2-4 sentence plain-English summary of what the brand does, who it serves, and what it sells",\n'
+        '  "unique_selling_propositions": ["short bullet", "short bullet", "..."] list of 3-5 concrete USPs / differentiators,\n'
+        '  "brand_voice_tone": "short description of the brand\'s voice and tone (e.g. playful and irreverent, premium and minimal, warm and reassuring)",\n'
+        '  "target_audience": "short description of the primary target audience/customer persona"\n'
+        "}\n"
+        "Return ONLY valid JSON."
+    )
+
+    chat = LlmChat(
+        api_key=EMERGENT_LLM_KEY,
+        session_id=session_id,
+        system_message=system_message,
+    ).with_model("openai", "gpt-5.4")
+
+    full_text = ""
+    async for event in chat.stream_message(UserMessage(text=prompt)):
+        if isinstance(event, TextDelta):
+            full_text += event.content
+        elif isinstance(event, StreamDone):
+            break
+
+    full_text = _clean_json_text(full_text)
+    try:
+        result = json.loads(full_text)
+    except json.JSONDecodeError:
+        start = full_text.find("{")
+        end = full_text.rfind("}")
+        if start == -1 or end == -1:
+            raise RuntimeError("Brand analysis model did not return valid JSON")
+        result = json.loads(full_text[start:end + 1])
+
+    missing = REQUIRED_BRAND_ANALYSIS_KEYS - set(result.keys())
+    if missing:
+        raise RuntimeError(f"Brand website analysis missing required fields: {missing}")
+
+    if not isinstance(result.get("unique_selling_propositions"), list):
+        result["unique_selling_propositions"] = [str(result["unique_selling_propositions"])]
+
+    return result
+
+
 REQUIRED_VIDEO_PROMPT_KEYS = {
     "content", "camera_angle", "view_position", "character_behavior",
     "scene_details", "brand_narrative", "full_video_prompt", "suggested_duration_seconds",
@@ -181,7 +253,11 @@ async def generate_video_prompt(analysis: dict, brand_context: dict, target_dura
         "Brand context to weave into the rest of the video:\n"
         f"- Brand name: {brand_context.get('brand_name') or '(not provided)'}\n"
         f"- Brand goal: {brand_context.get('brand_goal') or '(not provided)'}\n"
-        f"- Brand details: {brand_context.get('brand_details') or '(not provided)'}\n\n"
+        f"- Brand details: {brand_context.get('brand_details') or '(not provided)'}\n"
+        f"- Brand overview: {brand_context.get('brand_overview') or '(not provided)'}\n"
+        f"- Unique selling propositions: {brand_context.get('unique_selling_propositions') or '(not provided)'}\n"
+        f"- Brand voice & tone: {brand_context.get('brand_voice_tone') or '(not provided)'}\n"
+        f"- Target audience: {brand_context.get('target_audience') or '(not provided)'}\n\n"
         f"Target video duration: up to {target_duration} seconds.\n\n"
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
@@ -190,7 +266,7 @@ async def generate_video_prompt(analysis: dict, brand_context: dict, target_dura
         '  "view_position": "framing/view position (close-up, POV, etc.), matching the original hook",\n'
         '  "character_behavior": "how the character behaves/moves, preserving the original hook mechanics (pose, gesture, expression) at the start",\n'
         '  "scene_details": "environment/background/lighting/props details, consistent with the reference image(s)",\n'
-        '  "brand_narrative": "how the video narrative ties into the brand goal and message after the hook",\n'
+        '  "brand_narrative": "how the video narrative ties into the brand goal, message, unique selling propositions, and target audience after the hook, written in the brand\'s voice & tone if provided",\n'
         '  "full_video_prompt": "a single, cohesive, production-ready prompt string (150-300 words) combining all of the above, ready to feed directly into an image-to-video AI model",\n'
         '  "suggested_duration_seconds": integer up to ' + str(target_duration) + "\n"
         "}\n"

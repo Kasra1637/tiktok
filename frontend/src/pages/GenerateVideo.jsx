@@ -10,7 +10,7 @@ import { Badge } from "../components/ui/badge";
 import GenerationProgress from "../components/GenerationProgress";
 import Stepper from "../components/Stepper";
 import { api, mediaUrl, getErrorMessage } from "../lib/api";
-import { ArrowLeft, Wand2, Clapperboard, AlertTriangle, RotateCcw, Clock, Film, Camera, Eye, Users, MapPinned, Megaphone, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Wand2, Clapperboard, AlertTriangle, RotateCcw, Clock, Film, Camera, Eye, Users, MapPinned, Megaphone, CheckCircle2, Globe, Sparkles, ListChecks } from "lucide-react";
 import { toast } from "sonner";
 
 const PROMPT_STAGES = ["Reading the hook analysis", "Weaving in your brand context", "Writing the video prompt"];
@@ -36,6 +36,18 @@ export default function GenerateVideo() {
   const [brandDetails, setBrandDetails] = useState("");
   const [duration, setDuration] = useState(30);
 
+  // Brand website analysis: fetches the brand's site and derives structured
+  // context (overview, USPs, voice/tone, target audience). These fields
+  // remain manually editable regardless of whether analysis was run.
+  const [websiteUrl, setWebsiteUrl] = useState("");
+  const [analyzingWebsite, setAnalyzingWebsite] = useState(false);
+  const [websiteError, setWebsiteError] = useState(null);
+  const [websiteAnalyzed, setWebsiteAnalyzed] = useState(false);
+  const [brandOverview, setBrandOverview] = useState("");
+  const [usps, setUsps] = useState("");
+  const [brandVoiceTone, setBrandVoiceTone] = useState("");
+  const [targetAudience, setTargetAudience] = useState("");
+
   const [generatingPrompt, setGeneratingPrompt] = useState(false);
   const [promptError, setPromptError] = useState(null);
   const [job, setJob] = useState(null);
@@ -51,6 +63,26 @@ export default function GenerateVideo() {
       .catch((err) => setLoadError(getErrorMessage(err)));
   }, [customizationId]);
 
+  const handleAnalyzeWebsite = async () => {
+    if (!websiteUrl.trim()) return;
+    setAnalyzingWebsite(true);
+    setWebsiteError(null);
+    try {
+      const data = await api.analyzeBrandWebsite(websiteUrl.trim());
+      if (data.brand_name && !brandName.trim()) setBrandName(data.brand_name);
+      setBrandOverview(data.brand_overview || "");
+      setUsps((data.unique_selling_propositions || []).join("\n"));
+      setBrandVoiceTone(data.brand_voice_tone || "");
+      setTargetAudience(data.target_audience || "");
+      setWebsiteAnalyzed(true);
+      toast.success("Website analyzed — review the fields below before generating your prompt.");
+    } catch (err) {
+      setWebsiteError(getErrorMessage(err));
+    } finally {
+      setAnalyzingWebsite(false);
+    }
+  };
+
   const handleGeneratePrompt = async () => {
     setGeneratingPrompt(true);
     setPromptError(null);
@@ -62,6 +94,14 @@ export default function GenerateVideo() {
         brand_goal: brandGoal,
         brand_details: brandDetails,
         duration_seconds: Number(duration) || 30,
+        website_url: websiteUrl,
+        brand_overview: brandOverview,
+        unique_selling_propositions: usps
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean),
+        brand_voice_tone: brandVoiceTone,
+        target_audience: targetAudience,
       });
       setJob(data);
       setEditedPrompt(data.full_prompt_text || "");
@@ -165,6 +205,51 @@ export default function GenerateVideo() {
             ))}
           </div>
 
+          <div className="space-y-2 rounded-xl border border-dashed border-border p-3 bg-[color:rgba(13,148,136,0.04)]">
+            <label className="text-sm font-medium flex items-center gap-1.5">
+              <Globe className="h-3.5 w-3.5" /> Brand website (optional)
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Paste your brand's website and we'll auto-fill the overview, USPs, voice/tone, and
+              audience below — you can edit anything before generating the prompt.
+            </p>
+            <div className="flex items-center gap-2">
+              <Input
+                value={websiteUrl}
+                onChange={(e) => setWebsiteUrl(e.target.value)}
+                placeholder="https://yourbrand.com"
+                data-testid="brand-website-input"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAnalyzeWebsite();
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                onClick={handleAnalyzeWebsite}
+                disabled={analyzingWebsite || !websiteUrl.trim()}
+                size="sm"
+                className="shrink-0 gap-1.5 bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white"
+                data-testid="analyze-website-button"
+              >
+                <Sparkles className={`h-3.5 w-3.5 ${analyzingWebsite ? "animate-pulse" : ""}`} />
+                {analyzingWebsite ? "Analyzing..." : "Analyze"}
+              </Button>
+            </div>
+            {websiteError && (
+              <p className="text-xs text-destructive" data-testid="website-error-text">
+                {websiteError}
+              </p>
+            )}
+            {websiteAnalyzed && !websiteError && (
+              <p className="text-xs text-[color:var(--brand-teal-dark)] flex items-center gap-1">
+                <CheckCircle2 className="h-3 w-3" /> Fields below were pre-filled from your website. Review and edit as needed.
+              </p>
+            )}
+          </div>
+
           <div className="space-y-2">
             <label className="text-sm font-medium">Brand name</label>
             <Input
@@ -193,6 +278,48 @@ export default function GenerateVideo() {
               data-testid="brand-details-textarea"
             />
           </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Brand overview</label>
+            <Textarea
+              value={brandOverview}
+              onChange={(e) => setBrandOverview(e.target.value)}
+              placeholder="What does the brand do, who does it serve, and what does it sell? (auto-filled by website analysis)"
+              className="min-h-[70px]"
+              data-testid="brand-overview-textarea"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium flex items-center gap-1.5">
+              <ListChecks className="h-3.5 w-3.5" /> Unique selling propositions (one per line)
+            </label>
+            <Textarea
+              value={usps}
+              onChange={(e) => setUsps(e.target.value)}
+              placeholder={"e.g.\nOnly app with offline voice transcription\n7-day free trial, no card required"}
+              className="min-h-[70px]"
+              data-testid="brand-usps-textarea"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Brand voice &amp; tone</label>
+            <Input
+              value={brandVoiceTone}
+              onChange={(e) => setBrandVoiceTone(e.target.value)}
+              placeholder="e.g. playful and irreverent, premium and minimal"
+              data-testid="brand-voice-tone-input"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Target audience</label>
+            <Input
+              value={targetAudience}
+              onChange={(e) => setTargetAudience(e.target.value)}
+              placeholder="e.g. busy working parents in their 30s-40s"
+              data-testid="target-audience-input"
+            />
+          </div>
+
           <div className="space-y-2">
             <label className="text-sm font-medium flex items-center gap-1.5">
               <Clock className="h-3.5 w-3.5" /> Target duration (seconds, max 30)

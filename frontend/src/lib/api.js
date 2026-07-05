@@ -33,6 +33,8 @@ export const api = {
   getCustomizations: () => client.get("/customizations").then((r) => r.data),
   getCustomization: (id) => client.get(`/customizations/${id}`).then((r) => r.data),
   getHistory: () => client.get("/history").then((r) => r.data),
+  analyzeBrandWebsite: (websiteUrl) =>
+    client.post("/brand/analyze-website", { website_url: websiteUrl }).then((r) => r.data),
   generateVideoPrompt: (customizationId, payload) =>
     client.post(`/customizations/${customizationId}/generate-video-prompt`, payload).then((r) => r.data),
   generateVideo: (jobId, payload) =>

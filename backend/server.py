@@ -15,10 +15,18 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from PIL import Image
 from starlette.middleware.cors import CORSMiddleware
 
+import brand_analysis
 import pipeline
 import viral_detection
-from ai_service import analyze_hook, generate_customized_preview, generate_video_prompt
-from models import IngestVideoRequest, BrandContextRequest, GenerateVideoRequest, now_iso, serialize_doc
+from ai_service import analyze_brand_website, analyze_hook, generate_customized_preview, generate_video_prompt
+from models import (
+    BrandContextRequest,
+    BrandWebsiteRequest,
+    GenerateVideoRequest,
+    IngestVideoRequest,
+    now_iso,
+    serialize_doc,
+)
 from niches_config import NICHES, NICHE_MAP
 
 ROOT_DIR = Path(__file__).parent
@@ -543,6 +551,41 @@ async def get_customization(customization_id: str):
 
 
 # ---------------------------------------------------------------------------
+# Brand website analysis
+# ---------------------------------------------------------------------------
+@api_router.post("/brand/analyze-website")
+async def analyze_brand_website_endpoint(payload: BrandWebsiteRequest):
+    """
+    Fetch a brand's website, extract its readable text, and use an LLM to
+    derive a brand overview, unique selling propositions, brand voice/tone,
+    and target audience. These feed into (and remain editable ahead of)
+    video prompt generation.
+    """
+    try:
+        site = await brand_analysis.fetch_website_text(payload.website_url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=f"Could not analyze that website. {str(e)[:200]}")
+
+    try:
+        result = await analyze_brand_website(site, session_id=f"brandsite-{uuid.uuid4()}")
+    except Exception as e:
+        logger.error(f"Brand website analysis failed for {payload.website_url}: {e}")
+        raise HTTPException(status_code=502, detail=f"AI brand analysis failed. Please try again. ({str(e)[:150]})")
+
+    doc = {
+        "id": str(uuid.uuid4()),
+        "website_url": site["url"],
+        "requested_url": payload.website_url,
+        **result,
+        "created_at": now_iso(),
+    }
+    await db.brand_analyses.insert_one(doc)
+    return serialize_doc(doc)
+
+
+# ---------------------------------------------------------------------------
 # Step 4: Video generation (prompt auto-generation + provider-pending job)
 # ---------------------------------------------------------------------------
 @api_router.post("/customizations/{customization_id}/generate-video-prompt")
@@ -574,6 +617,11 @@ async def generate_video_prompt_endpoint(customization_id: str, payload: BrandCo
         "brand_name": payload.brand_name,
         "brand_goal": payload.brand_goal,
         "brand_details": payload.brand_details,
+        "website_url": payload.website_url,
+        "brand_overview": payload.brand_overview,
+        "unique_selling_propositions": payload.unique_selling_propositions,
+        "brand_voice_tone": payload.brand_voice_tone,
+        "target_audience": payload.target_audience,
         "target_duration_seconds": duration,
         "prompt_breakdown": prompt_result,
         "full_prompt_text": prompt_result.get("full_video_prompt"),

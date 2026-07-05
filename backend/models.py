@@ -44,6 +44,18 @@ class BrandContextRequest(BaseModel):
     brand_goal: str = ""
     brand_details: str = ""
     duration_seconds: int = 30
+    # Optional structured brand fields, typically pre-filled by analyzing the
+    # brand's website (see BrandWebsiteRequest / /api/brand/analyze-website)
+    # but always editable by the user before generating the prompt.
+    website_url: Optional[str] = ""
+    brand_overview: Optional[str] = ""
+    unique_selling_propositions: List[str] = []
+    brand_voice_tone: Optional[str] = ""
+    target_audience: Optional[str] = ""
+
+
+class BrandWebsiteRequest(BaseModel):
+    website_url: str
 
 
 class GenerateVideoRequest(BaseModel):
