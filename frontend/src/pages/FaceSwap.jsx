@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
@@ -17,6 +18,7 @@ import {
   Wand2,
   Check,
   ZoomIn,
+  Film,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -189,20 +191,44 @@ function DropZone({ onFileSelect, accept, label, sublabel, preview, onRemove, te
 }
 
 export default function FaceSwap() {
+  const [searchParams] = useSearchParams();
   const [targetFile, setTargetFile] = useState(null);
   const [targetPreview, setTargetPreview] = useState(null);
+  const [targetFrameUrl, setTargetFrameUrl] = useState(null); // When target comes from a video frame
   const [sourceFile, setSourceFile] = useState(null);
   const [sourcePreview, setSourcePreview] = useState(null);
+  const [videoInfo, setVideoInfo] = useState(null); // Info about the source video if applicable
 
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState(null);
   const [result, setResult] = useState(null);
+
+  // Pre-load target frame from query params (when coming from video analysis)
+  useEffect(() => {
+    const frameUrl = searchParams.get("target");
+    const videoId = searchParams.get("videoId");
+    const frameIndex = searchParams.get("frame");
+
+    if (frameUrl) {
+      const fullUrl = mediaUrl(frameUrl);
+      setTargetPreview(fullUrl);
+      setTargetFrameUrl(frameUrl);
+      // Create a synthetic "file" marker so the step indicator advances
+      setTargetFile({ name: "video_frame.jpg", fromVideo: true });
+
+      if (videoId) {
+        setVideoInfo({ videoId, frameIndex: frameIndex || "key" });
+      }
+    }
+  }, [searchParams]);
 
   const currentStep = !targetFile ? 1 : !sourceFile ? 2 : 3;
 
   const handleTargetSelect = (file) => {
     setTargetFile(file);
     setTargetPreview(URL.createObjectURL(file));
+    setTargetFrameUrl(null);
+    setVideoInfo(null);
     setResult(null);
     setGenError(null);
   };
@@ -217,6 +243,8 @@ export default function FaceSwap() {
   const handleRemoveTarget = () => {
     setTargetFile(null);
     setTargetPreview(null);
+    setTargetFrameUrl(null);
+    setVideoInfo(null);
     setResult(null);
     setGenError(null);
   };
@@ -238,8 +266,16 @@ export default function FaceSwap() {
     setResult(null);
     try {
       const formData = new FormData();
-      formData.append("target_image", targetFile);
       formData.append("source_face", sourceFile);
+
+      if (targetFrameUrl) {
+        // Target is a server-side frame from a video analysis — pass the URL
+        formData.append("target_frame_url", targetFrameUrl);
+      } else {
+        // Target is a user-uploaded file
+        formData.append("target_image", targetFile);
+      }
+
       const data = await api.faceSwap(formData);
       setResult(data);
       toast.success("Face swap generated successfully!");
@@ -253,6 +289,8 @@ export default function FaceSwap() {
   const handleReset = () => {
     setTargetFile(null);
     setTargetPreview(null);
+    setTargetFrameUrl(null);
+    setVideoInfo(null);
     setSourceFile(null);
     setSourcePreview(null);
     setResult(null);
@@ -288,8 +326,18 @@ export default function FaceSwap() {
                 <h2 className="font-display font-semibold text-lg">Upload Your Target</h2>
               </div>
               <p className="text-sm text-muted-foreground">
-                Choose the photo you want to swap a face onto. Works with any photo style.
+                {videoInfo
+                  ? "Target frame loaded from your analyzed viral video. You can replace it or continue to step 2."
+                  : "Choose the photo you want to swap a face onto. Works with any photo style."}
               </p>
+              {videoInfo && targetPreview && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[color:rgba(99,102,241,0.06)] border border-[color:rgba(99,102,241,0.15)]">
+                  <Film className="h-4 w-4 text-[color:var(--brand-teal)]" />
+                  <span className="text-xs font-medium text-[color:var(--brand-teal-dark)]">
+                    From viral video analysis (frame {videoInfo.frameIndex})
+                  </span>
+                </div>
+              )}
               <DropZone
                 onFileSelect={handleTargetSelect}
                 accept="image/jpeg,image/png,image/webp"
