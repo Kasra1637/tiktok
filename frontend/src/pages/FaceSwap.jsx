@@ -25,6 +25,7 @@ import {
   Play,
   Clock,
   Loader2,
+  Globe,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -219,6 +220,15 @@ export default function FaceSwap() {
   const [videoError, setVideoError] = useState(null);
   const pollingRef = useRef(null);
 
+  // Phase 2B: Branded video state
+  const [brandUrl, setBrandUrl] = useState("");
+  const [brandProfile, setBrandProfile] = useState(null);
+  const [brandedDuration, setBrandedDuration] = useState(15);
+  const [brandedPrompt, setBrandedPrompt] = useState("");
+  const [brandedPromptBrand, setBrandedPromptBrand] = useState("");
+  const [generatingBrandedPrompt, setGeneratingBrandedPrompt] = useState(false);
+  const [brandedPromptError, setBrandedPromptError] = useState(null);
+
   // Pre-load target frame from query params (when coming from video analysis)
   useEffect(() => {
     const frameUrl = searchParams.get("target");
@@ -355,6 +365,84 @@ export default function FaceSwap() {
     };
   }, []);
 
+  // Load existing brand profile on mount
+  useEffect(() => {
+    api.getActiveBrand()
+      .then((brand) => setBrandProfile(brand))
+      .catch(() => setBrandProfile(null));
+  }, []);
+
+  // Phase 2B: Generate branded video prompt
+  const handleGenerateBrandedPrompt = async () => {
+    if (!result?.id) return;
+    if (!brandUrl.trim() && !brandProfile) {
+      toast.error("Please enter your brand/website URL.");
+      return;
+    }
+    setGeneratingBrandedPrompt(true);
+    setBrandedPromptError(null);
+    setBrandedPrompt("");
+    try {
+      const data = await api.faceSwapBrandedPrompt(
+        result.id,
+        brandUrl.trim(),
+        videoInfo?.videoId || "",
+        brandedDuration
+      );
+      setBrandedPrompt(data.video_prompt || "");
+      setBrandedPromptBrand(data.brand_name || "");
+      toast.success("Brand video prompt generated!");
+    } catch (err) {
+      setBrandedPromptError(getErrorMessage(err));
+    } finally {
+      setGeneratingBrandedPrompt(false);
+    }
+  };
+
+  // Phase 2B: Generate the actual branded video using the prompt
+  const handleGenerateBrandedVideo = async () => {
+    if (!result?.id || !brandedPrompt) return;
+    setVideoDuration(brandedDuration);
+    setVideoPrompt(brandedPrompt);
+    setGeneratingVideo(true);
+    setVideoError(null);
+    setVideoUrl(null);
+    setVideoStatus("pending");
+    try {
+      const data = await api.faceSwapGenerateVideo(result.id, brandedPrompt, brandedDuration);
+      setVideoJobId(data.job_id);
+      setVideoStatus("pending");
+      toast.success("Branded video generation started!");
+      startPolling(data.job_id);
+    } catch (err) {
+      setVideoError(getErrorMessage(err));
+      setVideoStatus(null);
+      setGeneratingVideo(false);
+    }
+  };
+
+  // Quick preview: 5s video with default motion
+  const handleQuickPreview = async () => {
+    if (!result?.id) return;
+    setVideoDuration(5);
+    setVideoPrompt("");
+    setGeneratingVideo(true);
+    setVideoError(null);
+    setVideoUrl(null);
+    setVideoStatus("pending");
+    try {
+      const data = await api.faceSwapGenerateVideo(result.id, "", 5);
+      setVideoJobId(data.job_id);
+      setVideoStatus("pending");
+      toast.success("Quick preview generation started!");
+      startPolling(data.job_id);
+    } catch (err) {
+      setVideoError(getErrorMessage(err));
+      setVideoStatus(null);
+      setGeneratingVideo(false);
+    }
+  };
+
   const handleReset = () => {
     setTargetFile(null);
     setTargetPreview(null);
@@ -372,6 +460,13 @@ export default function FaceSwap() {
     setVideoStatus(null);
     setVideoUrl(null);
     setVideoError(null);
+    // Reset branded video state
+    setBrandUrl("");
+    setBrandedDuration(15);
+    setBrandedPrompt("");
+    setBrandedPromptBrand("");
+    setGeneratingBrandedPrompt(false);
+    setBrandedPromptError(null);
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
       pollingRef.current = null;
@@ -567,94 +662,7 @@ export default function FaceSwap() {
                 </div>
               </div>
 
-              <p className="text-sm text-muted-foreground">
-                Your swapped face will be used as the first frame. The AI will animate it into a natural video,
-                keeping the face consistent throughout the entire duration.
-              </p>
-
-              {!videoUrl && (
-                <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium flex items-center gap-1.5">
-                        <Clock className="h-3.5 w-3.5" /> Duration (seconds)
-                      </label>
-                      <Input
-                        type="number"
-                        min={3}
-                        max={15}
-                        value={videoDuration}
-                        onChange={(e) => setVideoDuration(Math.max(3, Math.min(15, Number(e.target.value) || 10)))}
-                        data-testid="video-duration-input"
-                      />
-                      <p className="text-[10px] text-muted-foreground">3–15 seconds</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Motion prompt (optional)</label>
-                    <Textarea
-                      value={videoPrompt}
-                      onChange={(e) => setVideoPrompt(e.target.value)}
-                      placeholder="Describe the motion you want (e.g. 'Person looks at camera, smiles, then turns head slightly to the right'). Leave empty for natural default motion."
-                      className="min-h-[70px] text-sm"
-                      data-testid="video-prompt-textarea"
-                    />
-                  </div>
-
-                  {videoStatus === "pending" || videoStatus === "in_progress" ? (
-                    <Card className="p-4 rounded-xl border-border bg-muted/30">
-                      <div className="flex items-center gap-3">
-                        <Loader2 className="h-5 w-5 animate-spin text-[color:var(--brand-teal)]" />
-                        <div>
-                          <p className="text-sm font-medium">
-                            {videoStatus === "pending" ? "Video queued..." : "Generating video..."}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            This typically takes 30 seconds to 2 minutes. Please wait.
-                          </p>
-                        </div>
-                      </div>
-                      <div className="mt-3">
-                        <GenerationProgress
-                          stages={[
-                            "Submitting to video engine",
-                            "Processing first frame (face-swapped image)",
-                            "Animating with face consistency",
-                            "Rendering final video",
-                          ]}
-                          active={true}
-                        />
-                      </div>
-                    </Card>
-                  ) : (
-                    <Button
-                      onClick={handleGenerateVideo}
-                      disabled={generatingVideo}
-                      className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white"
-                      data-testid="generate-video-button"
-                    >
-                      <Clapperboard className="h-4 w-4" />
-                      {generatingVideo ? "Submitting..." : "Generate Video from Swapped Face"}
-                    </Button>
-                  )}
-
-                  {videoError && (
-                    <Alert variant="destructive" className="rounded-xl" data-testid="video-error">
-                      <AlertTriangle className="h-4 w-4" />
-                      <AlertTitle>Video generation failed</AlertTitle>
-                      <AlertDescription className="space-y-2">
-                        <p>{videoError}</p>
-                        <Button size="sm" onClick={handleGenerateVideo} className="gap-1.5">
-                          <RotateCcw className="h-3.5 w-3.5" /> Retry
-                        </Button>
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                </>
-              )}
-
-              {/* Video Result */}
+              {/* Video Result — shown at top when complete */}
               {videoUrl && (
                 <div className="space-y-4" data-testid="video-result">
                   <div className="rounded-xl overflow-hidden border border-[color:var(--brand-teal)] shadow-lg">
@@ -670,7 +678,7 @@ export default function FaceSwap() {
                   <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-green-50 border border-green-200">
                     <Check className="h-4 w-4 text-green-600" />
                     <span className="text-xs font-medium text-green-700">
-                      Video generated successfully — face consistency maintained throughout {videoDuration}s
+                      Video generated — face consistency maintained throughout {videoDuration}s
                     </span>
                   </div>
                   <div className="flex flex-col sm:flex-row gap-3">
@@ -679,13 +687,177 @@ export default function FaceSwap() {
                         <Download className="h-4 w-4" /> Download Video
                       </Button>
                     </a>
-                    <Button
-                      onClick={handleReset}
-                      variant="outline"
-                      className="flex-1 gap-2 rounded-xl"
-                    >
+                    <Button onClick={handleReset} variant="outline" className="flex-1 gap-2 rounded-xl">
                       <RotateCcw className="h-4 w-4" /> Start Over
                     </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Video generation in progress */}
+              {!videoUrl && (videoStatus === "pending" || videoStatus === "in_progress") && (
+                <Card className="p-4 rounded-xl border-border bg-muted/30">
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="h-5 w-5 animate-spin text-[color:var(--brand-teal)]" />
+                    <div>
+                      <p className="text-sm font-medium">
+                        {videoStatus === "pending" ? "Video queued..." : "Generating video..."}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        This typically takes 30 seconds to 2 minutes.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <GenerationProgress
+                      stages={["Submitting to video engine", "Processing first frame", "Animating with face consistency", "Rendering final video"]}
+                      active={true}
+                    />
+                  </div>
+                </Card>
+              )}
+
+              {videoError && (
+                <Alert variant="destructive" className="rounded-xl" data-testid="video-error">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Video generation failed</AlertTitle>
+                  <AlertDescription className="space-y-2">
+                    <p>{videoError}</p>
+                    <Button size="sm" onClick={handleGenerateVideo} className="gap-1.5">
+                      <RotateCcw className="h-3.5 w-3.5" /> Retry
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Two options — only shown when no video is generating/complete */}
+              {!videoUrl && !videoStatus && (
+                <div className="space-y-5">
+                  {/* Option A: Quick Preview */}
+                  <div className="rounded-xl border border-border p-4 space-y-3 bg-white/60">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-sm font-semibold flex items-center gap-1.5">
+                          <Play className="h-3.5 w-3.5 text-[color:var(--brand-teal)]" /> Quick Preview
+                        </h4>
+                        <p className="text-xs text-muted-foreground mt-0.5">5-second video with natural motion — see how your face looks in motion</p>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => handleQuickPreview()}
+                      disabled={generatingVideo}
+                      variant="secondary"
+                      className="w-full gap-2 rounded-xl"
+                      data-testid="quick-preview-button"
+                    >
+                      <Play className="h-4 w-4" /> Generate Quick Preview (5s)
+                    </Button>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-px bg-border" />
+                    <span className="text-xs font-medium text-muted-foreground">OR</span>
+                    <div className="flex-1 h-px bg-border" />
+                  </div>
+
+                  {/* Option B: Full Branded Video */}
+                  <div className="rounded-xl border-2 border-[color:var(--brand-coral)] p-4 space-y-4 bg-gradient-to-b from-[color:rgba(244,63,94,0.02)] to-transparent">
+                    <div>
+                      <h4 className="text-sm font-semibold flex items-center gap-1.5">
+                        <Sparkles className="h-3.5 w-3.5 text-[color:var(--brand-coral)]" /> Full Branded Video
+                        <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded-full bg-[color:var(--brand-coral)] text-white font-bold">RECOMMENDED</span>
+                      </h4>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Enter your brand/website URL — AI generates a custom video prompt tailored to your product, niche, and audience (up to 30s)
+                      </p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Your brand/website URL</label>
+                        <div className="flex gap-2">
+                          <Input
+                            value={brandUrl}
+                            onChange={(e) => setBrandUrl(e.target.value)}
+                            placeholder="https://yourbrand.com"
+                            className="flex-1"
+                            data-testid="brand-url-input"
+                          />
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">
+                          We'll analyze your website to understand your brand, products, audience, and tone — then write a video prompt custom to you.
+                          {brandProfile && <span className="text-[color:var(--brand-teal)]"> Or we'll use your saved brand profile.</span>}
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-medium flex items-center gap-1">
+                            <Clock className="h-3 w-3" /> Duration
+                          </label>
+                          <Input
+                            type="number"
+                            min={5}
+                            max={30}
+                            value={brandedDuration}
+                            onChange={(e) => setBrandedDuration(Math.max(5, Math.min(30, Number(e.target.value) || 15)))}
+                            data-testid="branded-duration-input"
+                          />
+                          <p className="text-[10px] text-muted-foreground">5–30 seconds</p>
+                        </div>
+                      </div>
+
+                      {/* Generated branded prompt (editable) */}
+                      {brandedPrompt && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium flex items-center justify-between">
+                            <span>Generated video prompt (editable)</span>
+                            {brandedPromptBrand && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted font-medium">
+                                {brandedPromptBrand}
+                              </span>
+                            )}
+                          </label>
+                          <Textarea
+                            value={brandedPrompt}
+                            onChange={(e) => setBrandedPrompt(e.target.value)}
+                            className="min-h-[100px] text-xs font-mono"
+                            data-testid="branded-prompt-textarea"
+                          />
+                        </div>
+                      )}
+
+                      {generatingBrandedPrompt ? (
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50">
+                          <Loader2 className="h-4 w-4 animate-spin text-[color:var(--brand-coral)]" />
+                          <span className="text-xs font-medium">Analyzing your brand & writing video prompt...</span>
+                        </div>
+                      ) : !brandedPrompt ? (
+                        <Button
+                          onClick={handleGenerateBrandedPrompt}
+                          disabled={generatingBrandedPrompt}
+                          className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white"
+                          data-testid="generate-branded-prompt-button"
+                        >
+                          <Wand2 className="h-4 w-4" /> Generate Branded Video Prompt
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={handleGenerateBrandedVideo}
+                          disabled={generatingVideo}
+                          className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white"
+                          data-testid="generate-branded-video-button"
+                        >
+                          <Clapperboard className="h-4 w-4" />
+                          {generatingVideo ? "Submitting..." : `Generate ${brandedDuration}s Branded Video`}
+                        </Button>
+                      )}
+
+                      {brandedPromptError && (
+                        <p className="text-xs text-red-600">{brandedPromptError}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

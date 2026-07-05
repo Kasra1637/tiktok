@@ -890,6 +890,145 @@ async def face_swap_video_status(job_id: str):
 
 
 # ---------------------------------------------------------------------------
+# Face Swap → Branded Video (Content Remixer integration)
+# Generates a brand-customized video prompt from the hook analysis context +
+# brand profile (via URL or saved), then submits to video generation with
+# the face-swapped image as first_frame.
+# ---------------------------------------------------------------------------
+@api_router.post("/face-swap/generate-branded-prompt")
+async def face_swap_branded_prompt(
+    image_id: str = Form(...),
+    brand_url: str = Form(""),
+    video_id: str = Form(""),
+    duration: int = Form(15),
+):
+    """
+    Generate a brand-customized video prompt for the face-swapped image.
+    If brand_url is provided, analyzes the URL first. Otherwise uses the active brand profile.
+    If video_id is provided, uses the hook analysis context for better remixing.
+    Returns the generated prompt (editable) so the user can review before video generation.
+    """
+    require_ai_configured()
+
+    # Validate image exists
+    image_path = pipeline.GENERATED_DIR / f"{image_id}.png"
+    if not image_path.exists():
+        raise HTTPException(status_code=404, detail="Face-swap image not found.")
+
+    # Resolve brand profile
+    brand_profile = None
+    if brand_url and brand_url.strip():
+        url = brand_url.strip()
+        if not url.lower().startswith(("http://", "https://")):
+            url = f"https://{url}"
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            )
+        }
+        try:
+            async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers=headers) as client:
+                resp = await client.get(url)
+                resp.raise_for_status()
+                html = resp.text
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Could not fetch URL. ({str(e)[:100]})")
+
+        page_text = strip_html_to_text(html)[:8000]
+        if not page_text.strip():
+            raise HTTPException(status_code=400, detail="No readable text found at this URL.")
+
+        try:
+            brand_profile = await analyze_brand_from_text(url, page_text)
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Brand analysis failed. ({str(e)[:100]})")
+    else:
+        # Try to use saved brand profile
+        brand_row = await _fetch_one(
+            "SELECT * FROM brand_profiles ORDER BY updated_at DESC, created_at DESC LIMIT 1"
+        )
+        if brand_row:
+            brand_profile = brand_row
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Please provide a brand URL or set up your brand profile first.",
+            )
+
+    # Get hook analysis if video_id is available
+    analysis = None
+    if video_id and video_id.strip():
+        analysis_row = await _fetch_one(
+            "SELECT * FROM analyses WHERE video_id = ? ORDER BY created_at DESC LIMIT 1",
+            (video_id.strip(),),
+        )
+        if analysis_row:
+            analysis = analysis_row
+
+    # Build a hook-context-aware prompt
+    duration = max(5, min(duration, 30))
+
+    if analysis:
+        # We have hook analysis — use the full remix script generator
+        try:
+            remix_result = await generate_remix_script(
+                analysis=analysis,
+                brand_profile=brand_profile,
+                target_duration=duration,
+                session_id=f"face-swap-brand-{image_id}",
+            )
+            video_prompt = remix_result.get("full_video_prompt", "")
+            prompt_breakdown = remix_result
+        except Exception as e:
+            logger.error(f"Remix script generation failed: {e}")
+            raise HTTPException(status_code=502, detail=f"AI prompt generation failed. ({str(e)[:100]})")
+    else:
+        # No hook analysis — generate a simpler brand-aware video prompt
+        brand_name = brand_profile.get("brand_name", "")
+        brand_desc = brand_profile.get("brand_description", "")
+        niche = brand_profile.get("niche", "")
+        audience = brand_profile.get("target_audience", "")
+        tone = brand_profile.get("tone_voice", "")
+        products = brand_profile.get("products_services") or brand_profile.get("products_or_services") or []
+        if isinstance(products, str):
+            try:
+                products = json.loads(products)
+            except (json.JSONDecodeError, TypeError):
+                products = [products] if products else []
+        products_str = ", ".join(str(p) for p in products) if products else ""
+
+        video_prompt = (
+            f"Create a {duration}-second vertical video (9:16) featuring the person from the first frame. "
+            f"The video promotes {brand_name} — {brand_desc}. "
+            f"Niche: {niche}. Target audience: {audience}. "
+            f"{'Products/services: ' + products_str + '. ' if products_str else ''}"
+            f"The tone should be {tone or 'engaging and authentic'}. "
+            "Start with the person's hook gesture from the first frame, then transition into "
+            "a natural, energetic delivery — speaking to camera with confident body language. "
+            "Maintain perfect face consistency throughout. Keep the camera steady with slight "
+            "natural movement. The video should feel like an organic TikTok/Reels creator video."
+        )
+        prompt_breakdown = {
+            "content": f"Person delivers a {tone or 'engaging'} message about {brand_name}",
+            "camera_angle": "Close-up to medium shot, steady with subtle movement",
+            "character_behavior": "Confident, expressive, speaking to camera",
+            "scene_details": "Matches the environment from the first frame",
+            "brand_narrative": f"Promotes {brand_name} ({niche}) to {audience}",
+            "full_video_prompt": video_prompt,
+            "suggested_duration_seconds": duration,
+        }
+
+    return {
+        "video_prompt": video_prompt,
+        "prompt_breakdown": prompt_breakdown,
+        "brand_name": brand_profile.get("brand_name", ""),
+        "duration": duration,
+        "image_id": image_id,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Customization / face-swap preview
 # ---------------------------------------------------------------------------
 @api_router.post("/videos/{video_id}/customize")
