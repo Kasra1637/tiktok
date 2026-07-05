@@ -4,7 +4,7 @@ import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
-import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
+import { Alert, AlertDescription } from "../components/ui/alert";
 import GenerationProgress from "../components/GenerationProgress";
 import { api, mediaUrl, getErrorMessage } from "../lib/api";
 import {
@@ -14,213 +14,107 @@ import {
   RotateCcw,
   X,
   Download,
-  ArrowRight,
   ImageIcon,
   User,
   Wand2,
   Check,
-  ZoomIn,
   Film,
   Clapperboard,
   Play,
   Clock,
   Loader2,
   Globe,
+  ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 
-const FACE_SWAP_STAGES = [
-  "Analyzing facial geometry & skin tone",
-  "Matching lighting conditions",
-  "Generating high-fidelity face swap",
-  "Applying natural blending & color matching",
-];
-
-const STEPS = [
-  { id: 1, title: "Upload Your Target", description: "Choose the photo you want to swap a face onto", icon: ImageIcon },
-  { id: 2, title: "Upload Your Source Face", description: "Select a clear photo of the face you want to insert", icon: User },
-  { id: 3, title: "Generate Your Swap", description: "Click Generate and let our face swap AI work its magic", icon: Wand2 },
-];
-
-function StepIndicator({ currentStep }) {
-  return (
-    <div className="flex items-center justify-center gap-0 w-full max-w-2xl mx-auto" data-testid="face-swap-step-indicator">
-      {STEPS.map((step, idx) => {
-        const isCompleted = currentStep > step.id;
-        const isCurrent = currentStep === step.id;
-        const Icon = step.icon;
-
-        return (
-          <div key={step.id} className="flex items-center flex-1">
-            <div className="flex flex-col items-center text-center flex-1">
-              <div
-                className={`flex h-10 w-10 items-center justify-center rounded-full border-2 transition-all duration-300 ${
-                  isCompleted
-                    ? "bg-[color:var(--brand-teal)] border-[color:var(--brand-teal)] text-white"
-                    : isCurrent
-                    ? "border-[color:var(--brand-teal)] text-[color:var(--brand-teal)] bg-white shadow-md"
-                    : "border-border text-muted-foreground bg-white"
-                }`}
-              >
-                {isCompleted ? <Check className="h-5 w-5" /> : <Icon className="h-5 w-5" />}
-              </div>
-              <p
-                className={`mt-2 text-xs font-semibold ${
-                  isCompleted || isCurrent ? "text-foreground" : "text-muted-foreground"
-                }`}
-              >
-                {step.title}
-              </p>
-              <p className="text-[10px] text-muted-foreground mt-0.5 hidden sm:block">{step.description}</p>
-            </div>
-            {idx < STEPS.length - 1 && (
-              <div
-                className={`h-[2px] w-full min-w-[24px] mx-1 transition-colors duration-300 ${
-                  currentStep > step.id ? "bg-[color:var(--brand-teal)]" : "bg-border"
-                }`}
-              />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
+/* ---------- Upload Drop Zone ---------- */
 function DropZone({ onFileSelect, accept, label, sublabel, preview, onRemove, testId, icon: Icon = Upload }) {
   const inputRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  const handleDragOver = useCallback((e) => {
+  const handleDragOver = useCallback((e) => { e.preventDefault(); setIsDragging(true); }, []);
+  const handleDragLeave = useCallback((e) => { e.preventDefault(); setIsDragging(false); }, []);
+  const handleDrop = useCallback((e) => {
     e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
     setIsDragging(false);
-  }, []);
-
-  const handleDrop = useCallback(
-    (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setIsDragging(false);
-      const file = e.dataTransfer.files?.[0];
-      if (file && file.type.startsWith("image/")) {
-        onFileSelect(file);
-      } else {
-        toast.error("Please drop an image file (JPEG, PNG, or WEBP).");
-      }
-    },
-    [onFileSelect]
-  );
-
-  const handleClick = () => inputRef.current?.click();
-
-  const handleInputChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (!file.type.startsWith("image/")) {
-        toast.error("Please upload an image file (JPEG, PNG, or WEBP).");
-        return;
-      }
-      onFileSelect(file);
-    }
-  };
+    const file = e.dataTransfer.files?.[0];
+    if (file?.type.startsWith("image/")) onFileSelect(file);
+    else toast.error("Please drop an image file (JPEG, PNG, or WEBP).");
+  }, [onFileSelect]);
 
   if (preview) {
     return (
       <div className="relative group" data-testid={`${testId}-preview`}>
-        <img
-          src={preview}
-          alt="Uploaded preview"
-          className="w-full rounded-2xl object-cover aspect-[3/4] shadow-[var(--shadow-soft)]"
-        />
-        <div className="absolute inset-0 rounded-2xl bg-black/0 group-hover:bg-black/10 transition-colors" />
+        <img src={preview} alt="Preview" className="w-full rounded-xl object-cover aspect-[3/4]" />
         <button
           onClick={onRemove}
-          className="absolute top-3 right-3 rounded-full bg-black/70 text-white p-1.5 transition-all hover:bg-black/90 hover:scale-110 active:scale-95 shadow-lg"
-          aria-label="Remove image"
+          className="absolute top-2 right-2 rounded-full bg-black/60 text-white p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
+          aria-label="Remove"
           data-testid={`${testId}-remove`}
         >
-          <X className="h-4 w-4" />
+          <X className="h-3.5 w-3.5" />
         </button>
-        <div className="absolute bottom-3 left-3 rounded-full bg-[color:var(--brand-teal)] text-white px-2.5 py-1 text-xs font-semibold flex items-center gap-1 shadow-lg">
-          <Check className="h-3 w-3" /> Uploaded
-        </div>
       </div>
     );
   }
 
   return (
     <div>
-      <input
-        ref={inputRef}
-        type="file"
-        accept={accept}
-        className="hidden"
-        onChange={handleInputChange}
-        data-testid={`${testId}-input`}
-      />
+      <input ref={inputRef} type="file" accept={accept} className="hidden" onChange={(e) => {
+        const file = e.target.files?.[0];
+        if (file?.type.startsWith("image/")) onFileSelect(file);
+        else if (file) toast.error("Please upload an image file.");
+      }} data-testid={`${testId}-input`} />
       <button
         type="button"
-        onClick={handleClick}
+        onClick={() => inputRef.current?.click()}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`w-full flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed py-16 transition-all duration-200 cursor-pointer ${
-          isDragging
-            ? "border-[color:var(--brand-teal)] bg-[color:rgba(99,102,241,0.06)] scale-[1.02]"
-            : "border-border bg-white/60 hover:bg-white/80 hover:border-[color:rgba(99,102,241,0.45)]"
+        className={`w-full flex flex-col items-center justify-center gap-2.5 rounded-xl border-2 border-dashed py-12 cursor-pointer transition-all ${
+          isDragging ? "border-[color:var(--brand-teal)] bg-[color:rgba(99,102,241,0.04)] scale-[1.01]" : "border-border hover:border-[color:rgba(99,102,241,0.4)] bg-white/50 hover:bg-white/80"
         }`}
         data-testid={`${testId}-dropzone`}
       >
-        <div
-          className={`flex h-14 w-14 items-center justify-center rounded-full transition-colors ${
-            isDragging ? "bg-[color:rgba(99,102,241,0.12)]" : "bg-muted"
-          }`}
-        >
-          <Icon className={`h-6 w-6 ${isDragging ? "text-[color:var(--brand-teal)]" : "text-muted-foreground"}`} />
+        <div className={`h-11 w-11 rounded-full flex items-center justify-center ${isDragging ? "bg-[color:rgba(99,102,241,0.1)]" : "bg-muted"}`}>
+          <Icon className={`h-5 w-5 ${isDragging ? "text-[color:var(--brand-teal)]" : "text-muted-foreground"}`} />
         </div>
-        <div className="text-center">
-          <span className="text-sm font-medium text-foreground">{label}</span>
-          <p className="text-xs text-muted-foreground mt-1">{sublabel}</p>
-        </div>
-        <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
-          Drag & drop or click to browse
-        </span>
+        <span className="text-sm font-medium">{label}</span>
+        <span className="text-[11px] text-muted-foreground">{sublabel}</span>
       </button>
     </div>
   );
 }
 
+/* ---------- Main Component ---------- */
 export default function FaceSwap() {
   const [searchParams] = useSearchParams();
+
+  // Upload state
   const [targetFile, setTargetFile] = useState(null);
   const [targetPreview, setTargetPreview] = useState(null);
-  const [targetFrameUrl, setTargetFrameUrl] = useState(null); // When target comes from a video frame
+  const [targetFrameUrl, setTargetFrameUrl] = useState(null);
   const [sourceFile, setSourceFile] = useState(null);
   const [sourcePreview, setSourcePreview] = useState(null);
-  const [videoInfo, setVideoInfo] = useState(null); // Info about the source video if applicable
+  const [videoInfo, setVideoInfo] = useState(null);
 
+  // Generation state
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState(null);
   const [result, setResult] = useState(null);
 
-  // Phase 2: Video generation state
+  // Video state
   const [videoDuration, setVideoDuration] = useState(10);
   const [videoPrompt, setVideoPrompt] = useState("");
   const [generatingVideo, setGeneratingVideo] = useState(false);
   const [videoJobId, setVideoJobId] = useState(null);
-  const [videoStatus, setVideoStatus] = useState(null); // "pending" | "in_progress" | "completed" | "failed"
+  const [videoStatus, setVideoStatus] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
   const [videoError, setVideoError] = useState(null);
   const pollingRef = useRef(null);
 
-  // Phase 2B: Branded video state
+  // Brand video state
   const [brandUrl, setBrandUrl] = useState("");
   const [brandProfile, setBrandProfile] = useState(null);
   const [brandedDuration, setBrandedDuration] = useState(15);
@@ -229,704 +123,312 @@ export default function FaceSwap() {
   const [generatingBrandedPrompt, setGeneratingBrandedPrompt] = useState(false);
   const [brandedPromptError, setBrandedPromptError] = useState(null);
 
-  // Pre-load target frame from query params (when coming from video analysis)
+  // Video mode tab
+  const [videoMode, setVideoMode] = useState("branded"); // "preview" | "branded"
+
+  // Load target from query params
   useEffect(() => {
     const frameUrl = searchParams.get("target");
     const videoId = searchParams.get("videoId");
     const frameIndex = searchParams.get("frame");
-
     if (frameUrl) {
-      const fullUrl = mediaUrl(frameUrl);
-      setTargetPreview(fullUrl);
+      setTargetPreview(mediaUrl(frameUrl));
       setTargetFrameUrl(frameUrl);
-      // Create a synthetic "file" marker so the step indicator advances
       setTargetFile({ name: "video_frame.jpg", fromVideo: true });
-
-      if (videoId) {
-        setVideoInfo({ videoId, frameIndex: frameIndex || "key" });
-      }
+      if (videoId) setVideoInfo({ videoId, frameIndex: frameIndex || "key" });
     }
   }, [searchParams]);
 
+  // Load brand profile
+  useEffect(() => {
+    api.getActiveBrand().then(setBrandProfile).catch(() => setBrandProfile(null));
+  }, []);
+
+  // Cleanup polling
+  useEffect(() => () => { if (pollingRef.current) clearInterval(pollingRef.current); }, []);
+
   const currentStep = !targetFile ? 1 : !sourceFile ? 2 : 3;
 
-  const handleTargetSelect = (file) => {
-    setTargetFile(file);
-    setTargetPreview(URL.createObjectURL(file));
-    setTargetFrameUrl(null);
-    setVideoInfo(null);
-    setResult(null);
-    setGenError(null);
-  };
-
-  const handleSourceSelect = (file) => {
-    setSourceFile(file);
-    setSourcePreview(URL.createObjectURL(file));
-    setResult(null);
-    setGenError(null);
-  };
-
-  const handleRemoveTarget = () => {
-    setTargetFile(null);
-    setTargetPreview(null);
-    setTargetFrameUrl(null);
-    setVideoInfo(null);
-    setResult(null);
-    setGenError(null);
-  };
-
-  const handleRemoveSource = () => {
-    setSourceFile(null);
-    setSourcePreview(null);
-    setResult(null);
-    setGenError(null);
-  };
+  /* --- Handlers --- */
+  const handleTargetSelect = (file) => { setTargetFile(file); setTargetPreview(URL.createObjectURL(file)); setTargetFrameUrl(null); setVideoInfo(null); setResult(null); setGenError(null); };
+  const handleSourceSelect = (file) => { setSourceFile(file); setSourcePreview(URL.createObjectURL(file)); setResult(null); setGenError(null); };
+  const handleRemoveTarget = () => { setTargetFile(null); setTargetPreview(null); setTargetFrameUrl(null); setVideoInfo(null); setResult(null); };
+  const handleRemoveSource = () => { setSourceFile(null); setSourcePreview(null); setResult(null); };
 
   const handleGenerate = async () => {
-    if (!targetFile || !sourceFile) {
-      toast.error("Please upload both a target image and a source face.");
-      return;
-    }
-    setGenerating(true);
-    setGenError(null);
-    setResult(null);
+    if (!targetFile || !sourceFile) { toast.error("Upload both images first."); return; }
+    setGenerating(true); setGenError(null); setResult(null);
     try {
       const formData = new FormData();
       formData.append("source_face", sourceFile);
-
-      if (targetFrameUrl) {
-        // Target is a server-side frame from a video analysis — pass the URL
-        formData.append("target_frame_url", targetFrameUrl);
-      } else {
-        // Target is a user-uploaded file
-        formData.append("target_image", targetFile);
-      }
-
+      if (targetFrameUrl) formData.append("target_frame_url", targetFrameUrl);
+      else formData.append("target_image", targetFile);
       const data = await api.faceSwap(formData);
       setResult(data);
-      toast.success("Face swap generated successfully!");
-    } catch (err) {
-      setGenError(getErrorMessage(err));
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  // Phase 2: Generate video from swapped image
-  const handleGenerateVideo = async () => {
-    if (!result?.id) return;
-    setGeneratingVideo(true);
-    setVideoError(null);
-    setVideoUrl(null);
-    setVideoStatus("pending");
-    try {
-      const data = await api.faceSwapGenerateVideo(result.id, videoPrompt, videoDuration);
-      setVideoJobId(data.job_id);
-      setVideoStatus("pending");
-      toast.success("Video generation started!");
-      // Start polling
-      startPolling(data.job_id);
-    } catch (err) {
-      setVideoError(getErrorMessage(err));
-      setVideoStatus(null);
-      setGeneratingVideo(false);
-    }
+      toast.success("Face swap complete!");
+    } catch (err) { setGenError(getErrorMessage(err)); }
+    finally { setGenerating(false); }
   };
 
   const startPolling = (jobId) => {
     if (pollingRef.current) clearInterval(pollingRef.current);
     pollingRef.current = setInterval(async () => {
       try {
-        const status = await api.faceSwapVideoStatus(jobId);
-        setVideoStatus(status.status);
-        if (status.status === "completed") {
-          setVideoUrl(status.video_url || status.video_urls?.[0]);
-          setGeneratingVideo(false);
-          clearInterval(pollingRef.current);
-          pollingRef.current = null;
-          toast.success("Video generated successfully!");
-        } else if (status.status === "failed") {
-          setVideoError(status.error || "Video generation failed.");
-          setGeneratingVideo(false);
-          clearInterval(pollingRef.current);
-          pollingRef.current = null;
-        }
-      } catch (err) {
-        // Don't stop polling on transient errors
-        console.warn("Polling error:", err);
-      }
-    }, 5000); // Poll every 5 seconds
+        const s = await api.faceSwapVideoStatus(jobId);
+        setVideoStatus(s.status);
+        if (s.status === "completed") { setVideoUrl(s.video_url || s.video_urls?.[0]); setGeneratingVideo(false); clearInterval(pollingRef.current); pollingRef.current = null; toast.success("Video ready!"); }
+        else if (s.status === "failed") { setVideoError(s.error || "Generation failed."); setGeneratingVideo(false); clearInterval(pollingRef.current); pollingRef.current = null; }
+      } catch (err) { console.warn("Poll error:", err); }
+    }, 5000);
   };
 
-  // Cleanup polling on unmount
-  useEffect(() => {
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    };
-  }, []);
-
-  // Load existing brand profile on mount
-  useEffect(() => {
-    api.getActiveBrand()
-      .then((brand) => setBrandProfile(brand))
-      .catch(() => setBrandProfile(null));
-  }, []);
-
-  // Phase 2B: Generate branded video prompt
-  const handleGenerateBrandedPrompt = async () => {
-    if (!result?.id) return;
-    if (!brandUrl.trim() && !brandProfile) {
-      toast.error("Please enter your brand/website URL.");
-      return;
-    }
-    setGeneratingBrandedPrompt(true);
-    setBrandedPromptError(null);
-    setBrandedPrompt("");
-    try {
-      const data = await api.faceSwapBrandedPrompt(
-        result.id,
-        brandUrl.trim(),
-        videoInfo?.videoId || "",
-        brandedDuration
-      );
-      setBrandedPrompt(data.video_prompt || "");
-      setBrandedPromptBrand(data.brand_name || "");
-      toast.success("Brand video prompt generated!");
-    } catch (err) {
-      setBrandedPromptError(getErrorMessage(err));
-    } finally {
-      setGeneratingBrandedPrompt(false);
-    }
-  };
-
-  // Phase 2B: Generate the actual branded video using the prompt
-  const handleGenerateBrandedVideo = async () => {
-    if (!result?.id || !brandedPrompt) return;
-    setVideoDuration(brandedDuration);
-    setVideoPrompt(brandedPrompt);
-    setGeneratingVideo(true);
-    setVideoError(null);
-    setVideoUrl(null);
-    setVideoStatus("pending");
-    try {
-      const data = await api.faceSwapGenerateVideo(result.id, brandedPrompt, brandedDuration);
-      setVideoJobId(data.job_id);
-      setVideoStatus("pending");
-      toast.success("Branded video generation started!");
-      startPolling(data.job_id);
-    } catch (err) {
-      setVideoError(getErrorMessage(err));
-      setVideoStatus(null);
-      setGeneratingVideo(false);
-    }
-  };
-
-  // Quick preview: 5s video with default motion
   const handleQuickPreview = async () => {
     if (!result?.id) return;
-    setVideoDuration(5);
-    setVideoPrompt("");
-    setGeneratingVideo(true);
-    setVideoError(null);
-    setVideoUrl(null);
-    setVideoStatus("pending");
+    setVideoDuration(5); setVideoPrompt(""); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
+    try { const d = await api.faceSwapGenerateVideo(result.id, "", 5); setVideoJobId(d.job_id); startPolling(d.job_id); }
+    catch (err) { setVideoError(getErrorMessage(err)); setVideoStatus(null); setGeneratingVideo(false); }
+  };
+
+  const handleGenerateBrandedPrompt = async () => {
+    if (!result?.id) return;
+    if (!brandUrl.trim() && !brandProfile) { toast.error("Enter your brand URL."); return; }
+    setGeneratingBrandedPrompt(true); setBrandedPromptError(null); setBrandedPrompt("");
     try {
-      const data = await api.faceSwapGenerateVideo(result.id, "", 5);
-      setVideoJobId(data.job_id);
-      setVideoStatus("pending");
-      toast.success("Quick preview generation started!");
-      startPolling(data.job_id);
-    } catch (err) {
-      setVideoError(getErrorMessage(err));
-      setVideoStatus(null);
-      setGeneratingVideo(false);
-    }
+      const d = await api.faceSwapBrandedPrompt(result.id, brandUrl.trim(), videoInfo?.videoId || "", brandedDuration);
+      setBrandedPrompt(d.video_prompt || ""); setBrandedPromptBrand(d.brand_name || "");
+      toast.success("Prompt generated!");
+    } catch (err) { setBrandedPromptError(getErrorMessage(err)); }
+    finally { setGeneratingBrandedPrompt(false); }
+  };
+
+  const handleGenerateBrandedVideo = async () => {
+    if (!result?.id || !brandedPrompt) return;
+    setVideoDuration(brandedDuration); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
+    try { const d = await api.faceSwapGenerateVideo(result.id, brandedPrompt, brandedDuration); setVideoJobId(d.job_id); startPolling(d.job_id); }
+    catch (err) { setVideoError(getErrorMessage(err)); setVideoStatus(null); setGeneratingVideo(false); }
   };
 
   const handleReset = () => {
-    setTargetFile(null);
-    setTargetPreview(null);
-    setTargetFrameUrl(null);
-    setVideoInfo(null);
-    setSourceFile(null);
-    setSourcePreview(null);
-    setResult(null);
-    setGenError(null);
-    // Reset video state
-    setVideoDuration(10);
-    setVideoPrompt("");
-    setGeneratingVideo(false);
-    setVideoJobId(null);
-    setVideoStatus(null);
-    setVideoUrl(null);
-    setVideoError(null);
-    // Reset branded video state
-    setBrandUrl("");
-    setBrandedDuration(15);
-    setBrandedPrompt("");
-    setBrandedPromptBrand("");
-    setGeneratingBrandedPrompt(false);
-    setBrandedPromptError(null);
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    }
+    setTargetFile(null); setTargetPreview(null); setTargetFrameUrl(null); setVideoInfo(null);
+    setSourceFile(null); setSourcePreview(null); setResult(null); setGenError(null);
+    setVideoDuration(10); setVideoPrompt(""); setGeneratingVideo(false); setVideoJobId(null);
+    setVideoStatus(null); setVideoUrl(null); setVideoError(null);
+    setBrandUrl(""); setBrandedDuration(15); setBrandedPrompt(""); setBrandedPromptBrand("");
+    setGeneratingBrandedPrompt(false); setBrandedPromptError(null);
+    if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
   };
 
+  /* ===================== RENDER ===================== */
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="text-center space-y-3">
-        <h1 className="font-display text-3xl md:text-4xl font-bold tracking-tight">
-          AI Face Swap
-        </h1>
-        <p className="text-muted-foreground max-w-xl mx-auto">
-          Swap any face in photos instantly. Our AI tracks facial geometry, skin tone, and lighting
-          to deliver production-ready results with natural blending.
-        </p>
+    <div className="space-y-6 max-w-4xl mx-auto">
+
+      {/* ---------- HEADER ---------- */}
+      <div className="text-center space-y-1.5 pt-2">
+        <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight">Face Swap</h1>
+        <p className="text-sm text-muted-foreground">Upload a target photo and your face. We handle the rest.</p>
       </div>
 
-      {/* Step Indicator */}
-      <StepIndicator currentStep={result ? 4 : currentStep} />
-
-      {/* Main Content */}
-      <div className="max-w-5xl mx-auto">
-        {!result ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
-            {/* Step 1: Target Upload */}
-            <Card className="p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] space-y-4">
-              <div className="flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[color:var(--brand-teal)] text-white text-xs font-bold">
-                  1
-                </span>
-                <h2 className="font-display font-semibold text-lg">Upload Your Target</h2>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {videoInfo
-                  ? "Target frame loaded from your analyzed viral video. You can replace it or continue to step 2."
-                  : "Choose the photo you want to swap a face onto. Works with any photo style."}
-              </p>
-              {videoInfo && targetPreview && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[color:rgba(99,102,241,0.06)] border border-[color:rgba(99,102,241,0.15)]">
-                  <Film className="h-4 w-4 text-[color:var(--brand-teal)]" />
-                  <span className="text-xs font-medium text-[color:var(--brand-teal-dark)]">
-                    From viral video analysis (frame {videoInfo.frameIndex})
-                  </span>
-                </div>
-              )}
-              <DropZone
-                onFileSelect={handleTargetSelect}
-                accept="image/jpeg,image/png,image/webp"
-                label="Upload target image"
-                sublabel="JPEG, PNG, or WEBP up to 12MB"
-                preview={targetPreview}
-                onRemove={handleRemoveTarget}
-                testId="target"
-                icon={ImageIcon}
-              />
-            </Card>
-
-            {/* Step 2: Source Face Upload */}
-            <Card className="p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] space-y-4">
-              <div className="flex items-center gap-2">
-                <span
-                  className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-colors ${
-                    targetFile
-                      ? "bg-[color:var(--brand-teal)] text-white"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  2
-                </span>
-                <h2 className={`font-display font-semibold text-lg ${!targetFile ? "text-muted-foreground" : ""}`}>
-                  Upload Your Source Face
-                </h2>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Select a clear, well-lit photo of the face you want to insert. Frontal view works best.
-              </p>
-              <DropZone
-                onFileSelect={handleSourceSelect}
-                accept="image/jpeg,image/png,image/webp"
-                label="Upload source face"
-                sublabel="Clear, frontal face photo recommended"
-                preview={sourcePreview}
-                onRemove={handleRemoveSource}
-                testId="source"
-                icon={User}
-              />
-            </Card>
+      {/* ---------- STEP INDICATOR (minimal) ---------- */}
+      <div className="flex items-center justify-center gap-2 py-2" data-testid="face-swap-step-indicator">
+        {[1, 2, 3].map((s) => (
+          <div key={s} className="flex items-center gap-2">
+            <div className={`h-2 w-2 rounded-full transition-all ${
+              result ? "bg-[color:var(--brand-teal)]" : s < currentStep ? "bg-[color:var(--brand-teal)]" : s === currentStep ? "bg-[color:var(--brand-teal)] scale-125" : "bg-border"
+            }`} />
+            {s < 3 && <div className={`w-8 h-px ${s < currentStep || result ? "bg-[color:var(--brand-teal)]" : "bg-border"}`} />}
           </div>
-        ) : (
-          /* Results Display */
-          <div className="space-y-6">
-            <Card className="overflow-hidden rounded-2xl border-[color:var(--brand-teal)] shadow-lg" data-testid="face-swap-result">
-              <div className="px-5 py-3 border-b border-border bg-gradient-to-r from-[color:rgba(99,102,241,0.04)] to-transparent flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-[color:var(--brand-teal)]" />
-                  <span className="text-sm font-semibold">Your Face Swap Result</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 rounded-full font-medium">
-                    <Check className="h-3 w-3" /> Production-Ready
-                  </span>
-                </div>
-              </div>
+        ))}
+      </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-0">
-                {/* Original target */}
-                <div className="p-4 border-r border-border">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">Target Image</p>
-                  <img
-                    src={targetPreview}
-                    alt="Target"
-                    className="w-full rounded-xl object-cover aspect-[3/4]"
-                  />
-                </div>
-                {/* Source face */}
-                <div className="p-4 border-r border-border">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">Source Face</p>
-                  <img
-                    src={sourcePreview}
-                    alt="Source face"
-                    className="w-full rounded-xl object-cover aspect-[3/4]"
-                  />
-                </div>
-                {/* Generated result */}
-                <div className="p-4 bg-gradient-to-b from-transparent to-[color:rgba(99,102,241,0.02)]">
-                  <p className="text-xs font-medium text-[color:var(--brand-teal-dark)] mb-2 flex items-center gap-1">
-                    <Sparkles className="h-3 w-3" /> Generated Result
-                  </p>
-                  <img
-                    src={mediaUrl(result.generated_image_url)}
-                    alt="Face swap result"
-                    className="w-full rounded-xl object-cover aspect-[3/4] ring-2 ring-[color:var(--brand-teal)] ring-offset-2"
-                    data-testid="face-swap-generated-image"
-                  />
-                </div>
+      {/* ---------- UPLOAD PHASE ---------- */}
+      {!result && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Target */}
+            <div className="space-y-2.5">
+              <div className="flex items-center gap-2">
+                <span className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${targetFile ? "bg-[color:var(--brand-teal)] text-white" : "bg-muted text-muted-foreground"}`}>1</span>
+                <span className="text-sm font-semibold">Target Photo</span>
+                {videoInfo && <span className="text-[10px] px-2 py-0.5 rounded-full bg-[color:rgba(99,102,241,0.08)] text-[color:var(--brand-teal-dark)] font-medium flex items-center gap-1"><Film className="h-3 w-3" /> From video</span>}
               </div>
-
-              {/* Quality Indicators */}
-              <div className="px-5 py-3 border-t border-border bg-muted/30 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground">Resolution</p>
-                  <p className="text-sm font-semibold">{result.resolution || "1024x1024"}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground">Blending</p>
-                  <p className="text-sm font-semibold text-green-600">Natural</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground">Color Match</p>
-                  <p className="text-sm font-semibold text-green-600">Matched</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground">Format</p>
-                  <p className="text-sm font-semibold">PNG</p>
-                </div>
-              </div>
-            </Card>
-
-            {/* Action buttons */}
-            <div className="flex flex-col sm:flex-row gap-3">
-              <a
-                href={mediaUrl(result.generated_image_url)}
-                download
-                target="_blank"
-                rel="noreferrer"
-                className="flex-1"
-              >
-                <Button className="w-full gap-2 rounded-xl bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white" data-testid="download-swap-button">
-                  <Download className="h-4 w-4" /> Download Image
-                </Button>
-              </a>
-              <Button
-                onClick={handleReset}
-                variant="outline"
-                className="flex-1 gap-2 rounded-xl"
-                data-testid="new-swap-button"
-              >
-                <RotateCcw className="h-4 w-4" /> New Face Swap
-              </Button>
+              <DropZone onFileSelect={handleTargetSelect} accept="image/jpeg,image/png,image/webp" label="Drop target image here" sublabel="The photo to swap a face onto" preview={targetPreview} onRemove={handleRemoveTarget} testId="target" icon={ImageIcon} />
             </div>
 
-            {/* Phase 2: Generate Video from Swapped Image */}
-            <Card className="p-5 rounded-2xl border-border shadow-[var(--shadow-soft)] space-y-4" data-testid="phase2-video-section">
+            {/* Source */}
+            <div className="space-y-2.5">
               <div className="flex items-center gap-2">
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[color:var(--brand-coral)] text-white">
-                  <Clapperboard className="h-4 w-4" />
-                </span>
-                <div>
-                  <h3 className="font-display font-semibold text-lg">Generate Video</h3>
-                  <p className="text-xs text-muted-foreground">Animate your face-swapped image into a full video</p>
-                </div>
+                <span className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${sourceFile ? "bg-[color:var(--brand-teal)] text-white" : targetFile ? "bg-[color:var(--brand-teal)] text-white" : "bg-muted text-muted-foreground"}`}>2</span>
+                <span className={`text-sm font-semibold ${!targetFile ? "text-muted-foreground" : ""}`}>Your Face</span>
               </div>
+              <DropZone onFileSelect={handleSourceSelect} accept="image/jpeg,image/png,image/webp" label="Drop your face photo here" sublabel="Clear, frontal view works best" preview={sourcePreview} onRemove={handleRemoveSource} testId="source" icon={User} />
+            </div>
+          </div>
 
-              {/* Video Result — shown at top when complete */}
-              {videoUrl && (
-                <div className="space-y-4" data-testid="video-result">
-                  <div className="rounded-xl overflow-hidden border border-[color:var(--brand-teal)] shadow-lg">
-                    <video
-                      src={videoUrl}
-                      controls
-                      autoPlay
-                      loop
-                      className="w-full"
-                      data-testid="generated-video-player"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-green-50 border border-green-200">
-                    <Check className="h-4 w-4 text-green-600" />
-                    <span className="text-xs font-medium text-green-700">
-                      Video generated — face consistency maintained throughout {videoDuration}s
-                    </span>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <a href={videoUrl} download target="_blank" rel="noreferrer" className="flex-1">
-                      <Button className="w-full gap-2 rounded-xl bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white" data-testid="download-video-button">
-                        <Download className="h-4 w-4" /> Download Video
-                      </Button>
-                    </a>
-                    <Button onClick={handleReset} variant="outline" className="flex-1 gap-2 rounded-xl">
-                      <RotateCcw className="h-4 w-4" /> Start Over
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {/* Video generation in progress */}
-              {!videoUrl && (videoStatus === "pending" || videoStatus === "in_progress") && (
-                <Card className="p-4 rounded-xl border-border bg-muted/30">
-                  <div className="flex items-center gap-3">
-                    <Loader2 className="h-5 w-5 animate-spin text-[color:var(--brand-teal)]" />
-                    <div>
-                      <p className="text-sm font-medium">
-                        {videoStatus === "pending" ? "Video queued..." : "Generating video..."}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        This typically takes 30 seconds to 2 minutes.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <GenerationProgress
-                      stages={["Submitting to video engine", "Processing first frame", "Animating with face consistency", "Rendering final video"]}
-                      active={true}
-                    />
-                  </div>
+          {/* Generate button */}
+          {targetFile && sourceFile && (
+            <div className="text-center pt-2">
+              {generating ? (
+                <Card className="p-5 rounded-2xl max-w-md mx-auto">
+                  <GenerationProgress stages={["Analyzing faces", "Matching lighting", "Generating swap", "Final blending"]} active={true} />
                 </Card>
-              )}
-
-              {videoError && (
-                <Alert variant="destructive" className="rounded-xl" data-testid="video-error">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertTitle>Video generation failed</AlertTitle>
-                  <AlertDescription className="space-y-2">
-                    <p>{videoError}</p>
-                    <Button size="sm" onClick={handleGenerateVideo} className="gap-1.5">
-                      <RotateCcw className="h-3.5 w-3.5" /> Retry
-                    </Button>
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {/* Two options — only shown when no video is generating/complete */}
-              {!videoUrl && !videoStatus && (
-                <div className="space-y-5">
-                  {/* Option A: Quick Preview */}
-                  <div className="rounded-xl border border-border p-4 space-y-3 bg-white/60">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="text-sm font-semibold flex items-center gap-1.5">
-                          <Play className="h-3.5 w-3.5 text-[color:var(--brand-teal)]" /> Quick Preview
-                        </h4>
-                        <p className="text-xs text-muted-foreground mt-0.5">5-second video with natural motion — see how your face looks in motion</p>
-                      </div>
-                    </div>
-                    <Button
-                      onClick={() => handleQuickPreview()}
-                      disabled={generatingVideo}
-                      variant="secondary"
-                      className="w-full gap-2 rounded-xl"
-                      data-testid="quick-preview-button"
-                    >
-                      <Play className="h-4 w-4" /> Generate Quick Preview (5s)
-                    </Button>
-                  </div>
-
-                  {/* Divider */}
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 h-px bg-border" />
-                    <span className="text-xs font-medium text-muted-foreground">OR</span>
-                    <div className="flex-1 h-px bg-border" />
-                  </div>
-
-                  {/* Option B: Full Branded Video */}
-                  <div className="rounded-xl border-2 border-[color:var(--brand-coral)] p-4 space-y-4 bg-gradient-to-b from-[color:rgba(244,63,94,0.02)] to-transparent">
-                    <div>
-                      <h4 className="text-sm font-semibold flex items-center gap-1.5">
-                        <Sparkles className="h-3.5 w-3.5 text-[color:var(--brand-coral)]" /> Full Branded Video
-                        <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded-full bg-[color:var(--brand-coral)] text-white font-bold">RECOMMENDED</span>
-                      </h4>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Enter your brand/website URL — AI generates a custom video prompt tailored to your product, niche, and audience (up to 30s)
-                      </p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Your brand/website URL</label>
-                        <div className="flex gap-2">
-                          <Input
-                            value={brandUrl}
-                            onChange={(e) => setBrandUrl(e.target.value)}
-                            placeholder="https://yourbrand.com"
-                            className="flex-1"
-                            data-testid="brand-url-input"
-                          />
-                        </div>
-                        <p className="text-[10px] text-muted-foreground">
-                          We'll analyze your website to understand your brand, products, audience, and tone — then write a video prompt custom to you.
-                          {brandProfile && <span className="text-[color:var(--brand-teal)]"> Or we'll use your saved brand profile.</span>}
-                        </p>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-medium flex items-center gap-1">
-                            <Clock className="h-3 w-3" /> Duration
-                          </label>
-                          <Input
-                            type="number"
-                            min={5}
-                            max={30}
-                            value={brandedDuration}
-                            onChange={(e) => setBrandedDuration(Math.max(5, Math.min(30, Number(e.target.value) || 15)))}
-                            data-testid="branded-duration-input"
-                          />
-                          <p className="text-[10px] text-muted-foreground">5–30 seconds</p>
-                        </div>
-                      </div>
-
-                      {/* Generated branded prompt (editable) */}
-                      {brandedPrompt && (
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium flex items-center justify-between">
-                            <span>Generated video prompt (editable)</span>
-                            {brandedPromptBrand && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted font-medium">
-                                {brandedPromptBrand}
-                              </span>
-                            )}
-                          </label>
-                          <Textarea
-                            value={brandedPrompt}
-                            onChange={(e) => setBrandedPrompt(e.target.value)}
-                            className="min-h-[100px] text-xs font-mono"
-                            data-testid="branded-prompt-textarea"
-                          />
-                        </div>
-                      )}
-
-                      {generatingBrandedPrompt ? (
-                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50">
-                          <Loader2 className="h-4 w-4 animate-spin text-[color:var(--brand-coral)]" />
-                          <span className="text-xs font-medium">Analyzing your brand & writing video prompt...</span>
-                        </div>
-                      ) : !brandedPrompt ? (
-                        <Button
-                          onClick={handleGenerateBrandedPrompt}
-                          disabled={generatingBrandedPrompt}
-                          className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white"
-                          data-testid="generate-branded-prompt-button"
-                        >
-                          <Wand2 className="h-4 w-4" /> Generate Branded Video Prompt
-                        </Button>
-                      ) : (
-                        <Button
-                          onClick={handleGenerateBrandedVideo}
-                          disabled={generatingVideo}
-                          className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white"
-                          data-testid="generate-branded-video-button"
-                        >
-                          <Clapperboard className="h-4 w-4" />
-                          {generatingVideo ? "Submitting..." : `Generate ${brandedDuration}s Branded Video`}
-                        </Button>
-                      )}
-
-                      {brandedPromptError && (
-                        <p className="text-xs text-red-600">{brandedPromptError}</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </Card>
-          </div>
-        )}
-
-        {/* Generate Button - shown when both images are uploaded */}
-        {!result && targetFile && sourceFile && (
-          <div className="mt-8 text-center space-y-4">
-            {generating ? (
-              <Card className="p-6 rounded-2xl border-border shadow-[var(--shadow-soft)] max-w-lg mx-auto">
-                <h3 className="font-display font-semibold mb-3 flex items-center justify-center gap-2">
-                  <Wand2 className="h-4 w-4 text-[color:var(--brand-teal)]" /> Generating your face swap...
-                </h3>
-                <GenerationProgress stages={FACE_SWAP_STAGES} active={true} />
-              </Card>
-            ) : (
-              <>
-                <Button
-                  onClick={handleGenerate}
-                  disabled={generating}
-                  size="lg"
-                  className="gap-2.5 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white px-10 py-6 text-base font-semibold shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5 active:translate-y-0"
-                  data-testid="generate-swap-button"
-                >
-                  <Sparkles className="h-5 w-5" /> Generate Face Swap
+              ) : (
+                <Button onClick={handleGenerate} size="lg" className="gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white px-8 py-5 text-sm font-semibold shadow-md" data-testid="generate-swap-button">
+                  <Sparkles className="h-4 w-4" /> Generate Face Swap
                 </Button>
-                <p className="text-xs text-muted-foreground">
-                  Our AI analyzes facial geometry, matches skin tone & lighting, and generates a natural blend
-                </p>
-              </>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
 
-        {/* Error State */}
-        {genError && (
-          <div className="mt-6 max-w-lg mx-auto">
-            <Alert variant="destructive" className="rounded-2xl" data-testid="face-swap-error">
+          {genError && (
+            <Alert variant="destructive" className="rounded-xl max-w-md mx-auto" data-testid="face-swap-error">
               <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Face swap generation failed</AlertTitle>
-              <AlertDescription className="space-y-2">
-                <p>{genError}</p>
-                <Button size="sm" onClick={handleGenerate} className="gap-1.5" data-testid="retry-swap-button">
-                  <RotateCcw className="h-3.5 w-3.5" /> Retry
-                </Button>
+              <AlertDescription className="flex items-center justify-between">
+                <span className="text-sm">{genError}</span>
+                <Button size="sm" variant="ghost" onClick={handleGenerate} className="gap-1 shrink-0"><RotateCcw className="h-3 w-3" /> Retry</Button>
               </AlertDescription>
             </Alert>
-          </div>
-        )}
-      </div>
+          )}
+        </>
+      )}
 
-      {/* Features Section */}
-      {!result && !generating && (
-        <div className="max-w-4xl mx-auto pt-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { title: "Frame-by-Frame Accuracy", desc: "Tracks facial geometry, skin tone, and lighting for precise results" },
-              { title: "Works With Any Content", desc: "Photos, portraits, artistic styles, or any image format" },
-              { title: "Lightning-Fast", desc: "High-resolution results generated in seconds" },
-              { title: "Production-Ready Output", desc: "Matched color, natural blending, ready to publish" },
-            ].map((feat) => (
-              <Card key={feat.title} className="p-4 rounded-2xl border-border">
-                <h3 className="text-sm font-semibold mb-1">{feat.title}</h3>
-                <p className="text-xs text-muted-foreground">{feat.desc}</p>
-              </Card>
-            ))}
+      {/* ---------- RESULT PHASE ---------- */}
+      {result && (
+        <div className="space-y-5">
+
+          {/* Result comparison */}
+          <Card className="rounded-2xl overflow-hidden border-[color:var(--brand-teal)]" data-testid="face-swap-result">
+            <div className="grid grid-cols-3 gap-px bg-border">
+              <div className="bg-white p-3 text-center">
+                <p className="text-[10px] font-medium text-muted-foreground mb-1.5">Target</p>
+                <img src={targetPreview} alt="Target" className="w-full rounded-lg object-cover aspect-[3/4]" />
+              </div>
+              <div className="bg-white p-3 text-center">
+                <p className="text-[10px] font-medium text-muted-foreground mb-1.5">Your Face</p>
+                <img src={sourcePreview} alt="Source" className="w-full rounded-lg object-cover aspect-[3/4]" />
+              </div>
+              <div className="bg-[color:rgba(99,102,241,0.02)] p-3 text-center">
+                <p className="text-[10px] font-medium text-[color:var(--brand-teal-dark)] mb-1.5 flex items-center justify-center gap-1"><Sparkles className="h-2.5 w-2.5" /> Result</p>
+                <img src={mediaUrl(result.generated_image_url)} alt="Result" className="w-full rounded-lg object-cover aspect-[3/4] ring-1 ring-[color:var(--brand-teal)]" data-testid="face-swap-generated-image" />
+              </div>
+            </div>
+          </Card>
+
+          {/* Quick actions */}
+          <div className="flex gap-2">
+            <a href={mediaUrl(result.generated_image_url)} download target="_blank" rel="noreferrer" className="flex-1">
+              <Button variant="outline" className="w-full gap-1.5 rounded-xl text-sm" data-testid="download-swap-button"><Download className="h-3.5 w-3.5" /> Download</Button>
+            </a>
+            <Button onClick={handleReset} variant="ghost" className="gap-1.5 rounded-xl text-sm text-muted-foreground" data-testid="new-swap-button"><RotateCcw className="h-3.5 w-3.5" /> Reset</Button>
           </div>
+
+          {/* ---------- VIDEO GENERATION ---------- */}
+          <Card className="rounded-2xl p-5 space-y-4" data-testid="phase2-video-section">
+            <div className="flex items-center gap-2.5">
+              <div className="h-8 w-8 rounded-full bg-[color:var(--brand-coral)] text-white flex items-center justify-center">
+                <Clapperboard className="h-4 w-4" />
+              </div>
+              <div>
+                <h2 className="font-display font-semibold text-base">Create Video</h2>
+                <p className="text-xs text-muted-foreground">Turn your swapped image into an animated video</p>
+              </div>
+            </div>
+
+            {/* Video complete */}
+            {videoUrl && (
+              <div className="space-y-3" data-testid="video-result">
+                <video src={videoUrl} controls autoPlay loop className="w-full rounded-xl" data-testid="generated-video-player" />
+                <div className="flex gap-2">
+                  <a href={videoUrl} download target="_blank" rel="noreferrer" className="flex-1">
+                    <Button className="w-full gap-1.5 rounded-xl bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white text-sm" data-testid="download-video-button"><Download className="h-3.5 w-3.5" /> Download Video</Button>
+                  </a>
+                  <Button onClick={handleReset} variant="outline" className="gap-1.5 rounded-xl text-sm"><RotateCcw className="h-3.5 w-3.5" /> New</Button>
+                </div>
+              </div>
+            )}
+
+            {/* Video in progress */}
+            {!videoUrl && (videoStatus === "pending" || videoStatus === "in_progress") && (
+              <div className="flex items-center gap-3 p-4 rounded-xl bg-muted/40">
+                <Loader2 className="h-5 w-5 animate-spin text-[color:var(--brand-teal)] shrink-0" />
+                <div>
+                  <p className="text-sm font-medium">{videoStatus === "pending" ? "Queued..." : "Generating..."}</p>
+                  <p className="text-xs text-muted-foreground">Usually takes 30s to 2 min</p>
+                </div>
+              </div>
+            )}
+
+            {videoError && (
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 text-red-700 text-xs">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                <span className="flex-1">{videoError}</span>
+                <Button size="sm" variant="ghost" onClick={handleQuickPreview} className="text-red-700 h-auto py-1 px-2"><RotateCcw className="h-3 w-3" /></Button>
+              </div>
+            )}
+
+            {/* Mode selector — only when no video in progress */}
+            {!videoUrl && !videoStatus && (
+              <div className="space-y-4">
+                {/* Tab buttons */}
+                <div className="flex rounded-lg bg-muted p-0.5">
+                  <button onClick={() => setVideoMode("branded")} className={`flex-1 text-xs font-semibold py-2 px-3 rounded-md transition-all ${videoMode === "branded" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                    Branded Video
+                  </button>
+                  <button onClick={() => setVideoMode("preview")} className={`flex-1 text-xs font-semibold py-2 px-3 rounded-md transition-all ${videoMode === "preview" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                    Quick Preview
+                  </button>
+                </div>
+
+                {/* Quick Preview tab */}
+                {videoMode === "preview" && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-muted-foreground">Generate a 5-second video with natural motion to see how your face looks animated.</p>
+                    <Button onClick={handleQuickPreview} disabled={generatingVideo} variant="secondary" className="w-full gap-2 rounded-xl" data-testid="quick-preview-button">
+                      <Play className="h-4 w-4" /> Generate 5s Preview
+                    </Button>
+                  </div>
+                )}
+
+                {/* Branded Video tab */}
+                {videoMode === "branded" && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-muted-foreground">
+                      Enter your website — we'll generate a custom video prompt for your brand, then animate it.
+                      {brandProfile && <span className="text-[color:var(--brand-teal)]"> Saved brand profile detected.</span>}
+                    </p>
+
+                    <div className="flex gap-2">
+                      <Input value={brandUrl} onChange={(e) => setBrandUrl(e.target.value)} placeholder="https://yourbrand.com" className="flex-1 text-sm" data-testid="brand-url-input" />
+                      <div className="w-20">
+                        <Input type="number" min={5} max={30} value={brandedDuration} onChange={(e) => setBrandedDuration(Math.max(5, Math.min(30, Number(e.target.value) || 15)))} className="text-sm text-center" data-testid="branded-duration-input" />
+                        <p className="text-[9px] text-muted-foreground text-center mt-0.5">{brandedDuration}s</p>
+                      </div>
+                    </div>
+
+                    {brandedPrompt && (
+                      <Textarea value={brandedPrompt} onChange={(e) => setBrandedPrompt(e.target.value)} className="min-h-[80px] text-xs" data-testid="branded-prompt-textarea" placeholder="Your AI-generated video prompt..." />
+                    )}
+
+                    {brandedPromptError && <p className="text-xs text-red-600">{brandedPromptError}</p>}
+
+                    {generatingBrandedPrompt ? (
+                      <div className="flex items-center gap-2 py-2">
+                        <Loader2 className="h-4 w-4 animate-spin text-[color:var(--brand-coral)]" />
+                        <span className="text-xs">Writing your branded prompt...</span>
+                      </div>
+                    ) : !brandedPrompt ? (
+                      <Button onClick={handleGenerateBrandedPrompt} disabled={generatingBrandedPrompt} className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white" data-testid="generate-branded-prompt-button">
+                        <Wand2 className="h-4 w-4" /> Write Video Prompt
+                      </Button>
+                    ) : (
+                      <Button onClick={handleGenerateBrandedVideo} disabled={generatingVideo} className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white" data-testid="generate-branded-video-button">
+                        <Clapperboard className="h-4 w-4" /> Generate {brandedDuration}s Video
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
         </div>
       )}
     </div>
