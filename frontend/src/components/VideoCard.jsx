@@ -3,7 +3,7 @@ import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { AspectRatio } from "./ui/aspect-ratio";
 import { Button } from "./ui/button";
-import { Eye, Heart, Sparkles, Flame } from "lucide-react";
+import { Eye, Heart, MessageCircle, Sparkles, Flame } from "lucide-react";
 
 function formatCount(n) {
   if (!n) return "0";
@@ -55,13 +55,17 @@ export function VideoCard({ video, onAnalyze, analyzing, index = 0 }) {
           </div>
         )}
         <div className="absolute bottom-2 left-2 right-2 flex items-center gap-1.5 text-[11px] text-white">
-          <Badge className="bg-black/70 border-none text-white gap-1">
+          <Badge className="bg-black/70 border-none text-white gap-1" data-testid="video-card-view-count">
             <Eye className="h-3 w-3" />
             {formatCount(video.view_count)}
           </Badge>
-          <Badge className="bg-black/70 border-none text-white gap-1">
+          <Badge className="bg-black/70 border-none text-white gap-1" data-testid="video-card-like-count">
             <Heart className="h-3 w-3" />
             {formatCount(video.like_count)}
+          </Badge>
+          <Badge className="bg-black/70 border-none text-white gap-1" data-testid="video-card-comment-count">
+            <MessageCircle className="h-3 w-3" />
+            {formatCount(video.comment_count)}
           </Badge>
         </div>
       </AspectRatio>

@@ -141,13 +141,13 @@ export default function AnalysisDetail() {
           <h2 className="font-display text-lg font-semibold leading-snug">{video.title}</h2>
           <p className="text-sm text-muted-foreground">@{video.creator}</p>
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1">
+            <span className="flex items-center gap-1" data-testid="analysis-view-count">
               <Eye className="h-3.5 w-3.5" /> {formatCount(video.view_count)}
             </span>
-            <span className="flex items-center gap-1">
+            <span className="flex items-center gap-1" data-testid="analysis-like-count">
               <Heart className="h-3.5 w-3.5" /> {formatCount(video.like_count)}
             </span>
-            <span className="flex items-center gap-1">
+            <span className="flex items-center gap-1" data-testid="analysis-comment-count">
               <MessageCircle className="h-3.5 w-3.5" /> {formatCount(video.comment_count)}
             </span>
           </div>

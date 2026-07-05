@@ -7,8 +7,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/
 import EmptyState from "../components/EmptyState";
 import JsonSpecPanel from "../components/JsonSpecPanel";
 import { api, mediaUrl, getErrorMessage } from "../lib/api";
-import { Clock, Eye, Heart, ImageOff, History as HistoryIcon, Clapperboard, Film } from "lucide-react";
+import { Clock, Eye, Heart, MessageCircle, ImageOff, History as HistoryIcon, Clapperboard, Film } from "lucide-react";
 import { toast } from "sonner";
+
+function formatCount(n) {
+  if (!n) return "0";
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+  return `${n}`;
+}
 
 export default function History() {
   const [items, setItems] = useState([]);
@@ -93,11 +100,14 @@ export default function History() {
                 </Link>
                 <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                   <span>@{video.creator}</span>
-                  <span className="flex items-center gap-1">
-                    <Eye className="h-3 w-3" /> {video.view_count}
+                  <span className="flex items-center gap-1" data-testid="history-view-count">
+                    <Eye className="h-3 w-3" /> {formatCount(video.view_count)}
                   </span>
-                  <span className="flex items-center gap-1">
-                    <Heart className="h-3 w-3" /> {video.like_count}
+                  <span className="flex items-center gap-1" data-testid="history-like-count">
+                    <Heart className="h-3 w-3" /> {formatCount(video.like_count)}
+                  </span>
+                  <span className="flex items-center gap-1" data-testid="history-comment-count">
+                    <MessageCircle className="h-3 w-3" /> {formatCount(video.comment_count)}
                   </span>
                   {video.niche && (
                     <Badge variant="secondary" className="rounded-full text-[10px]">
