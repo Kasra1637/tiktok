@@ -295,12 +295,14 @@ async def _refresh_trending_cache(niche_key: str, force: bool = False):
         return False
 
     hashtags = NICHE_MAP[niche_key].get("hashtags", [])
+    # Only fetch the first (most relevant) hashtag to keep response fast
+    hashtags_to_fetch = hashtags[:1]
     hashtag_results = await asyncio.gather(
-        *[viral_detection.fetch_hashtag_videos(tag, limit=10) for tag in hashtags],
+        *[viral_detection.fetch_hashtag_videos(tag, limit=10) for tag in hashtags_to_fetch],
         return_exceptions=True,
     )
     all_videos = []
-    for tag, result in zip(hashtags, hashtag_results):
+    for tag, result in zip(hashtags_to_fetch, hashtag_results):
         if isinstance(result, Exception):
             logger.warning(f"Hashtag fetch failed for #{tag}: {result!r}")
             continue
@@ -455,12 +457,14 @@ async def get_niche_videos(niche_key: str, refresh: bool = False, mode: str = "c
 
         if is_stale:
             creators = NICHE_MAP[niche_key]["creators"]
+            # Only fetch from the first creator to keep response fast
+            creators_to_fetch = creators[:1]
             creator_results = await asyncio.gather(
-                *[pipeline.fetch_creator_videos(handle, limit=2) for handle in creators],
+                *[pipeline.fetch_creator_videos(handle, limit=3) for handle in creators_to_fetch],
                 return_exceptions=True,
             )
             fetched_any = False
-            for handle, videos in zip(creators, creator_results):
+            for handle, videos in zip(creators_to_fetch, creator_results):
                 if isinstance(videos, Exception):
                     logger.warning(f"Creator fetch failed for {handle}: {videos!r}")
                     continue

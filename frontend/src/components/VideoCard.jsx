@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
@@ -20,9 +21,35 @@ function getViralityStyle(score) {
 
 function proxyThumb(url) {
   if (!url) return null;
-  // Proxy TikTok thumbnails through our backend to bypass CORS/referrer blocking
   const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
   return `${BACKEND_URL}/api/proxy-thumb?url=${encodeURIComponent(url)}`;
+}
+
+function Thumbnail({ url, alt }) {
+  const [src, setSrc] = useState(url); // Try direct URL first
+  const [failed, setFailed] = useState(false);
+
+  if (!url) return null;
+  if (failed) return null;
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      className="h-full w-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+      onError={() => {
+        if (src === url) {
+          // Direct load failed — try proxy
+          setSrc(proxyThumb(url));
+        } else {
+          // Proxy also failed — give up
+          setFailed(true);
+        }
+      }}
+    />
+  );
 }
 
 export function VideoCard({ video, onAnalyze, analyzing, index = 0 }) {
@@ -39,18 +66,7 @@ export function VideoCard({ video, onAnalyze, analyzing, index = 0 }) {
       data-testid="video-card"
     >
       <AspectRatio ratio={9 / 16} className="bg-muted overflow-hidden relative">
-        {video.thumbnail_url ? (
-          <img
-            src={proxyThumb(video.thumbnail_url)}
-            alt={video.title}
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            className="h-full w-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-            }}
-          />
-        ) : null}
+        <Thumbnail url={video.thumbnail_url} alt={video.title} />
         {video.virality_score != null && (
           <div className="absolute top-2 right-2">
             <Badge
