@@ -1659,6 +1659,30 @@ async def on_startup():
         )
 
 
+# ---------------------------------------------------------------------------
+# Thumbnail proxy — serves TikTok cover images through our server to bypass
+# CORS/referrer blocking. Frontend uses /api/proxy-thumb?url=<encoded_url>
+# ---------------------------------------------------------------------------
+@api_router.get("/proxy-thumb")
+async def proxy_thumbnail(url: str = ""):
+    """Proxy a thumbnail image to bypass TikTok's CORS/referrer restrictions."""
+    if not url or not url.startswith("http"):
+        raise HTTPException(status_code=400, detail="Invalid URL")
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://www.tiktok.com/",
+        }
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            resp = await client.get(url, headers=headers)
+            resp.raise_for_status()
+            from fastapi.responses import Response
+            content_type = resp.headers.get("content-type", "image/jpeg")
+            return Response(content=resp.content, media_type=content_type, headers={"Cache-Control": "public, max-age=86400"})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Could not fetch thumbnail")
+
+
 app.include_router(api_router)
 app.mount("/api/media", StaticFiles(directory=str(pipeline.STORAGE_DIR)), name="media")
 

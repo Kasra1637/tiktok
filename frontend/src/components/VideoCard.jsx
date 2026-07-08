@@ -18,6 +18,13 @@ function getViralityStyle(score) {
   return "bg-gray-500/80 text-white";
 }
 
+function proxyThumb(url) {
+  if (!url) return null;
+  // Proxy TikTok thumbnails through our backend to bypass CORS/referrer blocking
+  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
+  return `${BACKEND_URL}/api/proxy-thumb?url=${encodeURIComponent(url)}`;
+}
+
 export function VideoCard({ video, onAnalyze, analyzing, index = 0 }) {
   const reduceMotion = useReducedMotion();
 
@@ -34,9 +41,10 @@ export function VideoCard({ video, onAnalyze, analyzing, index = 0 }) {
       <AspectRatio ratio={9 / 16} className="bg-muted overflow-hidden relative">
         {video.thumbnail_url ? (
           <img
-            src={video.thumbnail_url}
+            src={proxyThumb(video.thumbnail_url)}
             alt={video.title}
             loading="lazy"
+            referrerPolicy="no-referrer"
             className="h-full w-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
             onError={(e) => {
               e.currentTarget.style.display = "none";
