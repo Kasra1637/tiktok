@@ -15,7 +15,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 APIFY_TOKEN = os.environ.get("APIFY_API_TOKEN", "")
-ACTOR_ID = "dami_studio/tiktok-scraper"
+ACTOR_ID = "dami_studio~tiktok-scraper"
 APIFY_RUN_URL = f"https://api.apify.com/v2/acts/{ACTOR_ID}/run-sync-get-dataset-items"
 
 
@@ -56,7 +56,7 @@ def _parse_apify_video(item: dict) -> Optional[dict]:
     }
 
 
-async def _run_actor(input_data: dict, timeout: int = 60) -> list:
+async def _run_actor(input_data: dict, timeout: int = 120) -> list:
     """Run the Apify Actor synchronously and return dataset items."""
     if not APIFY_TOKEN:
         logger.warning("APIFY_API_TOKEN not set — cannot fetch TikTok data.")
@@ -67,16 +67,21 @@ async def _run_actor(input_data: dict, timeout: int = 60) -> list:
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
+            logger.info(f"Calling Apify actor: {APIFY_RUN_URL} with input: {input_data}")
             resp = await client.post(
                 APIFY_RUN_URL,
                 params=params,
                 headers=headers,
                 json=input_data,
             )
-            resp.raise_for_status()
+            if resp.status_code != 200:
+                logger.error(f"Apify returned status {resp.status_code}: {resp.text[:500]}")
+                return []
             items = resp.json()
             if isinstance(items, list):
+                logger.info(f"Apify returned {len(items)} items")
                 return items
+            logger.warning(f"Apify returned non-list: {type(items)}")
             return []
     except httpx.TimeoutException:
         logger.warning(f"Apify actor timed out after {timeout}s")
@@ -97,7 +102,7 @@ async def fetch_creator_videos(handle: str, limit: int = 5) -> list:
         "resultsPerPage": limit,
     }
 
-    items = await _run_actor(input_data, timeout=45)
+    items = await _run_actor(input_data, timeout=120)
     results = []
     for item in items:
         parsed = _parse_apify_video(item)
@@ -117,7 +122,7 @@ async def fetch_hashtag_videos(hashtag: str, limit: int = 20) -> list:
         "resultsPerPage": limit,
     }
 
-    items = await _run_actor(input_data, timeout=45)
+    items = await _run_actor(input_data, timeout=120)
     results = []
     for item in items:
         parsed = _parse_apify_video(item)
@@ -138,7 +143,7 @@ async def fetch_keyword_videos(keyword: str, limit: int = 20) -> list:
         "resultsPerPage": limit,
     }
 
-    items = await _run_actor(input_data, timeout=45)
+    items = await _run_actor(input_data, timeout=120)
     results = []
     for item in items:
         parsed = _parse_apify_video(item)
