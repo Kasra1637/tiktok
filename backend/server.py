@@ -1638,9 +1638,11 @@ async def get_history():
 
 @api_router.get("/")
 async def root():
+    import apify_tiktok
     return {
         "message": "HookForge API",
         "ai_configured": bool(os.environ.get("OPENROUTER_API_KEY")),
+        "apify_configured": apify_tiktok.is_configured(),
     }
 
 
