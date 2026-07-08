@@ -52,26 +52,28 @@ def _parse_apify_video(item: dict) -> Optional[dict]:
     if not video_url or "tiktok.com" not in video_url:
         return None
 
-    # Extract author info (different formats)
-    author = item.get("author") or item.get("authorMeta") or {}
-    author_id = author.get("uniqueId") or author.get("name") or author.get("id") or ""
-    author_name = author.get("nickname") or author.get("name") or author_id
+    # Extract author info (clockworks format uses authorMeta with name/nickName)
+    author = item.get("authorMeta") or item.get("author") or {}
+    author_id = author.get("name") or author.get("uniqueId") or author.get("id") or ""
+    author_name = author.get("nickName") or author.get("nickname") or author.get("name") or author_id
 
-    # Extract video metadata
-    video_meta = item.get("video") or item.get("videoMeta") or {}
+    # Extract video metadata (clockworks format uses videoMeta with coverUrl)
+    video_meta = item.get("videoMeta") or item.get("video") or {}
 
-    # Extract counts (different field names across Actors)
+    # Extract counts (clockworks uses playCount, diggCount, commentCount, shareCount directly on item)
     view_count = item.get("playCount") or item.get("plays") or item.get("view_count") or 0
     like_count = item.get("diggCount") or item.get("likes") or item.get("like_count") or 0
     comment_count = item.get("commentCount") or item.get("comments") or item.get("comment_count") or 0
     share_count = item.get("shareCount") or item.get("shares") or item.get("share_count") or 0
 
-    # Extract text/title
+    # Extract text/title (clockworks uses "text" field)
     title = item.get("text") or item.get("description") or item.get("desc") or "Untitled"
 
-    # Extract thumbnail
+    # Extract thumbnail (clockworks format uses videoMeta.coverUrl)
     thumbnail = (
-        video_meta.get("cover")
+        video_meta.get("coverUrl")
+        or video_meta.get("originalCoverUrl")
+        or video_meta.get("cover")
         or video_meta.get("thumbnail")
         or item.get("covers", {}).get("default")
         or item.get("thumbnail_url")

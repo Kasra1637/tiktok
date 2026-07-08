@@ -244,6 +244,13 @@ async def init_db():
                 await conn.execute(f"ALTER TABLE brand_profiles ADD COLUMN {col} TEXT")
         await conn.commit()
 
+        # Clear stale trending/curated caches with empty thumbnails (from before Apify fix)
+        await conn.execute("DELETE FROM trending_videos WHERE thumbnail_url = '' OR thumbnail_url IS NULL")
+        await conn.execute("DELETE FROM curated_videos WHERE thumbnail_url = '' OR thumbnail_url IS NULL")
+        await conn.execute("DELETE FROM trending_cache_meta")
+        await conn.execute("DELETE FROM niche_cache_meta")
+        await conn.commit()
+
 
 async def _fetch_one(query: str, params: tuple = ()) -> Optional[dict]:
     """Fetch one row as a dict, or None."""
