@@ -70,9 +70,17 @@ def _parse_video_entry(data: dict) -> dict:
 
 async def fetch_hashtag_videos(hashtag: str, limit: int = 20) -> list:
     """
-    Fetch videos from a TikTok hashtag page using yt-dlp.
-    Uses --flat-playlist to get metadata without downloading.
+    Fetch videos from a TikTok hashtag. Uses Apify if configured, else yt-dlp.
     """
+    import apify_tiktok
+    if apify_tiktok.is_configured():
+        videos = await apify_tiktok.fetch_hashtag_videos(hashtag, limit)
+        # Add virality score to each video
+        for v in videos:
+            v["virality_score"] = compute_virality_score(v)
+        return videos
+
+    # Fallback: yt-dlp (may be unreliable)
     # Strip leading '#' if present
     hashtag = hashtag.lstrip("#").strip()
     if not hashtag:
@@ -112,9 +120,16 @@ async def fetch_hashtag_videos(hashtag: str, limit: int = 20) -> list:
 
 async def fetch_keyword_videos(keyword: str, limit: int = 20) -> list:
     """
-    Search TikTok for videos matching a keyword using yt-dlp's search feature.
-    Uses the tiktoksearch: URL pattern supported by yt-dlp.
+    Search TikTok for videos matching a keyword. Uses Apify if configured, else yt-dlp.
     """
+    import apify_tiktok
+    if apify_tiktok.is_configured():
+        videos = await apify_tiktok.fetch_keyword_videos(keyword, limit)
+        for v in videos:
+            v["virality_score"] = compute_virality_score(v)
+        return videos
+
+    # Fallback: yt-dlp (may be unreliable)
     keyword = keyword.strip()
     if not keyword:
         return []

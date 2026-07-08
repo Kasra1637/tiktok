@@ -76,7 +76,12 @@ async def fetch_video_metadata(tiktok_url: str) -> dict:
 
 
 async def fetch_creator_videos(handle: str, limit: int = 2) -> list:
-    """Fetch the latest `limit` videos (with real metadata) for a creator handle."""
+    """Fetch the latest `limit` videos for a creator handle. Uses Apify if configured, else yt-dlp."""
+    import apify_tiktok
+    if apify_tiktok.is_configured():
+        return await apify_tiktok.fetch_creator_videos(handle, limit)
+
+    # Fallback: yt-dlp (may be unreliable)
     cmd = YTDLP_CMD + [
         "--flat-playlist", "--playlist-end", str(limit),
         "-j", "--no-warnings", f"https://www.tiktok.com/@{handle}",
