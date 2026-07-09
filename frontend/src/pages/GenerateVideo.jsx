@@ -7,10 +7,11 @@ import { Textarea } from "../components/ui/textarea";
 import { Skeleton } from "../components/ui/skeleton";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
+import { Switch } from "../components/ui/switch";
 import GenerationProgress from "../components/GenerationProgress";
 import RemixChat from "../components/RemixChat";
 import { api, mediaUrl, getErrorMessage } from "../lib/api";
-import { ArrowLeft, Wand2, Clapperboard, AlertTriangle, RotateCcw, Clock, Film, Camera, Eye, Users, MapPinned, Megaphone, CheckCircle2, Sparkles, Briefcase, MessageSquareText } from "lucide-react";
+import { ArrowLeft, Wand2, Clapperboard, AlertTriangle, RotateCcw, Clock, Film, Camera, Eye, Users, MapPinned, Megaphone, CheckCircle2, Sparkles, Briefcase, MessageSquareText, Music2 } from "lucide-react";
 import { toast } from "sonner";
 
 function RemixChatEmptyState() {
@@ -38,6 +39,7 @@ const BREAKDOWN_SECTIONS = [
   { key: "character_behavior", label: "Character Behavior", icon: Users },
   { key: "scene_details", label: "Scene Details", icon: MapPinned },
   { key: "brand_narrative", label: "Brand Narrative", icon: Megaphone },
+  { key: "audio_recommendation", label: "Audio", icon: Music2 },
 ];
 
 export default function GenerateVideo() {
@@ -46,6 +48,9 @@ export default function GenerateVideo() {
 
   const [customization, setCustomization] = useState(null);
   const [loadError, setLoadError] = useState(null);
+
+  const [sourceVideo, setSourceVideo] = useState(null);
+  const [useOriginalSound, setUseOriginalSound] = useState(false);
 
   const [brandProfile, setBrandProfile] = useState(null);
   const [brandLoading, setBrandLoading] = useState(true);
@@ -91,7 +96,17 @@ export default function GenerateVideo() {
   useEffect(() => {
     api
       .getCustomization(customizationId)
-      .then(setCustomization)
+      .then((c) => {
+        setCustomization(c);
+        if (c?.video_id) {
+          api
+            .getVideoInfo(c.video_id)
+            .then(setSourceVideo)
+            .catch(() => {
+              // Non-fatal: sound info just won't be shown if this fails.
+            });
+        }
+      })
       .catch((err) => setLoadError(getErrorMessage(err)));
 
     api
@@ -153,6 +168,7 @@ export default function GenerateVideo() {
         brand_goal: brandGoal,
         brand_details: brandDetails,
         duration_seconds: Number(duration) || 30,
+        use_original_sound: useOriginalSound,
       });
       setJob(data);
       setEditedPrompt(data.full_prompt_text || "");
@@ -172,6 +188,7 @@ export default function GenerateVideo() {
     try {
       const data = await api.generateRemixScript(customizationId, {
         duration_seconds: Number(duration) || 30,
+        use_original_sound: useOriginalSound,
       });
       setJob(data);
       setEditedPrompt(data.full_prompt_text || "");
@@ -332,6 +349,31 @@ export default function GenerateVideo() {
             />
           </div>
 
+          {(sourceVideo?.song_title || sourceVideo?.song_artist) ? (
+            <div
+              className="flex items-center justify-between gap-3 rounded-xl border border-border bg-secondary/60 px-3 py-2.5"
+              data-testid="use-original-sound-toggle-row"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[color:rgba(13,148,136,0.12)] text-[color:var(--brand-teal)] shrink-0">
+                  <Music2 className="h-3.5 w-3.5" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium leading-tight">Use original sound</p>
+                  <p className="text-[11px] text-muted-foreground truncate" title={`${sourceVideo.song_title || ""} ${sourceVideo.song_artist ? `— ${sourceVideo.song_artist}` : ""}`}>
+                    {sourceVideo.song_title || "Untitled sound"}
+                    {sourceVideo.song_artist ? ` — ${sourceVideo.song_artist}` : ""}
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={useOriginalSound}
+                onCheckedChange={setUseOriginalSound}
+                data-testid="use-original-sound-switch"
+              />
+            </div>
+          ) : null}
+
           {brandProfile ? (
             <Button
               onClick={handleRemixForBrand}
@@ -418,6 +460,14 @@ export default function GenerateVideo() {
                         Content Remix
                       </Badge>
                     )}
+                    {useOriginalSound && (sourceVideo?.song_title || sourceVideo?.song_artist) && (
+                      <Badge
+                        className="rounded-full text-[10px] gap-1 bg-[color:var(--brand-teal)] text-white border-transparent"
+                        data-testid="using-original-sound-badge"
+                      >
+                        <Music2 className="h-2.5 w-2.5" /> Original sound
+                      </Badge>
+                    )}
                     <Badge variant="secondary" className="rounded-full text-[10px]">
                       ~{job.target_duration_seconds}s
                     </Badge>
@@ -429,6 +479,20 @@ export default function GenerateVideo() {
                   className="min-h-[180px] font-mono text-xs"
                   data-testid="full-prompt-textarea"
                 />
+                {useOriginalSound && (sourceVideo?.song_title || sourceVideo?.song_artist) && (
+                  <Alert className="rounded-xl border-[color:var(--brand-teal)] bg-[color:rgba(13,148,136,0.06)]" data-testid="original-sound-reminder">
+                    <Music2 className="h-3.5 w-3.5 text-[color:var(--brand-teal)]" />
+                    <AlertDescription className="text-xs">
+                      This prompt is written for the original sound "{sourceVideo.song_title || "Untitled sound"}"
+                      {sourceVideo.song_artist ? ` by ${sourceVideo.song_artist}` : ""} playing underneath. Since AI
+                      video generation can't embed licensed audio directly, add this sound from{" "}
+                      <a href={sourceVideo.tiktok_url} target="_blank" rel="noreferrer" className="underline font-medium">
+                        the original TikTok
+                      </a>{" "}
+                      when you post your remix.
+                    </AlertDescription>
+                  </Alert>
+                )}
               </Card>
 
               {!videoJob ? (
@@ -449,6 +513,13 @@ export default function GenerateVideo() {
                     are saved and ready to send to a video-generation provider. Actual video rendering will go live once
                     a provider (e.g. Runway, Kling, Luma) is connected — this brief is saved to your History in the
                     meantime.
+                    {useOriginalSound && (sourceVideo?.song_title || sourceVideo?.song_artist) && (
+                      <>
+                        {" "}Remember to add the original sound "{sourceVideo.song_title || "Untitled sound"}"
+                        {sourceVideo.song_artist ? ` by ${sourceVideo.song_artist}` : ""} when you post — this is
+                        saved on the brief as your chosen audio.
+                      </>
+                    )}
                   </AlertDescription>
                 </Alert>
               )}

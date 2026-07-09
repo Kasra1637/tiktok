@@ -32,6 +32,7 @@ export const api = {
       .then((r) => r.data),
   getCustomizations: () => client.get("/customizations").then((r) => r.data),
   getCustomization: (id) => client.get(`/customizations/${id}`).then((r) => r.data),
+  getVideoInfo: (videoId) => client.get(`/videos/${videoId}`).then((r) => r.data),
   getHistory: () => client.get("/history").then((r) => r.data),
   getRemixChat: (customizationId) =>
     client.get(`/customizations/${customizationId}/remix-chat`).then((r) => r.data),
@@ -71,12 +72,13 @@ export const api = {
   getVideoModels: () => client.get("/video-models").then((r) => r.data),
 
   // Face Swap → Branded Video (Content Remixer)
-  faceSwapBrandedPrompt: (imageId, brandUrl, videoId, duration) => {
+  faceSwapBrandedPrompt: (imageId, brandUrl, videoId, duration, useOriginalSound = false) => {
     const formData = new FormData();
     formData.append("image_id", imageId);
     formData.append("brand_url", brandUrl || "");
     formData.append("video_id", videoId || "");
     formData.append("duration", String(duration || 15));
+    formData.append("use_original_sound", useOriginalSound ? "true" : "false");
     return client
       .post("/face-swap/generate-branded-prompt", formData, {
         headers: { "Content-Type": "multipart/form-data" },

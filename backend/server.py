@@ -193,6 +193,8 @@ async def init_db():
                 full_prompt_text TEXT,
                 reference_image_ids TEXT,
                 selected_image_ids TEXT,
+                use_original_sound INTEGER DEFAULT 0,
+                sound_reference TEXT,
                 status TEXT DEFAULT 'prompt_ready',
                 openrouter_job_id TEXT,
                 video_url TEXT,
@@ -1105,6 +1107,7 @@ async def face_swap_branded_prompt(
     brand_url: str = Form(""),
     video_id: str = Form(""),
     duration: int = Form(15),
+    use_original_sound: bool = Form(False),
 ):
     """
     Generate a brand-customized video prompt for the face-swapped image.
@@ -1173,23 +1176,8 @@ async def face_swap_branded_prompt(
         video_record = await _fetch_one("SELECT * FROM videos WHERE id = ?", (video_id.strip(),))
 
     # Build music context from the video's stored metadata
-    music_context = None
-    transcript_text = ""
-    hashtags = []
-    if video_record:
-        if video_record.get("song_title") or video_record.get("song_artist"):
-            music_context = {
-                "song_title": video_record.get("song_title", ""),
-                "song_artist": video_record.get("song_artist", ""),
-                "song_album": video_record.get("song_album", ""),
-                "song_duration": video_record.get("song_duration", 0),
-            }
-        if video_record.get("subtitles_url"):
-            import apify_tiktok
-            raw_vtt = await apify_tiktok.fetch_subtitles(video_record["subtitles_url"])
-            if raw_vtt:
-                transcript_text = apify_tiktok.parse_webvtt_to_text(raw_vtt)
-        hashtags = video_record.get("hashtags", []) if isinstance(video_record.get("hashtags"), list) else []
+    music_context, transcript_text, hashtags = await _build_music_context(video_record)
+    sound_reference = _build_sound_reference(music_context, use_original_sound)
 
     # Build a hook-context-aware prompt
     duration = max(5, min(duration, 30))
@@ -1205,6 +1193,7 @@ async def face_swap_branded_prompt(
                 music_context=music_context,
                 transcript_text=transcript_text,
                 hashtags=hashtags,
+                use_original_sound=use_original_sound,
             )
             video_prompt = remix_result.get("full_video_prompt", "")
             prompt_breakdown = remix_result
@@ -1226,6 +1215,14 @@ async def face_swap_branded_prompt(
                 products = [products] if products else []
         products_str = ", ".join(str(p) for p in products) if products else ""
 
+        sound_note = ""
+        if sound_reference:
+            sound_note = (
+                f" Reuse the original sound (\"{sound_reference['song_title']}\" by "
+                f"{sound_reference['song_artist']}) underneath the video rather than a new voiceover — "
+                "lean on visuals and on-screen text/captions instead of new spoken dialogue."
+            )
+
         video_prompt = (
             f"Create a {duration}-second vertical video (9:16) featuring the person from the first frame. "
             f"The video promotes {brand_name} — {brand_desc}. "
@@ -1236,6 +1233,7 @@ async def face_swap_branded_prompt(
             "a natural, energetic delivery — speaking to camera with confident body language. "
             "Maintain perfect face consistency throughout. Keep the camera steady with slight "
             "natural movement. The video should feel like an organic TikTok/Reels creator video."
+            f"{sound_note}"
         )
         prompt_breakdown = {
             "content": f"Person delivers a {tone or 'engaging'} message about {brand_name}",
@@ -1243,6 +1241,10 @@ async def face_swap_branded_prompt(
             "character_behavior": "Confident, expressive, speaking to camera",
             "scene_details": "Matches the environment from the first frame",
             "brand_narrative": f"Promotes {brand_name} ({niche}) to {audience}",
+            "audio_recommendation": (
+                f"Keep the original sound: \"{sound_reference['song_title']}\" by {sound_reference['song_artist']}"
+                if sound_reference else "Original voiceover/music matching the brand tone"
+            ),
             "full_video_prompt": video_prompt,
             "suggested_duration_seconds": duration,
         }
@@ -1253,6 +1255,8 @@ async def face_swap_branded_prompt(
         "brand_name": brand_profile.get("brand_name", ""),
         "duration": duration,
         "image_id": image_id,
+        "use_original_sound": use_original_sound,
+        "sound_reference": sound_reference,
     }
 
 
@@ -1513,6 +1517,52 @@ async def post_remix_chat_message(customization_id: str, payload: RemixChatMessa
 # ---------------------------------------------------------------------------
 # Video generation: prompt writing + OpenRouter video job submission/polling
 # ---------------------------------------------------------------------------
+async def _build_music_context(video: Optional[dict]):
+    """
+    Given a video record, build (music_context, transcript_text, hashtags) for use in
+    AI prompt generation. Returns (None, "", []) if the video has no music/subtitle data.
+    """
+    music_context = None
+    transcript_text = ""
+    hashtags = []
+    if not video:
+        return music_context, transcript_text, hashtags
+
+    if video.get("song_title") or video.get("song_artist"):
+        music_context = {
+            "song_title": video.get("song_title", ""),
+            "song_artist": video.get("song_artist", ""),
+            "song_album": video.get("song_album", ""),
+            "song_duration": video.get("song_duration", 0),
+        }
+    if video.get("subtitles_url"):
+        import apify_tiktok
+        raw_vtt = await apify_tiktok.fetch_subtitles(video["subtitles_url"])
+        if raw_vtt:
+            transcript_text = apify_tiktok.parse_webvtt_to_text(raw_vtt)
+    hashtags = video.get("hashtags", []) if isinstance(video.get("hashtags"), list) else []
+    return music_context, transcript_text, hashtags
+
+
+def _build_sound_reference(music_context: Optional[dict], use_original_sound: bool) -> Optional[dict]:
+    """
+    Build a small persisted record of which sound (if any) the user chose to reuse,
+    so the video brief / History can display "Use this sound: <title> by <artist>".
+    """
+    if not use_original_sound or not music_context:
+        return None
+    song_title = music_context.get("song_title") or ""
+    song_artist = music_context.get("song_artist") or ""
+    if not song_title and not song_artist:
+        return None
+    return {
+        "reuse_original_sound": True,
+        "song_title": song_title,
+        "song_artist": song_artist,
+        "song_album": music_context.get("song_album", ""),
+    }
+
+
 @api_router.post("/customizations/{customization_id}/generate-video-prompt")
 async def generate_video_prompt_endpoint(customization_id: str, payload: BrandContextRequest):
     require_ai_configured()
@@ -1523,6 +1573,10 @@ async def generate_video_prompt_endpoint(customization_id: str, payload: BrandCo
     if not analysis:
         raise HTTPException(status_code=404, detail="Related hook analysis not found")
 
+    # Fetch the video record for music/subtitle context
+    video = await _fetch_one("SELECT * FROM videos WHERE id = ?", (customization["video_id"],))
+    music_context, transcript_text, _hashtags = await _build_music_context(video)
+
     duration = max(5, min(30, payload.duration_seconds or 30))
 
     try:
@@ -1531,10 +1585,15 @@ async def generate_video_prompt_endpoint(customization_id: str, payload: BrandCo
             brand_context=payload.model_dump(),
             target_duration=duration,
             session_id=f"videoprompt-{customization_id}",
+            music_context=music_context,
+            transcript_text=transcript_text,
+            use_original_sound=payload.use_original_sound,
         )
     except Exception as e:
         logger.error(f"Video prompt generation failed for {customization_id}: {e}")
         raise HTTPException(status_code=502, detail=f"AI prompt generation failed. Please try again. ({str(e)[:150]})")
+
+    sound_reference = _build_sound_reference(music_context, payload.use_original_sound)
 
     job_id = str(uuid.uuid4())
     created_at = now_iso()
@@ -1543,11 +1602,12 @@ async def generate_video_prompt_endpoint(customization_id: str, payload: BrandCo
         """INSERT INTO video_jobs
            (id, customization_id, video_id, brand_name, brand_goal, brand_details,
             target_duration_seconds, prompt_breakdown, full_prompt_text, reference_image_ids,
-            status, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            use_original_sound, sound_reference, status, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (job_id, customization_id, customization["video_id"], payload.brand_name, payload.brand_goal,
          payload.brand_details, duration, json.dumps(prompt_result), prompt_result.get("full_video_prompt"),
-         json.dumps(reference_image_ids), "prompt_ready", created_at),
+         json.dumps(reference_image_ids), 1 if payload.use_original_sound else 0,
+         json.dumps(sound_reference) if sound_reference else None, "prompt_ready", created_at),
     )
     return await _fetch_one("SELECT * FROM video_jobs WHERE id = ?", (job_id,))
 
@@ -1567,25 +1627,7 @@ async def generate_remix_script_endpoint(customization_id: str, payload: Generat
 
     # Fetch the video record for music/subtitle context
     video = await _fetch_one("SELECT * FROM videos WHERE id = ?", (customization["video_id"],))
-
-    # Build music context from the video's stored metadata
-    music_context = None
-    transcript_text = ""
-    hashtags = []
-    if video:
-        if video.get("song_title") or video.get("song_artist"):
-            music_context = {
-                "song_title": video.get("song_title", ""),
-                "song_artist": video.get("song_artist", ""),
-                "song_album": video.get("song_album", ""),
-                "song_duration": video.get("song_duration", 0),
-            }
-        if video.get("subtitles_url"):
-            import apify_tiktok
-            raw_vtt = await apify_tiktok.fetch_subtitles(video["subtitles_url"])
-            if raw_vtt:
-                transcript_text = apify_tiktok.parse_webvtt_to_text(raw_vtt)
-        hashtags = video.get("hashtags", []) if isinstance(video.get("hashtags"), list) else []
+    music_context, transcript_text, hashtags = await _build_music_context(video)
 
     duration = max(5, min(30, payload.duration_seconds or 30))
 
@@ -1598,10 +1640,13 @@ async def generate_remix_script_endpoint(customization_id: str, payload: Generat
             music_context=music_context,
             transcript_text=transcript_text,
             hashtags=hashtags,
+            use_original_sound=payload.use_original_sound,
         )
     except Exception as e:
         logger.error(f"Remix script generation failed for {customization_id}: {e}")
         raise HTTPException(status_code=502, detail=f"AI remix script generation failed. Please try again. ({str(e)[:150]})")
+
+    sound_reference = _build_sound_reference(music_context, payload.use_original_sound)
 
     job_id = str(uuid.uuid4())
     created_at = now_iso()
@@ -1610,12 +1655,13 @@ async def generate_remix_script_endpoint(customization_id: str, payload: Generat
         """INSERT INTO video_jobs
            (id, customization_id, video_id, brand_name, brand_goal, brand_details,
             target_duration_seconds, prompt_breakdown, full_prompt_text, reference_image_ids,
-            status, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            use_original_sound, sound_reference, status, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (job_id, customization_id, customization["video_id"], brand_profile.get("brand_name"),
          "Content Remixer: adapt viral hook to brand", brand_profile.get("brand_description"),
          duration, json.dumps(prompt_result), prompt_result.get("full_video_prompt"),
-         json.dumps(reference_image_ids), "prompt_ready", created_at),
+         json.dumps(reference_image_ids), 1 if payload.use_original_sound else 0,
+         json.dumps(sound_reference) if sound_reference else None, "prompt_ready", created_at),
     )
     return await _fetch_one("SELECT * FROM video_jobs WHERE id = ?", (job_id,))
 
