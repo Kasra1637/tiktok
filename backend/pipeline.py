@@ -10,6 +10,8 @@ import logging
 import sys
 from pathlib import Path
 
+import httpx
+
 logger = logging.getLogger(__name__)
 
 STORAGE_DIR = Path(__file__).parent / "storage"
@@ -70,12 +72,33 @@ async def fetch_video_metadata(tiktok_url: str) -> dict:
         "view_count": data.get("view_count") or 0,
         "like_count": data.get("like_count") or 0,
         "comment_count": data.get("comment_count") or 0,
+        "share_count": data.get("repost_count") or 0,
+        "bookmark_count": 0,
         "duration": data.get("duration") or 0,
         "thumbnail_url": _pick_thumbnail(data),
+        "timestamp": data.get("timestamp") or 0,
+        # Defaults for fields only available via Apify
+        "direct_video_url": "",
+        "hashtags": [],
+        "song_id": "",
+        "song_title": "",
+        "song_artist": "",
+        "song_album": "",
+        "song_duration": 0,
+        "song_cover_url": "",
+        "subtitles_url": "",
+        "subtitles_language": "",
+        "creator_followers": 0,
+        "creator_following": 0,
+        "creator_verified": False,
+        "creator_bio": "",
+        "creator_avatar": "",
+        "creator_total_videos": 0,
+        "creator_total_likes": 0,
     }
 
 
-async def fetch_creator_videos(handle: str, limit: int = 2) -> list:
+async def fetch_creator_videos(handle: str, limit: int = 10) -> list:
     """Fetch the latest `limit` videos for a creator handle. Uses Apify if configured, else yt-dlp."""
     import apify_tiktok
     if apify_tiktok.is_configured():
@@ -109,17 +132,62 @@ async def fetch_creator_videos(handle: str, limit: int = 2) -> list:
             "view_count": data.get("view_count") or 0,
             "like_count": data.get("like_count") or 0,
             "comment_count": data.get("comment_count") or 0,
+            "share_count": data.get("repost_count") or 0,
+            "bookmark_count": 0,
             "duration": data.get("duration") or 0,
             "thumbnail_url": _pick_thumbnail(data),
+            "timestamp": data.get("timestamp") or 0,
+            # These fields are only available via Apify; set defaults for yt-dlp fallback
+            "direct_video_url": "",
+            "hashtags": [],
+            "song_id": "",
+            "song_title": "",
+            "song_artist": "",
+            "song_album": "",
+            "song_duration": 0,
+            "song_cover_url": "",
+            "subtitles_url": "",
+            "subtitles_language": "",
+            "creator_followers": 0,
+            "creator_following": 0,
+            "creator_verified": False,
+            "creator_bio": "",
+            "creator_avatar": "",
+            "creator_total_videos": 0,
+            "creator_total_likes": 0,
         })
     return results
 
 
-async def download_video(tiktok_url: str) -> Path:
+async def download_video(tiktok_url: str, direct_video_url: str = "") -> Path:
+    """
+    Download a TikTok video. Tries direct_video_url first (from Apify scraper),
+    falls back to yt-dlp if direct URL is unavailable or fails.
+    """
     vhash = url_hash(tiktok_url)
     out_path = VIDEOS_DIR / f"{vhash}.mp4"
     if out_path.exists() and out_path.stat().st_size > 0:
         return out_path
+
+    # Try direct video URL first (faster, no yt-dlp dependency)
+    if direct_video_url:
+        try:
+            async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+                resp = await client.get(direct_video_url, headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Referer": "https://www.tiktok.com/",
+                })
+                if resp.status_code == 200 and len(resp.content) > 1000:
+                    with open(out_path, "wb") as f:
+                        f.write(resp.content)
+                    logger.info(f"Downloaded video via direct URL: {out_path} ({out_path.stat().st_size} bytes)")
+                    return out_path
+                else:
+                    logger.warning(f"Direct video URL returned status {resp.status_code} or too small, falling back to yt-dlp")
+        except Exception as e:
+            logger.warning(f"Direct video download failed ({e}), falling back to yt-dlp")
+
+    # Fallback: yt-dlp
     cmd = YTDLP_CMD + ["-f", "b[ext=mp4]/best", "--no-warnings", "-o", str(out_path), tiktok_url]
     rc, out, err = await run_cmd(cmd, timeout=100)
     if rc != 0 or not out_path.exists():

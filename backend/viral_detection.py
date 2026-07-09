@@ -68,7 +68,7 @@ def _parse_video_entry(data: dict) -> dict:
     }
 
 
-async def fetch_hashtag_videos(hashtag: str, limit: int = 20) -> list:
+async def fetch_hashtag_videos(hashtag: str, limit: int = 25) -> list:
     """
     Fetch videos from a TikTok hashtag. Uses Apify if configured, else yt-dlp.
     """
@@ -118,13 +118,19 @@ async def fetch_hashtag_videos(hashtag: str, limit: int = 20) -> list:
     return results
 
 
-async def fetch_keyword_videos(keyword: str, limit: int = 20) -> list:
+async def fetch_keyword_videos(keyword: str, limit: int = 25, location: str = "", sort_type: str = "RELEVANCE") -> list:
     """
     Search TikTok for videos matching a keyword. Uses Apify if configured, else yt-dlp.
+
+    Args:
+        keyword: Search term
+        limit: Max number of results
+        location: ISO 3166-1 alpha-2 country code for location targeting
+        sort_type: Sort order — "RELEVANCE", "MOST_LIKED", or "DATE_POSTED"
     """
     import apify_tiktok
     if apify_tiktok.is_configured():
-        videos = await apify_tiktok.fetch_keyword_videos(keyword, limit)
+        videos = await apify_tiktok.fetch_keyword_videos(keyword, limit, location=location, sort_type=sort_type)
         for v in videos:
             v["virality_score"] = compute_virality_score(v)
         return videos
@@ -170,10 +176,11 @@ async def fetch_keyword_videos(keyword: str, limit: int = 20) -> list:
 def compute_virality_score(video_meta: dict) -> float:
     """
     Calculate a 0-100 virality score for a video based on:
-    - engagement_rate (30%): (likes + comments + shares) / views
-    - velocity (40%): views / age_in_hours
-    - recency_boost (20%): exponential decay favoring videos < 48 hours old
+    - engagement_rate (25%): (likes + comments + shares + bookmarks) / views
+    - velocity (35%): views / age_in_hours
+    - recency_boost (15%): exponential decay favoring videos < 48 hours old
     - raw_scale (10%): log-scaled view count
+    - save_intent (15%): bookmarks-to-views ratio (high bookmarks = purchase/save intent)
 
     Returns a float between 0 and 100.
     """
@@ -181,20 +188,22 @@ def compute_virality_score(video_meta: dict) -> float:
     likes = max(video_meta.get("like_count") or 0, 0)
     comments = max(video_meta.get("comment_count") or 0, 0)
     shares = max(video_meta.get("share_count") or 0, 0)
+    bookmarks = max(video_meta.get("bookmark_count") or 0, 0)
 
     # -- Calculate age in hours --
     age_hours = _compute_age_hours(video_meta)
 
-    # -- Engagement Rate Component (30%) --
+    # -- Engagement Rate Component (25%) --
+    # Now includes bookmarks as an engagement signal
     if views > 0:
-        engagement_rate = (likes + comments + shares) / views
+        engagement_rate = (likes + comments + shares + bookmarks) / views
     else:
         engagement_rate = 0.0
     # Typical viral TikTok: 5-15% engagement. Cap at ~25% for scoring.
     # Normalize: 0.10 engagement = perfect score
     engagement_score = min(engagement_rate / 0.10, 1.0) * 100
 
-    # -- Velocity Component (40%) --
+    # -- Velocity Component (35%) --
     # Views per hour. A viral video might get 100k+ views/hour.
     if age_hours > 0:
         velocity = views / age_hours
@@ -208,7 +217,7 @@ def compute_virality_score(video_meta: dict) -> float:
     else:
         velocity_score = 0.0
 
-    # -- Recency Boost (20%) --
+    # -- Recency Boost (15%) --
     # Exponential decay: full score at 0 hours, half-life of 24 hours
     # After 48 hours, the boost is minimal.
     half_life = 24.0
@@ -221,12 +230,22 @@ def compute_virality_score(video_meta: dict) -> float:
     else:
         raw_scale_score = 0.0
 
+    # -- Save Intent / Bookmarks Component (15%) --
+    # Bookmarks indicate "I want to come back to this" — strong purchase/conversion intent.
+    # A bookmark-to-view ratio of 0.05 (5%) is exceptional on TikTok.
+    if views > 0 and bookmarks > 0:
+        bookmark_ratio = bookmarks / views
+        save_intent_score = min(bookmark_ratio / 0.05, 1.0) * 100
+    else:
+        save_intent_score = 0.0
+
     # -- Weighted sum --
     final_score = (
-        engagement_score * 0.30
-        + velocity_score * 0.40
-        + recency_score * 0.20
+        engagement_score * 0.25
+        + velocity_score * 0.35
+        + recency_score * 0.15
         + raw_scale_score * 0.10
+        + save_intent_score * 0.15
     )
 
     # Clamp to 0-100
@@ -272,3 +291,31 @@ def rank_videos(videos_list: list) -> list:
 
     scored.sort(key=lambda v: v["virality_score"], reverse=True)
     return scored
+
+
+async def fetch_music_videos(music_url: str, limit: int = 25) -> list:
+    """
+    Fetch videos using a specific TikTok sound/music. Uses Apify.
+    """
+    import apify_tiktok
+    if not apify_tiktok.is_configured():
+        logger.warning("Apify not configured — cannot fetch music-based videos.")
+        return []
+    videos = await apify_tiktok.fetch_music_videos(music_url, limit)
+    for v in videos:
+        v["virality_score"] = compute_virality_score(v)
+    return videos
+
+
+async def fetch_location_videos(location_url: str, limit: int = 25) -> list:
+    """
+    Fetch videos from a specific TikTok location page. Uses Apify.
+    """
+    import apify_tiktok
+    if not apify_tiktok.is_configured():
+        logger.warning("Apify not configured — cannot fetch location-based videos.")
+        return []
+    videos = await apify_tiktok.fetch_location_videos(location_url, limit)
+    for v in videos:
+        v["virality_score"] = compute_virality_score(v)
+    return videos
