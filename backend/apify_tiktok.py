@@ -143,7 +143,7 @@ async def fetch_creator_videos(handle: str, limit: int = 5) -> list:
 
     input_data = {
         "profiles": [f"https://www.tiktok.com/@{handle}"],
-        "resultsPerPage": min(limit, 5),
+        "resultsPerPage": min(limit, 10),
     }
 
     items = await _run_actor(input_data, timeout=120)
@@ -163,7 +163,7 @@ async def fetch_hashtag_videos(hashtag: str, limit: int = 20) -> list:
 
     input_data = {
         "hashtags": [hashtag],
-        "resultsPerPage": min(limit, 10),
+        "resultsPerPage": min(limit, 25),
     }
 
     items = await _run_actor(input_data, timeout=120)
@@ -184,7 +184,7 @@ async def fetch_keyword_videos(keyword: str, limit: int = 20) -> list:
 
     input_data = {
         "searchQueries": [keyword],
-        "resultsPerPage": min(limit, 10),
+        "resultsPerPage": min(limit, 25),
     }
 
     items = await _run_actor(input_data, timeout=120)

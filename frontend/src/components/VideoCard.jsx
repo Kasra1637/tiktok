@@ -4,7 +4,7 @@ import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { AspectRatio } from "./ui/aspect-ratio";
 import { Button } from "./ui/button";
-import { Eye, Heart, MessageCircle, Sparkles, Flame } from "lucide-react";
+import { Eye, Heart, MessageCircle, Sparkles, Flame, ExternalLink } from "lucide-react";
 
 function formatCount(n) {
   if (!n) return "0";
@@ -67,6 +67,19 @@ export function VideoCard({ video, onAnalyze, analyzing, index = 0 }) {
     >
       <AspectRatio ratio={9 / 16} className="bg-muted overflow-hidden relative">
         <Thumbnail url={video.thumbnail_url} alt={video.title} />
+        {/* TikTok link overlay */}
+        {video.tiktok_url && (
+          <a
+            href={video.tiktok_url}
+            target="_blank"
+            rel="noreferrer"
+            className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-black/70 text-white px-2 py-1 text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/90"
+            onClick={(e) => e.stopPropagation()}
+            data-testid="video-tiktok-link"
+          >
+            <ExternalLink className="h-2.5 w-2.5" /> TikTok
+          </a>
+        )}
         {video.virality_score != null && (
           <div className="absolute top-2 right-2">
             <Badge
