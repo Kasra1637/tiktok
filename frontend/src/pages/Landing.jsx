@@ -12,7 +12,7 @@ const FEATURES = [
     icon: Search,
     title: "Discover Viral Hooks",
     description:
-      "Browse 10 niches of trending TikTok videos ranked by virality score. Search by keyword, hashtag, sound, or location. Filter by Most Liked, Relevance, or Date Posted.",
+      "Browse 10 niches of trending TikTok videos ranked by virality score. Search by keyword or hashtag. Filter by Most Liked, Relevance, or Date Posted.",
     badge: null,
   },
   {
@@ -66,10 +66,10 @@ const FEATURES = [
   },
   {
     icon: MapPin,
-    title: "Location Targeting",
+    title: "Niche Discovery",
     description:
-      "Discover what\u2019s trending in specific countries using ISO region codes. Perfect for localized brand campaigns and geo-targeted content strategy.",
-    badge: "New",
+      "10 pre-configured niches with curated creators and trending hashtags. Browse fitness, comedy, beauty, food, fashion, tech, pets, travel, finance, and education.",
+    badge: null,
   },
   {
     icon: FileText,
@@ -171,9 +171,9 @@ export default function Landing() {
         <div className="mt-14 flex flex-wrap items-center justify-center gap-6 sm:gap-10">
           {[
             { value: "10", label: "Niches" },
-            { value: "460", label: "Posts/sec" },
-            { value: "98%", label: "Success Rate" },
-            { value: "$0.30", label: "Per 1K Videos" },
+            { value: "3", label: "Video Models" },
+            { value: "8", label: "Hook Metrics" },
+            { value: "30s", label: "Max Video" },
           ].map((stat) => (
             <div key={stat.label} className="text-center">
               <p className="font-display text-2xl sm:text-3xl font-bold text-foreground">{stat.value}</p>
@@ -310,7 +310,7 @@ export default function Landing() {
               <p><strong className="text-foreground">Video (Best):</strong> ByteDance Seedance 2.0 \u2014 character consistency, native audio, cinematic camera</p>
               <p><strong className="text-foreground">Video (Alt):</strong> Alibaba Wan 2.7 \u2014 strong style/reference preservation</p>
               <p><strong className="text-foreground">Video (Fast):</strong> ByteDance Seedance 2.0 Fast \u2014 same tech, optimized for speed</p>
-              <p><strong className="text-foreground">Data Scraping:</strong> ApiDojo TikTok Scraper \u2014 460 posts/sec, 98% success, $0.30/1K results</p>
+              <p><strong className="text-foreground">Data Scraping:</strong> Clockworks TikTok Scraper \u2014 profiles, hashtags, keyword search, music metadata</p>
             </div>
           </div>
         </div>

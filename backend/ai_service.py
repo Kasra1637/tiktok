@@ -92,8 +92,8 @@ async def analyze_hook(frame_paths: list, session_id: str, music_context: dict =
     """
     Analyze hook frames using OpenRouter vision model.
     
-    Enhanced with actual music/audio context and transcript when available
-    (from ApiDojo scraper), instead of purely inferring audio from visuals.
+    Enhanced with actual music/audio context and transcript when available,
+    instead of purely inferring audio from visuals.
     
     Args:
         frame_paths: List of Path objects pointing to extracted video frames
@@ -581,7 +581,7 @@ async def generate_remix_script(analysis: dict, brand_profile: dict, target_dura
     product/service, rather than generic brand copy.
 
     Enhanced with actual music/audio context, transcript, and hashtag data when available
-    from the ApiDojo scraper for more accurate remix scripts.
+    for more accurate remix scripts.
 
     Args:
         use_original_sound: If True and music_context has a song, the remix script is written

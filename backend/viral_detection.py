@@ -118,19 +118,13 @@ async def fetch_hashtag_videos(hashtag: str, limit: int = 25) -> list:
     return results
 
 
-async def fetch_keyword_videos(keyword: str, limit: int = 25, location: str = "", sort_type: str = "RELEVANCE") -> list:
+async def fetch_keyword_videos(keyword: str, limit: int = 25) -> list:
     """
     Search TikTok for videos matching a keyword. Uses Apify if configured, else yt-dlp.
-
-    Args:
-        keyword: Search term
-        limit: Max number of results
-        location: ISO 3166-1 alpha-2 country code for location targeting
-        sort_type: Sort order — "RELEVANCE", "MOST_LIKED", or "DATE_POSTED"
     """
     import apify_tiktok
     if apify_tiktok.is_configured():
-        videos = await apify_tiktok.fetch_keyword_videos(keyword, limit, location=location, sort_type=sort_type)
+        videos = await apify_tiktok.fetch_keyword_videos(keyword, limit)
         for v in videos:
             v["virality_score"] = compute_virality_score(v)
         return videos
@@ -291,31 +285,3 @@ def rank_videos(videos_list: list) -> list:
 
     scored.sort(key=lambda v: v["virality_score"], reverse=True)
     return scored
-
-
-async def fetch_music_videos(music_url: str, limit: int = 25) -> list:
-    """
-    Fetch videos using a specific TikTok sound/music. Uses Apify.
-    """
-    import apify_tiktok
-    if not apify_tiktok.is_configured():
-        logger.warning("Apify not configured — cannot fetch music-based videos.")
-        return []
-    videos = await apify_tiktok.fetch_music_videos(music_url, limit)
-    for v in videos:
-        v["virality_score"] = compute_virality_score(v)
-    return videos
-
-
-async def fetch_location_videos(location_url: str, limit: int = 25) -> list:
-    """
-    Fetch videos from a specific TikTok location page. Uses Apify.
-    """
-    import apify_tiktok
-    if not apify_tiktok.is_configured():
-        logger.warning("Apify not configured — cannot fetch location-based videos.")
-        return []
-    videos = await apify_tiktok.fetch_location_videos(location_url, limit)
-    for v in videos:
-        v["virality_score"] = compute_virality_score(v)
-    return videos

@@ -28,7 +28,7 @@ from ai_service import (
 from models import (
     IngestVideoRequest, BrandContextRequest, GenerateVideoRequest,
     AnalyzeBrandUrlRequest, BrandProfileUpdateRequest, GenerateRemixScriptRequest,
-    RemixChatMessageRequest, TrendingSearchRequest, MusicSearchRequest, now_iso, row_to_dict,
+    RemixChatMessageRequest, now_iso, row_to_dict,
 )
 from niches_config import NICHES, NICHE_MAP
 
@@ -744,12 +744,8 @@ async def get_niche_trending(niche_key: str, refresh: bool = False):
 
 
 @api_router.get("/trending/search")
-async def trending_search(q: str = "", limit: int = 20, location: str = "", sort_type: str = "RELEVANCE"):
-    """Search TikTok for trending videos matching a keyword.
-    
-    Supports location targeting via ISO 3166-1 alpha-2 country codes (e.g., US, GB, DE)
-    and sort order (RELEVANCE, MOST_LIKED, DATE_POSTED).
-    """
+async def trending_search(q: str = "", limit: int = 20):
+    """Search TikTok for trending videos matching a keyword."""
     q = q.strip()
     if not q:
         raise HTTPException(status_code=400, detail="Query parameter 'q' is required")
@@ -760,60 +756,7 @@ async def trending_search(q: str = "", limit: int = 20, location: str = "", sort
         )
     limit = max(1, min(50, limit))
     async with _ytdlp_semaphore:
-        videos = await viral_detection.fetch_keyword_videos(
-            q, limit=limit, location=location.strip(), sort_type=sort_type.strip()
-        )
-    ranked = viral_detection.rank_videos(videos)
-    return ranked
-
-
-# ---------------------------------------------------------------------------
-# Music-based and location-based video discovery
-# ---------------------------------------------------------------------------
-@api_router.get("/trending/music")
-async def trending_music_search(music_url: str = "", limit: int = 25):
-    """Fetch videos using a specific TikTok sound/music URL.
-    
-    Provide a full TikTok music page URL (e.g., https://www.tiktok.com/music/...).
-    Returns videos ranked by virality score that use this sound.
-    """
-    music_url = music_url.strip()
-    if not music_url:
-        raise HTTPException(status_code=400, detail="Query parameter 'music_url' is required")
-    if "tiktok.com" not in music_url:
-        raise HTTPException(status_code=400, detail="Please provide a valid TikTok music URL")
-    limit = max(1, min(50, limit))
-
-    import apify_tiktok
-    if not apify_tiktok.is_configured():
-        raise HTTPException(status_code=503, detail="Apify is not configured. Set APIFY_API_TOKEN to use music search.")
-
-    async with _ytdlp_semaphore:
-        videos = await viral_detection.fetch_music_videos(music_url, limit=limit)
-    ranked = viral_detection.rank_videos(videos)
-    return ranked
-
-
-@api_router.get("/trending/location")
-async def trending_location_search(location_url: str = "", limit: int = 25):
-    """Fetch videos from a specific TikTok location page.
-    
-    Provide a full TikTok location URL.
-    Returns videos ranked by virality score from that location.
-    """
-    location_url = location_url.strip()
-    if not location_url:
-        raise HTTPException(status_code=400, detail="Query parameter 'location_url' is required")
-    if "tiktok.com" not in location_url:
-        raise HTTPException(status_code=400, detail="Please provide a valid TikTok location URL")
-    limit = max(1, min(50, limit))
-
-    import apify_tiktok
-    if not apify_tiktok.is_configured():
-        raise HTTPException(status_code=503, detail="Apify is not configured. Set APIFY_API_TOKEN to use location search.")
-
-    async with _ytdlp_semaphore:
-        videos = await viral_detection.fetch_location_videos(location_url, limit=limit)
+        videos = await viral_detection.fetch_keyword_videos(q, limit=limit)
     ranked = viral_detection.rank_videos(videos)
     return ranked
 
@@ -920,7 +863,7 @@ async def analyze_video_hook(video_id: str):
 
     frame_docs = build_frame_docs(video_hash, frame_paths)
 
-    # Build music context and fetch transcript if available (from ApiDojo scraper data)
+    # Build music context and fetch transcript if available
     music_context = None
     transcript_text = ""
     if video.get("song_title") or video.get("song_artist"):
@@ -2049,44 +1992,11 @@ async def root():
 
 @api_router.get("/debug/apify-test")
 async def debug_apify_test():
-    """
-    Diagnostic endpoint: runs the Apify actor asynchronously and returns
-    the run status + dataset info so we can see why it returns 0 results.
-    """
+    """Diagnostic endpoint: test the Apify actor connection."""
     import apify_tiktok
     if not apify_tiktok.is_configured():
         return {"error": "APIFY_API_TOKEN not set"}
-
-    token = apify_tiktok.APIFY_TOKEN
-    actor_id = apify_tiktok.ACTOR_ID
-
-    input_data = {"keywords": ["fitness"], "maxItems": 15}
-
-    # Start an async run (don't wait for results)
-    run_url = f"https://api.apify.com/v2/acts/{actor_id}/runs"
-    params = {"token": token}
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(run_url, params=params, json=input_data)
-        if resp.status_code not in (200, 201):
-            return {
-                "error": f"Failed to start run: {resp.status_code}",
-                "body": resp.text[:500],
-            }
-        run_data = resp.json().get("data", {})
-
-    return {
-        "run_id": run_data.get("id"),
-        "status": run_data.get("status"),
-        "statusMessage": run_data.get("statusMessage"),
-        "defaultDatasetId": run_data.get("defaultDatasetId"),
-        "startedAt": run_data.get("startedAt"),
-        "usageTotalUsd": run_data.get("usageTotalUsd"),
-        "usageUsd": run_data.get("usageUsd"),
-        "options": run_data.get("options"),
-        "exitCode": run_data.get("exitCode"),
-        "input": input_data,
-    }
+    return {"status": "configured", "actor": apify_tiktok.ACTOR_ID}
 
 
 # ---------------------------------------------------------------------------

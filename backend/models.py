@@ -33,20 +33,6 @@ class IngestVideoRequest(BaseModel):
     niche: Optional[str] = None
 
 
-class TrendingSearchRequest(BaseModel):
-    """Parameters for keyword-based trending search with location targeting."""
-    q: str
-    limit: int = 20
-    location: Optional[str] = None  # ISO 3166-1 alpha-2 country code (e.g., "US", "GB")
-    sort_type: Optional[str] = None  # "RELEVANCE", "MOST_LIKED", "DATE_POSTED"
-
-
-class MusicSearchRequest(BaseModel):
-    """Parameters for music/sound-based video discovery."""
-    music_url: str
-    limit: int = 25
-
-
 class CustomizeRequest(BaseModel):
     environment: Optional[str] = ""
     background: Optional[str] = ""
