@@ -75,7 +75,7 @@ function DropZone({ onFileSelect, accept, label, sublabel, preview, onRemove, te
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={`w-full flex flex-col items-center justify-center gap-2.5 rounded-xl border-2 border-dashed py-12 cursor-pointer transition-all ${
-          isDragging ? "border-[color:var(--brand-teal)] bg-[color:rgba(99,102,241,0.04)] scale-[1.01]" : "border-border hover:border-[color:rgba(99,102,241,0.4)] bg-white/50 hover:bg-white/80"
+          isDragging ? "border-[color:var(--brand-teal)] bg-[color:rgba(99,102,241,0.04)] scale-[1.01]" : "border-border hover:border-[color:rgba(99,102,241,0.4)] bg-card/50 hover:bg-card/80"
         }`}
         data-testid={`${testId}-dropzone`}
       >
@@ -337,7 +337,7 @@ export default function FaceSwap() {
                 <div className="flex items-center gap-2">
                   <span className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${sourceFile ? "bg-[color:var(--brand-teal)] text-white" : "bg-[color:var(--brand-coral)] text-white"}`}>{sourceFile ? <Check className="h-3 w-3" /> : "2"}</span>
                   <span className="text-sm font-semibold">Your Face</span>
-                  {savedFaceLoaded && <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-medium flex items-center gap-1"><Save className="h-2.5 w-2.5" /> Saved</span>}
+                  {savedFaceLoaded && <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-medium flex items-center gap-1"><Save className="h-2.5 w-2.5" /> Saved</span>}
                 </div>
                 <DropZone onFileSelect={handleSourceSelect} accept="image/jpeg,image/png,image/webp" label="Drop your face photo here" sublabel="Clear, frontal view works best" preview={sourcePreview} onRemove={handleRemoveSource} testId="source" icon={User} />
                 {sourceFile && !savedFaceLoaded && (
@@ -386,7 +386,7 @@ export default function FaceSwap() {
                 <div className="flex items-center gap-2">
                   <span className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${sourceFile ? "bg-[color:var(--brand-teal)] text-white" : targetFile ? "bg-[color:var(--brand-teal)] text-white" : "bg-muted text-muted-foreground"}`}>2</span>
                   <span className={`text-sm font-semibold ${!targetFile ? "text-muted-foreground" : ""}`}>Your Face</span>
-                  {savedFaceLoaded && <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-medium flex items-center gap-1"><Save className="h-2.5 w-2.5" /> Saved</span>}
+                  {savedFaceLoaded && <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-medium flex items-center gap-1"><Save className="h-2.5 w-2.5" /> Saved</span>}
                 </div>
                 <DropZone onFileSelect={handleSourceSelect} accept="image/jpeg,image/png,image/webp" label="Drop your face photo here" sublabel="Clear, frontal view works best" preview={sourcePreview} onRemove={handleRemoveSource} testId="source" icon={User} />
                 {sourceFile && !savedFaceLoaded && (
@@ -438,11 +438,11 @@ export default function FaceSwap() {
           {/* Result comparison */}
           <Card className="rounded-2xl overflow-hidden border-[color:var(--brand-teal)]" data-testid="face-swap-result">
             <div className="grid grid-cols-3 gap-px bg-border">
-              <div className="bg-white p-3 text-center">
+              <div className="bg-card p-3 text-center">
                 <p className="text-[10px] font-medium text-muted-foreground mb-1.5">Target</p>
                 <img src={targetPreview} alt="Target" className="w-full rounded-lg object-cover aspect-[3/4]" />
               </div>
-              <div className="bg-white p-3 text-center">
+              <div className="bg-card p-3 text-center">
                 <p className="text-[10px] font-medium text-muted-foreground mb-1.5">Your Face</p>
                 <img src={sourcePreview} alt="Source" className="w-full rounded-lg object-cover aspect-[3/4]" />
               </div>
@@ -498,10 +498,10 @@ export default function FaceSwap() {
             )}
 
             {videoError && (
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 text-red-700 text-xs">
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 text-red-400 text-xs">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                 <span className="flex-1">{videoError}</span>
-                <Button size="sm" variant="ghost" onClick={handleQuickPreview} className="text-red-700 h-auto py-1 px-2"><RotateCcw className="h-3 w-3" /></Button>
+                <Button size="sm" variant="ghost" onClick={handleQuickPreview} className="text-red-400 h-auto py-1 px-2"><RotateCcw className="h-3 w-3" /></Button>
               </div>
             )}
 
@@ -510,10 +510,10 @@ export default function FaceSwap() {
               <div className="space-y-4">
                 {/* Tab buttons */}
                 <div className="flex rounded-lg bg-muted p-0.5">
-                  <button onClick={() => setVideoMode("branded")} className={`flex-1 text-xs font-semibold py-2 px-3 rounded-md transition-all ${videoMode === "branded" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                  <button onClick={() => setVideoMode("branded")} className={`flex-1 text-xs font-semibold py-2 px-3 rounded-md transition-all ${videoMode === "branded" ? "bg-secondary shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
                     Branded Video
                   </button>
-                  <button onClick={() => setVideoMode("preview")} className={`flex-1 text-xs font-semibold py-2 px-3 rounded-md transition-all ${videoMode === "preview" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                  <button onClick={() => setVideoMode("preview")} className={`flex-1 text-xs font-semibold py-2 px-3 rounded-md transition-all ${videoMode === "preview" ? "bg-secondary shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
                     Quick Preview
                   </button>
                 </div>
@@ -554,7 +554,7 @@ export default function FaceSwap() {
                         <button
                           key={m.key}
                           onClick={() => setVideoModel(m.key)}
-                          className={`flex-1 text-center py-1.5 px-2 rounded-md transition-all ${videoModel === m.key ? "bg-white shadow-sm" : "hover:bg-white/50"}`}
+                          className={`flex-1 text-center py-1.5 px-2 rounded-md transition-all ${videoModel === m.key ? "bg-secondary shadow-sm" : "hover:bg-card/50"}`}
                           data-testid={`model-${m.key}`}
                         >
                           <span className={`text-[11px] font-semibold block ${videoModel === m.key ? "text-foreground" : "text-muted-foreground"}`}>{m.label}</span>

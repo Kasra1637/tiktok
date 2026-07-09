@@ -122,7 +122,7 @@ export default function NicheFeed() {
       </div>
 
       {/* Filter bar */}
-      <div className="rounded-xl border border-border bg-white/60 p-3 space-y-3">
+      <div className="rounded-xl border border-border bg-card/60 p-3 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
           <form onSubmit={handleSearch} className="flex items-center gap-2 flex-1 min-w-0">
             <div className="relative flex-1">
@@ -132,7 +132,7 @@ export default function NicheFeed() {
                 placeholder="Search by keyword or hashtag..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 rounded-lg bg-white h-9 text-sm"
+                className="pl-9 rounded-lg bg-secondary h-9 text-sm"
                 data-testid="search-input"
               />
             </div>
@@ -155,7 +155,7 @@ export default function NicheFeed() {
             )}
           </form>
 
-          <div className="flex items-center gap-1 rounded-full border border-border p-0.5 bg-white shrink-0" data-testid="mode-toggle">
+          <div className="flex items-center gap-1 rounded-full border border-border p-0.5 bg-secondary shrink-0" data-testid="mode-toggle">
             {MODES.map((m) => (
               <button
                 key={m.key}
@@ -194,7 +194,7 @@ export default function NicheFeed() {
                 className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium border transition-colors hover:-translate-y-[1px] active:translate-y-0 ${
                   isActive
                     ? "bg-[color:var(--brand-teal)] text-white border-transparent"
-                    : "bg-white border-border hover:border-[color:rgba(13,148,136,0.45)]"
+                    : "bg-secondary border-border hover:border-[color:rgba(13,148,136,0.45)]"
                 }`}
               >
                 <Icon className="h-3.5 w-3.5" /> {n.label}

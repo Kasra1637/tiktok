@@ -17,7 +17,7 @@ export function Stepper({ current }) {
                 ? "bg-[color:var(--brand-teal)] text-white"
                 : i === idx
                 ? "bg-[color:var(--brand-coral)] text-white"
-                : "bg-white border border-border text-muted-foreground"
+                : "bg-secondary border border-border text-muted-foreground"
             }`}
             data-testid={`stepper-step-${s.key}`}
           >

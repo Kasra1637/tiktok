@@ -10,7 +10,7 @@ export function EmptyState({ icon: Icon, title, description, action }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.28, ease: "easeOut" }}
     >
-      <Card className="flex flex-col items-center justify-center text-center gap-3 p-10 rounded-2xl border-dashed border-2 border-border bg-white/50">
+      <Card className="flex flex-col items-center justify-center text-center gap-3 p-10 rounded-2xl border-dashed border-2 border-border bg-card/50">
         {Icon && (
           <motion.span
             initial={reduceMotion ? { scale: 1 } : { scale: 0.85 }}

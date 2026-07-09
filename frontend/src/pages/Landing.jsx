@@ -104,7 +104,7 @@ export default function Landing() {
         <h2 className="font-display text-2xl font-bold text-center mb-8">How It Works</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {FLOW_STEPS.map((s) => (
-            <div key={s.step} className="rounded-xl border border-border bg-white/80 p-4 text-center space-y-2">
+            <div key={s.step} className="rounded-xl border border-border bg-card/80 p-4 text-center space-y-2">
               <div className="mx-auto h-9 w-9 rounded-full bg-[color:var(--brand-teal)] text-white flex items-center justify-center font-bold text-sm">
                 {s.step}
               </div>
@@ -121,7 +121,7 @@ export default function Landing() {
         <p className="text-sm text-muted-foreground text-center mb-8">Everything the app does, at a glance.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {FEATURES.map((f) => (
-            <div key={f.title} className="rounded-xl border border-border bg-white/80 p-4 space-y-2.5 hover:border-[color:rgba(99,102,241,0.3)] transition-colors">
+            <div key={f.title} className="rounded-xl border border-border bg-card/80 p-4 space-y-2.5 hover:border-[color:rgba(99,102,241,0.3)] transition-colors">
               <div className="h-8 w-8 rounded-lg bg-[color:rgba(99,102,241,0.08)] flex items-center justify-center">
                 <f.icon className="h-4 w-4 text-[color:var(--brand-teal)]" />
               </div>
@@ -135,7 +135,7 @@ export default function Landing() {
       {/* Pipeline Detail */}
       <section className="relative z-10 max-w-4xl mx-auto px-4 pb-16">
         <h2 className="font-display text-2xl font-bold text-center mb-8">The Pipeline</h2>
-        <div className="rounded-2xl border border-border bg-white/80 p-6 space-y-5">
+        <div className="rounded-2xl border border-border bg-card/80 p-6 space-y-5">
           <div className="space-y-1">
             <h3 className="font-display font-semibold text-sm flex items-center gap-2"><Film className="h-4 w-4 text-[color:var(--brand-teal)]" /> Phase 1: Image (Face Swap)</h3>
             <p className="text-xs text-muted-foreground leading-relaxed pl-6">
@@ -188,7 +188,7 @@ export default function Landing() {
       </section>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-border/50 bg-white/40">
+      <footer className="relative z-10 border-t border-border/50 bg-card/40">
         <div className="max-w-5xl mx-auto px-4 py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span className="flex h-5 w-5 items-center justify-center rounded bg-[color:var(--brand-teal)] text-white">

@@ -33,7 +33,7 @@ export function AppShell({ children }) {
 
   return (
     <div className="relative min-h-screen hero-wash">
-      <header className="sticky top-0 z-20 border-b border-border/60 bg-[color:var(--card)]/80 backdrop-blur-sm">
+      <header className="sticky top-0 z-20 border-b border-border/40 bg-background/90 backdrop-blur-md">
         <div className="max-w-[1400px] mx-auto px-4 md:px-6 lg:px-8 py-2 md:h-14 md:py-0 flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
           <div className="flex items-center justify-between md:justify-start gap-3 md:shrink-0">
             <Link to="/discover" className="flex items-center gap-1.5 shrink-0" data-testid="logo-home-link">
@@ -55,7 +55,7 @@ export function AppShell({ children }) {
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="Paste a TikTok video URL to analyze..."
-                className="bg-white/80 pl-9"
+                className="bg-secondary pl-9"
                 data-testid="tiktok-url-input"
               />
             </div>

@@ -96,7 +96,7 @@ export function RemixChat({
             onClick={() => scrollToBottom()}
             aria-label="Scroll to latest message"
             data-testid="remix-chat-scroll-bottom-button"
-            className="sticky bottom-1 left-1/2 -translate-x-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-white border border-border shadow-[var(--shadow-tight)] hover:-translate-y-0.5 active:translate-y-0 transition-transform"
+            className="sticky bottom-1 left-1/2 -translate-x-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-card border border-border shadow-[var(--shadow-tight)] hover:-translate-y-0.5 active:translate-y-0 transition-transform"
           >
             <ChevronDown className="h-4 w-4 text-muted-foreground" />
           </button>
@@ -109,14 +109,14 @@ export function RemixChat({
         </div>
       )}
 
-      <div className="border-t border-border p-3 md:p-4 space-y-2 bg-white/40">
+      <div className="border-t border-border p-3 md:p-4 space-y-2 bg-card/40">
         <Textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={sending}
-          className="min-h-[64px] max-h-40 resize-none bg-white"
+          className="min-h-[64px] max-h-40 resize-none bg-secondary"
           data-testid="remix-chat-input"
         />
         <div className="flex items-center justify-between">
