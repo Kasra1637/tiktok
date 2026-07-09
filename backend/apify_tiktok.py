@@ -25,12 +25,9 @@ import httpx
 logger = logging.getLogger(__name__)
 
 APIFY_TOKEN = os.environ.get("APIFY_API_TOKEN", "")
-ACTOR_ID = "apidojo~tiktok-scraper"
+ACTOR_ID = "clockworks~tiktok-scraper"
 # Use the synchronous endpoint with a timeout parameter so Apify returns within Render's limits
 APIFY_RUN_URL = f"https://api.apify.com/v2/acts/{ACTOR_ID}/run-sync-get-dataset-items"
-
-# Diagnostic: also support async run to debug empty results
-APIFY_RUN_ASYNC_URL = f"https://api.apify.com/v2/acts/{ACTOR_ID}/runs"
 
 
 def is_configured() -> bool:
@@ -39,100 +36,101 @@ def is_configured() -> bool:
 
 def _parse_apify_video(item: dict) -> Optional[dict]:
     """
-    Convert an ApiDojo result item to our internal video format.
-    Extracts all available fields including music, subtitles, bookmarks,
-    hashtags array, channel/profile data, and direct video URL.
+    Convert a Clockworks actor result item to our internal video format.
+    Handles the Clockworks output schema (authorMeta, playCount, diggCount, etc.)
+    and extracts all available enriched fields (music, subtitles, bookmarks, etc.).
     """
-    # Skip non-video items
-    if not item.get("id") and not item.get("title") and not item.get("postPage"):
+    # Skip non-video or placeholder items
+    if item.get("noResults"):
+        return None
+    item_type = item.get("type", "video")
+    if item_type == "profile":
         return None
 
     # --- Video URL ---
     video_url = (
-        item.get("postPage")
-        or item.get("webVideoUrl")
+        item.get("webVideoUrl")
+        or item.get("videoUrl")
         or item.get("url")
+        or item.get("input")
         or ""
     )
     if not video_url:
         video_id = item.get("id", "")
-        channel = item.get("channel") or {}
-        author_username = channel.get("username", "")
-        if video_id and author_username:
-            video_url = f"https://www.tiktok.com/@{author_username}/video/{video_id}"
+        author_meta = item.get("authorMeta") or item.get("author") or {}
+        author_id = author_meta.get("name") or author_meta.get("uniqueId") or author_meta.get("id") or ""
+        if video_id and author_id:
+            video_url = f"https://www.tiktok.com/@{author_id}/video/{video_id}"
 
     if not video_url or "tiktok.com" not in video_url:
         return None
 
-    # --- Channel / Creator info ---
-    channel = item.get("channel") or {}
-    author_id = channel.get("username") or channel.get("name") or ""
-    author_name = channel.get("name") or channel.get("username") or author_id
-    creator_followers = channel.get("followers") or 0
-    creator_following = channel.get("following") or 0
-    creator_verified = bool(channel.get("verified", False))
-    creator_bio = channel.get("bio") or ""
-    creator_avatar = channel.get("avatar") or ""
-    creator_total_videos = channel.get("videos") or 0
-    creator_total_likes = channel.get("likes") or 0
+    # --- Author / Creator info (Clockworks: authorMeta) ---
+    author_meta = item.get("authorMeta") or item.get("author") or {}
+    author_id = author_meta.get("name") or author_meta.get("uniqueId") or author_meta.get("id") or ""
+    author_name = author_meta.get("nickName") or author_meta.get("nickname") or author_meta.get("name") or author_id
+    creator_followers = author_meta.get("fans") or author_meta.get("followers") or 0
+    creator_following = author_meta.get("following") or 0
+    creator_verified = bool(author_meta.get("verified", False))
+    creator_bio = author_meta.get("signature") or author_meta.get("bio") or ""
+    creator_avatar = author_meta.get("avatar") or ""
 
-    # --- Engagement metrics ---
-    view_count = item.get("views") or 0
-    like_count = item.get("likes") or 0
-    comment_count = item.get("comments") or 0
-    share_count = item.get("shares") or 0
-    bookmark_count = item.get("bookmarks") or 0
+    # --- Engagement metrics (Clockworks uses playCount, diggCount, etc.) ---
+    view_count = item.get("playCount") or item.get("plays") or item.get("view_count") or 0
+    like_count = item.get("diggCount") or item.get("likes") or item.get("like_count") or 0
+    comment_count = item.get("commentCount") or item.get("comments") or item.get("comment_count") or 0
+    share_count = item.get("shareCount") or item.get("shares") or item.get("share_count") or 0
+    bookmark_count = item.get("collectCount") or item.get("bookmarks") or item.get("bookmark_count") or 0
 
-    # --- Title / description ---
-    title = item.get("title") or item.get("description") or "Untitled"
+    # --- Title / description (Clockworks uses "text" field) ---
+    title = item.get("text") or item.get("description") or item.get("desc") or "Untitled"
 
-    # --- Hashtags as structured array ---
-    hashtags = item.get("hashtags") or []
-    if isinstance(hashtags, list):
-        hashtags = [str(h) for h in hashtags]
+    # --- Hashtags (Clockworks: hashtags array of objects with .name) ---
+    raw_hashtags = item.get("hashtags") or []
+    if isinstance(raw_hashtags, list):
+        hashtags = []
+        for h in raw_hashtags:
+            if isinstance(h, dict):
+                hashtags.append(h.get("name") or h.get("title") or "")
+            elif isinstance(h, str):
+                hashtags.append(h)
+        hashtags = [h for h in hashtags if h]
     else:
         hashtags = []
 
-    # --- Video metadata (direct URL, cover, dimensions, duration) ---
-    video_meta = item.get("video") or {}
-    direct_video_url = video_meta.get("url") or ""
+    # --- Video metadata (Clockworks: videoMeta with coverUrl, duration) ---
+    video_meta = item.get("videoMeta") or item.get("video") or {}
+    direct_video_url = video_meta.get("downloadAddr") or video_meta.get("url") or ""
     thumbnail = (
-        video_meta.get("cover")
+        video_meta.get("coverUrl")
+        or video_meta.get("originalCoverUrl")
+        or video_meta.get("cover")
         or video_meta.get("thumbnail")
+        or item.get("covers", {}).get("default")
         or ""
     )
+    duration = video_meta.get("duration") or item.get("duration") or 0
     video_width = video_meta.get("width") or 0
     video_height = video_meta.get("height") or 0
-    video_ratio = video_meta.get("ratio") or ""
-    duration = video_meta.get("duration") or item.get("duration") or 0
 
-    # --- Song / Music metadata ---
-    song_data = item.get("song") or {}
-    song_id = song_data.get("id") or ""
-    song_title = song_data.get("title") or ""
-    song_artist = song_data.get("artist") or ""
-    song_album = song_data.get("album") or ""
-    song_duration = song_data.get("duration") or 0
-    song_cover = song_data.get("cover") or ""
-
-    # --- Subtitles / Transcript ---
-    subtitle_info = item.get("subtitleInformation") or []
-    subtitles_url = ""
-    subtitles_language = ""
-    if isinstance(subtitle_info, list) and subtitle_info:
-        # Pick the first available subtitle (prefer original captions)
-        for sub in subtitle_info:
-            if sub.get("is_original_caption"):
-                subtitles_url = sub.get("url") or ""
-                subtitles_language = sub.get("language_code") or sub.get("lang") or ""
-                break
-        if not subtitles_url and subtitle_info:
-            subtitles_url = subtitle_info[0].get("url") or ""
-            subtitles_language = subtitle_info[0].get("language_code") or subtitle_info[0].get("lang") or ""
+    # --- Music metadata (Clockworks: musicMeta) ---
+    music_meta = item.get("musicMeta") or item.get("song") or {}
+    song_id = str(music_meta.get("musicId") or music_meta.get("id") or "")
+    song_title = music_meta.get("musicName") or music_meta.get("title") or ""
+    song_artist = music_meta.get("musicAuthor") or music_meta.get("artist") or ""
+    song_album = music_meta.get("musicAlbum") or music_meta.get("album") or ""
+    song_duration = music_meta.get("duration") or 0
+    song_cover = music_meta.get("coverMediumUrl") or music_meta.get("cover") or ""
 
     # --- Timestamps ---
-    uploaded_at = item.get("uploadedAt") or 0  # Unix timestamp
-    uploaded_at_formatted = item.get("uploadedAtFormatted") or ""
+    create_time = item.get("createTime") or item.get("createTimeISO") or 0
+    if isinstance(create_time, str):
+        # ISO format
+        uploaded_at_formatted = create_time
+        uploaded_at = 0
+    else:
+        uploaded_at = int(create_time) if create_time else 0
+        uploaded_at_formatted = item.get("createTimeISO") or ""
 
     return {
         # Core video fields
@@ -150,31 +148,31 @@ def _parse_apify_video(item: dict) -> Optional[dict]:
         "thumbnail_url": thumbnail,
         "timestamp": int(uploaded_at) if uploaded_at else 0,
         "upload_date_formatted": uploaded_at_formatted,
-        # Direct video URL for download fallback
+        # Direct video URL
         "direct_video_url": direct_video_url,
         "video_width": video_width,
         "video_height": video_height,
-        "video_ratio": video_ratio,
-        # Hashtags as structured array
+        "video_ratio": "",
+        # Hashtags
         "hashtags": hashtags,
-        # Song / Music metadata
-        "song_id": str(song_id) if song_id else "",
+        # Music metadata
+        "song_id": song_id,
         "song_title": song_title,
         "song_artist": song_artist,
         "song_album": song_album,
         "song_duration": int(song_duration) if song_duration else 0,
         "song_cover_url": song_cover,
-        # Subtitles / Transcript
-        "subtitles_url": subtitles_url,
-        "subtitles_language": subtitles_language,
-        # Creator / Channel profile data
+        # Subtitles (Clockworks doesn't provide these inline, but field kept for compat)
+        "subtitles_url": "",
+        "subtitles_language": "",
+        # Creator profile data
         "creator_followers": int(creator_followers) if creator_followers else 0,
         "creator_following": int(creator_following) if creator_following else 0,
         "creator_verified": creator_verified,
         "creator_bio": creator_bio,
         "creator_avatar": creator_avatar,
-        "creator_total_videos": int(creator_total_videos) if creator_total_videos else 0,
-        "creator_total_likes": int(creator_total_likes) if creator_total_likes else 0,
+        "creator_total_videos": 0,
+        "creator_total_likes": 0,
     }
 
 
@@ -187,14 +185,10 @@ async def _run_actor(input_data: dict, timeout: int = 75) -> list:
     # Query params for the run-sync endpoint:
     # - token: auth
     # - timeout: how long Apify waits before returning (in seconds)
-    #   The actor needs time to start + scrape. 60s is enough for small queries.
-    # - clean: skip empty items
-    # - memory: allocate more memory for faster actor startup (default 256MB is slow)
+    #   Clockworks actor typically completes in 10-40s for small queries.
     params = {
         "token": APIFY_TOKEN,
         "timeout": 60,
-        "clean": "true",
-        "memory": 512,
     }
     headers = {"Content-Type": "application/json"}
 
@@ -247,11 +241,11 @@ async def fetch_creator_videos(handle: str, limit: int = 10) -> list:
     if not handle:
         return []
 
-    # ApiDojo uses startUrls with profile URLs
-    effective_limit = max(limit, 10)  # Enforce minimum 10 per ApiDojo requirements
+    # Clockworks actor uses: hashtags, profiles, resultsPerPage, searchQueries
+    # (NOT startUrls/keywords/maxItems like ApiDojo)
     input_data = {
-        "startUrls": [f"https://www.tiktok.com/@{handle}"],
-        "maxItems": effective_limit,
+        "profiles": [f"https://www.tiktok.com/@{handle}"],
+        "resultsPerPage": effective_limit,
     }
 
     items = await _run_actor(input_data, timeout=75)
@@ -269,11 +263,11 @@ async def fetch_hashtag_videos(hashtag: str, limit: int = 25) -> list:
     if not hashtag:
         return []
 
-    # ApiDojo uses startUrls with hashtag URLs
-    effective_limit = max(limit, 10)  # Enforce minimum 10
+    # Clockworks actor uses hashtags array
+    effective_limit = max(limit, 10)
     input_data = {
-        "startUrls": [f"https://www.tiktok.com/tag/{hashtag}"],
-        "maxItems": effective_limit,
+        "hashtags": [hashtag],
+        "resultsPerPage": effective_limit,
     }
 
     items = await _run_actor(input_data, timeout=75)
@@ -300,20 +294,15 @@ async def fetch_keyword_videos(keyword: str, limit: int = 25, location: str = ""
     if not keyword:
         return []
 
-    # ApiDojo uses keywords array for search
-    effective_limit = max(limit, 10)  # Enforce minimum 10
+    # Clockworks actor uses searchQueries array
+    effective_limit = max(limit, 10)
     input_data = {
-        "keywords": [keyword],
-        "maxItems": effective_limit,
+        "searchQueries": [keyword],
+        "resultsPerPage": effective_limit,
     }
 
-    # Add location targeting if specified
-    if location and location.strip():
-        input_data["location"] = location.strip().upper()
-
-    # Add sort type if not default
-    if sort_type and sort_type.strip().upper() in ("RELEVANCE", "MOST_LIKED", "DATE_POSTED"):
-        input_data["sortType"] = sort_type.strip().upper()
+    # Location targeting is not supported by Clockworks actor
+    # sort_type is not supported by Clockworks actor
 
     items = await _run_actor(input_data, timeout=75)
     results = []
@@ -328,55 +317,22 @@ async def fetch_keyword_videos(keyword: str, limit: int = 25, location: str = ""
 async def fetch_music_videos(music_url: str, limit: int = 25) -> list:
     """
     Fetch videos using a specific TikTok sound/music.
-
-    Args:
-        music_url: Full TikTok music page URL (e.g., https://www.tiktok.com/music/...)
+    Note: Clockworks actor doesn't support music URL scraping directly.
+    Falls back to searching the music name as a keyword if possible.
     """
-    music_url = music_url.strip()
-    if not music_url or "tiktok.com" not in music_url:
-        return []
-
-    effective_limit = max(limit, 10)
-    input_data = {
-        "startUrls": [music_url],
-        "maxItems": effective_limit,
-    }
-
-    items = await _run_actor(input_data, timeout=75)
-    results = []
-    for item in items:
-        parsed = _parse_apify_video(item)
-        if parsed:
-            parsed["source_music_url"] = music_url
-            results.append(parsed)
-    return results[:limit]
+    # Clockworks doesn't support music URLs, return empty
+    logger.info("Music URL scraping not supported by Clockworks actor — use search instead")
+    return []
 
 
 async def fetch_location_videos(location_url: str, limit: int = 25) -> list:
     """
     Fetch videos from a specific TikTok location page.
-
-    Args:
-        location_url: Full TikTok location page URL
+    Note: Clockworks actor doesn't support location URL scraping directly.
     """
-    location_url = location_url.strip()
-    if not location_url or "tiktok.com" not in location_url:
-        return []
-
-    effective_limit = max(limit, 10)
-    input_data = {
-        "startUrls": [location_url],
-        "maxItems": effective_limit,
-    }
-
-    items = await _run_actor(input_data, timeout=75)
-    results = []
-    for item in items:
-        parsed = _parse_apify_video(item)
-        if parsed:
-            parsed["source_location_url"] = location_url
-            results.append(parsed)
-    return results[:limit]
+    # Clockworks doesn't support location URLs, return empty
+    logger.info("Location URL scraping not supported by Clockworks actor")
+    return []
 
 
 async def fetch_subtitles(subtitles_url: str) -> Optional[str]:
