@@ -87,7 +87,7 @@ export default function Landing() {
         </p>
         <div className="mt-8 flex items-center justify-center gap-3">
           <Link to="/discover">
-            <Button size="lg" className="gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white px-8 py-5 text-sm font-semibold shadow-md">
+            <Button size="lg" className="gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#e0264c] text-white px-8 py-5 text-sm font-semibold shadow-md">
               <Sparkles className="h-4 w-4" /> Enter App
             </Button>
           </Link>
@@ -181,7 +181,7 @@ export default function Landing() {
       {/* CTA */}
       <section className="relative z-10 max-w-4xl mx-auto px-4 pb-12 text-center">
         <Link to="/discover">
-          <Button size="lg" className="gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white px-10 py-5 text-base font-semibold shadow-lg">
+          <Button size="lg" className="gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#e0264c] text-white px-10 py-5 text-base font-semibold shadow-lg">
             <Sparkles className="h-5 w-5" /> Enter App
           </Button>
         </Link>

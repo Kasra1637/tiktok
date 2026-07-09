@@ -412,7 +412,7 @@ export default function FaceSwap() {
                   <GenerationProgress stages={["Analyzing faces", "Matching lighting", "Generating swap", "Final blending"]} active={true} />
                 </Card>
               ) : (
-                <Button onClick={handleGenerate} size="lg" className="gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white px-8 py-5 text-sm font-semibold shadow-md" data-testid="generate-swap-button">
+                <Button onClick={handleGenerate} size="lg" className="gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#e0264c] text-white px-8 py-5 text-sm font-semibold shadow-md" data-testid="generate-swap-button">
                   <Sparkles className="h-4 w-4" /> Generate Face Swap
                 </Button>
               )}
@@ -575,11 +575,11 @@ export default function FaceSwap() {
                         <span className="text-xs">Writing your branded prompt...</span>
                       </div>
                     ) : !brandedPrompt ? (
-                      <Button onClick={handleGenerateBrandedPrompt} disabled={generatingBrandedPrompt} className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white" data-testid="generate-branded-prompt-button">
+                      <Button onClick={handleGenerateBrandedPrompt} disabled={generatingBrandedPrompt} className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#e0264c] text-white" data-testid="generate-branded-prompt-button">
                         <Wand2 className="h-4 w-4" /> Write Video Prompt
                       </Button>
                     ) : (
-                      <Button onClick={handleGenerateBrandedVideo} disabled={generatingVideo} className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white" data-testid="generate-branded-video-button">
+                      <Button onClick={handleGenerateBrandedVideo} disabled={generatingVideo} className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#e0264c] text-white" data-testid="generate-branded-video-button">
                         <Clapperboard className="h-4 w-4" /> Generate {brandedDuration}s Video
                       </Button>
                     )}

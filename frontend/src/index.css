@@ -50,8 +50,9 @@ code, .font-mono {
 
         --brand-teal: #818CF8;
         --brand-teal-dark: #6366F1;
-        --brand-coral: #FB7185;
+        --brand-coral: #FE2C55;
         --brand-mint: rgba(129, 140, 248, 0.12);
+        --brand-red: #FE2C55;
         --shadow-soft: 0 10px 40px rgba(0, 0, 0, 0.35);
         --shadow-tight: 0 4px 20px rgba(0, 0, 0, 0.4);
         --noise-opacity: 0.03;
@@ -79,7 +80,7 @@ code, .font-mono {
 
 .hero-wash {
     background: radial-gradient(1000px circle at 25% 5%, rgba(129,140,248,0.08), transparent 50%),
-                radial-gradient(800px circle at 75% 0%, rgba(251,113,133,0.06), transparent 45%),
+                radial-gradient(800px circle at 75% 0%, rgba(254,44,85,0.06), transparent 45%),
                 linear-gradient(180deg, hsl(228, 14%, 7%) 0%, hsl(228, 14%, 8%) 100%);
 }
 
@@ -108,7 +109,7 @@ code, .font-mono {
 
 /* Selection highlight */
 ::selection {
-    background: rgba(129, 140, 248, 0.3);
+    background: rgba(254, 44, 85, 0.25);
     color: white;
 }
 

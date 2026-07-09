@@ -154,7 +154,7 @@ export default function AnalysisDetail() {
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">Effectiveness Score</span>
                 <Badge
-                  className="rounded-full px-2.5 py-1 text-xs font-semibold bg-[color:rgba(244,63,94,0.15)] text-[color:#9F1239] border-none"
+                  className="rounded-full px-2.5 py-1 text-xs font-semibold bg-[color:var(--brand-coral)]/15 text-[color:var(--brand-coral)] border-none"
                   data-testid="effectiveness-score-badge"
                 >
                   {analysis.effectiveness_score}/10
@@ -170,7 +170,7 @@ export default function AnalysisDetail() {
                   navigate(`/face-swap?target=${encodeURIComponent(frame.media_url)}&videoId=${videoId}&frame=${selectedFrame}`);
                 }
               }}
-              className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white"
+              className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#e0264c] text-white"
               data-testid="face-swap-hook-button"
             >
               <Repeat2 className="h-4 w-4" /> Face Swap

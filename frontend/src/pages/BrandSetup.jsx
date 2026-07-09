@@ -156,7 +156,7 @@ export default function BrandSetup() {
         <Button
           type="submit"
           disabled={analyzing}
-          className="gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#E11D48] text-white shrink-0"
+          className="gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#e0264c] text-white shrink-0"
           data-testid="analyze-brand-url-button"
         >
           {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}

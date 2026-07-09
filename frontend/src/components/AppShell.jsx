@@ -63,7 +63,7 @@ export function AppShell({ children }) {
               type="submit"
               disabled={loading}
               data-testid="tiktok-url-submit-button"
-              className="shrink-0 bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white"
+              className="shrink-0 bg-[color:var(--brand-coral)] hover:bg-[#e0264c] text-white"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Analyze"}
             </Button>

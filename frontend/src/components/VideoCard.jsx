@@ -16,7 +16,7 @@ function formatCount(n) {
 function getViralityStyle(score) {
   if (score >= 70) return "bg-[color:var(--brand-coral)] text-white";
   if (score >= 40) return "bg-[color:var(--brand-teal)] text-white";
-  return "bg-gray-500/80 text-white";
+  return "bg-secondary text-muted-foreground";
 }
 
 function proxyThumb(url) {
@@ -99,7 +99,7 @@ export function VideoCard({ video, onAnalyze, analyzing, index = 0 }) {
         <Button
           onClick={() => onAnalyze(video)}
           disabled={analyzing}
-          className="w-full bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white gap-2"
+          className="w-full bg-[color:var(--brand-coral)] hover:bg-[#e0264c] text-white gap-2"
           data-testid="analyze-hook-button"
         >
           <Sparkles className={`h-4 w-4 ${analyzing ? "animate-pulse" : ""}`} /> {analyzing ? "Analyzing..." : "Analyze Hook"}
