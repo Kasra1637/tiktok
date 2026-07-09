@@ -341,10 +341,15 @@ async def generate_face_swap(
     raise RuntimeError("No image returned from face swap model.")
 
 
-async def generate_video_prompt(analysis: dict, brand_context: dict, target_duration: int, session_id: str, music_context: dict = None, transcript_text: str = "") -> dict:
+async def generate_video_prompt(analysis: dict, brand_context: dict, target_duration: int, session_id: str, music_context: dict = None, transcript_text: str = "", use_original_sound: bool = False) -> dict:
     """Auto-generate a production-ready video prompt from hook analysis + brand context.
     
     Enhanced with actual music/audio context and transcript when available.
+
+    Args:
+        use_original_sound: If True and music_context has a song, instructs the model to
+            write the prompt assuming the ORIGINAL sound/music will be reused verbatim
+            (e.g. lean on visuals/captions instead of new spoken dialogue that would clash).
     """
     system_message = (
         "You are an expert short-form video creative director who writes precise, production-ready prompts for "
@@ -354,6 +359,8 @@ async def generate_video_prompt(analysis: dict, brand_context: dict, target_dura
 
     # Build audio context from actual data
     audio_context_parts = []
+    song_title = ""
+    song_artist = ""
     if music_context:
         song_title = music_context.get("song_title") or ""
         song_artist = music_context.get("song_artist") or ""
@@ -362,6 +369,22 @@ async def generate_video_prompt(analysis: dict, brand_context: dict, target_dura
     if transcript_text:
         audio_context_parts.append(f"Original transcript: \"{transcript_text[:500]}\"")
     audio_context_str = "; ".join(audio_context_parts) if audio_context_parts else "(not available)"
+
+    sound_instruction = ""
+    has_sound_to_reuse = use_original_sound and (song_title or song_artist)
+    if has_sound_to_reuse:
+        sound_instruction = (
+            f"\n\nIMPORTANT: The user wants to REUSE the exact original sound/music (\"{song_title}\" by "
+            f"{song_artist}) in their remixed video instead of a new voiceover or different track. Write the "
+            "video prompt assuming this original audio track will play underneath — favor visual storytelling, "
+            "on-screen text captions, and movement/lip-sync timed to the original sound rather than describing "
+            "new spoken dialogue that would conflict with it. Do not suggest a different sound."
+        )
+    elif use_original_sound:
+        sound_instruction = (
+            "\n\nNote: The user asked to reuse the original sound, but no sound metadata is available for "
+            "this video — proceed as normal without an explicit audio plan."
+        )
 
     prompt = (
         "Hook analysis of the original viral video's first 2-3 seconds:\n"
@@ -372,7 +395,8 @@ async def generate_video_prompt(analysis: dict, brand_context: dict, target_dura
         f"- Audio cues (inferred): {analysis.get('audio_cues_inferred')}\n"
         f"- Hook summary: {analysis.get('hook_summary')}\n"
         f"- Replicable mechanics: {analysis.get('replicable_mechanics')}\n\n"
-        f"Actual audio/music context: {audio_context_str}\n\n"
+        f"Actual audio/music context: {audio_context_str}\n"
+        f"{sound_instruction}\n\n"
         "Brand context:\n"
         f"- Brand name: {brand_context.get('brand_name') or '(not provided)'}\n"
         f"- Brand goal: {brand_context.get('brand_goal') or '(not provided)'}\n"
@@ -386,6 +410,7 @@ async def generate_video_prompt(analysis: dict, brand_context: dict, target_dura
         '  "character_behavior": "how the character behaves/moves",\n'
         '  "scene_details": "environment/background/lighting/props",\n'
         '  "brand_narrative": "how the video ties into the brand",\n'
+        '  "audio_recommendation": "the audio/sound approach for this video",\n'
         '  "full_video_prompt": "cohesive production-ready prompt (150-300 words)",\n'
         '  "suggested_duration_seconds": integer up to ' + str(target_duration) + "\n"
         "}\n"
@@ -422,6 +447,11 @@ async def generate_video_prompt(analysis: dict, brand_context: dict, target_dura
     missing = REQUIRED_VIDEO_PROMPT_KEYS - set(result.keys())
     if missing:
         raise RuntimeError(f"Video prompt generation missing required fields: {missing}")
+
+    # Deterministic safety net: guarantee the audio plan reflects the user's choice
+    # regardless of what the model produced, so the UI can trust this field.
+    if has_sound_to_reuse:
+        result["audio_recommendation"] = f'Keep the original sound: "{song_title}" by {song_artist}'
 
     return result
 
@@ -543,7 +573,7 @@ async def analyze_brand_from_text(url: str, page_text: str) -> dict:
     return result
 
 
-async def generate_remix_script(analysis: dict, brand_profile: dict, target_duration: int, session_id: str, music_context: dict = None, transcript_text: str = "", hashtags: list = None) -> dict:
+async def generate_remix_script(analysis: dict, brand_profile: dict, target_duration: int, session_id: str, music_context: dict = None, transcript_text: str = "", hashtags: list = None, use_original_sound: bool = False) -> dict:
     """
     Auto-generate a production-ready video prompt ("Content Remixer") from hook analysis +
     a structured brand profile (niche, products/services, target audience, tone/voice).
@@ -552,6 +582,10 @@ async def generate_remix_script(analysis: dict, brand_profile: dict, target_dura
 
     Enhanced with actual music/audio context, transcript, and hashtag data when available
     from the ApiDojo scraper for more accurate remix scripts.
+
+    Args:
+        use_original_sound: If True and music_context has a song, the remix script is written
+            to explicitly reuse that exact sound rather than suggesting a new one.
     """
     system_message = (
         "You are an expert short-form video creative director and brand scriptwriter. You take the "
@@ -569,6 +603,8 @@ async def generate_remix_script(analysis: dict, brand_profile: dict, target_dura
 
     # Build enhanced audio/music context
     audio_context_parts = []
+    song_title = ""
+    song_artist = ""
     if music_context:
         song_title = music_context.get("song_title") or ""
         song_artist = music_context.get("song_artist") or ""
@@ -587,6 +623,22 @@ async def generate_remix_script(analysis: dict, brand_profile: dict, target_dura
     if hashtags and isinstance(hashtags, list) and len(hashtags) > 0:
         hashtags_str = f"Original video hashtags: #{', #'.join(hashtags[:10])}"
 
+    has_sound_to_reuse = use_original_sound and (song_title or song_artist)
+    sound_instruction = ""
+    if has_sound_to_reuse:
+        sound_instruction = (
+            f"\n\nIMPORTANT: The user explicitly wants to REUSE the exact original sound/music "
+            f"(\"{song_title}\" by {song_artist}) in the remixed video rather than a new voiceover or "
+            "different track. Set audio_recommendation to keeping this exact original sound, and write "
+            "the script to lean on visuals, on-screen text/captions, and movement/lip-sync timed to that "
+            "original audio instead of new spoken dialogue that would clash with it."
+        )
+    elif use_original_sound:
+        sound_instruction = (
+            "\n\nNote: The user asked to reuse the original sound, but no sound metadata is available "
+            "for this video — proceed with your best audio recommendation as normal."
+        )
+
     prompt = (
         "Hook analysis of the original viral video's first 2-3 seconds:\n"
         f"- Facial expressions: {analysis.get('facial_expressions')}\n"
@@ -598,7 +650,8 @@ async def generate_remix_script(analysis: dict, brand_profile: dict, target_dura
         f"- Replicable mechanics: {analysis.get('replicable_mechanics')}\n\n"
         "Audio & music context from the original video:\n"
         f"{audio_context_str}\n"
-        f"{hashtags_str}\n\n"
+        f"{hashtags_str}\n"
+        f"{sound_instruction}\n\n"
         "Brand profile to remix this hook for:\n"
         f"- Brand name: {brand_profile.get('brand_name') or '(not provided)'}\n"
         f"- Brand description: {brand_profile.get('brand_description') or '(not provided)'}\n"
@@ -663,6 +716,11 @@ async def generate_remix_script(analysis: dict, brand_profile: dict, target_dura
     missing = REQUIRED_VIDEO_PROMPT_KEYS - set(result.keys())
     if missing:
         raise RuntimeError(f"Remix script generation missing required fields: {missing}")
+
+    # Deterministic safety net: guarantee the audio plan reflects the user's choice
+    # regardless of what the model produced, so the UI can trust this field.
+    if has_sound_to_reuse:
+        result["audio_recommendation"] = f'Keep the original sound: "{song_title}" by {song_artist}'
 
     return result
 

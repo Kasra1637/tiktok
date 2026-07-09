@@ -14,7 +14,7 @@ def row_to_dict(row, columns: list) -> dict:
     JSON_FIELDS = {
         "frames", "generation_spec", "generated_images", "prompt_breakdown",
         "reference_image_ids", "selected_image_ids", "replicable_mechanics",
-        "products_services", "messages", "brief", "hashtags",
+        "products_services", "messages", "brief", "hashtags", "sound_reference",
     }
     d = {}
     for i, col in enumerate(columns):
@@ -59,6 +59,7 @@ class BrandContextRequest(BaseModel):
     brand_goal: str = ""
     brand_details: str = ""
     duration_seconds: int = 30
+    use_original_sound: bool = False
 
 
 class GenerateVideoRequest(BaseModel):
@@ -86,6 +87,7 @@ class BrandProfileUpdateRequest(BaseModel):
 
 class GenerateRemixScriptRequest(BaseModel):
     duration_seconds: int = 30
+    use_original_sound: bool = False
 
 
 class RemixChatMessageRequest(BaseModel):

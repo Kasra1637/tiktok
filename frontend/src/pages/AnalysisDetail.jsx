@@ -9,7 +9,7 @@ import Filmstrip from "../components/Filmstrip";
 import HookBreakdown from "../components/HookBreakdown";
 import GenerationProgress from "../components/GenerationProgress";
 import { api, getErrorMessage } from "../lib/api";
-import { ArrowLeft, Eye, Heart, MessageCircle, AlertTriangle, RotateCcw, ExternalLink, Repeat2 } from "lucide-react";
+import { ArrowLeft, Eye, Heart, MessageCircle, AlertTriangle, RotateCcw, ExternalLink, Repeat2, Music2 } from "lucide-react";
 
 const ANALYZE_STAGES = ["Downloading video", "Extracting first 2-3 seconds", "Analyzing hook mechanics with AI"];
 
@@ -149,6 +149,23 @@ export default function AnalysisDetail() {
           >
             View on TikTok <ExternalLink className="h-3.5 w-3.5" />
           </a>
+          {(video.song_title || video.song_artist) && (
+            <div
+              className="flex items-center gap-2 rounded-xl border border-border bg-secondary/60 px-3 py-2"
+              data-testid="original-sound-card"
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[color:rgba(13,148,136,0.12)] text-[color:var(--brand-teal)] shrink-0">
+                <Music2 className="h-3.5 w-3.5" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Original sound</p>
+                <p className="text-sm font-medium truncate">
+                  {video.song_title || "Untitled sound"}
+                  {video.song_artist ? ` — ${video.song_artist}` : ""}
+                </p>
+              </div>
+            </div>
+          )}
           {analysis && (
             <div className="pt-2 border-t border-border">
               <div className="flex items-center justify-between">

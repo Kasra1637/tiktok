@@ -4,7 +4,7 @@ import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { AspectRatio } from "./ui/aspect-ratio";
 import { Button } from "./ui/button";
-import { Eye, Heart, MessageCircle, Sparkles, Flame, ExternalLink } from "lucide-react";
+import { Eye, Heart, MessageCircle, Sparkles, Flame, ExternalLink, Music2 } from "lucide-react";
 
 function formatCount(n) {
   if (!n) return "0";
@@ -109,6 +109,19 @@ export function VideoCard({ video, onAnalyze, analyzing, index = 0 }) {
       <div className="p-4 space-y-2">
         <p className="text-sm font-medium leading-snug line-clamp-2 min-h-[2.5rem]">{video.title}</p>
         <p className="text-xs text-muted-foreground">@{video.creator}</p>
+        {(video.song_title || video.song_artist) && (
+          <div
+            className="flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground max-w-full"
+            data-testid="video-card-sound-badge"
+            title={`${video.song_title || "Original sound"}${video.song_artist ? ` — ${video.song_artist}` : ""}`}
+          >
+            <Music2 className="h-3 w-3 shrink-0 text-[color:var(--brand-teal)]" />
+            <span className="truncate">
+              {video.song_title || "Original sound"}
+              {video.song_artist ? ` · ${video.song_artist}` : ""}
+            </span>
+          </div>
+        )}
         <Button
           onClick={() => onAnalyze(video)}
           disabled={analyzing}
