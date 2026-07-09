@@ -28,7 +28,7 @@ from ai_service import (
 from models import (
     IngestVideoRequest, BrandContextRequest, GenerateVideoRequest,
     AnalyzeBrandUrlRequest, BrandProfileUpdateRequest, GenerateRemixScriptRequest,
-    RemixChatMessageRequest, now_iso, row_to_dict,
+    RemixChatMessageRequest, TrendingSearchRequest, MusicSearchRequest, now_iso, row_to_dict,
 )
 from niches_config import NICHES, NICHE_MAP
 
@@ -88,8 +88,25 @@ async def init_db():
                 view_count INTEGER DEFAULT 0,
                 like_count INTEGER DEFAULT 0,
                 comment_count INTEGER DEFAULT 0,
+                share_count INTEGER DEFAULT 0,
+                bookmark_count INTEGER DEFAULT 0,
                 duration REAL DEFAULT 0,
                 thumbnail_url TEXT,
+                direct_video_url TEXT,
+                hashtags TEXT,
+                song_id TEXT,
+                song_title TEXT,
+                song_artist TEXT,
+                song_album TEXT,
+                song_duration INTEGER DEFAULT 0,
+                song_cover_url TEXT,
+                subtitles_url TEXT,
+                subtitles_language TEXT,
+                creator_followers INTEGER DEFAULT 0,
+                creator_following INTEGER DEFAULT 0,
+                creator_verified INTEGER DEFAULT 0,
+                creator_bio TEXT,
+                creator_avatar TEXT,
                 status TEXT DEFAULT 'metadata_ready',
                 local_video_path TEXT,
                 last_analysis_id TEXT,
@@ -107,8 +124,19 @@ async def init_db():
                 view_count INTEGER DEFAULT 0,
                 like_count INTEGER DEFAULT 0,
                 comment_count INTEGER DEFAULT 0,
+                share_count INTEGER DEFAULT 0,
+                bookmark_count INTEGER DEFAULT 0,
                 duration REAL DEFAULT 0,
                 thumbnail_url TEXT,
+                direct_video_url TEXT,
+                hashtags TEXT,
+                song_id TEXT,
+                song_title TEXT,
+                song_artist TEXT,
+                song_cover_url TEXT,
+                subtitles_url TEXT,
+                creator_followers INTEGER DEFAULT 0,
+                creator_verified INTEGER DEFAULT 0,
                 virality_score REAL DEFAULT 0,
                 cached_at TEXT
             );
@@ -184,8 +212,19 @@ async def init_db():
                 view_count INTEGER DEFAULT 0,
                 like_count INTEGER DEFAULT 0,
                 comment_count INTEGER DEFAULT 0,
+                share_count INTEGER DEFAULT 0,
+                bookmark_count INTEGER DEFAULT 0,
                 duration REAL DEFAULT 0,
                 thumbnail_url TEXT,
+                direct_video_url TEXT,
+                hashtags TEXT,
+                song_id TEXT,
+                song_title TEXT,
+                song_artist TEXT,
+                song_cover_url TEXT,
+                subtitles_url TEXT,
+                creator_followers INTEGER DEFAULT 0,
+                creator_verified INTEGER DEFAULT 0,
                 virality_score REAL DEFAULT 0,
                 cached_at TEXT
             );
@@ -316,14 +355,25 @@ async def _refresh_trending_cache(niche_key: str, force: bool = False):
                 await conn.execute(
                     """INSERT INTO trending_videos
                        (niche, tiktok_url, video_platform_id, creator, creator_display,
-                        title, view_count, like_count, comment_count, duration,
-                        thumbnail_url, virality_score, cached_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        title, view_count, like_count, comment_count, share_count,
+                        bookmark_count, duration, thumbnail_url, direct_video_url,
+                        hashtags, song_id, song_title, song_artist, song_cover_url,
+                        subtitles_url, creator_followers, creator_verified,
+                        virality_score, cached_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (niche_key, v.get("tiktok_url"), v.get("video_platform_id"),
                      v.get("creator"), v.get("creator_display"), v.get("title"),
                      v.get("view_count", 0), v.get("like_count", 0),
-                     v.get("comment_count", 0), v.get("duration", 0),
-                     v.get("thumbnail_url"), v.get("virality_score", 0), now_iso()),
+                     v.get("comment_count", 0), v.get("share_count", 0),
+                     v.get("bookmark_count", 0), v.get("duration", 0),
+                     v.get("thumbnail_url"), v.get("direct_video_url", ""),
+                     json.dumps(v.get("hashtags", [])),
+                     v.get("song_id", ""), v.get("song_title", ""),
+                     v.get("song_artist", ""), v.get("song_cover_url", ""),
+                     v.get("subtitles_url", ""),
+                     v.get("creator_followers", 0),
+                     1 if v.get("creator_verified") else 0,
+                     v.get("virality_score", 0), now_iso()),
                 )
             await conn.execute(
                 "INSERT OR REPLACE INTO trending_cache_meta (niche, cached_at) VALUES (?, ?)",
@@ -479,13 +529,24 @@ async def get_niche_videos(niche_key: str, refresh: bool = False, mode: str = "c
                             """INSERT OR REPLACE INTO curated_videos
                                (tiktok_url, niche, video_platform_id, creator,
                                 creator_display, title, view_count, like_count,
-                                comment_count, duration, thumbnail_url, cached_at)
-                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                comment_count, share_count, bookmark_count, duration,
+                                thumbnail_url, direct_video_url, hashtags,
+                                song_id, song_title, song_artist, song_cover_url,
+                                subtitles_url, creator_followers, creator_verified, cached_at)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                             (v["tiktok_url"], niche_key, v.get("video_platform_id"),
                              v.get("creator"), v.get("creator_display"), v.get("title"),
                              v.get("view_count", 0), v.get("like_count", 0),
-                             v.get("comment_count", 0), v.get("duration", 0),
-                             v.get("thumbnail_url"), now_iso()),
+                             v.get("comment_count", 0), v.get("share_count", 0),
+                             v.get("bookmark_count", 0), v.get("duration", 0),
+                             v.get("thumbnail_url"), v.get("direct_video_url", ""),
+                             json.dumps(v.get("hashtags", [])),
+                             v.get("song_id", ""), v.get("song_title", ""),
+                             v.get("song_artist", ""), v.get("song_cover_url", ""),
+                             v.get("subtitles_url", ""),
+                             v.get("creator_followers", 0),
+                             1 if v.get("creator_verified") else 0,
+                             now_iso()),
                         )
                         await conn.commit()
             if fetched_any or not cache_meta:
@@ -546,7 +607,12 @@ async def get_niche_trending(niche_key: str, refresh: bool = False):
 
 
 @api_router.get("/trending/search")
-async def trending_search(q: str = "", limit: int = 20):
+async def trending_search(q: str = "", limit: int = 20, location: str = "", sort_type: str = "RELEVANCE"):
+    """Search TikTok for trending videos matching a keyword.
+    
+    Supports location targeting via ISO 3166-1 alpha-2 country codes (e.g., US, GB, DE)
+    and sort order (RELEVANCE, MOST_LIKED, DATE_POSTED).
+    """
     q = q.strip()
     if not q:
         raise HTTPException(status_code=400, detail="Query parameter 'q' is required")
@@ -557,7 +623,60 @@ async def trending_search(q: str = "", limit: int = 20):
         )
     limit = max(1, min(50, limit))
     async with _ytdlp_semaphore:
-        videos = await viral_detection.fetch_keyword_videos(q, limit=limit)
+        videos = await viral_detection.fetch_keyword_videos(
+            q, limit=limit, location=location.strip(), sort_type=sort_type.strip()
+        )
+    ranked = viral_detection.rank_videos(videos)
+    return ranked
+
+
+# ---------------------------------------------------------------------------
+# Music-based and location-based video discovery
+# ---------------------------------------------------------------------------
+@api_router.get("/trending/music")
+async def trending_music_search(music_url: str = "", limit: int = 25):
+    """Fetch videos using a specific TikTok sound/music URL.
+    
+    Provide a full TikTok music page URL (e.g., https://www.tiktok.com/music/...).
+    Returns videos ranked by virality score that use this sound.
+    """
+    music_url = music_url.strip()
+    if not music_url:
+        raise HTTPException(status_code=400, detail="Query parameter 'music_url' is required")
+    if "tiktok.com" not in music_url:
+        raise HTTPException(status_code=400, detail="Please provide a valid TikTok music URL")
+    limit = max(1, min(50, limit))
+
+    import apify_tiktok
+    if not apify_tiktok.is_configured():
+        raise HTTPException(status_code=503, detail="Apify is not configured. Set APIFY_API_TOKEN to use music search.")
+
+    async with _ytdlp_semaphore:
+        videos = await viral_detection.fetch_music_videos(music_url, limit=limit)
+    ranked = viral_detection.rank_videos(videos)
+    return ranked
+
+
+@api_router.get("/trending/location")
+async def trending_location_search(location_url: str = "", limit: int = 25):
+    """Fetch videos from a specific TikTok location page.
+    
+    Provide a full TikTok location URL.
+    Returns videos ranked by virality score from that location.
+    """
+    location_url = location_url.strip()
+    if not location_url:
+        raise HTTPException(status_code=400, detail="Query parameter 'location_url' is required")
+    if "tiktok.com" not in location_url:
+        raise HTTPException(status_code=400, detail="Please provide a valid TikTok location URL")
+    limit = max(1, min(50, limit))
+
+    import apify_tiktok
+    if not apify_tiktok.is_configured():
+        raise HTTPException(status_code=503, detail="Apify is not configured. Set APIFY_API_TOKEN to use location search.")
+
+    async with _ytdlp_semaphore:
+        videos = await viral_detection.fetch_location_videos(location_url, limit=limit)
     ranked = viral_detection.rank_videos(videos)
     return ranked
 
@@ -599,13 +718,27 @@ async def ingest_video(payload: IngestVideoRequest):
     await _execute(
         """INSERT INTO videos
            (id, tiktok_url, niche, video_platform_id, creator, creator_display, title,
-            description, view_count, like_count, comment_count, duration, thumbnail_url,
+            description, view_count, like_count, comment_count, share_count, bookmark_count,
+            duration, thumbnail_url, direct_video_url, hashtags,
+            song_id, song_title, song_artist, song_album, song_duration, song_cover_url,
+            subtitles_url, subtitles_language,
+            creator_followers, creator_following, creator_verified, creator_bio, creator_avatar,
             status, local_video_path, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (video_id, tiktok_url, niche, meta.get("video_platform_id"), meta.get("creator"),
          meta.get("creator_display"), meta.get("title"), meta.get("description", ""),
          meta.get("view_count", 0), meta.get("like_count", 0), meta.get("comment_count", 0),
-         meta.get("duration", 0), meta.get("thumbnail_url"), "metadata_ready", None, created_at),
+         meta.get("share_count", 0), meta.get("bookmark_count", 0),
+         meta.get("duration", 0), meta.get("thumbnail_url"),
+         meta.get("direct_video_url", ""), json.dumps(meta.get("hashtags", [])),
+         meta.get("song_id", ""), meta.get("song_title", ""),
+         meta.get("song_artist", ""), meta.get("song_album", ""),
+         meta.get("song_duration", 0), meta.get("song_cover_url", ""),
+         meta.get("subtitles_url", ""), meta.get("subtitles_language", ""),
+         meta.get("creator_followers", 0), meta.get("creator_following", 0),
+         1 if meta.get("creator_verified") else 0,
+         meta.get("creator_bio", ""), meta.get("creator_avatar", ""),
+         "metadata_ready", None, created_at),
     )
     return await get_video_or_404(video_id)
 
@@ -624,7 +757,7 @@ async def analyze_video_hook(video_id: str):
 
     try:
         async with _ytdlp_semaphore:
-            video_path = await pipeline.download_video(tiktok_url)
+            video_path = await pipeline.download_video(tiktok_url, direct_video_url=video.get("direct_video_url", ""))
     except Exception as e:
         logger.error(f"Download failed for {tiktok_url}: {e}")
         await _execute(
@@ -650,8 +783,27 @@ async def analyze_video_hook(video_id: str):
 
     frame_docs = build_frame_docs(video_hash, frame_paths)
 
+    # Build music context and fetch transcript if available (from ApiDojo scraper data)
+    music_context = None
+    transcript_text = ""
+    if video.get("song_title") or video.get("song_artist"):
+        music_context = {
+            "song_title": video.get("song_title", ""),
+            "song_artist": video.get("song_artist", ""),
+            "song_album": video.get("song_album", ""),
+            "song_duration": video.get("song_duration", 0),
+        }
+    if video.get("subtitles_url"):
+        import apify_tiktok
+        raw_vtt = await apify_tiktok.fetch_subtitles(video["subtitles_url"])
+        if raw_vtt:
+            transcript_text = apify_tiktok.parse_webvtt_to_text(raw_vtt)
+
     try:
-        analysis_result = await analyze_hook(frame_paths, session_id=f"hook-{video_id}")
+        analysis_result = await analyze_hook(
+            frame_paths, session_id=f"hook-{video_id}",
+            music_context=music_context, transcript_text=transcript_text,
+        )
     except Exception as e:
         logger.error(f"Hook analysis failed for {video_id}: {e}")
         await _execute(
@@ -1010,6 +1162,7 @@ async def face_swap_branded_prompt(
 
     # Get hook analysis if video_id is available
     analysis = None
+    video_record = None
     if video_id and video_id.strip():
         analysis_row = await _fetch_one(
             "SELECT * FROM analyses WHERE video_id = ? ORDER BY created_at DESC LIMIT 1",
@@ -1017,6 +1170,26 @@ async def face_swap_branded_prompt(
         )
         if analysis_row:
             analysis = analysis_row
+        video_record = await _fetch_one("SELECT * FROM videos WHERE id = ?", (video_id.strip(),))
+
+    # Build music context from the video's stored metadata
+    music_context = None
+    transcript_text = ""
+    hashtags = []
+    if video_record:
+        if video_record.get("song_title") or video_record.get("song_artist"):
+            music_context = {
+                "song_title": video_record.get("song_title", ""),
+                "song_artist": video_record.get("song_artist", ""),
+                "song_album": video_record.get("song_album", ""),
+                "song_duration": video_record.get("song_duration", 0),
+            }
+        if video_record.get("subtitles_url"):
+            import apify_tiktok
+            raw_vtt = await apify_tiktok.fetch_subtitles(video_record["subtitles_url"])
+            if raw_vtt:
+                transcript_text = apify_tiktok.parse_webvtt_to_text(raw_vtt)
+        hashtags = video_record.get("hashtags", []) if isinstance(video_record.get("hashtags"), list) else []
 
     # Build a hook-context-aware prompt
     duration = max(5, min(duration, 30))
@@ -1029,6 +1202,9 @@ async def face_swap_branded_prompt(
                 brand_profile=brand_profile,
                 target_duration=duration,
                 session_id=f"face-swap-brand-{image_id}",
+                music_context=music_context,
+                transcript_text=transcript_text,
+                hashtags=hashtags,
             )
             video_prompt = remix_result.get("full_video_prompt", "")
             prompt_breakdown = remix_result
@@ -1195,6 +1371,14 @@ async def customize_video(
         "pacing_notes": analysis.get("pacing_cuts"),
         "text_overlay_plan": analysis.get("text_overlays_timing"),
         "audio_plan": analysis.get("audio_cues_inferred"),
+        "music_context": {
+            "song_title": video.get("song_title", ""),
+            "song_artist": video.get("song_artist", ""),
+            "song_album": video.get("song_album", ""),
+            "song_id": video.get("song_id", ""),
+        },
+        "transcript_available": bool(video.get("subtitles_url")),
+        "hashtags": video.get("hashtags", []) if isinstance(video.get("hashtags"), list) else [],
         "customization": {
             "environment": environment if mode == "custom" else "(kept identical to original)",
             "background": background if mode == "custom" else "(kept identical to original)",
@@ -1381,6 +1565,28 @@ async def generate_remix_script_endpoint(customization_id: str, payload: Generat
     if not analysis:
         raise HTTPException(status_code=404, detail="Related hook analysis not found")
 
+    # Fetch the video record for music/subtitle context
+    video = await _fetch_one("SELECT * FROM videos WHERE id = ?", (customization["video_id"],))
+
+    # Build music context from the video's stored metadata
+    music_context = None
+    transcript_text = ""
+    hashtags = []
+    if video:
+        if video.get("song_title") or video.get("song_artist"):
+            music_context = {
+                "song_title": video.get("song_title", ""),
+                "song_artist": video.get("song_artist", ""),
+                "song_album": video.get("song_album", ""),
+                "song_duration": video.get("song_duration", 0),
+            }
+        if video.get("subtitles_url"):
+            import apify_tiktok
+            raw_vtt = await apify_tiktok.fetch_subtitles(video["subtitles_url"])
+            if raw_vtt:
+                transcript_text = apify_tiktok.parse_webvtt_to_text(raw_vtt)
+        hashtags = video.get("hashtags", []) if isinstance(video.get("hashtags"), list) else []
+
     duration = max(5, min(30, payload.duration_seconds or 30))
 
     try:
@@ -1389,6 +1595,9 @@ async def generate_remix_script_endpoint(customization_id: str, payload: Generat
             brand_profile=brand_profile,
             target_duration=duration,
             session_id=f"remix-{customization_id}",
+            music_context=music_context,
+            transcript_text=transcript_text,
+            hashtags=hashtags,
         )
     except Exception as e:
         logger.error(f"Remix script generation failed for {customization_id}: {e}")

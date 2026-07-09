@@ -88,14 +88,56 @@ def _clean_json_text(text: str) -> str:
     return text.strip()
 
 
-async def analyze_hook(frame_paths: list, session_id: str) -> dict:
-    """Analyze hook frames using OpenRouter vision model."""
+async def analyze_hook(frame_paths: list, session_id: str, music_context: dict = None, transcript_text: str = "") -> dict:
+    """
+    Analyze hook frames using OpenRouter vision model.
+    
+    Enhanced with actual music/audio context and transcript when available
+    (from ApiDojo scraper), instead of purely inferring audio from visuals.
+    
+    Args:
+        frame_paths: List of Path objects pointing to extracted video frames
+        session_id: Unique session identifier for logging
+        music_context: Dict with song metadata (song_title, song_artist, song_album, song_duration)
+        transcript_text: Plain text transcript of the video's spoken words (from subtitles)
+    """
+    # Build audio context string from actual data when available
+    audio_context_parts = []
+    if music_context:
+        song_title = music_context.get("song_title") or ""
+        song_artist = music_context.get("song_artist") or ""
+        if song_title or song_artist:
+            audio_context_parts.append(
+                f"The video uses the sound/music: \"{song_title}\" by {song_artist}."
+            )
+            if music_context.get("song_duration"):
+                audio_context_parts.append(f"Sound duration: {music_context['song_duration']}s.")
+    if transcript_text:
+        # Limit transcript to first ~500 chars (hook is first 3 seconds)
+        truncated_transcript = transcript_text[:500]
+        audio_context_parts.append(
+            f"Transcript/spoken words in the video: \"{truncated_transcript}\""
+        )
+
+    audio_context_str = " ".join(audio_context_parts) if audio_context_parts else ""
+
     system_message = (
         "You are an expert short-form video (TikTok/Reels) hook analyst. You examine the "
         "first 2-3 seconds of a video (given as a sequence of frames in chronological order) "
         "and identify exactly what makes the hook effective at grabbing attention. "
         "Respond with STRICT JSON only, no markdown fences, no extra commentary."
     )
+
+    # Build prompt with actual audio/music context when available
+    audio_instruction = ""
+    if audio_context_str:
+        audio_instruction = (
+            f"\n\nIMPORTANT AUDIO CONTEXT (actual data from the video, not inferred):\n"
+            f"{audio_context_str}\n"
+            "Use this real audio/music information to inform your analysis of audio_cues_inferred "
+            "and how the sound contributes to the hook's effectiveness."
+        )
+
     prompt = (
         "Here are sequential frames from the first ~3 seconds of a short-form video "
         "(frame_001 is earliest). Analyze the hook and return ONLY a JSON object with this "
@@ -105,12 +147,13 @@ async def analyze_hook(frame_paths: list, session_id: str) -> dict:
         '  "body_language_gestures": "string describing body language and hand gestures",\n'
         '  "pacing_cuts": "string describing pacing and cut speed/escalation across the frames",\n'
         '  "text_overlays_timing": "string describing any on-screen text/elements and when they appear",\n'
-        '  "audio_cues_inferred": "string inferring likely audio cues based on visual context",\n'
+        '  "audio_cues_inferred": "string describing the audio/music and how it contributes to the hook",\n'
         '  "hook_summary": "1-2 sentence summary of why this hook works",\n'
         '  "effectiveness_score": integer 1-10,\n'
         '  "key_hook_frame_index": integer index (1-based) of the single frame that best represents the peak hook moment,\n'
         '  "replicable_mechanics": ["short bullet", "..."] list of concrete mechanics to preserve when recreating this hook\n'
         "}\n"
+        f"{audio_instruction}\n"
         "Return ONLY valid JSON."
     )
 
@@ -298,13 +341,27 @@ async def generate_face_swap(
     raise RuntimeError("No image returned from face swap model.")
 
 
-async def generate_video_prompt(analysis: dict, brand_context: dict, target_duration: int, session_id: str) -> dict:
-    """Auto-generate a production-ready video prompt from hook analysis + brand context."""
+async def generate_video_prompt(analysis: dict, brand_context: dict, target_duration: int, session_id: str, music_context: dict = None, transcript_text: str = "") -> dict:
+    """Auto-generate a production-ready video prompt from hook analysis + brand context.
+    
+    Enhanced with actual music/audio context and transcript when available.
+    """
     system_message = (
         "You are an expert short-form video creative director who writes precise, production-ready prompts for "
         "AI video generation models. You take the analyzed 'hook' of a viral video and a brand's context, and "
         "produce a full video generation prompt. Respond with STRICT JSON only, no markdown fences."
     )
+
+    # Build audio context from actual data
+    audio_context_parts = []
+    if music_context:
+        song_title = music_context.get("song_title") or ""
+        song_artist = music_context.get("song_artist") or ""
+        if song_title or song_artist:
+            audio_context_parts.append(f"Original sound: \"{song_title}\" by {song_artist}")
+    if transcript_text:
+        audio_context_parts.append(f"Original transcript: \"{transcript_text[:500]}\"")
+    audio_context_str = "; ".join(audio_context_parts) if audio_context_parts else "(not available)"
 
     prompt = (
         "Hook analysis of the original viral video's first 2-3 seconds:\n"
@@ -315,6 +372,7 @@ async def generate_video_prompt(analysis: dict, brand_context: dict, target_dura
         f"- Audio cues (inferred): {analysis.get('audio_cues_inferred')}\n"
         f"- Hook summary: {analysis.get('hook_summary')}\n"
         f"- Replicable mechanics: {analysis.get('replicable_mechanics')}\n\n"
+        f"Actual audio/music context: {audio_context_str}\n\n"
         "Brand context:\n"
         f"- Brand name: {brand_context.get('brand_name') or '(not provided)'}\n"
         f"- Brand goal: {brand_context.get('brand_goal') or '(not provided)'}\n"
@@ -485,12 +543,15 @@ async def analyze_brand_from_text(url: str, page_text: str) -> dict:
     return result
 
 
-async def generate_remix_script(analysis: dict, brand_profile: dict, target_duration: int, session_id: str) -> dict:
+async def generate_remix_script(analysis: dict, brand_profile: dict, target_duration: int, session_id: str, music_context: dict = None, transcript_text: str = "", hashtags: list = None) -> dict:
     """
     Auto-generate a production-ready video prompt ("Content Remixer") from hook analysis +
     a structured brand profile (niche, products/services, target audience, tone/voice).
     The resulting script is explicitly adapted to weave in the brand's actual niche and
     product/service, rather than generic brand copy.
+
+    Enhanced with actual music/audio context, transcript, and hashtag data when available
+    from the ApiDojo scraper for more accurate remix scripts.
     """
     system_message = (
         "You are an expert short-form video creative director and brand scriptwriter. You take the "
@@ -506,6 +567,26 @@ async def generate_remix_script(analysis: dict, brand_profile: dict, target_dura
     else:
         products_str = str(products) or "(not specified)"
 
+    # Build enhanced audio/music context
+    audio_context_parts = []
+    if music_context:
+        song_title = music_context.get("song_title") or ""
+        song_artist = music_context.get("song_artist") or ""
+        if song_title or song_artist:
+            audio_context_parts.append(
+                f"Original sound/music used: \"{song_title}\" by {song_artist}"
+            )
+    if transcript_text:
+        truncated = transcript_text[:800]
+        audio_context_parts.append(f"Original spoken script/transcript: \"{truncated}\"")
+
+    audio_context_str = "\n".join(audio_context_parts) if audio_context_parts else "(not available)"
+
+    # Build hashtags context
+    hashtags_str = ""
+    if hashtags and isinstance(hashtags, list) and len(hashtags) > 0:
+        hashtags_str = f"Original video hashtags: #{', #'.join(hashtags[:10])}"
+
     prompt = (
         "Hook analysis of the original viral video's first 2-3 seconds:\n"
         f"- Facial expressions: {analysis.get('facial_expressions')}\n"
@@ -515,6 +596,9 @@ async def generate_remix_script(analysis: dict, brand_profile: dict, target_dura
         f"- Audio cues (inferred): {analysis.get('audio_cues_inferred')}\n"
         f"- Hook summary: {analysis.get('hook_summary')}\n"
         f"- Replicable mechanics: {analysis.get('replicable_mechanics')}\n\n"
+        "Audio & music context from the original video:\n"
+        f"{audio_context_str}\n"
+        f"{hashtags_str}\n\n"
         "Brand profile to remix this hook for:\n"
         f"- Brand name: {brand_profile.get('brand_name') or '(not provided)'}\n"
         f"- Brand description: {brand_profile.get('brand_description') or '(not provided)'}\n"
@@ -531,7 +615,9 @@ async def generate_remix_script(analysis: dict, brand_profile: dict, target_dura
         "specific product(s)/service(s) — e.g. if the brand sells fitness supplements, the narrative should "
         "naturally weave in that specific product, not generic brand copy. Speak directly to the ideal "
         "customer profile's pain points and where they spend time online, and lean into the brand's stated "
-        "differentiation/USP as the emotional payoff or twist of the remixed script. Return ONLY a JSON "
+        "differentiation/USP as the emotional payoff or twist of the remixed script. "
+        "If the original video uses a trending sound, suggest whether to keep the same sound or recommend "
+        "a similar audio approach for the remix. Return ONLY a JSON "
         "object with this exact schema:\n"
         "{\n"
         '  "content": "what happens in the video moment by moment",\n'
@@ -540,6 +626,7 @@ async def generate_remix_script(analysis: dict, brand_profile: dict, target_dura
         '  "character_behavior": "how the character behaves/moves",\n'
         '  "scene_details": "environment/background/lighting/props",\n'
         '  "brand_narrative": "how the video ties into the brand\'s specific niche/products/services/tone",\n'
+        '  "audio_recommendation": "suggested sound/music approach for the remix (keep original sound, use similar style, or voiceover)",\n'
         '  "full_video_prompt": "cohesive production-ready prompt (150-300 words)",\n'
         '  "suggested_duration_seconds": integer up to ' + str(target_duration) + "\n"
         "}\n"

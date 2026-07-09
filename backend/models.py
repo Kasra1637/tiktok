@@ -11,7 +11,11 @@ def now_iso() -> str:
 
 def row_to_dict(row, columns: list) -> dict:
     """Convert an sqlite3.Row to a dict, parsing JSON fields."""
-    JSON_FIELDS = {"frames", "generation_spec", "generated_images", "prompt_breakdown", "reference_image_ids", "selected_image_ids", "replicable_mechanics", "products_services", "messages", "brief"}
+    JSON_FIELDS = {
+        "frames", "generation_spec", "generated_images", "prompt_breakdown",
+        "reference_image_ids", "selected_image_ids", "replicable_mechanics",
+        "products_services", "messages", "brief", "hashtags",
+    }
     d = {}
     for i, col in enumerate(columns):
         val = row[i]
@@ -27,6 +31,20 @@ def row_to_dict(row, columns: list) -> dict:
 class IngestVideoRequest(BaseModel):
     tiktok_url: str
     niche: Optional[str] = None
+
+
+class TrendingSearchRequest(BaseModel):
+    """Parameters for keyword-based trending search with location targeting."""
+    q: str
+    limit: int = 20
+    location: Optional[str] = None  # ISO 3166-1 alpha-2 country code (e.g., "US", "GB")
+    sort_type: Optional[str] = None  # "RELEVANCE", "MOST_LIKED", "DATE_POSTED"
+
+
+class MusicSearchRequest(BaseModel):
+    """Parameters for music/sound-based video discovery."""
+    music_url: str
+    limit: int = 25
 
 
 class CustomizeRequest(BaseModel):
