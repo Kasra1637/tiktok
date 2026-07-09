@@ -2058,6 +2058,13 @@ async def on_startup():
             "OPENROUTER_API_KEY is not set. The app will run, but AI features "
             "(hook analysis, face swap, video generation) will return 503 until it is set."
         )
+    import apify_tiktok
+    if not apify_tiktok.is_configured():
+        logger.warning(
+            "APIFY_API_TOKEN is not set. The Discovery feed and keyword search will fall back "
+            "to yt-dlp, which is frequently blocked by TikTok and will likely return zero "
+            "results (empty feed / 'No results found'). Set APIFY_API_TOKEN to fix this."
+        )
 
 
 # ---------------------------------------------------------------------------
