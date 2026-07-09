@@ -9,7 +9,7 @@ import Filmstrip from "../components/Filmstrip";
 import HookBreakdown from "../components/HookBreakdown";
 import GenerationProgress from "../components/GenerationProgress";
 import { api, getErrorMessage } from "../lib/api";
-import { ArrowLeft, Eye, Heart, MessageCircle, AlertTriangle, RotateCcw, ExternalLink, Repeat2, Music2 } from "lucide-react";
+import { ArrowLeft, Eye, Heart, MessageCircle, AlertTriangle, RotateCcw, ExternalLink, Repeat2, Music2, FileText, BadgeAlert } from "lucide-react";
 
 const ANALYZE_STAGES = ["Downloading video", "Extracting first 2-3 seconds", "Analyzing hook mechanics with AI"];
 
@@ -128,7 +128,19 @@ export default function AnalysisDetail() {
             />
           )}
           <h2 className="font-display text-lg font-semibold leading-snug">{video.title}</h2>
-          <p className="text-sm text-muted-foreground">@{video.creator}</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm text-muted-foreground">@{video.creator}</p>
+            {video.is_ad && (
+              <Badge
+                className="bg-amber-500/90 border-none text-white gap-1 text-[10px] font-semibold"
+                data-testid="analysis-sponsored-badge"
+                title="This post is flagged as an ad or sponsored content"
+              >
+                <BadgeAlert className="h-2.5 w-2.5" />
+                Sponsored
+              </Badge>
+            )}
+          </div>
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <span className="flex items-center gap-1" data-testid="analysis-view-count">
               <Eye className="h-3.5 w-3.5" /> {formatCount(video.view_count)}
@@ -162,6 +174,23 @@ export default function AnalysisDetail() {
                 <p className="text-sm font-medium truncate">
                   {video.song_title || "Untitled sound"}
                   {video.song_artist ? ` — ${video.song_artist}` : ""}
+                </p>
+              </div>
+            </div>
+          )}
+          {video.subtitles_url && (
+            <div
+              className="flex items-center gap-2 rounded-xl border border-border bg-secondary/60 px-3 py-2"
+              data-testid="transcript-informed-card"
+              title="A transcript was found for this video and was used to ground the hook analysis"
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[color:rgba(13,148,136,0.12)] text-[color:var(--brand-teal)] shrink-0">
+                <FileText className="h-3.5 w-3.5" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Transcript-informed</p>
+                <p className="text-sm font-medium truncate">
+                  Analysis uses the video's actual spoken words
                 </p>
               </div>
             </div>

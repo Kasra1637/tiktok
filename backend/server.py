@@ -102,6 +102,7 @@ async def init_db():
                 song_cover_url TEXT,
                 subtitles_url TEXT,
                 subtitles_language TEXT,
+                is_ad INTEGER DEFAULT 0,
                 creator_followers INTEGER DEFAULT 0,
                 creator_following INTEGER DEFAULT 0,
                 creator_verified INTEGER DEFAULT 0,
@@ -135,6 +136,7 @@ async def init_db():
                 song_artist TEXT,
                 song_cover_url TEXT,
                 subtitles_url TEXT,
+                is_ad INTEGER DEFAULT 0,
                 creator_followers INTEGER DEFAULT 0,
                 creator_verified INTEGER DEFAULT 0,
                 virality_score REAL DEFAULT 0,
@@ -225,6 +227,7 @@ async def init_db():
                 song_artist TEXT,
                 song_cover_url TEXT,
                 subtitles_url TEXT,
+                is_ad INTEGER DEFAULT 0,
                 creator_followers INTEGER DEFAULT 0,
                 creator_verified INTEGER DEFAULT 0,
                 virality_score REAL DEFAULT 0,
@@ -288,9 +291,9 @@ async def init_db():
         # Migration: drop and recreate cache tables if they're missing new columns
         # (these are just caches that rebuild on next request — no data loss).
         cache_tables_to_check = {
-            "curated_videos": "share_count",
-            "trending_videos": "share_count",
-            "videos": "share_count",
+            "curated_videos": "is_ad",
+            "trending_videos": "is_ad",
+            "videos": "is_ad",
             "video_jobs": "use_original_sound",
         }
         for table, required_col in cache_tables_to_check.items():
@@ -329,6 +332,7 @@ async def init_db():
                 song_cover_url TEXT,
                 subtitles_url TEXT,
                 subtitles_language TEXT,
+                is_ad INTEGER DEFAULT 0,
                 creator_followers INTEGER DEFAULT 0,
                 creator_following INTEGER DEFAULT 0,
                 creator_verified INTEGER DEFAULT 0,
@@ -362,6 +366,7 @@ async def init_db():
                 song_artist TEXT,
                 song_cover_url TEXT,
                 subtitles_url TEXT,
+                is_ad INTEGER DEFAULT 0,
                 creator_followers INTEGER DEFAULT 0,
                 creator_verified INTEGER DEFAULT 0,
                 virality_score REAL DEFAULT 0,
@@ -390,6 +395,7 @@ async def init_db():
                 song_artist TEXT,
                 song_cover_url TEXT,
                 subtitles_url TEXT,
+                is_ad INTEGER DEFAULT 0,
                 creator_followers INTEGER DEFAULT 0,
                 creator_verified INTEGER DEFAULT 0,
                 virality_score REAL DEFAULT 0,
@@ -495,9 +501,9 @@ async def _refresh_trending_cache(niche_key: str, force: bool = False):
                         title, view_count, like_count, comment_count, share_count,
                         bookmark_count, duration, thumbnail_url, direct_video_url,
                         hashtags, song_id, song_title, song_artist, song_cover_url,
-                        subtitles_url, creator_followers, creator_verified,
+                        subtitles_url, is_ad, creator_followers, creator_verified,
                         virality_score, cached_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (niche_key, v.get("tiktok_url"), v.get("video_platform_id"),
                      v.get("creator"), v.get("creator_display"), v.get("title"),
                      v.get("view_count", 0), v.get("like_count", 0),
@@ -508,6 +514,7 @@ async def _refresh_trending_cache(niche_key: str, force: bool = False):
                      v.get("song_id", ""), v.get("song_title", ""),
                      v.get("song_artist", ""), v.get("song_cover_url", ""),
                      v.get("subtitles_url", ""),
+                     1 if v.get("is_ad") else 0,
                      v.get("creator_followers", 0),
                      1 if v.get("creator_verified") else 0,
                      v.get("virality_score", 0), now_iso()),
@@ -537,6 +544,13 @@ def build_frame_docs(video_hash: str, frame_paths: list) -> list:
             "media_url": frame_media_url(video_hash, fp.name),
         })
     return docs
+
+
+def filter_ads(videos: list, include_ads: bool) -> list:
+    """Drop ad/sponsored posts from a list of video dicts unless include_ads is True."""
+    if include_ads:
+        return videos
+    return [v for v in videos if not v.get("is_ad")]
 
 
 async def get_video_or_404(video_id: str) -> dict:
@@ -622,7 +636,7 @@ async def list_niches():
 
 
 @api_router.get("/niches/{niche_key}/videos")
-async def get_niche_videos(niche_key: str, refresh: bool = False, mode: str = "curated"):
+async def get_niche_videos(niche_key: str, refresh: bool = False, mode: str = "curated", include_ads: bool = True):
     if niche_key not in NICHE_MAP:
         raise HTTPException(status_code=404, detail="Unknown niche")
 
@@ -669,8 +683,8 @@ async def get_niche_videos(niche_key: str, refresh: bool = False, mode: str = "c
                                 comment_count, share_count, bookmark_count, duration,
                                 thumbnail_url, direct_video_url, hashtags,
                                 song_id, song_title, song_artist, song_cover_url,
-                                subtitles_url, creator_followers, creator_verified, cached_at)
-                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                subtitles_url, is_ad, creator_followers, creator_verified, cached_at)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                             (v["tiktok_url"], niche_key, v.get("video_platform_id"),
                              v.get("creator"), v.get("creator_display"), v.get("title"),
                              v.get("view_count", 0), v.get("like_count", 0),
@@ -681,6 +695,7 @@ async def get_niche_videos(niche_key: str, refresh: bool = False, mode: str = "c
                              v.get("song_id", ""), v.get("song_title", ""),
                              v.get("song_artist", ""), v.get("song_cover_url", ""),
                              v.get("subtitles_url", ""),
+                             1 if v.get("is_ad") else 0,
                              v.get("creator_followers", 0),
                              1 if v.get("creator_verified") else 0,
                              now_iso()),
@@ -713,9 +728,9 @@ async def get_niche_videos(niche_key: str, refresh: bool = False, mode: str = "c
         trending_videos = raw_trending
 
     if mode == "curated":
-        return curated_videos
+        result = curated_videos
     elif mode == "trending":
-        return trending_videos
+        result = trending_videos
     else:  # mixed
         combined = curated_videos + trending_videos
         seen_urls = set()
@@ -728,11 +743,13 @@ async def get_niche_videos(niche_key: str, refresh: bool = False, mode: str = "c
             elif not url:
                 unique.append(v)
         unique.sort(key=lambda v: v.get("virality_score", 0), reverse=True)
-        return unique[:50]
+        result = unique[:50]
+
+    return filter_ads(result, include_ads)
 
 
 @api_router.get("/niches/{niche_key}/trending")
-async def get_niche_trending(niche_key: str, refresh: bool = False):
+async def get_niche_trending(niche_key: str, refresh: bool = False, include_ads: bool = True):
     if niche_key not in NICHE_MAP:
         raise HTTPException(status_code=404, detail="Unknown niche")
     await _refresh_trending_cache(niche_key, force=refresh)
@@ -740,11 +757,11 @@ async def get_niche_trending(niche_key: str, refresh: bool = False):
         "SELECT * FROM trending_videos WHERE niche = ? ORDER BY virality_score DESC LIMIT 50",
         (niche_key,),
     )
-    return videos
+    return filter_ads(videos, include_ads)
 
 
 @api_router.get("/trending/search")
-async def trending_search(q: str = "", limit: int = 20):
+async def trending_search(q: str = "", limit: int = 20, include_ads: bool = True):
     """Search TikTok for trending videos matching a keyword."""
     q = q.strip()
     if not q:
@@ -758,7 +775,7 @@ async def trending_search(q: str = "", limit: int = 20):
     async with _ytdlp_semaphore:
         videos = await viral_detection.fetch_keyword_videos(q, limit=limit)
     ranked = viral_detection.rank_videos(videos)
-    return ranked
+    return filter_ads(ranked, include_ads)
 
 
 # ---------------------------------------------------------------------------
@@ -801,10 +818,10 @@ async def ingest_video(payload: IngestVideoRequest):
             description, view_count, like_count, comment_count, share_count, bookmark_count,
             duration, thumbnail_url, direct_video_url, hashtags,
             song_id, song_title, song_artist, song_album, song_duration, song_cover_url,
-            subtitles_url, subtitles_language,
+            subtitles_url, subtitles_language, is_ad,
             creator_followers, creator_following, creator_verified, creator_bio, creator_avatar,
             status, local_video_path, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (video_id, tiktok_url, niche, meta.get("video_platform_id"), meta.get("creator"),
          meta.get("creator_display"), meta.get("title"), meta.get("description", ""),
          meta.get("view_count", 0), meta.get("like_count", 0), meta.get("comment_count", 0),
@@ -815,6 +832,7 @@ async def ingest_video(payload: IngestVideoRequest):
          meta.get("song_artist", ""), meta.get("song_album", ""),
          meta.get("song_duration", 0), meta.get("song_cover_url", ""),
          meta.get("subtitles_url", ""), meta.get("subtitles_language", ""),
+         1 if meta.get("is_ad") else 0,
          meta.get("creator_followers", 0), meta.get("creator_following", 0),
          1 if meta.get("creator_verified") else 0,
          meta.get("creator_bio", ""), meta.get("creator_avatar", ""),

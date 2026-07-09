@@ -12,6 +12,8 @@ Capabilities:
 - Creator profile data (followers, verified status, bio)
 - Hashtags as structured array
 - Video thumbnails and direct download URLs
+- Subtitle/transcript link extraction (subtitleLinks), when available
+- Ad / sponsored post detection (isAd / isSponsored)
 
 Requires APIFY_API_TOKEN environment variable.
 Docs: https://apify.com/clockworks/tiktok-scraper
@@ -130,6 +132,50 @@ def _parse_apify_video(item: dict) -> Optional[dict]:
         uploaded_at = int(create_time) if create_time else 0
         uploaded_at_formatted = item.get("createTimeISO") or ""
 
+    # --- Subtitles / transcript link (subtitleLinks: array of {language, downloadLink, ...}) ---
+    subtitles_url = ""
+    subtitles_language = ""
+    raw_subtitles = (
+        item.get("subtitleLinks")
+        or item.get("subtitleInfos")
+        or item.get("subtitles")
+        or []
+    )
+    if isinstance(raw_subtitles, list) and raw_subtitles:
+        # Prefer a non-auto-generated / original-language track if that info is present,
+        # otherwise just take the first available track.
+        chosen = None
+        for sub in raw_subtitles:
+            if not isinstance(sub, dict):
+                continue
+            if sub.get("source") == "original" or sub.get("isOriginal"):
+                chosen = sub
+                break
+        if not chosen:
+            chosen = next((s for s in raw_subtitles if isinstance(s, dict)), None)
+        if chosen:
+            subtitles_url = (
+                chosen.get("downloadLink")
+                or chosen.get("url")
+                or chosen.get("tiktokLink")
+                or ""
+            )
+            subtitles_language = (
+                chosen.get("language")
+                or chosen.get("languageCode")
+                or chosen.get("languageID")
+                or ""
+            )
+
+    # --- Ad / sponsored post detection ---
+    is_ad = bool(
+        item.get("isAd")
+        or item.get("is_ad")
+        or item.get("isSponsored")
+        or item.get("is_sponsored")
+        or item.get("adAuthorName")
+    )
+
     return {
         "tiktok_url": video_url,
         "video_platform_id": str(item.get("id", "")),
@@ -155,8 +201,9 @@ def _parse_apify_video(item: dict) -> Optional[dict]:
         "song_album": song_album,
         "song_duration": int(song_duration) if song_duration else 0,
         "song_cover_url": song_cover,
-        "subtitles_url": "",
-        "subtitles_language": "",
+        "subtitles_url": subtitles_url,
+        "subtitles_language": subtitles_language,
+        "is_ad": is_ad,
         "creator_followers": int(creator_followers) if creator_followers else 0,
         "creator_following": int(creator_following) if creator_following else 0,
         "creator_verified": creator_verified,

@@ -4,7 +4,7 @@ import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { AspectRatio } from "./ui/aspect-ratio";
 import { Button } from "./ui/button";
-import { Eye, Heart, MessageCircle, Sparkles, Flame, ExternalLink, Music2 } from "lucide-react";
+import { Eye, Heart, MessageCircle, Sparkles, Flame, ExternalLink, Music2, BadgeAlert } from "lucide-react";
 
 function formatCount(n) {
   if (!n) return "0";
@@ -73,12 +73,26 @@ export function VideoCard({ video, onAnalyze, analyzing, index = 0 }) {
             href={video.tiktok_url}
             target="_blank"
             rel="noreferrer"
-            className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-black/70 text-white px-2 py-1 text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/90"
+            className={`absolute left-2 flex items-center gap-1 rounded-full bg-black/70 text-white px-2 py-1 text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/90 ${
+              video.is_ad ? "top-9" : "top-2"
+            }`}
             onClick={(e) => e.stopPropagation()}
             data-testid="video-tiktok-link"
           >
             <ExternalLink className="h-2.5 w-2.5" /> TikTok
           </a>
+        )}
+        {video.is_ad && (
+          <div className="absolute top-2 left-2">
+            <Badge
+              className="bg-amber-500/90 border-none text-white gap-1 text-[10px] font-semibold shadow-md"
+              data-testid="sponsored-badge"
+              title="This post is flagged as an ad or sponsored content"
+            >
+              <BadgeAlert className="h-2.5 w-2.5" />
+              Sponsored
+            </Badge>
+          </div>
         )}
         {video.virality_score != null && (
           <div className="absolute top-2 right-2">

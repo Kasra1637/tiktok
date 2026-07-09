@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import * as LucideIcons from "lucide-react";
-import { Compass, Search, SlidersHorizontal, X } from "lucide-react";
+import { Compass, Search, SlidersHorizontal, X, BadgeAlert } from "lucide-react";
 import { Skeleton } from "../components/ui/skeleton";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -76,8 +76,9 @@ export default function NicheFeed() {
   const [durationFilter, setDurationFilter] = useState("all");
   const [sortBy, setSortBy] = useState("virality");
   const [recencyFilter, setRecencyFilter] = useState("all");
+  const [hideSponsored, setHideSponsored] = useState(true);
 
-  const activeFilterCount = [viewFilter !== "all", durationFilter !== "all", sortBy !== "virality", recencyFilter !== "all"].filter(Boolean).length;
+  const activeFilterCount = [viewFilter !== "all", durationFilter !== "all", sortBy !== "virality", recencyFilter !== "all", !hideSponsored].filter(Boolean).length;
 
   useEffect(() => {
     api
@@ -161,11 +162,17 @@ export default function NicheFeed() {
     setDurationFilter("all");
     setSortBy("virality");
     setRecencyFilter("all");
+    setHideSponsored(true);
   };
 
   // Apply filters and sorting client-side
   const displayVideos = useMemo(() => {
     let list = searchResults !== null ? [...searchResults] : [...videos];
+
+    // Sponsored / ad post filter
+    if (hideSponsored) {
+      list = list.filter((v) => !v.is_ad);
+    }
 
     // View count filter
     const viewConfig = VIEW_FILTERS.find((f) => f.key === viewFilter);
@@ -215,7 +222,7 @@ export default function NicheFeed() {
     }
 
     return list;
-  }, [videos, searchResults, viewFilter, durationFilter, sortBy, recencyFilter]);
+  }, [videos, searchResults, viewFilter, durationFilter, sortBy, recencyFilter, hideSponsored]);
 
   return (
     <div className="space-y-4">
@@ -305,6 +312,21 @@ export default function NicheFeed() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide w-14 shrink-0">When</span>
               {RECENCY_FILTERS.map((f) => <FilterChip key={f.key} label={f.label} active={recencyFilter === f.key} onClick={() => setRecencyFilter(f.key)} />)}
+            </div>
+            {/* Sponsored content toggle */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide w-14 shrink-0">Ads</span>
+              <button
+                onClick={() => setHideSponsored((prev) => !prev)}
+                data-testid="toggle-hide-sponsored"
+                aria-pressed={hideSponsored}
+                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                  hideSponsored ? "bg-[color:var(--brand-teal)] text-white" : "bg-secondary text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <BadgeAlert className="h-3 w-3" />
+                {hideSponsored ? "Hiding sponsored" : "Showing sponsored"}
+              </button>
             </div>
             {activeFilterCount > 0 && (
               <button onClick={resetFilters} className="text-[11px] text-muted-foreground hover:text-foreground underline">Reset all filters</button>

@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import {
   Sparkles, Search, Repeat2, Clapperboard, Globe, Save, Film,
   TrendingUp, ArrowRight, Zap, Target, Layers, Music2,
-  Bookmark, Users, ChevronRight, Hash, BarChart3,
+  Bookmark, Users, ChevronRight, Hash, BarChart3, FileText, BadgeAlert,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 
@@ -20,10 +20,22 @@ const FEATURES = [
       "Paste any TikTok URL or pick from discovery. AI extracts the first 2\u20133 seconds, analyzes facial expressions, gestures, pacing, text overlays, and audio cues. Effectiveness score 1\u201310.",
   },
   {
+    icon: FileText,
+    title: "Transcript-Informed Analysis",
+    description:
+      "When a video has captions available, we pull the actual spoken transcript and ground the hook analysis in real words \u2014 not just visual guesswork.",
+  },
+  {
     icon: Music2,
     title: "Sound & Music Data",
     description:
       "Every video includes the exact sound used \u2014 title, artist, and duration. See which sounds are trending, then toggle \u201cUse original sound\u201d to get a remix script written for that audio.",
+  },
+  {
+    icon: BadgeAlert,
+    title: "Sponsored Post Filtering",
+    description:
+      "Ad and sponsored posts are automatically flagged. Hide them with one toggle in Discovery to focus on organic hooks worth replicating.",
   },
   {
     icon: Repeat2,
@@ -246,6 +258,20 @@ export default function Landing() {
               The swapped image is passed as <code className="text-xs bg-muted px-1.5 py-0.5 rounded-md font-mono">first_frame</code> to
               Seedance 2.0 or Wan 2.7 via OpenRouter&apos;s unified API. The model generates 5&ndash;30 seconds of video
               maintaining face consistency throughout. Toggle &ldquo;Use original sound&rdquo; to get a script written for the viral audio track.
+            </p>
+          </div>
+          <div className="h-px bg-border" />
+          <div className="space-y-2">
+            <h3 className="font-display font-semibold text-base flex items-center gap-2.5">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[color:rgba(99,102,241,0.1)]">
+                <FileText className="h-4 w-4 text-[color:var(--brand-teal)]" />
+              </span>
+              Transcript &amp; Ad Detection
+            </h3>
+            <p className="text-sm sm:text-base text-muted-foreground leading-relaxed pl-10">
+              When TikTok provides captions for a video, we fetch the transcript link and use the actual spoken
+              words to ground the hook analysis. Posts flagged as ads or sponsored content are marked with a
+              &ldquo;Sponsored&rdquo; badge and can be hidden with one toggle in Discovery, so you focus on organic hooks.
             </p>
           </div>
           <div className="h-px bg-border" />
