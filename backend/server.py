@@ -285,6 +285,141 @@ async def init_db():
                 await conn.execute(f"ALTER TABLE brand_profiles ADD COLUMN {col} TEXT")
         await conn.commit()
 
+        # Migration: drop and recreate cache tables if they're missing new columns
+        # (these are just caches that rebuild on next request — no data loss).
+        cache_tables_to_check = {
+            "curated_videos": "share_count",
+            "trending_videos": "share_count",
+            "videos": "share_count",
+            "video_jobs": "use_original_sound",
+        }
+        for table, required_col in cache_tables_to_check.items():
+            cursor = await conn.execute(f"PRAGMA table_info({table})")
+            cols = {row[1] for row in await cursor.fetchall()}
+            if cols and required_col not in cols:
+                logger.info(f"Migration: dropping and recreating {table} (missing column '{required_col}')")
+                await conn.execute(f"DROP TABLE IF EXISTS {table}")
+        await conn.commit()
+
+        # Recreate any tables that were just dropped
+        await conn.executescript("""
+            CREATE TABLE IF NOT EXISTS videos (
+                id TEXT PRIMARY KEY,
+                tiktok_url TEXT UNIQUE,
+                niche TEXT,
+                video_platform_id TEXT,
+                creator TEXT,
+                creator_display TEXT,
+                title TEXT,
+                description TEXT,
+                view_count INTEGER DEFAULT 0,
+                like_count INTEGER DEFAULT 0,
+                comment_count INTEGER DEFAULT 0,
+                share_count INTEGER DEFAULT 0,
+                bookmark_count INTEGER DEFAULT 0,
+                duration REAL DEFAULT 0,
+                thumbnail_url TEXT,
+                direct_video_url TEXT,
+                hashtags TEXT,
+                song_id TEXT,
+                song_title TEXT,
+                song_artist TEXT,
+                song_album TEXT,
+                song_duration INTEGER DEFAULT 0,
+                song_cover_url TEXT,
+                subtitles_url TEXT,
+                subtitles_language TEXT,
+                creator_followers INTEGER DEFAULT 0,
+                creator_following INTEGER DEFAULT 0,
+                creator_verified INTEGER DEFAULT 0,
+                creator_bio TEXT,
+                creator_avatar TEXT,
+                status TEXT DEFAULT 'metadata_ready',
+                local_video_path TEXT,
+                last_analysis_id TEXT,
+                error TEXT,
+                created_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS curated_videos (
+                tiktok_url TEXT PRIMARY KEY,
+                niche TEXT,
+                video_platform_id TEXT,
+                creator TEXT,
+                creator_display TEXT,
+                title TEXT,
+                view_count INTEGER DEFAULT 0,
+                like_count INTEGER DEFAULT 0,
+                comment_count INTEGER DEFAULT 0,
+                share_count INTEGER DEFAULT 0,
+                bookmark_count INTEGER DEFAULT 0,
+                duration REAL DEFAULT 0,
+                thumbnail_url TEXT,
+                direct_video_url TEXT,
+                hashtags TEXT,
+                song_id TEXT,
+                song_title TEXT,
+                song_artist TEXT,
+                song_cover_url TEXT,
+                subtitles_url TEXT,
+                creator_followers INTEGER DEFAULT 0,
+                creator_verified INTEGER DEFAULT 0,
+                virality_score REAL DEFAULT 0,
+                cached_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS trending_videos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                niche TEXT,
+                tiktok_url TEXT,
+                video_platform_id TEXT,
+                creator TEXT,
+                creator_display TEXT,
+                title TEXT,
+                view_count INTEGER DEFAULT 0,
+                like_count INTEGER DEFAULT 0,
+                comment_count INTEGER DEFAULT 0,
+                share_count INTEGER DEFAULT 0,
+                bookmark_count INTEGER DEFAULT 0,
+                duration REAL DEFAULT 0,
+                thumbnail_url TEXT,
+                direct_video_url TEXT,
+                hashtags TEXT,
+                song_id TEXT,
+                song_title TEXT,
+                song_artist TEXT,
+                song_cover_url TEXT,
+                subtitles_url TEXT,
+                creator_followers INTEGER DEFAULT 0,
+                creator_verified INTEGER DEFAULT 0,
+                virality_score REAL DEFAULT 0,
+                cached_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS video_jobs (
+                id TEXT PRIMARY KEY,
+                customization_id TEXT,
+                video_id TEXT,
+                brand_name TEXT,
+                brand_goal TEXT,
+                brand_details TEXT,
+                target_duration_seconds INTEGER,
+                prompt_breakdown TEXT,
+                full_prompt_text TEXT,
+                reference_image_ids TEXT,
+                selected_image_ids TEXT,
+                use_original_sound INTEGER DEFAULT 0,
+                sound_reference TEXT,
+                status TEXT DEFAULT 'prompt_ready',
+                openrouter_job_id TEXT,
+                video_url TEXT,
+                error TEXT,
+                created_at TEXT,
+                requested_at TEXT
+            );
+        """)
+        await conn.commit()
+
         # Clear stale trending/curated caches (force fresh fetch with more results)
         await conn.execute("DELETE FROM trending_videos")
         await conn.execute("DELETE FROM curated_videos")
