@@ -85,7 +85,10 @@ export default function NicheFeed() {
       .getNiches()
       .then((data) => {
         setNiches(data);
-        if (data.length) setActiveNiche(data[0].key);
+        // Intentionally do NOT auto-select a niche (e.g. "fitness") here.
+        // Leave activeNiche as null until the user explicitly picks a niche
+        // chip, or searches by keyword/hashtag — this avoids kicking off an
+        // unwanted video fetch/generation the moment the page loads.
       })
       .catch((err) => toast.error(getErrorMessage(err)));
   }, []);
@@ -376,6 +379,12 @@ export default function NicheFeed() {
             </Card>
           ))}
         </div>
+      ) : !activeNiche && searchResults === null ? (
+        <EmptyState
+          icon={Compass}
+          title="Pick a niche or search to get started"
+          description="Select a niche chip above, or search by keyword/hashtag, to load videos. Nothing loads automatically."
+        />
       ) : displayVideos.length === 0 ? (
         <EmptyState
           icon={searchResults !== null ? Search : Compass}

@@ -324,10 +324,16 @@ async def generate_customized_preview(
         data = resp.json()
 
     # Extract image from response content
-    choices = data.get("choices", [])
+    choices = data.get("choices") or []
     if not choices:
+        logger.error(f"Customized preview: no choices in response: {json.dumps(data)[:1000]}")
         raise RuntimeError("No response from image generation model.")
-    content = choices[0].get("message", {}).get("content", [])
+    message = choices[0].get("message") or {}
+    finish_reason = choices[0].get("finish_reason")
+    # .get("content") can return an explicit None (e.g. safety refusal / empty response),
+    # which is falsy — `or []` normalizes that to an empty list instead of letting a
+    # bare `for part in content` crash with "'NoneType' object is not iterable".
+    content = message.get("content") or []
     if isinstance(content, str):
         raise RuntimeError(f"Model returned text only, no image: {content[:200]}")
     for part in content:
@@ -338,7 +344,11 @@ async def generate_customized_preview(
                 b64_data = img_url.split(",", 1)[1] if "," in img_url else img_url
                 return base64.b64decode(b64_data)
 
-    raise RuntimeError("No image returned from generation model.")
+    logger.error(
+        f"Customized preview: no image in response (finish_reason={finish_reason}). "
+        f"Message: {json.dumps(message)[:1000]}"
+    )
+    raise RuntimeError(f"No image returned from generation model (finish_reason={finish_reason}).")
 
 
 async def generate_face_swap(
@@ -395,10 +405,16 @@ async def generate_face_swap(
         data = resp.json()
 
     # Extract image from response content
-    choices = data.get("choices", [])
+    choices = data.get("choices") or []
     if not choices:
+        logger.error(f"Face swap: no choices in response: {json.dumps(data)[:1000]}")
         raise RuntimeError("No response from face swap model.")
-    content = choices[0].get("message", {}).get("content", [])
+    message = choices[0].get("message") or {}
+    finish_reason = choices[0].get("finish_reason")
+    # .get("content") can return an explicit None (e.g. safety refusal / empty response),
+    # which is falsy — `or []` normalizes that to an empty list instead of letting a
+    # bare `for part in content` crash with "'NoneType' object is not iterable".
+    content = message.get("content") or []
     if isinstance(content, str):
         raise RuntimeError(f"Model returned text only, no image: {content[:200]}")
     for part in content:
@@ -408,7 +424,11 @@ async def generate_face_swap(
                 b64_data = img_url.split(",", 1)[1] if "," in img_url else img_url
                 return base64.b64decode(b64_data)
 
-    raise RuntimeError("No image returned from face swap model.")
+    logger.error(
+        f"Face swap: no image in response (finish_reason={finish_reason}). "
+        f"Message: {json.dumps(message)[:1000]}"
+    )
+    raise RuntimeError(f"No image returned from face swap model (finish_reason={finish_reason}).")
 
 
 async def generate_video_prompt(analysis: dict, brand_context: dict, target_duration: int, session_id: str, music_context: dict = None, transcript_text: str = "", use_original_sound: bool = False) -> dict:
