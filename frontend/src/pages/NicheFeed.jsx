@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import * as LucideIcons from "lucide-react";
-import { Compass, Search, TrendingUp } from "lucide-react";
+import { Compass, Search, SlidersHorizontal, X } from "lucide-react";
 import { Skeleton } from "../components/ui/skeleton";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -16,6 +16,48 @@ const MODES = [
   { key: "mixed", label: "Mixed" },
 ];
 
+const VIEW_FILTERS = [
+  { key: "all", label: "All" },
+  { key: "1m", label: "1M+", min: 1000000 },
+  { key: "5m", label: "5M+", min: 5000000 },
+  { key: "10m", label: "10M+", min: 10000000 },
+];
+
+const DURATION_FILTERS = [
+  { key: "all", label: "All" },
+  { key: "short", label: "<15s", max: 15 },
+  { key: "medium", label: "15-60s", min: 15, max: 60 },
+  { key: "long", label: "60s+", min: 60 },
+];
+
+const SORT_OPTIONS = [
+  { key: "virality", label: "Virality" },
+  { key: "views", label: "Views" },
+  { key: "likes", label: "Likes" },
+  { key: "engagement", label: "Engagement" },
+  { key: "newest", label: "Newest" },
+];
+
+const RECENCY_FILTERS = [
+  { key: "all", label: "All time" },
+  { key: "7d", label: "7 days", days: 7 },
+  { key: "30d", label: "30 days", days: 30 },
+  { key: "90d", label: "90 days", days: 90 },
+];
+
+function FilterChip({ label, active, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+        active ? "bg-[color:var(--brand-teal)] text-white" : "bg-secondary text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
 export default function NicheFeed() {
   const [niches, setNiches] = useState([]);
   const [activeNiche, setActiveNiche] = useState(null);
@@ -27,6 +69,15 @@ export default function NicheFeed() {
   const [searchResults, setSearchResults] = useState(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const navigate = useNavigate();
+
+  // Filters
+  const [showFilters, setShowFilters] = useState(false);
+  const [viewFilter, setViewFilter] = useState("all");
+  const [durationFilter, setDurationFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("virality");
+  const [recencyFilter, setRecencyFilter] = useState("all");
+
+  const activeFilterCount = [viewFilter !== "all", durationFilter !== "all", sortBy !== "virality", recencyFilter !== "all"].filter(Boolean).length;
 
   useEffect(() => {
     api
@@ -105,14 +156,66 @@ export default function NicheFeed() {
     }
   };
 
-  const displayVideos = searchResults !== null ? searchResults : videos;
+  const resetFilters = () => {
+    setViewFilter("all");
+    setDurationFilter("all");
+    setSortBy("virality");
+    setRecencyFilter("all");
+  };
 
-  const loadingText =
-    mode === "trending"
-      ? "Finding viral videos..."
-      : mode === "mixed"
-      ? "Finding viral and curated videos..."
-      : "Fetching curated videos...";
+  // Apply filters and sorting client-side
+  const displayVideos = useMemo(() => {
+    let list = searchResults !== null ? [...searchResults] : [...videos];
+
+    // View count filter
+    const viewConfig = VIEW_FILTERS.find((f) => f.key === viewFilter);
+    if (viewConfig?.min) {
+      list = list.filter((v) => (v.view_count || 0) >= viewConfig.min);
+    }
+
+    // Duration filter
+    const durConfig = DURATION_FILTERS.find((f) => f.key === durationFilter);
+    if (durConfig?.max && !durConfig?.min) {
+      list = list.filter((v) => (v.duration || 0) > 0 && (v.duration || 0) <= durConfig.max);
+    } else if (durConfig?.min && durConfig?.max) {
+      list = list.filter((v) => (v.duration || 0) >= durConfig.min && (v.duration || 0) <= durConfig.max);
+    } else if (durConfig?.min && !durConfig?.max) {
+      list = list.filter((v) => (v.duration || 0) >= durConfig.min);
+    }
+
+    // Recency filter
+    const recConfig = RECENCY_FILTERS.find((f) => f.key === recencyFilter);
+    if (recConfig?.days) {
+      const cutoff = Date.now() - recConfig.days * 24 * 60 * 60 * 1000;
+      list = list.filter((v) => {
+        const cached = v.cached_at ? new Date(v.cached_at).getTime() : Date.now();
+        return cached >= cutoff;
+      });
+    }
+
+    // Sort
+    if (sortBy === "views") {
+      list.sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
+    } else if (sortBy === "likes") {
+      list.sort((a, b) => (b.like_count || 0) - (a.like_count || 0));
+    } else if (sortBy === "engagement") {
+      const eng = (v) => {
+        const views = v.view_count || 1;
+        return ((v.like_count || 0) + (v.comment_count || 0) + (v.share_count || 0)) / views;
+      };
+      list.sort((a, b) => eng(b) - eng(a));
+    } else if (sortBy === "newest") {
+      list.sort((a, b) => {
+        const ta = a.cached_at ? new Date(a.cached_at).getTime() : 0;
+        const tb = b.cached_at ? new Date(b.cached_at).getTime() : 0;
+        return tb - ta;
+      });
+    } else {
+      list.sort((a, b) => (b.virality_score || 0) - (a.virality_score || 0));
+    }
+
+    return list;
+  }, [videos, searchResults, viewFilter, durationFilter, sortBy, recencyFilter]);
 
   return (
     <div className="space-y-4">
@@ -139,48 +242,77 @@ export default function NicheFeed() {
             <button
               type="submit"
               disabled={searchLoading || !searchQuery.trim()}
-              className="rounded-lg px-3 py-1.5 text-sm font-medium bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white disabled:opacity-50 transition-colors hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98]"
+              className="rounded-lg px-3 py-1.5 text-sm font-medium bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white disabled:opacity-50 transition-colors"
               data-testid="search-button"
             >
-              {searchLoading ? "Searching..." : "Search"}
+              {searchLoading ? "..." : "Search"}
             </button>
             {searchResults !== null && (
-              <button
-                type="button"
-                onClick={clearSearch}
-                className="rounded-lg px-3 py-1.5 text-sm font-medium border border-border hover:bg-muted transition-colors"
-              >
-                Clear
+              <button type="button" onClick={clearSearch} className="rounded-lg px-2.5 py-1.5 text-sm border border-border hover:bg-muted transition-colors">
+                <X className="h-3.5 w-3.5" />
               </button>
             )}
           </form>
 
-          <div className="flex items-center gap-1 rounded-full border border-border p-0.5 bg-secondary shrink-0" data-testid="mode-toggle">
-            {MODES.map((m) => (
-              <button
-                key={m.key}
-                onClick={() => setMode(m.key)}
-                data-testid={`mode-${m.key}`}
-                aria-pressed={mode === m.key}
-                className={`rounded-full px-3 py-1 text-sm font-medium transition-colors active:scale-95 ${
-                  mode === m.key
-                    ? "bg-[color:var(--brand-teal)] text-white"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1 rounded-full border border-border p-0.5 bg-secondary" data-testid="mode-toggle">
+              {MODES.map((m) => (
+                <button
+                  key={m.key}
+                  onClick={() => setMode(m.key)}
+                  data-testid={`mode-${m.key}`}
+                  aria-pressed={mode === m.key}
+                  className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
+                    mode === m.key ? "bg-[color:var(--brand-teal)] text-white" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium border transition-colors ${
+                showFilters || activeFilterCount > 0 ? "border-[color:var(--brand-teal)] text-[color:var(--brand-teal)]" : "border-border text-muted-foreground hover:text-foreground"
+              }`}
+              data-testid="toggle-filters"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              Filters{activeFilterCount > 0 && ` (${activeFilterCount})`}
+            </button>
           </div>
         </div>
 
-        {searchResults !== null && (
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Search className="h-3 w-3" />
-            Results for &quot;{searchQuery}&quot;
-          </span>
+        {/* Expandable filters */}
+        {showFilters && (
+          <div className="space-y-2.5 pt-1 border-t border-border">
+            {/* Sort */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide w-14 shrink-0">Sort</span>
+              {SORT_OPTIONS.map((s) => <FilterChip key={s.key} label={s.label} active={sortBy === s.key} onClick={() => setSortBy(s.key)} />)}
+            </div>
+            {/* Views */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide w-14 shrink-0">Views</span>
+              {VIEW_FILTERS.map((f) => <FilterChip key={f.key} label={f.label} active={viewFilter === f.key} onClick={() => setViewFilter(f.key)} />)}
+            </div>
+            {/* Duration */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide w-14 shrink-0">Length</span>
+              {DURATION_FILTERS.map((f) => <FilterChip key={f.key} label={f.label} active={durationFilter === f.key} onClick={() => setDurationFilter(f.key)} />)}
+            </div>
+            {/* Recency */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide w-14 shrink-0">When</span>
+              {RECENCY_FILTERS.map((f) => <FilterChip key={f.key} label={f.label} active={recencyFilter === f.key} onClick={() => setRecencyFilter(f.key)} />)}
+            </div>
+            {activeFilterCount > 0 && (
+              <button onClick={resetFilters} className="text-[11px] text-muted-foreground hover:text-foreground underline">Reset all filters</button>
+            )}
+          </div>
         )}
 
+        {/* Niche chips */}
         <div className="flex flex-wrap gap-1.5" data-testid="niche-selector-tabs">
           {niches.map((n) => {
             const Icon = LucideIcons[n.icon] || Compass;
@@ -191,10 +323,10 @@ export default function NicheFeed() {
                 onClick={() => setActiveNiche(n.key)}
                 data-testid={`niche-chip-${n.key}`}
                 aria-pressed={isActive}
-                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium border transition-colors hover:-translate-y-[1px] active:translate-y-0 ${
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium border transition-colors ${
                   isActive
                     ? "bg-[color:var(--brand-teal)] text-white border-transparent"
-                    : "bg-secondary border-border hover:border-[color:rgba(13,148,136,0.45)]"
+                    : "bg-secondary border-border hover:border-[color:rgba(129,140,248,0.4)]"
                 }`}
               >
                 <Icon className="h-3.5 w-3.5" /> {n.label}
@@ -203,6 +335,11 @@ export default function NicheFeed() {
           })}
         </div>
       </div>
+
+      {/* Results count */}
+      {!loadingVideos && !searchLoading && displayVideos.length > 0 && (
+        <p className="text-xs text-muted-foreground">{displayVideos.length} video{displayVideos.length !== 1 ? "s" : ""}</p>
+      )}
 
       {loadingVideos || searchLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -220,11 +357,13 @@ export default function NicheFeed() {
       ) : displayVideos.length === 0 ? (
         <EmptyState
           icon={searchResults !== null ? Search : Compass}
-          title={searchResults !== null ? "No results found" : "No trending videos found right now"}
+          title={searchResults !== null ? "No results found" : "No videos match your filters"}
           description={
             searchResults !== null
               ? "Try a different keyword or hashtag."
-              : "This niche's creators may be temporarily unavailable. Try another niche or paste a TikTok URL directly above."
+              : activeFilterCount > 0
+              ? "Try adjusting your filters or selecting a different niche."
+              : "This niche's creators may be temporarily unavailable. Try another niche or paste a TikTok URL above."
           }
         />
       ) : (
