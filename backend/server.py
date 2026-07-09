@@ -2047,6 +2047,48 @@ async def root():
     }
 
 
+@api_router.get("/debug/apify-test")
+async def debug_apify_test():
+    """
+    Diagnostic endpoint: runs the Apify actor asynchronously and returns
+    the run status + dataset info so we can see why it returns 0 results.
+    """
+    import apify_tiktok
+    if not apify_tiktok.is_configured():
+        return {"error": "APIFY_API_TOKEN not set"}
+
+    token = apify_tiktok.APIFY_TOKEN
+    actor_id = apify_tiktok.ACTOR_ID
+
+    input_data = {"keywords": ["fitness"], "maxItems": 15}
+
+    # Start an async run (don't wait for results)
+    run_url = f"https://api.apify.com/v2/acts/{actor_id}/runs"
+    params = {"token": token}
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(run_url, params=params, json=input_data)
+        if resp.status_code not in (200, 201):
+            return {
+                "error": f"Failed to start run: {resp.status_code}",
+                "body": resp.text[:500],
+            }
+        run_data = resp.json().get("data", {})
+
+    return {
+        "run_id": run_data.get("id"),
+        "status": run_data.get("status"),
+        "statusMessage": run_data.get("statusMessage"),
+        "defaultDatasetId": run_data.get("defaultDatasetId"),
+        "startedAt": run_data.get("startedAt"),
+        "usageTotalUsd": run_data.get("usageTotalUsd"),
+        "usageUsd": run_data.get("usageUsd"),
+        "options": run_data.get("options"),
+        "exitCode": run_data.get("exitCode"),
+        "input": input_data,
+    }
+
+
 # ---------------------------------------------------------------------------
 # App wiring
 # ---------------------------------------------------------------------------

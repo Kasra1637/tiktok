@@ -29,6 +29,9 @@ ACTOR_ID = "apidojo~tiktok-scraper"
 # Use the synchronous endpoint with a timeout parameter so Apify returns within Render's limits
 APIFY_RUN_URL = f"https://api.apify.com/v2/acts/{ACTOR_ID}/run-sync-get-dataset-items"
 
+# Diagnostic: also support async run to debug empty results
+APIFY_RUN_ASYNC_URL = f"https://api.apify.com/v2/acts/{ACTOR_ID}/runs"
+
 
 def is_configured() -> bool:
     return bool(APIFY_TOKEN)
