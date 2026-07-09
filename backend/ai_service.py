@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 # Models
 VISION_MODEL = "google/gemini-2.5-flash"
-IMAGE_GEN_MODEL = "google/gemini-2.5-flash-preview-image-generation"
+IMAGE_GEN_MODEL = "google/gemini-2.5-flash-image"
 TEXT_MODEL = "google/gemini-2.5-flash"
 
 # Video generation models (user-selectable)
@@ -191,23 +191,41 @@ async def generate_customized_preview(
 
     payload = {
         "model": IMAGE_GEN_MODEL,
-        "prompt": prompt,
-        "input_references": [
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{ref_b64}"}},
-            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{person_b64}"}},
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{ref_b64}"}},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{person_b64}"}},
+                ],
+            }
         ],
-        "aspect_ratio": "9:16",
+        "modalities": ["text", "image"],
+        "max_tokens": 4096,
     }
 
     async with httpx.AsyncClient(timeout=120) as client:
-        resp = await client.post(f"{OPENROUTER_BASE}/images", headers=_headers(), json=payload)
+        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
         resp.raise_for_status()
         data = resp.json()
 
-    if not data.get("data") or not data["data"][0].get("b64_json"):
-        raise RuntimeError("No image returned from generation model.")
+    # Extract image from response content
+    choices = data.get("choices", [])
+    if not choices:
+        raise RuntimeError("No response from image generation model.")
+    content = choices[0].get("message", {}).get("content", [])
+    if isinstance(content, str):
+        raise RuntimeError(f"Model returned text only, no image: {content[:200]}")
+    for part in content:
+        if isinstance(part, dict) and part.get("type") == "image_url":
+            img_url = part.get("image_url", {}).get("url", "")
+            if img_url.startswith("data:"):
+                # Extract base64 from data URL
+                b64_data = img_url.split(",", 1)[1] if "," in img_url else img_url
+                return base64.b64decode(b64_data)
 
-    return base64.b64decode(data["data"][0]["b64_json"])
+    raise RuntimeError("No image returned from generation model.")
 
 
 async def generate_face_swap(
@@ -244,22 +262,40 @@ async def generate_face_swap(
 
     payload = {
         "model": IMAGE_GEN_MODEL,
-        "prompt": prompt,
-        "input_references": [
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{target_b64}"}},
-            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{source_b64}"}},
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{target_b64}"}},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{source_b64}"}},
+                ],
+            }
         ],
+        "modalities": ["text", "image"],
+        "max_tokens": 4096,
     }
 
     async with httpx.AsyncClient(timeout=120) as client:
-        resp = await client.post(f"{OPENROUTER_BASE}/images", headers=_headers(), json=payload)
+        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
         resp.raise_for_status()
         data = resp.json()
 
-    if not data.get("data") or not data["data"][0].get("b64_json"):
-        raise RuntimeError("No image returned from face swap model.")
+    # Extract image from response content
+    choices = data.get("choices", [])
+    if not choices:
+        raise RuntimeError("No response from face swap model.")
+    content = choices[0].get("message", {}).get("content", [])
+    if isinstance(content, str):
+        raise RuntimeError(f"Model returned text only, no image: {content[:200]}")
+    for part in content:
+        if isinstance(part, dict) and part.get("type") == "image_url":
+            img_url = part.get("image_url", {}).get("url", "")
+            if img_url.startswith("data:"):
+                b64_data = img_url.split(",", 1)[1] if "," in img_url else img_url
+                return base64.b64decode(b64_data)
 
-    return base64.b64decode(data["data"][0]["b64_json"])
+    raise RuntimeError("No image returned from face swap model.")
 
 
 async def generate_video_prompt(analysis: dict, brand_context: dict, target_duration: int, session_id: str) -> dict:
