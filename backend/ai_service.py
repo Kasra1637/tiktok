@@ -10,6 +10,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from typing import Optional
 
 import httpx
 
@@ -86,6 +87,69 @@ def _clean_json_text(text: str) -> str:
         if text.lower().startswith("json"):
             text = text[4:]
     return text.strip()
+
+
+def _extract_balanced_object(text: str) -> Optional[str]:
+    """
+    Scan text for the first balanced {...} object, correctly handling nested
+    braces and braces inside string literals. More robust than find('{')/rfind('}')
+    which breaks when the model adds trailing prose or the JSON contains nested
+    objects/arrays with braces of their own.
+    """
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return None
+
+
+def _parse_json_response(full_text: str, context: str) -> dict:
+    """
+    Robustly parse a JSON object out of an LLM response. Tries, in order:
+    1. Direct json.loads on the cleaned text
+    2. A balanced-brace scan to isolate the JSON object even if the model
+       added leading/trailing commentary or the object contains nested braces
+    On total failure, logs the raw text (truncated) so the actual model output
+    is visible in server logs instead of a bare "invalid JSON" error.
+    """
+    cleaned = _clean_json_text(full_text)
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    candidate = _extract_balanced_object(cleaned)
+    if candidate:
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            pass
+
+    logger.error(
+        f"{context}: model did not return valid JSON. Raw response (first 1500 chars): "
+        f"{full_text[:1500]!r}"
+    )
+    raise RuntimeError(f"{context} did not return valid JSON")
 
 
 async def analyze_hook(frame_paths: list, session_id: str, music_context: dict = None, transcript_text: str = "") -> dict:
@@ -173,7 +237,7 @@ async def analyze_hook(frame_paths: list, session_id: str, music_context: dict =
             {"role": "user", "content": content},
         ],
         "temperature": 0.3,
-        "max_tokens": 2000,
+        "max_tokens": 3000,
     }
 
     async with httpx.AsyncClient(timeout=60) as client:
@@ -181,20 +245,26 @@ async def analyze_hook(frame_paths: list, session_id: str, music_context: dict =
         resp.raise_for_status()
         data = resp.json()
 
-    full_text = data["choices"][0]["message"]["content"]
-    full_text = _clean_json_text(full_text)
+    choices = data.get("choices") or []
+    if not choices:
+        logger.error(f"Hook analysis: no choices in response: {json.dumps(data)[:1000]}")
+        raise RuntimeError("Hook analysis model returned no response")
 
-    try:
-        analysis = json.loads(full_text)
-    except json.JSONDecodeError:
-        start = full_text.find("{")
-        end = full_text.rfind("}")
-        if start == -1 or end == -1:
-            raise RuntimeError("Hook analysis model did not return valid JSON")
-        analysis = json.loads(full_text[start:end + 1])
+    finish_reason = choices[0].get("finish_reason")
+    full_text = choices[0].get("message", {}).get("content", "")
+    if not full_text:
+        logger.error(f"Hook analysis: empty content, finish_reason={finish_reason}, full response: {json.dumps(data)[:1000]}")
+        raise RuntimeError(
+            f"Hook analysis model returned empty content (finish_reason={finish_reason})"
+        )
+    if finish_reason == "length":
+        logger.warning(f"Hook analysis: response was truncated by max_tokens. Raw text: {full_text[:1500]!r}")
+
+    analysis = _parse_json_response(full_text, "Hook analysis")
 
     missing = REQUIRED_ANALYSIS_KEYS - set(analysis.keys())
     if missing:
+        logger.error(f"Hook analysis missing fields {missing}. Raw text: {full_text[:1500]!r}")
         raise RuntimeError(f"Hook analysis missing required fields: {missing}")
 
     return analysis
@@ -433,19 +503,11 @@ async def generate_video_prompt(analysis: dict, brand_context: dict, target_dura
         data = resp.json()
 
     full_text = data["choices"][0]["message"]["content"]
-    full_text = _clean_json_text(full_text)
-
-    try:
-        result = json.loads(full_text)
-    except json.JSONDecodeError:
-        start = full_text.find("{")
-        end = full_text.rfind("}")
-        if start == -1 or end == -1:
-            raise RuntimeError("Video prompt model did not return valid JSON")
-        result = json.loads(full_text[start:end + 1])
+    result = _parse_json_response(full_text, "Video prompt generation")
 
     missing = REQUIRED_VIDEO_PROMPT_KEYS - set(result.keys())
     if missing:
+        logger.error(f"Video prompt generation missing fields {missing}. Raw text: {full_text[:1500]!r}")
         raise RuntimeError(f"Video prompt generation missing required fields: {missing}")
 
     # Deterministic safety net: guarantee the audio plan reflects the user's choice
@@ -551,19 +613,11 @@ async def analyze_brand_from_text(url: str, page_text: str) -> dict:
         data = resp.json()
 
     full_text = data["choices"][0]["message"]["content"]
-    full_text = _clean_json_text(full_text)
-
-    try:
-        result = json.loads(full_text)
-    except json.JSONDecodeError:
-        start = full_text.find("{")
-        end = full_text.rfind("}")
-        if start == -1 or end == -1:
-            raise RuntimeError("Brand analysis model did not return valid JSON")
-        result = json.loads(full_text[start:end + 1])
+    result = _parse_json_response(full_text, "Brand analysis")
 
     missing = REQUIRED_BRAND_ANALYSIS_KEYS - set(result.keys())
     if missing:
+        logger.error(f"Brand analysis missing fields {missing}. Raw text: {full_text[:1500]!r}")
         raise RuntimeError(f"Brand analysis missing required fields: {missing}")
 
     if not isinstance(result.get("products_or_services"), list):
@@ -702,19 +756,11 @@ async def generate_remix_script(analysis: dict, brand_profile: dict, target_dura
         data = resp.json()
 
     full_text = data["choices"][0]["message"]["content"]
-    full_text = _clean_json_text(full_text)
-
-    try:
-        result = json.loads(full_text)
-    except json.JSONDecodeError:
-        start = full_text.find("{")
-        end = full_text.rfind("}")
-        if start == -1 or end == -1:
-            raise RuntimeError("Remix script model did not return valid JSON")
-        result = json.loads(full_text[start:end + 1])
+    result = _parse_json_response(full_text, "Remix script generation")
 
     missing = REQUIRED_VIDEO_PROMPT_KEYS - set(result.keys())
     if missing:
+        logger.error(f"Remix script generation missing fields {missing}. Raw text: {full_text[:1500]!r}")
         raise RuntimeError(f"Remix script generation missing required fields: {missing}")
 
     # Deterministic safety net: guarantee the audio plan reflects the user's choice
@@ -831,18 +877,11 @@ async def remix_chat_turn(
         data = resp.json()
 
     full_text = data["choices"][0]["message"]["content"]
-    full_text = _clean_json_text(full_text)
-    try:
-        result = json.loads(full_text)
-    except json.JSONDecodeError:
-        start = full_text.find("{")
-        end = full_text.rfind("}")
-        if start == -1 or end == -1:
-            raise RuntimeError("Remix chat model did not return valid JSON")
-        result = json.loads(full_text[start:end + 1])
+    result = _parse_json_response(full_text, "Remix chat")
 
     missing = REQUIRED_REMIX_CHAT_KEYS - set(result.keys())
     if missing:
+        logger.error(f"Remix chat missing fields {missing}. Raw text: {full_text[:1500]!r}")
         raise RuntimeError(f"Remix chat response missing required fields: {missing}")
 
     brief = result.get("brief") or {}
