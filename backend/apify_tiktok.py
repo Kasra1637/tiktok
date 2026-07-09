@@ -181,8 +181,17 @@ async def _run_actor(input_data: dict, timeout: int = 120) -> list:
         logger.warning("APIFY_API_TOKEN not set — cannot fetch TikTok data.")
         return []
 
-    # timeout param tells Apify to wait up to this many seconds before returning
-    params = {"token": APIFY_TOKEN, "timeout": 90}
+    # Query params for the run-sync endpoint:
+    # - token: auth
+    # - timeout: how long Apify waits before returning (in seconds)
+    # - clean: skip empty items
+    # - maxItems: billing cap (charged items limit, for pay-per-event actors)
+    max_items = input_data.get("maxItems", 25)
+    params = {
+        "token": APIFY_TOKEN,
+        "timeout": 60,
+        "clean": "true",
+    }
     headers = {"Content-Type": "application/json"}
 
     try:
@@ -194,6 +203,7 @@ async def _run_actor(input_data: dict, timeout: int = 120) -> list:
                 headers=headers,
                 json=input_data,
             )
+            logger.info(f"Apify response status: {resp.status_code}, length: {len(resp.content)}")
             if resp.status_code == 408:
                 # Apify timeout — actor didn't finish in time but may have partial results
                 logger.warning("Apify actor timed out (408) — no results yet")
@@ -205,7 +215,16 @@ async def _run_actor(input_data: dict, timeout: int = 120) -> list:
             if isinstance(items, list):
                 logger.info(f"Apify returned {len(items)} items")
                 return items
-            logger.warning(f"Apify returned non-list: {type(items)}")
+            # Some responses wrap items in a data/items structure
+            if isinstance(items, dict):
+                if "items" in items:
+                    items_list = items["items"]
+                    logger.info(f"Apify returned dict with {len(items_list)} items (unwrapped)")
+                    return items_list if isinstance(items_list, list) else []
+                if "data" in items and isinstance(items["data"], list):
+                    logger.info(f"Apify returned dict.data with {len(items['data'])} items")
+                    return items["data"]
+            logger.warning(f"Apify returned unexpected type: {type(items)}, keys: {items.keys() if isinstance(items, dict) else 'N/A'}, first 300 chars: {str(items)[:300]}")
             return []
     except httpx.TimeoutException:
         logger.warning(f"HTTP timeout after {timeout}s waiting for Apify")
