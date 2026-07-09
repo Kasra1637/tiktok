@@ -175,7 +175,7 @@ def _parse_apify_video(item: dict) -> Optional[dict]:
     }
 
 
-async def _run_actor(input_data: dict, timeout: int = 120) -> list:
+async def _run_actor(input_data: dict, timeout: int = 45) -> list:
     """Run the Apify Actor synchronously and return dataset items."""
     if not APIFY_TOKEN:
         logger.warning("APIFY_API_TOKEN not set — cannot fetch TikTok data.")
@@ -184,12 +184,12 @@ async def _run_actor(input_data: dict, timeout: int = 120) -> list:
     # Query params for the run-sync endpoint:
     # - token: auth
     # - timeout: how long Apify waits before returning (in seconds)
+    #   Keep this SHORT (30s) — the actor is fast (460 posts/sec) so 25 items
+    #   should complete in seconds, but actor startup adds overhead.
     # - clean: skip empty items
-    # - maxItems: billing cap (charged items limit, for pay-per-event actors)
-    max_items = input_data.get("maxItems", 25)
     params = {
         "token": APIFY_TOKEN,
-        "timeout": 60,
+        "timeout": 30,
         "clean": "true",
     }
     headers = {"Content-Type": "application/json"}
@@ -250,7 +250,7 @@ async def fetch_creator_videos(handle: str, limit: int = 10) -> list:
         "maxItems": effective_limit,
     }
 
-    items = await _run_actor(input_data, timeout=120)
+    items = await _run_actor(input_data, timeout=45)
     results = []
     for item in items:
         parsed = _parse_apify_video(item)
@@ -272,7 +272,7 @@ async def fetch_hashtag_videos(hashtag: str, limit: int = 25) -> list:
         "maxItems": effective_limit,
     }
 
-    items = await _run_actor(input_data, timeout=120)
+    items = await _run_actor(input_data, timeout=45)
     results = []
     for item in items:
         parsed = _parse_apify_video(item)
@@ -311,7 +311,7 @@ async def fetch_keyword_videos(keyword: str, limit: int = 25, location: str = ""
     if sort_type and sort_type.strip().upper() in ("RELEVANCE", "MOST_LIKED", "DATE_POSTED"):
         input_data["sortType"] = sort_type.strip().upper()
 
-    items = await _run_actor(input_data, timeout=120)
+    items = await _run_actor(input_data, timeout=45)
     results = []
     for item in items:
         parsed = _parse_apify_video(item)
@@ -338,7 +338,7 @@ async def fetch_music_videos(music_url: str, limit: int = 25) -> list:
         "maxItems": effective_limit,
     }
 
-    items = await _run_actor(input_data, timeout=120)
+    items = await _run_actor(input_data, timeout=45)
     results = []
     for item in items:
         parsed = _parse_apify_video(item)
@@ -365,7 +365,7 @@ async def fetch_location_videos(location_url: str, limit: int = 25) -> list:
         "maxItems": effective_limit,
     }
 
-    items = await _run_actor(input_data, timeout=120)
+    items = await _run_actor(input_data, timeout=45)
     results = []
     for item in items:
         parsed = _parse_apify_video(item)
