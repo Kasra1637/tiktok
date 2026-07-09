@@ -244,9 +244,9 @@ async def init_db():
                 await conn.execute(f"ALTER TABLE brand_profiles ADD COLUMN {col} TEXT")
         await conn.commit()
 
-        # Clear stale trending/curated caches with empty thumbnails (from before Apify fix)
-        await conn.execute("DELETE FROM trending_videos WHERE thumbnail_url = '' OR thumbnail_url IS NULL")
-        await conn.execute("DELETE FROM curated_videos WHERE thumbnail_url = '' OR thumbnail_url IS NULL")
+        # Clear stale trending/curated caches (force fresh fetch with more results)
+        await conn.execute("DELETE FROM trending_videos")
+        await conn.execute("DELETE FROM curated_videos")
         await conn.execute("DELETE FROM trending_cache_meta")
         await conn.execute("DELETE FROM niche_cache_meta")
         await conn.commit()
@@ -298,7 +298,7 @@ async def _refresh_trending_cache(niche_key: str, force: bool = False):
     # Only fetch the first (most relevant) hashtag to keep response fast
     hashtags_to_fetch = hashtags[:1]
     hashtag_results = await asyncio.gather(
-        *[viral_detection.fetch_hashtag_videos(tag, limit=10) for tag in hashtags_to_fetch],
+        *[viral_detection.fetch_hashtag_videos(tag, limit=25) for tag in hashtags_to_fetch],
         return_exceptions=True,
     )
     all_videos = []
