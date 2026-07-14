@@ -106,6 +106,7 @@ export default function FaceSwap() {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState(null);
   const [result, setResult] = useState(null);
+  const [selectedVariant, setSelectedVariant] = useState(0);
 
   // Video state
   const [videoDuration, setVideoDuration] = useState(10);
@@ -213,15 +214,17 @@ export default function FaceSwap() {
 
   const handleGenerate = async () => {
     if (!targetFile || !sourceFile) { toast.error("Upload both images first."); return; }
-    setGenerating(true); setGenError(null); setResult(null);
+    setGenerating(true); setGenError(null); setResult(null); setSelectedVariant(0);
     try {
       const formData = new FormData();
       formData.append("source_face", sourceFile);
       if (targetFrameUrl) formData.append("target_frame_url", targetFrameUrl);
       else formData.append("target_image", targetFile);
+      formData.append("variants", "3");
       const data = await api.faceSwap(formData);
       setResult(data);
-      toast.success("Face swap complete!");
+      const variantCount = data.variants?.length || 1;
+      toast.success(variantCount > 1 ? `${variantCount} variants generated! Pick your favorite.` : "Face swap complete!");
     } catch (err) { setGenError(getErrorMessage(err)); }
     finally { setGenerating(false); }
   };
@@ -239,18 +242,20 @@ export default function FaceSwap() {
   };
 
   const handleQuickPreview = async () => {
-    if (!result?.id) return;
+    const activeId = (result?.variants && result.variants[selectedVariant]?.id) || result?.id;
+    if (!activeId) return;
     setVideoDuration(5); setVideoPrompt(""); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
-    try { const d = await api.faceSwapGenerateVideo(result.id, "", 5, "seedance-2.0-fast"); setVideoJobId(d.job_id); startPolling(d.job_id); }
+    try { const d = await api.faceSwapGenerateVideo(activeId, "", 5, "seedance-2.0-fast"); setVideoJobId(d.job_id); startPolling(d.job_id); }
     catch (err) { setVideoError(getErrorMessage(err)); setVideoStatus(null); setGeneratingVideo(false); }
   };
 
   const handleGenerateBrandedPrompt = async () => {
-    if (!result?.id) return;
+    const activeId = (result?.variants && result.variants[selectedVariant]?.id) || result?.id;
+    if (!activeId) return;
     if (!brandUrl.trim() && !brandProfile) { toast.error("Enter your brand URL."); return; }
     setGeneratingBrandedPrompt(true); setBrandedPromptError(null); setBrandedPrompt("");
     try {
-      const d = await api.faceSwapBrandedPrompt(result.id, brandUrl.trim(), videoInfo?.videoId || "", brandedDuration);
+      const d = await api.faceSwapBrandedPrompt(activeId, brandUrl.trim(), videoInfo?.videoId || "", brandedDuration);
       setBrandedPrompt(d.video_prompt || ""); setBrandedPromptBrand(d.brand_name || "");
       toast.success("Prompt generated!");
     } catch (err) { setBrandedPromptError(getErrorMessage(err)); }
@@ -258,15 +263,17 @@ export default function FaceSwap() {
   };
 
   const handleGenerateBrandedVideo = async () => {
-    if (!result?.id || !brandedPrompt) return;
+    const activeId = (result?.variants && result.variants[selectedVariant]?.id) || result?.id;
+    if (!activeId || !brandedPrompt) return;
     setVideoDuration(brandedDuration); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
-    try { const d = await api.faceSwapGenerateVideo(result.id, brandedPrompt, brandedDuration, videoModel); setVideoJobId(d.job_id); startPolling(d.job_id); }
+    try { const d = await api.faceSwapGenerateVideo(activeId, brandedPrompt, brandedDuration, videoModel); setVideoJobId(d.job_id); startPolling(d.job_id); }
     catch (err) { setVideoError(getErrorMessage(err)); setVideoStatus(null); setGeneratingVideo(false); }
   };
 
   const handleReset = () => {
     setTargetFile(null); setTargetPreview(null); setTargetFrameUrl(null); setVideoInfo(null);
     setSourceFile(null); setSourcePreview(null); setResult(null); setGenError(null);
+    setSelectedVariant(0);
     setVideoDuration(10); setVideoPrompt(""); setGeneratingVideo(false); setVideoJobId(null);
     setVideoStatus(null); setVideoUrl(null); setVideoError(null);
     setBrandUrl(""); setBrandedDuration(15); setBrandedPrompt(""); setBrandedPromptBrand("");
@@ -409,7 +416,7 @@ export default function FaceSwap() {
             <div className="text-center pt-2">
               {generating ? (
                 <Card className="p-5 rounded-2xl max-w-md mx-auto">
-                  <GenerationProgress stages={["Analyzing faces", "Matching lighting", "Generating swap", "Final blending"]} active={true} />
+                  <GenerationProgress stages={["Analyzing faces", "Generating variant 1", "Generating variant 2", "Generating variant 3", "Finalizing"]} active={true} />
                 </Card>
               ) : (
                 <Button onClick={handleGenerate} size="lg" className="gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#e0264c] text-white px-8 py-5 text-sm font-semibold shadow-md" data-testid="generate-swap-button">
@@ -448,14 +455,59 @@ export default function FaceSwap() {
               </div>
               <div className="bg-[color:rgba(99,102,241,0.02)] p-3 text-center">
                 <p className="text-[10px] font-medium text-[color:var(--brand-teal-dark)] mb-1.5 flex items-center justify-center gap-1"><Sparkles className="h-2.5 w-2.5" /> Result</p>
-                <img src={mediaUrl(result.generated_image_url)} alt="Result" className="w-full rounded-lg object-cover aspect-[3/4] ring-1 ring-[color:var(--brand-teal)]" data-testid="face-swap-generated-image" />
+                <img src={mediaUrl((result.variants && result.variants[selectedVariant]?.image_url) || result.generated_image_url)} alt="Result" className="w-full rounded-lg object-cover aspect-[3/4] ring-1 ring-[color:var(--brand-teal)]" data-testid="face-swap-generated-image" />
               </div>
             </div>
           </Card>
 
+          {/* Variant picker — shown when multiple variants are available */}
+          {result.variants && result.variants.length > 1 && (
+            <Card className="rounded-2xl p-4 space-y-3" data-testid="variant-picker">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-[color:var(--brand-teal)]" />
+                  Pick your best variant
+                </p>
+                <span className="text-[10px] text-muted-foreground">{selectedVariant + 1} of {result.variants.length} selected</span>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                {result.variants.map((variant, idx) => (
+                  <button
+                    key={variant.id}
+                    onClick={() => setSelectedVariant(idx)}
+                    className={`relative rounded-xl overflow-hidden border-2 transition-all ${
+                      selectedVariant === idx
+                        ? "border-[color:var(--brand-teal)] ring-2 ring-[color:rgba(99,102,241,0.2)] scale-[1.02]"
+                        : "border-border hover:border-[color:rgba(99,102,241,0.4)] hover:scale-[1.01]"
+                    }`}
+                    data-testid={`variant-option-${idx}`}
+                  >
+                    <img
+                      src={mediaUrl(variant.image_url)}
+                      alt={`Variant ${idx + 1}`}
+                      className="w-full object-cover aspect-[3/4]"
+                    />
+                    {selectedVariant === idx && (
+                      <div className="absolute top-1.5 right-1.5 h-5 w-5 rounded-full bg-[color:var(--brand-teal)] text-white flex items-center justify-center shadow-md">
+                        <Check className="h-3 w-3" />
+                      </div>
+                    )}
+                    <div className="absolute bottom-1.5 left-1.5">
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                        selectedVariant === idx ? "bg-[color:var(--brand-teal)] text-white" : "bg-black/60 text-white"
+                      }`}>
+                        {idx + 1}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </Card>
+          )}
+
           {/* Quick actions */}
           <div className="flex gap-2">
-            <a href={mediaUrl(result.generated_image_url)} download target="_blank" rel="noreferrer" className="flex-1">
+            <a href={mediaUrl((result.variants && result.variants[selectedVariant]?.image_url) || result.generated_image_url)} download target="_blank" rel="noreferrer" className="flex-1">
               <Button variant="outline" className="w-full gap-1.5 rounded-xl text-sm" data-testid="download-swap-button"><Download className="h-3.5 w-3.5" /> Download</Button>
             </a>
             <Button onClick={handleReset} variant="ghost" className="gap-1.5 rounded-xl text-sm text-muted-foreground" data-testid="new-swap-button"><RotateCcw className="h-3.5 w-3.5" /> Reset</Button>

@@ -960,13 +960,18 @@ async def face_swap(
     target_image: UploadFile = File(None),
     source_face: UploadFile = File(...),
     target_frame_url: str = Form(""),
+    variants: int = Form(1),
 ):
     """
     Standalone face swap endpoint. Accepts a target image (uploaded file OR server-side
     frame URL from a video analysis) and a source face image, performs high-fidelity
     face swap with facial geometry tracking, skin tone matching, and lighting adaptation.
+
+    Set variants=3 to generate multiple alternatives in parallel for A/B comparison.
+    The user can then pick the best result before proceeding to video generation.
     """
     require_ai_configured()
+    variants = max(1, min(variants, 4))  # Clamp to 1-4
 
     # Resolve target image path (either from upload or from existing server-side frame)
     if target_frame_url and target_frame_url.strip():
@@ -1011,40 +1016,74 @@ async def face_swap(
     with open(source_path, "wb") as f:
         f.write(normalized_source)
 
-    # Generate face swap
-    try:
-        image_bytes = await generate_face_swap(
-            target_image_path=target_path,
-            source_face_path=source_path,
-            session_id=f"face-swap-{source_id}",
-        )
-    except Exception as e:
-        logger.error(f"Face swap generation failed: {e}")
-        raise HTTPException(
-            status_code=502,
-            detail=f"AI face swap generation failed. Please try again. ({str(e)[:150]})",
-        )
+    # Generate face swap variant(s) in parallel
+    async def _generate_one_variant(variant_idx: int):
+        """Generate a single face swap variant. Returns (id, url, width, height) or None on failure."""
+        try:
+            image_bytes = await generate_face_swap(
+                target_image_path=target_path,
+                source_face_path=source_path,
+                session_id=f"face-swap-{source_id}-v{variant_idx}",
+            )
+            gen_id = str(uuid.uuid4())
+            gen_path = pipeline.GENERATED_DIR / f"{gen_id}.png"
+            with open(gen_path, "wb") as f:
+                f.write(image_bytes)
+            from PIL import Image as PILImage
+            img = PILImage.open(gen_path)
+            w, h = img.size
+            return {
+                "id": gen_id,
+                "image_url": f"/api/media/generated/{gen_id}.png",
+                "resolution": f"{w}x{h}",
+                "variant_index": variant_idx,
+            }
+        except Exception as e:
+            logger.warning(f"Face swap variant {variant_idx} failed: {e}")
+            return None
 
-    # Save generated result
-    generated_id = str(uuid.uuid4())
-    generated_path = pipeline.GENERATED_DIR / f"{generated_id}.png"
-    with open(generated_path, "wb") as f:
-        f.write(image_bytes)
+    if variants == 1:
+        # Single variant — original fast path
+        result = await _generate_one_variant(0)
+        if result is None:
+            raise HTTPException(
+                status_code=502,
+                detail="AI face swap generation failed. Please try again.",
+            )
+        return {
+            "id": result["id"],
+            "generated_image_url": result["image_url"],
+            "target_image_url": target_frame_url.strip() if target_frame_url and target_frame_url.strip() else f"/api/media/uploads/{target_id}.png",
+            "source_face_url": f"/api/media/uploads/{source_id}.png",
+            "resolution": result["resolution"],
+            "format": "PNG",
+            "status": "completed",
+            "variants": [result],
+            "selected_variant": 0,
+        }
+    else:
+        # Multiple variants — run in parallel for A/B comparison
+        tasks = [_generate_one_variant(i) for i in range(variants)]
+        results = await asyncio.gather(*tasks)
+        successful = [r for r in results if r is not None]
 
-    # Get image dimensions for resolution info
-    from PIL import Image as PILImage
-    img = PILImage.open(generated_path)
-    width, height = img.size
+        if not successful:
+            raise HTTPException(
+                status_code=502,
+                detail="AI face swap generation failed for all variants. Please try again.",
+            )
 
-    return {
-        "id": generated_id,
-        "generated_image_url": f"/api/media/generated/{generated_id}.png",
-        "target_image_url": target_frame_url.strip() if target_frame_url and target_frame_url.strip() else f"/api/media/uploads/{target_id}.png",
-        "source_face_url": f"/api/media/uploads/{source_id}.png",
-        "resolution": f"{width}x{height}",
-        "format": "PNG",
-        "status": "completed",
-    }
+        return {
+            "id": successful[0]["id"],  # Default to first successful variant
+            "generated_image_url": successful[0]["image_url"],
+            "target_image_url": target_frame_url.strip() if target_frame_url and target_frame_url.strip() else f"/api/media/uploads/{target_id}.png",
+            "source_face_url": f"/api/media/uploads/{source_id}.png",
+            "resolution": successful[0]["resolution"],
+            "format": "PNG",
+            "status": "completed",
+            "variants": successful,
+            "selected_variant": 0,
+        }
 
 
 # ---------------------------------------------------------------------------
