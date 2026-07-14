@@ -598,19 +598,22 @@ async def generate_video_prompt(analysis: dict, brand_context: dict, target_dura
         f"- Brand name: {brand_context.get('brand_name') or '(not provided)'}\n"
         f"- Brand goal: {brand_context.get('brand_goal') or '(not provided)'}\n"
         f"- Brand details: {brand_context.get('brand_details') or '(not provided)'}\n\n"
-        f"Target video duration: up to {target_duration} seconds.\n\n"
+        f"Target video duration: EXACTLY {target_duration} seconds. This is critical — pace all content, "
+        f"transitions, and delivery to fill exactly {target_duration} seconds. A {target_duration}-second "
+        f"video {'is very short — every beat must be punchy and immediate, no wasted time' if target_duration <= 7 else 'needs tight pacing with clear beats' if target_duration <= 12 else 'allows for a setup-payoff arc with breathing room' if target_duration <= 20 else 'should have a full narrative arc with intro, development, and strong CTA'}.\n\n"
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
-        '  "content": "what happens in the video moment by moment",\n'
+        '  "content": "what happens in the video SECOND BY SECOND — explicitly reference timestamps (e.g. 0-2s: hook, 2-5s: reveal, etc.)",\n'
         '  "camera_angle": "camera angles matching the original hook",\n'
         '  "view_position": "framing/view position",\n'
         '  "character_behavior": "how the character behaves/moves",\n'
         '  "scene_details": "environment/background/lighting/props",\n'
         '  "brand_narrative": "how the video ties into the brand",\n'
         '  "audio_recommendation": "the audio/sound approach for this video",\n'
-        '  "full_video_prompt": "cohesive production-ready prompt (150-300 words)",\n'
-        '  "suggested_duration_seconds": integer up to ' + str(target_duration) + "\n"
+        '  "full_video_prompt": "cohesive production-ready prompt (150-300 words) that EXPLICITLY states the video is ' + str(target_duration) + ' seconds and paces content accordingly",\n'
+        '  "suggested_duration_seconds": ' + str(target_duration) + "\n"
         "}\n"
+        "IMPORTANT: The full_video_prompt MUST explicitly mention it is a " + str(target_duration) + "-second video and structure content timing to match.\n"
         "Return ONLY valid JSON."
     )
 
@@ -844,7 +847,9 @@ async def generate_remix_script(analysis: dict, brand_profile: dict, target_dura
         f"- What sets this brand apart (standout strengths / USPs / signature angle): "
         f"{brand_profile.get('differentiation') or '(not provided)'}\n"
         f"- Tone/voice: {brand_profile.get('tone_voice') or '(not provided)'}\n\n"
-        f"Target video duration: up to {target_duration} seconds.\n\n"
+        f"Target video duration: EXACTLY {target_duration} seconds. This is critical — pace all content, "
+        f"transitions, and delivery to fill exactly {target_duration} seconds. A {target_duration}-second "
+        f"video {'is very short — every beat must be punchy and immediate, no wasted time' if target_duration <= 7 else 'needs tight pacing with clear beats' if target_duration <= 12 else 'allows for a setup-payoff arc with breathing room' if target_duration <= 20 else 'should have a full narrative arc with intro, development, and strong CTA'}.\n\n"
         "Remix the original hook's mechanics into a new script that naturally features this brand's "
         "specific product(s)/service(s) — e.g. if the brand sells fitness supplements, the narrative should "
         "naturally weave in that specific product, not generic brand copy. Speak directly to the ideal "
@@ -854,16 +859,17 @@ async def generate_remix_script(analysis: dict, brand_profile: dict, target_dura
         "a similar audio approach for the remix. Return ONLY a JSON "
         "object with this exact schema:\n"
         "{\n"
-        '  "content": "what happens in the video moment by moment",\n'
+        '  "content": "what happens in the video SECOND BY SECOND — explicitly reference timestamps (e.g. 0-2s: hook, 2-5s: reveal, etc.)",\n'
         '  "camera_angle": "camera angles matching the original hook",\n'
         '  "view_position": "framing/view position",\n'
         '  "character_behavior": "how the character behaves/moves",\n'
         '  "scene_details": "environment/background/lighting/props",\n'
         '  "brand_narrative": "how the video ties into the brand\'s specific niche/products/services/tone",\n'
         '  "audio_recommendation": "suggested sound/music approach for the remix (keep original sound, use similar style, or voiceover)",\n'
-        '  "full_video_prompt": "cohesive production-ready prompt (150-300 words)",\n'
-        '  "suggested_duration_seconds": integer up to ' + str(target_duration) + "\n"
+        '  "full_video_prompt": "cohesive production-ready prompt (150-300 words) that EXPLICITLY states the video is ' + str(target_duration) + ' seconds and paces content accordingly",\n'
+        '  "suggested_duration_seconds": ' + str(target_duration) + "\n"
         "}\n"
+        "IMPORTANT: The full_video_prompt MUST explicitly mention it is a " + str(target_duration) + "-second video and structure content timing to match.\n"
         "Return ONLY valid JSON."
     )
 

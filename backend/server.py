@@ -1321,12 +1321,30 @@ async def face_swap_branded_prompt(
 
         video_prompt = (
             f"Create a {duration}-second vertical video (9:16) featuring the person from the first frame. "
+            f"The video is EXACTLY {duration} seconds long — pace all content to fill this duration. "
             f"The video promotes {brand_name} — {brand_desc}. "
             f"Niche: {niche}. Target audience: {audience}. "
             f"{'Products/services: ' + products_str + '. ' if products_str else ''}"
             f"The tone should be {tone or 'engaging and authentic'}. "
-            "Start with the person's hook gesture from the first frame, then transition into "
-            "a natural, energetic delivery — speaking to camera with confident body language. "
+        )
+        # Add duration-aware pacing instruction
+        if duration <= 7:
+            video_prompt += (
+                "Open with an immediate attention-grabbing hook in the first 1-2 seconds, "
+                "then deliver the key message quickly. "
+            )
+        elif duration <= 15:
+            video_prompt += (
+                f"Start with a punchy hook (0-2s), deliver the core message (2-{duration-2}s), "
+                f"end with a clear CTA or payoff ({duration-2}-{duration}s). "
+            )
+        else:
+            video_prompt += (
+                f"Start with the hook gesture from the first frame (0-3s), build the narrative "
+                f"with energy (3-{duration-5}s), and close with a strong call-to-action "
+                f"({duration-5}-{duration}s). "
+            )
+        video_prompt += (
             "Maintain perfect face consistency throughout. Keep the camera steady with slight "
             "natural movement. The video should feel like an organic TikTok/Reels creator video."
             f"{sound_note}"
