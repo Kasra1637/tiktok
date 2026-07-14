@@ -15,6 +15,8 @@ from typing import Optional
 
 import httpx
 
+from face_crop import crop_face_from_path
+
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 
@@ -436,7 +438,11 @@ async def generate_customized_preview(
     )
 
     ref_b64 = image_to_base64(reference_frame_path)
-    person_b64 = image_to_base64(person_photo_path)
+
+    # Crop the person photo to just the face region before sending to the model.
+    # This ensures only facial identity is used, even if the upload includes torso/body.
+    cropped_person_path = crop_face_from_path(person_photo_path)
+    person_b64 = image_to_base64(cropped_person_path)
 
     payload = {
         "model": IMAGE_GEN_MODEL,
@@ -496,7 +502,11 @@ async def generate_face_swap(
     )
 
     target_b64 = image_to_base64(target_image_path)
-    source_b64 = image_to_base64(source_face_path)
+
+    # Crop the source face image to just the face region before sending to the model.
+    # This ensures only facial identity is used, even if the upload includes torso/body.
+    cropped_source_path = crop_face_from_path(source_face_path)
+    source_b64 = image_to_base64(cropped_source_path)
 
     payload = {
         "model": IMAGE_GEN_MODEL,

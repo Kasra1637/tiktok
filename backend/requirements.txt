@@ -96,3 +96,5 @@ websockets==16.0
 yarl==1.24.2
 yt-dlp==2026.6.9
 zipp==4.1.0
+
+opencv-python-headless==5.0.0.93
