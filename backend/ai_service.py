@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 # Models
 VISION_MODEL = "google/gemini-2.5-flash"
 IMAGE_GEN_MODEL = "google/gemini-2.5-flash-image"
+FACE_SWAP_MODEL = "google/gemini-3-pro-image"  # Gemini 3 Pro Image is far more reliable for face swaps
 TEXT_MODEL = "google/gemini-2.5-flash"
 
 # Video generation models (user-selectable)
@@ -415,14 +416,14 @@ async def generate_customized_preview(
     customization_prompt: str,
     session_id: str,
 ) -> bytes:
-    """Generate face-swapped preview image using OpenRouter Image API (Nano Banana).
+    """Generate face-swapped preview using Gemini 3 Pro Image.
 
-    Uses a multi-turn conversation to force Gemini to properly distinguish the source
-    face identity from the target scene, dramatically improving face swap accuracy.
+    Uses the same direct approach as generate_face_swap — source face first,
+    target scene second, with a clear replacement instruction.
     """
     if mode == "custom" and customization_prompt.strip():
         scene_instruction = (
-            f"Additionally, apply these customizations to the scene: {customization_prompt}. "
+            f" Additionally, apply these customizations to the scene: {customization_prompt}."
         )
     else:
         scene_instruction = ""
@@ -430,12 +431,11 @@ async def generate_customized_preview(
     ref_b64 = image_to_base64(reference_frame_path)
 
     # Crop the person photo to just the face region before sending to the model.
-    # This ensures only facial identity is used, even if the upload includes torso/body.
     cropped_person_path = crop_face_from_path(person_photo_path)
     person_b64 = image_to_base64(cropped_person_path)
 
     payload = {
-        "model": IMAGE_GEN_MODEL,
+        "model": FACE_SWAP_MODEL,
         "messages": [
             {
                 "role": "user",
@@ -443,44 +443,19 @@ async def generate_customized_preview(
                     {
                         "type": "text",
                         "text": (
-                            "This is a photo of Person A. Memorize this person's face — their bone structure, "
-                            "jawline, eyes, nose, lips, skin tone, and overall facial identity. "
-                            "You will need to use this exact face in the next step."
+                            "Please replace the face of the person in the second image with the "
+                            "face of the person in the first image. Keep everything else the same "
+                            "as much as possible — same pose, body, clothing, background, lighting, "
+                            "camera angle, and any text overlays. Do not change the hair color of "
+                            "the person in the second image. The face should be perfectly integrated "
+                            "into the image with natural skin tone matching and seamless blending."
+                            f"{scene_instruction}"
                         ),
                     },
                     {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{person_b64}"}},
-                ],
-            },
-            {
-                "role": "assistant",
-                "content": "I've memorized Person A's facial features — bone structure, jawline, eyes, nose, lips, and skin tone. Ready for the next step.",
-            },
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": (
-                            "Now here is a reference frame from a viral video hook. Generate a new image that "
-                            "recreates this EXACT scene — same pose, body position, hand gesture, clothing, "
-                            "background, lighting, camera angle, text overlays, and composition — but the person "
-                            "in the scene must have Person A's face (from the first image I showed you).\n\n"
-                            "CRITICAL: The output MUST show Person A's face, NOT the original person's face. "
-                            "The face must clearly be Person A's unique facial identity while the rest of the "
-                            "scene stays identical.\n\n"
-                            "Requirements:\n"
-                            "- Use Person A's actual face (their unique bone structure, jawline, eyes, nose, lips)\n"
-                            "- Adapt Person A's skin tone to the scene's lighting naturally\n"
-                            "- Keep the head angle and expression from this reference frame\n"
-                            "- Seamless blending — no visible edges or color mismatch at face boundaries\n"
-                            "- Preserve the hook mechanic (expression + gesture + body position) exactly\n"
-                            f"{scene_instruction}\n"
-                            "Output one photorealistic image."
-                        ),
-                    },
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{ref_b64}"}},
                 ],
-            },
+            }
         ],
         "modalities": ["image", "text"],
         "max_tokens": 4096,
@@ -490,7 +465,7 @@ async def generate_customized_preview(
         payload=payload,
         context="Customized preview generation",
         max_retries=3,
-        timeout=120,
+        timeout=180,
     )
 
 
@@ -500,27 +475,25 @@ async def generate_face_swap(
     session_id: str,
 ) -> bytes:
     """
-    Standalone face swap: swap the face from source_face into the target image.
+    Standalone face swap using Gemini 3 Pro Image (recommended by Google for face swaps).
 
-    Uses a multi-turn conversation approach to force Gemini to properly distinguish
-    between the source identity and the target scene. In a single-turn prompt,
-    Gemini frequently ignores the swap instruction and just regenerates the target.
-    The multi-turn approach establishes the source identity first, then asks for
-    the swap in the second turn — dramatically improving face replacement accuracy.
+    Gemini 2.5 Flash Image is NOT reliable for face replacement — it tends to preserve
+    the original face. Gemini 3 Pro Image handles this much better with a direct,
+    simple prompt approach.
 
-    Includes automatic retry logic (up to 3 attempts) because the Gemini image model
-    intermittently returns text-only responses (finish_reason=stop, no image) due to
-    transient safety filter triggers or model load issues.
+    Uses source-first image ordering (source face = Image 1, target scene = Image 2)
+    so the model anchors on the identity to use before seeing what to apply it to.
     """
     target_b64 = image_to_base64(target_image_path)
 
     # Crop the source face image to just the face region before sending to the model.
-    # This ensures only facial identity is used, even if the upload includes torso/body.
     cropped_source_path = crop_face_from_path(source_face_path)
     source_b64 = image_to_base64(cropped_source_path)
 
+    # Simple, direct prompt — this is what Google's own community recommends.
+    # Source face FIRST, target SECOND. Direct instruction, no over-engineering.
     payload = {
-        "model": IMAGE_GEN_MODEL,
+        "model": FACE_SWAP_MODEL,
         "messages": [
             {
                 "role": "user",
@@ -528,44 +501,18 @@ async def generate_face_swap(
                     {
                         "type": "text",
                         "text": (
-                            "This is a photo of Person A. Memorize this person's face — their bone structure, "
-                            "jawline, eyes, nose, lips, skin tone, and overall facial identity. "
-                            "You will need to use this exact face in the next step."
+                            "Please replace the face of the person in the second image with the "
+                            "face of the person in the first image. Keep everything else the same "
+                            "as much as possible — same pose, body, clothing, background, lighting, "
+                            "camera angle, and any text overlays. Do not change the hair color of "
+                            "the person in the second image. The face should be perfectly integrated "
+                            "into the image with natural skin tone matching and seamless blending."
                         ),
                     },
                     {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{source_b64}"}},
-                ],
-            },
-            {
-                "role": "assistant",
-                "content": "I've memorized Person A's facial features — bone structure, jawline, eyes, nose, lips, and skin tone. Ready for the next step.",
-            },
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": (
-                            "Now here is a target scene image. Generate a new image that is IDENTICAL to this "
-                            "target scene — same pose, body position, hands, clothing, background, lighting, "
-                            "camera angle, text overlays, and composition — but REPLACE the face of the person "
-                            "in this scene with Person A's face that you memorized above.\n\n"
-                            "CRITICAL: The output image MUST show Person A's face (from the first image), NOT "
-                            "the face of the person currently in this target scene. The face must clearly be a "
-                            "different person — Person A — while everything else stays identical.\n\n"
-                            "Requirements:\n"
-                            "- The face must be Person A's actual facial identity (their unique bone structure, "
-                            "jawline, eyes, nose shape, lip shape)\n"
-                            "- Adapt Person A's skin tone to match the scene's lighting naturally\n"
-                            "- Keep the head angle and expression from the target scene\n"
-                            "- Seamless blending at face boundaries — no visible edges or color mismatch\n"
-                            "- Everything else (body, clothes, hands, background, text) stays exactly the same\n\n"
-                            "Output one photorealistic image."
-                        ),
-                    },
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{target_b64}"}},
                 ],
-            },
+            }
         ],
         "modalities": ["image", "text"],
         "max_tokens": 4096,
@@ -575,7 +522,7 @@ async def generate_face_swap(
         payload=payload,
         context="Face swap",
         max_retries=3,
-        timeout=120,
+        timeout=180,
     )
 
 
