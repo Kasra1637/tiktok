@@ -448,7 +448,13 @@ async def generate_customized_preview(
                             "as much as possible — same pose, body, clothing, background, lighting, "
                             "camera angle, and any text overlays. Do not change the hair color of "
                             "the person in the second image. The face should be perfectly integrated "
-                            "into the image with natural skin tone matching and seamless blending."
+                            "into the image with seamless blending. "
+                            "IMPORTANT: The face from the first image is the skin tone reference. "
+                            "Adjust the body and neck skin tone in the output to match the face's "
+                            "skin tone from the first image — the entire visible skin (face, neck, "
+                            "arms, hands) should look like they belong to the same person with a "
+                            "consistent skin color. Apply natural lighting and shadows from the scene, "
+                            "but the base skin color must be consistent with the first image's face."
                             f"{scene_instruction}"
                         ),
                     },
@@ -505,8 +511,14 @@ async def generate_face_swap(
                             "face of the person in the first image. Keep everything else the same "
                             "as much as possible — same pose, body, clothing, background, lighting, "
                             "camera angle, and any text overlays. Do not change the hair color of "
-                            "the person in the second image. The face should be perfectly integrated "
-                            "into the image with natural skin tone matching and seamless blending."
+                            "the person in the second image. "
+                            "IMPORTANT: The face from the first image is the skin tone reference. "
+                            "Adjust the body and neck skin tone in the output to match the face's "
+                            "skin tone from the first image — the entire visible skin (face, neck, "
+                            "arms, hands) should look like they belong to the same person with a "
+                            "consistent skin color. Apply natural lighting and shadows from the scene, "
+                            "but the base skin color must be consistent with the first image's face. "
+                            "The face should be perfectly integrated with seamless blending."
                         ),
                     },
                     {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{source_b64}"}},
