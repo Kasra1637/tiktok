@@ -49,7 +49,7 @@ export const api = {
     client
       .post("/face-swap", formData, {
         headers: { "Content-Type": "multipart/form-data" },
-        timeout: 360000,
+        timeout: 240000,
       })
       .then((r) => r.data),
 

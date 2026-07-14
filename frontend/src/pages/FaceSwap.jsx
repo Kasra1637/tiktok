@@ -214,19 +214,41 @@ export default function FaceSwap() {
 
   const handleGenerate = async () => {
     if (!targetFile || !sourceFile) { toast.error("Upload both images first."); return; }
-    setGenerating(true); setGenError(null); setResult(null); setSelectedVariant(0);
+    setGenerating(true); setGenError(null); setResult(null); setSelectedVariant(0); setGeneratingMore(false);
     try {
       const formData = new FormData();
       formData.append("source_face", sourceFile);
       if (targetFrameUrl) formData.append("target_frame_url", targetFrameUrl);
       else formData.append("target_image", targetFile);
-      formData.append("variants", "3");
       const data = await api.faceSwap(formData);
       setResult(data);
-      const variantCount = data.variants?.length || 1;
-      toast.success(variantCount > 1 ? `${variantCount} variants generated! Pick your favorite.` : "Face swap complete!");
+      toast.success("Face swap complete!");
     } catch (err) { setGenError(getErrorMessage(err)); }
     finally { setGenerating(false); }
+  };
+
+  const [generatingMore, setGeneratingMore] = useState(false);
+
+  const handleGenerateMoreVariants = async () => {
+    if (!targetFile || !sourceFile) return;
+    setGeneratingMore(true);
+    try {
+      const formData = new FormData();
+      formData.append("source_face", sourceFile);
+      if (targetFrameUrl) formData.append("target_frame_url", targetFrameUrl);
+      else formData.append("target_image", targetFile);
+      formData.append("variants", "2");
+      const data = await api.faceSwap(formData);
+      // Merge new variants into existing result
+      if (data.variants && data.variants.length > 0) {
+        setResult((prev) => ({
+          ...prev,
+          variants: [...(prev.variants || [{ id: prev.id, image_url: prev.generated_image_url, resolution: prev.resolution, variant_index: 0 }]), ...data.variants.map((v, i) => ({ ...v, variant_index: (prev.variants?.length || 1) + i }))],
+        }));
+        toast.success(`${data.variants.length} more variant${data.variants.length > 1 ? "s" : ""} ready! Compare and pick your favorite.`);
+      }
+    } catch (err) { toast.error(getErrorMessage(err)); }
+    finally { setGeneratingMore(false); }
   };
 
   const startPolling = (jobId) => {
@@ -416,7 +438,7 @@ export default function FaceSwap() {
             <div className="text-center pt-2">
               {generating ? (
                 <Card className="p-5 rounded-2xl max-w-md mx-auto">
-                  <GenerationProgress stages={["Analyzing faces", "Generating variant 1", "Generating variant 2", "Generating variant 3", "Finalizing"]} active={true} />
+                  <GenerationProgress stages={["Analyzing faces", "Matching lighting", "Generating image", "Final blending"]} active={true} />
                 </Card>
               ) : (
                 <Button onClick={handleGenerate} size="lg" className="gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#e0264c] text-white px-8 py-5 text-sm font-semibold shadow-md" data-testid="generate-swap-button">
@@ -503,6 +525,20 @@ export default function FaceSwap() {
                 ))}
               </div>
             </Card>
+          )}
+
+          {/* Generate more variants button */}
+          {(!result.variants || result.variants.length < 4) && (
+            <Button
+              onClick={handleGenerateMoreVariants}
+              disabled={generatingMore}
+              variant="outline"
+              className="w-full gap-1.5 rounded-xl text-sm"
+              data-testid="generate-more-variants-button"
+            >
+              {generatingMore ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              {generatingMore ? "Generating alternatives..." : "Generate Alternatives"}
+            </Button>
           )}
 
           {/* Quick actions */}
