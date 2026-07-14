@@ -5,6 +5,7 @@ AI service layer using OpenRouter API.
 - Video prompt generation via chat/completions
 - Video generation via /videos endpoint (HappyHorse)
 """
+import asyncio
 import base64
 import json
 import logging
@@ -150,6 +151,141 @@ def _parse_json_response(full_text: str, context: str) -> dict:
         f"{full_text[:1500]!r}"
     )
     raise RuntimeError(f"{context} did not return valid JSON")
+
+
+def _extract_image_bytes_from_response(data: dict, context: str) -> bytes:
+    """
+    Extract image bytes from an OpenRouter chat/completions response.
+
+    OpenRouter returns generated images in TWO possible locations depending on
+    the model and API version:
+      1. message.images[] — newer format (array of image objects with image_url.url)
+      2. message.content[] — older format (array of content parts with type "image_url")
+
+    This helper tries both paths and returns the decoded image bytes, or raises
+    a RuntimeError with diagnostic info if no image is found.
+    """
+    choices = data.get("choices") or []
+    if not choices:
+        logger.error(f"{context}: no choices in response: {json.dumps(data)[:1000]}")
+        raise RuntimeError(f"No response from {context} model.")
+
+    message = choices[0].get("message") or {}
+    finish_reason = choices[0].get("finish_reason")
+
+    # --- Path 1: Check message.images[] (OpenRouter's newer image response format) ---
+    images = message.get("images") or []
+    if isinstance(images, list):
+        for img_obj in images:
+            if isinstance(img_obj, dict):
+                # Format: {"image_url": {"url": "data:image/png;base64,..."}, "type": "image_url"}
+                img_url = ""
+                if "image_url" in img_obj:
+                    img_url = img_obj["image_url"].get("url", "") if isinstance(img_obj["image_url"], dict) else str(img_obj["image_url"])
+                elif "url" in img_obj:
+                    img_url = img_obj["url"]
+
+                if img_url and img_url.startswith("data:"):
+                    b64_data = img_url.split(",", 1)[1] if "," in img_url else img_url
+                    return base64.b64decode(b64_data)
+                elif img_url and not img_url.startswith("data:"):
+                    # Could be a raw base64 string without the data: prefix
+                    try:
+                        return base64.b64decode(img_url)
+                    except Exception:
+                        pass
+
+    # --- Path 2: Check message.content[] (content parts with type "image_url") ---
+    content = message.get("content") or []
+    if isinstance(content, str):
+        # Model returned text only — no image generated
+        # Log the text for debugging (may contain refusal reason)
+        logger.warning(
+            f"{context}: model returned text-only content (finish_reason={finish_reason}): "
+            f"{content[:300]!r}"
+        )
+        raise RuntimeError(
+            f"No image returned from {context} model (finish_reason={finish_reason}). "
+            f"Model response: {content[:200]}"
+        )
+
+    if isinstance(content, list):
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "image_url":
+                img_url = part.get("image_url", {}).get("url", "")
+                if img_url.startswith("data:"):
+                    b64_data = img_url.split(",", 1)[1] if "," in img_url else img_url
+                    return base64.b64decode(b64_data)
+                elif img_url:
+                    try:
+                        return base64.b64decode(img_url)
+                    except Exception:
+                        pass
+
+    # --- No image found anywhere ---
+    logger.error(
+        f"{context}: no image in response (finish_reason={finish_reason}). "
+        f"Message keys: {list(message.keys())}. "
+        f"Message: {json.dumps(message)[:1000]}"
+    )
+    raise RuntimeError(f"No image returned from {context} model (finish_reason={finish_reason}).")
+
+
+async def _call_image_generation_with_retry(
+    payload: dict,
+    context: str,
+    max_retries: int = 3,
+    timeout: int = 120,
+) -> bytes:
+    """
+    Call OpenRouter image generation endpoint with retry logic.
+
+    Gemini image models intermittently return text-only responses (finish_reason=stop
+    but no image) due to safety filters or transient issues. Retrying typically
+    succeeds on the next attempt.
+    """
+    last_error = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.post(
+                    f"{OPENROUTER_BASE}/chat/completions",
+                    headers=_headers(),
+                    json=payload,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+
+            return _extract_image_bytes_from_response(data, context)
+
+        except RuntimeError as e:
+            last_error = e
+            if attempt < max_retries:
+                wait_time = attempt * 2  # 2s, 4s backoff
+                logger.warning(
+                    f"{context}: attempt {attempt}/{max_retries} failed ({e}). "
+                    f"Retrying in {wait_time}s..."
+                )
+                await asyncio.sleep(wait_time)
+            else:
+                logger.error(
+                    f"{context}: all {max_retries} attempts failed. Last error: {e}"
+                )
+        except httpx.HTTPStatusError as e:
+            last_error = RuntimeError(f"HTTP {e.response.status_code}: {e.response.text[:300]}")
+            if attempt < max_retries and e.response.status_code in (429, 500, 502, 503):
+                wait_time = attempt * 3
+                logger.warning(
+                    f"{context}: HTTP {e.response.status_code} on attempt {attempt}/{max_retries}. "
+                    f"Retrying in {wait_time}s..."
+                )
+                await asyncio.sleep(wait_time)
+            else:
+                raise RuntimeError(
+                    f"{context} failed with HTTP {e.response.status_code}: {e.response.text[:300]}"
+                ) from e
+
+    raise last_error or RuntimeError(f"{context} failed after {max_retries} attempts.")
 
 
 async def analyze_hook(frame_paths: list, session_id: str, music_context: dict = None, transcript_text: str = "") -> dict:
@@ -314,41 +450,16 @@ async def generate_customized_preview(
                 ],
             }
         ],
-        "modalities": ["text", "image"],
+        "modalities": ["image", "text"],
         "max_tokens": 4096,
     }
 
-    async with httpx.AsyncClient(timeout=120) as client:
-        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-
-    # Extract image from response content
-    choices = data.get("choices") or []
-    if not choices:
-        logger.error(f"Customized preview: no choices in response: {json.dumps(data)[:1000]}")
-        raise RuntimeError("No response from image generation model.")
-    message = choices[0].get("message") or {}
-    finish_reason = choices[0].get("finish_reason")
-    # .get("content") can return an explicit None (e.g. safety refusal / empty response),
-    # which is falsy — `or []` normalizes that to an empty list instead of letting a
-    # bare `for part in content` crash with "'NoneType' object is not iterable".
-    content = message.get("content") or []
-    if isinstance(content, str):
-        raise RuntimeError(f"Model returned text only, no image: {content[:200]}")
-    for part in content:
-        if isinstance(part, dict) and part.get("type") == "image_url":
-            img_url = part.get("image_url", {}).get("url", "")
-            if img_url.startswith("data:"):
-                # Extract base64 from data URL
-                b64_data = img_url.split(",", 1)[1] if "," in img_url else img_url
-                return base64.b64decode(b64_data)
-
-    logger.error(
-        f"Customized preview: no image in response (finish_reason={finish_reason}). "
-        f"Message: {json.dumps(message)[:1000]}"
+    return await _call_image_generation_with_retry(
+        payload=payload,
+        context="Customized preview generation",
+        max_retries=3,
+        timeout=120,
     )
-    raise RuntimeError(f"No image returned from generation model (finish_reason={finish_reason}).")
 
 
 async def generate_face_swap(
@@ -360,6 +471,10 @@ async def generate_face_swap(
     Standalone face swap: swap the face from source_face into the target image.
     Uses advanced prompt engineering for facial geometry tracking, skin tone matching,
     and lighting adaptation — inspired by Higgsfield's production-quality approach.
+
+    Includes automatic retry logic (up to 3 attempts) because the Gemini image model
+    intermittently returns text-only responses (finish_reason=stop, no image) due to
+    transient safety filter triggers or model load issues.
     """
     prompt = (
         "Perform a high-fidelity face swap. Image 1 is the TARGET — keep everything about this image "
@@ -395,40 +510,16 @@ async def generate_face_swap(
                 ],
             }
         ],
-        "modalities": ["text", "image"],
+        "modalities": ["image", "text"],
         "max_tokens": 4096,
     }
 
-    async with httpx.AsyncClient(timeout=120) as client:
-        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-
-    # Extract image from response content
-    choices = data.get("choices") or []
-    if not choices:
-        logger.error(f"Face swap: no choices in response: {json.dumps(data)[:1000]}")
-        raise RuntimeError("No response from face swap model.")
-    message = choices[0].get("message") or {}
-    finish_reason = choices[0].get("finish_reason")
-    # .get("content") can return an explicit None (e.g. safety refusal / empty response),
-    # which is falsy — `or []` normalizes that to an empty list instead of letting a
-    # bare `for part in content` crash with "'NoneType' object is not iterable".
-    content = message.get("content") or []
-    if isinstance(content, str):
-        raise RuntimeError(f"Model returned text only, no image: {content[:200]}")
-    for part in content:
-        if isinstance(part, dict) and part.get("type") == "image_url":
-            img_url = part.get("image_url", {}).get("url", "")
-            if img_url.startswith("data:"):
-                b64_data = img_url.split(",", 1)[1] if "," in img_url else img_url
-                return base64.b64decode(b64_data)
-
-    logger.error(
-        f"Face swap: no image in response (finish_reason={finish_reason}). "
-        f"Message: {json.dumps(message)[:1000]}"
+    return await _call_image_generation_with_retry(
+        payload=payload,
+        context="Face swap",
+        max_retries=3,
+        timeout=120,
     )
-    raise RuntimeError(f"No image returned from face swap model (finish_reason={finish_reason}).")
 
 
 async def generate_video_prompt(analysis: dict, brand_context: dict, target_duration: int, session_id: str, music_context: dict = None, transcript_text: str = "", use_original_sound: bool = False) -> dict:
