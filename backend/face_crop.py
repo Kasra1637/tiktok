@@ -25,11 +25,12 @@ _MODEL_PATH = Path(__file__).parent / "models" / "face_detection_yunet_2023mar_i
 _MIN_CONFIDENCE = 0.5
 
 # Padding ratios relative to the detected face bounding box dimensions.
-# These ensure we capture enough context (hair, forehead, ears, chin/neck)
-# for the AI to understand the face's identity, while excluding torso/arms.
-_PAD_HORIZONTAL = 0.5    # 50% of face width on each side
-_PAD_TOP = 0.7           # 70% above face (forehead + hair)
-_PAD_BOTTOM = 0.3        # 30% below face (chin + bit of neck)
+# These ensure we capture the full head (face + hair + ears + chin/neck)
+# for the AI to understand the person's complete identity including hair style,
+# while excluding torso/arms/clothing.
+_PAD_HORIZONTAL = 0.6    # 60% of face width on each side (captures ears + hair width)
+_PAD_TOP = 1.0           # 100% above face (captures full hair/top of head)
+_PAD_BOTTOM = 0.4        # 40% below face (chin + neck for skin tone reference)
 
 
 def _detect_face(img_rgb: np.ndarray) -> tuple:
