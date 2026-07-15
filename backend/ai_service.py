@@ -663,7 +663,8 @@ async def generate_video(prompt: str, reference_image_path: Path = None, duratio
         mime = "image/png"
         payload["frame_images"] = [
             {
-                "url": f"data:{mime};base64,{b64}",
+                "type": "image_url",
+                "image_url": {"url": f"data:{mime};base64,{b64}"},
                 "frame_type": "first_frame",
             }
         ]
