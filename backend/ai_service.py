@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # Models
 VISION_MODEL = "google/gemini-2.5-flash"
 IMAGE_GEN_MODEL = "google/gemini-2.5-flash-image"
-FACE_SWAP_MODEL = "google/gemini-2.5-flash-image"  # Nano Banana — proven to work without content filter issues
+FACE_SWAP_MODEL = "x-ai/grok-imagine-image-quality"  # Grok Imagine — strong identity preservation, no content filter issues, 2K
 TEXT_MODEL = "google/gemini-2.5-flash"
 
 # Video generation models (user-selectable)
