@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # Models
 VISION_MODEL = "google/gemini-2.5-flash"
 IMAGE_GEN_MODEL = "google/gemini-2.5-flash-image"
-FACE_SWAP_MODEL = "openai/gpt-5.4-image-2"  # GPT-5.4 Image 2 — best face retention, reasons before rendering, surgical editing
+FACE_SWAP_MODEL = "google/gemini-3.1-flash-image"  # Nano Banana 2 — no aggressive content filter, strong identity preservation, up to 4K
 TEXT_MODEL = "google/gemini-2.5-flash"
 
 # Video generation models (user-selectable)
@@ -180,17 +180,15 @@ def _extract_image_bytes_from_image_response(data: dict, context: str) -> bytes:
 async def _call_image_generation_with_retry(
     payload: dict,
     context: str,
-    max_retries: int = 1,
+    max_retries: int = 2,
     timeout: int = 600,
 ) -> bytes:
     """
     Generate an image through OpenRouter's dedicated Images API.
 
-    Uses a buffered (non-streaming) request when input_references are present
-    because OpenRouter does not support streaming for image-to-image (edit)
-    requests. For text-only prompts, streaming would be possible but we use
-    buffered mode uniformly for simplicity — this function runs inside a
-    background task so there is no browser timeout to worry about.
+    Uses a buffered (non-streaming) request because OpenRouter does not support
+    streaming for image-to-image (edit) requests with input_references.
+    Retries on transient failures (429, 500, 502, 503).
     """
     last_error = None
     request_timeout = httpx.Timeout(connect=30, read=timeout, write=60, pool=30)
@@ -209,6 +207,10 @@ async def _call_image_generation_with_retry(
                         f"{context}: HTTP {resp.status_code} on attempt "
                         f"{attempt}/{max_retries}: {error_text}"
                     )
+                    # Don't retry on 400 client errors (bad request / content filter)
+                    if resp.status_code == 400:
+                        raise RuntimeError(f"HTTP {resp.status_code}: {error_text}")
+                    # Retry on server-side / rate limit errors
                     raise RuntimeError(f"HTTP {resp.status_code}: {error_text}")
 
                 data = resp.json()
@@ -216,7 +218,8 @@ async def _call_image_generation_with_retry(
 
         except Exception as exc:
             last_error = exc if isinstance(exc, RuntimeError) else RuntimeError(str(exc))
-            if attempt < max_retries:
+            is_retryable = "429" in str(last_error) or "500" in str(last_error) or "502" in str(last_error) or "503" in str(last_error)
+            if attempt < max_retries and is_retryable:
                 wait_time = attempt * 3
                 logger.warning(
                     f"{context}: attempt {attempt}/{max_retries} failed ({last_error}). "
@@ -225,6 +228,9 @@ async def _call_image_generation_with_retry(
                 await asyncio.sleep(wait_time)
             else:
                 logger.error(f"{context}: generation failed: {last_error}")
+                break
+
+    raise last_error or RuntimeError(f"{context} failed after {max_retries} attempts.")
 
     raise last_error or RuntimeError(f"{context} failed after {max_retries} attempts.")
 
@@ -356,7 +362,7 @@ async def generate_customized_preview(
     customization_prompt: str,
     session_id: str,
 ) -> bytes:
-    """Generate a customized face-swapped preview with GPT-5.4 Image 2.
+    """Generate a customized face-swapped preview with Gemini 3.1 Flash Image.
 
     The source photo is cropped to the identity region before being sent as the
     first reference; the original scene remains the second reference.
@@ -378,18 +384,18 @@ async def generate_customized_preview(
     payload = {
         "model": FACE_SWAP_MODEL,
         "prompt": (
-            "Reference image 1 is my face and identity. Reference image 2 is the target scene. "
-            "Create a new photorealistic image of the person from reference image 1 in the exact "
-            "pose, clothing, location, composition, and framing of reference image 2. Preserve the "
-            "identity, facial geometry, skin details, and hair from reference image 1 while retaining "
-            "everything else from reference image 2."
+            "I am a content creator. Reference image 1 is my headshot. Reference image 2 is a scene. "
+            "Generate a new image of me (from reference 1) placed into the exact scene from reference 2. "
+            "Keep my face, hair, and features from reference 1. Match the pose, outfit, background, "
+            "lighting, and camera angle from reference 2."
             f"{scene_instruction}"
         ),
         "input_references": [
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{person_b64}"}},
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{ref_b64}"}},
         ],
-        "quality": "high",
+        "resolution": "2K",
+        "aspect_ratio": "9:16",
         "n": 1,
     }
 
@@ -410,7 +416,7 @@ async def generate_face_swap(
     Standalone identity-preserving scene edit through OpenRouter's Images API.
 
     The cropped source identity is reference 1 and the complete target scene is
-    reference 2. GPT-5.4 Image 2 receives both references in one generation call.
+    reference 2. Gemini 3.1 Flash Image receives both references in one call.
     """
     target_b64 = image_to_base64(target_image_path)
 
@@ -421,18 +427,17 @@ async def generate_face_swap(
     payload = {
         "model": FACE_SWAP_MODEL,
         "prompt": (
-            "Reference image 1 is my face and identity. Reference image 2 is the target scene. "
-            "Create a new photorealistic image of the person from reference image 1 in the exact "
-            "pose, clothing, location, composition, lighting, and framing of reference image 2. "
-            "Preserve the identity, facial geometry, skin texture, eye shape, and hair from reference "
-            "image 1. Do not copy the face or identity from reference image 2. Keep all non-identity "
-            "scene details from reference image 2 unchanged."
+            "I am a content creator. Reference image 1 is my headshot. Reference image 2 is a scene. "
+            "Generate a new image of me (from reference 1) placed into the exact scene from reference 2. "
+            "Keep my face, hair, and features from reference 1. Match the pose, outfit, background, "
+            "lighting, and camera angle from reference 2."
         ),
         "input_references": [
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{source_b64}"}},
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{target_b64}"}},
         ],
-        "quality": "high",
+        "resolution": "2K",
+        "aspect_ratio": "9:16",
         "n": 1,
     }
 
