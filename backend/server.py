@@ -1570,6 +1570,9 @@ async def face_swap_video_status(job_id: str):
     """
     require_ai_configured()
 
+    if not job_id or job_id == "undefined" or job_id == "null":
+        raise HTTPException(status_code=400, detail="Invalid video job ID.")
+
     try:
         result = await poll_video_job(job_id)
     except Exception as e:

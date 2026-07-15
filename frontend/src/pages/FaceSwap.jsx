@@ -361,13 +361,26 @@ export default function FaceSwap() {
 
   const startPolling = (jobId) => {
     if (pollingRef.current) clearInterval(pollingRef.current);
+    let pollCount = 0;
+    const MAX_POLLS = 120; // 10 minutes at 5s intervals
     pollingRef.current = setInterval(async () => {
+      pollCount++;
       try {
         const s = await api.faceSwapVideoStatus(jobId);
         setVideoStatus(s.status);
         if (s.status === "completed") { setVideoUrl(s.video_url || s.video_urls?.[0]); setGeneratingVideo(false); clearInterval(pollingRef.current); pollingRef.current = null; toast.success("Video ready!"); }
-        else if (s.status === "failed") { setVideoError(s.error || "Generation failed."); setGeneratingVideo(false); clearInterval(pollingRef.current); pollingRef.current = null; }
-      } catch (err) { console.warn("Poll error:", err); }
+        else if (s.status === "failed" || s.status === "cancelled" || s.status === "expired") { setVideoError(s.error || "Video generation failed."); setGeneratingVideo(false); clearInterval(pollingRef.current); pollingRef.current = null; }
+        else if (pollCount >= MAX_POLLS) { setVideoError("Video generation timed out. Please try again."); setGeneratingVideo(false); clearInterval(pollingRef.current); pollingRef.current = null; }
+      } catch (err) {
+        console.warn("Poll error:", err);
+        // If poll returns 502/404 repeatedly, stop after a few failures
+        if (pollCount > 5 && err?.response?.status >= 400) {
+          setVideoError(`Video status check failed (${err?.response?.status}). The video may still be generating — try refreshing.`);
+          setGeneratingVideo(false);
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+      }
     }, 5000);
   };
 

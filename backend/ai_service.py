@@ -46,7 +46,7 @@ VIDEO_MODELS = {
         "id": "alibaba/wan-2.7",
         "name": "Wan 2.7",
         "description": "Strong image-to-video. Reference style preservation.",
-        "max_duration": 15,
+        "max_duration": 10,
     },
 }
 DEFAULT_VIDEO_MODEL = "seedance-2.0"
@@ -680,18 +680,35 @@ async def generate_video(prompt: str, reference_image_path: Path = None, duratio
             error_text = resp.text[:500]
             logger.error(f"Video generation submission failed: HTTP {resp.status_code}: {error_text}")
             raise RuntimeError(f"Video generation failed (HTTP {resp.status_code}): {error_text}")
-        return resp.json()
+        data = resp.json()
+        job_id = data.get("id") or data.get("generation_id") or ""
+        logger.info(
+            f"Video generation submitted: job_id={job_id}, status={data.get('status')}, "
+            f"polling_url={data.get('polling_url')}, keys={list(data.keys())}"
+        )
+        if not job_id:
+            logger.error(f"Video generation returned no job ID. Full response: {resp.text[:1000]}")
+            raise RuntimeError("Video generation returned no job ID.")
+        # Normalize: ensure 'id' key is always present
+        data["id"] = job_id
+        return data
 
 
 async def poll_video_job(job_id: str) -> dict:
     """Poll a video generation job status."""
+    if not job_id:
+        raise RuntimeError("No video job ID to poll.")
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.get(
             f"{OPENROUTER_BASE}/videos/{job_id}",
             headers=_headers(),
         )
+        if resp.status_code == 404:
+            raise RuntimeError(f"Video job {job_id} not found (404). It may have expired.")
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+        logger.info(f"Poll video {job_id}: status={data.get('status')}, has_urls={bool(data.get('unsigned_urls'))}")
+        return data
 
 
 
