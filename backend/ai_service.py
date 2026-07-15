@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # Models
 VISION_MODEL = "google/gemini-2.5-flash"
 IMAGE_GEN_MODEL = "google/gemini-2.5-flash-image"
-FACE_SWAP_MODEL = "google/gemini-3.1-flash-image"  # Nano Banana 2 — no aggressive content filter, strong identity preservation, up to 4K
+FACE_SWAP_MODEL = "google/gemini-2.5-flash-image"  # Nano Banana — proven to work without content filter issues
 TEXT_MODEL = "google/gemini-2.5-flash"
 
 # Video generation models (user-selectable)
