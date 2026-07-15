@@ -1128,14 +1128,20 @@ async def face_swap_generate_hook_video(
     image_id: str = Form(...),
     motion_style: str = Form(""),
     model: str = Form(""),
+    video_id: str = Form(""),
 ):
     """
     Phase 2a: Generate a 5-second SILENT hook video from the face-swapped image.
-    The hook is purely visual — character movement designed to grab attention
-    and create curiosity in the first 2-3 seconds. No voice, no text.
+
+    If video_id is provided, pulls the hook analysis from the original viral video
+    and uses its PROVEN hook mechanics (expressions, gestures, pacing) as the basis
+    for the video prompt — not a generic template. This is the core value prop:
+    recreating what actually worked.
+
+    Falls back to a motion-style template if no analysis is available.
 
     motion_style options: lean-in, turn, gesture, intrigue, stop-motion
-    (or empty for auto-selection based on the image)
+    (used as fallback when no hook analysis exists)
     """
     require_ai_configured()
 
@@ -1146,21 +1152,60 @@ async def face_swap_generate_hook_video(
             detail="Generated face-swap image not found. Please generate the image first.",
         )
 
-    # Select motion type
-    motion_map = {
-        "lean-in": HOOK_MOTION_TYPES[0],
-        "turn": HOOK_MOTION_TYPES[1],
-        "gesture": HOOK_MOTION_TYPES[2],
-        "intrigue": HOOK_MOTION_TYPES[3],
-        "stop-motion": HOOK_MOTION_TYPES[4],
-    }
-    if motion_style.strip() and motion_style.strip() in motion_map:
-        motion = motion_map[motion_style.strip()]
-    else:
-        # Default: confident lean-in (most universally effective hook movement)
-        motion = HOOK_MOTION_TYPES[0]
+    # Try to get hook analysis from the original viral video
+    analysis = None
+    if video_id and video_id.strip():
+        analysis_row = await _fetch_one(
+            "SELECT * FROM analyses WHERE video_id = ? ORDER BY created_at DESC LIMIT 1",
+            (video_id.strip(),),
+        )
+        if analysis_row:
+            analysis = analysis_row
 
-    prompt = HOOK_VIDEO_PROMPT_TEMPLATE.format(motion_type=motion)
+    if analysis:
+        # USE THE PROVEN HOOK STRUCTURE from the analyzed viral video
+        prompt = (
+            "Create a 5-second vertical video (9:16) starting from this exact first frame. "
+            "NO VOICE, NO SPEECH, NO TEXT OVERLAYS — this is a purely visual hook. "
+            "Recreate the EXACT hook mechanics that made the original viral video work:\n\n"
+            f"FACIAL EXPRESSION: {analysis.get('facial_expressions', 'engaging expression')}\n"
+            f"BODY LANGUAGE & GESTURE: {analysis.get('body_language_gestures', 'confident body language')}\n"
+            f"PACING & MOVEMENT: {analysis.get('pacing_cuts', 'quick, attention-grabbing pacing')}\n"
+            f"HOOK SUMMARY: {analysis.get('hook_summary', 'attention-grabbing opening')}\n\n"
+            "CRITICAL REQUIREMENTS:\n"
+            "- Perform the EXACT movements and expressions described above — these are proven to grab attention\n"
+            "- Maintain perfect face consistency with the first frame throughout\n"
+            "- Smooth, natural motion — no jerky or artificial movement\n"
+            "- Camera holds steady or has a subtle push-in matching the original's pacing\n"
+            "- The movement should build curiosity and make the viewer want to see more\n"
+            "- End on a moment of anticipation (the viewer wants to know what happens next)\n"
+            "- SILENT — no audio, no music, no voiceover, no text overlays"
+        )
+        # Include replicable mechanics if available
+        mechanics = analysis.get("replicable_mechanics")
+        if mechanics:
+            if isinstance(mechanics, str):
+                try:
+                    mechanics = json.loads(mechanics)
+                except (json.JSONDecodeError, TypeError):
+                    mechanics = [mechanics]
+            if isinstance(mechanics, list) and mechanics:
+                mechanics_str = "; ".join(str(m) for m in mechanics[:5])
+                prompt += f"\n\nKEY MECHANICS TO REPLICATE: {mechanics_str}"
+    else:
+        # Fallback: use generic motion template
+        motion_map = {
+            "lean-in": HOOK_MOTION_TYPES[0],
+            "turn": HOOK_MOTION_TYPES[1],
+            "gesture": HOOK_MOTION_TYPES[2],
+            "intrigue": HOOK_MOTION_TYPES[3],
+            "stop-motion": HOOK_MOTION_TYPES[4],
+        }
+        if motion_style.strip() and motion_style.strip() in motion_map:
+            motion = motion_map[motion_style.strip()]
+        else:
+            motion = HOOK_MOTION_TYPES[0]
+        prompt = HOOK_VIDEO_PROMPT_TEMPLATE.format(motion_type=motion)
 
     try:
         result = await generate_video(

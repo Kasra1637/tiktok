@@ -270,7 +270,7 @@ export default function FaceSwap() {
     if (!activeId) return;
     setVideoPhase("hook"); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
     try {
-      const d = await api.faceSwapGenerateHook(activeId, motionStyle, videoModel);
+      const d = await api.faceSwapGenerateHook(activeId, motionStyle, videoModel, videoInfo?.videoId || "");
       setVideoJobId(d.job_id); startPolling(d.job_id);
     } catch (err) { setVideoError(getErrorMessage(err)); setVideoStatus(null); setGeneratingVideo(false); }
   };
@@ -289,7 +289,7 @@ export default function FaceSwap() {
     const activeId = (result?.variants && result.variants[selectedVariant]?.id) || result?.id;
     if (!activeId) return;
     setVideoPhase("hook"); setVideoDuration(5); setVideoPrompt(""); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
-    try { const d = await api.faceSwapGenerateHook(activeId, motionStyle, "seedance-2.0-fast"); setVideoJobId(d.job_id); startPolling(d.job_id); }
+    try { const d = await api.faceSwapGenerateHook(activeId, motionStyle, "seedance-2.0-fast", videoInfo?.videoId || ""); setVideoJobId(d.job_id); startPolling(d.job_id); }
     catch (err) { setVideoError(getErrorMessage(err)); setVideoStatus(null); setGeneratingVideo(false); }
   };
 

@@ -67,11 +67,12 @@ export const api = {
       })
       .then((r) => r.data);
   },
-  faceSwapGenerateHook: (imageId, motionStyle, model) => {
+  faceSwapGenerateHook: (imageId, motionStyle, model, videoId) => {
     const formData = new FormData();
     formData.append("image_id", imageId);
     formData.append("motion_style", motionStyle || "lean-in");
     formData.append("model", model || "");
+    formData.append("video_id", videoId || "");
     return client
       .post("/face-swap/generate-hook-video", formData, {
         headers: { "Content-Type": "multipart/form-data" },
