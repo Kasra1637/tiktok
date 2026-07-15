@@ -111,6 +111,16 @@ export function AppShell({ children }) {
       <main className="relative z-10 max-w-[1400px] mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">
         {children}
       </main>
+      {/* Build stamp — visual proof of which deploy is live. If this doesn't
+          match the latest commit's build stamp, Render served a stale/cached
+          build and needs a forced redeploy (see Dockerfile BUILD_STAMP). */}
+      <div
+        className="fixed bottom-2 right-2 z-50 rounded-full bg-black/70 px-2.5 py-1 text-[9px] font-mono text-white/60 pointer-events-none select-none"
+        data-testid="build-stamp"
+        title="Build version — confirms the deployed frontend matches the latest source"
+      >
+        build:hookflow-v2
+      </div>
     </div>
   );
 }

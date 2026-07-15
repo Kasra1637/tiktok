@@ -6,6 +6,15 @@ WORKDIR /app/frontend
 COPY frontend/package.json frontend/yarn.lock* ./
 RUN yarn install --frozen-lockfile || yarn install
 
+# Cache-bust: this literal string must be changed (any edit works — a new
+# timestamp, a counter, etc.) every time frontend source changes and a fresh
+# build is required. Because the LINE ITSELF changes, Docker/Render cannot
+# reuse the cached layer for this instruction or anything after it — this
+# works regardless of whether Render's Blueprint passes --build-arg through,
+# which is not guaranteed. If the UI still looks stale after a deploy, bump
+# the value below and push again.
+RUN echo "BUILD_STAMP=2026-07-15T03:20:00Z-hookflow-v2" > /tmp/buildstamp.txt
+
 COPY frontend/ ./
 
 # Build with empty BACKEND_URL so API calls use same-origin
