@@ -50,6 +50,9 @@ RUN mkdir -p /app/backend/storage/videos /app/backend/storage/frames \
 # Without this, BuildKit can cache the old COPY --from=builder output even when
 # the builder stage produced new files (multi-stage cache independence bug).
 RUN echo "RUNTIME_BUST=2026-07-15-v2" > /tmp/runtime_bust.txt
+# Copy built frontend from builder stage — RUNTIME_BUST forces Docker to
+# re-execute this COPY even if the runtime stage layers are cached.
+RUN echo "RUNTIME_BUST=2026-07-15-v3" > /tmp/runtime_bust.txt
 COPY --from=builder /app/frontend/build /app/frontend_build/
 
 # Expose the application port
