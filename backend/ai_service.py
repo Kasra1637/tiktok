@@ -25,13 +25,7 @@ logger = logging.getLogger(__name__)
 # Models
 VISION_MODEL = "google/gemini-2.5-flash"
 IMAGE_GEN_MODEL = "google/gemini-2.5-flash-image"
-# Face swap model fallback chain: tries in order until one works
-FACE_SWAP_MODELS = [
-    "google/gemini-2.5-flash-image",         # Original Nano Banana (most reliable/available)
-    "google/gemini-3.1-flash-image",         # Nano Banana 2 (newer)
-    "google/gemini-3-pro-image",             # Nano Banana Pro (highest quality but may need access)
-]
-FACE_SWAP_MODEL = FACE_SWAP_MODELS[0]  # Default to most reliable
+FACE_SWAP_MODEL = "openai/gpt-image-1"  # GPT Image 1.5 — best identity preservation, reliable face editing
 TEXT_MODEL = "google/gemini-2.5-flash"
 
 # Video generation models (user-selectable)
@@ -243,75 +237,64 @@ def _extract_image_bytes_from_response(data: dict, context: str) -> bytes:
 async def _call_image_generation_with_retry(
     payload: dict,
     context: str,
-    max_retries: int = 2,
+    max_retries: int = 3,
     timeout: int = 120,
 ) -> bytes:
     """
-    Call OpenRouter image generation endpoint with retry logic and model fallback.
+    Call OpenRouter image generation endpoint with retry logic.
 
-    Tries the primary model first. If it fails (HTTP error, content filter, or no image),
-    falls back to alternative models from FACE_SWAP_MODELS list.
+    Uses GPT Image 1.5 which has reliable identity preservation and doesn't
+    aggressively content-filter face editing requests like Gemini does.
     """
-    original_model = payload.get("model", FACE_SWAP_MODEL)
-
-    # Build list of models to try: start with the one in payload, then fallbacks
-    models_to_try = [original_model]
-    for m in FACE_SWAP_MODELS:
-        if m != original_model and m not in models_to_try:
-            models_to_try.append(m)
-
     last_error = None
-    for model_idx, model_id in enumerate(models_to_try):
-        payload["model"] = model_id
-        for attempt in range(1, max_retries + 1):
-            try:
-                async with httpx.AsyncClient(timeout=timeout) as client:
-                    resp = await client.post(
-                        f"{OPENROUTER_BASE}/chat/completions",
-                        headers=_headers(),
-                        json=payload,
-                    )
-                    if resp.status_code >= 400:
-                        error_text = resp.text[:300]
-                        logger.warning(
-                            f"{context}: model {model_id} returned HTTP {resp.status_code}: {error_text}"
-                        )
-                        last_error = RuntimeError(f"HTTP {resp.status_code}: {error_text}")
-                        break  # Try next model
-                    data = resp.json()
-
-                return _extract_image_bytes_from_response(data, context)
-
-            except RuntimeError as e:
-                last_error = e
-                if attempt < max_retries:
-                    wait_time = attempt * 2
+    for attempt in range(1, max_retries + 1):
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.post(
+                    f"{OPENROUTER_BASE}/chat/completions",
+                    headers=_headers(),
+                    json=payload,
+                )
+                if resp.status_code >= 400:
+                    error_text = resp.text[:300]
                     logger.warning(
-                        f"{context}: model {model_id}, attempt {attempt}/{max_retries} failed ({e}). "
-                        f"Retrying in {wait_time}s..."
+                        f"{context}: HTTP {resp.status_code} on attempt {attempt}/{max_retries}: {error_text}"
                     )
-                    await asyncio.sleep(wait_time)
-                else:
-                    logger.warning(
-                        f"{context}: model {model_id} failed all {max_retries} attempts."
-                    )
-            except httpx.HTTPStatusError as e:
-                last_error = RuntimeError(f"HTTP {e.response.status_code}: {e.response.text[:300]}")
-                if e.response.status_code in (429, 500, 502, 503) and attempt < max_retries:
-                    wait_time = attempt * 3
-                    logger.warning(
-                        f"{context}: HTTP {e.response.status_code} on attempt {attempt}. Retrying..."
-                    )
-                    await asyncio.sleep(wait_time)
-                else:
-                    logger.warning(f"{context}: model {model_id} failed. Trying next model...")
+                    last_error = RuntimeError(f"HTTP {resp.status_code}: {error_text}")
+                    if resp.status_code in (429, 500, 502, 503) and attempt < max_retries:
+                        await asyncio.sleep(attempt * 3)
+                        continue
                     break
-            except Exception as e:
-                last_error = RuntimeError(f"Unexpected error: {str(e)[:200]}")
-                logger.warning(f"{context}: model {model_id} error: {e}. Trying next model...")
+                data = resp.json()
+
+            return _extract_image_bytes_from_response(data, context)
+
+        except RuntimeError as e:
+            last_error = e
+            if attempt < max_retries:
+                wait_time = attempt * 2
+                logger.warning(
+                    f"{context}: attempt {attempt}/{max_retries} failed ({e}). "
+                    f"Retrying in {wait_time}s..."
+                )
+                await asyncio.sleep(wait_time)
+            else:
+                logger.error(f"{context}: all {max_retries} attempts failed. Last error: {e}")
+        except httpx.HTTPStatusError as e:
+            last_error = RuntimeError(f"HTTP {e.response.status_code}: {e.response.text[:300]}")
+            if e.response.status_code in (429, 500, 502, 503) and attempt < max_retries:
+                await asyncio.sleep(attempt * 3)
+            else:
+                break
+        except Exception as e:
+            last_error = RuntimeError(f"Unexpected error: {str(e)[:200]}")
+            logger.error(f"{context}: unexpected error on attempt {attempt}: {e}")
+            if attempt < max_retries:
+                await asyncio.sleep(attempt * 2)
+            else:
                 break
 
-    raise last_error or RuntimeError(f"{context} failed with all models.")
+    raise last_error or RuntimeError(f"{context} failed after {max_retries} attempts.")
 
 
 async def analyze_hook(frame_paths: list, session_id: str, music_context: dict = None, transcript_text: str = "") -> dict:
