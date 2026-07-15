@@ -6,15 +6,6 @@ WORKDIR /app/frontend
 COPY frontend/package.json frontend/yarn.lock* ./
 RUN yarn install --frozen-lockfile || yarn install
 
-# Cache-bust: this literal string must be changed (any edit works — a new
-# timestamp, a counter, etc.) every time frontend source changes and a fresh
-# build is required. Because the LINE ITSELF changes, Docker/Render cannot
-# reuse the cached layer for this instruction or anything after it — this
-# works regardless of whether Render's Blueprint passes --build-arg through,
-# which is not guaranteed. If the UI still looks stale after a deploy, bump
-# the value below and push again.
-RUN echo "BUILD_STAMP=2026-07-15T03:20:00Z-hookflow-v2" > /tmp/buildstamp.txt
-
 COPY frontend/ ./
 
 # Build with empty BACKEND_URL so API calls use same-origin
@@ -45,14 +36,11 @@ COPY backend/ /app/backend/
 RUN mkdir -p /app/backend/storage/videos /app/backend/storage/frames \
              /app/backend/storage/uploads /app/backend/storage/generated
 
-# Copy built frontend from builder stage
-# NOTE: A RUN before this COPY busts Docker's layer cache for the runtime stage.
-# Without this, BuildKit can cache the old COPY --from=builder output even when
-# the builder stage produced new files (multi-stage cache independence bug).
-RUN echo "RUNTIME_BUST=2026-07-15-v2" > /tmp/runtime_bust.txt
-# Copy built frontend from builder stage — RUNTIME_BUST forces Docker to
-# re-execute this COPY even if the runtime stage layers are cached.
-RUN echo "RUNTIME_BUST=2026-07-15-v3" > /tmp/runtime_bust.txt
+# IMPORTANT: This RUN instruction MUST change value on every deploy where
+# frontend code changed. It busts Docker BuildKit's runtime stage cache
+# which otherwise reuses the old COPY --from=builder output independently
+# of whether the builder stage produced new files.
+RUN echo "FRONTEND_VERSION=hookflow-v3-2026-07-15T04" > /tmp/frontend_version.txt
 COPY --from=builder /app/frontend/build /app/frontend_build/
 
 # Expose the application port
