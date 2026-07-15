@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # Models
 VISION_MODEL = "google/gemini-2.5-flash"
 IMAGE_GEN_MODEL = "google/gemini-2.5-flash-image"
-FACE_SWAP_MODEL = "openai/gpt-5-image"  # GPT-5 Image — reasoning + superior face editing & identity preservation
+FACE_SWAP_MODEL = "openai/gpt-5.5"  # GPT-5.5 — most intelligent model, best reasoning for identity transfer
 TEXT_MODEL = "google/gemini-2.5-flash"
 
 # Video generation models (user-selectable)
