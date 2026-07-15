@@ -644,6 +644,81 @@ async def generate_video_prompt(analysis: dict, brand_context: dict, target_dura
     return result
 
 
+async def analyze_image_for_hook(image_path: Path, session_id: str) -> dict:
+    """
+    Analyze a single image (uploaded target or face-swapped result) to extract
+    hook-relevant movement and expression cues for video generation.
+
+    Unlike analyze_hook() which works on multiple video frames, this works on a
+    SINGLE still image — inferring what movement/expression is captured and what
+    natural continuation would make an effective hook video.
+
+    Returns a dict with the same keys as a hook analysis so it can be used
+    interchangeably by the video generation prompt.
+    """
+    b64 = image_to_base64(image_path)
+
+    system_message = (
+        "You are an expert short-form video (TikTok/Reels) hook strategist. You examine a single "
+        "still image of a person and determine what attention-grabbing movement is happening or "
+        "about to happen — then describe how to animate this into a 5-second silent hook video. "
+        "Respond with STRICT JSON only, no markdown fences, no extra commentary."
+    )
+
+    prompt = (
+        "Here is a still image that will be the first frame of a 5-second TikTok hook video. "
+        "Analyze what's in this image and describe how to animate it into an attention-grabbing "
+        "silent hook. Return ONLY a JSON object with this exact schema:\n"
+        "{\n"
+        '  "facial_expressions": "describe the expression visible and how it should evolve over 5 seconds",\n'
+        '  "body_language_gestures": "describe the pose/gesture visible and what movement should follow",\n'
+        '  "pacing_cuts": "describe the ideal pacing and camera movement for a 5s hook starting from this frame",\n'
+        '  "hook_summary": "1-2 sentence description of the hook concept that would work from this image",\n'
+        '  "replicable_mechanics": ["list", "of", "specific", "movements", "to", "animate"]\n'
+        "}\n"
+        "Focus on: what movement from THIS starting pose would create maximum curiosity in 2-3 seconds? "
+        "Think about what the viewer would want to see happen next. The video will be SILENT (no voice, "
+        "no text) so all attention must come from physical movement and expression change.\n"
+        "Return ONLY valid JSON."
+    )
+
+    content = [
+        {"type": "text", "text": prompt},
+        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
+    ]
+
+    payload = {
+        "model": VISION_MODEL,
+        "messages": [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": content},
+        ],
+        "temperature": 0.4,
+        "max_tokens": 1500,
+    }
+
+    async with httpx.AsyncClient(timeout=45) as client:
+        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+
+    choices = data.get("choices") or []
+    if not choices:
+        logger.warning(f"Image hook analysis: no choices returned")
+        return {}
+
+    full_text = choices[0].get("message", {}).get("content", "")
+    if not full_text:
+        return {}
+
+    try:
+        result = _parse_json_response(full_text, "Image hook analysis")
+        return result
+    except Exception as e:
+        logger.warning(f"Image hook analysis failed to parse: {e}")
+        return {}
+
+
 async def generate_video(prompt: str, reference_image_path: Path = None, duration: int = 5, model: str = None, generate_audio: bool = False) -> dict:
     """Submit a video generation job to OpenRouter. Returns job info for polling.
 

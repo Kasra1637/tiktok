@@ -24,6 +24,7 @@ from ai_service import (
     analyze_hook, generate_customized_preview, generate_face_swap, generate_video_prompt,
     generate_video, poll_video_job, analyze_brand_from_text, generate_remix_script,
     strip_html_to_text, remix_chat_turn, empty_remix_brief, VIDEO_MODELS, DEFAULT_VIDEO_MODEL,
+    analyze_image_for_hook,
 )
 from models import (
     IngestVideoRequest, BrandContextRequest, GenerateVideoRequest,
@@ -1193,19 +1194,46 @@ async def face_swap_generate_hook_video(
                 mechanics_str = "; ".join(str(m) for m in mechanics[:5])
                 prompt += f"\n\nKEY MECHANICS TO REPLICATE: {mechanics_str}"
     else:
-        # Fallback: use generic motion template
-        motion_map = {
-            "lean-in": HOOK_MOTION_TYPES[0],
-            "turn": HOOK_MOTION_TYPES[1],
-            "gesture": HOOK_MOTION_TYPES[2],
-            "intrigue": HOOK_MOTION_TYPES[3],
-            "stop-motion": HOOK_MOTION_TYPES[4],
-        }
-        if motion_style.strip() and motion_style.strip() in motion_map:
-            motion = motion_map[motion_style.strip()]
+        # No video analysis available (manual upload) — analyze the IMAGE itself
+        # to determine the best hook movement based on what's in the frame
+        image_analysis = await analyze_image_for_hook(image_path, session_id=f"img-hook-{image_id}")
+
+        if image_analysis and image_analysis.get("body_language_gestures"):
+            # Use the AI's analysis of the uploaded image
+            prompt = (
+                "Create a 5-second vertical video (9:16) starting from this exact first frame. "
+                "NO VOICE, NO SPEECH, NO TEXT OVERLAYS — this is a purely visual hook. "
+                "Animate from this starting pose using these movement cues:\n\n"
+                f"FACIAL EXPRESSION: {image_analysis.get('facial_expressions', 'engaging expression')}\n"
+                f"BODY LANGUAGE & MOVEMENT: {image_analysis.get('body_language_gestures', 'confident movement')}\n"
+                f"PACING: {image_analysis.get('pacing_cuts', 'quick, attention-grabbing pacing')}\n"
+                f"HOOK CONCEPT: {image_analysis.get('hook_summary', 'attention-grabbing opening')}\n\n"
+                "CRITICAL REQUIREMENTS:\n"
+                "- Animate naturally from the starting pose shown in the first frame\n"
+                "- Maintain perfect face consistency throughout\n"
+                "- Smooth, natural motion — no jerky or artificial movement\n"
+                "- The movement should build curiosity and make the viewer want to see more\n"
+                "- End on a moment of anticipation\n"
+                "- SILENT — no audio, no music, no voiceover, no text overlays"
+            )
+            mechanics = image_analysis.get("replicable_mechanics")
+            if mechanics and isinstance(mechanics, list) and mechanics:
+                mechanics_str = "; ".join(str(m) for m in mechanics[:5])
+                prompt += f"\n\nSPECIFIC MOVEMENTS TO PERFORM: {mechanics_str}"
         else:
-            motion = HOOK_MOTION_TYPES[0]
-        prompt = HOOK_VIDEO_PROMPT_TEMPLATE.format(motion_type=motion)
+            # Final fallback: use the motion style template
+            motion_map = {
+                "lean-in": HOOK_MOTION_TYPES[0],
+                "turn": HOOK_MOTION_TYPES[1],
+                "gesture": HOOK_MOTION_TYPES[2],
+                "intrigue": HOOK_MOTION_TYPES[3],
+                "stop-motion": HOOK_MOTION_TYPES[4],
+            }
+            if motion_style.strip() and motion_style.strip() in motion_map:
+                motion = motion_map[motion_style.strip()]
+            else:
+                motion = HOOK_MOTION_TYPES[0]
+            prompt = HOOK_VIDEO_PROMPT_TEMPLATE.format(motion_type=motion)
 
     try:
         result = await generate_video(
