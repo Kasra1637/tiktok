@@ -802,13 +802,13 @@ export default function FaceSwap() {
                 {/* Motion style selector */}
                 <div className="space-y-1.5">
                   <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Motion style</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                     {[
-                      { key: "lean-in", label: "Lean In", desc: "Confident approach" },
-                      { key: "turn", label: "Dramatic Turn", desc: "Profile to camera" },
-                      { key: "gesture", label: "Gesture", desc: "Hand signal / reveal" },
-                      { key: "intrigue", label: "Intrigue", desc: "Raised brow, half-smile" },
-                      { key: "stop-motion", label: "Stop Motion", desc: "Sudden pose change" },
+                      { key: "lean-in", label: "Lean In", desc: "Move toward camera like you're about to share a secret — builds instant curiosity" },
+                      { key: "turn", label: "Dramatic Turn", desc: "Start from the side, then turn to face the viewer — creates a reveal moment" },
+                      { key: "gesture", label: "Gesture", desc: "Point, raise hand, or reveal something — signals 'watch this' to stop the scroll" },
+                      { key: "intrigue", label: "Intrigue", desc: "Subtle head tilt + raised eyebrow — makes viewers think 'what do they know?'" },
+                      { key: "stop-motion", label: "Stop Motion", desc: "Sudden freeze-frame pose snap — eye-catching pattern interrupt that holds attention" },
                     ].map((m) => (
                       <button key={m.key} onClick={() => setMotionStyle(m.key)}
                         className={`text-left p-2 rounded-lg border transition-all ${motionStyle === m.key ? "border-[color:var(--brand-teal)] bg-[color:rgba(99,102,241,0.05)]" : "border-border hover:border-[color:rgba(99,102,241,0.3)]"}`}
