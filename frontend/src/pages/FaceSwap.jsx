@@ -116,6 +116,8 @@ export default function FaceSwap() {
   const [videoStatus, setVideoStatus] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
   const [videoError, setVideoError] = useState(null);
+  const [videoPhase, setVideoPhase] = useState("hook"); // "hook" | "extend"
+  const [motionStyle, setMotionStyle] = useState("lean-in");
   const pollingRef = useRef(null);
 
   // Brand video state
@@ -263,11 +265,31 @@ export default function FaceSwap() {
     }, 5000);
   };
 
+  const handleGenerateHook = async () => {
+    const activeId = (result?.variants && result.variants[selectedVariant]?.id) || result?.id;
+    if (!activeId) return;
+    setVideoPhase("hook"); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
+    try {
+      const d = await api.faceSwapGenerateHook(activeId, motionStyle, videoModel);
+      setVideoJobId(d.job_id); startPolling(d.job_id);
+    } catch (err) { setVideoError(getErrorMessage(err)); setVideoStatus(null); setGeneratingVideo(false); }
+  };
+
+  const handleExtendVideo = async () => {
+    const activeId = (result?.variants && result.variants[selectedVariant]?.id) || result?.id;
+    if (!activeId) return;
+    setVideoPhase("extend"); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
+    try {
+      const d = await api.faceSwapExtendVideo(activeId, videoJobId, brandUrl.trim(), brandedDuration, videoModel);
+      setVideoJobId(d.job_id); startPolling(d.job_id);
+    } catch (err) { setVideoError(getErrorMessage(err)); setVideoStatus(null); setGeneratingVideo(false); }
+  };
+
   const handleQuickPreview = async () => {
     const activeId = (result?.variants && result.variants[selectedVariant]?.id) || result?.id;
     if (!activeId) return;
-    setVideoDuration(5); setVideoPrompt(""); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
-    try { const d = await api.faceSwapGenerateVideo(activeId, "", 5, "seedance-2.0-fast"); setVideoJobId(d.job_id); startPolling(d.job_id); }
+    setVideoPhase("hook"); setVideoDuration(5); setVideoPrompt(""); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
+    try { const d = await api.faceSwapGenerateHook(activeId, motionStyle, "seedance-2.0-fast"); setVideoJobId(d.job_id); startPolling(d.job_id); }
     catch (err) { setVideoError(getErrorMessage(err)); setVideoStatus(null); setGeneratingVideo(false); }
   };
 
@@ -297,8 +319,8 @@ export default function FaceSwap() {
     setSourceFile(null); setSourcePreview(null); setResult(null); setGenError(null);
     setSelectedVariant(0);
     setVideoDuration(10); setVideoPrompt(""); setGeneratingVideo(false); setVideoJobId(null);
-    setVideoStatus(null); setVideoUrl(null); setVideoError(null);
-    setBrandUrl(""); setBrandedDuration(15); setBrandedPrompt(""); setBrandedPromptBrand("");
+    setVideoStatus(null); setVideoUrl(null); setVideoError(null); setVideoPhase("hook"); setMotionStyle("lean-in");
+    setBrandUrl(""); setBrandedDuration(10); setBrandedPrompt(""); setBrandedPromptBrand("");
     setGeneratingBrandedPrompt(false); setBrandedPromptError(null);
     if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
   };
@@ -549,7 +571,7 @@ export default function FaceSwap() {
             <Button onClick={handleReset} variant="ghost" className="gap-1.5 rounded-xl text-sm text-muted-foreground" data-testid="new-swap-button"><RotateCcw className="h-3.5 w-3.5" /> Reset</Button>
           </div>
 
-          {/* ---------- VIDEO GENERATION ---------- */}
+          {/* ---------- VIDEO GENERATION (Hook → Extend) ---------- */}
           <Card className="rounded-2xl p-5 space-y-4" data-testid="phase2-video-section">
             <div className="flex items-center gap-2.5">
               <div className="h-8 w-8 rounded-full bg-[color:var(--brand-coral)] text-white flex items-center justify-center">
@@ -557,17 +579,77 @@ export default function FaceSwap() {
               </div>
               <div>
                 <h2 className="font-display font-semibold text-base">Create Video</h2>
-                <p className="text-xs text-muted-foreground">Turn your swapped image into an animated video</p>
+                <p className="text-xs text-muted-foreground">Step 1: Silent 5s hook → Step 2: Extend with brand message</p>
               </div>
             </div>
 
-            {/* Video complete */}
-            {videoUrl && (
-              <div className="space-y-3" data-testid="video-result">
-                <video src={videoUrl} controls autoPlay loop className="w-full rounded-xl" data-testid="generated-video-player" />
+            {/* Hook video complete — show it + offer extend */}
+            {videoUrl && videoPhase === "hook" && (
+              <div className="space-y-4" data-testid="hook-video-result">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[color:var(--brand-teal)] text-white">Step 1</span>
+                    <span className="text-xs font-medium">5s Hook Video (silent)</span>
+                    <Check className="h-3.5 w-3.5 text-green-500" />
+                  </div>
+                  <video src={videoUrl} controls autoPlay loop muted className="w-full rounded-xl" data-testid="hook-video-player" />
+                </div>
                 <div className="flex gap-2">
                   <a href={videoUrl} download target="_blank" rel="noreferrer" className="flex-1">
-                    <Button className="w-full gap-1.5 rounded-xl bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white text-sm" data-testid="download-video-button"><Download className="h-3.5 w-3.5" /> Download Video</Button>
+                    <Button variant="outline" className="w-full gap-1.5 rounded-xl text-sm" data-testid="download-hook-button"><Download className="h-3.5 w-3.5" /> Download Hook</Button>
+                  </a>
+                  <Button onClick={handleReset} variant="ghost" className="gap-1.5 rounded-xl text-sm text-muted-foreground"><RotateCcw className="h-3.5 w-3.5" /> Reset</Button>
+                </div>
+
+                {/* Extend section */}
+                <div className="pt-3 border-t border-border space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[color:var(--brand-coral)] text-white">Step 2</span>
+                    <span className="text-xs font-medium">Extend with brand message</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Now add a longer continuation with your brand message, voiceover, and CTA.
+                    {brandProfile && <span className="text-[color:var(--brand-teal)]"> Brand profile detected.</span>}
+                  </p>
+                  <div className="flex gap-2">
+                    <Input value={brandUrl} onChange={(e) => setBrandUrl(e.target.value)} placeholder="https://yourbrand.com" className="flex-1 text-sm" data-testid="extend-brand-url-input" />
+                    <div className="w-20">
+                      <Input type="number" min={5} max={15} value={brandedDuration} onChange={(e) => setBrandedDuration(Math.max(5, Math.min(15, Number(e.target.value) || 10)))} className="text-sm text-center" />
+                      <p className="text-[9px] text-muted-foreground text-center mt-0.5">{brandedDuration}s</p>
+                    </div>
+                  </div>
+                  {/* Model selector */}
+                  <div className="flex gap-1 rounded-lg bg-muted/50 p-0.5" data-testid="extend-model-selector">
+                    {[
+                      { key: "seedance-2.0", label: "Seedance 2.0", sub: "Best quality" },
+                      { key: "wan-2.7", label: "Wan 2.7", sub: "Style preservation" },
+                      { key: "seedance-2.0-fast", label: "Fast", sub: "Quick & cheap" },
+                    ].map((m) => (
+                      <button key={m.key} onClick={() => setVideoModel(m.key)}
+                        className={`flex-1 text-center py-1.5 px-2 rounded-md transition-all ${videoModel === m.key ? "bg-secondary shadow-sm" : "hover:bg-card/50"}`}>
+                        <span className={`text-[11px] font-semibold block ${videoModel === m.key ? "text-foreground" : "text-muted-foreground"}`}>{m.label}</span>
+                        <span className="text-[9px] text-muted-foreground">{m.sub}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <Button onClick={handleExtendVideo} disabled={generatingVideo} className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#e0264c] text-white" data-testid="extend-video-button">
+                    <Film className="h-4 w-4" /> Extend to {brandedDuration}s Branded Video
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Extended video complete */}
+            {videoUrl && videoPhase === "extend" && (
+              <div className="space-y-3" data-testid="extended-video-result">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-600 text-white">Complete</span>
+                  <span className="text-xs font-medium">Extended branded video ready</span>
+                </div>
+                <video src={videoUrl} controls autoPlay loop className="w-full rounded-xl" data-testid="extended-video-player" />
+                <div className="flex gap-2">
+                  <a href={videoUrl} download target="_blank" rel="noreferrer" className="flex-1">
+                    <Button className="w-full gap-1.5 rounded-xl bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white text-sm" data-testid="download-extended-button"><Download className="h-3.5 w-3.5" /> Download Video</Button>
                   </a>
                   <Button onClick={handleReset} variant="outline" className="gap-1.5 rounded-xl text-sm"><RotateCcw className="h-3.5 w-3.5" /> New</Button>
                 </div>
@@ -580,7 +662,9 @@ export default function FaceSwap() {
                 <Loader2 className="h-5 w-5 animate-spin text-[color:var(--brand-teal)] shrink-0" />
                 <div>
                   <p className="text-sm font-medium">{videoStatus === "pending" ? "Queued..." : "Generating..."}</p>
-                  <p className="text-xs text-muted-foreground">Usually takes 30s to 2 min</p>
+                  <p className="text-xs text-muted-foreground">
+                    {videoPhase === "hook" ? "Creating 5s silent hook (30s-2min)" : "Extending video with brand message (1-3min)"}
+                  </p>
                 </div>
               </div>
             )}
@@ -589,90 +673,63 @@ export default function FaceSwap() {
               <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 text-red-400 text-xs">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                 <span className="flex-1">{videoError}</span>
-                <Button size="sm" variant="ghost" onClick={handleQuickPreview} className="text-red-400 h-auto py-1 px-2"><RotateCcw className="h-3 w-3" /></Button>
+                <Button size="sm" variant="ghost" onClick={handleGenerateHook} className="text-red-400 h-auto py-1 px-2"><RotateCcw className="h-3 w-3" /></Button>
               </div>
             )}
 
-            {/* Mode selector — only when no video in progress */}
+            {/* Initial state — generate hook button */}
             {!videoUrl && !videoStatus && (
               <div className="space-y-4">
-                {/* Tab buttons */}
-                <div className="flex rounded-lg bg-muted p-0.5">
-                  <button onClick={() => setVideoMode("branded")} className={`flex-1 text-xs font-semibold py-2 px-3 rounded-md transition-all ${videoMode === "branded" ? "bg-secondary shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-                    Branded Video
-                  </button>
-                  <button onClick={() => setVideoMode("preview")} className={`flex-1 text-xs font-semibold py-2 px-3 rounded-md transition-all ${videoMode === "preview" ? "bg-secondary shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-                    Quick Preview
-                  </button>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[color:var(--brand-teal)] text-white">Step 1</span>
+                    <span className="text-xs font-medium">Generate 5s Hook (silent, movement only)</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    A short, silent video with attention-grabbing movement — no voice, no text. Designed to stop the scroll in the first 2-3 seconds.
+                  </p>
                 </div>
 
-                {/* Quick Preview tab */}
-                {videoMode === "preview" && (
-                  <div className="space-y-3">
-                    <p className="text-xs text-muted-foreground">Generate a 5-second video with natural motion to see how your face looks animated.</p>
-                    <Button onClick={handleQuickPreview} disabled={generatingVideo} variant="secondary" className="w-full gap-2 rounded-xl" data-testid="quick-preview-button">
-                      <Play className="h-4 w-4" /> Generate 5s Preview
-                    </Button>
+                {/* Motion style selector */}
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Motion style</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                    {[
+                      { key: "lean-in", label: "Lean In", desc: "Confident approach" },
+                      { key: "turn", label: "Dramatic Turn", desc: "Profile to camera" },
+                      { key: "gesture", label: "Gesture", desc: "Hand signal / reveal" },
+                      { key: "intrigue", label: "Intrigue", desc: "Raised brow, half-smile" },
+                      { key: "stop-motion", label: "Stop Motion", desc: "Sudden pose change" },
+                    ].map((m) => (
+                      <button key={m.key} onClick={() => setMotionStyle(m.key)}
+                        className={`text-left p-2 rounded-lg border transition-all ${motionStyle === m.key ? "border-[color:var(--brand-teal)] bg-[color:rgba(99,102,241,0.05)]" : "border-border hover:border-[color:rgba(99,102,241,0.3)]"}`}
+                        data-testid={`motion-${m.key}`}>
+                        <span className={`text-[11px] font-semibold block ${motionStyle === m.key ? "text-[color:var(--brand-teal)]" : "text-foreground"}`}>{m.label}</span>
+                        <span className="text-[9px] text-muted-foreground">{m.desc}</span>
+                      </button>
+                    ))}
                   </div>
-                )}
+                </div>
 
-                {/* Branded Video tab */}
-                {videoMode === "branded" && (
-                  <div className="space-y-3">
-                    <p className="text-xs text-muted-foreground">
-                      Enter your website — we'll generate a custom video prompt for your brand, then animate it.
-                      {brandProfile && <span className="text-[color:var(--brand-teal)]"> Saved brand profile detected.</span>}
-                    </p>
+                {/* Model selector */}
+                <div className="flex gap-1 rounded-lg bg-muted/50 p-0.5" data-testid="hook-model-selector">
+                  {[
+                    { key: "seedance-2.0", label: "Seedance 2.0", sub: "Best quality" },
+                    { key: "wan-2.7", label: "Wan 2.7", sub: "Style preservation" },
+                    { key: "seedance-2.0-fast", label: "Fast", sub: "Quick & cheap" },
+                  ].map((m) => (
+                    <button key={m.key} onClick={() => setVideoModel(m.key)}
+                      className={`flex-1 text-center py-1.5 px-2 rounded-md transition-all ${videoModel === m.key ? "bg-secondary shadow-sm" : "hover:bg-card/50"}`}
+                      data-testid={`model-${m.key}`}>
+                      <span className={`text-[11px] font-semibold block ${videoModel === m.key ? "text-foreground" : "text-muted-foreground"}`}>{m.label}</span>
+                      <span className="text-[9px] text-muted-foreground">{m.sub}</span>
+                    </button>
+                  ))}
+                </div>
 
-                    <div className="flex gap-2">
-                      <Input value={brandUrl} onChange={(e) => setBrandUrl(e.target.value)} placeholder="https://yourbrand.com" className="flex-1 text-sm" data-testid="brand-url-input" />
-                      <div className="w-20">
-                        <Input type="number" min={5} max={30} value={brandedDuration} onChange={(e) => setBrandedDuration(Math.max(5, Math.min(30, Number(e.target.value) || 15)))} className="text-sm text-center" data-testid="branded-duration-input" />
-                        <p className="text-[9px] text-muted-foreground text-center mt-0.5">{brandedDuration}s</p>
-                      </div>
-                    </div>
-
-                    {/* Model selector */}
-                    <div className="flex gap-1 rounded-lg bg-muted/50 p-0.5" data-testid="video-model-selector">
-                      {[
-                        { key: "seedance-2.0", label: "Seedance 2.0", sub: "Best quality" },
-                        { key: "wan-2.7", label: "Wan 2.7", sub: "Style preservation" },
-                        { key: "seedance-2.0-fast", label: "Fast", sub: "Quick & cheap" },
-                      ].map((m) => (
-                        <button
-                          key={m.key}
-                          onClick={() => setVideoModel(m.key)}
-                          className={`flex-1 text-center py-1.5 px-2 rounded-md transition-all ${videoModel === m.key ? "bg-secondary shadow-sm" : "hover:bg-card/50"}`}
-                          data-testid={`model-${m.key}`}
-                        >
-                          <span className={`text-[11px] font-semibold block ${videoModel === m.key ? "text-foreground" : "text-muted-foreground"}`}>{m.label}</span>
-                          <span className="text-[9px] text-muted-foreground">{m.sub}</span>
-                        </button>
-                      ))}
-                    </div>
-
-                    {brandedPrompt && (
-                      <Textarea value={brandedPrompt} onChange={(e) => setBrandedPrompt(e.target.value)} className="min-h-[80px] text-xs" data-testid="branded-prompt-textarea" placeholder="Your AI-generated video prompt..." />
-                    )}
-
-                    {brandedPromptError && <p className="text-xs text-red-600">{brandedPromptError}</p>}
-
-                    {generatingBrandedPrompt ? (
-                      <div className="flex items-center gap-2 py-2">
-                        <Loader2 className="h-4 w-4 animate-spin text-[color:var(--brand-coral)]" />
-                        <span className="text-xs">Writing your branded prompt...</span>
-                      </div>
-                    ) : !brandedPrompt ? (
-                      <Button onClick={handleGenerateBrandedPrompt} disabled={generatingBrandedPrompt} className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#e0264c] text-white" data-testid="generate-branded-prompt-button">
-                        <Wand2 className="h-4 w-4" /> Write Video Prompt
-                      </Button>
-                    ) : (
-                      <Button onClick={handleGenerateBrandedVideo} disabled={generatingVideo} className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#e0264c] text-white" data-testid="generate-branded-video-button">
-                        <Clapperboard className="h-4 w-4" /> Generate {brandedDuration}s Video
-                      </Button>
-                    )}
-                  </div>
-                )}
+                <Button onClick={handleGenerateHook} disabled={generatingVideo} className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#e0264c] text-white" data-testid="generate-hook-button">
+                  <Clapperboard className="h-4 w-4" /> Generate 5s Hook Video
+                </Button>
               </div>
             )}
           </Card>

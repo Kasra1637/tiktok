@@ -67,6 +67,32 @@ export const api = {
       })
       .then((r) => r.data);
   },
+  faceSwapGenerateHook: (imageId, motionStyle, model) => {
+    const formData = new FormData();
+    formData.append("image_id", imageId);
+    formData.append("motion_style", motionStyle || "lean-in");
+    formData.append("model", model || "");
+    return client
+      .post("/face-swap/generate-hook-video", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 60000,
+      })
+      .then((r) => r.data);
+  },
+  faceSwapExtendVideo: (imageId, hookJobId, brandUrl, duration, model) => {
+    const formData = new FormData();
+    formData.append("image_id", imageId);
+    formData.append("hook_job_id", hookJobId || "");
+    formData.append("brand_url", brandUrl || "");
+    formData.append("duration", String(duration || 10));
+    formData.append("model", model || "");
+    return client
+      .post("/face-swap/extend-video", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 60000,
+      })
+      .then((r) => r.data);
+  },
   faceSwapVideoStatus: (jobId) =>
     client.get(`/face-swap/video-status/${jobId}`).then((r) => r.data),
   getVideoModels: () => client.get("/video-models").then((r) => r.data),

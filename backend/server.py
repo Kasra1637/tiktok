@@ -1087,12 +1087,245 @@ async def face_swap(
 
 
 # ---------------------------------------------------------------------------
-# Face Swap → Video Generation (Phase 2)
-# Uses the face-swapped image as first_frame to generate a video via
-# OpenRouter's async video API. This is the Higgsfield-style two-phase flow:
-#   Phase 1: Image generation (face swap with Gemini image model)
-#   Phase 2: Video generation (animate the swapped frame into a full video)
+# Face Swap → Video Generation (Two-Phase: Hook + Extend)
+#
+# Phase 2a: HOOK VIDEO (5s, silent, movement-focused)
+#   Generates a short attention-grabbing clip with pure visual motion —
+#   no voice, just character movement to spark curiosity. This is the
+#   "scroll-stopper" that TikTok's algorithm tests in the first 2-3 seconds.
+#
+# Phase 2b: EXTEND VIDEO (optional continuation)
+#   After the user approves the hook, generates a longer continuation with
+#   voice/narrative that delivers the message. Uses the hook video's last
+#   frame as a bridge for visual continuity.
 # ---------------------------------------------------------------------------
+
+HOOK_VIDEO_PROMPT_TEMPLATE = (
+    "Create a 5-second vertical video (9:16) starting from this exact first frame. "
+    "NO VOICE, NO SPEECH, NO TEXT OVERLAYS — this is a purely visual hook. "
+    "The character should perform a single attention-grabbing movement that creates "
+    "curiosity: {motion_type}. "
+    "Requirements: "
+    "- Maintain perfect face consistency with the first frame throughout "
+    "- Smooth, natural motion — no jerky or artificial movement "
+    "- Camera holds steady or has a very subtle push-in for tension "
+    "- The movement should feel like it's building up to something (creates anticipation) "
+    "- End on a moment that makes the viewer want to see what happens next "
+    "- No audio, no music, no voiceover — silent video only"
+)
+
+HOOK_MOTION_TYPES = [
+    "a confident lean-in toward camera with a knowing expression, as if about to reveal a secret",
+    "a slow dramatic turn from profile to face-on, making eye contact with the camera",
+    "a quick attention-grabbing gesture (pointing, hand raise, or prop reveal) that implies 'watch this'",
+    "a subtle head tilt and raised eyebrow with a half-smile, building intrigue",
+    "a sudden stop-motion-style pose change that catches the eye, then holds",
+]
+
+
+@api_router.post("/face-swap/generate-hook-video")
+async def face_swap_generate_hook_video(
+    image_id: str = Form(...),
+    motion_style: str = Form(""),
+    model: str = Form(""),
+):
+    """
+    Phase 2a: Generate a 5-second SILENT hook video from the face-swapped image.
+    The hook is purely visual — character movement designed to grab attention
+    and create curiosity in the first 2-3 seconds. No voice, no text.
+
+    motion_style options: lean-in, turn, gesture, intrigue, stop-motion
+    (or empty for auto-selection based on the image)
+    """
+    require_ai_configured()
+
+    image_path = pipeline.GENERATED_DIR / f"{image_id}.png"
+    if not image_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Generated face-swap image not found. Please generate the image first.",
+        )
+
+    # Select motion type
+    motion_map = {
+        "lean-in": HOOK_MOTION_TYPES[0],
+        "turn": HOOK_MOTION_TYPES[1],
+        "gesture": HOOK_MOTION_TYPES[2],
+        "intrigue": HOOK_MOTION_TYPES[3],
+        "stop-motion": HOOK_MOTION_TYPES[4],
+    }
+    if motion_style.strip() and motion_style.strip() in motion_map:
+        motion = motion_map[motion_style.strip()]
+    else:
+        # Default: confident lean-in (most universally effective hook movement)
+        motion = HOOK_MOTION_TYPES[0]
+
+    prompt = HOOK_VIDEO_PROMPT_TEMPLATE.format(motion_type=motion)
+
+    try:
+        result = await generate_video(
+            prompt=prompt,
+            reference_image_path=image_path,
+            duration=5,
+            model=model.strip() if model else None,
+            generate_audio=False,
+        )
+    except Exception as e:
+        logger.error(f"Hook video generation failed: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Hook video generation failed. Please try again. ({str(e)[:150]})",
+        )
+
+    job_id = result.get("id", "")
+    polling_url = result.get("polling_url", "")
+
+    await _execute(
+        """INSERT OR REPLACE INTO face_swap_video_jobs
+           (id, image_id, prompt, duration, status, polling_url, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (job_id, image_id, prompt, 5, "pending", polling_url, now_iso()),
+    )
+
+    return {
+        "job_id": job_id,
+        "status": "pending",
+        "polling_url": polling_url,
+        "image_id": image_id,
+        "duration": 5,
+        "phase": "hook",
+        "motion_style": motion_style.strip() or "lean-in",
+    }
+
+
+@api_router.post("/face-swap/extend-video")
+async def face_swap_extend_video(
+    image_id: str = Form(...),
+    hook_job_id: str = Form(""),
+    brand_url: str = Form(""),
+    prompt: str = Form(""),
+    duration: int = Form(10),
+    model: str = Form(""),
+):
+    """
+    Phase 2b: Extend the hook video with a longer continuation that delivers
+    the brand message. This generates a video that continues from where the
+    5-second hook left off — with voice, narrative, and CTA.
+
+    If prompt is empty, auto-generates a branded extension prompt using the
+    brand URL or active brand profile.
+    """
+    require_ai_configured()
+
+    image_path = pipeline.GENERATED_DIR / f"{image_id}.png"
+    if not image_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Face-swap image not found. Please generate the image first.",
+        )
+
+    duration = max(5, min(duration, 15))
+
+    # Auto-generate extension prompt if not provided
+    if not prompt.strip():
+        # Try to get brand context
+        brand_profile = None
+        if brand_url and brand_url.strip():
+            url = brand_url.strip()
+            if not url.lower().startswith(("http://", "https://")):
+                url = f"https://{url}"
+            try:
+                async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                }) as client:
+                    resp = await client.get(url)
+                    resp.raise_for_status()
+                    page_text = strip_html_to_text(resp.text)[:8000]
+                    if page_text.strip():
+                        brand_profile = await analyze_brand_from_text(url, page_text)
+            except Exception as e:
+                logger.warning(f"Brand URL fetch failed for extend-video: {e}")
+
+        if not brand_profile:
+            brand_row = await _fetch_one(
+                "SELECT * FROM brand_profiles ORDER BY updated_at DESC, created_at DESC LIMIT 1"
+            )
+            if brand_row:
+                brand_profile = brand_row
+
+        if brand_profile:
+            brand_name = brand_profile.get("brand_name", "the brand")
+            brand_desc = brand_profile.get("brand_description", "")
+            audience = brand_profile.get("target_audience", "")
+            tone = brand_profile.get("tone_voice", "engaging")
+            products = brand_profile.get("products_services") or brand_profile.get("products_or_services") or []
+            if isinstance(products, str):
+                try:
+                    products = json.loads(products)
+                except (json.JSONDecodeError, TypeError):
+                    products = [products] if products else []
+            products_str = ", ".join(str(p) for p in products[:3]) if products else ""
+
+            prompt = (
+                f"Continue this video for {duration} seconds. The character from the first frame "
+                f"now delivers a confident, {tone} message to camera. "
+                f"They are promoting {brand_name}"
+                f"{' — ' + brand_desc if brand_desc else ''}. "
+                f"{'Products/services: ' + products_str + '. ' if products_str else ''}"
+                f"{'Speaking directly to: ' + audience + '. ' if audience else ''}"
+                f"The delivery should feel natural and authentic — like a real creator talking to "
+                f"their audience, not scripted or stiff. Include confident body language, "
+                f"occasional hand gestures, and direct eye contact with camera. "
+                f"End with a clear call-to-action moment (pointing, nodding, or inviting gesture). "
+                f"Maintain perfect face consistency throughout."
+            )
+        else:
+            prompt = (
+                f"Continue this video for {duration} seconds. The character from the first frame "
+                "now delivers an energetic, confident message directly to camera. "
+                "Natural delivery — speaking with passion, using hand gestures, maintaining "
+                "eye contact. The energy builds from the hook into a clear message. "
+                "End with a decisive moment (nod, point, or inviting gesture). "
+                "Maintain perfect face consistency throughout."
+            )
+
+    try:
+        result = await generate_video(
+            prompt=prompt,
+            reference_image_path=image_path,
+            duration=duration,
+            model=model.strip() if model else None,
+            generate_audio=True,
+        )
+    except Exception as e:
+        logger.error(f"Extend video generation failed: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Video extension failed. Please try again. ({str(e)[:150]})",
+        )
+
+    job_id = result.get("id", "")
+    polling_url = result.get("polling_url", "")
+
+    await _execute(
+        """INSERT OR REPLACE INTO face_swap_video_jobs
+           (id, image_id, prompt, duration, status, polling_url, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (job_id, image_id, prompt, duration, "pending", polling_url, now_iso()),
+    )
+
+    return {
+        "job_id": job_id,
+        "status": "pending",
+        "polling_url": polling_url,
+        "image_id": image_id,
+        "duration": duration,
+        "phase": "extend",
+        "hook_job_id": hook_job_id,
+    }
+
+
+# Keep the original endpoint for backward compatibility
 @api_router.post("/face-swap/generate-video")
 async def face_swap_generate_video(
     image_id: str = Form(...),
@@ -1101,13 +1334,12 @@ async def face_swap_generate_video(
     model: str = Form(""),
 ):
     """
-    Phase 2 of the face swap pipeline: take a face-swapped image (from Phase 1)
-    and generate a video using it as the first frame. The video will maintain the
-    swapped face throughout its entire duration.
+    Legacy endpoint — generates a video from the face-swapped image.
+    For the new flow, use /face-swap/generate-hook-video (5s hook)
+    followed by /face-swap/extend-video (continuation).
     """
     require_ai_configured()
 
-    # Validate the generated image exists
     image_path = pipeline.GENERATED_DIR / f"{image_id}.png"
     if not image_path.exists():
         raise HTTPException(
@@ -1115,7 +1347,6 @@ async def face_swap_generate_video(
             detail="Generated face-swap image not found. Please generate the image first.",
         )
 
-    # Build video prompt if not provided
     if not prompt.strip():
         prompt = (
             "Animate this person naturally from the first frame. Keep the same face, pose, and environment. "
@@ -1125,7 +1356,6 @@ async def face_swap_generate_video(
             "Camera holds steady, matching the original framing."
         )
 
-    # Clamp duration
     duration = max(3, min(duration, 15))
 
     try:
@@ -1134,6 +1364,7 @@ async def face_swap_generate_video(
             reference_image_path=image_path,
             duration=duration,
             model=model.strip() if model else None,
+            generate_audio=False,
         )
     except Exception as e:
         logger.error(f"Video generation submission failed: {e}")
@@ -1142,7 +1373,6 @@ async def face_swap_generate_video(
             detail=f"Video generation failed to submit. Please try again. ({str(e)[:150]})",
         )
 
-    # Store the video job in DB for tracking
     job_id = result.get("id", "")
     polling_url = result.get("polling_url", "")
 

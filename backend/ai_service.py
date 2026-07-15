@@ -644,8 +644,13 @@ async def generate_video_prompt(analysis: dict, brand_context: dict, target_dura
     return result
 
 
-async def generate_video(prompt: str, reference_image_path: Path = None, duration: int = 10, model: str = None) -> dict:
-    """Submit a video generation job to OpenRouter. Returns job info for polling."""
+async def generate_video(prompt: str, reference_image_path: Path = None, duration: int = 5, model: str = None, generate_audio: bool = False) -> dict:
+    """Submit a video generation job to OpenRouter. Returns job info for polling.
+
+    Args:
+        generate_audio: Whether to generate audio. Defaults to False for hook videos
+                       (silent movement-based hooks). Set True for extended videos with voiceover.
+    """
     # Resolve model
     if model and model in VIDEO_MODELS:
         model_id = VIDEO_MODELS[model]["id"]
@@ -658,23 +663,32 @@ async def generate_video(prompt: str, reference_image_path: Path = None, duratio
         "model": model_id,
         "prompt": prompt,
         "duration": min(duration, max_dur),
-        "resolution": "1080p",
+        "resolution": "720p",
         "aspect_ratio": "9:16",
+        "generate_audio": generate_audio,
     }
 
     if reference_image_path and reference_image_path.exists():
         b64 = image_to_base64(reference_image_path)
+        mime = "image/png"
         payload["frame_images"] = [
             {
-                "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{b64}"},
+                "url": f"data:{mime};base64,{b64}",
                 "frame_type": "first_frame",
             }
         ]
 
-    async with httpx.AsyncClient(timeout=60) as client:
+    logger.info(
+        f"Submitting video generation: model={model_id}, duration={payload['duration']}s, "
+        f"has_frame_image={bool(payload.get('frame_images'))}, audio={generate_audio}"
+    )
+
+    async with httpx.AsyncClient(timeout=90) as client:
         resp = await client.post(f"{OPENROUTER_BASE}/videos", headers=_headers(), json=payload)
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            error_text = resp.text[:500]
+            logger.error(f"Video generation submission failed: HTTP {resp.status_code}: {error_text}")
+            raise RuntimeError(f"Video generation failed (HTTP {resp.status_code}): {error_text}")
         return resp.json()
 
 
