@@ -1,9 +1,9 @@
 """
 AI service layer using OpenRouter API.
 - Vision-based hook analysis via chat/completions
-- Face-swap image generation via /images endpoint (Nano Banana)
+- Face-swap image generation via the dedicated /images API
 - Video prompt generation via chat/completions
-- Video generation via /videos endpoint (HappyHorse)
+- Video generation via /videos endpoint
 """
 import asyncio
 import base64
@@ -156,143 +156,106 @@ def _parse_json_response(full_text: str, context: str) -> dict:
     raise RuntimeError(f"{context} did not return valid JSON")
 
 
-def _extract_image_bytes_from_response(data: dict, context: str) -> bytes:
-    """
-    Extract image bytes from an OpenRouter chat/completions response.
+def _decode_image_base64(value: str, context: str) -> bytes:
+    """Decode image bytes returned by OpenRouter's dedicated Images API."""
+    if not value:
+        raise RuntimeError(f"No image returned from {context} model.")
+    encoded = value.split(",", 1)[1] if value.startswith("data:") and "," in value else value
+    try:
+        return base64.b64decode(encoded, validate=True)
+    except (ValueError, TypeError) as exc:
+        raise RuntimeError(f"{context} returned invalid image data.") from exc
 
-    OpenRouter returns generated images in TWO possible locations depending on
-    the model and API version:
-      1. message.images[] — newer format (array of image objects with image_url.url)
-      2. message.content[] — older format (array of content parts with type "image_url")
 
-    This helper tries both paths and returns the decoded image bytes, or raises
-    a RuntimeError with diagnostic info if no image is found.
-    """
-    choices = data.get("choices") or []
-    if not choices:
-        logger.error(f"{context}: no choices in response: {json.dumps(data)[:1000]}")
-        raise RuntimeError(f"No response from {context} model.")
-
-    message = choices[0].get("message") or {}
-    finish_reason = choices[0].get("finish_reason")
-
-    # --- Path 1: Check message.images[] (OpenRouter's newer image response format) ---
-    images = message.get("images") or []
-    if isinstance(images, list):
-        for img_obj in images:
-            if isinstance(img_obj, dict):
-                # Format: {"image_url": {"url": "data:image/png;base64,..."}, "type": "image_url"}
-                img_url = ""
-                if "image_url" in img_obj:
-                    img_url = img_obj["image_url"].get("url", "") if isinstance(img_obj["image_url"], dict) else str(img_obj["image_url"])
-                elif "url" in img_obj:
-                    img_url = img_obj["url"]
-
-                if img_url and img_url.startswith("data:"):
-                    b64_data = img_url.split(",", 1)[1] if "," in img_url else img_url
-                    return base64.b64decode(b64_data)
-                elif img_url and not img_url.startswith("data:"):
-                    # Could be a raw base64 string without the data: prefix
-                    try:
-                        return base64.b64decode(img_url)
-                    except Exception:
-                        pass
-
-    # --- Path 2: Check message.content[] (content parts with type "image_url") ---
-    content = message.get("content") or []
-    if isinstance(content, str):
-        # Model returned text only — no image generated
-        # Log the text for debugging (may contain refusal reason)
-        logger.warning(
-            f"{context}: model returned text-only content (finish_reason={finish_reason}): "
-            f"{content[:300]!r}"
-        )
-        raise RuntimeError(
-            f"No image returned from {context} model (finish_reason={finish_reason}). "
-            f"Model response: {content[:200]}"
-        )
-
-    if isinstance(content, list):
-        for part in content:
-            if isinstance(part, dict) and part.get("type") == "image_url":
-                img_url = part.get("image_url", {}).get("url", "")
-                if img_url.startswith("data:"):
-                    b64_data = img_url.split(",", 1)[1] if "," in img_url else img_url
-                    return base64.b64decode(b64_data)
-                elif img_url:
-                    try:
-                        return base64.b64decode(img_url)
-                    except Exception:
-                        pass
-
-    # --- No image found anywhere ---
-    logger.error(
-        f"{context}: no image in response (finish_reason={finish_reason}). "
-        f"Message keys: {list(message.keys())}. "
-        f"Message: {json.dumps(message)[:1000]}"
-    )
-    raise RuntimeError(f"No image returned from {context} model (finish_reason={finish_reason}).")
+def _extract_image_bytes_from_image_response(data: dict, context: str) -> bytes:
+    """Extract the first image from a buffered OpenRouter Images API response."""
+    images = data.get("data") or []
+    for image in images:
+        if isinstance(image, dict) and image.get("b64_json"):
+            return _decode_image_base64(image["b64_json"], context)
+    logger.error(f"{context}: no image in Images API response: {json.dumps(data)[:1000]}")
+    raise RuntimeError(f"No image returned from {context} model.")
 
 
 async def _call_image_generation_with_retry(
     payload: dict,
     context: str,
-    max_retries: int = 3,
-    timeout: int = 120,
+    max_retries: int = 1,
+    timeout: int = 600,
 ) -> bytes:
     """
-    Call OpenRouter image generation endpoint with retry logic.
+    Generate an image through OpenRouter's dedicated Images API.
 
-    Uses GPT Image 1.5 which has reliable identity preservation and doesn't
-    aggressively content-filter face editing requests like Gemini does.
+    GPT-5.4 Image 2 supports native SSE streaming. Streaming keeps the upstream
+    connection active during long renders and delivers the final base64 image in
+    an image_generation.completed event. The caller runs this outside the user's
+    request/response lifecycle, so a browser or reverse-proxy timeout cannot lose
+    a completed, billed result.
     """
     last_error = None
+    request_payload = {**payload, "stream": True}
+    request_timeout = httpx.Timeout(connect=30, read=timeout, write=60, pool=30)
+
     for attempt in range(1, max_retries + 1):
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                resp = await client.post(
-                    f"{OPENROUTER_BASE}/chat/completions",
+            async with httpx.AsyncClient(timeout=request_timeout) as client:
+                async with client.stream(
+                    "POST",
+                    f"{OPENROUTER_BASE}/images",
                     headers=_headers(),
-                    json=payload,
-                )
-                if resp.status_code >= 400:
-                    error_text = resp.text[:300]
-                    logger.warning(
-                        f"{context}: HTTP {resp.status_code} on attempt {attempt}/{max_retries}: {error_text}"
-                    )
-                    last_error = RuntimeError(f"HTTP {resp.status_code}: {error_text}")
-                    if resp.status_code in (429, 500, 502, 503) and attempt < max_retries:
-                        await asyncio.sleep(attempt * 3)
-                        continue
-                    break
-                data = resp.json()
+                    json=request_payload,
+                ) as resp:
+                    if resp.status_code >= 400:
+                        error_text = (await resp.aread()).decode(errors="replace")[:500]
+                        logger.warning(
+                            f"{context}: HTTP {resp.status_code} on attempt "
+                            f"{attempt}/{max_retries}: {error_text}"
+                        )
+                        raise RuntimeError(f"HTTP {resp.status_code}: {error_text}")
 
-            return _extract_image_bytes_from_response(data, context)
+                    final_image = None
+                    stream_error = None
+                    async for line in resp.aiter_lines():
+                        if not line.startswith("data:"):
+                            continue
+                        raw_event = line[5:].strip()
+                        if not raw_event or raw_event == "[DONE]":
+                            continue
+                        try:
+                            event = json.loads(raw_event)
+                        except json.JSONDecodeError:
+                            logger.warning(f"{context}: ignored malformed SSE event: {raw_event[:200]!r}")
+                            continue
 
-        except RuntimeError as e:
-            last_error = e
+                        # SDK responses may wrap the actual SSE event in {"data": ...}.
+                        wrapped_data = event.get("data") if isinstance(event, dict) else None
+                        event_data = wrapped_data if isinstance(wrapped_data, dict) else event
+                        if not isinstance(event_data, dict):
+                            continue
+                        event_type = event_data.get("type")
+                        if event_type == "image_generation.completed" and event_data.get("b64_json"):
+                            final_image = _decode_image_base64(event_data["b64_json"], context)
+                        elif event_type == "error":
+                            error_data = event_data.get("error") or {}
+                            stream_error = error_data.get("message") or str(error_data) or "Image generation failed."
+
+                    if final_image:
+                        return final_image
+                    if stream_error:
+                        raise RuntimeError(stream_error)
+                    raise RuntimeError(f"{context} stream ended without a completed image.")
+
+        except Exception as exc:
+            last_error = exc if isinstance(exc, RuntimeError) else RuntimeError(str(exc))
             if attempt < max_retries:
-                wait_time = attempt * 2
+                wait_time = attempt * 3
                 logger.warning(
-                    f"{context}: attempt {attempt}/{max_retries} failed ({e}). "
+                    f"{context}: attempt {attempt}/{max_retries} failed ({last_error}). "
                     f"Retrying in {wait_time}s..."
                 )
                 await asyncio.sleep(wait_time)
             else:
-                logger.error(f"{context}: all {max_retries} attempts failed. Last error: {e}")
-        except httpx.HTTPStatusError as e:
-            last_error = RuntimeError(f"HTTP {e.response.status_code}: {e.response.text[:300]}")
-            if e.response.status_code in (429, 500, 502, 503) and attempt < max_retries:
-                await asyncio.sleep(attempt * 3)
-            else:
-                break
-        except Exception as e:
-            last_error = RuntimeError(f"Unexpected error: {str(e)[:200]}")
-            logger.error(f"{context}: unexpected error on attempt {attempt}: {e}")
-            if attempt < max_retries:
-                await asyncio.sleep(attempt * 2)
-            else:
-                break
+                logger.error(f"{context}: generation failed: {last_error}")
 
     raise last_error or RuntimeError(f"{context} failed after {max_retries} attempts.")
 
@@ -422,10 +385,10 @@ async def generate_customized_preview(
     customization_prompt: str,
     session_id: str,
 ) -> bytes:
-    """Generate face-swapped preview using Gemini 3 Pro Image.
+    """Generate a customized face-swapped preview with GPT-5.4 Image 2.
 
-    Uses "character consistency" framing to avoid triggering content safety filters
-    that block explicit "face swap" language.
+    The source photo is cropped to the identity region before being sent as the
+    first reference; the original scene remains the second reference.
     """
     if mode == "custom" and customization_prompt.strip():
         scene_instruction = (
@@ -440,37 +403,30 @@ async def generate_customized_preview(
     cropped_person_path = crop_face_from_path(person_photo_path)
     person_b64 = image_to_base64(cropped_person_path)
 
-    # Minimal prompt — intentionally short to avoid triggering content filter.
+    # Use OpenRouter's dedicated Images API with explicit identity + scene references.
     payload = {
         "model": FACE_SWAP_MODEL,
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": (
-                            "I have two images. The first image is my face photo. The second image is a "
-                            "reference scene. Generate a new image that looks like ME (from the first image) "
-                            "in the exact same pose, clothing, location, and framing as the second image. "
-                            "Keep my face and hair exactly as they appear in my photo."
-                            f"{scene_instruction}"
-                        ),
-                    },
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{person_b64}"}},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{ref_b64}"}},
-                ],
-            },
+        "prompt": (
+            "Reference image 1 is my face and identity. Reference image 2 is the target scene. "
+            "Create a new photorealistic image of the person from reference image 1 in the exact "
+            "pose, clothing, location, composition, and framing of reference image 2. Preserve the "
+            "identity, facial geometry, skin details, and hair from reference image 1 while retaining "
+            "everything else from reference image 2."
+            f"{scene_instruction}"
+        ),
+        "input_references": [
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{person_b64}"}},
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{ref_b64}"}},
         ],
-        "modalities": ["image", "text"],
-        "max_tokens": 4096,
+        "quality": "high",
+        "n": 1,
     }
 
     return await _call_image_generation_with_retry(
         payload=payload,
         context="Customized preview generation",
         max_retries=1,
-        timeout=180,
+        timeout=600,
     )
 
 
@@ -480,14 +436,10 @@ async def generate_face_swap(
     session_id: str,
 ) -> bytes:
     """
-    Standalone face swap using a minimal prompt to avoid content_filter triggers.
+    Standalone identity-preserving scene edit through OpenRouter's Images API.
 
-    Key insight from logs: detailed prompts describing "character integration" or
-    "face replacement" trigger Google's safety filter even when framed as creative work.
-    The filter is pattern-matching on the OPERATION DESCRIPTION, not the images.
-
-    Solution: Use a single-turn prompt with both images. GPT-5.4 Image 2
-    understands multi-image editing natively — no fake assistant turns needed.
+    The cropped source identity is reference 1 and the complete target scene is
+    reference 2. GPT-5.4 Image 2 receives both references in one generation call.
     """
     target_b64 = image_to_base64(target_image_path)
 
@@ -497,33 +449,27 @@ async def generate_face_swap(
 
     payload = {
         "model": FACE_SWAP_MODEL,
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": (
-                            "I have two images. The first image is my face photo. The second image is a "
-                            "reference scene. Generate a new image that looks like ME (from the first image) "
-                            "in the exact same pose, clothing, location, and framing as the second image. "
-                            "Keep my face and hair exactly as they appear in my photo."
-                        ),
-                    },
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{source_b64}"}},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{target_b64}"}},
-                ],
-            },
+        "prompt": (
+            "Reference image 1 is my face and identity. Reference image 2 is the target scene. "
+            "Create a new photorealistic image of the person from reference image 1 in the exact "
+            "pose, clothing, location, composition, lighting, and framing of reference image 2. "
+            "Preserve the identity, facial geometry, skin texture, eye shape, and hair from reference "
+            "image 1. Do not copy the face or identity from reference image 2. Keep all non-identity "
+            "scene details from reference image 2 unchanged."
+        ),
+        "input_references": [
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{source_b64}"}},
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{target_b64}"}},
         ],
-        "modalities": ["image", "text"],
-        "max_tokens": 4096,
+        "quality": "high",
+        "n": 1,
     }
 
     return await _call_image_generation_with_retry(
         payload=payload,
         context="Face swap",
         max_retries=1,
-        timeout=180,
+        timeout=600,
     )
 
 

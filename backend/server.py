@@ -12,7 +12,7 @@ from typing import Optional
 import aiosqlite
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, APIRouter, BackgroundTasks, HTTPException, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from PIL import Image
@@ -266,6 +266,21 @@ async def init_db():
                 updated_at TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS face_swap_jobs (
+                id TEXT PRIMARY KEY,
+                status TEXT DEFAULT 'pending',
+                target_image_url TEXT,
+                source_face_url TEXT,
+                target_image_path TEXT,
+                source_face_path TEXT,
+                variants_requested INTEGER DEFAULT 1,
+                result_json TEXT,
+                error TEXT,
+                created_at TEXT,
+                started_at TEXT,
+                completed_at TEXT
+            );
+
             CREATE TABLE IF NOT EXISTS face_swap_video_jobs (
                 id TEXT PRIMARY KEY,
                 image_id TEXT,
@@ -278,6 +293,18 @@ async def init_db():
                 created_at TEXT
             );
         """)
+        await conn.commit()
+
+        # The Images API does not expose a provider job ID that can be resumed after
+        # this process exits. Never leave interrupted app jobs polling forever.
+        await conn.execute(
+            """UPDATE face_swap_jobs
+               SET status = 'failed',
+                   error = 'The server restarted before image generation completed. Please try again.',
+                   completed_at = ?
+               WHERE status IN ('pending', 'in_progress')""",
+            (now_iso(),),
+        )
         await conn.commit()
 
         # Migration: add columns that may be missing on a pre-existing DB (e.g. on Render's
@@ -956,135 +983,205 @@ async def list_video_models():
 # ---------------------------------------------------------------------------
 # Standalone Face Swap (Higgsfield-style 3-step flow)
 # ---------------------------------------------------------------------------
-@api_router.post("/face-swap")
-async def face_swap(
-    target_image: UploadFile = File(None),
-    source_face: UploadFile = File(...),
-    target_frame_url: str = Form(""),
-    variants: int = Form(1),
+async def _generate_face_swap_variant(
+    target_path: Path,
+    source_path: Path,
+    job_id: str,
+    variant_index: int,
+) -> dict:
+    """Generate and persist one face-swap variant for an asynchronous job."""
+    image_bytes = await generate_face_swap(
+        target_image_path=target_path,
+        source_face_path=source_path,
+        session_id=f"face-swap-{job_id}-v{variant_index}",
+    )
+    gen_id = str(uuid.uuid4())
+    gen_path = pipeline.GENERATED_DIR / f"{gen_id}.png"
+
+    # Normalize provider output to a real PNG and verify it before completing the job.
+    with Image.open(io.BytesIO(image_bytes)) as generated_image:
+        normalized = generated_image.convert("RGB")
+        width, height = normalized.size
+        normalized.save(gen_path, format="PNG")
+
+    return {
+        "id": gen_id,
+        "image_url": f"/api/media/generated/{gen_id}.png",
+        "resolution": f"{width}x{height}",
+        "variant_index": variant_index,
+    }
+
+
+async def _run_face_swap_job(
+    job_id: str,
+    target_path: Path,
+    source_path: Path,
+    target_image_url: str,
+    source_face_url: str,
+    variants: int,
 ):
-    """
-    Standalone face swap endpoint. Accepts a target image (uploaded file OR server-side
-    frame URL from a video analysis) and a source face image, performs high-fidelity
-    face swap with facial geometry tracking, skin tone matching, and lighting adaptation.
-
-    Set variants=3 to generate multiple alternatives in parallel for A/B comparison.
-    The user can then pick the best result before proceeding to video generation.
-    """
-    require_ai_configured()
-    variants = max(1, min(variants, 4))  # Clamp to 1-4
-
-    # Resolve target image path (either from upload or from existing server-side frame)
-    if target_frame_url and target_frame_url.strip():
-        # Target comes from an analyzed video frame already on the server
-        # e.g. /api/media/frames/abc123/frame_003.jpg
-        url_path = target_frame_url.strip()
-        # Extract the actual file path from the media URL
-        if url_path.startswith("/api/media/"):
-            relative_path = url_path[len("/api/media/"):]
-            target_path = pipeline.STORAGE_DIR / relative_path
-        else:
-            raise HTTPException(status_code=400, detail="Invalid target frame URL.")
-
-        if not target_path.exists():
-            raise HTTPException(status_code=400, detail="Target frame not found on server. Please re-analyze the video.")
-    elif target_image:
-        # Target is a freshly uploaded file
-        target_bytes = await target_image.read()
-        if len(target_bytes) == 0:
-            raise HTTPException(status_code=400, detail="Target image is empty.")
-        if len(target_bytes) > 12 * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="Target image is too large (max 12MB).")
-        normalized_target = validate_and_normalize_photo(target_bytes)
-        target_id = str(uuid.uuid4())
-        target_path = pipeline.UPLOADS_DIR / f"{target_id}.png"
-        with open(target_path, "wb") as f:
-            f.write(normalized_target)
-    else:
-        raise HTTPException(status_code=400, detail="Please provide either a target image upload or a target frame URL.")
-
-    # Validate source face
-    source_bytes = await source_face.read()
-    if len(source_bytes) == 0:
-        raise HTTPException(status_code=400, detail="Source face image is empty.")
-    if len(source_bytes) > 12 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Source face image is too large (max 12MB).")
-
-    # Normalize source face
-    normalized_source = validate_and_normalize_photo(source_bytes)
-    source_id = str(uuid.uuid4())
-    source_path = pipeline.UPLOADS_DIR / f"{source_id}.png"
-    with open(source_path, "wb") as f:
-        f.write(normalized_source)
-
-    # Generate face swap variant(s) in parallel
-    async def _generate_one_variant(variant_idx: int):
-        """Generate a single face swap variant. Returns (id, url, width, height) or None on failure."""
-        try:
-            image_bytes = await generate_face_swap(
-                target_image_path=target_path,
-                source_face_path=source_path,
-                session_id=f"face-swap-{source_id}-v{variant_idx}",
-            )
-            gen_id = str(uuid.uuid4())
-            gen_path = pipeline.GENERATED_DIR / f"{gen_id}.png"
-            with open(gen_path, "wb") as f:
-                f.write(image_bytes)
-            from PIL import Image as PILImage
-            img = PILImage.open(gen_path)
-            w, h = img.size
-            return {
-                "id": gen_id,
-                "image_url": f"/api/media/generated/{gen_id}.png",
-                "resolution": f"{w}x{h}",
-                "variant_index": variant_idx,
-            }
-        except Exception as e:
-            logger.warning(f"Face swap variant {variant_idx} failed: {e}")
-            return None
-
-    if variants == 1:
-        # Single variant — original fast path
-        result = await _generate_one_variant(0)
-        if result is None:
-            raise HTTPException(
-                status_code=502,
-                detail="AI face swap generation failed. Please try again.",
-            )
-        return {
-            "id": result["id"],
-            "generated_image_url": result["image_url"],
-            "target_image_url": target_frame_url.strip() if target_frame_url and target_frame_url.strip() else f"/api/media/uploads/{target_id}.png",
-            "source_face_url": f"/api/media/uploads/{source_id}.png",
-            "resolution": result["resolution"],
-            "format": "PNG",
-            "status": "completed",
-            "variants": [result],
-            "selected_variant": 0,
-        }
-    else:
-        # Multiple variants — run in parallel for A/B comparison
-        tasks = [_generate_one_variant(i) for i in range(variants)]
-        results = await asyncio.gather(*tasks)
-        successful = [r for r in results if r is not None]
+    """Run image generation after the submission response has reached the browser."""
+    await _execute(
+        "UPDATE face_swap_jobs SET status = ?, started_at = ? WHERE id = ?",
+        ("in_progress", now_iso(), job_id),
+    )
+    try:
+        tasks = [
+            _generate_face_swap_variant(target_path, source_path, job_id, index)
+            for index in range(variants)
+        ]
+        raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+        successful = [result for result in raw_results if isinstance(result, dict)]
+        failures = [str(result) for result in raw_results if isinstance(result, Exception)]
 
         if not successful:
-            raise HTTPException(
-                status_code=502,
-                detail="AI face swap generation failed for all variants. Please try again.",
-            )
+            provider_error = "; ".join(failures)[:1000] or "The image model returned no result."
+            raise RuntimeError(provider_error)
 
-        return {
-            "id": successful[0]["id"],  # Default to first successful variant
+        result = {
+            "id": successful[0]["id"],
             "generated_image_url": successful[0]["image_url"],
-            "target_image_url": target_frame_url.strip() if target_frame_url and target_frame_url.strip() else f"/api/media/uploads/{target_id}.png",
-            "source_face_url": f"/api/media/uploads/{source_id}.png",
+            "target_image_url": target_image_url,
+            "source_face_url": source_face_url,
             "resolution": successful[0]["resolution"],
             "format": "PNG",
             "status": "completed",
             "variants": successful,
             "selected_variant": 0,
         }
+        await _execute(
+            """UPDATE face_swap_jobs
+               SET status = ?, result_json = ?, error = NULL, completed_at = ?
+               WHERE id = ?""",
+            ("completed", json.dumps(result), now_iso(), job_id),
+        )
+        logger.info(f"Face swap job {job_id} completed with {len(successful)} variant(s)")
+    except Exception as exc:
+        error = str(exc)[:1000] or "Unknown image generation error."
+        logger.error(f"Face swap job {job_id} failed: {error}")
+        await _execute(
+            "UPDATE face_swap_jobs SET status = ?, error = ?, completed_at = ? WHERE id = ?",
+            ("failed", error, now_iso(), job_id),
+        )
+
+
+@api_router.post("/face-swap", status_code=202)
+async def face_swap(
+    background_tasks: BackgroundTasks,
+    target_image: UploadFile = File(None),
+    source_face: UploadFile = File(...),
+    target_frame_url: str = Form(""),
+    variants: int = Form(1),
+):
+    """
+    Validate and persist both inputs, then return an app job ID immediately.
+    GPT-5.4 Image 2 runs after the response so browser and reverse-proxy request
+    timeouts cannot discard a completed generation.
+    """
+    require_ai_configured()
+    variants = max(1, min(variants, 4))
+
+    if target_frame_url and target_frame_url.strip():
+        url_path = target_frame_url.strip()
+        if not url_path.startswith("/api/media/"):
+            raise HTTPException(status_code=400, detail="Invalid target frame URL.")
+        relative_path = url_path[len("/api/media/"):]
+        storage_root = pipeline.STORAGE_DIR.resolve()
+        target_path = (storage_root / relative_path).resolve()
+        if storage_root not in target_path.parents or not target_path.is_file():
+            raise HTTPException(
+                status_code=400,
+                detail="Target frame not found on server. Please re-analyze the video.",
+            )
+        target_image_url = url_path
+    elif target_image:
+        target_bytes = await target_image.read()
+        if not target_bytes:
+            raise HTTPException(status_code=400, detail="Target image is empty.")
+        if len(target_bytes) > 12 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Target image is too large (max 12MB).")
+        normalized_target = validate_and_normalize_photo(target_bytes)
+        target_id = str(uuid.uuid4())
+        target_path = pipeline.UPLOADS_DIR / f"{target_id}.png"
+        target_path.write_bytes(normalized_target)
+        target_image_url = f"/api/media/uploads/{target_id}.png"
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Please provide either a target image upload or a target frame URL.",
+        )
+
+    source_bytes = await source_face.read()
+    if not source_bytes:
+        raise HTTPException(status_code=400, detail="Source face image is empty.")
+    if len(source_bytes) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Source face image is too large (max 12MB).")
+
+    normalized_source = validate_and_normalize_photo(source_bytes)
+    source_id = str(uuid.uuid4())
+    source_path = pipeline.UPLOADS_DIR / f"{source_id}.png"
+    source_path.write_bytes(normalized_source)
+    source_face_url = f"/api/media/uploads/{source_id}.png"
+
+    job_id = str(uuid.uuid4())
+    await _execute(
+        """INSERT INTO face_swap_jobs
+           (id, status, target_image_url, source_face_url, target_image_path,
+            source_face_path, variants_requested, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            job_id,
+            "pending",
+            target_image_url,
+            source_face_url,
+            str(target_path),
+            str(source_path),
+            variants,
+            now_iso(),
+        ),
+    )
+    background_tasks.add_task(
+        _run_face_swap_job,
+        job_id,
+        target_path,
+        source_path,
+        target_image_url,
+        source_face_url,
+        variants,
+    )
+
+    return {
+        "job_id": job_id,
+        "status": "pending",
+        "target_image_url": target_image_url,
+        "source_face_url": source_face_url,
+        "variants_requested": variants,
+    }
+
+
+@api_router.get("/face-swap/status/{job_id}")
+async def face_swap_status(job_id: str):
+    """Return the latest state and completed result for a face-swap image job."""
+    job = await _fetch_one("SELECT * FROM face_swap_jobs WHERE id = ?", (job_id,))
+    if not job:
+        raise HTTPException(status_code=404, detail="Face-swap job not found.")
+
+    response = {
+        "job_id": job_id,
+        "status": job.get("status", "pending"),
+        "target_image_url": job.get("target_image_url"),
+        "source_face_url": job.get("source_face_url"),
+        "variants_requested": job.get("variants_requested", 1),
+    }
+    if job.get("status") == "completed" and job.get("result_json"):
+        try:
+            response.update(json.loads(job["result_json"]))
+        except (json.JSONDecodeError, TypeError):
+            logger.error(f"Face swap job {job_id} has invalid result JSON")
+            raise HTTPException(status_code=500, detail="Face-swap result could not be loaded.")
+    elif job.get("status") == "failed":
+        response["error"] = job.get("error") or "AI face swap generation failed."
+    return response
 
 
 # ---------------------------------------------------------------------------

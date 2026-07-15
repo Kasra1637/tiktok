@@ -44,14 +44,16 @@ export const api = {
     client.post(`/video-jobs/${jobId}/generate-video`, payload).then((r) => r.data),
   getVideoJob: (jobId) => client.get(`/video-jobs/${jobId}`).then((r) => r.data),
 
-  // Standalone face swap (Higgsfield-style 3-step flow)
+  // Standalone face swap: submit quickly, then poll the app job while GPT renders.
   faceSwap: (formData) =>
     client
       .post("/face-swap", formData, {
         headers: { "Content-Type": "multipart/form-data" },
-        timeout: 240000,
+        timeout: 60000,
       })
       .then((r) => r.data),
+  faceSwapStatus: (jobId) =>
+    client.get(`/face-swap/status/${jobId}`).then((r) => r.data),
 
   // Face Swap → Video Generation (Phase 2)
   faceSwapGenerateVideo: (imageId, prompt, duration, model) => {

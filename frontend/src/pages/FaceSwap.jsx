@@ -30,6 +30,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+const ACTIVE_FACE_SWAP_JOB_KEY = "hookforge_active_face_swap_job";
+
 /* ---------- Upload Drop Zone ---------- */
 function DropZone({ onFileSelect, accept, label, sublabel, preview, onRemove, testId, icon: Icon = Upload }) {
   const inputRef = useRef(null);
@@ -119,6 +121,8 @@ export default function FaceSwap() {
   const [videoPhase, setVideoPhase] = useState("hook"); // "hook" | "extend"
   const [motionStyle, setMotionStyle] = useState("lean-in");
   const pollingRef = useRef(null);
+  const imagePollingRef = useRef(null);
+  const imageJobIdRef = useRef(null);
 
   // Brand video state
   const [brandUrl, setBrandUrl] = useState("");
@@ -154,6 +158,7 @@ export default function FaceSwap() {
   // Load saved face from localStorage
   useEffect(() => {
     try {
+      if (localStorage.getItem(ACTIVE_FACE_SWAP_JOB_KEY)) return;
       const savedFace = localStorage.getItem("hookforge_saved_face");
       if (savedFace) {
         const { dataUrl, name } = JSON.parse(savedFace);
@@ -176,7 +181,11 @@ export default function FaceSwap() {
   }, []);
 
   // Cleanup polling
-  useEffect(() => () => { if (pollingRef.current) clearInterval(pollingRef.current); }, []);
+  useEffect(() => () => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+    if (imagePollingRef.current) clearInterval(imagePollingRef.current);
+    imageJobIdRef.current = null;
+  }, []);
 
   const currentStep = !targetFile ? 1 : !sourceFile ? 2 : 3;
 
@@ -214,6 +223,101 @@ export default function FaceSwap() {
     toast.success("Saved face removed.");
   };
 
+  const startImagePolling = (jobId, appendVariants = false) => {
+    if (imagePollingRef.current) clearInterval(imagePollingRef.current);
+    imageJobIdRef.current = jobId;
+
+    const poll = async () => {
+      if (imageJobIdRef.current !== jobId) return;
+      try {
+        const status = await api.faceSwapStatus(jobId);
+        if (imageJobIdRef.current !== jobId) return;
+        if (status.status === "completed") {
+          clearInterval(imagePollingRef.current);
+          imagePollingRef.current = null;
+          imageJobIdRef.current = null;
+          if (!appendVariants) localStorage.removeItem(ACTIVE_FACE_SWAP_JOB_KEY);
+
+          if (appendVariants) {
+            setResult((previous) => {
+              const existing = previous?.variants?.length
+                ? previous.variants
+                : [{
+                    id: previous.id,
+                    image_url: previous.generated_image_url,
+                    resolution: previous.resolution,
+                    variant_index: 0,
+                  }];
+              const additions = (status.variants || []).map((variant, index) => ({
+                ...variant,
+                variant_index: existing.length + index,
+              }));
+              return { ...previous, variants: [...existing, ...additions] };
+            });
+            setGeneratingMore(false);
+            toast.success(`${status.variants?.length || 0} more variant${status.variants?.length === 1 ? "" : "s"} ready!`);
+          } else {
+            if (status.target_image_url) setTargetPreview(mediaUrl(status.target_image_url));
+            if (status.source_face_url) setSourcePreview(mediaUrl(status.source_face_url));
+            setResult(status);
+            setGenerating(false);
+            toast.success("Face swap complete!");
+          }
+        } else if (status.status === "failed") {
+          clearInterval(imagePollingRef.current);
+          imagePollingRef.current = null;
+          imageJobIdRef.current = null;
+          if (!appendVariants) localStorage.removeItem(ACTIVE_FACE_SWAP_JOB_KEY);
+          const message = status.error
+            ? `AI face swap generation failed. ${status.error}`
+            : "AI face swap generation failed. Please try again.";
+          if (appendVariants) {
+            setGeneratingMore(false);
+            toast.error(message);
+          } else {
+            setGenerating(false);
+            setGenError(message);
+          }
+        }
+      } catch (err) {
+        if (err?.response?.status === 404 && imageJobIdRef.current === jobId) {
+          clearInterval(imagePollingRef.current);
+          imagePollingRef.current = null;
+          imageJobIdRef.current = null;
+          localStorage.removeItem(ACTIVE_FACE_SWAP_JOB_KEY);
+          setGenerating(false);
+          setGeneratingMore(false);
+          setGenError("This face-swap job is no longer available. Please generate it again.");
+          return;
+        }
+        // A transient status request failure should not cancel a provider generation.
+        console.warn("Face-swap status poll failed:", err);
+      }
+    };
+
+    poll();
+    imagePollingRef.current = setInterval(poll, 3000);
+  };
+
+  // Resume an accepted job after a refresh or navigation back to this page.
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(ACTIVE_FACE_SWAP_JOB_KEY) || "null");
+      if (!saved?.jobId) return;
+      if (saved.targetImageUrl) setTargetPreview(mediaUrl(saved.targetImageUrl));
+      if (saved.sourceFaceUrl) setSourcePreview(mediaUrl(saved.sourceFaceUrl));
+      setTargetFile({ name: "restored-target", restored: true });
+      setSourceFile({ name: "restored-face", restored: true });
+      setGenerating(true);
+      setGenError(null);
+      startImagePolling(saved.jobId);
+    } catch (err) {
+      localStorage.removeItem(ACTIVE_FACE_SWAP_JOB_KEY);
+    }
+    // The active job is restored only once when this page mounts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleGenerate = async () => {
     if (!targetFile || !sourceFile) { toast.error("Upload both images first."); return; }
     setGenerating(true); setGenError(null); setResult(null); setSelectedVariant(0); setGeneratingMore(false);
@@ -222,11 +326,18 @@ export default function FaceSwap() {
       formData.append("source_face", sourceFile);
       if (targetFrameUrl) formData.append("target_frame_url", targetFrameUrl);
       else formData.append("target_image", targetFile);
-      const data = await api.faceSwap(formData);
-      setResult(data);
-      toast.success("Face swap complete!");
-    } catch (err) { setGenError(getErrorMessage(err)); }
-    finally { setGenerating(false); }
+      const submission = await api.faceSwap(formData);
+      localStorage.setItem(ACTIVE_FACE_SWAP_JOB_KEY, JSON.stringify({
+        jobId: submission.job_id,
+        targetImageUrl: submission.target_image_url,
+        sourceFaceUrl: submission.source_face_url,
+        createdAt: new Date().toISOString(),
+      }));
+      startImagePolling(submission.job_id);
+    } catch (err) {
+      setGenError(getErrorMessage(err));
+      setGenerating(false);
+    }
   };
 
   const [generatingMore, setGeneratingMore] = useState(false);
@@ -239,18 +350,13 @@ export default function FaceSwap() {
       formData.append("source_face", sourceFile);
       if (targetFrameUrl) formData.append("target_frame_url", targetFrameUrl);
       else formData.append("target_image", targetFile);
-      formData.append("variants", "2");
-      const data = await api.faceSwap(formData);
-      // Merge new variants into existing result
-      if (data.variants && data.variants.length > 0) {
-        setResult((prev) => ({
-          ...prev,
-          variants: [...(prev.variants || [{ id: prev.id, image_url: prev.generated_image_url, resolution: prev.resolution, variant_index: 0 }]), ...data.variants.map((v, i) => ({ ...v, variant_index: (prev.variants?.length || 1) + i }))],
-        }));
-        toast.success(`${data.variants.length} more variant${data.variants.length > 1 ? "s" : ""} ready! Compare and pick your favorite.`);
-      }
-    } catch (err) { toast.error(getErrorMessage(err)); }
-    finally { setGeneratingMore(false); }
+      formData.append("variants", String(Math.min(2, 4 - (result.variants?.length || 1))));
+      const submission = await api.faceSwap(formData);
+      startImagePolling(submission.job_id, true);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+      setGeneratingMore(false);
+    }
   };
 
   const startPolling = (jobId) => {
@@ -321,8 +427,11 @@ export default function FaceSwap() {
     setVideoDuration(10); setVideoPrompt(""); setGeneratingVideo(false); setVideoJobId(null);
     setVideoStatus(null); setVideoUrl(null); setVideoError(null); setVideoPhase("hook"); setMotionStyle("lean-in");
     setBrandUrl(""); setBrandedDuration(10); setBrandedPrompt(""); setBrandedPromptBrand("");
-    setGeneratingBrandedPrompt(false); setBrandedPromptError(null);
+    setGeneratingBrandedPrompt(false); setBrandedPromptError(null); setGeneratingMore(false);
     if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
+    if (imagePollingRef.current) { clearInterval(imagePollingRef.current); imagePollingRef.current = null; }
+    imageJobIdRef.current = null;
+    localStorage.removeItem(ACTIVE_FACE_SWAP_JOB_KEY);
   };
 
   /* ===================== RENDER ===================== */
@@ -550,7 +659,7 @@ export default function FaceSwap() {
           )}
 
           {/* Generate more variants button */}
-          {(!result.variants || result.variants.length < 4) && (
+          {targetFile && sourceFile && !targetFile.restored && !sourceFile.restored && (!result.variants || result.variants.length < 4) && (
             <Button
               onClick={handleGenerateMoreVariants}
               disabled={generatingMore}
