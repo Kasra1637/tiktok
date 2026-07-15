@@ -186,64 +186,33 @@ async def _call_image_generation_with_retry(
     """
     Generate an image through OpenRouter's dedicated Images API.
 
-    GPT-5.4 Image 2 supports native SSE streaming. Streaming keeps the upstream
-    connection active during long renders and delivers the final base64 image in
-    an image_generation.completed event. The caller runs this outside the user's
-    request/response lifecycle, so a browser or reverse-proxy timeout cannot lose
-    a completed, billed result.
+    Uses a buffered (non-streaming) request when input_references are present
+    because OpenRouter does not support streaming for image-to-image (edit)
+    requests. For text-only prompts, streaming would be possible but we use
+    buffered mode uniformly for simplicity — this function runs inside a
+    background task so there is no browser timeout to worry about.
     """
     last_error = None
-    request_payload = {**payload, "stream": True}
     request_timeout = httpx.Timeout(connect=30, read=timeout, write=60, pool=30)
 
     for attempt in range(1, max_retries + 1):
         try:
             async with httpx.AsyncClient(timeout=request_timeout) as client:
-                async with client.stream(
-                    "POST",
+                resp = await client.post(
                     f"{OPENROUTER_BASE}/images",
                     headers=_headers(),
-                    json=request_payload,
-                ) as resp:
-                    if resp.status_code >= 400:
-                        error_text = (await resp.aread()).decode(errors="replace")[:500]
-                        logger.warning(
-                            f"{context}: HTTP {resp.status_code} on attempt "
-                            f"{attempt}/{max_retries}: {error_text}"
-                        )
-                        raise RuntimeError(f"HTTP {resp.status_code}: {error_text}")
+                    json=payload,
+                )
+                if resp.status_code >= 400:
+                    error_text = resp.text[:500]
+                    logger.warning(
+                        f"{context}: HTTP {resp.status_code} on attempt "
+                        f"{attempt}/{max_retries}: {error_text}"
+                    )
+                    raise RuntimeError(f"HTTP {resp.status_code}: {error_text}")
 
-                    final_image = None
-                    stream_error = None
-                    async for line in resp.aiter_lines():
-                        if not line.startswith("data:"):
-                            continue
-                        raw_event = line[5:].strip()
-                        if not raw_event or raw_event == "[DONE]":
-                            continue
-                        try:
-                            event = json.loads(raw_event)
-                        except json.JSONDecodeError:
-                            logger.warning(f"{context}: ignored malformed SSE event: {raw_event[:200]!r}")
-                            continue
-
-                        # SDK responses may wrap the actual SSE event in {"data": ...}.
-                        wrapped_data = event.get("data") if isinstance(event, dict) else None
-                        event_data = wrapped_data if isinstance(wrapped_data, dict) else event
-                        if not isinstance(event_data, dict):
-                            continue
-                        event_type = event_data.get("type")
-                        if event_type == "image_generation.completed" and event_data.get("b64_json"):
-                            final_image = _decode_image_base64(event_data["b64_json"], context)
-                        elif event_type == "error":
-                            error_data = event_data.get("error") or {}
-                            stream_error = error_data.get("message") or str(error_data) or "Image generation failed."
-
-                    if final_image:
-                        return final_image
-                    if stream_error:
-                        raise RuntimeError(stream_error)
-                    raise RuntimeError(f"{context} stream ended without a completed image.")
+                data = resp.json()
+                return _extract_image_bytes_from_image_response(data, context)
 
         except Exception as exc:
             last_error = exc if isinstance(exc, RuntimeError) else RuntimeError(str(exc))
@@ -256,6 +225,8 @@ async def _call_image_generation_with_retry(
                 await asyncio.sleep(wait_time)
             else:
                 logger.error(f"{context}: generation failed: {last_error}")
+
+    raise last_error or RuntimeError(f"{context} failed after {max_retries} attempts.")
 
     raise last_error or RuntimeError(f"{context} failed after {max_retries} attempts.")
 
