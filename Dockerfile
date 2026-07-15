@@ -46,6 +46,10 @@ RUN mkdir -p /app/backend/storage/videos /app/backend/storage/frames \
              /app/backend/storage/uploads /app/backend/storage/generated
 
 # Copy built frontend from builder stage
+# NOTE: A RUN before this COPY busts Docker's layer cache for the runtime stage.
+# Without this, BuildKit can cache the old COPY --from=builder output even when
+# the builder stage produced new files (multi-stage cache independence bug).
+RUN echo "RUNTIME_BUST=2026-07-15-v2" > /tmp/runtime_bust.txt
 COPY --from=builder /app/frontend/build /app/frontend_build/
 
 # Expose the application port
