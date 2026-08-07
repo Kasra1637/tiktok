@@ -3,6 +3,7 @@ import {
   Sparkles, Search, Repeat2, Clapperboard, Globe, Save, Film,
   TrendingUp, ArrowRight, Zap, Target, Layers, Music2,
   Bookmark, Users, ChevronRight, Hash, BarChart3, FileText, BadgeAlert,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 
@@ -41,7 +42,7 @@ const FEATURES = [
     icon: Repeat2,
     title: "Face Swap",
     description:
-      "Select any frame from a viral video. Your face is swapped in with production-quality geometry tracking \u2014 pose, gesture, lighting, and environment stay identical.",
+      "Select any frame from a viral video. Your face is swapped in with production-quality identity preservation \u2014 pose, gesture, lighting, and environment stay identical.",
   },
   {
     icon: Save,
@@ -50,10 +51,22 @@ const FEATURES = [
       "Upload your face once \u2014 it persists across sessions. Next time you pick a viral video, just hit Generate. Zero re-uploads needed.",
   },
   {
+    icon: Bookmark,
+    title: "Hook Templates",
+    description:
+      "Save a proven hook once \u2014 its analysis, prompt, and motion reference are cached. Reuse it on any future face swap with zero re-analysis cost, forever.",
+  },
+  {
     icon: Clapperboard,
     title: "AI Video Generation",
     description:
-      "Your face-swapped image becomes the first frame. MiniMax H3 generates a 5\u201315 second video at 2K resolution with native audio, V2V motion transfer, and full face consistency \u2014 all in one pass.",
+      "Your face-swapped image becomes the first frame. MiniMax H3 generates a 5\u201315 second video at 2K resolution with native audio, V2V motion transfer from the original clip, and full face consistency \u2014 all in one pass.",
+  },
+  {
+    icon: RotateCcw,
+    title: "Re-roll a Take",
+    description:
+      "Not quite right? Re-roll generates another take with the exact same prompt and references \u2014 no re-analysis, just a fresh render.",
   },
   {
     icon: Globe,
@@ -74,22 +87,10 @@ const FEATURES = [
       "10 niches with curated creators and trending hashtags (fitness, comedy, beauty, food, fashion, tech, pets, travel, finance, education). Fresh data on every visit.",
   },
   {
-    icon: Bookmark,
-    title: "Bookmarks = Purchase Intent",
-    description:
-      "Bookmark count (saves) is a stronger conversion signal than likes. Our virality scoring weights bookmarks to surface hooks that drive real action, not passive scrolling.",
-  },
-  {
     icon: BarChart3,
     title: "Virality Scoring Engine",
     description:
       "Every video gets a 0\u2013100 score blending engagement rate, view velocity, recency, raw scale, and save intent \u2014 so the best hooks always surface first.",
-  },
-  {
-    icon: Layers,
-    title: "MiniMax H3 Powered",
-    description:
-      "Omni-modal video generation: native stereo audio (dialogue, foley, music), V2V motion transfer from viral references, 2K resolution, and up to 9 image references for character consistency.",
   },
 ];
 
@@ -101,8 +102,8 @@ const FLOW_STEPS = [
   },
   {
     step: "2",
-    label: "Analyze",
-    detail: "AI breaks down what makes the hook work \u2014 expressions, gestures, pacing, overlays, and audio cues.",
+    label: "Analyze & Save",
+    detail: "AI breaks down what makes the hook work, then save it as a reusable template for free future reuse.",
   },
   {
     step: "3",
@@ -112,7 +113,7 @@ const FLOW_STEPS = [
   {
     step: "4",
     label: "Generate Video",
-    detail: "AI creates a branded video from your swapped frame \u2014 with the option to keep the original sound.",
+    detail: "MiniMax H3 animates your swapped frame with native audio \u2014 re-roll for another take, or extend it with your brand message.",
   },
 ];
 
@@ -151,7 +152,8 @@ export default function Landing() {
         <p className="text-lg sm:text-xl text-muted-foreground mt-6 max-w-3xl mx-auto leading-relaxed">
           Find trending TikTok videos in your niche, analyze what makes their hook work,
           face-swap yourself into the key frame, then generate a full branded video
-          customized to your product and audience &mdash; all from one pipeline.
+          customized to your product and audience &mdash; all from one pipeline. Save any
+          hook that works as a template and reuse it for free, forever.
         </p>
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link to="/discover">
@@ -173,6 +175,7 @@ export default function Landing() {
             { value: "2K", label: "Resolution" },
             { value: "8", label: "Hook Metrics" },
             { value: "15s", label: "Max Video" },
+            { value: "$0", label: "Template Reuse" },
           ].map((stat) => (
             <div key={stat.label} className="text-center">
               <p className="font-display text-2xl sm:text-3xl font-bold text-foreground">{stat.value}</p>
@@ -186,7 +189,8 @@ export default function Landing() {
       <section className="relative z-10 max-w-5xl mx-auto px-5 pb-20">
         <h2 className="font-display text-3xl sm:text-4xl font-bold text-center mb-4">How It Works</h2>
         <p className="text-base sm:text-lg text-muted-foreground text-center mb-10 max-w-2xl mx-auto">
-          Four steps from trending video to your own branded content.
+          Four steps from trending video to your own branded content &mdash; and every hook you
+          save gets cheaper to reuse.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {FLOW_STEPS.map((s, i) => (
@@ -241,9 +245,9 @@ export default function Landing() {
               Phase 1: Image (Face Swap)
             </h3>
             <p className="text-sm sm:text-base text-muted-foreground leading-relaxed pl-10">
-              Gemini 2.5 Flash Image Generation takes the selected video frame + your face photo.
-              It maps facial geometry, matches skin tone to scene lighting, ensures natural blending at boundaries,
-              and preserves the target&apos;s expression and pose. Output: a production-ready PNG with your face in the viral hook pose.
+              Grok Imagine (Image Quality) takes your cropped face photo as the identity reference and the selected
+              video frame as the scene reference. It places your face into that exact scene &mdash; matching pose,
+              outfit, background, lighting, and camera angle. Output: a 2K, 9:16 PNG with your face in the viral hook pose.
             </p>
           </div>
           <div className="h-px bg-border" />
@@ -258,7 +262,22 @@ export default function Landing() {
               The swapped image is passed as <code className="text-xs bg-muted px-1.5 py-0.5 rounded-md font-mono">first_frame</code> to
               MiniMax H3 via OpenRouter&apos;s unified API. The original viral video is fed as a V2V motion reference,
               so H3 replicates the exact timing, camera work, and performance rhythm while generating native stereo
-              audio (dialogue, foley, ambient) in a single pass &mdash; no separate audio step needed.
+              audio (dialogue, foley, ambient) in a single pass &mdash; no separate audio step needed. Not quite right?
+              Re-roll the same prompt for another take, or extend the hook into a longer branded video with a CTA.
+            </p>
+          </div>
+          <div className="h-px bg-border" />
+          <div className="space-y-2">
+            <h3 className="font-display font-semibold text-base flex items-center gap-2.5">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[color:rgba(99,102,241,0.1)]">
+                <Bookmark className="h-4 w-4 text-[color:var(--brand-teal)]" />
+              </span>
+              Hook Templates: Save Once, Reuse Free
+            </h3>
+            <p className="text-sm sm:text-base text-muted-foreground leading-relaxed pl-10">
+              Found a hook that works? Save it as a template &mdash; the analysis, the generated prompt, and a copy
+              of the source clip (for V2V motion transfer) are all cached. Reusing that template on a new face swap
+              skips the AI hook analysis and prompt generation entirely, so you only ever pay for the video itself.
             </p>
           </div>
           <div className="h-px bg-border" />
@@ -299,11 +318,10 @@ export default function Landing() {
             </h3>
             <div className="text-sm sm:text-base text-muted-foreground leading-relaxed pl-10 space-y-1.5">
               <p><strong className="text-foreground">Hook Analysis:</strong> Google Gemini 2.5 Flash (vision) &mdash; reads frames, outputs structured JSON</p>
-              <p><strong className="text-foreground">Face Swap:</strong> Gemini 2.5 Flash Image Generation &mdash; photorealistic identity transfer</p>
-              <p><strong className="text-foreground">Video (Best):</strong> ByteDance Seedance 2.0 &mdash; character consistency, native audio, cinematic camera</p>
-              <p><strong className="text-foreground">Video (Alt):</strong> Alibaba Wan 2.7 &mdash; strong style/reference preservation</p>
-              <p><strong className="text-foreground">Video (Fast):</strong> ByteDance Seedance 2.0 Fast &mdash; same tech, optimized for speed</p>
-              <p><strong className="text-foreground">Data:</strong> Clockworks TikTok Scraper &mdash; profiles, hashtags, keyword search, music metadata</p>
+              <p><strong className="text-foreground">Face Swap:</strong> Grok Imagine (Image Quality) &mdash; identity-preserving scene compositing, 2K</p>
+              <p><strong className="text-foreground">Video Generation:</strong> MiniMax H3 &mdash; omni-modal, native stereo audio, V2V motion transfer, 2K, up to 15s</p>
+              <p><strong className="text-foreground">Brand &amp; Remix Text:</strong> Google Gemini 2.5 Flash &mdash; brand extraction, prompt writing, remix chat</p>
+              <p><strong className="text-foreground">Data:</strong> Clockworks TikTok Scraper (Apify) + yt-dlp fallback &mdash; profiles, hashtags, keyword search, music metadata</p>
             </div>
           </div>
         </div>
@@ -315,6 +333,7 @@ export default function Landing() {
           <h2 className="font-display text-2xl sm:text-3xl font-bold mb-3">Ready to remix viral hooks?</h2>
           <p className="text-base text-muted-foreground mb-8 max-w-xl mx-auto">
             Find the trending sound, swap your face in, and generate a branded video &mdash; all in under 2 minutes.
+            Save the hook as a template and every future remix is free.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link to="/discover">
