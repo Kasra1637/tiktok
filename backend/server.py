@@ -29,8 +29,9 @@ from ai_service import (
 )
 from models import (
     IngestVideoRequest, BrandContextRequest, GenerateVideoRequest,
-    AnalyzeBrandUrlRequest, BrandProfileUpdateRequest, GenerateRemixScriptRequest,
-    RemixChatMessageRequest, CreateHookTemplateRequest, UpdateHookTemplateRequest,
+    AnalyzeBrandUrlRequest, BrandProfileCreateRequest, BrandProfileUpdateRequest,
+    GenerateRemixScriptRequest, RemixChatMessageRequest,
+    CreateHookTemplateRequest, UpdateHookTemplateRequest,
     now_iso, row_to_dict,
 )
 from niches_config import NICHES, NICHE_MAP
@@ -644,8 +645,22 @@ async def get_latest_analysis_or_404(video_id: str) -> dict:
     return analysis
 
 
+async def _fetch_active_brand() -> Optional[dict]:
+    """
+    The "active" brand profile: the most recently created *or edited* one.
+
+    Single source of truth so every caller agrees on which profile is active.
+    Previously the /brand/active endpoint ordered by created_at while the video
+    flows ordered by updated_at, so editing an older profile made the Brand page
+    and the generators disagree about which brand was in effect.
+    """
+    return await _fetch_one(
+        "SELECT * FROM brand_profiles ORDER BY updated_at DESC, created_at DESC LIMIT 1"
+    )
+
+
 async def get_active_brand_or_404() -> dict:
-    brand = await _fetch_one("SELECT * FROM brand_profiles ORDER BY created_at DESC LIMIT 1")
+    brand = await _fetch_active_brand()
     if not brand:
         raise HTTPException(
             status_code=404,
@@ -1858,9 +1873,7 @@ async def face_swap_extend_video(
                 logger.warning(f"Brand URL fetch failed for extend-video: {e}")
 
         if not brand_profile:
-            brand_row = await _fetch_one(
-                "SELECT * FROM brand_profiles ORDER BY updated_at DESC, created_at DESC LIMIT 1"
-            )
+            brand_row = await _fetch_active_brand()
             if brand_row:
                 brand_profile = brand_row
 
@@ -2146,9 +2159,7 @@ async def face_swap_branded_prompt(
             raise HTTPException(status_code=502, detail=f"Brand analysis failed. ({str(e)[:100]})")
     else:
         # Try to use saved brand profile
-        brand_row = await _fetch_one(
-            "SELECT * FROM brand_profiles ORDER BY updated_at DESC, created_at DESC LIMIT 1"
-        )
+        brand_row = await _fetch_active_brand()
         if brand_row:
             brand_profile = brand_row
         else:
@@ -2843,6 +2854,62 @@ async def analyze_brand_url(payload: AnalyzeBrandUrlRequest):
         logger.error(f"Brand analysis failed for {url}: {e}")
         raise HTTPException(status_code=502, detail=f"AI brand analysis failed. Please try again. ({str(e)[:150]})")
 
+    # Re-analysing the same site refreshes that profile in place rather than
+    # inserting another row. Previously every re-analysis created a duplicate,
+    # which orphaned the user's manual edits and left stale profiles behind
+    # competing to be the "active" one.
+    now = now_iso()
+    existing = await _fetch_one(
+        "SELECT id FROM brand_profiles WHERE website_url = ?", (url,)
+    )
+    values = (
+        extracted.get("brand_name"), extracted.get("brand_description"),
+        extracted.get("niche"), json.dumps(extracted.get("products_or_services", [])),
+        extracted.get("target_audience"), extracted.get("ideal_customer_profile"),
+        extracted.get("differentiation"), extracted.get("tone_voice"), page_text,
+    )
+    if existing:
+        brand_id = existing["id"]
+        await _execute(
+            """UPDATE brand_profiles
+               SET brand_name = ?, brand_description = ?, niche = ?, products_services = ?,
+                   target_audience = ?, ideal_customer_profile = ?, differentiation = ?,
+                   tone_voice = ?, raw_extracted_text = ?, updated_at = ?
+               WHERE id = ?""",
+            values + (now, brand_id),
+        )
+        logger.info(f"Refreshed existing brand profile {brand_id} from {url}")
+    else:
+        brand_id = str(uuid.uuid4())
+        await _execute(
+            """INSERT INTO brand_profiles
+               (id, website_url, brand_name, brand_description, niche, products_services,
+                target_audience, ideal_customer_profile, differentiation, tone_voice,
+                raw_extracted_text, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (brand_id, url) + values + (now, now),
+        )
+        logger.info(f"Created brand profile {brand_id} from {url}")
+    return await _fetch_one("SELECT * FROM brand_profiles WHERE id = ?", (brand_id,))
+
+
+@api_router.post("/brand", status_code=201)
+async def create_brand(payload: BrandProfileCreateRequest):
+    """
+    Create a brand profile from manually entered fields.
+
+    Deliberately does NOT require the URL-analysis step (or an AI key): a user
+    with no website, or whose site can't be fetched, must still be able to set
+    up a brand profile by hand.
+    """
+    name = (payload.brand_name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Brand name is required.")
+
+    website = (payload.website_url or "").strip()
+    if website and not website.lower().startswith(("http://", "https://")):
+        website = f"https://{website}"
+
     brand_id = str(uuid.uuid4())
     created_at = now_iso()
     await _execute(
@@ -2851,12 +2918,13 @@ async def analyze_brand_url(payload: AnalyzeBrandUrlRequest):
             target_audience, ideal_customer_profile, differentiation, tone_voice,
             raw_extracted_text, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (brand_id, url, extracted.get("brand_name"), extracted.get("brand_description"),
-         extracted.get("niche"), json.dumps(extracted.get("products_or_services", [])),
-         extracted.get("target_audience"), extracted.get("ideal_customer_profile"),
-         extracted.get("differentiation"), extracted.get("tone_voice"), page_text,
+        (brand_id, website or None, name, payload.brand_description or "",
+         payload.niche or "", json.dumps(payload.products_services or []),
+         payload.target_audience or "", payload.ideal_customer_profile or "",
+         payload.differentiation or "", payload.tone_voice or "", None,
          created_at, created_at),
     )
+    logger.info(f"Created brand profile {brand_id} ('{name}') from manual entry")
     return await _fetch_one("SELECT * FROM brand_profiles WHERE id = ?", (brand_id,))
 
 

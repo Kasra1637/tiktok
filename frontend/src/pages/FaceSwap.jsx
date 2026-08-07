@@ -541,6 +541,34 @@ export default function FaceSwap() {
         ))}
       </div>
 
+      {/* Confirms a template picked on the Templates page actually carried over.
+          Without this, "Use This Hook" navigated here with no visible effect —
+          the template picker only appears after a face swap has been generated. */}
+      {!result && selectedTemplate && (
+        <div
+          className="flex items-start gap-2.5 rounded-xl border border-[color:rgba(99,102,241,0.3)] bg-[color:rgba(99,102,241,0.04)] px-3.5 py-2.5"
+          data-testid="pending-template-banner"
+        >
+          <Bookmark className="h-4 w-4 text-[color:var(--brand-teal)] shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold truncate">
+              Using hook template: {selectedTemplate.name}
+            </p>
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              Add your face below and generate the swap — this saved hook is applied at the
+              video step, with no analysis cost.
+            </p>
+          </div>
+          <button
+            onClick={() => setSelectedTemplateId("")}
+            className="text-[11px] text-muted-foreground hover:text-foreground shrink-0 underline"
+            data-testid="clear-pending-template-button"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       {/* ---------- UPLOAD PHASE ---------- */}
       {!result && (
         <>

@@ -133,6 +133,7 @@ export const api = {
   analyzeBrandUrl: (url) => client.post("/brand/analyze-url", { url }).then((r) => r.data),
   getActiveBrand: () => client.get("/brand/active").then((r) => r.data),
   getBrand: (id) => client.get(`/brand/${id}`).then((r) => r.data),
+  createBrand: (payload) => client.post("/brand", payload).then((r) => r.data),
   updateBrand: (id, payload) => client.patch(`/brand/${id}`, payload).then((r) => r.data),
   generateRemixScript: (customizationId, payload) =>
     client.post(`/customizations/${customizationId}/generate-remix-script`, payload).then((r) => r.data),

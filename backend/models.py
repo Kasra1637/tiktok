@@ -58,6 +58,24 @@ class AnalyzeBrandUrlRequest(BaseModel):
     url: str
 
 
+class BrandProfileCreateRequest(BaseModel):
+    """
+    Create a brand profile from manually entered fields.
+
+    The website-analysis path is optional — users without a scrapeable site
+    (or whose site fails to fetch) need to be able to fill this in by hand.
+    """
+    website_url: Optional[str] = None
+    brand_name: str
+    brand_description: Optional[str] = ""
+    niche: Optional[str] = ""
+    products_services: Optional[List[str]] = None
+    target_audience: Optional[str] = ""
+    ideal_customer_profile: Optional[str] = ""
+    differentiation: Optional[str] = ""
+    tone_voice: Optional[str] = ""
+
+
 class BrandProfileUpdateRequest(BaseModel):
     website_url: Optional[str] = None
     brand_name: Optional[str] = None

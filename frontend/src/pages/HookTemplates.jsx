@@ -47,6 +47,45 @@ function formatUsed(n) {
   return n === 1 ? "Used once" : `Used ${n} times`;
 }
 
+/**
+ * Route a remote thumbnail through our proxy.
+ *
+ * Most template thumbnails are locally-copied frames, but when that copy failed
+ * at save time we fall back to the TikTok CDN cover URL — and those routinely
+ * fail to load in-browser due to referrer restrictions. Same proxy VideoCard uses.
+ */
+function proxyThumb(url) {
+  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
+  return `${BACKEND_URL}/api/proxy-thumb?url=${encodeURIComponent(url)}`;
+}
+
+function TemplateThumbnail({ url, alt }) {
+  const [src, setSrc] = useState(url ? mediaUrl(url) : null);
+  const [failed, setFailed] = useState(!url);
+
+  if (failed) {
+    return (
+      <div className="w-full rounded-xl aspect-[9/16] bg-muted flex items-center justify-center">
+        <ImageOff className="h-6 w-6 text-muted-foreground" />
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      className="w-full rounded-xl object-cover aspect-[9/16] bg-muted"
+      onError={() => {
+        // Remote covers get one retry through the proxy before giving up.
+        if (url.startsWith("http") && src !== proxyThumb(url)) setSrc(proxyThumb(url));
+        else setFailed(true);
+      }}
+    />
+  );
+}
+
 export default function HookTemplates() {
   const navigate = useNavigate();
   const [templates, setTemplates] = useState([]);
@@ -122,6 +161,18 @@ export default function HookTemplates() {
   const usedCategories = HOOK_TEMPLATE_CATEGORIES.filter((c) =>
     templates.some((t) => t.category === c.key)
   );
+
+  // Deleting or recategorizing the last template in the active category would
+  // otherwise strand the user: the filter row hides itself when only one
+  // category remains, leaving "No templates in this category" with no visible
+  // way to clear the filter. Fall back to "all" whenever the active category
+  // no longer has anything in it.
+  useEffect(() => {
+    if (activeCategory === "all") return;
+    if (!templates.some((t) => t.category === activeCategory)) {
+      setActiveCategory("all");
+    }
+  }, [templates, activeCategory]);
 
   const totalReuses = templates.reduce((sum, t) => sum + (t.times_used || 0), 0);
 
@@ -237,24 +288,7 @@ export default function HookTemplates() {
               >
                 {/* Thumbnail */}
                 <div className="relative">
-                  {t.thumbnail_url ? (
-                    <img
-                      src={mediaUrl(t.thumbnail_url)}
-                      alt={t.name}
-                      className="w-full rounded-xl object-cover aspect-[9/16] bg-muted"
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                        e.currentTarget.nextElementSibling?.classList.remove("hidden");
-                      }}
-                    />
-                  ) : null}
-                  <div
-                    className={`w-full rounded-xl aspect-[9/16] bg-muted flex items-center justify-center ${
-                      t.thumbnail_url ? "hidden" : ""
-                    }`}
-                  >
-                    <ImageOff className="h-6 w-6 text-muted-foreground" />
-                  </div>
+                  <TemplateThumbnail url={t.thumbnail_url} alt={t.name} />
                   <div className="absolute top-1.5 left-1.5 flex flex-col gap-1 items-start">
                     <Badge className="bg-black/70 border-none text-white text-[10px] font-semibold">
                       {categoryLabel(t.category)}

@@ -103,9 +103,14 @@ export default function BrandSetup() {
   };
 
   const handleSave = async () => {
+    // A brand with no name is useless to every downstream generator, so this is
+    // the one field we insist on. Everything else can be filled in later.
+    if (!form.brand_name.trim()) {
+      toast.error("Please enter a brand name before saving.");
+      return;
+    }
     setSaving(true);
     try {
-      let saved;
       const payload = {
         website_url: websiteUrl.trim() || undefined,
         brand_name: form.brand_name,
@@ -117,15 +122,11 @@ export default function BrandSetup() {
         differentiation: form.differentiation,
         tone_voice: form.tone_voice,
       };
-      if (brand?.id) {
-        saved = await api.updateBrand(brand.id, payload);
-      } else {
-        // No brand profile exists yet and no URL was analyzed — create one via manual entry
-        // by first requiring a URL analysis is not possible, so guide the user instead.
-        toast.error("Please analyze a website URL first to create your brand profile, then you can edit it here.");
-        setSaving(false);
-        return;
-      }
+      // Update in place when a profile already exists, otherwise create one from
+      // the manual fields — analysing a website is optional, not a prerequisite.
+      const saved = brand?.id
+        ? await api.updateBrand(brand.id, payload)
+        : await api.createBrand(payload);
       setBrand(saved);
       toast.success("Brand profile saved!");
     } catch (err) {
@@ -184,16 +185,18 @@ export default function BrandSetup() {
 
         {loadingActive ? (
           <p className="text-sm text-muted-foreground">Loading your brand profile...</p>
-        ) : !brand ? (
-          <Alert className="rounded-2xl" data-testid="no-brand-profile-alert">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>No brand profile yet</AlertTitle>
-            <AlertDescription>
-              Analyze your website URL above to get started.
-            </AlertDescription>
-          </Alert>
         ) : (
           <>
+            {!brand && (
+              <Alert className="rounded-2xl" data-testid="no-brand-profile-alert">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>No brand profile yet</AlertTitle>
+                <AlertDescription>
+                  Analyze your website above to fill this in automatically, or just type your
+                  details in below and hit Save — a website isn&apos;t required.
+                </AlertDescription>
+              </Alert>
+            )}
             <div className="space-y-1">
               <label className="text-sm font-medium">Brand name</label>
               <Input
@@ -281,27 +284,29 @@ export default function BrandSetup() {
               data-testid="save-brand-button"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {saving ? "Saving..." : "Save Brand Profile"}
+              {saving ? "Saving..." : brand?.id ? "Save Brand Profile" : "Create Brand Profile"}
             </Button>
 
-            <Alert className="rounded-2xl border-[color:var(--brand-teal)] bg-[color:rgba(99,102,241,0.06)]">
-              <CheckCircle2 className="h-4 w-4 text-[color:var(--brand-teal)]" />
-              <AlertTitle>Ready for the Content Remixer</AlertTitle>
-              <AlertDescription className="flex flex-col sm:flex-row sm:items-center gap-2 justify-between">
-                <span>
-                  This profile will auto-fill and inform brand-adapted scripts anywhere you generate a video.
-                </span>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="gap-1.5 rounded-lg shrink-0"
-                  onClick={() => navigate("/discover")}
-                  data-testid="find-video-to-remix-button"
-                >
-                  Find a video to remix <ArrowRight className="h-3.5 w-3.5" />
-                </Button>
-              </AlertDescription>
-            </Alert>
+            {brand?.id && (
+              <Alert className="rounded-2xl border-[color:var(--brand-teal)] bg-[color:rgba(99,102,241,0.06)]">
+                <CheckCircle2 className="h-4 w-4 text-[color:var(--brand-teal)]" />
+                <AlertTitle>Ready for the Content Remixer</AlertTitle>
+                <AlertDescription className="flex flex-col sm:flex-row sm:items-center gap-2 justify-between">
+                  <span>
+                    This profile will auto-fill and inform brand-adapted scripts anywhere you generate a video.
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="gap-1.5 rounded-lg shrink-0"
+                    onClick={() => navigate("/discover")}
+                    data-testid="find-video-to-remix-button"
+                  >
+                    Find a video to remix <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
           </>
         )}
       </Card>
