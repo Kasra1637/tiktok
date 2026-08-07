@@ -131,7 +131,10 @@ export default function Landing() {
           <span className="font-display text-xl font-bold tracking-tight">HookForge</span>
         </div>
         <Link to="/discover">
-          <Button className="gap-2 rounded-xl bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white px-5 py-2.5 text-sm font-semibold shadow-md">
+          <Button
+            className="gap-2 rounded-xl bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white px-5 py-2.5 text-sm font-semibold shadow-md"
+            data-testid="landing-enter-app-button"
+          >
             Enter App <ArrowRight className="h-4 w-4" />
           </Button>
         </Link>
@@ -169,7 +172,7 @@ export default function Landing() {
         </div>
 
         {/* Quick stats bar */}
-        <div className="mt-14 flex flex-wrap items-center justify-center gap-6 sm:gap-10">
+        <div className="mt-14 flex flex-wrap items-center justify-center gap-6 sm:gap-10" data-testid="landing-stats">
           {[
             { value: "10", label: "Niches" },
             { value: "2K", label: "Resolution" },
@@ -186,7 +189,7 @@ export default function Landing() {
       </section>
 
       {/* How it works */}
-      <section className="relative z-10 max-w-5xl mx-auto px-5 pb-20">
+      <section className="relative z-10 max-w-5xl mx-auto px-5 pb-20" data-testid="landing-how-it-works">
         <h2 className="font-display text-3xl sm:text-4xl font-bold text-center mb-4">How It Works</h2>
         <p className="text-base sm:text-lg text-muted-foreground text-center mb-10 max-w-2xl mx-auto">
           Four steps from trending video to your own branded content &mdash; and every hook you
@@ -212,7 +215,7 @@ export default function Landing() {
       </section>
 
       {/* Features Grid */}
-      <section className="relative z-10 max-w-6xl mx-auto px-5 pb-20">
+      <section className="relative z-10 max-w-6xl mx-auto px-5 pb-20" data-testid="landing-features">
         <h2 className="font-display text-3xl sm:text-4xl font-bold text-center mb-3">Features &amp; Capabilities</h2>
         <p className="text-base sm:text-lg text-muted-foreground text-center mb-10 max-w-2xl mx-auto">
           Everything the app does, at a glance.
