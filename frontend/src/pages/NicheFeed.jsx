@@ -45,6 +45,24 @@ const RECENCY_FILTERS = [
   { key: "90d", label: "90 days", days: 90 },
 ];
 
+/**
+ * Resolve a video's actual PUBLISH time in ms, or null if unknown.
+ *
+ * Two shapes reach this page and they carry the date under different keys:
+ *  - niche/trending results come from our DB cache  -> `upload_timestamp`
+ *  - keyword search results come straight from the scraper -> `timestamp`
+ * Both are Unix epoch SECONDS.
+ *
+ * Note this is deliberately NOT `cached_at`, which is when *we* fetched the
+ * video, not when it was posted — using that made "Newest" and the recency
+ * filter meaningless.
+ */
+function publishedAtMs(video) {
+  const secs = Number(video?.upload_timestamp ?? video?.timestamp ?? 0);
+  if (!Number.isFinite(secs) || secs <= 0) return null;
+  return secs * 1000;
+}
+
 function FilterChip({ label, active, onClick }) {
   return (
     <button
@@ -84,7 +102,12 @@ export default function NicheFeed() {
   const [recencyFilter, setRecencyFilter] = useState("all");
   const [hideSponsored, setHideSponsored] = useState(true);
 
+  // Badge count: anything the user changed away from defaults.
   const activeFilterCount = [viewFilter !== "all", durationFilter !== "all", sortBy !== "virality", recencyFilter !== "all", !hideSponsored].filter(Boolean).length;
+  // Only these can actually hide results, so only these justify telling the
+  // user to "adjust your filters" on an empty feed (a sort never hides
+  // anything, and showing sponsored posts widens rather than narrows).
+  const narrowingFilterCount = [viewFilter !== "all", durationFilter !== "all", recencyFilter !== "all"].filter(Boolean).length;
 
   useEffect(() => {
     api
@@ -175,6 +198,23 @@ export default function NicheFeed() {
     setSearchQuery("");
   }, []);
 
+  // Niche browsing and keyword search are mutually exclusive contexts, and
+  // handleSearch gives a typed keyword priority. So picking a niche (or
+  // switching Trending/Curated/Mixed) clears any active search — otherwise
+  // clicking a niche chip with text still in the box would look like it did
+  // nothing, since Search would just re-run the keyword query.
+  const handleSelectNiche = useCallback((nicheKey) => {
+    setActiveNiche(nicheKey);
+    setSearchQuery("");
+    setSearchResults(null);
+  }, []);
+
+  const handleSelectMode = useCallback((modeKey) => {
+    setMode(modeKey);
+    setSearchQuery("");
+    setSearchResults(null);
+  }, []);
+
   const handleAnalyze = async (video) => {
     setAnalyzingId(video.tiktok_url);
     try {
@@ -220,13 +260,15 @@ export default function NicheFeed() {
       list = list.filter((v) => (v.duration || 0) >= durConfig.min);
     }
 
-    // Recency filter
+    // Recency filter — based on real publish date. Videos with an unknown
+    // publish date are excluded rather than silently passed through, so
+    // "posted in the last 7 days" actually means that.
     const recConfig = RECENCY_FILTERS.find((f) => f.key === recencyFilter);
     if (recConfig?.days) {
       const cutoff = Date.now() - recConfig.days * 24 * 60 * 60 * 1000;
       list = list.filter((v) => {
-        const cached = v.cached_at ? new Date(v.cached_at).getTime() : Date.now();
-        return cached >= cutoff;
+        const published = publishedAtMs(v);
+        return published !== null && published >= cutoff;
       });
     }
 
@@ -242,16 +284,29 @@ export default function NicheFeed() {
       };
       list.sort((a, b) => eng(b) - eng(a));
     } else if (sortBy === "newest") {
+      // Newest first, with unknown publish dates sorted to the end.
       list.sort((a, b) => {
-        const ta = a.cached_at ? new Date(a.cached_at).getTime() : 0;
-        const tb = b.cached_at ? new Date(b.cached_at).getTime() : 0;
+        const ta = publishedAtMs(a);
+        const tb = publishedAtMs(b);
+        if (ta === null && tb === null) return 0;
+        if (ta === null) return 1;
+        if (tb === null) return -1;
         return tb - ta;
       });
     } else {
       list.sort((a, b) => (b.virality_score || 0) - (a.virality_score || 0));
     }
 
-    return list;
+    // Guard against duplicate tiktok_urls (possible in keyword search results)
+    // so React keys in the grid stay unique.
+    const seen = new Set();
+    return list.filter((v) => {
+      const url = v.tiktok_url;
+      if (!url) return true;
+      if (seen.has(url)) return false;
+      seen.add(url);
+      return true;
+    });
   }, [videos, searchResults, viewFilter, durationFilter, sortBy, recencyFilter, hideSponsored]);
 
   return (
@@ -303,7 +358,7 @@ export default function NicheFeed() {
               {MODES.map((m) => (
                 <button
                   key={m.key}
-                  onClick={() => setMode(m.key)}
+                  onClick={() => handleSelectMode(m.key)}
                   data-testid={`mode-${m.key}`}
                   aria-pressed={mode === m.key}
                   className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
@@ -380,7 +435,7 @@ export default function NicheFeed() {
             return (
               <button
                 key={n.key}
-                onClick={() => setActiveNiche(n.key)}
+                onClick={() => handleSelectNiche(n.key)}
                 data-testid={`niche-chip-${n.key}`}
                 aria-pressed={isActive}
                 className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium border transition-colors ${
@@ -430,10 +485,10 @@ export default function NicheFeed() {
           icon={searchResults !== null ? Search : Compass}
           title={searchResults !== null ? "No results found" : "No videos match your filters"}
           description={
-            searchResults !== null
+            narrowingFilterCount > 0
+              ? "Your filters are hiding everything that was loaded. Note the date filter only matches videos with a known publish date."
+              : searchResults !== null
               ? "Try a different keyword or hashtag."
-              : activeFilterCount > 0
-              ? "Try adjusting your filters or selecting a different niche."
               : "This niche's creators may be temporarily unavailable. Try another niche or paste a TikTok URL above."
           }
         />

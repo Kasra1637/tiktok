@@ -142,6 +142,7 @@ async def init_db():
                 is_ad INTEGER DEFAULT 0,
                 creator_followers INTEGER DEFAULT 0,
                 creator_verified INTEGER DEFAULT 0,
+                upload_timestamp INTEGER DEFAULT 0,
                 virality_score REAL DEFAULT 0,
                 cached_at TEXT
             );
@@ -233,6 +234,7 @@ async def init_db():
                 is_ad INTEGER DEFAULT 0,
                 creator_followers INTEGER DEFAULT 0,
                 creator_verified INTEGER DEFAULT 0,
+                upload_timestamp INTEGER DEFAULT 0,
                 virality_score REAL DEFAULT 0,
                 cached_at TEXT
             );
@@ -355,8 +357,10 @@ async def init_db():
         # Migration: drop and recreate cache tables if they're missing new columns
         # (these are just caches that rebuild on next request — no data loss).
         cache_tables_to_check = {
-            "curated_videos": "is_ad",
-            "trending_videos": "is_ad",
+            # upload_timestamp is the newest column on these cache tables; if it's
+            # missing the table predates publish-date support and is rebuilt.
+            "curated_videos": "upload_timestamp",
+            "trending_videos": "upload_timestamp",
             "videos": "is_ad",
             "video_jobs": "use_original_sound",
         }
@@ -433,6 +437,7 @@ async def init_db():
                 is_ad INTEGER DEFAULT 0,
                 creator_followers INTEGER DEFAULT 0,
                 creator_verified INTEGER DEFAULT 0,
+                upload_timestamp INTEGER DEFAULT 0,
                 virality_score REAL DEFAULT 0,
                 cached_at TEXT
             );
@@ -462,6 +467,7 @@ async def init_db():
                 is_ad INTEGER DEFAULT 0,
                 creator_followers INTEGER DEFAULT 0,
                 creator_verified INTEGER DEFAULT 0,
+                upload_timestamp INTEGER DEFAULT 0,
                 virality_score REAL DEFAULT 0,
                 cached_at TEXT
             );
@@ -566,8 +572,8 @@ async def _refresh_trending_cache(niche_key: str, force: bool = False):
                         bookmark_count, duration, thumbnail_url, direct_video_url,
                         hashtags, song_id, song_title, song_artist, song_cover_url,
                         subtitles_url, is_ad, creator_followers, creator_verified,
-                        virality_score, cached_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        upload_timestamp, virality_score, cached_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (niche_key, v.get("tiktok_url"), v.get("video_platform_id"),
                      v.get("creator"), v.get("creator_display"), v.get("title"),
                      v.get("view_count", 0), v.get("like_count", 0),
@@ -581,6 +587,7 @@ async def _refresh_trending_cache(niche_key: str, force: bool = False):
                      1 if v.get("is_ad") else 0,
                      v.get("creator_followers", 0),
                      1 if v.get("creator_verified") else 0,
+                     int(v.get("timestamp") or 0),
                      v.get("virality_score", 0), now_iso()),
                 )
             await conn.execute(
@@ -747,8 +754,9 @@ async def get_niche_videos(niche_key: str, refresh: bool = False, mode: str = "c
                                 comment_count, share_count, bookmark_count, duration,
                                 thumbnail_url, direct_video_url, hashtags,
                                 song_id, song_title, song_artist, song_cover_url,
-                                subtitles_url, is_ad, creator_followers, creator_verified, cached_at)
-                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                subtitles_url, is_ad, creator_followers, creator_verified,
+                                upload_timestamp, cached_at)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                             (v["tiktok_url"], niche_key, v.get("video_platform_id"),
                              v.get("creator"), v.get("creator_display"), v.get("title"),
                              v.get("view_count", 0), v.get("like_count", 0),
@@ -762,6 +770,7 @@ async def get_niche_videos(niche_key: str, refresh: bool = False, mode: str = "c
                              1 if v.get("is_ad") else 0,
                              v.get("creator_followers", 0),
                              1 if v.get("creator_verified") else 0,
+                             int(v.get("timestamp") or 0),
                              now_iso()),
                         )
                         await conn.commit()
@@ -776,6 +785,11 @@ async def get_niche_videos(niche_key: str, refresh: bool = False, mode: str = "c
             (niche_key,),
         )
         for v in raw_curated:
+            # compute_virality_score derives age from `timestamp`; without it the
+            # scorer silently assumes a 48h-old video, which skews the velocity and
+            # recency components. Surface the persisted publish time under both
+            # names so the score is real and the client can sort/filter by date.
+            v["timestamp"] = v.get("upload_timestamp") or 0
             v["virality_score"] = viral_detection.compute_virality_score(v)
             v["source"] = "curated"
         curated_videos = raw_curated
