@@ -64,20 +64,26 @@ export const TOURS = {
         target: '[data-testid="niche-selector-tabs"]',
         title: "Pick a niche",
         body:
-          "Choose the niche closest to your brand \u2014 fitness, beauty, tech, and more. Each niche pulls its own curated creators and trending hashtags, so results stay relevant to you.",
+          "Choose the niche closest to your brand \u2014 fitness, beauty, tech, and more. Selecting a niche just sets a filter \u2014 it never fetches videos by itself.",
       },
       {
         target: '[data-testid="mode-toggle"]',
         title: "Trending vs. Curated",
         body:
-          "Trending pulls fresh hashtag data ranked by a live virality score. Curated shows hand-picked top creators. Mixed blends both so you never run out of hooks to study.",
+          "Trending pulls fresh hashtag data ranked by a live virality score. Curated shows hand-picked top creators. Mixed blends both. Switching modes is also free \u2014 no request fires until you search.",
       },
       {
         target: '[data-testid="search-input"]',
         title: "Or search directly",
         optional: true,
         body:
-          "Already have a keyword or hashtag in mind? Search TikTok directly instead of browsing \u2014 useful when you're chasing a specific trend.",
+          "Already have a keyword or hashtag in mind? Type it here instead of browsing by niche \u2014 useful when you're chasing a specific trend.",
+      },
+      {
+        target: '[data-testid="search-button"]',
+        title: "Click Search to load videos",
+        body:
+          "Nothing loads until you click this \u2014 whether you picked a niche or typed a keyword. That keeps every video fetch intentional, so you're never surprised by an unexpected search.",
       },
       {
         target: '[data-testid="toggle-filters"]',
@@ -87,8 +93,9 @@ export const TOURS = {
           "Filter by view count, duration, recency, or sort order to zero in on the hooks most worth analyzing \u2014 less scrolling, more signal.",
       },
       {
-        target: '[data-testid="video-feed-grid"], [data-testid="niche-selector-tabs"]',
+        target: '[data-testid="video-feed-grid"]',
         title: "Found one? Analyze it",
+        optional: true,
         body:
           "Click \u201cAnalyze Hook\u201d on any video card. AI breaks down exactly what makes the first 2\u20133 seconds work \u2014 expressions, gestures, pacing, and more \u2014 so you know what to replicate.",
       },

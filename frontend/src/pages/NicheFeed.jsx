@@ -68,6 +68,12 @@ export default function NicheFeed() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState(null);
   const [searchLoading, setSearchLoading] = useState(false);
+  // True only after the user has explicitly clicked Search and a niche fetch
+  // (which hits Apify/yt-dlp) has completed for the CURRENT niche+mode combo.
+  // Selecting a niche chip or switching Trending/Curated/Mixed never sets
+  // this — it only flips to false again, so no video request ever fires
+  // without an explicit Search click.
+  const [hasLoadedNiche, setHasLoadedNiche] = useState(false);
   const navigate = useNavigate();
 
   // Filters
@@ -113,6 +119,7 @@ export default function NicheFeed() {
             data.sort((a, b) => (b.virality_score || 0) - (a.virality_score || 0));
           }
           setVideos(data);
+          setHasLoadedNiche(true);
         })
         .catch((err) => toast.error(getErrorMessage(err)))
         .finally(() => setLoadingVideos(false));
@@ -120,27 +127,47 @@ export default function NicheFeed() {
     []
   );
 
+  // Selecting a niche chip or switching Trending/Curated/Mixed only updates
+  // local state here — it deliberately does NOT fetch anything. This clears
+  // any previously-loaded results for the old niche/mode so stale videos
+  // don't linger on screen, and resets hasLoadedNiche so the UI prompts the
+  // user to click Search before the next Apify/yt-dlp request is made.
   useEffect(() => {
-    if (activeNiche) loadVideos(activeNiche, mode);
-  }, [activeNiche, mode, loadVideos]);
+    setVideos([]);
+    setHasLoadedNiche(false);
+  }, [activeNiche, mode]);
 
   const handleSearch = useCallback(
     (e) => {
-      e.preventDefault();
+      if (e && typeof e.preventDefault === "function") e.preventDefault();
       const query = searchQuery.trim();
-      if (!query) return;
 
-      setSearchLoading(true);
-      api
-        .searchTrending(query, 20)
-        .then((data) => {
-          data.sort((a, b) => (b.virality_score || 0) - (a.virality_score || 0));
-          setSearchResults(data);
-        })
-        .catch((err) => toast.error(getErrorMessage(err)))
-        .finally(() => setSearchLoading(false));
+      // Keyword/hashtag search always takes priority when text is entered.
+      if (query) {
+        setSearchLoading(true);
+        setSearchResults(null);
+        api
+          .searchTrending(query, 20)
+          .then((data) => {
+            data.sort((a, b) => (b.virality_score || 0) - (a.virality_score || 0));
+            setSearchResults(data);
+          })
+          .catch((err) => toast.error(getErrorMessage(err)))
+          .finally(() => setSearchLoading(false));
+        return;
+      }
+
+      // No keyword typed — load videos for the currently selected niche.
+      // This is the ONLY place a niche's videos are fetched; niche chips and
+      // the mode toggle never trigger this on their own.
+      if (activeNiche) {
+        loadVideos(activeNiche, mode);
+        return;
+      }
+
+      toast.error("Select a niche chip or type a search term, then click Search.");
     },
-    [searchQuery]
+    [searchQuery, activeNiche, mode, loadVideos]
   );
 
   const clearSearch = useCallback(() => {
@@ -251,11 +278,18 @@ export default function NicheFeed() {
             </div>
             <button
               type="submit"
-              disabled={searchLoading || !searchQuery.trim()}
+              disabled={searchLoading || loadingVideos || (!searchQuery.trim() && !activeNiche)}
               className="rounded-lg px-3 py-1.5 text-sm font-medium bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white disabled:opacity-50 transition-colors"
               data-testid="search-button"
+              title={
+                searchQuery.trim()
+                  ? "Search TikTok for this keyword/hashtag"
+                  : activeNiche
+                  ? "Load videos for the selected niche"
+                  : "Select a niche or type a keyword first"
+              }
             >
-              {searchLoading ? "..." : "Search"}
+              {searchLoading || loadingVideos ? "..." : "Search"}
             </button>
             {searchResults !== null && (
               <button type="button" onClick={clearSearch} className="rounded-lg px-2.5 py-1.5 text-sm border border-border hover:bg-muted transition-colors">
@@ -337,7 +371,8 @@ export default function NicheFeed() {
           </div>
         )}
 
-        {/* Niche chips */}
+        {/* Niche chips — selecting one only sets the filter, it never fetches
+            on its own. Click Search to actually load videos for it. */}
         <div className="flex flex-wrap gap-1.5" data-testid="niche-selector-tabs">
           {niches.map((n) => {
             const Icon = LucideIcons[n.icon] || Compass;
@@ -359,6 +394,11 @@ export default function NicheFeed() {
             );
           })}
         </div>
+        {activeNiche && !hasLoadedNiche && !loadingVideos && (
+          <p className="text-[11px] text-muted-foreground flex items-center gap-1" data-testid="niche-pending-search-hint">
+            <Search className="h-3 w-3" /> Click <span className="font-semibold text-foreground">Search</span> to load videos for this niche.
+          </p>
+        )}
       </div>
 
       {/* Results count */}
@@ -379,11 +419,11 @@ export default function NicheFeed() {
             </Card>
           ))}
         </div>
-      ) : !activeNiche && searchResults === null ? (
+      ) : !hasLoadedNiche && searchResults === null ? (
         <EmptyState
           icon={Compass}
-          title="Pick a niche or search to get started"
-          description="Select a niche chip above, or search by keyword/hashtag, to load videos. Nothing loads automatically."
+          title="Pick a niche, then click Search"
+          description="Select a niche chip above (or type a keyword/hashtag), then click the Search button to load videos. Nothing loads automatically — not even when you switch niches or modes."
         />
       ) : displayVideos.length === 0 ? (
         <EmptyState
