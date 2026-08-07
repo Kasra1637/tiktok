@@ -747,6 +747,15 @@ export default function FaceSwap() {
                   <a href={videoUrl} download target="_blank" rel="noreferrer" className="flex-1">
                     <Button variant="outline" className="w-full gap-1.5 rounded-xl text-sm" data-testid="download-hook-button"><Download className="h-3.5 w-3.5" /> Download Hook</Button>
                   </a>
+                  <Button
+                    onClick={() => { setVideoUrl(null); setVideoStatus(null); setVideoJobId(null); handleGenerateHook(); }}
+                    variant="outline"
+                    className="gap-1.5 rounded-xl text-sm"
+                    data-testid="reroll-hook-button"
+                    title="Generate another take with the same prompt — only costs the video generation, no re-analysis"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" /> Re-roll
+                  </Button>
                   <Button onClick={handleReset} variant="ghost" className="gap-1.5 rounded-xl text-sm text-muted-foreground"><RotateCcw className="h-3.5 w-3.5" /> Reset</Button>
                 </div>
 
@@ -798,6 +807,15 @@ export default function FaceSwap() {
                   <a href={videoUrl} download target="_blank" rel="noreferrer" className="flex-1">
                     <Button className="w-full gap-1.5 rounded-xl bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white text-sm" data-testid="download-extended-button"><Download className="h-3.5 w-3.5" /> Download Video</Button>
                   </a>
+                  <Button
+                    onClick={() => { setVideoUrl(null); setVideoStatus(null); setVideoJobId(null); handleExtendVideo(); }}
+                    variant="outline"
+                    className="gap-1.5 rounded-xl text-sm"
+                    data-testid="reroll-extend-button"
+                    title="Generate another take with the same prompt"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" /> Re-roll
+                  </Button>
                   <Button onClick={handleReset} variant="outline" className="gap-1.5 rounded-xl text-sm"><RotateCcw className="h-3.5 w-3.5" /> New</Button>
                 </div>
               </div>
