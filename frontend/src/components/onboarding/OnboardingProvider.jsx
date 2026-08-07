@@ -4,27 +4,6 @@ import { TOURS, getTourIdForPath } from "../../lib/onboarding/tours";
 import TourOverlay from "./TourOverlay";
 import TourHelpButton from "./TourHelpButton";
 
-const STORAGE_KEY = "hookforge_onboarding_seen_tours";
-
-function loadSeenTours() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const arr = raw ? JSON.parse(raw) : [];
-    return new Set(Array.isArray(arr) ? arr : []);
-  } catch {
-    return new Set();
-  }
-}
-
-function persistSeenTours(set) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(set)));
-  } catch {
-    // localStorage unavailable (private mode, quota, etc) — onboarding will
-    // just replay each visit. Non-fatal, so we swallow the error.
-  }
-}
-
 const OnboardingContext = createContext(null);
 
 export function useOnboarding() {
@@ -40,42 +19,35 @@ export function useOnboarding() {
  *
  * Wraps the routed app (must live inside <BrowserRouter> since it reads the
  * current location) and:
- *  - Auto-starts the relevant page tour the first time a user visits a route
- *    that has one, tracked per-browser via localStorage so it never repeats.
+ *  - Auto-starts the relevant page tour every time a user visits (or
+ *    revisits) a route that has one. Unlike a typical one-time onboarding
+ *    flow, this is intentionally NOT tracked/suppressed across sessions —
+ *    the tour reappears on every page load, per the product requirement
+ *    that it act as an always-on guide rather than a first-run-only intro.
  *  - Exposes controls (next/back/skip/replay) consumed by <TourOverlay />.
  *  - Renders a small floating "Tour" button on any page with a tour so users
  *    can replay it on demand, and the spotlight/tooltip overlay itself.
  */
 export function OnboardingProvider({ children }) {
   const location = useLocation();
-  const [seenTours, setSeenTours] = useState(loadSeenTours);
   const [activeTourId, setActiveTourId] = useState(null);
   const [stepIndex, setStepIndex] = useState(0);
   const autoStartTimerRef = useRef(null);
+  // Tracks which page pathname we've already auto-started a tour for during
+  // THIS mount, so re-rendering the same page (e.g. state updates) doesn't
+  // keep restarting the tour out from under the user — but navigating away
+  // and back, or a full page reload, starts it fresh again.
+  const autoStartedForPathRef = useRef(null);
 
   const pageTourId = getTourIdForPath(location.pathname);
   const activeTour = activeTourId ? TOURS[activeTourId] : null;
   const currentStep = activeTour ? activeTour.steps[stepIndex] : null;
 
-  const markSeen = useCallback((tourId) => {
-    setSeenTours((prev) => {
-      if (prev.has(tourId)) return prev;
-      const next = new Set(prev);
-      next.add(tourId);
-      persistSeenTours(next);
-      return next;
-    });
+  const startTour = useCallback((tourId) => {
+    if (!TOURS[tourId]) return;
+    setActiveTourId(tourId);
+    setStepIndex(0);
   }, []);
-
-  const startTour = useCallback(
-    (tourId) => {
-      if (!TOURS[tourId]) return;
-      setActiveTourId(tourId);
-      setStepIndex(0);
-      markSeen(tourId);
-    },
-    [markSeen]
-  );
 
   const stopTour = useCallback(() => {
     setActiveTourId(null);
@@ -101,24 +73,25 @@ export function OnboardingProvider({ children }) {
     stopTour();
   }, [stopTour]);
 
-  // Auto-start the page's tour once per browser, a beat after navigation so
-  // async data (niche list, hook analysis, etc.) has a moment to load before
-  // the overlay starts probing the DOM for its first target.
+  // Auto-start the page's tour every time its route is entered, a beat after
+  // navigation so async data (niche list, hook analysis, etc.) has a moment
+  // to load before the overlay starts probing the DOM for its first target.
   useEffect(() => {
     if (autoStartTimerRef.current) {
       clearTimeout(autoStartTimerRef.current);
       autoStartTimerRef.current = null;
     }
-    if (!pageTourId || seenTours.has(pageTourId) || activeTourId) return;
-    autoStartTimerRef.current = setTimeout(() => startTour(pageTourId), 700);
+    if (!pageTourId) return;
+    if (autoStartedForPathRef.current === location.pathname) return;
+    autoStartTimerRef.current = setTimeout(() => {
+      autoStartedForPathRef.current = location.pathname;
+      startTour(pageTourId);
+    }, 700);
     return () => {
       if (autoStartTimerRef.current) clearTimeout(autoStartTimerRef.current);
     };
-    // Re-evaluate only when the resolved tour for this page changes, not on
-    // every location change (e.g. query-string-only navigation within the
-    // same page/tour shouldn't retrigger this).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageTourId, seenTours, activeTourId]);
+  }, [pageTourId, location.pathname]);
 
   // If the user navigates to a page with a different (or no) tour while one
   // is open, close the overlay rather than letting it follow them somewhere
