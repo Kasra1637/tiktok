@@ -57,7 +57,7 @@ export default function Privacy() {
             <ul className="list-disc pl-5 space-y-1">
               <li><strong>OpenRouter API:</strong> For AI image generation (face swap), video generation, and text analysis. Your images are sent to their API for processing.</li>
               <li><strong>Google Gemini:</strong> For vision-based hook analysis and image generation (via OpenRouter).</li>
-              <li><strong>ByteDance Seedance / Alibaba Wan:</strong> For AI video generation (via OpenRouter).</li>
+              <li><strong>MiniMax H3 (Hailuo 3):</strong> For AI video generation with native audio and V2V motion transfer (via OpenRouter).</li>
               <li><strong>TikTok Content Discovery API:</strong> For displaying publicly available trending videos within the app.</li>
             </ul>
             <p>Each third-party service has its own privacy policy governing how they handle data sent to them.</p>

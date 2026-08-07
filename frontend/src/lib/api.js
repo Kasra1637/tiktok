@@ -82,13 +82,14 @@ export const api = {
       })
       .then((r) => r.data);
   },
-  faceSwapExtendVideo: (imageId, hookJobId, brandUrl, duration, model) => {
+  faceSwapExtendVideo: (imageId, hookJobId, brandUrl, duration, model, videoId) => {
     const formData = new FormData();
     formData.append("image_id", imageId);
     formData.append("hook_job_id", hookJobId || "");
     formData.append("brand_url", brandUrl || "");
     formData.append("duration", String(duration || 10));
     formData.append("model", model || "");
+    formData.append("video_id", videoId || "");
     return client
       .post("/face-swap/extend-video", formData, {
         headers: { "Content-Type": "multipart/form-data" },

@@ -1200,7 +1200,8 @@ async def face_swap_status(job_id: str):
 
 HOOK_VIDEO_PROMPT_TEMPLATE = (
     "Create a 5-second vertical video (9:16) starting from this exact first frame. "
-    "NO VOICE, NO SPEECH, NO TEXT OVERLAYS — this is a purely visual hook. "
+    "Generate native audio that complements the hook — subtle tension-building sound design, "
+    "ambient audio, or trending-style music that enhances the visual impact. "
     "The character should perform a single attention-grabbing movement that creates "
     "curiosity: {motion_type}. "
     "Requirements: "
@@ -1209,7 +1210,7 @@ HOOK_VIDEO_PROMPT_TEMPLATE = (
     "- Camera holds steady or has a very subtle push-in for tension "
     "- The movement should feel like it's building up to something (creates anticipation) "
     "- End on a moment that makes the viewer want to see what happens next "
-    "- No audio, no music, no voiceover — silent video only"
+    "- Audio should enhance the hook's impact (sound design, subtle music, or ambient)"
 )
 
 HOOK_MOTION_TYPES = [
@@ -1229,12 +1230,19 @@ async def face_swap_generate_hook_video(
     video_id: str = Form(""),
 ):
     """
-    Phase 2a: Generate a 5-second SILENT hook video from the face-swapped image.
+    Generate a hook video from the face-swapped image using MiniMax H3.
 
-    If video_id is provided, pulls the hook analysis from the original viral video
-    and uses its PROVEN hook mechanics (expressions, gestures, pacing) as the basis
-    for the video prompt — not a generic template. This is the core value prop:
-    recreating what actually worked.
+    H3 advantages leveraged here:
+    - Native audio in one pass: generates synced sound (ambient, foley, music)
+      alongside video — no need for a separate silent-then-extend workflow.
+    - V2V motion transfer: if a viral video was analyzed, passes it as a reference
+      so H3 replicates the exact timing, camera movement, and performance rhythm.
+    - Omni-reference: face-swapped image as first_frame + viral video as motion ref.
+    - 2K resolution output.
+
+    If video_id is provided, pulls the hook analysis AND the downloaded video file
+    to feed as a V2V motion reference — H3 will replicate the proven hook mechanics
+    directly from the source video rather than relying on text descriptions alone.
 
     Falls back to a motion-style template if no analysis is available.
 
@@ -1250,8 +1258,9 @@ async def face_swap_generate_hook_video(
             detail="Generated face-swap image not found. Please generate the image first.",
         )
 
-    # Try to get hook analysis from the original viral video
+    # Try to get hook analysis and video file from the original viral video
     analysis = None
+    reference_video_path = None
     if video_id and video_id.strip():
         analysis_row = await _fetch_one(
             "SELECT * FROM analyses WHERE video_id = ? ORDER BY created_at DESC LIMIT 1",
@@ -1260,11 +1269,21 @@ async def face_swap_generate_hook_video(
         if analysis_row:
             analysis = analysis_row
 
+        # Get the downloaded video file for V2V motion transfer
+        video_record = await _fetch_one("SELECT * FROM videos WHERE id = ?", (video_id.strip(),))
+        if video_record and video_record.get("local_video_path"):
+            v_path = Path(video_record["local_video_path"])
+            if v_path.exists():
+                reference_video_path = v_path
+
     if analysis:
-        # USE THE PROVEN HOOK STRUCTURE from the analyzed viral video
+        # USE THE PROVEN HOOK STRUCTURE from the analyzed viral video.
+        # With H3's V2V motion transfer, the video reference carries the timing
+        # and camera work — the text prompt reinforces expressions and intent.
         prompt = (
             "Create a 5-second vertical video (9:16) starting from this exact first frame. "
-            "NO VOICE, NO SPEECH, NO TEXT OVERLAYS — this is a purely visual hook. "
+            "Generate native audio that complements the hook (ambient sound, subtle tension-building music, "
+            "or brief impactful sound design — match the energy of the movement). "
             "Recreate the EXACT hook mechanics that made the original viral video work:\n\n"
             f"FACIAL EXPRESSION: {analysis.get('facial_expressions', 'engaging expression')}\n"
             f"BODY LANGUAGE & GESTURE: {analysis.get('body_language_gestures', 'confident body language')}\n"
@@ -1277,7 +1296,7 @@ async def face_swap_generate_hook_video(
             "- Camera holds steady or has a subtle push-in matching the original's pacing\n"
             "- The movement should build curiosity and make the viewer want to see more\n"
             "- End on a moment of anticipation (the viewer wants to know what happens next)\n"
-            "- SILENT — no audio, no music, no voiceover, no text overlays"
+            "- Audio should enhance the hook's impact (sound design, ambient, or trending-style audio)"
         )
         # Include replicable mechanics if available
         mechanics = analysis.get("replicable_mechanics")
@@ -1290,16 +1309,22 @@ async def face_swap_generate_hook_video(
             if isinstance(mechanics, list) and mechanics:
                 mechanics_str = "; ".join(str(m) for m in mechanics[:5])
                 prompt += f"\n\nKEY MECHANICS TO REPLICATE: {mechanics_str}"
+
+        if reference_video_path:
+            prompt += (
+                "\n\nNOTE: A reference video is provided for V2V motion transfer. "
+                "Replicate its timing, camera movement, performance rhythm, and editing pace "
+                "while using the new character from the first frame."
+            )
     else:
         # No video analysis available (manual upload) — analyze the IMAGE itself
-        # to determine the best hook movement based on what's in the frame
         image_analysis = await analyze_image_for_hook(image_path, session_id=f"img-hook-{image_id}")
 
         if image_analysis and image_analysis.get("body_language_gestures"):
-            # Use the AI's analysis of the uploaded image
             prompt = (
                 "Create a 5-second vertical video (9:16) starting from this exact first frame. "
-                "NO VOICE, NO SPEECH, NO TEXT OVERLAYS — this is a purely visual hook. "
+                "Generate native audio that enhances the hook (subtle sound design, ambient audio, "
+                "or trending-style music that builds tension). "
                 "Animate from this starting pose using these movement cues:\n\n"
                 f"FACIAL EXPRESSION: {image_analysis.get('facial_expressions', 'engaging expression')}\n"
                 f"BODY LANGUAGE & MOVEMENT: {image_analysis.get('body_language_gestures', 'confident movement')}\n"
@@ -1311,7 +1336,7 @@ async def face_swap_generate_hook_video(
                 "- Smooth, natural motion — no jerky or artificial movement\n"
                 "- The movement should build curiosity and make the viewer want to see more\n"
                 "- End on a moment of anticipation\n"
-                "- SILENT — no audio, no music, no voiceover, no text overlays"
+                "- Audio should complement the visual hook (sound design, ambient, or music)"
             )
             mechanics = image_analysis.get("replicable_mechanics")
             if mechanics and isinstance(mechanics, list) and mechanics:
@@ -1337,8 +1362,8 @@ async def face_swap_generate_hook_video(
             prompt=prompt,
             reference_image_path=image_path,
             duration=5,
-            model=model.strip() if model else None,
-            generate_audio=False,
+            generate_audio=True,  # H3 generates native audio in one pass
+            reference_video_path=reference_video_path,  # V2V motion transfer
         )
     except Exception as e:
         logger.error(f"Hook video generation failed: {e}")
@@ -1365,6 +1390,9 @@ async def face_swap_generate_hook_video(
         "duration": 5,
         "phase": "hook",
         "motion_style": motion_style.strip() or "lean-in",
+        "model": "minimax-h3",
+        "has_v2v_motion": bool(reference_video_path),
+        "has_native_audio": True,
     }
 
 
@@ -1376,14 +1404,15 @@ async def face_swap_extend_video(
     prompt: str = Form(""),
     duration: int = Form(10),
     model: str = Form(""),
+    video_id: str = Form(""),
 ):
     """
-    Phase 2b: Extend the hook video with a longer continuation that delivers
-    the brand message. This generates a video that continues from where the
-    5-second hook left off — with voice, narrative, and CTA.
+    Generate an extended brand video using MiniMax H3 with native audio.
 
-    If prompt is empty, auto-generates a branded extension prompt using the
-    brand URL or active brand profile.
+    H3 produces the full video with synced audio (voiceover, music, sound effects)
+    in a single pass — no separate audio generation step needed. If video_id is
+    provided and the original viral video is available, uses it as a V2V motion
+    reference for timing and pacing continuity.
     """
     require_ai_configured()
 
@@ -1395,6 +1424,15 @@ async def face_swap_extend_video(
         )
 
     duration = max(5, min(duration, 15))
+
+    # Get the original viral video for V2V motion transfer if available
+    reference_video_path = None
+    if video_id and video_id.strip():
+        video_record = await _fetch_one("SELECT * FROM videos WHERE id = ?", (video_id.strip(),))
+        if video_record and video_record.get("local_video_path"):
+            v_path = Path(video_record["local_video_path"])
+            if v_path.exists():
+                reference_video_path = v_path
 
     # Auto-generate extension prompt if not provided
     if not prompt.strip():
@@ -1438,7 +1476,7 @@ async def face_swap_extend_video(
 
             prompt = (
                 f"Continue this video for {duration} seconds. The character from the first frame "
-                f"now delivers a confident, {tone} message to camera. "
+                f"now delivers a confident, {tone} message to camera with native voice audio. "
                 f"They are promoting {brand_name}"
                 f"{' — ' + brand_desc if brand_desc else ''}. "
                 f"{'Products/services: ' + products_str + '. ' if products_str else ''}"
@@ -1447,6 +1485,8 @@ async def face_swap_extend_video(
                 f"their audience, not scripted or stiff. Include confident body language, "
                 f"occasional hand gestures, and direct eye contact with camera. "
                 f"End with a clear call-to-action moment (pointing, nodding, or inviting gesture). "
+                f"Generate natural voice audio matching the character — confident, clear delivery "
+                f"with ambient room tone. "
                 f"Maintain perfect face consistency throughout."
             )
         else:
@@ -1455,6 +1495,7 @@ async def face_swap_extend_video(
                 "now delivers an energetic, confident message directly to camera. "
                 "Natural delivery — speaking with passion, using hand gestures, maintaining "
                 "eye contact. The energy builds from the hook into a clear message. "
+                "Generate native voice audio — confident, engaging delivery with natural room tone. "
                 "End with a decisive moment (nod, point, or inviting gesture). "
                 "Maintain perfect face consistency throughout."
             )
@@ -1464,8 +1505,8 @@ async def face_swap_extend_video(
             prompt=prompt,
             reference_image_path=image_path,
             duration=duration,
-            model=model.strip() if model else None,
-            generate_audio=True,
+            generate_audio=True,  # H3 native audio in one pass
+            reference_video_path=reference_video_path,  # V2V motion transfer if available
         )
     except Exception as e:
         logger.error(f"Extend video generation failed: {e}")
@@ -1492,6 +1533,9 @@ async def face_swap_extend_video(
         "duration": duration,
         "phase": "extend",
         "hook_job_id": hook_job_id,
+        "model": "minimax-h3",
+        "has_v2v_motion": bool(reference_video_path),
+        "has_native_audio": True,
     }
 
 
@@ -1504,7 +1548,7 @@ async def face_swap_generate_video(
     model: str = Form(""),
 ):
     """
-    Legacy endpoint — generates a video from the face-swapped image.
+    Legacy endpoint — generates a video from the face-swapped image using MiniMax H3.
     For the new flow, use /face-swap/generate-hook-video (5s hook)
     followed by /face-swap/extend-video (continuation).
     """
@@ -1523,7 +1567,8 @@ async def face_swap_generate_video(
             "Add subtle natural motion: slight head movement, blinking, breathing, and gentle body sway. "
             "Maintain perfect face consistency throughout. The scene should feel like a real person in a "
             "natural video — smooth, lifelike motion with no flickering or face changes. "
-            "Camera holds steady, matching the original framing."
+            "Camera holds steady, matching the original framing. "
+            "Generate subtle ambient audio (room tone, gentle background) to make the video feel natural."
         )
 
     duration = max(3, min(duration, 15))
@@ -1533,8 +1578,7 @@ async def face_swap_generate_video(
             prompt=prompt,
             reference_image_path=image_path,
             duration=duration,
-            model=model.strip() if model else None,
-            generate_audio=False,
+            generate_audio=True,  # H3 native audio
         )
     except Exception as e:
         logger.error(f"Video generation submission failed: {e}")
@@ -2242,7 +2286,7 @@ async def generate_video_endpoint(job_id: str, payload: GenerateVideoRequest):
 
 @api_router.post("/video-jobs/{job_id}/submit-video")
 async def submit_video_job(job_id: str):
-    """Actually submit the video generation job to OpenRouter (HappyHorse)."""
+    """Actually submit the video generation job to OpenRouter using MiniMax H3."""
     require_ai_configured()
     job = await _fetch_one("SELECT * FROM video_jobs WHERE id = ?", (job_id,))
     if not job:
@@ -2252,6 +2296,7 @@ async def submit_video_job(job_id: str):
         "SELECT * FROM customizations WHERE id = ?", (job["customization_id"],)
     )
     reference_image_path = None
+    reference_video_path = None
     if customization:
         generated_images = customization.get("generated_images", [])
         selected_ids = job.get("selected_image_ids") or job.get("reference_image_ids") or []
@@ -2266,11 +2311,23 @@ async def submit_video_job(job_id: str):
         if chosen:
             reference_image_path = pipeline.GENERATED_DIR / f"{chosen['id']}.png"
 
+        # Get the original viral video for V2V motion transfer
+        if customization.get("video_id"):
+            video_record = await _fetch_one(
+                "SELECT * FROM videos WHERE id = ?", (customization["video_id"],)
+            )
+            if video_record and video_record.get("local_video_path"):
+                v_path = Path(video_record["local_video_path"])
+                if v_path.exists():
+                    reference_video_path = v_path
+
     try:
         result = await generate_video(
             prompt=job.get("full_prompt_text") or "",
             reference_image_path=reference_image_path,
             duration=job.get("target_duration_seconds", 10) or 10,
+            generate_audio=True,  # H3 native audio
+            reference_video_path=reference_video_path,  # V2V motion transfer
         )
     except Exception as e:
         logger.error(f"Video submission failed for {job_id}: {e}")

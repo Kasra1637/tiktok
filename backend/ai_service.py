@@ -28,28 +28,23 @@ IMAGE_GEN_MODEL = "google/gemini-2.5-flash-image"
 FACE_SWAP_MODEL = "x-ai/grok-imagine-image-quality"  # Grok Imagine — strong identity preservation, no content filter issues, 2K
 TEXT_MODEL = "google/gemini-2.5-flash"
 
-# Video generation models (user-selectable)
+# Video generation models — MiniMax H3 (Hailuo 3) is the sole model.
+# H3 supports omni-reference inputs (up to 9 images, 3 videos, 3 audio files),
+# native stereo audio generation in a single pass, V2V motion transfer,
+# and up to 2K resolution at 15 seconds.
 VIDEO_MODELS = {
-    "seedance-2.0": {
-        "id": "bytedance/seedance-2.0",
-        "name": "Seedance 2.0",
-        "description": "Best quality. Character consistency, native audio, cinematic camera.",
+    "minimax-h3": {
+        "id": "minimax/hailuo-3",
+        "name": "MiniMax H3",
+        "description": "Omni-modal video generation. Native audio, V2V motion transfer, 2K resolution, up to 15s.",
         "max_duration": 15,
-    },
-    "seedance-2.0-fast": {
-        "id": "bytedance/seedance-2.0-fast",
-        "name": "Seedance 2.0 Fast",
-        "description": "Faster generation, lower cost. Good for previews.",
-        "max_duration": 15,
-    },
-    "wan-2.7": {
-        "id": "alibaba/wan-2.7",
-        "name": "Wan 2.7",
-        "description": "Strong image-to-video. Reference style preservation.",
-        "max_duration": 10,
+        "supports_references": True,
+        "supports_native_audio": True,
+        "supports_v2v_motion": True,
+        "resolution": "2K",
     },
 }
-DEFAULT_VIDEO_MODEL = "seedance-2.0"
+DEFAULT_VIDEO_MODEL = "minimax-h3"
 # Legacy fallback
 VIDEO_MODEL = VIDEO_MODELS[DEFAULT_VIDEO_MODEL]["id"]
 
@@ -634,30 +629,53 @@ async def analyze_image_for_hook(image_path: Path, session_id: str) -> dict:
         return {}
 
 
-async def generate_video(prompt: str, reference_image_path: Path = None, duration: int = 5, model: str = None, generate_audio: bool = False) -> dict:
-    """Submit a video generation job to OpenRouter. Returns job info for polling.
+async def generate_video(
+    prompt: str,
+    reference_image_path: Path = None,
+    duration: int = 5,
+    model: str = None,
+    generate_audio: bool = True,
+    reference_video_path: Path = None,
+    reference_audio_url: str = None,
+    input_references: list = None,
+) -> dict:
+    """Submit a video generation job to OpenRouter using MiniMax H3.
+
+    MiniMax H3 capabilities leveraged:
+    - Omni-reference inputs: up to 9 images + 3 video clips + 3 audio files in one call
+    - Native stereo audio: generated in the same pass as video (dialogue, foley, music synced)
+    - V2V motion transfer: feed original viral video as motion/timing reference
+    - 2K resolution output
+    - Up to 15 seconds per generation
 
     Args:
-        generate_audio: Whether to generate audio. Defaults to False for hook videos
-                       (silent movement-based hooks). Set True for extended videos with voiceover.
+        prompt: Text prompt describing the video to generate.
+        reference_image_path: Face-swapped image used as first_frame (identity anchor).
+        duration: Target duration in seconds (1-15).
+        model: Model key (only "minimax-h3" supported now).
+        generate_audio: Whether to generate native audio. Defaults to True since H3
+                       produces synced audio in one pass (dialogue, foley, ambient).
+        reference_video_path: Optional path to the original viral video for V2V motion
+                            transfer — H3 will replicate the timing, camera movement,
+                            and performance rhythm from this video.
+        reference_audio_url: Optional URL to an audio file to use as voice/music reference.
+        input_references: Optional pre-built list of reference objects to pass directly.
+                         Each item should follow OpenRouter's input_references schema.
     """
-    # Resolve model
-    if model and model in VIDEO_MODELS:
-        model_id = VIDEO_MODELS[model]["id"]
-        max_dur = VIDEO_MODELS[model]["max_duration"]
-    else:
-        model_id = VIDEO_MODELS[DEFAULT_VIDEO_MODEL]["id"]
-        max_dur = VIDEO_MODELS[DEFAULT_VIDEO_MODEL]["max_duration"]
+    # Always use MiniMax H3
+    model_id = VIDEO_MODELS[DEFAULT_VIDEO_MODEL]["id"]
+    max_dur = VIDEO_MODELS[DEFAULT_VIDEO_MODEL]["max_duration"]
 
     payload = {
         "model": model_id,
         "prompt": prompt,
         "duration": min(duration, max_dur),
-        "resolution": "720p",
+        "resolution": "2K",
         "aspect_ratio": "9:16",
         "generate_audio": generate_audio,
     }
 
+    # First frame: the face-swapped image anchors identity throughout the video
     if reference_image_path and reference_image_path.exists():
         b64 = image_to_base64(reference_image_path)
         mime = "image/png"
@@ -669,9 +687,36 @@ async def generate_video(prompt: str, reference_image_path: Path = None, duratio
             }
         ]
 
+    # Omni-reference inputs: H3 can accept images, videos, and audio as references
+    # to guide subject identity, motion/timing, and sound in one generation.
+    refs = list(input_references) if input_references else []
+
+    # V2V motion transfer: feed the original viral video so H3 replicates its
+    # timing, camera language, performance rhythm, and editing pace.
+    if reference_video_path and reference_video_path.exists():
+        video_b64 = _video_to_base64(reference_video_path)
+        if video_b64:
+            refs.append({
+                "type": "video_url",
+                "video_url": {"url": f"data:video/mp4;base64,{video_b64}"},
+            })
+
+    # Audio reference: feed an audio file (voice/music) so H3 syncs lip movement
+    # and pacing to the original sound.
+    if reference_audio_url:
+        refs.append({
+            "type": "audio_url",
+            "audio_url": {"url": reference_audio_url},
+        })
+
+    if refs:
+        payload["input_references"] = refs
+
     logger.info(
-        f"Submitting video generation: model={model_id}, duration={payload['duration']}s, "
-        f"has_frame_image={bool(payload.get('frame_images'))}, audio={generate_audio}"
+        f"Submitting video generation (MiniMax H3): duration={payload['duration']}s, "
+        f"resolution={payload['resolution']}, has_frame_image={bool(payload.get('frame_images'))}, "
+        f"audio={generate_audio}, num_references={len(refs)}, "
+        f"has_v2v_motion={bool(reference_video_path and reference_video_path.exists())}"
     )
 
     async with httpx.AsyncClient(timeout=90) as client:
@@ -692,6 +737,27 @@ async def generate_video(prompt: str, reference_image_path: Path = None, duratio
         # Normalize: ensure 'id' key is always present
         data["id"] = job_id
         return data
+
+
+def _video_to_base64(path: Path, max_size_mb: int = 25) -> Optional[str]:
+    """Encode a video file to base64 for use as a V2V motion reference.
+
+    Returns None if the file is too large (avoids inflating the API payload
+    beyond reasonable limits — H3 accepts references up to ~25MB).
+    """
+    try:
+        file_size = path.stat().st_size
+        if file_size > max_size_mb * 1024 * 1024:
+            logger.warning(
+                f"Video reference {path.name} is {file_size / 1024 / 1024:.1f}MB "
+                f"(max {max_size_mb}MB). Skipping V2V motion transfer."
+            )
+            return None
+        with open(path, "rb") as f:
+            return base64.b64encode(f.read()).decode("utf-8")
+    except Exception as e:
+        logger.warning(f"Could not read video reference {path}: {e}")
+        return None
 
 
 async def poll_video_job(job_id: str) -> dict:

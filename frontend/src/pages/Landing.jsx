@@ -53,7 +53,7 @@ const FEATURES = [
     icon: Clapperboard,
     title: "AI Video Generation",
     description:
-      "Your face-swapped image becomes the first frame. Seedance 2.0 or Wan 2.7 animates it into a 5\u201330 second video with full face consistency throughout.",
+      "Your face-swapped image becomes the first frame. MiniMax H3 generates a 5\u201315 second video at 2K resolution with native audio, V2V motion transfer, and full face consistency \u2014 all in one pass.",
   },
   {
     icon: Globe,
@@ -87,9 +87,9 @@ const FEATURES = [
   },
   {
     icon: Layers,
-    title: "Multiple Video Models",
+    title: "MiniMax H3 Powered",
     description:
-      "Choose Seedance 2.0 (best quality, native audio, cinematic camera), Wan 2.7 (style preservation), or Seedance Fast (quick iteration previews).",
+      "Omni-modal video generation: native stereo audio (dialogue, foley, music), V2V motion transfer from viral references, 2K resolution, and up to 9 image references for character consistency.",
   },
 ];
 
@@ -170,9 +170,9 @@ export default function Landing() {
         <div className="mt-14 flex flex-wrap items-center justify-center gap-6 sm:gap-10">
           {[
             { value: "10", label: "Niches" },
-            { value: "3", label: "Video Models" },
+            { value: "2K", label: "Resolution" },
             { value: "8", label: "Hook Metrics" },
-            { value: "30s", label: "Max Video" },
+            { value: "15s", label: "Max Video" },
           ].map((stat) => (
             <div key={stat.label} className="text-center">
               <p className="font-display text-2xl sm:text-3xl font-bold text-foreground">{stat.value}</p>
@@ -256,8 +256,9 @@ export default function Landing() {
             </h3>
             <p className="text-sm sm:text-base text-muted-foreground leading-relaxed pl-10">
               The swapped image is passed as <code className="text-xs bg-muted px-1.5 py-0.5 rounded-md font-mono">first_frame</code> to
-              Seedance 2.0 or Wan 2.7 via OpenRouter&apos;s unified API. The model generates 5&ndash;30 seconds of video
-              maintaining face consistency throughout. Toggle &ldquo;Use original sound&rdquo; to get a script written for the viral audio track.
+              MiniMax H3 via OpenRouter&apos;s unified API. The original viral video is fed as a V2V motion reference,
+              so H3 replicates the exact timing, camera work, and performance rhythm while generating native stereo
+              audio (dialogue, foley, ambient) in a single pass &mdash; no separate audio step needed.
             </p>
           </div>
           <div className="h-px bg-border" />

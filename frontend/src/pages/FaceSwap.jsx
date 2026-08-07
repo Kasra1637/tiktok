@@ -135,7 +135,7 @@ export default function FaceSwap() {
 
   // Video mode tab
   const [videoMode, setVideoMode] = useState("branded"); // "preview" | "branded"
-  const [videoModel, setVideoModel] = useState("seedance-2.0"); // default to best quality
+  const [videoModel, setVideoModel] = useState("minimax-h3"); // MiniMax H3 — sole model
 
   // Load target from query params
   useEffect(() => {
@@ -399,7 +399,7 @@ export default function FaceSwap() {
     if (!activeId) return;
     setVideoPhase("extend"); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
     try {
-      const d = await api.faceSwapExtendVideo(activeId, videoJobId, brandUrl.trim(), brandedDuration, videoModel);
+      const d = await api.faceSwapExtendVideo(activeId, videoJobId, brandUrl.trim(), brandedDuration, videoModel, videoInfo?.videoId || "");
       setVideoJobId(d.job_id); startPolling(d.job_id);
     } catch (err) { setVideoError(getErrorMessage(err)); setVideoStatus(null); setGeneratingVideo(false); }
   };
@@ -408,7 +408,7 @@ export default function FaceSwap() {
     const activeId = (result?.variants && result.variants[selectedVariant]?.id) || result?.id;
     if (!activeId) return;
     setVideoPhase("hook"); setVideoDuration(5); setVideoPrompt(""); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
-    try { const d = await api.faceSwapGenerateHook(activeId, motionStyle, "seedance-2.0-fast", videoInfo?.videoId || ""); setVideoJobId(d.job_id); startPolling(d.job_id); }
+    try { const d = await api.faceSwapGenerateHook(activeId, motionStyle, "minimax-h3", videoInfo?.videoId || ""); setVideoJobId(d.job_id); startPolling(d.job_id); }
     catch (err) { setVideoError(getErrorMessage(err)); setVideoStatus(null); setGeneratingVideo(false); }
   };
 
@@ -743,9 +743,7 @@ export default function FaceSwap() {
                   {/* Model selector */}
                   <div className="flex gap-1 rounded-lg bg-muted/50 p-0.5" data-testid="extend-model-selector">
                     {[
-                      { key: "seedance-2.0", label: "Seedance 2.0", sub: "Best quality" },
-                      { key: "wan-2.7", label: "Wan 2.7", sub: "Style preservation" },
-                      { key: "seedance-2.0-fast", label: "Fast", sub: "Quick & cheap" },
+                      { key: "minimax-h3", label: "MiniMax H3", sub: "2K · Native audio · V2V" },
                     ].map((m) => (
                       <button key={m.key} onClick={() => setVideoModel(m.key)}
                         className={`flex-1 text-center py-1.5 px-2 rounded-md transition-all ${videoModel === m.key ? "bg-secondary shadow-sm" : "hover:bg-card/50"}`}>
