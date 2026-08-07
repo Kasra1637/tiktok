@@ -29,6 +29,8 @@ import {
   Trash2,
   Zap,
   Bookmark,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -122,6 +124,12 @@ export default function FaceSwap() {
   const [videoError, setVideoError] = useState(null);
   const [videoPhase, setVideoPhase] = useState("hook"); // "hook" | "extend"
   const [motionStyle, setMotionStyle] = useState("lean-in");
+  // Hook videos are muted/silent by default. TikTok creators normally attach
+  // a trending sound or native text-to-speech in TikTok's own editor after
+  // exporting — AI-generated audio can't be posted as a "trending sound" and
+  // would just be replaced. Off by default; opt in for platforms without an
+  // in-app sound library (e.g. Reels/Shorts).
+  const [includeHookAudio, setIncludeHookAudio] = useState(false);
   const pollingRef = useRef(null);
   const imagePollingRef = useRef(null);
   const imageJobIdRef = useRef(null);
@@ -413,7 +421,7 @@ export default function FaceSwap() {
     setVideoPhase("hook"); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
     try {
       const d = await api.faceSwapGenerateHook(
-        activeId, motionStyle, videoModel, videoInfo?.videoId || "", selectedTemplateId
+        activeId, motionStyle, videoModel, videoInfo?.videoId || "", selectedTemplateId, includeHookAudio
       );
       setVideoJobId(d.job_id); startPolling(d.job_id);
       if (d.from_template) toast.success(`Reusing "${d.template_name}" — no analysis cost.`);
@@ -434,7 +442,7 @@ export default function FaceSwap() {
     const activeId = (result?.variants && result.variants[selectedVariant]?.id) || result?.id;
     if (!activeId) return;
     setVideoPhase("hook"); setVideoDuration(5); setVideoPrompt(""); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
-    try { const d = await api.faceSwapGenerateHook(activeId, motionStyle, "minimax-h3", videoInfo?.videoId || "", selectedTemplateId); setVideoJobId(d.job_id); startPolling(d.job_id); }
+    try { const d = await api.faceSwapGenerateHook(activeId, motionStyle, "minimax-h3", videoInfo?.videoId || "", selectedTemplateId, includeHookAudio); setVideoJobId(d.job_id); startPolling(d.job_id); }
     catch (err) { setVideoError(getErrorMessage(err)); setVideoStatus(null); setGeneratingVideo(false); }
   };
 
@@ -467,7 +475,7 @@ export default function FaceSwap() {
     setVideoStatus(null); setVideoUrl(null); setVideoError(null); setVideoPhase("hook"); setMotionStyle("lean-in");
     setBrandUrl(""); setBrandedDuration(10); setBrandedPrompt(""); setBrandedPromptBrand("");
     setGeneratingBrandedPrompt(false); setBrandedPromptError(null); setGeneratingMore(false);
-    setSelectedTemplateId("");
+    setSelectedTemplateId(""); setIncludeHookAudio(false);
     if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
     if (imagePollingRef.current) { clearInterval(imagePollingRef.current); imagePollingRef.current = null; }
     imageJobIdRef.current = null;
@@ -738,10 +746,10 @@ export default function FaceSwap() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[color:var(--brand-teal)] text-white">Step 1</span>
-                    <span className="text-xs font-medium">5s Hook Video</span>
+                    <span className="text-xs font-medium">5s Hook Video{!includeHookAudio && " (muted)"}</span>
                     <Check className="h-3.5 w-3.5 text-green-500" />
                   </div>
-                  <video src={videoUrl} controls autoPlay loop className="w-full rounded-xl" data-testid="hook-video-player" />
+                  <video src={videoUrl} controls autoPlay loop muted={!includeHookAudio} className="w-full rounded-xl" data-testid="hook-video-player" />
                 </div>
                 <div className="flex gap-2">
                   <a href={videoUrl} download target="_blank" rel="noreferrer" className="flex-1">
@@ -828,7 +836,7 @@ export default function FaceSwap() {
                 <div>
                   <p className="text-sm font-medium">{videoStatus === "pending" ? "Queued..." : "Generating..."}</p>
                   <p className="text-xs text-muted-foreground">
-                    {videoPhase === "hook" ? "Creating 5s hook with native audio (30s-2min)" : "Extending video with brand message (1-3min)"}
+                    {videoPhase === "hook" ? `Creating 5s ${includeHookAudio ? "hook with AI audio" : "silent hook"} (30s-2min)` : "Extending video with brand message (1-3min)"}
                   </p>
                 </div>
               </div>
@@ -851,9 +859,41 @@ export default function FaceSwap() {
                     <span className="text-xs font-medium">Generate 5s Hook</span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    A short scroll-stopping clip with attention-grabbing movement and native audio, designed to hold attention in the first 2-3 seconds.
+                    A short scroll-stopping clip with attention-grabbing movement, designed to hold attention in the first 2-3 seconds.
+                    Muted by default — add a trending sound or text-to-speech in TikTok's editor after exporting.
                   </p>
                 </div>
+
+                {/* Audio toggle — off by default (see rationale above) */}
+                <button
+                  type="button"
+                  onClick={() => setIncludeHookAudio((v) => !v)}
+                  className="flex items-center justify-between gap-2 w-full rounded-lg border border-border px-3 py-2 hover:border-[color:rgba(99,102,241,0.3)] transition-colors"
+                  data-testid="hook-audio-toggle"
+                  aria-pressed={includeHookAudio}
+                >
+                  <span className="flex items-center gap-2 text-left">
+                    {includeHookAudio ? (
+                      <Volume2 className="h-3.5 w-3.5 text-[color:var(--brand-teal)]" />
+                    ) : (
+                      <VolumeX className="h-3.5 w-3.5 text-muted-foreground" />
+                    )}
+                    <span className="text-[11px] font-medium">
+                      {includeHookAudio ? "AI audio on" : "Muted (recommended for TikTok)"}
+                    </span>
+                  </span>
+                  <span
+                    className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors shrink-0 ${
+                      includeHookAudio ? "bg-[color:var(--brand-teal)]" : "bg-border"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${
+                        includeHookAudio ? "translate-x-3.5" : "translate-x-0.5"
+                      }`}
+                    />
+                  </span>
+                </button>
 
                 {/* Saved hook templates — reusing one costs no AI calls */}
                 {hookTemplates.length > 0 && (
@@ -956,7 +996,7 @@ export default function FaceSwap() {
                 {/* Model */}
                 <div className="flex gap-1 rounded-lg bg-muted/50 p-0.5" data-testid="hook-model-selector">
                   {[
-                    { key: "minimax-h3", label: "MiniMax H3", sub: "2K · Native audio · V2V" },
+                    { key: "minimax-h3", label: "MiniMax H3", sub: "2K · Optional audio · V2V" },
                   ].map((m) => (
                     <button key={m.key} onClick={() => setVideoModel(m.key)}
                       className={`flex-1 text-center py-1.5 px-2 rounded-md transition-all ${videoModel === m.key ? "bg-secondary shadow-sm" : "hover:bg-card/50"}`}

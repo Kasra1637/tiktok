@@ -33,7 +33,7 @@ export const TOURS = {
         target: '[data-testid="landing-stats"]',
         title: "The core loop",
         body:
-          "Discover a viral hook, swap in your face, and generate an AI video with native audio \u2014 powered by MiniMax H3 at 2K resolution, up to 15 seconds.",
+          "Discover a viral hook, swap in your face, and generate an AI video \u2014 powered by MiniMax H3 at 2K resolution, up to 15 seconds. Hooks are muted by default so you can add a trending sound on TikTok.",
       },
       {
         target: '[data-testid="landing-how-it-works"]',
@@ -182,7 +182,7 @@ export const TOURS = {
         target: '[data-testid="generate-hook-button"]',
         title: "Bring it to life",
         body:
-          "MiniMax H3 turns your swapped image into a short video with native audio and camera motion \u2014 2K resolution, generated in a single pass.",
+          "MiniMax H3 turns your swapped image into a short video with camera motion \u2014 2K resolution, generated in a single pass. Muted by default, since most creators add a trending sound or text-to-speech in TikTok's own editor. Toggle audio on above if you'd rather have H3 generate a track.",
       },
       {
         target: '[data-testid="reroll-hook-button"], [data-testid="extend-video-button"]',

@@ -1236,8 +1236,6 @@ async def face_swap_status(job_id: str):
 
 HOOK_VIDEO_PROMPT_TEMPLATE = (
     "Create a 5-second vertical video (9:16) starting from this exact first frame. "
-    "Generate native audio that complements the hook — subtle tension-building sound design, "
-    "ambient audio, or trending-style music that enhances the visual impact. "
     "The character should perform a single attention-grabbing movement that creates "
     "curiosity: {motion_type}. "
     "Requirements: "
@@ -1245,9 +1243,40 @@ HOOK_VIDEO_PROMPT_TEMPLATE = (
     "- Smooth, natural motion — no jerky or artificial movement "
     "- Camera holds steady or has a very subtle push-in for tension "
     "- The movement should feel like it's building up to something (creates anticipation) "
-    "- End on a moment that makes the viewer want to see what happens next "
-    "- Audio should enhance the hook's impact (sound design, subtle music, or ambient)"
+    "- End on a moment that makes the viewer want to see what happens next"
 )
+
+# Hook videos are muted by default. On TikTok, creators almost always attach a
+# trending sound or use native text-to-speech in TikTok's own editor after
+# exporting — a locally-generated audio track can't be posted as a "trending
+# sound" and would just get stripped/replaced anyway. Muting by default avoids
+# paying for audio generation nobody keeps, while still letting users opt in
+# (e.g. for platforms without an in-app sound library, like Reels/Shorts).
+AUDIO_ON_INSTRUCTION = (
+    "\n\nGenerate native audio that complements the hook — ambient sound, subtle "
+    "tension-building music, or brief impactful sound design matching the energy "
+    "of the movement."
+)
+AUDIO_OFF_INSTRUCTION = (
+    "\n\nIMPORTANT: This video must be completely SILENT — no audio, no music, "
+    "no voiceover, no ambient sound, no sound design of any kind. The creator "
+    "will add a trending sound or text-to-speech in TikTok's own editor after "
+    "exporting this clip."
+)
+
+
+def apply_audio_directive(prompt: str, include_audio: bool) -> str:
+    """
+    Append an explicit, authoritative audio instruction to a hook-video prompt.
+
+    Applied uniformly across all prompt sources (live analysis, saved
+    templates, image analysis, motion-style fallback) right before
+    submission, so the muted-by-default behavior holds regardless of where
+    the base prompt text came from — including older saved templates whose
+    cached text predates this toggle. The `generate_audio` flag passed to the
+    video API is the primary enforcement; this text reinforces it.
+    """
+    return prompt + (AUDIO_ON_INSTRUCTION if include_audio else AUDIO_OFF_INSTRUCTION)
 
 HOOK_MOTION_TYPES = [
     "a confident lean-in toward camera with a knowing expression, as if about to reveal a secret",
@@ -1283,8 +1312,6 @@ def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = 
     """
     prompt = (
         "Create a 5-second vertical video (9:16) starting from this exact first frame. "
-        "Generate native audio that complements the hook (ambient sound, subtle tension-building music, "
-        "or brief impactful sound design — match the energy of the movement). "
         "Recreate the EXACT hook mechanics that made the original viral video work:\n\n"
         f"FACIAL EXPRESSION: {analysis.get('facial_expressions') or 'engaging expression'}\n"
         f"BODY LANGUAGE & GESTURE: {analysis.get('body_language_gestures') or 'confident body language'}\n"
@@ -1296,8 +1323,7 @@ def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = 
         "- Smooth, natural motion — no jerky or artificial movement\n"
         "- Camera holds steady or has a subtle push-in matching the original's pacing\n"
         "- The movement should build curiosity and make the viewer want to see more\n"
-        "- End on a moment of anticipation (the viewer wants to know what happens next)\n"
-        "- Audio should enhance the hook's impact (sound design, ambient, or trending-style audio)"
+        "- End on a moment of anticipation (the viewer wants to know what happens next)"
     )
 
     mechanics = _coerce_mechanics(analysis.get("replicable_mechanics"))
@@ -1318,8 +1344,6 @@ def build_hook_prompt_from_image_analysis(image_analysis: dict) -> str:
     """Build the hook-video prompt when only a single still image was analyzed."""
     prompt = (
         "Create a 5-second vertical video (9:16) starting from this exact first frame. "
-        "Generate native audio that enhances the hook (subtle sound design, ambient audio, "
-        "or trending-style music that builds tension). "
         "Animate from this starting pose using these movement cues:\n\n"
         f"FACIAL EXPRESSION: {image_analysis.get('facial_expressions') or 'engaging expression'}\n"
         f"BODY LANGUAGE & MOVEMENT: {image_analysis.get('body_language_gestures') or 'confident movement'}\n"
@@ -1330,8 +1354,7 @@ def build_hook_prompt_from_image_analysis(image_analysis: dict) -> str:
         "- Maintain perfect face consistency throughout\n"
         "- Smooth, natural motion — no jerky or artificial movement\n"
         "- The movement should build curiosity and make the viewer want to see more\n"
-        "- End on a moment of anticipation\n"
-        "- Audio should complement the visual hook (sound design, ambient, or music)"
+        "- End on a moment of anticipation"
     )
     mechanics = _coerce_mechanics(image_analysis.get("replicable_mechanics"))
     if mechanics:
@@ -1574,13 +1597,13 @@ async def face_swap_generate_hook_video(
     model: str = Form(""),
     video_id: str = Form(""),
     template_id: str = Form(""),
+    include_audio: bool = Form(False),
 ):
     """
     Generate a hook video from the face-swapped image using MiniMax H3.
 
     H3 advantages leveraged here:
-    - Native audio in one pass: generates synced sound (ambient, foley, music)
-      alongside video — no need for a separate silent-then-extend workflow.
+    - Native audio generation in one pass (OFF by default — see include_audio below).
     - V2V motion transfer: if a viral video was analyzed, passes it as a reference
       so H3 replicates the exact timing, camera movement, and performance rhythm.
     - Omni-reference: face-swapped image as first_frame + viral video as motion ref.
@@ -1599,6 +1622,13 @@ async def face_swap_generate_hook_video(
 
     motion_style options: lean-in, turn, gesture, intrigue, stop-motion
     (used as fallback when no hook analysis exists)
+
+    include_audio: defaults to False. Hook videos are silent by default because
+    TikTok creators attach a trending sound or native text-to-speech in TikTok's
+    own editor after exporting — audio generated here can't be posted as a
+    "trending sound" and would just be muted/replaced anyway. Set True to have
+    H3 generate an ambient/music track in the same pass (useful for platforms
+    without an in-app sound library).
     """
     require_ai_configured()
 
@@ -1670,12 +1700,18 @@ async def face_swap_generate_hook_video(
             # Final fallback: hand-written motion template (no AI cost)
             prompt = build_hook_prompt_from_motion_style(motion_style)
 
+    # Apply the audio directive last, uniformly, regardless of which branch
+    # produced the base prompt (fresh analysis, saved template, image
+    # analysis, or motion fallback) — including templates saved before this
+    # toggle existed, whose cached text may still reference audio.
+    prompt = apply_audio_directive(prompt, include_audio)
+
     try:
         result = await generate_video(
             prompt=prompt,
             reference_image_path=image_path,
             duration=5,
-            generate_audio=True,  # H3 generates native audio in one pass
+            generate_audio=include_audio,
             reference_video_path=reference_video_path,  # V2V motion transfer
         )
     except Exception as e:
@@ -1712,7 +1748,7 @@ async def face_swap_generate_hook_video(
         "motion_style": motion_style.strip() or "lean-in",
         "model": "minimax-h3",
         "has_v2v_motion": bool(reference_video_path),
-        "has_native_audio": True,
+        "has_native_audio": include_audio,
         "from_template": bool(template),
         "template_id": template["id"] if template else None,
         "template_name": template.get("name") if template else None,

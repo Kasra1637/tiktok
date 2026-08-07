@@ -60,7 +60,7 @@ const FEATURES = [
     icon: Clapperboard,
     title: "AI Video Generation",
     description:
-      "Your face-swapped image becomes the first frame. MiniMax H3 generates a 5\u201315 second video at 2K resolution with native audio, V2V motion transfer from the original clip, and full face consistency \u2014 all in one pass.",
+      "Your face-swapped image becomes the first frame. MiniMax H3 generates a 5\u201315 second video at 2K resolution with V2V motion transfer from the original clip and full face consistency \u2014 muted by default so you can add a trending sound on TikTok, with an optional AI-audio toggle.",
   },
   {
     icon: RotateCcw,
@@ -113,7 +113,7 @@ const FLOW_STEPS = [
   {
     step: "4",
     label: "Generate Video",
-    detail: "MiniMax H3 animates your swapped frame with native audio \u2014 re-roll for another take, or extend it with your brand message.",
+    detail: "MiniMax H3 animates your swapped frame, muted by default \u2014 re-roll for another take, or extend it with your brand message.",
   },
 ];
 
@@ -264,8 +264,10 @@ export default function Landing() {
             <p className="text-sm sm:text-base text-muted-foreground leading-relaxed pl-10">
               The swapped image is passed as <code className="text-xs bg-muted px-1.5 py-0.5 rounded-md font-mono">first_frame</code> to
               MiniMax H3 via OpenRouter&apos;s unified API. The original viral video is fed as a V2V motion reference,
-              so H3 replicates the exact timing, camera work, and performance rhythm while generating native stereo
-              audio (dialogue, foley, ambient) in a single pass &mdash; no separate audio step needed. Not quite right?
+              so H3 replicates the exact timing, camera work, and performance rhythm. Hook videos are muted by
+              default &mdash; most creators attach a trending sound or use TikTok&apos;s native text-to-speech after
+              exporting, so AI-generated audio would just get replaced. Flip the audio toggle on if you&apos;d rather
+              have H3 generate a native stereo track (dialogue, foley, ambient) in the same pass. Not quite right?
               Re-roll the same prompt for another take, or extend the hook into a longer branded video with a CTA.
             </p>
           </div>
@@ -322,7 +324,7 @@ export default function Landing() {
             <div className="text-sm sm:text-base text-muted-foreground leading-relaxed pl-10 space-y-1.5">
               <p><strong className="text-foreground">Hook Analysis:</strong> Google Gemini 2.5 Flash (vision) &mdash; reads frames, outputs structured JSON</p>
               <p><strong className="text-foreground">Face Swap:</strong> Grok Imagine (Image Quality) &mdash; identity-preserving scene compositing, 2K</p>
-              <p><strong className="text-foreground">Video Generation:</strong> MiniMax H3 &mdash; omni-modal, native stereo audio, V2V motion transfer, 2K, up to 15s</p>
+              <p><strong className="text-foreground">Video Generation:</strong> MiniMax H3 &mdash; omni-modal, optional native stereo audio, V2V motion transfer, 2K, up to 15s</p>
               <p><strong className="text-foreground">Brand &amp; Remix Text:</strong> Google Gemini 2.5 Flash &mdash; brand extraction, prompt writing, remix chat</p>
               <p><strong className="text-foreground">Data:</strong> Clockworks TikTok Scraper (Apify) + yt-dlp fallback &mdash; profiles, hashtags, keyword search, music metadata</p>
             </div>
