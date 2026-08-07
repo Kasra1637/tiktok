@@ -1783,9 +1783,15 @@ async def face_swap_extend_video(
     Generate an extended brand video using MiniMax H3 with native audio.
 
     H3 produces the full video with synced audio (voiceover, music, sound effects)
-    in a single pass — no separate audio generation step needed. If video_id is
-    provided and the original viral video is available, uses it as a V2V motion
-    reference for timing and pacing continuity.
+    in a single pass — no separate audio generation step needed.
+
+    If hook_job_id refers to a hook clip we already cached locally, its LAST frame
+    is extracted and used as this generation's first frame, so the extension
+    genuinely continues the hook rather than restarting from the hook's opening
+    pose. Falls back to the face-swap still if the clip isn't available.
+
+    If video_id is provided and the original viral video is available, it is also
+    passed as a V2V motion reference for timing and pacing continuity.
     """
     require_ai_configured()
 
@@ -1806,6 +1812,30 @@ async def face_swap_extend_video(
             v_path = Path(video_record["local_video_path"])
             if v_path.exists():
                 reference_video_path = v_path
+
+    # Bridge the continuation to the end of the hook clip. Without this the
+    # extension is generated from the same face-swap still the hook started
+    # from, so it replays the hook's opening pose instead of continuing it.
+    # The completed hook video is cached at storage/videos/{hook_job_id}.mp4
+    # by the video-status endpoint; its last frame becomes our first frame.
+    first_frame_path = image_path
+    continued_from_hook = False
+    if hook_job_id and hook_job_id.strip():
+        hook_video_path = pipeline.STORAGE_DIR / "videos" / f"{hook_job_id.strip()}.mp4"
+        if hook_video_path.exists():
+            bridge_path = pipeline.GENERATED_DIR / f"bridge-{hook_job_id.strip()}.png"
+            extracted = await pipeline.extract_last_frame(hook_video_path, bridge_path)
+            if extracted:
+                first_frame_path = extracted
+                continued_from_hook = True
+                logger.info(
+                    f"Extend video: continuing from last frame of hook {hook_job_id.strip()}"
+                )
+        else:
+            logger.info(
+                f"Extend video: hook clip {hook_job_id.strip()}.mp4 not cached locally — "
+                "falling back to the face-swap still as first frame"
+            )
 
     # Auto-generate extension prompt if not provided
     if not prompt.strip():
@@ -1873,10 +1903,18 @@ async def face_swap_extend_video(
                 "Maintain perfect face consistency throughout."
             )
 
+    # Tell the model this frame is a mid-scene continuation, not a fresh opening.
+    if continued_from_hook:
+        prompt += (
+            "\n\nCONTINUITY: This first frame is the final frame of the preceding hook clip. "
+            "Continue the motion seamlessly from exactly this pose and expression so the two "
+            "clips play as one unbroken take — do not reset, re-introduce, or restart the pose."
+        )
+
     try:
         result = await generate_video(
             prompt=prompt,
-            reference_image_path=image_path,
+            reference_image_path=first_frame_path,
             duration=duration,
             generate_audio=True,  # H3 native audio in one pass
             reference_video_path=reference_video_path,  # V2V motion transfer if available
@@ -1909,6 +1947,7 @@ async def face_swap_extend_video(
         "model": "minimax-h3",
         "has_v2v_motion": bool(reference_video_path),
         "has_native_audio": True,
+        "continued_from_hook": continued_from_hook,
     }
 
 

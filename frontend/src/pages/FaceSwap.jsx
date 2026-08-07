@@ -115,14 +115,14 @@ export default function FaceSwap() {
   const [selectedVariant, setSelectedVariant] = useState(0);
 
   // Video state
-  const [videoDuration, setVideoDuration] = useState(10);
-  const [videoPrompt, setVideoPrompt] = useState("");
   const [generatingVideo, setGeneratingVideo] = useState(false);
-  const [videoJobId, setVideoJobId] = useState(null);
   const [videoStatus, setVideoStatus] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
   const [videoError, setVideoError] = useState(null);
   const [videoPhase, setVideoPhase] = useState("hook"); // "hook" | "extend"
+  // Which phase the last error came from, so the retry affordance repeats the
+  // action that actually failed rather than always regenerating the hook.
+  const [failedPhase, setFailedPhase] = useState(null);
   const [motionStyle, setMotionStyle] = useState("lean-in");
   // Hook videos are muted/silent by default. TikTok creators normally attach
   // a trending sound or native text-to-speech in TikTok's own editor after
@@ -133,18 +133,20 @@ export default function FaceSwap() {
   const pollingRef = useRef(null);
   const imagePollingRef = useRef(null);
   const imageJobIdRef = useRef(null);
+  // Remembers the completed hook clip's URL. Kept in a ref (not state) so the
+  // polling callbacks always read the current value, and so a failed extension
+  // can put the finished hook back on screen instead of losing it.
+  const hookVideoUrlRef = useRef(null);
+  // The HOOK's job id specifically — tracked separately from videoJobId because
+  // the backend bridges the extension off the hook clip. After an extension runs,
+  // videoJobId points at the extension, so re-rolling with it would chain a
+  // continuation of the continuation instead of re-rolling the extension.
+  const hookJobIdRef = useRef(null);
 
   // Brand video state
   const [brandUrl, setBrandUrl] = useState("");
   const [brandProfile, setBrandProfile] = useState(null);
   const [brandedDuration, setBrandedDuration] = useState(15);
-  const [brandedPrompt, setBrandedPrompt] = useState("");
-  const [brandedPromptBrand, setBrandedPromptBrand] = useState("");
-  const [generatingBrandedPrompt, setGeneratingBrandedPrompt] = useState(false);
-  const [brandedPromptError, setBrandedPromptError] = useState(null);
-
-  // Video mode tab
-  const [videoMode, setVideoMode] = useState("branded"); // "preview" | "branded"
   const [videoModel, setVideoModel] = useState("minimax-h3"); // MiniMax H3 — sole model
 
   // Hook template state — reusing a saved template skips hook analysis and
@@ -390,92 +392,119 @@ export default function FaceSwap() {
     }
   };
 
-  const startPolling = (jobId) => {
+  // `phase` is passed explicitly rather than read from videoPhase state, because
+  // setVideoPhase hasn't committed yet when this is called from a click handler.
+  const startPolling = (jobId, phase = "hook") => {
     if (pollingRef.current) clearInterval(pollingRef.current);
     let pollCount = 0;
     const MAX_POLLS = 120; // 10 minutes at 5s intervals
+
+    const stop = () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    };
+
+    // Return the UI to an actionable state on failure. For a failed extension
+    // that means restoring the already-finished hook clip, so the user can retry
+    // the extension instead of having to regenerate the hook from scratch.
+    const fail = (message) => {
+      stop();
+      setVideoError(message);
+      setFailedPhase(phase);
+      setGeneratingVideo(false);
+      setVideoStatus(null);
+      if (phase === "extend" && hookVideoUrlRef.current) {
+        setVideoUrl(hookVideoUrlRef.current);
+        setVideoPhase("hook");
+      }
+    };
+
     pollingRef.current = setInterval(async () => {
       pollCount++;
       try {
         const s = await api.faceSwapVideoStatus(jobId);
         setVideoStatus(s.status);
-        if (s.status === "completed") { setVideoUrl(s.video_url || s.video_urls?.[0]); setGeneratingVideo(false); clearInterval(pollingRef.current); pollingRef.current = null; toast.success("Video ready!"); }
-        else if (s.status === "failed" || s.status === "cancelled" || s.status === "expired") { setVideoError(s.error || "Video generation failed."); setGeneratingVideo(false); clearInterval(pollingRef.current); pollingRef.current = null; }
-        else if (pollCount >= MAX_POLLS) { setVideoError("Video generation timed out. Please try again."); setGeneratingVideo(false); clearInterval(pollingRef.current); pollingRef.current = null; }
+        if (s.status === "completed") {
+          const url = s.video_url || s.video_urls?.[0];
+          if (phase === "hook") hookVideoUrlRef.current = url;
+          setVideoUrl(url);
+          setGeneratingVideo(false);
+          stop();
+          toast.success("Video ready!");
+        } else if (s.status === "failed" || s.status === "cancelled" || s.status === "expired") {
+          fail(s.error || "Video generation failed.");
+        } else if (pollCount >= MAX_POLLS) {
+          fail("Video generation timed out. Please try again.");
+        }
       } catch (err) {
         console.warn("Poll error:", err);
-        // If poll returns 502/404 repeatedly, stop after a few failures
+        // A few transient status failures are tolerated; give up after that.
         if (pollCount > 5 && err?.response?.status >= 400) {
-          setVideoError(`Video status check failed (${err?.response?.status}). The video may still be generating — try refreshing.`);
-          setGeneratingVideo(false);
-          clearInterval(pollingRef.current);
-          pollingRef.current = null;
+          fail(`Video status check failed (${err?.response?.status}). The video may still be generating — try refreshing.`);
         }
       }
     }, 5000);
   };
 
+  const activeImageId = () =>
+    (result?.variants && result.variants[selectedVariant]?.id) || result?.id;
+
   const handleGenerateHook = async () => {
-    const activeId = (result?.variants && result.variants[selectedVariant]?.id) || result?.id;
+    const activeId = activeImageId();
     if (!activeId) return;
-    setVideoPhase("hook"); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
+    setVideoPhase("hook"); setGeneratingVideo(true); setVideoError(null); setFailedPhase(null);
+    setVideoUrl(null); setVideoStatus("pending");
+    hookVideoUrlRef.current = null;
     try {
       const d = await api.faceSwapGenerateHook(
         activeId, motionStyle, videoModel, videoInfo?.videoId || "", selectedTemplateId, includeHookAudio
       );
-      setVideoJobId(d.job_id); startPolling(d.job_id);
+      hookJobIdRef.current = d.job_id;
+      startPolling(d.job_id, "hook");
       if (d.from_template) toast.success(`Reusing "${d.template_name}" — no analysis cost.`);
-    } catch (err) { setVideoError(getErrorMessage(err)); setVideoStatus(null); setGeneratingVideo(false); }
+    } catch (err) {
+      setVideoError(getErrorMessage(err)); setFailedPhase("hook");
+      setVideoStatus(null); setGeneratingVideo(false);
+    }
   };
 
   const handleExtendVideo = async () => {
-    const activeId = (result?.variants && result.variants[selectedVariant]?.id) || result?.id;
+    const activeId = activeImageId();
     if (!activeId) return;
-    setVideoPhase("extend"); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
+    setVideoPhase("extend"); setGeneratingVideo(true); setVideoError(null); setFailedPhase(null);
+    setVideoUrl(null); setVideoStatus("pending");
     try {
-      const d = await api.faceSwapExtendVideo(activeId, videoJobId, brandUrl.trim(), brandedDuration, videoModel, videoInfo?.videoId || "");
-      setVideoJobId(d.job_id); startPolling(d.job_id);
-    } catch (err) { setVideoError(getErrorMessage(err)); setVideoStatus(null); setGeneratingVideo(false); }
+      // Always bridge off the HOOK clip so re-rolling an extension regenerates
+      // it from the hook's ending rather than chaining onto the last extension.
+      const d = await api.faceSwapExtendVideo(activeId, hookJobIdRef.current || "", brandUrl.trim(), brandedDuration, videoModel, videoInfo?.videoId || "");
+      startPolling(d.job_id, "extend");
+    } catch (err) {
+      setVideoError(getErrorMessage(err)); setFailedPhase("extend");
+      setVideoStatus(null); setGeneratingVideo(false);
+      // Put the finished hook back on screen so its Extend controls return.
+      if (hookVideoUrlRef.current) { setVideoUrl(hookVideoUrlRef.current); setVideoPhase("hook"); }
+    }
   };
 
-  const handleQuickPreview = async () => {
-    const activeId = (result?.variants && result.variants[selectedVariant]?.id) || result?.id;
-    if (!activeId) return;
-    setVideoPhase("hook"); setVideoDuration(5); setVideoPrompt(""); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
-    try { const d = await api.faceSwapGenerateHook(activeId, motionStyle, "minimax-h3", videoInfo?.videoId || "", selectedTemplateId, includeHookAudio); setVideoJobId(d.job_id); startPolling(d.job_id); }
-    catch (err) { setVideoError(getErrorMessage(err)); setVideoStatus(null); setGeneratingVideo(false); }
-  };
-
-  const handleGenerateBrandedPrompt = async () => {
-    const activeId = (result?.variants && result.variants[selectedVariant]?.id) || result?.id;
-    if (!activeId) return;
-    if (!brandUrl.trim() && !brandProfile) { toast.error("Enter your brand URL."); return; }
-    setGeneratingBrandedPrompt(true); setBrandedPromptError(null); setBrandedPrompt("");
-    try {
-      const d = await api.faceSwapBrandedPrompt(activeId, brandUrl.trim(), videoInfo?.videoId || "", brandedDuration);
-      setBrandedPrompt(d.video_prompt || ""); setBrandedPromptBrand(d.brand_name || "");
-      toast.success("Prompt generated!");
-    } catch (err) { setBrandedPromptError(getErrorMessage(err)); }
-    finally { setGeneratingBrandedPrompt(false); }
-  };
-
-  const handleGenerateBrandedVideo = async () => {
-    const activeId = (result?.variants && result.variants[selectedVariant]?.id) || result?.id;
-    if (!activeId || !brandedPrompt) return;
-    setVideoDuration(brandedDuration); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
-    try { const d = await api.faceSwapGenerateVideo(activeId, brandedPrompt, brandedDuration, videoModel); setVideoJobId(d.job_id); startPolling(d.job_id); }
-    catch (err) { setVideoError(getErrorMessage(err)); setVideoStatus(null); setGeneratingVideo(false); }
+  // The retry affordance must repeat whichever step failed — retrying a failed
+  // extension by regenerating the hook would silently do the wrong thing.
+  const retryVideo = () => {
+    if (failedPhase === "extend") handleExtendVideo();
+    else handleGenerateHook();
   };
 
   const handleReset = () => {
     setTargetFile(null); setTargetPreview(null); setTargetFrameUrl(null); setVideoInfo(null);
     setSourceFile(null); setSourcePreview(null); setResult(null); setGenError(null);
     setSelectedVariant(0);
-    setVideoDuration(10); setVideoPrompt(""); setGeneratingVideo(false); setVideoJobId(null);
-    setVideoStatus(null); setVideoUrl(null); setVideoError(null); setVideoPhase("hook"); setMotionStyle("lean-in");
-    setBrandUrl(""); setBrandedDuration(10); setBrandedPrompt(""); setBrandedPromptBrand("");
-    setGeneratingBrandedPrompt(false); setBrandedPromptError(null); setGeneratingMore(false);
+    setGeneratingVideo(false);
+    setVideoStatus(null); setVideoUrl(null); setVideoError(null); setFailedPhase(null);
+    setVideoPhase("hook"); setMotionStyle("lean-in");
+    // Match the initial state (15s), not an arbitrary different default.
+    setBrandUrl(""); setBrandedDuration(15); setGeneratingMore(false);
     setSelectedTemplateId(""); setIncludeHookAudio(false);
+    hookVideoUrlRef.current = null;
+    hookJobIdRef.current = null;
     if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
     if (imagePollingRef.current) { clearInterval(imagePollingRef.current); imagePollingRef.current = null; }
     imageJobIdRef.current = null;
@@ -756,7 +785,8 @@ export default function FaceSwap() {
                     <Button variant="outline" className="w-full gap-1.5 rounded-xl text-sm" data-testid="download-hook-button"><Download className="h-3.5 w-3.5" /> Download Hook</Button>
                   </a>
                   <Button
-                    onClick={() => { setVideoUrl(null); setVideoStatus(null); setVideoJobId(null); handleGenerateHook(); }}
+                    onClick={handleGenerateHook}
+                    disabled={generatingVideo}
                     variant="outline"
                     className="gap-1.5 rounded-xl text-sm"
                     data-testid="reroll-hook-button"
@@ -816,7 +846,8 @@ export default function FaceSwap() {
                     <Button className="w-full gap-1.5 rounded-xl bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white text-sm" data-testid="download-extended-button"><Download className="h-3.5 w-3.5" /> Download Video</Button>
                   </a>
                   <Button
-                    onClick={() => { setVideoUrl(null); setVideoStatus(null); setVideoJobId(null); handleExtendVideo(); }}
+                    onClick={handleExtendVideo}
+                    disabled={generatingVideo}
                     variant="outline"
                     className="gap-1.5 rounded-xl text-sm"
                     data-testid="reroll-extend-button"
@@ -843,10 +874,21 @@ export default function FaceSwap() {
             )}
 
             {videoError && (
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 text-red-400 text-xs">
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 text-red-400 text-xs" data-testid="video-error">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                 <span className="flex-1">{videoError}</span>
-                <Button size="sm" variant="ghost" onClick={handleGenerateHook} className="text-red-400 h-auto py-1 px-2"><RotateCcw className="h-3 w-3" /></Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={retryVideo}
+                  disabled={generatingVideo}
+                  className="text-red-400 h-auto py-1 px-2 gap-1 shrink-0"
+                  data-testid="retry-video-button"
+                  title={failedPhase === "extend" ? "Retry the extension" : "Retry the hook video"}
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  {failedPhase === "extend" ? "Retry extend" : "Retry"}
+                </Button>
               </div>
             )}
 

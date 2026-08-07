@@ -9,6 +9,7 @@ import json
 import logging
 import sys
 from pathlib import Path
+from typing import Optional
 
 import httpx
 
@@ -221,3 +222,40 @@ async def extract_hook_frames(video_path: Path, num_frames: int = 8, duration: f
     if rc != 0 or not frames:
         raise RuntimeError(f"Frame extraction failed: {err.strip()[-400:] or 'unknown error'}")
     return frames
+
+
+async def extract_last_frame(video_path: Path, out_path: Path) -> Optional[Path]:
+    """
+    Extract the final frame of a video as an image.
+
+    Used to bridge a generated hook clip into its continuation: feeding the
+    hook's LAST frame as the first frame of the next generation makes the two
+    clips read as one continuous take, instead of the continuation restarting
+    from the same opening pose the hook already used.
+
+    Returns None (rather than raising) when extraction isn't possible, so
+    callers can fall back to the original still image.
+    """
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    # -sseof seeks relative to end-of-file; -update 1 keeps overwriting the same
+    # output file while decoding, so the frame left on disk is the final one.
+    cmd = [
+        "ffmpeg", "-y",
+        "-sseof", "-1",
+        "-i", str(video_path),
+        "-update", "1",
+        "-q:v", "2",
+        str(out_path),
+    ]
+    try:
+        rc, _out, err = await run_cmd(cmd, timeout=45)
+    except RuntimeError as e:
+        logger.warning(f"Last-frame extraction timed out for {video_path.name}: {e}")
+        return None
+    if rc != 0 or not out_path.exists() or out_path.stat().st_size == 0:
+        logger.warning(
+            f"Last-frame extraction failed for {video_path.name}: "
+            f"{err.strip()[-300:] or 'unknown error'}"
+        )
+        return None
+    return out_path
