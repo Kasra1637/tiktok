@@ -69,12 +69,13 @@ export const api = {
       })
       .then((r) => r.data);
   },
-  faceSwapGenerateHook: (imageId, motionStyle, model, videoId) => {
+  faceSwapGenerateHook: (imageId, motionStyle, model, videoId, templateId) => {
     const formData = new FormData();
     formData.append("image_id", imageId);
     formData.append("motion_style", motionStyle || "lean-in");
     formData.append("model", model || "");
     formData.append("video_id", videoId || "");
+    formData.append("template_id", templateId || "");
     return client
       .post("/face-swap/generate-hook-video", formData, {
         headers: { "Content-Type": "multipart/form-data" },
@@ -116,6 +117,16 @@ export const api = {
       })
       .then((r) => r.data);
   },
+
+  // Hook templates — save a proven hook once, reuse it with zero AI cost
+  getHookTemplates: (params = {}) =>
+    client.get("/hook-templates", { params }).then((r) => r.data),
+  getHookTemplate: (id) => client.get(`/hook-templates/${id}`).then((r) => r.data),
+  createHookTemplate: (payload) =>
+    client.post("/hook-templates", payload).then((r) => r.data),
+  updateHookTemplate: (id, payload) =>
+    client.patch(`/hook-templates/${id}`, payload).then((r) => r.data),
+  deleteHookTemplate: (id) => client.delete(`/hook-templates/${id}`).then((r) => r.data),
 
   // Brand profile / Content Remixer
   analyzeBrandUrl: (url) => client.post("/brand/analyze-url", { url }).then((r) => r.data),

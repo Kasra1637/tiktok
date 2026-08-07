@@ -27,6 +27,8 @@ import {
   ArrowRight,
   Save,
   Trash2,
+  Zap,
+  Bookmark,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -137,6 +139,11 @@ export default function FaceSwap() {
   const [videoMode, setVideoMode] = useState("branded"); // "preview" | "branded"
   const [videoModel, setVideoModel] = useState("minimax-h3"); // MiniMax H3 — sole model
 
+  // Hook template state — reusing a saved template skips hook analysis and
+  // prompt generation entirely, so it costs no AI calls.
+  const [hookTemplates, setHookTemplates] = useState([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+
   // Load target from query params
   useEffect(() => {
     const frameUrl = searchParams.get("target");
@@ -149,6 +156,22 @@ export default function FaceSwap() {
       if (videoId) setVideoInfo({ videoId, frameIndex: frameIndex || "key" });
     }
   }, [searchParams]);
+
+  // Load saved hook templates, and preselect one if arriving from the Templates page.
+  useEffect(() => {
+    const templateId = searchParams.get("templateId");
+    api
+      .getHookTemplates()
+      .then((rows) => {
+        setHookTemplates(rows || []);
+        if (templateId && (rows || []).some((t) => t.id === templateId)) {
+          setSelectedTemplateId(templateId);
+        }
+      })
+      .catch(() => setHookTemplates([]));
+  }, [searchParams]);
+
+  const selectedTemplate = hookTemplates.find((t) => t.id === selectedTemplateId) || null;
 
   // Load brand profile
   useEffect(() => {
@@ -389,8 +412,11 @@ export default function FaceSwap() {
     if (!activeId) return;
     setVideoPhase("hook"); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
     try {
-      const d = await api.faceSwapGenerateHook(activeId, motionStyle, videoModel, videoInfo?.videoId || "");
+      const d = await api.faceSwapGenerateHook(
+        activeId, motionStyle, videoModel, videoInfo?.videoId || "", selectedTemplateId
+      );
       setVideoJobId(d.job_id); startPolling(d.job_id);
+      if (d.from_template) toast.success(`Reusing "${d.template_name}" — no analysis cost.`);
     } catch (err) { setVideoError(getErrorMessage(err)); setVideoStatus(null); setGeneratingVideo(false); }
   };
 
@@ -408,7 +434,7 @@ export default function FaceSwap() {
     const activeId = (result?.variants && result.variants[selectedVariant]?.id) || result?.id;
     if (!activeId) return;
     setVideoPhase("hook"); setVideoDuration(5); setVideoPrompt(""); setGeneratingVideo(true); setVideoError(null); setVideoUrl(null); setVideoStatus("pending");
-    try { const d = await api.faceSwapGenerateHook(activeId, motionStyle, "minimax-h3", videoInfo?.videoId || ""); setVideoJobId(d.job_id); startPolling(d.job_id); }
+    try { const d = await api.faceSwapGenerateHook(activeId, motionStyle, "minimax-h3", videoInfo?.videoId || "", selectedTemplateId); setVideoJobId(d.job_id); startPolling(d.job_id); }
     catch (err) { setVideoError(getErrorMessage(err)); setVideoStatus(null); setGeneratingVideo(false); }
   };
 
@@ -441,6 +467,7 @@ export default function FaceSwap() {
     setVideoStatus(null); setVideoUrl(null); setVideoError(null); setVideoPhase("hook"); setMotionStyle("lean-in");
     setBrandUrl(""); setBrandedDuration(10); setBrandedPrompt(""); setBrandedPromptBrand("");
     setGeneratingBrandedPrompt(false); setBrandedPromptError(null); setGeneratingMore(false);
+    setSelectedTemplateId("");
     if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
     if (imagePollingRef.current) { clearInterval(imagePollingRef.current); imagePollingRef.current = null; }
     imageJobIdRef.current = null;
@@ -701,7 +728,7 @@ export default function FaceSwap() {
               </div>
               <div>
                 <h2 className="font-display font-semibold text-base">Create Video</h2>
-                <p className="text-xs text-muted-foreground">Step 1: Silent 5s hook → Step 2: Extend with brand message</p>
+                <p className="text-xs text-muted-foreground">Step 1: 5s hook → Step 2: Extend with brand message</p>
               </div>
             </div>
 
@@ -711,10 +738,10 @@ export default function FaceSwap() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[color:var(--brand-teal)] text-white">Step 1</span>
-                    <span className="text-xs font-medium">5s Hook Video (silent)</span>
+                    <span className="text-xs font-medium">5s Hook Video</span>
                     <Check className="h-3.5 w-3.5 text-green-500" />
                   </div>
-                  <video src={videoUrl} controls autoPlay loop muted className="w-full rounded-xl" data-testid="hook-video-player" />
+                  <video src={videoUrl} controls autoPlay loop className="w-full rounded-xl" data-testid="hook-video-player" />
                 </div>
                 <div className="flex gap-2">
                   <a href={videoUrl} download target="_blank" rel="noreferrer" className="flex-1">
@@ -783,7 +810,7 @@ export default function FaceSwap() {
                 <div>
                   <p className="text-sm font-medium">{videoStatus === "pending" ? "Queued..." : "Generating..."}</p>
                   <p className="text-xs text-muted-foreground">
-                    {videoPhase === "hook" ? "Creating 5s silent hook (30s-2min)" : "Extending video with brand message (1-3min)"}
+                    {videoPhase === "hook" ? "Creating 5s hook with native audio (30s-2min)" : "Extending video with brand message (1-3min)"}
                   </p>
                 </div>
               </div>
@@ -803,40 +830,115 @@ export default function FaceSwap() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[color:var(--brand-teal)] text-white">Step 1</span>
-                    <span className="text-xs font-medium">Generate 5s Hook (silent, movement only)</span>
+                    <span className="text-xs font-medium">Generate 5s Hook</span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    A short, silent video with attention-grabbing movement — no voice, no text. Designed to stop the scroll in the first 2-3 seconds.
+                    A short scroll-stopping clip with attention-grabbing movement and native audio, designed to hold attention in the first 2-3 seconds.
                   </p>
                 </div>
 
-                {/* Motion style selector */}
-                <div className="space-y-1.5">
-                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Motion style</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                    {[
-                      { key: "lean-in", label: "Lean In", desc: "Move toward camera like you're about to share a secret — builds instant curiosity" },
-                      { key: "turn", label: "Dramatic Turn", desc: "Start from the side, then turn to face the viewer — creates a reveal moment" },
-                      { key: "gesture", label: "Gesture", desc: "Point, raise hand, or reveal something — signals 'watch this' to stop the scroll" },
-                      { key: "intrigue", label: "Intrigue", desc: "Subtle head tilt + raised eyebrow — makes viewers think 'what do they know?'" },
-                      { key: "stop-motion", label: "Stop Motion", desc: "Sudden freeze-frame pose snap — eye-catching pattern interrupt that holds attention" },
-                    ].map((m) => (
-                      <button key={m.key} onClick={() => setMotionStyle(m.key)}
-                        className={`text-left p-2 rounded-lg border transition-all ${motionStyle === m.key ? "border-[color:var(--brand-teal)] bg-[color:rgba(99,102,241,0.05)]" : "border-border hover:border-[color:rgba(99,102,241,0.3)]"}`}
-                        data-testid={`motion-${m.key}`}>
-                        <span className={`text-[11px] font-semibold block ${motionStyle === m.key ? "text-[color:var(--brand-teal)]" : "text-foreground"}`}>{m.label}</span>
-                        <span className="text-[9px] text-muted-foreground">{m.desc}</span>
+                {/* Saved hook templates — reusing one costs no AI calls */}
+                {hookTemplates.length > 0 && (
+                  <div className="space-y-1.5" data-testid="hook-template-picker">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Saved hook template</p>
+                      <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-[color:var(--brand-teal)]">
+                        <Zap className="h-2.5 w-2.5" /> No analysis cost
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        onClick={() => setSelectedTemplateId("")}
+                        className={`text-left p-2 rounded-lg border transition-all ${
+                          !selectedTemplateId
+                            ? "border-[color:var(--brand-teal)] bg-[color:rgba(99,102,241,0.05)]"
+                            : "border-border hover:border-[color:rgba(99,102,241,0.3)]"
+                        }`}
+                        data-testid="hook-template-none"
+                      >
+                        <span className={`text-[11px] font-semibold block ${!selectedTemplateId ? "text-[color:var(--brand-teal)]" : "text-foreground"}`}>
+                          {videoInfo ? "Use this video's hook analysis" : "Motion style below"}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground">
+                          {videoInfo ? "Fresh analysis of the selected viral video" : "Pick a motion style manually"}
+                        </span>
                       </button>
-                    ))}
+                      {hookTemplates.slice(0, 5).map((t) => (
+                        <button
+                          key={t.id}
+                          onClick={() => setSelectedTemplateId(t.id)}
+                          className={`text-left p-2 rounded-lg border transition-all ${
+                            selectedTemplateId === t.id
+                              ? "border-[color:var(--brand-teal)] bg-[color:rgba(99,102,241,0.05)]"
+                              : "border-border hover:border-[color:rgba(99,102,241,0.3)]"
+                          }`}
+                          data-testid="hook-template-option"
+                        >
+                          <span className={`text-[11px] font-semibold block truncate ${selectedTemplateId === t.id ? "text-[color:var(--brand-teal)]" : "text-foreground"}`}>
+                            {t.name}
+                          </span>
+                          <span className="text-[9px] text-muted-foreground">
+                            {t.effectiveness_score ? `${t.effectiveness_score}/10 · ` : ""}
+                            {t.times_used ? `used ${t.times_used}x` : "not used yet"}
+                            {t.has_motion_reference ? " · motion ref" : ""}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    {hookTemplates.length > 5 && (
+                      <p className="text-[9px] text-muted-foreground">
+                        Showing 5 of {hookTemplates.length} templates — manage them all on the Templates page.
+                      </p>
+                    )}
                   </div>
-                </div>
+                )}
 
-                {/* Model selector */}
+                {/* Motion style selector — only relevant when not reusing a template
+                    and no viral-video analysis is available */}
+                {!selectedTemplate && !videoInfo && (
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Motion style</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {[
+                        { key: "lean-in", label: "Lean In", desc: "Move toward camera like you're about to share a secret — builds instant curiosity" },
+                        { key: "turn", label: "Dramatic Turn", desc: "Start from the side, then turn to face the viewer — creates a reveal moment" },
+                        { key: "gesture", label: "Gesture", desc: "Point, raise hand, or reveal something — signals 'watch this' to stop the scroll" },
+                        { key: "intrigue", label: "Intrigue", desc: "Subtle head tilt + raised eyebrow — makes viewers think 'what do they know?'" },
+                        { key: "stop-motion", label: "Stop Motion", desc: "Sudden freeze-frame pose snap — eye-catching pattern interrupt that holds attention" },
+                      ].map((m) => (
+                        <button key={m.key} onClick={() => setMotionStyle(m.key)}
+                          className={`text-left p-2 rounded-lg border transition-all ${motionStyle === m.key ? "border-[color:var(--brand-teal)] bg-[color:rgba(99,102,241,0.05)]" : "border-border hover:border-[color:rgba(99,102,241,0.3)]"}`}
+                          data-testid={`motion-${m.key}`}>
+                          <span className={`text-[11px] font-semibold block ${motionStyle === m.key ? "text-[color:var(--brand-teal)]" : "text-foreground"}`}>{m.label}</span>
+                          <span className="text-[9px] text-muted-foreground">{m.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Selected template summary */}
+                {selectedTemplate && (
+                  <div
+                    className="flex items-start gap-2 rounded-xl border border-[color:rgba(99,102,241,0.3)] bg-[color:rgba(99,102,241,0.04)] px-3 py-2"
+                    data-testid="selected-template-summary"
+                  >
+                    <Bookmark className="h-3.5 w-3.5 text-[color:var(--brand-teal)] shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold truncate">{selectedTemplate.name}</p>
+                      <p className="text-[9px] text-muted-foreground leading-snug">
+                        Reuses the saved analysis and prompt
+                        {selectedTemplate.has_motion_reference ? " plus the original clip for motion transfer" : ""}
+                        {selectedTemplate.source_creator ? ` · from @${selectedTemplate.source_creator}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Model */}
                 <div className="flex gap-1 rounded-lg bg-muted/50 p-0.5" data-testid="hook-model-selector">
                   {[
-                    { key: "seedance-2.0", label: "Seedance 2.0", sub: "Best quality" },
-                    { key: "wan-2.7", label: "Wan 2.7", sub: "Style preservation" },
-                    { key: "seedance-2.0-fast", label: "Fast", sub: "Quick & cheap" },
+                    { key: "minimax-h3", label: "MiniMax H3", sub: "2K · Native audio · V2V" },
                   ].map((m) => (
                     <button key={m.key} onClick={() => setVideoModel(m.key)}
                       className={`flex-1 text-center py-1.5 px-2 rounded-md transition-all ${videoModel === m.key ? "bg-secondary shadow-sm" : "hover:bg-card/50"}`}
@@ -848,7 +950,8 @@ export default function FaceSwap() {
                 </div>
 
                 <Button onClick={handleGenerateHook} disabled={generatingVideo} className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#e0264c] text-white" data-testid="generate-hook-button">
-                  <Clapperboard className="h-4 w-4" /> Generate 5s Hook Video
+                  <Clapperboard className="h-4 w-4" />
+                  {selectedTemplate ? "Generate Hook from Template" : "Generate 5s Hook Video"}
                 </Button>
               </div>
             )}

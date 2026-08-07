@@ -79,3 +79,18 @@ class GenerateRemixScriptRequest(BaseModel):
 class RemixChatMessageRequest(BaseModel):
     """A single user turn in the conversational remix chat for a customization."""
     message: str
+
+
+class CreateHookTemplateRequest(BaseModel):
+    """Save an analyzed hook as a reusable template (snapshot, no AI calls)."""
+    video_id: str
+    name: Optional[str] = ""
+    category: Optional[str] = ""
+    notes: Optional[str] = ""
+
+
+class UpdateHookTemplateRequest(BaseModel):
+    """Rename or recategorize a saved hook template."""
+    name: Optional[str] = None
+    category: Optional[str] = None
+    notes: Optional[str] = None

@@ -3,6 +3,7 @@ import io
 import json
 import logging
 import os
+import shutil
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -29,7 +30,8 @@ from ai_service import (
 from models import (
     IngestVideoRequest, BrandContextRequest, GenerateVideoRequest,
     AnalyzeBrandUrlRequest, BrandProfileUpdateRequest, GenerateRemixScriptRequest,
-    RemixChatMessageRequest, now_iso, row_to_dict,
+    RemixChatMessageRequest, CreateHookTemplateRequest, UpdateHookTemplateRequest,
+    now_iso, row_to_dict,
 )
 from niches_config import NICHES, NICHE_MAP
 
@@ -291,6 +293,40 @@ async def init_db():
                 video_url TEXT,
                 error TEXT,
                 created_at TEXT
+            );
+
+            -- Saved hook templates. Each row is a full snapshot of a proven
+            -- hook: the AI analysis, the ready-to-submit video prompt, and a
+            -- local copy of the source clip for V2V motion transfer. Reusing a
+            -- template costs zero AI calls -- no re-analysis, no prompt
+            -- regeneration, no re-download of the source video.
+            CREATE TABLE IF NOT EXISTS hook_templates (
+                id TEXT PRIMARY KEY,
+                name TEXT,
+                category TEXT,
+                notes TEXT,
+                source_video_id TEXT,
+                source_analysis_id TEXT,
+                source_tiktok_url TEXT,
+                source_creator TEXT,
+                source_title TEXT,
+                thumbnail_url TEXT,
+                facial_expressions TEXT,
+                body_language_gestures TEXT,
+                pacing_cuts TEXT,
+                text_overlays_timing TEXT,
+                audio_cues_inferred TEXT,
+                hook_summary TEXT,
+                effectiveness_score INTEGER,
+                replicable_mechanics TEXT,
+                prompt_template TEXT,
+                reference_video_path TEXT,
+                song_title TEXT,
+                song_artist TEXT,
+                times_used INTEGER DEFAULT 0,
+                last_used_at TEXT,
+                created_at TEXT,
+                updated_at TEXT
             );
         """)
         await conn.commit()
@@ -1222,12 +1258,322 @@ HOOK_MOTION_TYPES = [
 ]
 
 
+def _coerce_mechanics(mechanics) -> list:
+    """Normalize replicable_mechanics into a list (it may be stored as JSON text)."""
+    if not mechanics:
+        return []
+    if isinstance(mechanics, str):
+        try:
+            mechanics = json.loads(mechanics)
+        except (json.JSONDecodeError, TypeError):
+            mechanics = [mechanics]
+    if isinstance(mechanics, list):
+        return [m for m in mechanics if m]
+    return [mechanics]
+
+
+def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = False) -> str:
+    """
+    Build the hook-video prompt from a viral video's hook analysis.
+
+    Shared by the live analysis path and by hook-template creation, so a saved
+    template stores exactly the prompt that a fresh analysis would have produced.
+    With H3's V2V motion transfer the video reference carries timing and camera
+    work, while this text reinforces expressions and intent.
+    """
+    prompt = (
+        "Create a 5-second vertical video (9:16) starting from this exact first frame. "
+        "Generate native audio that complements the hook (ambient sound, subtle tension-building music, "
+        "or brief impactful sound design — match the energy of the movement). "
+        "Recreate the EXACT hook mechanics that made the original viral video work:\n\n"
+        f"FACIAL EXPRESSION: {analysis.get('facial_expressions') or 'engaging expression'}\n"
+        f"BODY LANGUAGE & GESTURE: {analysis.get('body_language_gestures') or 'confident body language'}\n"
+        f"PACING & MOVEMENT: {analysis.get('pacing_cuts') or 'quick, attention-grabbing pacing'}\n"
+        f"HOOK SUMMARY: {analysis.get('hook_summary') or 'attention-grabbing opening'}\n\n"
+        "CRITICAL REQUIREMENTS:\n"
+        "- Perform the EXACT movements and expressions described above — these are proven to grab attention\n"
+        "- Maintain perfect face consistency with the first frame throughout\n"
+        "- Smooth, natural motion — no jerky or artificial movement\n"
+        "- Camera holds steady or has a subtle push-in matching the original's pacing\n"
+        "- The movement should build curiosity and make the viewer want to see more\n"
+        "- End on a moment of anticipation (the viewer wants to know what happens next)\n"
+        "- Audio should enhance the hook's impact (sound design, ambient, or trending-style audio)"
+    )
+
+    mechanics = _coerce_mechanics(analysis.get("replicable_mechanics"))
+    if mechanics:
+        mechanics_str = "; ".join(str(m) for m in mechanics[:5])
+        prompt += f"\n\nKEY MECHANICS TO REPLICATE: {mechanics_str}"
+
+    if has_reference_video:
+        prompt += (
+            "\n\nNOTE: A reference video is provided for V2V motion transfer. "
+            "Replicate its timing, camera movement, performance rhythm, and editing pace "
+            "while using the new character from the first frame."
+        )
+    return prompt
+
+
+def build_hook_prompt_from_image_analysis(image_analysis: dict) -> str:
+    """Build the hook-video prompt when only a single still image was analyzed."""
+    prompt = (
+        "Create a 5-second vertical video (9:16) starting from this exact first frame. "
+        "Generate native audio that enhances the hook (subtle sound design, ambient audio, "
+        "or trending-style music that builds tension). "
+        "Animate from this starting pose using these movement cues:\n\n"
+        f"FACIAL EXPRESSION: {image_analysis.get('facial_expressions') or 'engaging expression'}\n"
+        f"BODY LANGUAGE & MOVEMENT: {image_analysis.get('body_language_gestures') or 'confident movement'}\n"
+        f"PACING: {image_analysis.get('pacing_cuts') or 'quick, attention-grabbing pacing'}\n"
+        f"HOOK CONCEPT: {image_analysis.get('hook_summary') or 'attention-grabbing opening'}\n\n"
+        "CRITICAL REQUIREMENTS:\n"
+        "- Animate naturally from the starting pose shown in the first frame\n"
+        "- Maintain perfect face consistency throughout\n"
+        "- Smooth, natural motion — no jerky or artificial movement\n"
+        "- The movement should build curiosity and make the viewer want to see more\n"
+        "- End on a moment of anticipation\n"
+        "- Audio should complement the visual hook (sound design, ambient, or music)"
+    )
+    mechanics = _coerce_mechanics(image_analysis.get("replicable_mechanics"))
+    if mechanics:
+        mechanics_str = "; ".join(str(m) for m in mechanics[:5])
+        prompt += f"\n\nSPECIFIC MOVEMENTS TO PERFORM: {mechanics_str}"
+    return prompt
+
+
+def build_hook_prompt_from_motion_style(motion_style: str) -> str:
+    """Final fallback: a hand-written motion template. Costs zero AI calls."""
+    motion_map = {
+        "lean-in": HOOK_MOTION_TYPES[0],
+        "turn": HOOK_MOTION_TYPES[1],
+        "gesture": HOOK_MOTION_TYPES[2],
+        "intrigue": HOOK_MOTION_TYPES[3],
+        "stop-motion": HOOK_MOTION_TYPES[4],
+    }
+    key = (motion_style or "").strip()
+    motion = motion_map.get(key, HOOK_MOTION_TYPES[0])
+    return HOOK_VIDEO_PROMPT_TEMPLATE.format(motion_type=motion)
+
+
+# ---------------------------------------------------------------------------
+# Hook Templates — save a proven hook once, reuse it forever for free.
+#
+# A template is a complete snapshot of an analyzed hook:
+#   - the AI hook analysis (so it is never re-analyzed)
+#   - the ready-to-submit video prompt (so it is never regenerated)
+#   - a local copy of the source clip for V2V motion transfer (never re-downloaded)
+#   - a local copy of the key hook frame as a thumbnail
+#
+# Creating and reusing templates costs ZERO AI calls. Only the video generation
+# itself is billed, which is unavoidable for a new output.
+# ---------------------------------------------------------------------------
+HOOK_TEMPLATE_CATEGORIES = [
+    "intrigue", "reveal", "reaction", "tutorial", "lifestyle", "transformation", "other",
+]
+HOOK_TEMPLATE_NAME_MAX = 80
+HOOK_TEMPLATE_NOTES_MAX = 500
+
+
+def _normalize_template_category(category: Optional[str]) -> str:
+    key = (category or "").strip().lower()
+    return key if key in HOOK_TEMPLATE_CATEGORIES else "other"
+
+
+def _template_thumbnail_source(video: dict, analysis: dict) -> Optional[Path]:
+    """Resolve the on-disk path of the analysis's key hook frame."""
+    frames = analysis.get("frames") or []
+    if not frames or not video.get("tiktok_url"):
+        return None
+    key_idx = analysis.get("key_hook_frame_index") or 1
+    try:
+        key_idx = max(1, min(len(frames), int(key_idx)))
+    except (TypeError, ValueError):
+        key_idx = 1
+    frame_meta = frames[key_idx - 1]
+    media_url = frame_meta.get("media_url") or ""
+    if not media_url:
+        return None
+    filename = media_url.split("/")[-1]
+    candidate = pipeline.FRAMES_DIR / pipeline.url_hash(video["tiktok_url"]) / filename
+    return candidate if candidate.exists() else None
+
+
+@api_router.post("/hook-templates", status_code=201)
+async def create_hook_template(payload: CreateHookTemplateRequest):
+    """
+    Save an already-analyzed hook as a reusable template.
+
+    Costs zero AI calls: this only snapshots the existing analysis, pre-builds the
+    video prompt, and copies the source clip + key frame into template storage so
+    the template stays usable after caches are cleared.
+    """
+    video = await get_video_or_404(payload.video_id)
+    analysis = await get_latest_analysis_or_404(payload.video_id)
+
+    template_id = str(uuid.uuid4())
+
+    # Copy the source clip so V2V motion transfer keeps working for this template.
+    reference_video_path = None
+    if video.get("local_video_path"):
+        src_video = Path(video["local_video_path"])
+        if src_video.exists():
+            dest_video = pipeline.TEMPLATES_DIR / f"{template_id}.mp4"
+            try:
+                shutil.copy2(src_video, dest_video)
+                reference_video_path = str(dest_video)
+            except OSError as e:
+                logger.warning(f"Could not copy motion reference for template {template_id}: {e}")
+
+    # Copy the key hook frame as a stable thumbnail.
+    thumbnail_url = None
+    src_frame = _template_thumbnail_source(video, analysis)
+    if src_frame:
+        dest_frame = pipeline.TEMPLATES_DIR / f"{template_id}.jpg"
+        try:
+            shutil.copy2(src_frame, dest_frame)
+            thumbnail_url = f"/api/media/templates/{template_id}.jpg"
+        except OSError as e:
+            logger.warning(f"Could not copy thumbnail for template {template_id}: {e}")
+    if not thumbnail_url:
+        thumbnail_url = video.get("thumbnail_url")
+
+    # Pre-build the exact prompt a fresh analysis would have produced.
+    prompt_template = build_hook_prompt_from_analysis(
+        analysis, has_reference_video=bool(reference_video_path)
+    )
+
+    name = (payload.name or "").strip()[:HOOK_TEMPLATE_NAME_MAX]
+    if not name:
+        summary = (analysis.get("hook_summary") or "").strip()
+        name = (summary[:60].rstrip(" .,") if summary else f"Hook from @{video.get('creator') or 'unknown'}")
+
+    created_at = now_iso()
+    await _execute(
+        """INSERT INTO hook_templates
+           (id, name, category, notes, source_video_id, source_analysis_id,
+            source_tiktok_url, source_creator, source_title, thumbnail_url,
+            facial_expressions, body_language_gestures, pacing_cuts,
+            text_overlays_timing, audio_cues_inferred, hook_summary,
+            effectiveness_score, replicable_mechanics, prompt_template,
+            reference_video_path, song_title, song_artist,
+            times_used, last_used_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (template_id, name, _normalize_template_category(payload.category),
+         (payload.notes or "").strip()[:HOOK_TEMPLATE_NOTES_MAX],
+         video["id"], analysis["id"], video.get("tiktok_url"), video.get("creator"),
+         video.get("title"), thumbnail_url,
+         analysis.get("facial_expressions"), analysis.get("body_language_gestures"),
+         analysis.get("pacing_cuts"), analysis.get("text_overlays_timing"),
+         analysis.get("audio_cues_inferred"), analysis.get("hook_summary"),
+         analysis.get("effectiveness_score"),
+         json.dumps(_coerce_mechanics(analysis.get("replicable_mechanics"))),
+         prompt_template, reference_video_path,
+         video.get("song_title"), video.get("song_artist"),
+         0, None, created_at, created_at),
+    )
+    logger.info(
+        f"Saved hook template {template_id} ('{name}') from video {video['id']} — "
+        f"motion_reference={bool(reference_video_path)}"
+    )
+    return await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
+
+
+@api_router.get("/hook-templates")
+async def list_hook_templates(category: str = "", source_video_id: str = ""):
+    """List saved hook templates, most recently used first."""
+    clauses = []
+    params = []
+    if category.strip():
+        clauses.append("category = ?")
+        params.append(_normalize_template_category(category))
+    if source_video_id.strip():
+        clauses.append("source_video_id = ?")
+        params.append(source_video_id.strip())
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    rows = await _fetch_all(
+        f"""SELECT * FROM hook_templates {where}
+            ORDER BY COALESCE(last_used_at, created_at) DESC LIMIT 200""",
+        tuple(params),
+    )
+    for row in rows:
+        row["has_motion_reference"] = bool(
+            row.get("reference_video_path") and Path(row["reference_video_path"]).exists()
+        )
+    return rows
+
+
+@api_router.get("/hook-templates/{template_id}")
+async def get_hook_template(template_id: str):
+    template = await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
+    if not template:
+        raise HTTPException(status_code=404, detail="Hook template not found.")
+    template["has_motion_reference"] = bool(
+        template.get("reference_video_path") and Path(template["reference_video_path"]).exists()
+    )
+    return template
+
+
+@api_router.patch("/hook-templates/{template_id}")
+async def update_hook_template(template_id: str, payload: UpdateHookTemplateRequest):
+    """Rename, recategorize, or annotate a saved template."""
+    existing = await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
+    if not existing:
+        raise HTTPException(status_code=404, detail="Hook template not found.")
+
+    updates = payload.model_dump(exclude_unset=True)
+    set_clauses = []
+    values = []
+    if "name" in updates:
+        name = (updates["name"] or "").strip()[:HOOK_TEMPLATE_NAME_MAX]
+        if not name:
+            raise HTTPException(status_code=400, detail="Template name cannot be empty.")
+        set_clauses.append("name = ?")
+        values.append(name)
+    if "category" in updates:
+        set_clauses.append("category = ?")
+        values.append(_normalize_template_category(updates["category"]))
+    if "notes" in updates:
+        set_clauses.append("notes = ?")
+        values.append((updates["notes"] or "").strip()[:HOOK_TEMPLATE_NOTES_MAX])
+
+    if not set_clauses:
+        return existing
+
+    set_clauses.append("updated_at = ?")
+    values.append(now_iso())
+    values.append(template_id)
+    await _execute(
+        f"UPDATE hook_templates SET {', '.join(set_clauses)} WHERE id = ?", tuple(values)
+    )
+    return await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
+
+
+@api_router.delete("/hook-templates/{template_id}")
+async def delete_hook_template(template_id: str):
+    """Delete a template and its copied motion reference / thumbnail."""
+    existing = await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
+    if not existing:
+        raise HTTPException(status_code=404, detail="Hook template not found.")
+
+    for candidate in (
+        pipeline.TEMPLATES_DIR / f"{template_id}.mp4",
+        pipeline.TEMPLATES_DIR / f"{template_id}.jpg",
+    ):
+        try:
+            candidate.unlink(missing_ok=True)
+        except OSError as e:
+            logger.warning(f"Could not delete template asset {candidate.name}: {e}")
+
+    await _execute("DELETE FROM hook_templates WHERE id = ?", (template_id,))
+    return {"deleted": True, "id": template_id}
+
+
 @api_router.post("/face-swap/generate-hook-video")
 async def face_swap_generate_hook_video(
     image_id: str = Form(...),
     motion_style: str = Form(""),
     model: str = Form(""),
     video_id: str = Form(""),
+    template_id: str = Form(""),
 ):
     """
     Generate a hook video from the face-swapped image using MiniMax H3.
@@ -1244,6 +1590,11 @@ async def face_swap_generate_hook_video(
     to feed as a V2V motion reference — H3 will replicate the proven hook mechanics
     directly from the source video rather than relying on text descriptions alone.
 
+    If template_id is provided, reuses a saved hook template. This is the cheapest
+    path: the prompt and the V2V motion reference are already cached on disk, so
+    the request costs ZERO AI calls (no hook re-analysis, no prompt regeneration,
+    no re-download of the source video) — only the video generation itself.
+
     Falls back to a motion-style template if no analysis is available.
 
     motion_style options: lean-in, turn, gesture, intrigue, stop-motion
@@ -1258,10 +1609,36 @@ async def face_swap_generate_hook_video(
             detail="Generated face-swap image not found. Please generate the image first.",
         )
 
-    # Try to get hook analysis and video file from the original viral video
     analysis = None
     reference_video_path = None
-    if video_id and video_id.strip():
+    template = None
+    prompt = None
+
+    # --- Path 1: saved hook template (zero AI calls) ---
+    if template_id and template_id.strip():
+        template = await _fetch_one(
+            "SELECT * FROM hook_templates WHERE id = ?", (template_id.strip(),)
+        )
+        if not template:
+            raise HTTPException(status_code=404, detail="Hook template not found.")
+        prompt = template.get("prompt_template") or ""
+        if not prompt:
+            raise HTTPException(
+                status_code=400,
+                detail="This hook template has no saved prompt. Please re-save it from the analysis page.",
+            )
+        stored_ref = template.get("reference_video_path")
+        if stored_ref:
+            ref_path = Path(stored_ref)
+            if ref_path.exists():
+                reference_video_path = ref_path
+        logger.info(
+            f"Hook video from template {template['id']} ('{template.get('name')}') — "
+            "reusing cached prompt and motion reference, 0 AI calls"
+        )
+
+    # --- Path 2: live hook analysis from the original viral video ---
+    if prompt is None and video_id and video_id.strip():
         analysis_row = await _fetch_one(
             "SELECT * FROM analyses WHERE video_id = ? ORDER BY created_at DESC LIMIT 1",
             (video_id.strip(),),
@@ -1276,86 +1653,22 @@ async def face_swap_generate_hook_video(
             if v_path.exists():
                 reference_video_path = v_path
 
-    if analysis:
+    if prompt is not None:
+        pass  # already resolved from a saved template
+    elif analysis:
         # USE THE PROVEN HOOK STRUCTURE from the analyzed viral video.
-        # With H3's V2V motion transfer, the video reference carries the timing
-        # and camera work — the text prompt reinforces expressions and intent.
-        prompt = (
-            "Create a 5-second vertical video (9:16) starting from this exact first frame. "
-            "Generate native audio that complements the hook (ambient sound, subtle tension-building music, "
-            "or brief impactful sound design — match the energy of the movement). "
-            "Recreate the EXACT hook mechanics that made the original viral video work:\n\n"
-            f"FACIAL EXPRESSION: {analysis.get('facial_expressions', 'engaging expression')}\n"
-            f"BODY LANGUAGE & GESTURE: {analysis.get('body_language_gestures', 'confident body language')}\n"
-            f"PACING & MOVEMENT: {analysis.get('pacing_cuts', 'quick, attention-grabbing pacing')}\n"
-            f"HOOK SUMMARY: {analysis.get('hook_summary', 'attention-grabbing opening')}\n\n"
-            "CRITICAL REQUIREMENTS:\n"
-            "- Perform the EXACT movements and expressions described above — these are proven to grab attention\n"
-            "- Maintain perfect face consistency with the first frame throughout\n"
-            "- Smooth, natural motion — no jerky or artificial movement\n"
-            "- Camera holds steady or has a subtle push-in matching the original's pacing\n"
-            "- The movement should build curiosity and make the viewer want to see more\n"
-            "- End on a moment of anticipation (the viewer wants to know what happens next)\n"
-            "- Audio should enhance the hook's impact (sound design, ambient, or trending-style audio)"
+        prompt = build_hook_prompt_from_analysis(
+            analysis, has_reference_video=bool(reference_video_path)
         )
-        # Include replicable mechanics if available
-        mechanics = analysis.get("replicable_mechanics")
-        if mechanics:
-            if isinstance(mechanics, str):
-                try:
-                    mechanics = json.loads(mechanics)
-                except (json.JSONDecodeError, TypeError):
-                    mechanics = [mechanics]
-            if isinstance(mechanics, list) and mechanics:
-                mechanics_str = "; ".join(str(m) for m in mechanics[:5])
-                prompt += f"\n\nKEY MECHANICS TO REPLICATE: {mechanics_str}"
-
-        if reference_video_path:
-            prompt += (
-                "\n\nNOTE: A reference video is provided for V2V motion transfer. "
-                "Replicate its timing, camera movement, performance rhythm, and editing pace "
-                "while using the new character from the first frame."
-            )
     else:
         # No video analysis available (manual upload) — analyze the IMAGE itself
         image_analysis = await analyze_image_for_hook(image_path, session_id=f"img-hook-{image_id}")
 
         if image_analysis and image_analysis.get("body_language_gestures"):
-            prompt = (
-                "Create a 5-second vertical video (9:16) starting from this exact first frame. "
-                "Generate native audio that enhances the hook (subtle sound design, ambient audio, "
-                "or trending-style music that builds tension). "
-                "Animate from this starting pose using these movement cues:\n\n"
-                f"FACIAL EXPRESSION: {image_analysis.get('facial_expressions', 'engaging expression')}\n"
-                f"BODY LANGUAGE & MOVEMENT: {image_analysis.get('body_language_gestures', 'confident movement')}\n"
-                f"PACING: {image_analysis.get('pacing_cuts', 'quick, attention-grabbing pacing')}\n"
-                f"HOOK CONCEPT: {image_analysis.get('hook_summary', 'attention-grabbing opening')}\n\n"
-                "CRITICAL REQUIREMENTS:\n"
-                "- Animate naturally from the starting pose shown in the first frame\n"
-                "- Maintain perfect face consistency throughout\n"
-                "- Smooth, natural motion — no jerky or artificial movement\n"
-                "- The movement should build curiosity and make the viewer want to see more\n"
-                "- End on a moment of anticipation\n"
-                "- Audio should complement the visual hook (sound design, ambient, or music)"
-            )
-            mechanics = image_analysis.get("replicable_mechanics")
-            if mechanics and isinstance(mechanics, list) and mechanics:
-                mechanics_str = "; ".join(str(m) for m in mechanics[:5])
-                prompt += f"\n\nSPECIFIC MOVEMENTS TO PERFORM: {mechanics_str}"
+            prompt = build_hook_prompt_from_image_analysis(image_analysis)
         else:
-            # Final fallback: use the motion style template
-            motion_map = {
-                "lean-in": HOOK_MOTION_TYPES[0],
-                "turn": HOOK_MOTION_TYPES[1],
-                "gesture": HOOK_MOTION_TYPES[2],
-                "intrigue": HOOK_MOTION_TYPES[3],
-                "stop-motion": HOOK_MOTION_TYPES[4],
-            }
-            if motion_style.strip() and motion_style.strip() in motion_map:
-                motion = motion_map[motion_style.strip()]
-            else:
-                motion = HOOK_MOTION_TYPES[0]
-            prompt = HOOK_VIDEO_PROMPT_TEMPLATE.format(motion_type=motion)
+            # Final fallback: hand-written motion template (no AI cost)
+            prompt = build_hook_prompt_from_motion_style(motion_style)
 
     try:
         result = await generate_video(
@@ -1382,6 +1695,13 @@ async def face_swap_generate_hook_video(
         (job_id, image_id, prompt, 5, "pending", polling_url, now_iso()),
     )
 
+    # Track template reuse so the UI can surface the most effective saved hooks.
+    if template:
+        await _execute(
+            "UPDATE hook_templates SET times_used = times_used + 1, last_used_at = ? WHERE id = ?",
+            (now_iso(), template["id"]),
+        )
+
     return {
         "job_id": job_id,
         "status": "pending",
@@ -1393,6 +1713,9 @@ async def face_swap_generate_hook_video(
         "model": "minimax-h3",
         "has_v2v_motion": bool(reference_video_path),
         "has_native_audio": True,
+        "from_template": bool(template),
+        "template_id": template["id"] if template else None,
+        "template_name": template.get("name") if template else None,
     }
 
 

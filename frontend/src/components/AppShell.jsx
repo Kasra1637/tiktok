@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { Sparkles, History as HistoryIcon, Loader2, Link2, Briefcase, Repeat2 } from "lucide-react";
+import { Sparkles, History as HistoryIcon, Loader2, Link2, Briefcase, Repeat2, Bookmark } from "lucide-react";
 import { toast } from "sonner";
 import { api, getErrorMessage } from "../lib/api";
 
@@ -30,6 +30,7 @@ export function AppShell({ children }) {
   const isHistory = location.pathname === "/history";
   const isBrand = location.pathname === "/brand";
   const isFaceSwap = location.pathname === "/face-swap";
+  const isTemplates = location.pathname === "/templates";
 
   return (
     <div className="relative min-h-screen hero-wash">
@@ -80,6 +81,18 @@ export function AppShell({ children }) {
             >
               <Repeat2 className="h-4 w-4" />
               <span className="hidden md:inline">Face Swap</span>
+            </Link>
+
+            <Link
+              to="/templates"
+              data-testid="templates-nav-link"
+              aria-current={isTemplates ? "page" : undefined}
+              className={`flex items-center gap-1.5 text-sm font-medium px-2.5 py-1.5 rounded-xl hover:bg-[color:rgba(99,102,241,0.08)] transition-colors ${
+                isTemplates ? "text-[color:var(--brand-teal)]" : "text-foreground"
+              }`}
+            >
+              <Bookmark className="h-4 w-4" />
+              <span className="hidden md:inline">Templates</span>
             </Link>
 
             <Link

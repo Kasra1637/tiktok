@@ -8,8 +8,9 @@ import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import Filmstrip from "../components/Filmstrip";
 import HookBreakdown from "../components/HookBreakdown";
 import GenerationProgress from "../components/GenerationProgress";
+import SaveHookTemplateDialog from "../components/SaveHookTemplateDialog";
 import { api, getErrorMessage } from "../lib/api";
-import { ArrowLeft, Eye, Heart, MessageCircle, AlertTriangle, RotateCcw, ExternalLink, Repeat2, Music2, FileText, BadgeAlert } from "lucide-react";
+import { ArrowLeft, Eye, Heart, MessageCircle, AlertTriangle, RotateCcw, ExternalLink, Repeat2, Music2, FileText, BadgeAlert, Bookmark, BookmarkCheck } from "lucide-react";
 
 const ANALYZE_STAGES = ["Downloading video", "Extracting first 2-3 seconds", "Analyzing hook mechanics with AI"];
 
@@ -28,6 +29,8 @@ export default function AnalysisDetail() {
   const [selectedFrame, setSelectedFrame] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState(null);
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
+  const [savedTemplates, setSavedTemplates] = useState([]);
 
   const runAnalysis = useCallback(async () => {
     setAnalyzing(true);
@@ -68,6 +71,20 @@ export default function AnalysisDetail() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoId]);
+
+  // Surface whether this hook has already been saved as a template.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getHookTemplates({ source_video_id: videoId })
+      .then((rows) => {
+        if (!cancelled) setSavedTemplates(rows || []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [videoId]);
 
   if (error) {
@@ -222,6 +239,35 @@ export default function AnalysisDetail() {
               <Repeat2 className="h-4 w-4" /> Face Swap
             </Button>
           )}
+          {analysis && (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => setSaveTemplateOpen(true)}
+                className="w-full gap-2 rounded-xl"
+                data-testid="save-hook-template-button"
+              >
+                {savedTemplates.length > 0 ? (
+                  <>
+                    <BookmarkCheck className="h-4 w-4 text-[color:var(--brand-teal)]" /> Save Again as Template
+                  </>
+                ) : (
+                  <>
+                    <Bookmark className="h-4 w-4" /> Save as Template
+                  </>
+                )}
+              </Button>
+              {savedTemplates.length > 0 && (
+                <button
+                  onClick={() => navigate("/templates")}
+                  className="w-full text-[11px] text-muted-foreground hover:text-[color:var(--brand-teal)] transition-colors text-center"
+                  data-testid="view-saved-templates-link"
+                >
+                  Already saved {savedTemplates.length === 1 ? "as a template" : `${savedTemplates.length} times`} — view templates
+                </button>
+              )}
+            </>
+          )}
         </Card>
 
         <div className="space-y-5">
@@ -238,6 +284,15 @@ export default function AnalysisDetail() {
           )}
         </div>
       </div>
+
+      <SaveHookTemplateDialog
+        open={saveTemplateOpen}
+        onOpenChange={setSaveTemplateOpen}
+        videoId={videoId}
+        analysis={analysis}
+        video={video}
+        onSaved={(saved) => setSavedTemplates((prev) => [saved, ...prev])}
+      />
     </div>
   );
 }

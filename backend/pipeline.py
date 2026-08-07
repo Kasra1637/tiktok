@@ -19,7 +19,11 @@ VIDEOS_DIR = STORAGE_DIR / "videos"
 FRAMES_DIR = STORAGE_DIR / "frames"
 UPLOADS_DIR = STORAGE_DIR / "uploads"
 GENERATED_DIR = STORAGE_DIR / "generated"
-for _d in [VIDEOS_DIR, FRAMES_DIR, UPLOADS_DIR, GENERATED_DIR]:
+# Saved hook templates keep their own copy of the source clip (V2V motion
+# reference) and key frame so a template stays reusable even after the
+# original download or frame cache is cleaned up.
+TEMPLATES_DIR = STORAGE_DIR / "templates"
+for _d in [VIDEOS_DIR, FRAMES_DIR, UPLOADS_DIR, GENERATED_DIR, TEMPLATES_DIR]:
     _d.mkdir(parents=True, exist_ok=True)
 
 # Use `python -m yt_dlp` (same interpreter/venv as this process) instead of relying
