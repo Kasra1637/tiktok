@@ -386,11 +386,15 @@ async def generate_customized_preview(
         "prompt": (
             "Edit the first image. Replace ONLY the face and identity of the person shown in it with "
             "the face of the person shown in the second image — matching that person's facial "
-            "structure, eyes, nose, lips, skin tone, and hair. "
+            "structure, eyes, nose, lips, and skin tone. "
             "Keep everything else in the first image exactly as it is: the pose, body position, hand "
             "gestures, clothing, background, lighting, camera angle, and any on-screen text. "
             "The output must clearly show the face from the SECOND image — do not keep the face that "
             "was originally in the first image. "
+            "HAIRSTYLE: Also replace the hairstyle from the first image with the hairstyle of the "
+            "person in the second image — match its hair color, length, texture (straight, wavy, or "
+            "curly), volume, and parting exactly as shown in the second image. Do not keep the "
+            "hairstyle, hair color, or hair length that was originally in the first image. "
             "SKIN TONE CONSISTENCY: The face's skin tone from the second image is the reference for "
             "the ENTIRE person. Recolor the neck, chest, arms, and hands from the first image to match "
             "the exact skin tone and undertone of the new face — do not leave the original body's skin "
@@ -446,11 +450,15 @@ async def generate_face_swap(
         "prompt": (
             "Edit the first image. Replace ONLY the face and identity of the person shown in it with "
             "the face of the person shown in the second image — matching that person's facial "
-            "structure, eyes, nose, lips, skin tone, and hair. "
+            "structure, eyes, nose, lips, and skin tone. "
             "Keep everything else in the first image exactly as it is: the pose, body position, hand "
             "gestures, clothing, background, lighting, camera angle, and any on-screen text. "
             "The output must clearly show the face from the SECOND image — do not keep the face that "
             "was originally in the first image. "
+            "HAIRSTYLE: Also replace the hairstyle from the first image with the hairstyle of the "
+            "person in the second image — match its hair color, length, texture (straight, wavy, or "
+            "curly), volume, and parting exactly as shown in the second image. Do not keep the "
+            "hairstyle, hair color, or hair length that was originally in the first image. "
             "SKIN TONE CONSISTENCY: The face's skin tone from the second image is the reference for "
             "the ENTIRE person. Recolor the neck, chest, arms, and hands from the first image to match "
             "the exact skin tone and undertone of the new face — do not leave the original body's skin "
@@ -743,6 +751,20 @@ async def generate_video(
             "audio_url": {"url": reference_audio_url},
         })
 
+    # MiniMax Hailuo rejects any request that combines frame_images with
+    # input_references ("do not support frame_images and input_references in
+    # the same [request]", HTTP 400). frame_images anchors the face-swapped
+    # image as the video's first frame — that identity anchor matters more
+    # than the V2V motion/audio references, so when both would apply, drop
+    # the references rather than let the whole request fail.
+    if payload.get("frame_images") and refs:
+        logger.warning(
+            "MiniMax H3 does not support frame_images + input_references together — "
+            f"dropping {len(refs)} reference(s) (video/audio) to keep the first-frame "
+            "identity anchor."
+        )
+        refs = []
+
     if refs:
         payload["input_references"] = refs
 
@@ -750,7 +772,7 @@ async def generate_video(
         f"Submitting video generation (MiniMax H3): duration={payload['duration']}s, "
         f"resolution={payload['resolution']}, has_frame_image={bool(payload.get('frame_images'))}, "
         f"audio={generate_audio}, num_references={len(refs)}, "
-        f"has_v2v_motion={bool(reference_video_url)}"
+        f"has_v2v_motion={bool(reference_video_url) and bool(refs)}"
     )
 
     async with httpx.AsyncClient(timeout=90) as client:
