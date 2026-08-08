@@ -693,7 +693,7 @@ async def generate_video(
     reference_image_path: Path = None,
     duration: int = 5,
     model: str = None,
-    generate_audio: bool = True,
+    generate_audio: bool = False,
     reference_video_url: str = None,
     reference_audio_url: str = None,
     input_references: list = None,

@@ -1505,9 +1505,10 @@ AUDIO_ON_INSTRUCTION = (
 )
 AUDIO_OFF_INSTRUCTION = (
     "\n\nIMPORTANT: This video must be completely SILENT — no audio, no music, "
-    "no voiceover, no ambient sound, no sound design of any kind. The creator "
-    "will add a trending sound or text-to-speech in TikTok's own editor after "
-    "exporting this clip."
+    "no voiceover, no ambient sound, no sound design of any kind. The character "
+    "must NOT move their lips as if speaking or talking — keep the mouth closed "
+    "or in a natural resting/smiling position. The creator will add a trending "
+    "sound or text-to-speech in TikTok's own editor after exporting this clip."
 )
 
 
@@ -1951,14 +1952,14 @@ async def face_swap_generate_hook_video(
     # produced the base prompt (fresh analysis, saved template, image
     # analysis, or motion fallback) — including templates saved before this
     # toggle existed, whose cached text may still reference audio.
-    prompt = apply_audio_directive(prompt, include_audio)
+    prompt = apply_audio_directive(prompt, False)
 
     try:
         result = await generate_video(
             prompt=prompt,
             reference_image_path=image_path,
             duration=5,
-            generate_audio=include_audio,
+            generate_audio=False,  # Always silent — creator adds sound in TikTok editor
             reference_video_url=public_media_url(reference_video_path),  # V2V motion transfer
         )
     except Exception as e:
@@ -2111,26 +2112,25 @@ async def face_swap_extend_video(
 
             prompt = (
                 f"Continue this video for {duration} seconds. The character from the first frame "
-                f"now delivers a confident, {tone} message to camera with native voice audio. "
-                f"They are promoting {brand_name}"
+                f"continues with confident, {tone} body language and expressive gestures. "
+                f"They are showcasing {brand_name}"
                 f"{' — ' + brand_desc if brand_desc else ''}. "
                 f"{'Products/services: ' + products_str + '. ' if products_str else ''}"
-                f"{'Speaking directly to: ' + audience + '. ' if audience else ''}"
-                f"The delivery should feel natural and authentic — like a real creator talking to "
-                f"their audience, not scripted or stiff. Include confident body language, "
+                f"The performance should feel natural and authentic — confident body language, "
                 f"occasional hand gestures, and direct eye contact with camera. "
                 f"End with a clear call-to-action moment (pointing, nodding, or inviting gesture). "
-                f"Generate natural voice audio matching the character — confident, clear delivery "
-                f"with ambient room tone. "
+                f"NO AUDIO — this video must be completely silent. No voice, no music, no sound. "
+                f"The character should NOT move their lips as if speaking or talking. "
                 f"Maintain perfect face consistency throughout."
             )
         else:
             prompt = (
                 f"Continue this video for {duration} seconds. The character from the first frame "
-                "now delivers an energetic, confident message directly to camera. "
-                "Natural delivery — speaking with passion, using hand gestures, maintaining "
-                "eye contact. The energy builds from the hook into a clear message. "
-                "Generate native voice audio — confident, engaging delivery with natural room tone. "
+                "continues with energetic, confident body language directly to camera. "
+                "Natural movement — expressive hand gestures, maintaining eye contact. "
+                "The energy builds from the hook with dynamic poses and reactions. "
+                "NO AUDIO — this video must be completely silent. No voice, no music, no sound. "
+                "The character should NOT move their lips as if speaking or talking. "
                 "End with a decisive moment (nod, point, or inviting gesture). "
                 "Maintain perfect face consistency throughout."
             )
@@ -2148,7 +2148,7 @@ async def face_swap_extend_video(
             prompt=prompt,
             reference_image_path=first_frame_path,
             duration=duration,
-            generate_audio=True,  # H3 native audio in one pass
+            generate_audio=False,  # Always silent — creator adds sound in TikTok editor
             reference_video_url=public_media_url(reference_video_path),  # V2V motion transfer if available
         )
     except Exception as e:
@@ -2223,7 +2223,7 @@ async def face_swap_generate_video(
             prompt=prompt,
             reference_image_path=image_path,
             duration=duration,
-            generate_audio=True,  # H3 native audio
+            generate_audio=False,  # Always silent — creator adds sound in TikTok editor
         )
     except Exception as e:
         logger.error(f"Video generation submission failed: {e}")
@@ -2971,7 +2971,7 @@ async def submit_video_job(job_id: str, user_id: str = Depends(get_current_user_
             prompt=job.get("full_prompt_text") or "",
             reference_image_path=reference_image_path,
             duration=job.get("target_duration_seconds", 10) or 10,
-            generate_audio=True,  # H3 native audio
+            generate_audio=False,  # Always silent — creator adds sound in TikTok editor
             reference_video_url=public_media_url(reference_video_path),  # V2V motion transfer
         )
     except Exception as e:
