@@ -104,7 +104,7 @@ export default function HookTemplates() {
     setLoading(true);
     api
       .getBookmarks()
-      .then(setTemplates)
+      .then((data) => setTemplates(Array.isArray(data) ? data : []))
       .catch((err) => toast.error(getErrorMessage(err)))
       .finally(() => setLoading(false));
   }, []);

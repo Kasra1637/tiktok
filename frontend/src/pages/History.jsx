@@ -35,7 +35,7 @@ export default function History() {
   useEffect(() => {
     api
       .getHistory()
-      .then(setItems)
+      .then((data) => setItems(Array.isArray(data) ? data : data?.videos || []))
       .catch((err) => toast.error(getErrorMessage(err)))
       .finally(() => setLoading(false));
   }, []);
