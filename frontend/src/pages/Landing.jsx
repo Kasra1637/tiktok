@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/clerk-react";
 import {
   Sparkles, Search, Repeat2, Clapperboard, Globe, Save, Film,
   TrendingUp, ArrowRight, Zap, Target, Layers, Music2,
@@ -336,14 +337,34 @@ export default function Landing() {
             ))}
           </nav>
 
-          <Link to="/discover">
-            <Button
-              className="gap-2 rounded-xl bg-[color:var(--brand-teal)] px-4 text-sm font-semibold text-white shadow-[var(--glow-indigo)] hover:bg-[color:var(--brand-teal-dark)]"
-              data-testid="landing-enter-app-button"
-            >
-              Enter App <ArrowRight className="h-4 w-4" />
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <SignedOut>
+              <SignInButton mode="modal">
+                <button className="rounded-xl px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-[color:var(--indigo-6)] hover:text-foreground">
+                  Sign In
+                </button>
+              </SignInButton>
+              <SignUpButton mode="modal">
+                <Button
+                  className="gap-2 rounded-xl bg-[color:var(--brand-teal)] px-4 text-sm font-semibold text-white shadow-[var(--glow-indigo)] hover:bg-[color:var(--brand-teal-dark)]"
+                  data-testid="landing-enter-app-button"
+                >
+                  Get Started <ArrowRight className="h-4 w-4" />
+                </Button>
+              </SignUpButton>
+            </SignedOut>
+            <SignedIn>
+              <Link to="/discover">
+                <Button
+                  className="gap-2 rounded-xl bg-[color:var(--brand-teal)] px-4 text-sm font-semibold text-white shadow-[var(--glow-indigo)] hover:bg-[color:var(--brand-teal-dark)]"
+                  data-testid="landing-enter-app-button"
+                >
+                  Enter App <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+              <UserButton afterSignOutUrl="/" />
+            </SignedIn>
+          </div>
         </div>
       </header>
 
@@ -384,23 +405,44 @@ export default function Landing() {
             className="animate-fade-up mt-10 flex flex-col items-center justify-center gap-3.5 sm:flex-row"
             style={{ animationDelay: "180ms" }}
           >
-            <Link to="/discover" className="w-full sm:w-auto">
-              <Button
-                size="lg"
-                className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-white shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
-              >
-                <Sparkles className="h-5 w-5" /> Start Discovering
-              </Button>
-            </Link>
-            <Link to="/face-swap" className="w-full sm:w-auto">
-              <Button
-                size="lg"
-                variant="outline"
-                className="w-full gap-2.5 rounded-xl border-[color:var(--hairline-strong)] bg-[color:var(--indigo-4)] px-8 py-6 text-base font-semibold backdrop-blur-sm hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] sm:w-auto"
-              >
-                <Repeat2 className="h-5 w-5" /> Face Swap
-              </Button>
-            </Link>
+            <SignedOut>
+              <SignUpButton mode="modal">
+                <Button
+                  size="lg"
+                  className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-white shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
+                >
+                  <Sparkles className="h-5 w-5" /> Start Free
+                </Button>
+              </SignUpButton>
+              <SignInButton mode="modal">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="w-full gap-2.5 rounded-xl border-[color:var(--hairline-strong)] bg-[color:var(--indigo-4)] px-8 py-6 text-base font-semibold backdrop-blur-sm hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] sm:w-auto"
+                >
+                  I have an account
+                </Button>
+              </SignInButton>
+            </SignedOut>
+            <SignedIn>
+              <Link to="/discover" className="w-full sm:w-auto">
+                <Button
+                  size="lg"
+                  className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-white shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
+                >
+                  <Sparkles className="h-5 w-5" /> Go to App
+                </Button>
+              </Link>
+              <Link to="/face-swap" className="w-full sm:w-auto">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="w-full gap-2.5 rounded-xl border-[color:var(--hairline-strong)] bg-[color:var(--indigo-4)] px-8 py-6 text-base font-semibold backdrop-blur-sm hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] sm:w-auto"
+                >
+                  <Repeat2 className="h-5 w-5" /> Face Swap
+                </Button>
+              </Link>
+            </SignedIn>
           </div>
 
           <div
@@ -595,23 +637,44 @@ export default function Landing() {
                 Save the hook as a template and every future remix is free.
               </p>
               <div className="mt-9 flex flex-col items-center justify-center gap-3.5 sm:flex-row">
-                <Link to="/discover" className="w-full sm:w-auto">
-                  <Button
-                    size="lg"
-                    className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-white shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
-                  >
-                    <Sparkles className="h-5 w-5" /> Enter App
-                  </Button>
-                </Link>
-                <Link to="/brand" className="w-full sm:w-auto">
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="w-full gap-2.5 rounded-xl border-[color:var(--hairline-strong)] bg-[color:var(--indigo-4)] px-8 py-6 text-base font-semibold hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] sm:w-auto"
-                  >
-                    <Globe className="h-5 w-5" /> Set Up Your Brand
-                  </Button>
-                </Link>
+                <SignedOut>
+                  <SignUpButton mode="modal">
+                    <Button
+                      size="lg"
+                      className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-white shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
+                    >
+                      <Sparkles className="h-5 w-5" /> Get Started Free
+                    </Button>
+                  </SignUpButton>
+                  <SignInButton mode="modal">
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="w-full gap-2.5 rounded-xl border-[color:var(--hairline-strong)] bg-[color:var(--indigo-4)] px-8 py-6 text-base font-semibold hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] sm:w-auto"
+                    >
+                      Sign In
+                    </Button>
+                  </SignInButton>
+                </SignedOut>
+                <SignedIn>
+                  <Link to="/discover" className="w-full sm:w-auto">
+                    <Button
+                      size="lg"
+                      className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-white shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
+                    >
+                      <Sparkles className="h-5 w-5" /> Enter App
+                    </Button>
+                  </Link>
+                  <Link to="/brand" className="w-full sm:w-auto">
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="w-full gap-2.5 rounded-xl border-[color:var(--hairline-strong)] bg-[color:var(--indigo-4)] px-8 py-6 text-base font-semibold hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] sm:w-auto"
+                    >
+                      <Globe className="h-5 w-5" /> Set Up Your Brand
+                    </Button>
+                  </Link>
+                </SignedIn>
               </div>
             </div>
           </div>
