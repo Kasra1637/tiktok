@@ -105,6 +105,9 @@ export function SaveHookTemplateDialog({ open, onOpenChange, videoId, analysis, 
                 </Chip>
               ))}
             </div>
+            <p className="text-[11px] leading-snug text-muted-foreground" data-testid="category-description">
+              {HOOK_TEMPLATE_CATEGORIES.find((c) => c.key === category)?.description}
+            </p>
           </div>
 
           <div className="space-y-1.5">
