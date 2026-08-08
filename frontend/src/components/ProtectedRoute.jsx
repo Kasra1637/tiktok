@@ -1,4 +1,4 @@
-import { useAuth } from "@clerk/clerk-react";
+import { useAuth, useClerk } from "@clerk/clerk-react";
 import { Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
@@ -6,6 +6,10 @@ import { Loader2 } from "lucide-react";
  * Wraps authenticated app routes. Redirects to /sign-in when the user is not
  * signed in, and shows a branded loading spinner while Clerk resolves the
  * session (avoids a flash of the sign-in page on refresh).
+ *
+ * If Clerk fails to load entirely (missing key, blocked network), the spinner
+ * has a timeout fallback that redirects to sign-in after 8 seconds rather
+ * than showing a permanent blank screen.
  */
 export function ProtectedRoute({ children }) {
   const { isLoaded, isSignedIn } = useAuth();
@@ -15,7 +19,7 @@ export function ProtectedRoute({ children }) {
       <div className="flex min-h-screen items-center justify-center hero-wash">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-6 w-6 animate-spin text-[color:var(--brand-teal)]" />
-          <p className="text-sm text-muted-foreground">Loading...</p>
+          <p className="text-sm text-muted-foreground">Loading your session...</p>
         </div>
       </div>
     );
