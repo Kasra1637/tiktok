@@ -357,10 +357,15 @@ async def generate_customized_preview(
     customization_prompt: str,
     session_id: str,
 ) -> bytes:
-    """Generate a customized face-swapped preview with Gemini 3.1 Flash Image.
+    """Generate a customized face-swapped preview with the configured face-swap model.
 
-    The source photo is cropped to the identity region before being sent as the
-    first reference; the original scene remains the second reference.
+    The scene reference is sent FIRST and framed as "the image to edit"; the
+    cropped identity photo is sent SECOND as "the new face to use". This edit-
+    style framing (vs. a generic "generate me in this scene" instruction) is
+    what actually gets these image-editing models to replace the face instead
+    of just reproducing the scene reference's original face — see git history
+    (bcbf905, fe70420, 48c1082) for prior instances of this same failure mode
+    across different underlying models.
     """
     if mode == "custom" and customization_prompt.strip():
         scene_instruction = (
@@ -379,15 +384,18 @@ async def generate_customized_preview(
     payload = {
         "model": FACE_SWAP_MODEL,
         "prompt": (
-            "I am a content creator. Reference image 1 is my headshot. Reference image 2 is a scene. "
-            "Generate a new image of me (from reference 1) placed into the exact scene from reference 2. "
-            "Keep my face, hair, and features from reference 1. Match the pose, outfit, background, "
-            "lighting, and camera angle from reference 2."
+            "Edit the first image. Replace ONLY the face and identity of the person shown in it with "
+            "the face of the person shown in the second image — matching that person's facial "
+            "structure, eyes, nose, lips, skin tone, and hair. "
+            "Keep everything else in the first image exactly as it is: the pose, body position, hand "
+            "gestures, clothing, background, lighting, camera angle, and any on-screen text. "
+            "The output must clearly show the face from the SECOND image — do not keep the face that "
+            "was originally in the first image."
             f"{scene_instruction}"
         ),
         "input_references": [
-            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{person_b64}"}},
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{ref_b64}"}},
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{person_b64}"}},
         ],
         "resolution": "2K",
         "aspect_ratio": "9:16",
@@ -410,8 +418,15 @@ async def generate_face_swap(
     """
     Standalone identity-preserving scene edit through OpenRouter's Images API.
 
-    The cropped source identity is reference 1 and the complete target scene is
-    reference 2. Gemini 3.1 Flash Image receives both references in one call.
+    The target scene is sent FIRST and framed as "the image to edit"; the
+    cropped source identity is sent SECOND as "the new face to use". Sending
+    the scene as reference 1 with a generic "generate me in this scene"
+    instruction (the previous approach) made these image-editing models treat
+    the scene reference as authoritative and reproduce it — including its
+    original face — largely ignoring the uploaded face. Framing this as a
+    direct, local edit of image 1 using image 2's face is what actually
+    swaps the identity. See git history (bcbf905, fe70420, 48c1082) for prior
+    instances of this same failure mode across different underlying models.
     """
     target_b64 = image_to_base64(target_image_path)
 
@@ -422,14 +437,17 @@ async def generate_face_swap(
     payload = {
         "model": FACE_SWAP_MODEL,
         "prompt": (
-            "I am a content creator. Reference image 1 is my headshot. Reference image 2 is a scene. "
-            "Generate a new image of me (from reference 1) placed into the exact scene from reference 2. "
-            "Keep my face, hair, and features from reference 1. Match the pose, outfit, background, "
-            "lighting, and camera angle from reference 2."
+            "Edit the first image. Replace ONLY the face and identity of the person shown in it with "
+            "the face of the person shown in the second image — matching that person's facial "
+            "structure, eyes, nose, lips, skin tone, and hair. "
+            "Keep everything else in the first image exactly as it is: the pose, body position, hand "
+            "gestures, clothing, background, lighting, camera angle, and any on-screen text. "
+            "The output must clearly show the face from the SECOND image — do not keep the face that "
+            "was originally in the first image."
         ),
         "input_references": [
-            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{source_b64}"}},
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{target_b64}"}},
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{source_b64}"}},
         ],
         "resolution": "2K",
         "aspect_ratio": "9:16",
