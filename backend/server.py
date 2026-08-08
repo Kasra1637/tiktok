@@ -1104,31 +1104,53 @@ async def analyze_video_hook(video_id: str, user_id: str = Depends(get_current_u
     tiktok_url = video["tiktok_url"]
     video_hash = pipeline.url_hash(tiktok_url)
 
-    try:
-        async with _ytdlp_semaphore:
-            video_path = await pipeline.download_video(tiktok_url, direct_video_url=video.get("direct_video_url", ""))
-    except Exception as e:
-        logger.error(f"Download failed for {tiktok_url}: {e}")
-        await _execute(
-            "UPDATE videos SET status = ?, error = ? WHERE id = ?",
-            ("failed", str(e)[:400], video_id),
-        )
-        raise HTTPException(
-            status_code=502,
-            detail=f"Failed to download the video. It may be private or removed. ({str(e)[:150]})",
-        )
+    # When MODAL_FRAME_EXTRACTOR_URL is configured, the memory-heavy
+    # download + ffmpeg decode runs on Modal (dedicated RAM) instead of on
+    # this Render instance — see pipeline.py module docstring for context.
+    if pipeline.MODAL_FRAME_EXTRACTOR_URL:
+        try:
+            video_path, frame_paths = await pipeline.download_and_extract_via_modal(
+                tiktok_url,
+                direct_video_url=video.get("direct_video_url", ""),
+                num_frames=FRAME_COUNT,
+                duration=HOOK_DURATION_SECONDS,
+            )
+        except Exception as e:
+            logger.error(f"Modal download+extract failed for {tiktok_url}: {e}")
+            await _execute(
+                "UPDATE videos SET status = ?, error = ? WHERE id = ?",
+                ("failed", str(e)[:400], video_id),
+            )
+            raise HTTPException(
+                status_code=502,
+                detail=f"Failed to download/extract the video. ({str(e)[:150]})",
+            )
+    else:
+        try:
+            async with _ytdlp_semaphore:
+                video_path = await pipeline.download_video(tiktok_url, direct_video_url=video.get("direct_video_url", ""))
+        except Exception as e:
+            logger.error(f"Download failed for {tiktok_url}: {e}")
+            await _execute(
+                "UPDATE videos SET status = ?, error = ? WHERE id = ?",
+                ("failed", str(e)[:400], video_id),
+            )
+            raise HTTPException(
+                status_code=502,
+                detail=f"Failed to download the video. It may be private or removed. ({str(e)[:150]})",
+            )
 
-    try:
-        frame_paths = await pipeline.extract_hook_frames(
-            video_path, num_frames=FRAME_COUNT, duration=HOOK_DURATION_SECONDS
-        )
-    except Exception as e:
-        logger.error(f"Frame extraction failed for {video_id}: {e}")
-        await _execute(
-            "UPDATE videos SET status = ?, error = ? WHERE id = ?",
-            ("failed", str(e)[:400], video_id),
-        )
-        raise HTTPException(status_code=500, detail=f"Failed to extract frames from the video. ({str(e)[:150]})")
+        try:
+            frame_paths = await pipeline.extract_hook_frames(
+                video_path, num_frames=FRAME_COUNT, duration=HOOK_DURATION_SECONDS
+            )
+        except Exception as e:
+            logger.error(f"Frame extraction failed for {video_id}: {e}")
+            await _execute(
+                "UPDATE videos SET status = ?, error = ? WHERE id = ?",
+                ("failed", str(e)[:400], video_id),
+            )
+            raise HTTPException(status_code=500, detail=f"Failed to extract frames from the video. ({str(e)[:150]})")
 
     frame_docs = build_frame_docs(video_hash, frame_paths)
 

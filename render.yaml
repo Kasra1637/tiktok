@@ -19,3 +19,7 @@ services:
         sync: false
       - key: TURSO_AUTH_TOKEN
         sync: false
+      - key: MODAL_FRAME_EXTRACTOR_URL
+        sync: false
+      - key: MODAL_SHARED_SECRET
+        sync: false

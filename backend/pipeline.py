@@ -2,11 +2,21 @@
 Core media pipeline: TikTok video metadata/download via yt-dlp and
 first-2-3-second frame extraction via ffmpeg. All subprocess calls are async
 so they never block the FastAPI event loop.
+
+MEMORY OFFLOADING (Modal): downloading a video + decoding frames is the most
+memory-hungry part of this app and can exceed Render free tier's 512MB RAM
+budget, causing OOM restarts. When MODAL_FRAME_EXTRACTOR_URL is set, that work
+is delegated to a Modal serverless function (see backend/modal_worker.py)
+which runs with its own dedicated RAM — this process only writes the bytes it
+gets back to disk. When unset, everything runs locally exactly as before
+(this is the default for local development).
 """
 import asyncio
+import base64
 import hashlib
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -14,6 +24,9 @@ from typing import Optional
 import httpx
 
 logger = logging.getLogger(__name__)
+
+MODAL_FRAME_EXTRACTOR_URL = os.environ.get("MODAL_FRAME_EXTRACTOR_URL", "").strip()
+MODAL_SHARED_SECRET = os.environ.get("MODAL_SHARED_SECRET", "").strip()
 
 STORAGE_DIR = Path(__file__).parent / "storage"
 VIDEOS_DIR = STORAGE_DIR / "videos"
@@ -164,6 +177,50 @@ async def fetch_creator_videos(handle: str, limit: int = 10) -> list:
             "creator_total_likes": 0,
         })
     return results
+
+
+async def download_and_extract_via_modal(
+    tiktok_url: str, direct_video_url: str = "", num_frames: int = 8, duration: float = 3.0
+) -> tuple:
+    """
+    Delegate video download + frame extraction to the Modal worker so the
+    memory-heavy work never runs on this (RAM-constrained) process.
+
+    Returns (video_path, frame_paths) written to the normal local
+    directories, so every caller downstream works unmodified.
+    """
+    vhash = url_hash(tiktok_url)
+    video_path = VIDEOS_DIR / f"{vhash}.mp4"
+    frame_dir = FRAMES_DIR / vhash
+    frame_dir.mkdir(parents=True, exist_ok=True)
+
+    async with httpx.AsyncClient(timeout=170) as client:
+        resp = await client.post(
+            MODAL_FRAME_EXTRACTOR_URL,
+            json={
+                "tiktok_url": tiktok_url,
+                "direct_video_url": direct_video_url,
+                "num_frames": num_frames,
+                "duration": duration,
+                "secret": MODAL_SHARED_SECRET,
+            },
+        )
+        if resp.status_code >= 400:
+            raise RuntimeError(f"Modal frame extraction failed (HTTP {resp.status_code}): {resp.text[:400]}")
+        data = resp.json()
+
+    video_bytes = base64.b64decode(data["video_b64"])
+    video_path.write_bytes(video_bytes)
+
+    frame_paths = []
+    for frame in data["frames"]:
+        fp = frame_dir / frame["filename"]
+        fp.write_bytes(base64.b64decode(frame["data_b64"]))
+        frame_paths.append(fp)
+
+    if not frame_paths:
+        raise RuntimeError("Modal returned no frames.")
+    return video_path, sorted(frame_paths)
 
 
 async def download_video(tiktok_url: str, direct_video_url: str = "") -> Path:
