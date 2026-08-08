@@ -72,7 +72,11 @@ PUBLIC_BASE_URL = (os.environ.get("PUBLIC_BASE_URL") or os.environ.get("RENDER_E
 TURSO_DATABASE_URL = os.environ.get("TURSO_DATABASE_URL", "").strip()
 TURSO_AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "").strip()
 
-_ytdlp_semaphore = asyncio.Semaphore(3)
+# Capped at 1 concurrent yt-dlp/ffmpeg job — each video download + frame
+# extraction can use 100-200MB+ of RAM, and this container only has 512MB
+# total (shared with Python/Uvicorn/the DB connection). Running these
+# serially avoids the OOM restarts seen when multiple analyses overlap.
+_ytdlp_semaphore = asyncio.Semaphore(1)
 
 
 # ---------------------------------------------------------------------------

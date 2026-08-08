@@ -176,22 +176,32 @@ async def download_video(tiktok_url: str, direct_video_url: str = "") -> Path:
     if out_path.exists() and out_path.stat().st_size > 0:
         return out_path
 
-    # Try direct video URL first (faster, no yt-dlp dependency)
+    # Try direct video URL first (faster, no yt-dlp dependency).
+    # Streamed to disk in chunks — `resp.content` would buffer the entire
+    # video in RAM at once, which is a meaningful chunk of a 512MB container's
+    # budget when several requests overlap.
     if direct_video_url:
         try:
             async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
-                resp = await client.get(direct_video_url, headers={
+                async with client.stream("GET", direct_video_url, headers={
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                     "Referer": "https://www.tiktok.com/",
-                })
-                if resp.status_code == 200 and len(resp.content) > 1000:
-                    with open(out_path, "wb") as f:
-                        f.write(resp.content)
-                    logger.info(f"Downloaded video via direct URL: {out_path} ({out_path.stat().st_size} bytes)")
-                    return out_path
-                else:
-                    logger.warning(f"Direct video URL returned status {resp.status_code} or too small, falling back to yt-dlp")
+                }) as resp:
+                    if resp.status_code == 200:
+                        total = 0
+                        with open(out_path, "wb") as f:
+                            async for chunk in resp.aiter_bytes(chunk_size=262144):
+                                f.write(chunk)
+                                total += len(chunk)
+                        if total > 1000:
+                            logger.info(f"Downloaded video via direct URL: {out_path} ({total} bytes)")
+                            return out_path
+                        out_path.unlink(missing_ok=True)
+                        logger.warning("Direct video URL returned too little data, falling back to yt-dlp")
+                    else:
+                        logger.warning(f"Direct video URL returned status {resp.status_code}, falling back to yt-dlp")
         except Exception as e:
+            out_path.unlink(missing_ok=True)
             logger.warning(f"Direct video download failed ({e}), falling back to yt-dlp")
 
     # Fallback: yt-dlp
