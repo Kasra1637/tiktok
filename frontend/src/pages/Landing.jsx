@@ -10,7 +10,7 @@ import {
   Sparkles, Search, Repeat2, Clapperboard, Globe, Save, Film,
   TrendingUp, ArrowRight, Zap, Target, Layers, Music2,
   Bookmark, FileText, BadgeAlert,
-  RotateCcw, Play, Check, Wand2,
+  RotateCcw, Check, Wand2,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 
@@ -164,64 +164,6 @@ function Aurora() {
           background: "radial-gradient(circle, rgba(129,140,248,0.12), transparent 70%)",
         }}
       />
-    </div>
-  );
-}
-
-/**
- * Abstract product preview: the four pipeline stages rendered as connected
- * panels. Deliberately built from markup rather than a screenshot so it
- * always matches the live theme and never goes stale.
- */
-function PipelinePreview() {
-  return (
-    <div className="border-gradient relative mx-auto mt-16 max-w-4xl rounded-3xl p-[1px]">
-      <div className="surface-glass relative overflow-hidden rounded-3xl p-4 sm:p-6">
-        {/* Fake window chrome */}
-        <div className="mb-5 flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-[color:var(--brand-coral)]/70" />
-          <span className="h-2.5 w-2.5 rounded-full bg-amber-400/60" />
-          <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/60" />
-          <span className="ml-3 font-mono text-[10px] text-muted-foreground">hookforge / pipeline</span>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-          {FLOW_STEPS.map((s, i) => (
-            <div
-              key={s.step}
-              className="group relative rounded-2xl border border-[color:var(--hairline)] bg-[color:var(--indigo-4)] p-3.5"
-            >
-              <div className="mb-3 flex items-center justify-between">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[color:var(--indigo-10)] text-[color:var(--brand-teal)]">
-                  <s.icon className="h-3.5 w-3.5" />
-                </span>
-                <span className="font-mono text-[10px] text-muted-foreground/60">0{s.step}</span>
-              </div>
-
-              {/* Skeleton "frame" — 9:16 to echo the vertical video format */}
-              <div className="relative mb-3 aspect-[9/16] overflow-hidden rounded-xl bg-gradient-to-b from-[color:var(--indigo-10)] to-transparent">
-                <div className="absolute inset-0 grid place-items-center">
-                  {i === 3 ? (
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[color:var(--brand-coral)] text-white shadow-[var(--glow-coral)]">
-                      <Play className="h-3.5 w-3.5" />
-                    </span>
-                  ) : (
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--indigo-25)] text-[color:var(--brand-teal)]">
-                      <s.icon className="h-3.5 w-3.5" />
-                    </span>
-                  )}
-                </div>
-                <div className="absolute bottom-2 left-2 right-2 space-y-1.5">
-                  <span className="block h-1.5 w-3/4 rounded-full bg-white/10" />
-                  <span className="block h-1.5 w-1/2 rounded-full bg-white/[0.07]" />
-                </div>
-              </div>
-
-              <p className="font-display text-xs font-semibold">{s.label}</p>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
@@ -495,7 +437,6 @@ export default function Landing() {
             </dl>
           </div>
 
-          <PipelinePreview />
         </div>
       </section>
 
