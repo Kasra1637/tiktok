@@ -180,23 +180,12 @@ function SidebarFooter({ collapsed }) {
 
       {/* Only shown when the window is tall enough that it isn't stealing
           room from the nav list (see the `tall` screen in tailwind.config). */}
-      <div className="hidden rounded-2xl border border-[color:var(--hairline)] bg-[color:var(--indigo-4)] p-3.5 tall:block">
-        <p className="font-display text-[13px] font-semibold leading-tight">Save once, reuse free</p>
-        <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-          Saved hook templates skip AI analysis on every future remix.
-        </p>
-        <Link
-          to="/templates"
-          className="mt-2.5 inline-flex items-center gap-1 text-[11px] font-semibold text-[color:var(--brand-teal)] transition-colors hover:text-[color:var(--brand-teal-dark)]"
-        >
-          Open library <ArrowUpRight className="h-3 w-3" />
-        </Link>
-      </div>
       <Link
         to="/"
-        className="block px-1 pt-3 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+        className="flex items-center gap-2.5 rounded-2xl border border-[color:var(--hairline)] bg-[color:var(--indigo-4)] p-3.5 transition-colors hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] tall:flex hidden"
       >
-        Product overview
+        <ArrowUpRight className="h-4 w-4 shrink-0 text-[color:var(--brand-teal)]" />
+        <span className="font-display text-[13px] font-semibold leading-tight">Product overview</span>
       </Link>
     </div>
   );
