@@ -724,11 +724,12 @@ def build_frame_docs(video_hash: str, frame_paths: list) -> list:
 
 async def _recover_missing_frame(relative_path: str) -> bool:
     """
-    Best-effort self-heal for a missing frame file. Only re-extracts from
-    an already-cached video file — does NOT re-download the video, which
-    would exceed Render free tier's 512MB RAM limit and cause an OOM crash.
+    Best-effort self-heal for a missing OR corrupted (0-byte) frame file.
+    Only re-extracts from an already-cached video file — does NOT re-download
+    the video, which would exceed Render free tier's 512MB RAM limit and
+    cause an OOM crash.
 
-    Returns True if recovery succeeded (the file exists now), False otherwise.
+    Returns True if recovery succeeded (a real, non-empty file exists now).
     """
     parts = relative_path.split("/")
     if len(parts) != 3 or parts[0] != "frames":
@@ -748,7 +749,8 @@ async def _recover_missing_frame(relative_path: str) -> bool:
         logger.warning(f"Frame recovery failed for hash {video_hash}: {e}")
         return False
 
-    return (pipeline.FRAMES_DIR / video_hash / parts[2]).is_file()
+    target = pipeline.FRAMES_DIR / video_hash / parts[2]
+    return target.is_file() and target.stat().st_size > 1024
 
 
 def filter_ads(videos: list, include_ads: bool) -> list:
@@ -3340,22 +3342,23 @@ app.include_router(api_router)
 @app.get("/api/media/frames/{video_hash}/{filename}")
 async def serve_frame(video_hash: str, filename: str):
     """
-    Serve an extracted frame if it exists on disk. On Render's free tier
-    (512MB RAM), re-downloading + re-extracting videos causes OOM crashes,
-    so we only serve what's already cached — frames from the current session.
-    After a redeploy, frames are gone until the user re-analyzes the video.
+    Serve an extracted frame if it exists on disk AND is a real, non-empty
+    image. On Render's free tier (512MB RAM), re-downloading + re-extracting
+    full videos causes OOM crashes, so recovery only re-extracts from a video
+    already on disk — it never re-downloads.
     """
     frame_path = pipeline.FRAMES_DIR / video_hash / filename
-    if frame_path.is_file():
+    if frame_path.is_file() and frame_path.stat().st_size > 1024:
         return FileResponse(str(frame_path), media_type="image/jpeg")
 
-    # Try lightweight recovery: if the video file is already on disk (no download needed),
-    # just re-extract frames from it. This avoids the OOM from yt-dlp download.
+    # File is missing OR corrupted/empty (e.g. ffmpeg was killed mid-extraction
+    # under memory pressure). Try lightweight recovery: re-extract from the
+    # video if it's already on disk — never re-download (that's what OOMs).
     video_path = pipeline.VIDEOS_DIR / f"{video_hash}.mp4"
     if video_path.is_file():
         try:
             await pipeline.extract_hook_frames(video_path, num_frames=8, duration=3.0)
-            if frame_path.is_file():
+            if frame_path.is_file() and frame_path.stat().st_size > 1024:
                 return FileResponse(str(frame_path), media_type="image/jpeg")
         except Exception as e:
             logger.warning(f"Frame re-extraction failed for {video_hash}: {e}")

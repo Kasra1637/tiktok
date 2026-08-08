@@ -202,23 +202,52 @@ async def download_video(tiktok_url: str, direct_video_url: str = "") -> Path:
     return out_path
 
 
+def _valid_frame_files(paths: list) -> list:
+    """
+    Filter out empty/corrupted frame files. ffmpeg can be killed mid-extraction
+    under memory pressure (common on low-RAM hosts), leaving behind 0-byte or
+    truncated .jpg files. Reusing those silently produces blank filmstrip
+    thumbnails forever, since the cache-hit check only counted file names.
+    """
+    valid = []
+    for p in paths:
+        try:
+            if p.stat().st_size > 1024:  # a real JPEG frame is always >1KB
+                valid.append(p)
+        except OSError:
+            continue
+    return valid
+
+
 async def extract_hook_frames(video_path: Path, num_frames: int = 8, duration: float = 3.0) -> list:
     vhash = video_path.stem
     frame_dir = FRAMES_DIR / vhash
     frame_dir.mkdir(parents=True, exist_ok=True)
-    existing = sorted(frame_dir.glob("frame_*.jpg"))
+    existing = _valid_frame_files(sorted(frame_dir.glob("frame_*.jpg")))
     if len(existing) >= num_frames:
         return existing[:num_frames]
+
+    # Clear out any stale/corrupted partial extraction before retrying —
+    # otherwise ffmpeg's "-y" only overwrites files it regenerates, and any
+    # leftover bad file beyond the new count would stick around.
+    for stale in frame_dir.glob("frame_*.jpg"):
+        stale.unlink(missing_ok=True)
+
     fps = num_frames / duration
     cmd = [
         "ffmpeg", "-y", "-i", str(video_path),
         "-t", str(duration),
+        # Downscale before frame extraction and cap threads so ffmpeg doesn't
+        # spike memory on low-RAM hosts (e.g. Render's 512MB free tier) —
+        # a runaway/OOM-killed ffmpeg process is what produced empty frame
+        # files in the first place.
+        "-threads", "1",
         "-vf", f"fps={fps},scale=480:-1",
         "-q:v", "3",
         str(frame_dir / "frame_%03d.jpg"),
     ]
     rc, out, err = await run_cmd(cmd, timeout=60)
-    frames = sorted(frame_dir.glob("frame_*.jpg"))
+    frames = _valid_frame_files(sorted(frame_dir.glob("frame_*.jpg")))
     if rc != 0 or not frames:
         raise RuntimeError(f"Frame extraction failed: {err.strip()[-400:] or 'unknown error'}")
     return frames
