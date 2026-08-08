@@ -1,5 +1,4 @@
-import { Card } from "./ui/card";
-import { Smile, Hand, Scissors, Type, Volume2, ListChecks, Lightbulb } from "lucide-react";
+import { Smile, Hand, Scissors, Type, Volume2, ListChecks, Lightbulb, Check } from "lucide-react";
 
 const SECTIONS = [
   { key: "facial_expressions", label: "Facial Expressions & Micro-expressions", icon: Smile },
@@ -12,48 +11,65 @@ const SECTIONS = [
 export function HookBreakdown({ analysis }) {
   return (
     <div className="space-y-4">
-      <Card className="p-4 md:p-5 rounded-2xl border-border bg-[color:var(--card)] shadow-[var(--shadow-soft)]">
-        <div className="flex items-start gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[color:rgba(244,63,94,0.15)] text-[color:#9F1239] shrink-0">
-            <Lightbulb className="h-4 w-4" />
-          </span>
-          <div>
-            <h3 className="text-sm font-semibold text-muted-foreground">Hook Summary</h3>
-            <p className="text-base leading-relaxed mt-1">{analysis.hook_summary}</p>
+      {/* Hook summary — the headline takeaway, given coral emphasis so it
+          reads as the conclusion rather than one card among six. */}
+      <div className="border-gradient relative rounded-2xl p-[1px]">
+        <div className="surface-solid relative overflow-hidden rounded-2xl p-5">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background: "radial-gradient(500px circle at 0% 0%, rgba(254,44,85,0.07), transparent 60%)",
+            }}
+          />
+          <div className="relative flex items-start gap-3.5">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--coral-25)] bg-[color:var(--coral-12)] text-[color:var(--brand-coral)]">
+              <Lightbulb className="h-[18px] w-[18px]" />
+            </span>
+            <div className="min-w-0">
+              <span className="eyebrow">Hook summary</span>
+              <p className="mt-1.5 text-base leading-relaxed">{analysis.hook_summary}</p>
+            </div>
           </div>
         </div>
-      </Card>
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {SECTIONS.map(({ key, label, icon: Icon }) => (
-          <Card
+          <div
             key={key}
-            className="p-4 md:p-5 rounded-2xl border-border bg-[color:var(--card)] shadow-[var(--shadow-soft)] hover:shadow-[var(--shadow-tight)] transition-shadow"
+            className="surface surface-interactive rounded-2xl p-5"
             data-testid={`hook-section-${key}`}
           >
-            <div className="flex items-center gap-2 mb-2">
-              <Icon className="h-4 w-4 text-[color:var(--brand-teal)]" />
-              <h4 className="text-sm font-semibold">{label}</h4>
+            <div className="mb-2.5 flex items-center gap-2.5">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
+                <Icon className="h-4 w-4" />
+              </span>
+              <h4 className="font-display text-sm font-semibold leading-snug">{label}</h4>
             </div>
-            <p className="text-sm text-muted-foreground leading-relaxed">{analysis[key]}</p>
-          </Card>
+            <p className="text-sm leading-relaxed text-muted-foreground">{analysis[key]}</p>
+          </div>
         ))}
       </div>
 
-      <Card className="p-4 md:p-5 rounded-2xl border-border bg-[color:var(--card)] shadow-[var(--shadow-soft)]">
-        <div className="flex items-center gap-2 mb-3">
-          <ListChecks className="h-4 w-4 text-[color:var(--brand-teal)]" />
-          <h4 className="text-sm font-semibold">Replicable Mechanics Checklist</h4>
+      <div className="surface rounded-2xl p-5">
+        <div className="mb-3.5 flex items-center gap-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
+            <ListChecks className="h-4 w-4" />
+          </span>
+          <h4 className="font-display text-sm font-semibold">Replicable Mechanics Checklist</h4>
         </div>
-        <ul className="space-y-2">
+        <ul className="space-y-2.5">
           {(analysis.replicable_mechanics || []).map((m, i) => (
-            <li key={i} className="flex items-start gap-2 text-sm">
-              <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[color:var(--brand-teal)] shrink-0" />
-              <span>{m}</span>
+            <li key={i} className="flex items-start gap-2.5 text-sm">
+              <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[color:var(--indigo-15)] text-[color:var(--brand-teal)]">
+                <Check className="h-2.5 w-2.5" />
+              </span>
+              <span className="leading-relaxed">{m}</span>
             </li>
           ))}
         </ul>
-      </Card>
+      </div>
     </div>
   );
 }

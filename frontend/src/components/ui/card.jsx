@@ -2,10 +2,17 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+// Base card surface: soft-translucent card color, a light hairline border, a
+// layered shadow, and a 1px inner top highlight so the edge catches light.
+// Call sites can still override any of this via className (twMerge wins).
 const Card = React.forwardRef(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("rounded-xl border bg-card text-card-foreground shadow", className)}
+    className={cn(
+      "rounded-2xl border border-[color:var(--hairline)] bg-card/70 text-card-foreground shadow-[var(--shadow-md)] backdrop-blur-sm",
+      "[box-shadow:var(--shadow-md),inset_0_1px_0_0_rgba(255,255,255,0.04)]",
+      className
+    )}
     {...props} />
 ))
 Card.displayName = "Card"
@@ -21,7 +28,7 @@ CardHeader.displayName = "CardHeader"
 const CardTitle = React.forwardRef(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("font-semibold leading-none tracking-tight", className)}
+    className={cn("font-display font-semibold leading-none tracking-tight", className)}
     {...props} />
 ))
 CardTitle.displayName = "CardTitle"

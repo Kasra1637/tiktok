@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { AspectRatio } from "./ui/aspect-ratio";
 import { Button } from "./ui/button";
-import { Eye, Heart, MessageCircle, Sparkles, Flame, ExternalLink, Music2, BadgeAlert } from "lucide-react";
+import { Eye, Heart, MessageCircle, Sparkles, Flame, ExternalLink, Music2, BadgeAlert, ImageOff } from "lucide-react";
 
 function formatCount(n) {
   if (!n) return "0";
@@ -14,9 +13,9 @@ function formatCount(n) {
 }
 
 function getViralityStyle(score) {
-  if (score >= 70) return "bg-[color:var(--brand-coral)] text-white";
-  if (score >= 40) return "bg-[color:var(--brand-teal)] text-white";
-  return "bg-secondary text-muted-foreground";
+  if (score >= 70) return "bg-[color:var(--brand-coral)] text-white border-transparent";
+  if (score >= 40) return "bg-[color:var(--brand-teal)] text-white border-transparent";
+  return "bg-black/70 text-white border-transparent";
 }
 
 function proxyThumb(url) {
@@ -29,8 +28,15 @@ function Thumbnail({ url, alt }) {
   const [src, setSrc] = useState(url); // Try direct URL first
   const [failed, setFailed] = useState(false);
 
-  if (!url) return null;
-  if (failed) return null;
+  if (!url || failed) {
+    // Placeholder instead of an empty box, so the card keeps its shape when a
+    // TikTok CDN cover can't be loaded at all.
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-gradient-to-b from-secondary/60 to-muted">
+        <ImageOff className="h-6 w-6 text-muted-foreground/50" />
+      </div>
+    );
+  }
 
   return (
     <img
@@ -38,7 +44,7 @@ function Thumbnail({ url, alt }) {
       alt={alt}
       loading="lazy"
       referrerPolicy="no-referrer"
-      className="h-full w-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+      className="h-full w-full object-cover transition-transform duration-500 ease-out-expo group-hover:scale-[1.06]"
       onError={() => {
         if (src === url) {
           // Direct load failed — try proxy
@@ -52,6 +58,18 @@ function Thumbnail({ url, alt }) {
   );
 }
 
+function StatPill({ icon: Icon, value, testId }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[10.5px] font-semibold text-white backdrop-blur-sm"
+      data-testid={testId}
+    >
+      <Icon className="h-3 w-3" />
+      {value}
+    </span>
+  );
+}
+
 export function VideoCard({ video, onAnalyze, analyzing, index = 0 }) {
   const reduceMotion = useReducedMotion();
 
@@ -61,91 +79,103 @@ export function VideoCard({ video, onAnalyze, analyzing, index = 0 }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.24, ease: "easeOut", delay: Math.min(index * 0.04, 0.32) }}
     >
-    <Card
-      className="group overflow-hidden bg-card border border-border rounded-2xl hover:border-[color:rgba(129,140,248,0.35)] hover:-translate-y-0.5 transition-all duration-200"
-      data-testid="video-card"
-    >
-      <AspectRatio ratio={9 / 16} className="bg-muted overflow-hidden relative">
-        <Thumbnail url={video.thumbnail_url} alt={video.title} />
-        {/* TikTok link overlay */}
-        {video.tiktok_url && (
-          <a
-            href={video.tiktok_url}
-            target="_blank"
-            rel="noreferrer"
-            className={`absolute left-2 flex items-center gap-1 rounded-full bg-black/70 text-white px-2 py-1 text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/90 ${
-              video.is_ad ? "top-9" : "top-2"
-            }`}
-            onClick={(e) => e.stopPropagation()}
-            data-testid="video-tiktok-link"
-          >
-            <ExternalLink className="h-2.5 w-2.5" /> TikTok
-          </a>
-        )}
-        {video.is_ad && (
-          <div className="absolute top-2 left-2">
-            <Badge
-              className="bg-amber-500/90 border-none text-white gap-1 text-[10px] font-semibold shadow-md"
-              data-testid="sponsored-badge"
-              title="This post is flagged as an ad or sponsored content"
-            >
-              <BadgeAlert className="h-2.5 w-2.5" />
-              Sponsored
-            </Badge>
-          </div>
-        )}
-        {video.virality_score != null && (
-          <div className="absolute top-2 right-2">
-            <Badge
-              className={`border-none gap-1 text-xs font-semibold shadow-md ${getViralityStyle(video.virality_score)}`}
-              data-testid="virality-badge"
-            >
-              <Flame className="h-3 w-3" />
-              {Math.round(video.virality_score)}
-            </Badge>
-          </div>
-        )}
-        <div className="absolute bottom-2 left-2 right-2 flex items-center gap-1.5 text-[11px] text-white">
-          <Badge className="bg-black/70 border-none text-white gap-1" data-testid="video-card-view-count">
-            <Eye className="h-3 w-3" />
-            {formatCount(video.view_count)}
-          </Badge>
-          <Badge className="bg-black/70 border-none text-white gap-1" data-testid="video-card-like-count">
-            <Heart className="h-3 w-3" />
-            {formatCount(video.like_count)}
-          </Badge>
-          <Badge className="bg-black/70 border-none text-white gap-1" data-testid="video-card-comment-count">
-            <MessageCircle className="h-3 w-3" />
-            {formatCount(video.comment_count)}
-          </Badge>
-        </div>
-      </AspectRatio>
-      <div className="p-4 space-y-2">
-        <p className="text-sm font-medium leading-snug line-clamp-2 min-h-[2.5rem]">{video.title}</p>
-        <p className="text-xs text-muted-foreground">@{video.creator}</p>
-        {(video.song_title || video.song_artist) && (
+      <div
+        className="surface surface-interactive group flex flex-col overflow-hidden rounded-2xl"
+        data-testid="video-card"
+      >
+        <AspectRatio ratio={9 / 16} className="relative overflow-hidden bg-muted">
+          <Thumbnail url={video.thumbnail_url} alt={video.title} />
+
+          {/* Bottom scrim so the stat pills stay legible on bright thumbnails */}
           <div
-            className="flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground max-w-full"
-            data-testid="video-card-sound-badge"
-            title={`${video.song_title || "Original sound"}${video.song_artist ? ` — ${video.song_artist}` : ""}`}
-          >
-            <Music2 className="h-3 w-3 shrink-0 text-[color:var(--brand-teal)]" />
-            <span className="truncate">
-              {video.song_title || "Original sound"}
-              {video.song_artist ? ` · ${video.song_artist}` : ""}
-            </span>
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/80 via-black/25 to-transparent"
+          />
+
+          {/* TikTok link overlay */}
+          {video.tiktok_url && (
+            <a
+              href={video.tiktok_url}
+              target="_blank"
+              rel="noreferrer"
+              className={`absolute left-2.5 flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-semibold text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/90 group-hover:opacity-100 ${
+                video.is_ad ? "top-10" : "top-2.5"
+              }`}
+              onClick={(e) => e.stopPropagation()}
+              data-testid="video-tiktok-link"
+            >
+              <ExternalLink className="h-2.5 w-2.5" /> TikTok
+            </a>
+          )}
+
+          {video.is_ad && (
+            <div className="absolute left-2.5 top-2.5">
+              <Badge
+                className="border-transparent bg-amber-500/90 text-[10px] font-semibold text-white shadow-[var(--shadow-sm)]"
+                data-testid="sponsored-badge"
+                title="This post is flagged as an ad or sponsored content"
+              >
+                <BadgeAlert className="h-2.5 w-2.5" />
+                Sponsored
+              </Badge>
+            </div>
+          )}
+
+          {video.virality_score != null && (
+            <div className="absolute right-2.5 top-2.5">
+              <Badge
+                className={`text-xs font-bold shadow-[var(--shadow-sm)] backdrop-blur-sm ${getViralityStyle(video.virality_score)}`}
+                data-testid="virality-badge"
+              >
+                <Flame className="h-3 w-3" />
+                {Math.round(video.virality_score)}
+              </Badge>
+            </div>
+          )}
+
+          <div className="absolute inset-x-2.5 bottom-2.5 flex flex-wrap items-center gap-1.5">
+            <StatPill icon={Eye} value={formatCount(video.view_count)} testId="video-card-view-count" />
+            <StatPill icon={Heart} value={formatCount(video.like_count)} testId="video-card-like-count" />
+            <StatPill icon={MessageCircle} value={formatCount(video.comment_count)} testId="video-card-comment-count" />
           </div>
-        )}
-        <Button
-          onClick={() => onAnalyze(video)}
-          disabled={analyzing}
-          className="w-full bg-[color:var(--brand-coral)] hover:bg-[#e0264c] text-white gap-2"
-          data-testid="analyze-hook-button"
-        >
-          <Sparkles className={`h-4 w-4 ${analyzing ? "animate-pulse" : ""}`} /> {analyzing ? "Analyzing..." : "Analyze Hook"}
-        </Button>
+        </AspectRatio>
+
+        <div className="flex flex-1 flex-col gap-2.5 p-4">
+          <p className="line-clamp-2 min-h-[2.5rem] text-sm font-medium leading-snug">{video.title}</p>
+
+          <div className="flex items-center gap-2">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[color:var(--indigo-10)] text-[9px] font-bold uppercase text-[color:var(--brand-teal)]">
+              {(video.creator || "?").charAt(0)}
+            </span>
+            <p className="truncate text-xs text-muted-foreground">@{video.creator}</p>
+          </div>
+
+          {(video.song_title || video.song_artist) && (
+            <div
+              className="flex max-w-full items-center gap-1.5 rounded-full border border-[color:var(--hairline)] bg-secondary/40 px-2.5 py-1 text-[11px] text-muted-foreground"
+              data-testid="video-card-sound-badge"
+              title={`${video.song_title || "Original sound"}${video.song_artist ? ` — ${video.song_artist}` : ""}`}
+            >
+              <Music2 className="h-3 w-3 shrink-0 text-[color:var(--brand-teal)]" />
+              <span className="truncate">
+                {video.song_title || "Original sound"}
+                {video.song_artist ? ` · ${video.song_artist}` : ""}
+              </span>
+            </div>
+          )}
+
+          <Button
+            onClick={() => onAnalyze(video)}
+            disabled={analyzing}
+            variant="brand"
+            className="mt-auto w-full"
+            data-testid="analyze-hook-button"
+          >
+            <Sparkles className={`h-4 w-4 ${analyzing ? "animate-pulse" : ""}`} />{" "}
+            {analyzing ? "Analyzing..." : "Analyze Hook"}
+          </Button>
+        </div>
       </div>
-    </Card>
     </motion.div>
   );
 }

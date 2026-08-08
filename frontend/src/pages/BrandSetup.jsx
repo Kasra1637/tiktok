@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
+import PageHeader from "../components/PageHeader";
 import { api, getErrorMessage } from "../lib/api";
-import { Globe, Sparkles, Briefcase, Loader2, Save, CheckCircle2, AlertTriangle, ArrowRight } from "lucide-react";
+import { Globe, Sparkles, Briefcase, Loader2, Save, CheckCircle2, AlertTriangle, ArrowRight, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 
 const EMPTY_FORM = {
@@ -31,6 +31,17 @@ function textToProducts(text) {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+/** Labelled form field wrapper — keeps every input in this page aligned. */
+function Field({ label, hint, children }) {
+  return (
+    <div className="space-y-1.5">
+      <label className="block text-sm font-medium">{label}</label>
+      {children}
+      {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
+    </div>
+  );
 }
 
 export default function BrandSetup() {
@@ -137,59 +148,101 @@ export default function BrandSetup() {
   };
 
   return (
-    <div className="space-y-4 max-w-3xl mx-auto">
-      <div>
-        <h1 className="font-display text-2xl font-semibold tracking-tight">Your Brand</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          This profile powers brand-adapted scripts across the Content Remixer.
-        </p>
+    <div className="mx-auto max-w-3xl space-y-6">
+      <PageHeader
+        icon={Briefcase}
+        eyebrow="Setup"
+        title="Your Brand"
+        description="This profile powers brand-adapted scripts across the Content Remixer."
+        actions={
+          brand?.id ? (
+            <Badge variant="indigo" className="px-3 py-1">
+              <CheckCircle2 className="h-3 w-3" /> Profile active
+            </Badge>
+          ) : null
+        }
+      />
+
+      {/* ---------- Autofill from website ---------- */}
+      <div className="border-gradient relative rounded-2xl p-[1px]">
+        <div className="surface-solid relative overflow-hidden rounded-2xl p-5">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background: "radial-gradient(500px circle at 100% 0%, rgba(99,102,241,0.10), transparent 60%)",
+            }}
+          />
+          <form onSubmit={handleAnalyzeUrl} className="relative space-y-3" data-testid="brand-url-card">
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
+                <Wand2 className="h-[18px] w-[18px]" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="font-display text-base font-semibold">Autofill from your website</h2>
+                <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">
+                  AI reads your site and extracts your name, niche, audience, and tone &mdash; so you
+                  don&apos;t fill out the form below from scratch.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="relative flex-1">
+                <Globe className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={websiteUrl}
+                  onChange={(e) => setWebsiteUrl(e.target.value)}
+                  placeholder="https://yourbrand.com"
+                  data-testid="brand-url-input"
+                  className="pl-10"
+                />
+              </div>
+              <Button
+                type="submit"
+                disabled={analyzing}
+                variant="brand"
+                className="shrink-0"
+                data-testid="analyze-brand-url-button"
+              >
+                {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {analyzing ? "Analyzing..." : "Analyze"}
+              </Button>
+            </div>
+          </form>
+        </div>
       </div>
 
-      <form onSubmit={handleAnalyzeUrl} className="flex items-center gap-2" data-testid="brand-url-card">
-        <Globe className="h-4 w-4 text-[color:var(--brand-teal)] shrink-0" />
-        <Input
-          value={websiteUrl}
-          onChange={(e) => setWebsiteUrl(e.target.value)}
-          placeholder="https://yourbrand.com"
-          data-testid="brand-url-input"
-          className="flex-1"
-        />
-        <Button
-          type="submit"
-          disabled={analyzing}
-          className="gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#e0264c] text-white shrink-0"
-          data-testid="analyze-brand-url-button"
-        >
-          {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          {analyzing ? "Analyzing..." : "Analyze"}
-        </Button>
-      </form>
-
       {analyzeError && (
-        <Alert variant="destructive" className="rounded-2xl" data-testid="brand-analyze-error-alert">
+        <Alert variant="destructive" data-testid="brand-analyze-error-alert">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Could not analyze this URL</AlertTitle>
           <AlertDescription>{analyzeError}</AlertDescription>
         </Alert>
       )}
 
-      <Card className="p-4 md:p-5 rounded-2xl border-border space-y-4" data-testid="brand-manual-card">
-        <div className="flex items-center justify-between">
-          <h3 className="font-display font-semibold text-sm">Brand Details</h3>
+      {/* ---------- Manual details ---------- */}
+      <div className="surface space-y-5 rounded-2xl p-5 md:p-6" data-testid="brand-manual-card">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <span className="eyebrow block">Profile</span>
+            <h2 className="font-display text-base font-semibold">Brand Details</h2>
+          </div>
           {brand?.id && (
-            <Badge variant="secondary" className="rounded-full text-[10px]">
+            <Badge variant="secondary" className="shrink-0 text-[10px]">
               {brand.website_url ? "From website + edits" : "Manually entered"}
             </Badge>
           )}
         </div>
 
         {loadingActive ? (
-          <p className="text-sm text-muted-foreground">Loading your brand profile...</p>
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading your brand profile...
+          </p>
         ) : (
           <>
             {!brand && (
-              <Alert className="rounded-2xl" data-testid="no-brand-profile-alert">
-                <AlertTriangle className="h-4 w-4" />
+              <Alert data-testid="no-brand-profile-alert">
+                <AlertTriangle className="h-4 w-4 text-[color:var(--brand-teal)]" />
                 <AlertTitle>No brand profile yet</AlertTitle>
                 <AlertDescription>
                   Analyze your website above to fill this in automatically, or just type your
@@ -197,90 +250,91 @@ export default function BrandSetup() {
                 </AlertDescription>
               </Alert>
             )}
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Brand name</label>
-              <Input
-                value={form.brand_name}
-                onChange={handleFieldChange("brand_name")}
-                placeholder="e.g. Voxel — Voice Journaling App"
-                data-testid="brand-name-field"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Description</label>
-              <Textarea
-                value={form.brand_description}
-                onChange={handleFieldChange("brand_description")}
-                placeholder="What do you create or offer?"
-                className="min-h-[90px]"
-                data-testid="brand-description-field"
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-sm font-medium">Niche</label>
-                <Input
-                  value={form.niche}
-                  onChange={handleFieldChange("niche")}
-                  placeholder="e.g. Fitness supplements"
-                  data-testid="brand-niche-field"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium">Target audience</label>
-                <Input
-                  value={form.target_audience}
-                  onChange={handleFieldChange("target_audience")}
-                  placeholder="e.g. Busy professionals 25-40"
-                  data-testid="brand-audience-field"
-                />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Products / services</label>
-              <Input
-                value={form.products_services}
-                onChange={handleFieldChange("products_services")}
-                placeholder="Comma-separated, e.g. Protein powder, pre-workout"
-                data-testid="brand-products-field"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Ideal Customer</label>
-              <Textarea
-                value={form.ideal_customer_profile}
-                onChange={handleFieldChange("ideal_customer_profile")}
-                placeholder="Demographics, interests, pain points..."
-                className="min-h-[80px]"
-                data-testid="brand-ideal-customer-field"
-              />
-            </div>
 
-            <div className="space-y-1">
-              <label className="text-sm font-medium">What Sets You Apart</label>
-              <Textarea
-                value={form.differentiation}
-                onChange={handleFieldChange("differentiation")}
-                placeholder="Unique strengths, selling propositions, signature angles..."
-                className="min-h-[80px]"
-                data-testid="brand-differentiation-field"
-              />
-            </div>
+            <div className="space-y-5">
+              <Field label="Brand name">
+                <Input
+                  value={form.brand_name}
+                  onChange={handleFieldChange("brand_name")}
+                  placeholder="e.g. Voxel — Voice Journaling App"
+                  data-testid="brand-name-field"
+                />
+              </Field>
 
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Tone / voice</label>
-              <Input
-                value={form.tone_voice}
-                onChange={handleFieldChange("tone_voice")}
-                placeholder="e.g. Playful, high-energy, no-nonsense"
-                data-testid="brand-tone-field"
-              />
+              <Field label="Description">
+                <Textarea
+                  value={form.brand_description}
+                  onChange={handleFieldChange("brand_description")}
+                  placeholder="What do you create or offer?"
+                  className="min-h-[90px]"
+                  data-testid="brand-description-field"
+                />
+              </Field>
+
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <Field label="Niche">
+                  <Input
+                    value={form.niche}
+                    onChange={handleFieldChange("niche")}
+                    placeholder="e.g. Fitness supplements"
+                    data-testid="brand-niche-field"
+                  />
+                </Field>
+                <Field label="Target audience">
+                  <Input
+                    value={form.target_audience}
+                    onChange={handleFieldChange("target_audience")}
+                    placeholder="e.g. Busy professionals 25-40"
+                    data-testid="brand-audience-field"
+                  />
+                </Field>
+              </div>
+
+              <Field label="Products / services" hint="Comma-separated — each becomes a separate entry.">
+                <Input
+                  value={form.products_services}
+                  onChange={handleFieldChange("products_services")}
+                  placeholder="Comma-separated, e.g. Protein powder, pre-workout"
+                  data-testid="brand-products-field"
+                />
+              </Field>
+
+              <Field label="Ideal Customer">
+                <Textarea
+                  value={form.ideal_customer_profile}
+                  onChange={handleFieldChange("ideal_customer_profile")}
+                  placeholder="Demographics, interests, pain points..."
+                  className="min-h-[80px]"
+                  data-testid="brand-ideal-customer-field"
+                />
+              </Field>
+
+              <Field label="What Sets You Apart">
+                <Textarea
+                  value={form.differentiation}
+                  onChange={handleFieldChange("differentiation")}
+                  placeholder="Unique strengths, selling propositions, signature angles..."
+                  className="min-h-[80px]"
+                  data-testid="brand-differentiation-field"
+                />
+              </Field>
+
+              <Field label="Tone / voice">
+                <Input
+                  value={form.tone_voice}
+                  onChange={handleFieldChange("tone_voice")}
+                  placeholder="e.g. Playful, high-energy, no-nonsense"
+                  data-testid="brand-tone-field"
+                />
+              </Field>
             </div>
 
             <Button
               onClick={handleSave}
               disabled={saving}
-              className="w-full gap-2 rounded-xl bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white"
+              variant="accent"
+              size="lg"
+              className="w-full"
               data-testid="save-brand-button"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -288,17 +342,17 @@ export default function BrandSetup() {
             </Button>
 
             {brand?.id && (
-              <Alert className="rounded-2xl border-[color:var(--brand-teal)] bg-[color:rgba(99,102,241,0.06)]">
+              <Alert className="border-[color:var(--indigo-15)] bg-[color:var(--indigo-6)]">
                 <CheckCircle2 className="h-4 w-4 text-[color:var(--brand-teal)]" />
                 <AlertTitle>Ready for the Content Remixer</AlertTitle>
-                <AlertDescription className="flex flex-col sm:flex-row sm:items-center gap-2 justify-between">
-                  <span>
+                <AlertDescription className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                  <span className="text-muted-foreground">
                     This profile will auto-fill and inform brand-adapted scripts anywhere you generate a video.
                   </span>
                   <Button
                     variant="secondary"
                     size="sm"
-                    className="gap-1.5 rounded-lg shrink-0"
+                    className="shrink-0 gap-1.5"
                     onClick={() => navigate("/discover")}
                     data-testid="find-video-to-remix-button"
                   >
@@ -309,7 +363,7 @@ export default function BrandSetup() {
             )}
           </>
         )}
-      </Card>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
-import { Card } from "../components/ui/card";
+import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
@@ -10,18 +9,19 @@ import { Badge } from "../components/ui/badge";
 import { Switch } from "../components/ui/switch";
 import GenerationProgress from "../components/GenerationProgress";
 import RemixChat from "../components/RemixChat";
+import PageHeader from "../components/PageHeader";
 import { api, mediaUrl, getErrorMessage } from "../lib/api";
-import { ArrowLeft, Wand2, Clapperboard, AlertTriangle, RotateCcw, Clock, Film, Camera, Eye, Users, MapPinned, Megaphone, CheckCircle2, Sparkles, Briefcase, MessageSquareText, Music2 } from "lucide-react";
+import { ArrowLeft, Wand2, Clapperboard, AlertTriangle, RotateCcw, Clock, Film, Camera, Eye, Users, MapPinned, Megaphone, CheckCircle2, Sparkles, Music2, ImageOff } from "lucide-react";
 import { toast } from "sonner";
 
 function RemixChatEmptyState() {
   return (
-    <div className="text-center px-6 max-w-sm mx-auto" data-testid="remix-chat-empty-state">
-      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[color:rgba(99,102,241,0.10)] text-[color:var(--brand-teal)] mx-auto mb-3">
+    <div className="mx-auto max-w-sm px-6 text-center" data-testid="remix-chat-empty-state">
+      <span className="mx-auto mb-3.5 flex h-12 w-12 items-center justify-center rounded-2xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
         <Sparkles className="h-5 w-5" />
       </span>
-      <p className="text-sm font-medium">Tell us how you want to remix this hook</p>
-      <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+      <p className="font-display text-sm font-semibold">Tell us how you want to remix this hook</p>
+      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
         e.g. "Remix this for my dating app that gives feedback on profile screenshots" — we'll check the
         audience fit against the original video and ask a couple of quick questions before writing your video
         prompt.
@@ -41,6 +41,19 @@ const BREAKDOWN_SECTIONS = [
   { key: "brand_narrative", label: "Brand Narrative", icon: Megaphone },
   { key: "audio_recommendation", label: "Audio", icon: Music2 },
 ];
+
+/** Labelled form field wrapper, matching BrandSetup's field rhythm. */
+function Field({ label, icon: Icon, children }) {
+  return (
+    <div className="space-y-1.5">
+      <label className="flex items-center gap-1.5 text-sm font-medium">
+        {Icon && <Icon className="h-3.5 w-3.5 text-muted-foreground" />}
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
 
 export default function GenerateVideo() {
   const { customizationId } = useParams();
@@ -220,13 +233,13 @@ export default function GenerateVideo() {
 
   if (loadError) {
     return (
-      <div className="max-w-2xl mx-auto space-y-4">
-        <Alert variant="destructive" className="rounded-2xl">
+      <div className="mx-auto max-w-2xl space-y-4">
+        <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Could not load this customization</AlertTitle>
           <AlertDescription>{loadError}</AlertDescription>
         </Alert>
-        <Button onClick={() => navigate("/discover")} className="gap-1.5">
+        <Button onClick={() => navigate("/discover")} variant="accent" className="gap-1.5">
           <ArrowLeft className="h-4 w-4" /> Back to feed
         </Button>
       </div>
@@ -235,98 +248,113 @@ export default function GenerateVideo() {
 
   if (!customization) {
     return (
-      <div className="space-y-4" data-testid="generate-video-loading">
-        <div className="space-y-2">
-          <Skeleton className="h-8 w-64" />
-          <Skeleton className="h-4 w-full max-w-2xl" />
+      <div className="space-y-5" data-testid="generate-video-loading">
+        <div className="space-y-2.5">
+          <Skeleton className="h-9 w-72 rounded-xl" />
+          <Skeleton className="h-4 w-full max-w-2xl rounded-md" />
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6">
-          <Card className="p-4 md:p-5 rounded-2xl border-border space-y-3 h-fit">
+        <Skeleton className="h-[420px] w-full rounded-2xl" />
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[420px_1fr]">
+          <div className="surface h-fit space-y-3 rounded-2xl p-5">
             <div className="flex gap-2">
               {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="w-16 h-20 rounded-lg shrink-0" />
+                <Skeleton key={i} className="h-20 w-16 shrink-0 rounded-lg" />
               ))}
             </div>
-            <Skeleton className="h-9 w-full rounded-md" />
-            <Skeleton className="h-9 w-full rounded-md" />
-            <Skeleton className="h-24 w-full rounded-md" />
             <Skeleton className="h-10 w-full rounded-xl" />
-          </Card>
+            <Skeleton className="h-10 w-full rounded-xl" />
+            <Skeleton className="h-24 w-full rounded-xl" />
+            <Skeleton className="h-10 w-full rounded-xl" />
+          </div>
           <Skeleton className="h-64 rounded-2xl" />
         </div>
       </div>
     );
   }
 
+  const hasSound = !!(sourceVideo?.song_title || sourceVideo?.song_artist);
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <Button
         variant="ghost"
         size="sm"
         onClick={() => navigate(`/customize/${customization.video_id}`)}
-        className="gap-1 -ml-2"
+        className="-ml-2 gap-1 text-muted-foreground"
         data-testid="back-to-customize-button"
       >
         <ArrowLeft className="h-3.5 w-3.5" /> Back
       </Button>
 
-      <div>
-        <h1 className="font-display text-2xl md:text-3xl font-semibold tracking-tight flex items-center gap-2">
-          <Sparkles className="h-6 w-6 text-[color:var(--brand-coral)]" /> Content Remixer
-        </h1>
-        <p className="text-muted-foreground mt-1 max-w-2xl">
-          Remix this viral hook for your brand with AI-powered scriptwriting.
-        </p>
+      <PageHeader
+        icon={Sparkles}
+        eyebrow="Remix"
+        title="Content Remixer"
+        description="Remix this viral hook for your brand with AI-powered scriptwriting."
+        actions={
+          !brandLoading && brandProfile ? (
+            <Badge variant="indigo" className="px-3 py-1">
+              <CheckCircle2 className="h-3 w-3" /> {brandProfile.brand_name || "Brand profile"} loaded
+            </Badge>
+          ) : null
+        }
+      />
+
+      {/* ---------- Conversational brief ---------- */}
+      <div className="h-[420px] md:h-[480px]">
+        <RemixChat
+          messages={remixMessages}
+          onSend={handleSendRemixMessage}
+          sending={remixSending}
+          readyToGenerate={remixReady}
+          emptyState={<RemixChatEmptyState />}
+        />
       </div>
 
-      <div className="space-y-1.5">
-        <span className="text-xs font-medium flex items-center gap-1.5 text-muted-foreground">
-          <MessageSquareText className="h-3.5 w-3.5 text-[color:var(--brand-teal)]" /> Chat with AI
-        </span>
-        <div className="h-[420px] md:h-[480px]">
-          <RemixChat
-            messages={remixMessages}
-            onSend={handleSendRemixMessage}
-            sending={remixSending}
-            readyToGenerate={remixReady}
-            emptyState={<RemixChatEmptyState />}
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-4">
-        <Card className="p-4 md:p-5 rounded-2xl border-border space-y-3 h-fit">
-          <div className="flex gap-2 overflow-x-auto pb-1" data-testid="reference-images-row">
-            {(customization.generated_images || []).map((img) => (
-              <img
-                key={img.id}
-                src={mediaUrl(img.image_url)}
-                alt="Face-swapped reference"
-                className="w-16 h-20 object-cover rounded-lg border border-border shrink-0"
-              />
-            ))}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[420px_1fr]">
+        {/* ---------- Left: the brief form ---------- */}
+        <div className="surface h-fit space-y-5 rounded-2xl p-5">
+          <div>
+            <span className="eyebrow block">Reference frames</span>
+            <div className="mt-2 flex gap-2 overflow-x-auto pb-1" data-testid="reference-images-row">
+              {(customization.generated_images || []).length > 0 ? (
+                (customization.generated_images || []).map((img) => (
+                  <img
+                    key={img.id}
+                    src={mediaUrl(img.image_url)}
+                    alt="Face-swapped reference"
+                    className="h-20 w-16 shrink-0 rounded-lg border border-[color:var(--hairline)] object-cover"
+                  />
+                ))
+              ) : (
+                <div className="flex h-20 w-16 shrink-0 items-center justify-center rounded-lg border border-dashed border-[color:var(--hairline-strong)]">
+                  <ImageOff className="h-4 w-4 text-muted-foreground/50" />
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Brand name</label>
+          <div className="h-px bg-border/60" />
+
+          <Field label="Brand name">
             <Input
               value={brandName}
               onChange={(e) => setBrandName(e.target.value)}
               placeholder="e.g. Voxel — Voice Journaling App"
               data-testid="brand-name-input"
             />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Brand goal</label>
+          </Field>
+
+          <Field label="Brand goal">
             <Input
               value={brandGoal}
               onChange={(e) => setBrandGoal(e.target.value)}
               placeholder="e.g. Drive app installs"
               data-testid="brand-goal-input"
             />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Brand details</label>
+          </Field>
+
+          <Field label="Brand details">
             <Textarea
               value={brandDetails}
               onChange={(e) => setBrandDetails(e.target.value)}
@@ -334,11 +362,9 @@ export default function GenerateVideo() {
               className="min-h-[90px]"
               data-testid="brand-details-textarea"
             />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5" /> Target duration (seconds, max 30)
-            </label>
+          </Field>
+
+          <Field label="Target duration (seconds, max 30)" icon={Clock}>
             <Input
               type="number"
               min={5}
@@ -347,20 +373,23 @@ export default function GenerateVideo() {
               onChange={(e) => setDuration(Math.max(5, Math.min(30, Number(e.target.value) || 30)))}
               data-testid="duration-input"
             />
-          </div>
+          </Field>
 
-          {(sourceVideo?.song_title || sourceVideo?.song_artist) ? (
+          {hasSound ? (
             <div
-              className="flex items-center justify-between gap-3 rounded-xl border border-border bg-secondary/60 px-3 py-2.5"
+              className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 px-3 py-2.5"
               data-testid="use-original-sound-toggle-row"
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[color:rgba(13,148,136,0.12)] text-[color:var(--brand-teal)] shrink-0">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
                   <Music2 className="h-3.5 w-3.5" />
                 </span>
                 <div className="min-w-0">
                   <p className="text-sm font-medium leading-tight">Use original sound</p>
-                  <p className="text-[11px] text-muted-foreground truncate" title={`${sourceVideo.song_title || ""} ${sourceVideo.song_artist ? `— ${sourceVideo.song_artist}` : ""}`}>
+                  <p
+                    className="truncate text-[11px] text-muted-foreground"
+                    title={`${sourceVideo.song_title || ""} ${sourceVideo.song_artist ? `— ${sourceVideo.song_artist}` : ""}`}
+                  >
                     {sourceVideo.song_title || "Untitled sound"}
                     {sourceVideo.song_artist ? ` — ${sourceVideo.song_artist}` : ""}
                   </p>
@@ -374,57 +403,69 @@ export default function GenerateVideo() {
             </div>
           ) : null}
 
-          {brandProfile ? (
-            <Button
-              onClick={handleRemixForBrand}
-              disabled={generatingPrompt}
-              className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#e0264c] text-white"
-              data-testid="remix-for-brand-button"
-            >
-              <Sparkles className="h-4 w-4" />
-              {generatingPrompt ? "Remixing..." : `Remix this hook for ${brandProfile.brand_name || "your brand"}`}
-            </Button>
-          ) : (
-            <Button
-              onClick={handleGeneratePrompt}
-              disabled={generatingPrompt}
-              className="w-full gap-2 rounded-xl bg-[color:var(--brand-coral)] hover:bg-[#e0264c] text-white"
-              data-testid="generate-prompt-button"
-            >
-              <Wand2 className="h-4 w-4" /> {generatingPrompt ? "Writing prompt..." : "Generate Video Prompt"}
-            </Button>
-          )}
-          {brandProfile && (
-            <Button
-              onClick={handleGeneratePrompt}
-              disabled={generatingPrompt}
-              variant="secondary"
-              className="w-full gap-2 rounded-xl"
-              data-testid="generate-prompt-manual-button"
-            >
-              <Wand2 className="h-4 w-4" /> {generatingPrompt ? "Writing prompt..." : "Generate with manual fields instead"}
-            </Button>
-          )}
-        </Card>
+          <div className="space-y-2">
+            {brandProfile ? (
+              <Button
+                onClick={handleRemixForBrand}
+                disabled={generatingPrompt}
+                variant="brand"
+                className="w-full"
+                data-testid="remix-for-brand-button"
+              >
+                <Sparkles className="h-4 w-4" />
+                {generatingPrompt ? "Remixing..." : `Remix this hook for ${brandProfile.brand_name || "your brand"}`}
+              </Button>
+            ) : (
+              <Button
+                onClick={handleGeneratePrompt}
+                disabled={generatingPrompt}
+                variant="brand"
+                className="w-full"
+                data-testid="generate-prompt-button"
+              >
+                <Wand2 className="h-4 w-4" /> {generatingPrompt ? "Writing prompt..." : "Generate Video Prompt"}
+              </Button>
+            )}
+            {brandProfile && (
+              <Button
+                onClick={handleGeneratePrompt}
+                disabled={generatingPrompt}
+                variant="secondary"
+                className="w-full"
+                data-testid="generate-prompt-manual-button"
+              >
+                <Wand2 className="h-4 w-4" /> {generatingPrompt ? "Writing prompt..." : "Generate with manual fields instead"}
+              </Button>
+            )}
+          </div>
+        </div>
 
+        {/* ---------- Right: the generated prompt ---------- */}
         <div className="space-y-4">
           {generatingPrompt && (
-            <Card className="p-6 rounded-2xl border-border">
-              <h3 className="font-display font-semibold mb-3 flex items-center gap-2">
-                <Clapperboard className="h-4 w-4" /> Writing your video prompt...
-              </h3>
+            <div className="surface rounded-2xl p-6">
+              <div className="mb-5 flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
+                  <Clapperboard className="h-[18px] w-[18px]" />
+                </span>
+                <div>
+                  <h3 className="font-display font-semibold">Writing your video prompt...</h3>
+                  <p className="text-xs text-muted-foreground">Adapting the hook's mechanics to your brand</p>
+                </div>
+              </div>
               <GenerationProgress stages={PROMPT_STAGES} active={true} />
-            </Card>
+            </div>
           )}
 
           {promptError && (
-            <Alert variant="destructive" className="rounded-2xl" data-testid="prompt-error-alert">
+            <Alert variant="destructive" data-testid="prompt-error-alert">
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Prompt generation failed</AlertTitle>
-              <AlertDescription className="space-y-2">
+              <AlertDescription className="space-y-2.5">
                 <p>{promptError}</p>
                 <Button
                   size="sm"
+                  variant="secondary"
                   onClick={usingRemix ? handleRemixForBrand : handleGeneratePrompt}
                   className="gap-1.5"
                   data-testid="retry-prompt-button"
@@ -437,38 +478,37 @@ export default function GenerateVideo() {
 
           {job && !generatingPrompt && (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3" data-testid="prompt-breakdown">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2" data-testid="prompt-breakdown">
                 {BREAKDOWN_SECTIONS.map(({ key, label, icon: Icon }) => (
-                  <Card key={key} className="p-4 rounded-2xl border-border">
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <Icon className="h-4 w-4 text-[color:var(--brand-teal)]" />
-                      <h4 className="text-sm font-semibold">{label}</h4>
+                  <div key={key} className="surface surface-interactive rounded-2xl p-4">
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
+                        <Icon className="h-3.5 w-3.5" />
+                      </span>
+                      <h4 className="font-display text-sm font-semibold">{label}</h4>
                     </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed line-clamp-4">
+                    <p className="line-clamp-4 text-xs leading-relaxed text-muted-foreground">
                       {job.prompt_breakdown?.[key]}
                     </p>
-                  </Card>
+                  </div>
                 ))}
               </div>
 
-              <Card className="p-4 md:p-5 rounded-2xl border-border space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold">Full video prompt (editable)</h4>
-                  <div className="flex items-center gap-1.5">
+              <div className="surface space-y-3 rounded-2xl p-5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="font-display text-sm font-semibold">Full video prompt (editable)</h4>
+                  <div className="flex flex-wrap items-center gap-1.5">
                     {usingRemix && (
-                      <Badge className="rounded-full text-[10px] bg-[color:var(--brand-coral)] text-white border-transparent">
+                      <Badge variant="coral" className="text-[10px]">
                         Content Remix
                       </Badge>
                     )}
-                    {useOriginalSound && (sourceVideo?.song_title || sourceVideo?.song_artist) && (
-                      <Badge
-                        className="rounded-full text-[10px] gap-1 bg-[color:var(--brand-teal)] text-white border-transparent"
-                        data-testid="using-original-sound-badge"
-                      >
+                    {useOriginalSound && hasSound && (
+                      <Badge variant="indigo" className="text-[10px]" data-testid="using-original-sound-badge">
                         <Music2 className="h-2.5 w-2.5" /> Original sound
                       </Badge>
                     )}
-                    <Badge variant="secondary" className="rounded-full text-[10px]">
+                    <Badge variant="secondary" className="text-[10px]">
                       ~{job.target_duration_seconds}s
                     </Badge>
                   </div>
@@ -476,44 +516,57 @@ export default function GenerateVideo() {
                 <Textarea
                   value={editedPrompt}
                   onChange={(e) => setEditedPrompt(e.target.value)}
-                  className="min-h-[180px] font-mono text-xs"
+                  className="min-h-[180px] font-mono text-xs leading-relaxed"
                   data-testid="full-prompt-textarea"
                 />
-                {useOriginalSound && (sourceVideo?.song_title || sourceVideo?.song_artist) && (
-                  <Alert className="rounded-xl border-[color:var(--brand-teal)] bg-[color:rgba(13,148,136,0.06)]" data-testid="original-sound-reminder">
+                {useOriginalSound && hasSound && (
+                  <Alert
+                    className="border-[color:var(--indigo-15)] bg-[color:var(--indigo-6)]"
+                    data-testid="original-sound-reminder"
+                  >
                     <Music2 className="h-3.5 w-3.5 text-[color:var(--brand-teal)]" />
-                    <AlertDescription className="text-xs">
+                    <AlertDescription className="text-xs text-muted-foreground">
                       This prompt is written for the original sound "{sourceVideo.song_title || "Untitled sound"}"
                       {sourceVideo.song_artist ? ` by ${sourceVideo.song_artist}` : ""} playing underneath. Since AI
                       video generation can't embed licensed audio directly, add this sound from{" "}
-                      <a href={sourceVideo.tiktok_url} target="_blank" rel="noreferrer" className="underline font-medium">
+                      <a
+                        href={sourceVideo.tiktok_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-medium text-[color:var(--brand-teal)] underline"
+                      >
                         the original TikTok
                       </a>{" "}
                       when you post your remix.
                     </AlertDescription>
                   </Alert>
                 )}
-              </Card>
+              </div>
 
               {!videoJob ? (
                 <Button
                   onClick={handleGenerateVideo}
                   disabled={submittingVideo}
-                  className="w-full gap-2 rounded-xl bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white"
+                  variant="accent"
+                  size="lg"
+                  className="w-full"
                   data-testid="generate-video-button"
                 >
                   <Clapperboard className="h-4 w-4" /> {submittingVideo ? "Saving brief..." : "Generate Video"}
                 </Button>
               ) : (
-                <Alert className="rounded-2xl border-[color:var(--brand-teal)] bg-[color:rgba(13,148,136,0.06)]" data-testid="video-brief-ready-alert">
+                <Alert
+                  className="border-[color:var(--indigo-15)] bg-[color:var(--indigo-6)]"
+                  data-testid="video-brief-ready-alert"
+                >
                   <CheckCircle2 className="h-4 w-4 text-[color:var(--brand-teal)]" />
                   <AlertTitle>Video brief ready</AlertTitle>
-                  <AlertDescription>
+                  <AlertDescription className="text-muted-foreground">
                     Your face-swapped reference image(s), prompt, and target duration ({videoJob.target_duration_seconds}s)
                     are saved and ready to send to a video-generation provider. Actual video rendering will go live once
                     a provider (e.g. Runway, Kling, Luma) is connected — this brief is saved to your History in the
                     meantime.
-                    {useOriginalSound && (sourceVideo?.song_title || sourceVideo?.song_artist) && (
+                    {useOriginalSound && hasSound && (
                       <>
                         {" "}Remember to add the original sound "{sourceVideo.song_title || "Untitled sound"}"
                         {sourceVideo.song_artist ? ` by ${sourceVideo.song_artist}` : ""} when you post — this is

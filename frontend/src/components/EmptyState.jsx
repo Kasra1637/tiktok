@@ -1,5 +1,4 @@
 import { motion, useReducedMotion } from "framer-motion";
-import { Card } from "./ui/card";
 
 export function EmptyState({ icon: Icon, title, description, action }) {
   const reduceMotion = useReducedMotion();
@@ -10,21 +9,34 @@ export function EmptyState({ icon: Icon, title, description, action }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.28, ease: "easeOut" }}
     >
-      <Card className="flex flex-col items-center justify-center text-center gap-3 p-10 rounded-2xl border-dashed border-2 border-border bg-card/50">
-        {Icon && (
-          <motion.span
-            initial={reduceMotion ? { scale: 1 } : { scale: 0.85 }}
-            animate={{ scale: 1 }}
-            transition={{ duration: 0.3, ease: "easeOut", delay: 0.05 }}
-            className="flex h-12 w-12 items-center justify-center rounded-full bg-[color:rgba(99,102,241,0.10)] text-[color:var(--brand-teal)]"
-          >
-            <Icon className="h-6 w-6" />
-          </motion.span>
-        )}
-        <h3 className="font-display text-lg font-semibold">{title}</h3>
-        {description && <p className="text-sm text-muted-foreground max-w-md">{description}</p>}
-        {action}
-      </Card>
+      <div className="relative overflow-hidden rounded-3xl border border-dashed border-[color:var(--hairline-strong)] bg-card/40 px-6 py-14 text-center backdrop-blur-sm">
+        {/* Soft indigo pool behind the icon keeps the dashed box from reading
+            as an error state. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 h-40"
+          style={{
+            background: "radial-gradient(400px circle at 50% 0%, rgba(99,102,241,0.10), transparent 70%)",
+          }}
+        />
+        <div className="relative flex flex-col items-center justify-center gap-3.5">
+          {Icon && (
+            <motion.span
+              initial={reduceMotion ? { scale: 1 } : { scale: 0.85 }}
+              animate={{ scale: 1 }}
+              transition={{ duration: 0.3, ease: "easeOut", delay: 0.05 }}
+              className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)] shadow-[var(--shadow-md)]"
+            >
+              <Icon className="h-6 w-6" />
+            </motion.span>
+          )}
+          <h3 className="font-display text-lg font-semibold tracking-tight">{title}</h3>
+          {description && (
+            <p className="max-w-md text-sm leading-relaxed text-muted-foreground">{description}</p>
+          )}
+          {action && <div className="mt-1.5">{action}</div>}
+        </div>
+      </div>
     </motion.div>
   );
 }

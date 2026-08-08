@@ -1,12 +1,14 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import * as LucideIcons from "lucide-react";
-import { Compass, Search, SlidersHorizontal, X, BadgeAlert } from "lucide-react";
+import { Compass, Search, SlidersHorizontal, X, BadgeAlert, Loader2, RotateCcw } from "lucide-react";
 import { Skeleton } from "../components/ui/skeleton";
-import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
+import { Button } from "../components/ui/button";
 import VideoCard from "../components/VideoCard";
 import EmptyState from "../components/EmptyState";
+import PageHeader from "../components/PageHeader";
+import Chip from "../components/Chip";
 import { api, getErrorMessage } from "../lib/api";
 import { toast } from "sonner";
 
@@ -63,16 +65,13 @@ function publishedAtMs(video) {
   return secs * 1000;
 }
 
-function FilterChip({ label, active, onClick }) {
+/** One labelled row of filter chips inside the expandable filter panel. */
+function FilterRow({ label, children }) {
   return (
-    <button
-      onClick={onClick}
-      className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-        active ? "bg-[color:var(--brand-teal)] text-white" : "bg-secondary text-muted-foreground hover:text-foreground"
-      }`}
-    >
-      {label}
-    </button>
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <span className="eyebrow w-16 shrink-0 text-[10px]">{label}</span>
+      <div className="flex flex-wrap gap-1.5">{children}</div>
+    </div>
   );
 }
 
@@ -309,169 +308,218 @@ export default function NicheFeed() {
     });
   }, [videos, searchResults, viewFilter, durationFilter, sortBy, recencyFilter, hideSponsored]);
 
+  const busy = loadingVideos || searchLoading;
+
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="font-display text-2xl md:text-3xl font-semibold tracking-tight">Discover Hooks</h1>
-        <p className="text-muted-foreground text-sm mt-0.5">Browse trending TikToks and analyze what makes their hooks work.</p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        icon={Compass}
+        eyebrow="Discover"
+        title="Discover Hooks"
+        description="Browse trending TikToks and analyze what makes their hooks work."
+      />
 
-      {/* Filter bar */}
-      <div className="rounded-xl border border-border bg-card/60 p-3 space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-          <form onSubmit={handleSearch} className="flex items-center gap-2 flex-1 min-w-0">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="Search by keyword or hashtag..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 rounded-lg bg-secondary h-9 text-sm"
-                data-testid="search-input"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={searchLoading || loadingVideos || (!searchQuery.trim() && !activeNiche)}
-              className="rounded-lg px-3 py-1.5 text-sm font-medium bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white disabled:opacity-50 transition-colors"
-              data-testid="search-button"
-              title={
-                searchQuery.trim()
-                  ? "Search TikTok for this keyword/hashtag"
-                  : activeNiche
-                  ? "Load videos for the selected niche"
-                  : "Select a niche or type a keyword first"
-              }
-            >
-              {searchLoading || loadingVideos ? "..." : "Search"}
-            </button>
-            {searchResults !== null && (
-              <button type="button" onClick={clearSearch} className="rounded-lg px-2.5 py-1.5 text-sm border border-border hover:bg-muted transition-colors">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </form>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="flex items-center gap-1 rounded-full border border-border p-0.5 bg-secondary" data-testid="mode-toggle">
-              {MODES.map((m) => (
-                <button
-                  key={m.key}
-                  onClick={() => handleSelectMode(m.key)}
-                  data-testid={`mode-${m.key}`}
-                  aria-pressed={mode === m.key}
-                  className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
-                    mode === m.key ? "bg-[color:var(--brand-teal)] text-white" : "text-muted-foreground hover:text-foreground"
-                  }`}
+      {/* ---------- Search + filter console ---------- */}
+      <div className="surface overflow-hidden rounded-2xl">
+        <div className="flex flex-col gap-3 p-4">
+          <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center">
+            <form onSubmit={handleSearch} className="flex min-w-0 flex-1 items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search by keyword or hashtag..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-10 pl-10 text-sm"
+                  data-testid="search-input"
+                />
+              </div>
+              <Button
+                type="submit"
+                variant="accent"
+                disabled={busy || (!searchQuery.trim() && !activeNiche)}
+                className="shrink-0 px-5"
+                data-testid="search-button"
+                title={
+                  searchQuery.trim()
+                    ? "Search TikTok for this keyword/hashtag"
+                    : activeNiche
+                    ? "Load videos for the selected niche"
+                    : "Select a niche or type a keyword first"
+                }
+              >
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                <span className="hidden sm:inline">{busy ? "Searching" : "Search"}</span>
+              </Button>
+              {searchResults !== null && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  onClick={clearSearch}
+                  title="Clear search results"
+                  aria-label="Clear search results"
+                  className="shrink-0"
                 >
-                  {m.label}
-                </button>
-              ))}
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </form>
+
+            <div className="flex items-center gap-2 lg:shrink-0">
+              {/* Segmented mode switch */}
+              <div
+                className="flex items-center gap-0.5 rounded-full border border-[color:var(--hairline)] bg-secondary/40 p-1"
+                data-testid="mode-toggle"
+              >
+                {MODES.map((m) => (
+                  <button
+                    key={m.key}
+                    onClick={() => handleSelectMode(m.key)}
+                    data-testid={`mode-${m.key}`}
+                    aria-pressed={mode === m.key}
+                    className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors duration-200 ${
+                      mode === m.key
+                        ? "bg-[color:var(--brand-teal)] text-white shadow-[var(--shadow-sm)]"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-[11px] font-semibold transition-colors duration-200 ${
+                  showFilters || activeFilterCount > 0
+                    ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]"
+                    : "border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--indigo-35)] hover:text-foreground"
+                }`}
+                data-testid="toggle-filters"
+                aria-expanded={showFilters}
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[color:var(--brand-teal)] px-1 text-[9px] font-bold text-white">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
             </div>
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium border transition-colors ${
-                showFilters || activeFilterCount > 0 ? "border-[color:var(--brand-teal)] text-[color:var(--brand-teal)]" : "border-border text-muted-foreground hover:text-foreground"
-              }`}
-              data-testid="toggle-filters"
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              Filters{activeFilterCount > 0 && ` (${activeFilterCount})`}
-            </button>
           </div>
+
+          {/* Niche chips — selecting one only sets the filter, it never fetches
+              on its own. Click Search to actually load videos for it. */}
+          <div className="flex flex-wrap gap-1.5" data-testid="niche-selector-tabs">
+            {niches.map((n) => {
+              const Icon = LucideIcons[n.icon] || Compass;
+              return (
+                <Chip
+                  key={n.key}
+                  icon={Icon}
+                  size="md"
+                  active={activeNiche === n.key}
+                  onClick={() => handleSelectNiche(n.key)}
+                  testId={`niche-chip-${n.key}`}
+                >
+                  {n.label}
+                </Chip>
+              );
+            })}
+          </div>
+
+          {activeNiche && !hasLoadedNiche && !loadingVideos && (
+            <p
+              className="flex items-center gap-1.5 rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-6)] px-3 py-2 text-[11px] text-muted-foreground"
+              data-testid="niche-pending-search-hint"
+            >
+              <Search className="h-3 w-3 shrink-0 text-[color:var(--brand-teal)]" /> Click{" "}
+              <span className="font-semibold text-foreground">Search</span> to load videos for this niche.
+            </p>
+          )}
         </div>
 
         {/* Expandable filters */}
         {showFilters && (
-          <div className="space-y-2.5 pt-1 border-t border-border">
-            {/* Sort */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide w-14 shrink-0">Sort</span>
-              {SORT_OPTIONS.map((s) => <FilterChip key={s.key} label={s.label} active={sortBy === s.key} onClick={() => setSortBy(s.key)} />)}
-            </div>
-            {/* Views */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide w-14 shrink-0">Views</span>
-              {VIEW_FILTERS.map((f) => <FilterChip key={f.key} label={f.label} active={viewFilter === f.key} onClick={() => setViewFilter(f.key)} />)}
-            </div>
-            {/* Duration */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide w-14 shrink-0">Length</span>
-              {DURATION_FILTERS.map((f) => <FilterChip key={f.key} label={f.label} active={durationFilter === f.key} onClick={() => setDurationFilter(f.key)} />)}
-            </div>
-            {/* Recency */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide w-14 shrink-0">When</span>
-              {RECENCY_FILTERS.map((f) => <FilterChip key={f.key} label={f.label} active={recencyFilter === f.key} onClick={() => setRecencyFilter(f.key)} />)}
-            </div>
-            {/* Sponsored content toggle */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide w-14 shrink-0">Ads</span>
-              <button
+          <div className="space-y-3 border-t border-[color:var(--hairline)] bg-[hsl(228_14%_6%_/_0.4)] p-4">
+            <FilterRow label="Sort">
+              {SORT_OPTIONS.map((s) => (
+                <Chip key={s.key} active={sortBy === s.key} onClick={() => setSortBy(s.key)}>
+                  {s.label}
+                </Chip>
+              ))}
+            </FilterRow>
+            <FilterRow label="Views">
+              {VIEW_FILTERS.map((f) => (
+                <Chip key={f.key} active={viewFilter === f.key} onClick={() => setViewFilter(f.key)}>
+                  {f.label}
+                </Chip>
+              ))}
+            </FilterRow>
+            <FilterRow label="Length">
+              {DURATION_FILTERS.map((f) => (
+                <Chip key={f.key} active={durationFilter === f.key} onClick={() => setDurationFilter(f.key)}>
+                  {f.label}
+                </Chip>
+              ))}
+            </FilterRow>
+            <FilterRow label="When">
+              {RECENCY_FILTERS.map((f) => (
+                <Chip key={f.key} active={recencyFilter === f.key} onClick={() => setRecencyFilter(f.key)}>
+                  {f.label}
+                </Chip>
+              ))}
+            </FilterRow>
+            <FilterRow label="Ads">
+              <Chip
+                icon={BadgeAlert}
+                active={hideSponsored}
                 onClick={() => setHideSponsored((prev) => !prev)}
-                data-testid="toggle-hide-sponsored"
-                aria-pressed={hideSponsored}
-                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                  hideSponsored ? "bg-[color:var(--brand-teal)] text-white" : "bg-secondary text-muted-foreground hover:text-foreground"
-                }`}
+                testId="toggle-hide-sponsored"
               >
-                <BadgeAlert className="h-3 w-3" />
                 {hideSponsored ? "Hiding sponsored" : "Showing sponsored"}
-              </button>
-            </div>
+              </Chip>
+            </FilterRow>
             {activeFilterCount > 0 && (
-              <button onClick={resetFilters} className="text-[11px] text-muted-foreground hover:text-foreground underline">Reset all filters</button>
+              <button
+                onClick={resetFilters}
+                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-[color:var(--brand-teal)]"
+              >
+                <RotateCcw className="h-3 w-3" /> Reset all filters
+              </button>
             )}
           </div>
         )}
-
-        {/* Niche chips — selecting one only sets the filter, it never fetches
-            on its own. Click Search to actually load videos for it. */}
-        <div className="flex flex-wrap gap-1.5" data-testid="niche-selector-tabs">
-          {niches.map((n) => {
-            const Icon = LucideIcons[n.icon] || Compass;
-            const isActive = activeNiche === n.key;
-            return (
-              <button
-                key={n.key}
-                onClick={() => handleSelectNiche(n.key)}
-                data-testid={`niche-chip-${n.key}`}
-                aria-pressed={isActive}
-                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium border transition-colors ${
-                  isActive
-                    ? "bg-[color:var(--brand-teal)] text-white border-transparent"
-                    : "bg-secondary border-border hover:border-[color:rgba(129,140,248,0.4)]"
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5" /> {n.label}
-              </button>
-            );
-          })}
-        </div>
-        {activeNiche && !hasLoadedNiche && !loadingVideos && (
-          <p className="text-[11px] text-muted-foreground flex items-center gap-1" data-testid="niche-pending-search-hint">
-            <Search className="h-3 w-3" /> Click <span className="font-semibold text-foreground">Search</span> to load videos for this niche.
-          </p>
-        )}
       </div>
 
-      {/* Results count */}
-      {!loadingVideos && !searchLoading && displayVideos.length > 0 && (
-        <p className="text-xs text-muted-foreground">{displayVideos.length} video{displayVideos.length !== 1 ? "s" : ""}</p>
+      {/* ---------- Results ---------- */}
+      {!busy && displayVideos.length > 0 && (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">
+            <span className="font-semibold text-foreground">{displayVideos.length}</span> video
+            {displayVideos.length !== 1 ? "s" : ""}
+            {searchResults !== null ? " for your search" : activeNiche ? ` in ${activeNiche}` : ""}
+          </p>
+          <span className="eyebrow hidden sm:block">
+            Sorted by {SORT_OPTIONS.find((s) => s.key === sortBy)?.label}
+          </span>
+        </div>
       )}
 
-      {loadingVideos || searchLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Card key={i} className="overflow-hidden rounded-2xl border-border">
-              <Skeleton className="h-[280px] w-full" />
-              <div className="p-4 space-y-2">
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-3 w-1/2" />
-                <Skeleton className="h-9 w-full rounded-xl" />
+      {busy ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="surface overflow-hidden rounded-2xl">
+              <Skeleton className="h-[280px] w-full rounded-none border-0" />
+              <div className="space-y-2.5 p-4">
+                <Skeleton className="h-4 w-3/4 rounded-md" />
+                <Skeleton className="h-3 w-1/2 rounded-md" />
+                <Skeleton className="h-10 w-full rounded-xl" />
               </div>
-            </Card>
+            </div>
           ))}
         </div>
       ) : !hasLoadedNiche && searchResults === null ? (
@@ -491,9 +539,19 @@ export default function NicheFeed() {
               ? "Try a different keyword or hashtag."
               : "This niche's creators may be temporarily unavailable. Try another niche or paste a TikTok URL above."
           }
+          action={
+            narrowingFilterCount > 0 ? (
+              <Button variant="outline" onClick={resetFilters} className="gap-1.5">
+                <RotateCcw className="h-3.5 w-3.5" /> Reset filters
+              </Button>
+            ) : null
+          }
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4" data-testid="video-feed-grid">
+        <div
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4"
+          data-testid="video-feed-grid"
+        >
           {displayVideos.map((v, i) => (
             <VideoCard
               key={v.tiktok_url}
