@@ -1360,6 +1360,43 @@ async def face_swap_status(job_id: str, user_id: str = Depends(get_current_user_
     return response
 
 
+@api_router.get("/face-swap/jobs")
+async def list_face_swap_jobs(user_id: str = Depends(get_current_user_id)):
+    """
+    Return the authenticated user's face-swap job history (most recent first).
+
+    This gives users access to their past generations so they can revisit
+    results without needing to remember individual job IDs.
+    """
+    rows = await _fetch_all(
+        """SELECT id, status, target_image_url, source_face_url,
+                  variants_requested, error, created_at, started_at, completed_at
+           FROM face_swap_jobs
+           WHERE user_id = ?
+           ORDER BY created_at DESC
+           LIMIT 50""",
+        (user_id,),
+    )
+    # Attach the result summary for completed jobs
+    enriched = []
+    for row in rows:
+        entry = dict(row)
+        entry["job_id"] = entry.pop("id", entry.get("job_id"))
+        if entry.get("status") == "completed":
+            full_job = await _fetch_one(
+                "SELECT result_json FROM face_swap_jobs WHERE id = ?", (entry["job_id"],)
+            )
+            if full_job and full_job.get("result_json"):
+                try:
+                    result_data = json.loads(full_job["result_json"])
+                    entry["generated_image_url"] = result_data.get("generated_image_url")
+                    entry["variants"] = result_data.get("variants", [])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        enriched.append(entry)
+    return enriched
+
+
 # ---------------------------------------------------------------------------
 # Face Swap → Video Generation (Two-Phase: Hook + Extend)
 #
@@ -3096,6 +3133,10 @@ async def update_brand(brand_id: str, payload: BrandProfileUpdateRequest, user_i
 # ---------------------------------------------------------------------------
 @api_router.get("/history")
 async def get_history(user_id: str = Depends(get_current_user_id)):
+    """
+    Return the user's combined activity: analyzed videos, face-swap jobs,
+    and saved hook templates — everything needed to show a full history page.
+    """
     videos = await _fetch_all(
         "SELECT * FROM videos WHERE status IN ('analyzed', 'failed') AND user_id = ? ORDER BY created_at DESC LIMIT 200",
         (user_id,)
@@ -3115,7 +3156,50 @@ async def get_history(user_id: str = Depends(get_current_user_id)):
             "customizations": customizations,
             "video_jobs": video_jobs,
         })
-    return results
+
+    # Face-swap job history (last 50 completed/failed, with result images)
+    face_swap_jobs = await _fetch_all(
+        """SELECT id, status, target_image_url, source_face_url, result_json,
+                  variants_requested, error, created_at, completed_at
+           FROM face_swap_jobs
+           WHERE user_id = ? AND status IN ('completed', 'failed')
+           ORDER BY created_at DESC LIMIT 50""",
+        (user_id,),
+    )
+    face_swap_history = []
+    for job in face_swap_jobs:
+        entry = {
+            "job_id": job["id"],
+            "status": job["status"],
+            "target_image_url": job.get("target_image_url"),
+            "source_face_url": job.get("source_face_url"),
+            "created_at": job.get("created_at"),
+            "completed_at": job.get("completed_at"),
+            "error": job.get("error"),
+        }
+        if job.get("result_json"):
+            try:
+                result_data = json.loads(job["result_json"])
+                entry["generated_image_url"] = result_data.get("generated_image_url")
+                entry["variants_count"] = len(result_data.get("variants", []))
+            except (json.JSONDecodeError, TypeError):
+                pass
+        face_swap_history.append(entry)
+
+    # Saved hook templates
+    templates = await _fetch_all(
+        """SELECT id, name, category, source_creator, source_title, thumbnail_url,
+                  effectiveness_score, times_used, last_used_at, created_at
+           FROM hook_templates WHERE user_id = ?
+           ORDER BY created_at DESC LIMIT 100""",
+        (user_id,),
+    )
+
+    return {
+        "videos": results,
+        "face_swap_jobs": face_swap_history,
+        "hook_templates": templates,
+    }
 
 
 @api_router.get("/")

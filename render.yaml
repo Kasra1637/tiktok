@@ -4,6 +4,10 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: free
+    disk:
+      name: hookforge-data
+      mountPath: /app/backend/storage
+      sizeGB: 1
     envVars:
       - key: OPENROUTER_API_KEY
         sync: false
@@ -11,3 +15,7 @@ services:
         sync: false
       - key: PORT
         value: "8080"
+      - key: CLERK_JWKS_URL
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
