@@ -1,10 +1,6 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { Input } from "./ui/input";
-import { Button } from "./ui/button";
-import { Loader2, Link2, Menu, Sparkles } from "lucide-react";
-import { toast } from "sonner";
-import { api, getErrorMessage } from "../lib/api";
+import { useLocation } from "react-router-dom";
+import { Menu, Sparkles } from "lucide-react";
 import Sidebar, { MobileSidebar } from "./Sidebar";
 
 const SIDEBAR_COLLAPSED_KEY = "hookforge_sidebar_collapsed";
@@ -12,8 +8,6 @@ const SIDEBAR_W = 264;
 const SIDEBAR_W_COLLAPSED = 76;
 
 export function AppShell({ children }) {
-  const [url, setUrl] = useState("");
-  const [loading, setLoading] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
     try {
@@ -22,23 +16,7 @@ export function AppShell({ children }) {
       return false;
     }
   });
-  const navigate = useNavigate();
   const location = useLocation();
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!url.trim()) return;
-    setLoading(true);
-    try {
-      const video = await api.ingestVideo(url.trim());
-      setUrl("");
-      navigate(`/analysis/${video.id}`);
-    } catch (err) {
-      toast.error(getErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
@@ -53,10 +31,9 @@ export function AppShell({ children }) {
   };
 
   // Publish the live sidebar width on :root so fixed-position chrome rendered
-  // OUTSIDE this subtree (the onboarding tour's help button, which lives in
-  // OnboardingProvider, an ancestor) can offset itself and not sit underneath
-  // the panel. Reset to 0 on unmount so the Landing/legal pages — which have
-  // no sidebar — get the full viewport back.
+  // OUTSIDE this subtree can offset itself and not sit underneath the panel.
+  // Reset to 0 on unmount so the Landing/legal pages — which have no sidebar —
+  // get the full viewport back.
   useEffect(() => {
     const width = collapsed ? SIDEBAR_W_COLLAPSED : SIDEBAR_W;
     document.documentElement.style.setProperty("--app-sidebar-w", `${width}px`);
@@ -117,26 +94,6 @@ export function AppShell({ children }) {
           {children}
         </main>
       </div>
-
-      {/* Hidden form that keeps the global URL-ingest functionality alive.
-          The sidebar or individual pages can trigger it; it just needs to
-          exist in the DOM so the data-testid contract is preserved for the
-          onboarding tour and for any automated tests that target it. */}
-      <form onSubmit={handleSubmit} className="sr-only" role="search" aria-hidden="true">
-        <label htmlFor="tiktok-url-input" className="sr-only">
-          Paste a TikTok video URL to analyze
-        </label>
-        <Input
-          id="tiktok-url-input"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          data-testid="tiktok-url-input"
-          tabIndex={-1}
-        />
-        <Button type="submit" disabled={loading} data-testid="tiktok-url-submit-button" tabIndex={-1}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Analyze"}
-        </Button>
-      </form>
 
       {/* Build stamp — visual proof of which deploy is live. */}
       <div

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import * as LucideIcons from "lucide-react";
-import { Compass, Search, SlidersHorizontal, X, BadgeAlert, Loader2, RotateCcw } from "lucide-react";
+import { Compass, Search, SlidersHorizontal, X, BadgeAlert, Loader2, RotateCcw, Link2, Sparkles } from "lucide-react";
 import { Skeleton } from "../components/ui/skeleton";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
@@ -81,6 +81,9 @@ export default function NicheFeed() {
   const [videos, setVideos] = useState([]);
   const [loadingVideos, setLoadingVideos] = useState(false);
   const [analyzingId, setAnalyzingId] = useState(null);
+  // Direct TikTok-URL ingest — analyze one specific video instead of browsing.
+  const [tiktokUrl, setTiktokUrl] = useState("");
+  const [ingesting, setIngesting] = useState(false);
   const [mode, setMode] = useState("trending");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState(null);
@@ -226,6 +229,31 @@ export default function NicheFeed() {
     }
   };
 
+  /**
+   * Ingest a TikTok URL the user pasted directly, then jump straight to its
+   * analysis page. Separate from the keyword search below: this takes one
+   * known video rather than discovering new ones.
+   */
+  const handleIngestUrl = async (e) => {
+    e.preventDefault();
+    const value = tiktokUrl.trim();
+    if (!value) return;
+    if (!value.includes("tiktok.com")) {
+      toast.error("That doesn't look like a TikTok URL. It should contain tiktok.com.");
+      return;
+    }
+    setIngesting(true);
+    try {
+      const video = await api.ingestVideo(value);
+      setTiktokUrl("");
+      navigate(`/analysis/${video.id}`);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setIngesting(false);
+    }
+  };
+
   const resetFilters = () => {
     setViewFilter("all");
     setDurationFilter("all");
@@ -317,6 +345,71 @@ export default function NicheFeed() {
         title="Discover Hooks"
         description="Browse trending TikToks and analyze what makes their hooks work."
       />
+
+      {/* ---------- Direct URL ingest ----------
+          For when the user already has a specific video in mind. Distinct
+          from the keyword search below, which discovers new videos. */}
+      <div className="border-gradient relative rounded-2xl p-[1px]">
+        <div className="surface-solid relative overflow-hidden rounded-2xl p-4 sm:p-5">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(500px circle at 100% 0%, rgba(254,44,85,0.08), transparent 60%)",
+            }}
+          />
+          <form onSubmit={handleIngestUrl} className="relative flex flex-col gap-3">
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--coral-25)] bg-[color:var(--coral-12)] text-[color:var(--brand-coral)]">
+                <Link2 className="h-[18px] w-[18px]" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="font-display text-base font-semibold">Analyze a specific video</h2>
+                <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">
+                  Paste any TikTok URL and we&apos;ll break down its hook frame by frame.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="relative flex-1">
+                <Link2 className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <label htmlFor="tiktok-url-input" className="sr-only">
+                  Paste a TikTok video URL to analyze
+                </label>
+                <Input
+                  id="tiktok-url-input"
+                  type="url"
+                  inputMode="url"
+                  value={tiktokUrl}
+                  onChange={(e) => setTiktokUrl(e.target.value)}
+                  placeholder="https://www.tiktok.com/@creator/video/123..."
+                  className="pl-10 text-sm"
+                  data-testid="tiktok-url-input"
+                />
+              </div>
+              <Button
+                type="submit"
+                variant="brand"
+                disabled={ingesting || !tiktokUrl.trim()}
+                className="shrink-0 px-6"
+                data-testid="tiktok-url-submit-button"
+              >
+                {ingesting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" /> Analyze Hook
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        </div>
+      </div>
 
       {/* ---------- Search + filter console ---------- */}
       <div className="surface overflow-hidden rounded-2xl">
