@@ -1511,19 +1511,27 @@ AUDIO_OFF_INSTRUCTION = (
     "sound or text-to-speech in TikTok's own editor after exporting this clip."
 )
 
+# Always appended to every video prompt — text overlays are added later in
+# TikTok's editor, not baked into the AI-generated clip.
+NO_TEXT_OVERLAY_INSTRUCTION = (
+    "\n\nNO TEXT OVERLAYS: The generated video must NOT contain any text, captions, "
+    "titles, subtitles, watermarks, emojis, stickers, graphics, or visual text of "
+    "any kind rendered on top of the video. The output should be a clean video with "
+    "only the character and the scene — no text elements whatsoever. The creator "
+    "will add their own text overlays in TikTok's editor after exporting."
+)
+
 
 def apply_audio_directive(prompt: str, include_audio: bool) -> str:
     """
-    Append an explicit, authoritative audio instruction to a hook-video prompt.
+    Append explicit audio and text-overlay instructions to a video prompt.
 
     Applied uniformly across all prompt sources (live analysis, saved
     templates, image analysis, motion-style fallback) right before
-    submission, so the muted-by-default behavior holds regardless of where
-    the base prompt text came from — including older saved templates whose
-    cached text predates this toggle. The `generate_audio` flag passed to the
-    video API is the primary enforcement; this text reinforces it.
+    submission, so the muted-by-default behavior and no-text rule hold
+    regardless of where the base prompt text came from.
     """
-    return prompt + (AUDIO_ON_INSTRUCTION if include_audio else AUDIO_OFF_INSTRUCTION)
+    return prompt + (AUDIO_ON_INSTRUCTION if include_audio else AUDIO_OFF_INSTRUCTION) + NO_TEXT_OVERLAY_INSTRUCTION
 
 HOOK_MOTION_TYPES = [
     "a confident lean-in toward camera with a knowing expression, as if about to reveal a secret",
@@ -2142,6 +2150,9 @@ async def face_swap_extend_video(
             "Continue the motion seamlessly from exactly this pose and expression so the two "
             "clips play as one unbroken take — do not reset, re-introduce, or restart the pose."
         )
+
+    # Enforce no text overlays and silence on the extension too.
+    prompt += NO_TEXT_OVERLAY_INSTRUCTION + AUDIO_OFF_INSTRUCTION
 
     try:
         result = await generate_video(
