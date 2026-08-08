@@ -146,15 +146,15 @@ export const api = {
       .then((r) => r.data);
   },
 
-  // Hook templates — save a proven hook once, reuse it with zero AI cost
-  getHookTemplates: (params = {}) =>
-    client.get("/hook-templates", { params }).then((r) => r.data),
-  getHookTemplate: (id) => client.get(`/hook-templates/${id}`).then((r) => r.data),
-  createHookTemplate: (payload) =>
-    client.post("/hook-templates", payload).then((r) => r.data),
-  updateHookTemplate: (id, payload) =>
-    client.patch(`/hook-templates/${id}`, payload).then((r) => r.data),
-  deleteHookTemplate: (id) => client.delete(`/hook-templates/${id}`).then((r) => r.data),
+  // Bookmarks — save a hook analysis for quick access from history
+  getBookmarks: (params = {}) =>
+    client.get("/bookmarks", { params }).then((r) => r.data),
+  getBookmark: (id) => client.get(`/bookmarks/${id}`).then((r) => r.data),
+  createBookmark: (payload) =>
+    client.post("/bookmarks", payload).then((r) => r.data),
+  updateBookmark: (id, payload) =>
+    client.patch(`/bookmarks/${id}`, payload).then((r) => r.data),
+  deleteBookmark: (id) => client.delete(`/bookmarks/${id}`).then((r) => r.data),
 
   // Brand profile / Content Remixer
   analyzeBrandUrl: (url) => client.post("/brand/analyze-url", { url }).then((r) => r.data),

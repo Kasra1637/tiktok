@@ -23,8 +23,6 @@ import {
   ArrowRight,
   Save,
   Trash2,
-  Zap,
-  Bookmark,
   Volume2,
   VolumeX,
   Repeat2,
@@ -189,11 +187,6 @@ export default function FaceSwap() {
   const [brandedDuration, setBrandedDuration] = useState(15);
   const [videoModel, setVideoModel] = useState("minimax-h3"); // MiniMax H3 — sole model
 
-  // Hook template state — reusing a saved template skips hook analysis and
-  // prompt generation entirely, so it costs no AI calls.
-  const [hookTemplates, setHookTemplates] = useState([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState("");
-
   // Load target from query params
   useEffect(() => {
     const frameUrl = searchParams.get("target");
@@ -206,22 +199,6 @@ export default function FaceSwap() {
       if (videoId) setVideoInfo({ videoId, frameIndex: frameIndex || "key" });
     }
   }, [searchParams]);
-
-  // Load saved hook templates, and preselect one if arriving from the Templates page.
-  useEffect(() => {
-    const templateId = searchParams.get("templateId");
-    api
-      .getHookTemplates()
-      .then((rows) => {
-        setHookTemplates(rows || []);
-        if (templateId && (rows || []).some((t) => t.id === templateId)) {
-          setSelectedTemplateId(templateId);
-        }
-      })
-      .catch(() => setHookTemplates([]));
-  }, [searchParams]);
-
-  const selectedTemplate = hookTemplates.find((t) => t.id === selectedTemplateId) || null;
 
   // Load brand profile
   useEffect(() => {
@@ -499,7 +476,7 @@ export default function FaceSwap() {
     hookVideoUrlRef.current = null;
     try {
       const d = await api.faceSwapGenerateHook(
-        activeId, motionStyle, videoModel, videoInfo?.videoId || "", selectedTemplateId, includeHookAudio
+        activeId, motionStyle, videoModel, videoInfo?.videoId || "", "", includeHookAudio
       );
       hookJobIdRef.current = d.job_id;
       startPolling(d.job_id, "hook");
@@ -544,7 +521,7 @@ export default function FaceSwap() {
     setVideoPhase("hook"); setMotionStyle("lean-in");
     // Match the initial state (15s), not an arbitrary different default.
     setBrandUrl(""); setBrandedDuration(15); setGeneratingMore(false);
-    setSelectedTemplateId(""); setIncludeHookAudio(false);
+    setIncludeHookAudio(false);
     hookVideoUrlRef.current = null;
     hookJobIdRef.current = null;
     if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
@@ -601,35 +578,6 @@ export default function FaceSwap() {
         })}
       </div>
 
-      {/* Confirms a template picked on the Templates page actually carried over.
-          Without this, "Use This Hook" navigated here with no visible effect —
-          the template picker only appears after a face swap has been generated. */}
-      {!result && selectedTemplate && (
-        <div
-          className="flex items-start gap-3 rounded-2xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-6)] p-4"
-          data-testid="pending-template-banner"
-        >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-10)] text-[color:var(--brand-teal)]">
-            <Bookmark className="h-4 w-4" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-semibold">
-              Using hook template: {selectedTemplate.name}
-            </p>
-            <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-              Add your face below and generate the swap — this saved hook is applied at the
-              video step, with no analysis cost.
-            </p>
-          </div>
-          <button
-            onClick={() => setSelectedTemplateId("")}
-            className="shrink-0 text-[11px] font-medium text-muted-foreground underline transition-colors hover:text-foreground"
-            data-testid="clear-pending-template-button"
-          >
-            Clear
-          </button>
-        </div>
-      )}
 
       {/* ---------- UPLOAD PHASE ---------- */}
       {!result && (
@@ -1055,65 +1003,10 @@ export default function FaceSwap() {
                   </span>
                 </button>
 
-                {/* Saved hook templates — reusing one costs no AI calls */}
-                {hookTemplates.length > 0 && (
-                  <div className="space-y-2" data-testid="hook-template-picker">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="eyebrow">Saved hook template</p>
-                      <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide text-[color:var(--brand-teal)]">
-                        <Zap className="h-2.5 w-2.5" /> No analysis cost
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <button
-                        onClick={() => setSelectedTemplateId("")}
-                        className={`rounded-xl border p-2.5 text-left transition-colors duration-200 ${
-                          !selectedTemplateId
-                            ? "border-[color:var(--brand-teal)] bg-[color:var(--indigo-8)]"
-                            : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
-                        }`}
-                        data-testid="hook-template-none"
-                      >
-                        <span className={`block text-[11px] font-semibold ${!selectedTemplateId ? "text-[color:var(--brand-teal)]" : "text-foreground"}`}>
-                          {videoInfo ? "Use this video's hook analysis" : "Motion style below"}
-                        </span>
-                        <span className="text-[9px] text-muted-foreground">
-                          {videoInfo ? "Fresh analysis of the selected viral video" : "Pick a motion style manually"}
-                        </span>
-                      </button>
-                      {hookTemplates.slice(0, 5).map((t) => (
-                        <button
-                          key={t.id}
-                          onClick={() => setSelectedTemplateId(t.id)}
-                          className={`rounded-xl border p-2.5 text-left transition-colors duration-200 ${
-                            selectedTemplateId === t.id
-                              ? "border-[color:var(--brand-teal)] bg-[color:var(--indigo-8)]"
-                              : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
-                          }`}
-                          data-testid="hook-template-option"
-                        >
-                          <span className={`block truncate text-[11px] font-semibold ${selectedTemplateId === t.id ? "text-[color:var(--brand-teal)]" : "text-foreground"}`}>
-                            {t.name}
-                          </span>
-                          <span className="text-[9px] text-muted-foreground">
-                            {t.effectiveness_score ? `${t.effectiveness_score}/10 · ` : ""}
-                            {t.times_used ? `used ${t.times_used}x` : "not used yet"}
-                            {t.has_motion_reference ? " · motion ref" : ""}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                    {hookTemplates.length > 5 && (
-                      <p className="text-[9px] text-muted-foreground">
-                        Showing 5 of {hookTemplates.length} templates — manage them all on the Templates page.
-                      </p>
-                    )}
-                  </div>
-                )}
 
                 {/* Motion style selector — only relevant when not reusing a template
                     and no viral-video analysis is available */}
-                {!selectedTemplate && !videoInfo && (
+                {!videoInfo && (
                   <div className="space-y-2">
                     <p className="eyebrow">Motion style</p>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -1136,22 +1029,6 @@ export default function FaceSwap() {
                 )}
 
                 {/* Selected template summary */}
-                {selectedTemplate && (
-                  <div
-                    className="flex items-start gap-2.5 rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-6)] px-3.5 py-2.5"
-                    data-testid="selected-template-summary"
-                  >
-                    <Bookmark className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--brand-teal)]" />
-                    <div className="min-w-0">
-                      <p className="truncate text-[11px] font-semibold">{selectedTemplate.name}</p>
-                      <p className="text-[9px] leading-snug text-muted-foreground">
-                        Reuses the saved analysis and prompt
-                        {selectedTemplate.has_motion_reference ? " plus the original clip for motion transfer" : ""}
-                        {selectedTemplate.source_creator ? ` · from @${selectedTemplate.source_creator}` : ""}
-                      </p>
-                    </div>
-                  </div>
-                )}
 
                 {/* Model */}
                 <div className="flex gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1" data-testid="hook-model-selector">
@@ -1169,7 +1046,7 @@ export default function FaceSwap() {
 
                 <Button onClick={handleGenerateHook} disabled={generatingVideo} variant="brand" size="lg" className="w-full" data-testid="generate-hook-button">
                   <Clapperboard className="h-4 w-4" />
-                  {selectedTemplate ? "Generate Hook from Template" : "Generate 5s Hook Video"}
+                  Generate 5s Hook Video
                 </Button>
               </div>
             )}

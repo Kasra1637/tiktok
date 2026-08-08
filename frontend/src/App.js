@@ -55,7 +55,7 @@ function App() {
                         <Route path="/analysis/:videoId" element={<AnalysisDetail />} />
                         <Route path="/customize/:videoId" element={<CustomizeRedirect />} />
                         <Route path="/generate-video/:customizationId" element={<GenerateVideo />} />
-                        <Route path="/templates" element={<HookTemplates />} />
+                        <Route path="/bookmarks" element={<HookTemplates />} />
                         <Route path="/history" element={<History />} />
                         <Route path="/brand" element={<BrandSetup />} />
                       </Routes>

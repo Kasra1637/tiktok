@@ -36,7 +36,7 @@ export const NAV_GROUPS = [
   {
     label: "Library",
     items: [
-      { to: "/templates", label: "Templates", icon: Bookmark, testId: "templates-nav-link", hint: "Saved hooks" },
+      { to: "/bookmarks", label: "Bookmarks", icon: Bookmark, testId: "bookmarks-nav-link", hint: "Saved hooks" },
       { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Everything you made" },
     ],
   },

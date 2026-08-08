@@ -1667,7 +1667,7 @@ def _template_thumbnail_source(video: dict, analysis: dict) -> Optional[Path]:
     return candidate if candidate.exists() else None
 
 
-@api_router.post("/hook-templates", status_code=201)
+@api_router.post("/bookmarks", status_code=201)
 async def create_hook_template(payload: CreateHookTemplateRequest, user_id: str = Depends(get_current_user_id)):
     """
     Save an already-analyzed hook as a reusable template.
@@ -1747,7 +1747,7 @@ async def create_hook_template(payload: CreateHookTemplateRequest, user_id: str 
     return await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
 
 
-@api_router.get("/hook-templates")
+@api_router.get("/bookmarks")
 async def list_hook_templates(category: str = "", source_video_id: str = "", user_id: str = Depends(get_current_user_id)):
     """List saved hook templates, most recently used first."""
     clauses = ["user_id = ?"]
@@ -1771,7 +1771,7 @@ async def list_hook_templates(category: str = "", source_video_id: str = "", use
     return rows
 
 
-@api_router.get("/hook-templates/{template_id}")
+@api_router.get("/bookmarks/{template_id}")
 async def get_hook_template(template_id: str, user_id: str = Depends(get_current_user_id)):
     template = await _fetch_one("SELECT * FROM hook_templates WHERE id = ? AND user_id = ?", (template_id, user_id))
     if not template:
@@ -1782,7 +1782,7 @@ async def get_hook_template(template_id: str, user_id: str = Depends(get_current
     return template
 
 
-@api_router.patch("/hook-templates/{template_id}")
+@api_router.patch("/bookmarks/{template_id}")
 async def update_hook_template(template_id: str, payload: UpdateHookTemplateRequest, user_id: str = Depends(get_current_user_id)):
     """Rename, recategorize, or annotate a saved template."""
     existing = await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
@@ -1817,7 +1817,7 @@ async def update_hook_template(template_id: str, payload: UpdateHookTemplateRequ
     return await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
 
 
-@api_router.delete("/hook-templates/{template_id}")
+@api_router.delete("/bookmarks/{template_id}")
 async def delete_hook_template(template_id: str, user_id: str = Depends(get_current_user_id)):
     """Delete a template and its copied motion reference / thumbnail."""
     existing = await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))

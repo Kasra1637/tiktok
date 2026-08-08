@@ -45,7 +45,7 @@ export const TOURS = {
         target: '[data-testid="landing-features"]',
         title: "Save what works, for free",
         body:
-          "Found a hook that converts? Save it as a Template. Reusing a template later skips the AI analysis and prompt-writing entirely \u2014 you only pay for the video itself.",
+          "Found a hook that converts? Bookmark it. Bookmarked hooks can be found quickly in your history by category \u2014 you only pay for the video itself.",
       },
       {
         target: '[data-testid="landing-enter-app-button"]',
@@ -132,10 +132,10 @@ export const TOURS = {
           "Swap your face into this exact frame. Pose, lighting, outfit, and background all stay identical \u2014 only the identity changes.",
       },
       {
-        target: '[data-testid="save-hook-template-button"]',
+        target: '[data-testid="bookmark-hook-button"]',
         title: "Save it for later \u2014 free",
         body:
-          "Like this hook? Save it as a Template. Next time you reuse it \u2014 for a different client or brand \u2014 there's zero AI analysis cost, just the video generation.",
+          "Like this hook? Bookmark it. Next time you reuse it \u2014 for a different client or brand \u2014 there's zero AI analysis cost, just the video generation.",
       },
     ],
   },
@@ -172,11 +172,11 @@ export const TOURS = {
           "AI places your face into the exact scene \u2014 matching pose, outfit, lighting, and camera angle for a seamless result.",
       },
       {
-        target: '[data-testid="hook-template-picker"]',
+        target: '[data-testid="bookmark-picker"]',
         title: "Reuse a saved hook \u2014 free",
         optional: true,
         body:
-          "Already saved hook templates? Pick one here to skip AI analysis entirely \u2014 it even reuses the original clip as a motion reference.",
+          "Bookmarked hooks appear in your history, filterable by category."
       },
       {
         target: '[data-testid="generate-hook-button"]',
@@ -194,9 +194,9 @@ export const TOURS = {
     ],
   },
 
-  templates: {
-    id: "templates",
-    label: "Hook templates tour",
+  bookmarks: {
+    id: "bookmarks",
+    label: "Bookmarks tour",
     steps: [
       {
         target: null,
@@ -205,21 +205,21 @@ export const TOURS = {
           "Every hook you save here keeps its full analysis, generated prompt, and a copy of the source clip \u2014 so reusing it later costs nothing but the video generation itself.",
       },
       {
-        target: '[data-testid="templates-savings-summary"]',
+        target: '[data-testid="bookmarks-savings-summary"]',
         title: "Track your savings",
         optional: true,
         body:
           "This tracks how many times you've reused a saved hook \u2014 each reuse is a fresh AI analysis and prompt rewrite you didn't have to pay for.",
       },
       {
-        target: '[data-testid="templates-category-filter"]',
+        target: '[data-testid="bookmarks-category-filter"]',
         title: "Organize by category",
         optional: true,
         body:
           "Filter your saved hooks by type \u2014 intrigue, reveal, reaction, and more \u2014 to quickly find the right one for a new client or brand.",
       },
       {
-        target: '[data-testid="use-template-button"]',
+        target: '[data-testid="view-analysis-button"]',
         title: "One click to reuse",
         body:
           "Hit \u201cUse This Hook\u201d to jump straight into Face Swap with this template pre-selected \u2014 no re-analysis needed, ever.",
@@ -334,7 +334,7 @@ export function getTourIdForPath(pathname) {
   if (pathname.startsWith("/discover")) return "discover";
   if (pathname.startsWith("/analysis/")) return "analysis";
   if (pathname.startsWith("/face-swap")) return "faceswap";
-  if (pathname.startsWith("/templates")) return "templates";
+  if (pathname.startsWith("/bookmarks")) return "templates";
   if (pathname.startsWith("/generate-video/")) return "generate";
   if (pathname.startsWith("/brand")) return "brand";
   if (pathname.startsWith("/history")) return "history";

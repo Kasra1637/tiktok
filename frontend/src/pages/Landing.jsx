@@ -59,7 +59,7 @@ const FEATURES = [
   },
   {
     icon: Bookmark,
-    title: "Hook Templates",
+    title: "Bookmarks",
     description:
       "Save a proven hook once. The analysis, prompt, and motion reference are cached \u2014 reuse it free forever.",
   },
@@ -100,7 +100,7 @@ const FLOW_STEPS = [
     step: "2",
     label: "Analyze",
     icon: TrendingUp,
-    detail: "AI dissects the hook \u2014 expressions, pacing, overlays. Save it as a free-to-reuse template.",
+    detail: "AI dissects the hook \u2014 expressions, pacing, overlays. Save it as a bookmark for quick reuse.",
   },
   {
     step: "3",
@@ -192,10 +192,10 @@ const PIPELINE_BLOCKS = [
     icon: Bookmark,
     tone: "indigo",
     kicker: "Reuse",
-    title: "Hook Templates",
+    title: "Bookmarks",
     body: (
       <>
-        Save any hook that works. The analysis, prompt, and source clip are cached. Reusing a template
+        Save any hook that works. The analysis is cached. Reusing a bookmark
         later skips all AI analysis &mdash; you only pay for the video render itself.
       </>
     ),
@@ -340,7 +340,7 @@ export default function Landing() {
             style={{ animationDelay: "120ms" }}
           >
             Pick a trending hook, swap yourself into the key frame, and generate a branded
-            video in under two minutes. Save any hook as a template &mdash; every future
+            video in under two minutes. Bookmark any hook &mdash; every future
             remix costs nothing.
           </p>
 
@@ -399,7 +399,7 @@ export default function Landing() {
               <Check className="h-3.5 w-3.5 text-[color:var(--brand-teal)]" /> 2K vertical output
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <Check className="h-3.5 w-3.5 text-[color:var(--brand-teal)]" /> Free template reuse
+              <Check className="h-3.5 w-3.5 text-[color:var(--brand-teal)]" /> Free bookmark reuse
             </span>
           </div>
 
@@ -554,7 +554,7 @@ export default function Landing() {
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">
                 Find a trending hook, swap your face in, generate a branded video &mdash; done.
-                Save the hook as a template and every future remix is free.
+                Save the hook as a template and every future reuse is free.
               </p>
               <div className="mt-9 flex flex-col items-center justify-center gap-3.5 sm:flex-row">
                 <UnauthedOnly>
@@ -627,7 +627,7 @@ export default function Landing() {
                   <Link to="/face-swap" className="transition-colors hover:text-foreground">Face Swap</Link>
                 </li>
                 <li>
-                  <Link to="/templates" className="transition-colors hover:text-foreground">Hook Templates</Link>
+                  <Link to="/bookmarks" className="transition-colors hover:text-foreground">Bookmarks</Link>
                 </li>
                 <li>
                   <Link to="/brand" className="transition-colors hover:text-foreground">Your Brand</Link>

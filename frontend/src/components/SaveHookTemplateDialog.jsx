@@ -17,11 +17,10 @@ import { api, getErrorMessage } from "../lib/api";
 import { HOOK_TEMPLATE_CATEGORIES } from "../lib/hookTemplateCategories";
 
 /**
- * Save an analyzed hook as a reusable template.
+ * Bookmark an analyzed hook for quick access from the history page.
  *
- * The backend snapshots the existing analysis, pre-builds the video prompt, and
- * copies the source clip for V2V motion transfer — so every later reuse skips
- * hook re-analysis and prompt regeneration entirely.
+ * The backend snapshots the existing analysis so users can filter and
+ * find their bookmarked hooks by category later.
  */
 export function SaveHookTemplateDialog({ open, onOpenChange, videoId, analysis, video, onSaved }) {
   const [name, setName] = useState("");
@@ -41,13 +40,13 @@ export function SaveHookTemplateDialog({ open, onOpenChange, videoId, analysis, 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const saved = await api.createHookTemplate({
+      const saved = await api.createBookmark({
         video_id: videoId,
         name: name.trim(),
         category,
         notes: notes.trim(),
       });
-      toast.success(`Saved "${saved.name}" — reuse it anytime for free.`);
+      toast.success(`Bookmarked "${saved.name}" — find it in your history.`);
       onOpenChange(false);
       onSaved?.(saved);
     } catch (err) {
@@ -59,32 +58,31 @@ export function SaveHookTemplateDialog({ open, onOpenChange, videoId, analysis, 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md" data-testid="save-hook-template-dialog">
+      <DialogContent className="sm:max-w-md" data-testid="bookmark-hook-dialog">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
               <Bookmark className="h-4 w-4" />
             </span>
-            Save as Hook Template
+            Bookmark This Hook
           </DialogTitle>
           <DialogDescription>
-            Snapshots this hook's analysis, prompt, and motion reference. Reusing it later
-            costs no analysis or prompt-generation calls.
+            Save this hook to your history with a category so you can easily find and reuse it later.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-1">
           <div className="space-y-1.5">
-            <label htmlFor="template-name" className="eyebrow block">
-              Template name
+            <label htmlFor="bookmark-name" className="eyebrow block">
+              Name
             </label>
             <Input
-              id="template-name"
+              id="bookmark-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={80}
               placeholder="e.g. Lean-in Secret Reveal"
-              data-testid="save-template-name-input"
+              data-testid="bookmark-name-input"
             />
             <p className="text-[11px] text-muted-foreground">
               Leave blank to use the hook summary as the name.
@@ -93,13 +91,13 @@ export function SaveHookTemplateDialog({ open, onOpenChange, videoId, analysis, 
 
           <div className="space-y-2">
             <span className="eyebrow block">Category</span>
-            <div className="flex flex-wrap gap-1.5" data-testid="save-template-category-selector">
+            <div className="flex flex-wrap gap-1.5" data-testid="bookmark-category-selector">
               {HOOK_TEMPLATE_CATEGORIES.map((c) => (
                 <Chip
                   key={c.key}
                   active={category === c.key}
                   onClick={() => setCategory(c.key)}
-                  testId={`save-template-category-${c.key}`}
+                  testId={`bookmark-category-${c.key}`}
                 >
                   {c.label}
                 </Chip>
@@ -111,18 +109,18 @@ export function SaveHookTemplateDialog({ open, onOpenChange, videoId, analysis, 
           </div>
 
           <div className="space-y-1.5">
-            <label htmlFor="template-notes" className="eyebrow block">
+            <label htmlFor="bookmark-notes" className="eyebrow block">
               Notes <span className="font-normal normal-case tracking-normal">(optional)</span>
             </label>
             <Textarea
-              id="template-notes"
+              id="bookmark-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               maxLength={500}
               rows={2}
               placeholder="Why this hook works, who it's for..."
               className="min-h-[64px] resize-none text-sm"
-              data-testid="save-template-notes-input"
+              data-testid="bookmark-notes-input"
             />
           </div>
 
@@ -132,7 +130,6 @@ export function SaveHookTemplateDialog({ open, onOpenChange, videoId, analysis, 
               <p className="text-[11px] leading-snug text-muted-foreground">
                 Source: <span className="font-semibold text-foreground">@{video.creator}</span>
                 {analysis?.effectiveness_score ? ` · scored ${analysis.effectiveness_score}/10` : ""}
-                {video.local_video_path ? " · motion reference included" : ""}
               </p>
             </div>
           )}
@@ -143,7 +140,7 @@ export function SaveHookTemplateDialog({ open, onOpenChange, videoId, analysis, 
             variant="ghost"
             onClick={() => onOpenChange(false)}
             disabled={saving}
-            data-testid="save-template-cancel-button"
+            data-testid="bookmark-cancel-button"
           >
             Cancel
           </Button>
@@ -152,10 +149,10 @@ export function SaveHookTemplateDialog({ open, onOpenChange, videoId, analysis, 
             disabled={saving}
             variant="accent"
             className="gap-1.5"
-            data-testid="save-template-confirm-button"
+            data-testid="bookmark-confirm-button"
           >
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bookmark className="h-3.5 w-3.5" />}
-            {saving ? "Saving..." : "Save Template"}
+            {saving ? "Saving..." : "Bookmark"}
           </Button>
         </DialogFooter>
       </DialogContent>

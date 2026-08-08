@@ -129,11 +129,11 @@ export default function AnalysisDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoId]);
 
-  // Surface whether this hook has already been saved as a template.
+  // Check if this hook is already bookmarked.
   useEffect(() => {
     let cancelled = false;
     api
-      .getHookTemplates({ source_video_id: videoId })
+      .getBookmarks({ source_video_id: videoId })
       .then((rows) => {
         if (!cancelled) setSavedTemplates(rows || []);
       })
@@ -314,25 +314,25 @@ export default function AnalysisDetail() {
                 variant="outline"
                 onClick={() => setSaveTemplateOpen(true)}
                 className="w-full"
-                data-testid="save-hook-template-button"
+                data-testid="bookmark-hook-button"
               >
                 {savedTemplates.length > 0 ? (
                   <>
-                    <BookmarkCheck className="h-4 w-4 text-[color:var(--brand-teal)]" /> Save Again as Template
+                    <BookmarkCheck className="h-4 w-4 text-[color:var(--brand-teal)]" /> Bookmark Again
                   </>
                 ) : (
                   <>
-                    <Bookmark className="h-4 w-4" /> Save as Template
+                    <Bookmark className="h-4 w-4" /> Bookmark This Hook
                   </>
                 )}
               </Button>
               {savedTemplates.length > 0 && (
                 <button
-                  onClick={() => navigate("/templates")}
+                  onClick={() => navigate("/bookmarks")}
                   className="w-full text-center text-[11px] text-muted-foreground transition-colors hover:text-[color:var(--brand-teal)]"
-                  data-testid="view-saved-templates-link"
+                  data-testid="view-bookmarks-link"
                 >
-                  Already saved {savedTemplates.length === 1 ? "as a template" : `${savedTemplates.length} times`} — view templates
+                  Already bookmarked {savedTemplates.length === 1 ? "once" : `${savedTemplates.length} times`} — view bookmarks
                 </button>
               )}
             </>

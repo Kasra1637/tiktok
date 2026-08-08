@@ -103,7 +103,7 @@ export default function HookTemplates() {
   const load = useCallback(() => {
     setLoading(true);
     api
-      .getHookTemplates()
+      .getBookmarks()
       .then(setTemplates)
       .catch((err) => toast.error(getErrorMessage(err)))
       .finally(() => setLoading(false));
@@ -121,18 +121,18 @@ export default function HookTemplates() {
   const handleSaveEdit = async () => {
     if (!editing) return;
     if (!editName.trim()) {
-      toast.error("Template name cannot be empty.");
+      toast.error("Bookmark name cannot be empty.");
       return;
     }
     setSavingEdit(true);
     try {
-      const updated = await api.updateHookTemplate(editing.id, {
+      const updated = await api.updateBookmark(editing.id, {
         name: editName.trim(),
         category: editCategory,
         notes: editNotes.trim(),
       });
       setTemplates((prev) => prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)));
-      toast.success("Template updated.");
+      toast.success("Bookmark updated.");
       setEditing(null);
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -145,9 +145,9 @@ export default function HookTemplates() {
     if (!deleting) return;
     setDeletingBusy(true);
     try {
-      await api.deleteHookTemplate(deleting.id);
+      await api.deleteBookmark(deleting.id);
       setTemplates((prev) => prev.filter((t) => t.id !== deleting.id));
-      toast.success("Template deleted.");
+      toast.success("Bookmark deleted.");
       setDeleting(null);
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -179,7 +179,7 @@ export default function HookTemplates() {
 
   if (loading) {
     return (
-      <div className="space-y-6" data-testid="hook-templates-loading">
+      <div className="space-y-6" data-testid="bookmarks-loading">
         <Skeleton className="h-10 w-64 rounded-xl" />
         <Skeleton className="h-16 w-full rounded-2xl" />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -200,22 +200,22 @@ export default function HookTemplates() {
     <div className="space-y-6">
       <PageHeader
         icon={Bookmark}
-        title="Hook Templates"
-        description="Saved hooks keep their analysis, prompt, and motion reference on file. Reusing one skips hook analysis and prompt generation entirely — you only pay for the video itself."
+        title="Bookmarks"
+        description="Your bookmarked hooks, organized by category. Tap any bookmark to jump back to its analysis."
       />
 
       {templates.length === 0 ? (
         <EmptyState
           icon={Bookmark}
-          title="No hook templates yet"
-          description="Analyze a viral hook, then hit 'Save as Template' on the analysis page. Saved hooks can be reused on any face swap without re-running the AI analysis."
+          title="No bookmarks yet"
+          description="Analyze a viral hook, then hit 'Bookmark This Hook' on the analysis page. Bookmarked hooks appear here so you can find and reuse them by category."
           action={
             <Button
               onClick={() => navigate("/discover")}
               variant="brand"
-              data-testid="templates-discover-button"
+              data-testid="bookmarks-discover-button"
             >
-              <Sparkles className="h-4 w-4" /> Find a hook to save
+              <Sparkles className="h-4 w-4" /> Find a hook to bookmark
             </Button>
           }
         />
@@ -276,13 +276,13 @@ export default function HookTemplates() {
           {/* Template grid */}
           <div
             className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
-            data-testid="hook-templates-grid"
+            data-testid="bookmarks-grid"
           >
             {visible.map((t) => (
               <div
                 key={t.id}
                 className="surface surface-interactive group flex flex-col gap-3 rounded-2xl p-3"
-                data-testid="hook-template-card"
+                data-testid="bookmark-card"
               >
                 {/* Thumbnail */}
                 <div className="relative overflow-hidden rounded-xl">
@@ -362,12 +362,12 @@ export default function HookTemplates() {
                 {/* Actions */}
                 <div className="space-y-1.5">
                   <Button
-                    onClick={() => navigate(`/face-swap?templateId=${encodeURIComponent(t.id)}`)}
+                    onClick={() => navigate(`/analysis/${t.source_video_id}`)}
                     variant="brand"
                     className="w-full"
                     data-testid="use-template-button"
                   >
-                    <Repeat2 className="h-3.5 w-3.5" /> Use This Hook
+                    <Repeat2 className="h-3.5 w-3.5" /> View Analysis
                   </Button>
                   <div className="flex gap-1.5">
                     <Button
@@ -411,17 +411,17 @@ export default function HookTemplates() {
               <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
                 <Pencil className="h-4 w-4" />
               </span>
-              Edit Template
+              Edit Bookmark
             </DialogTitle>
             <DialogDescription>
-              Rename or recategorize this hook. The saved analysis, prompt, and motion reference stay
+              Rename or recategorize this bookmarked hook. The saved analysis stays
               unchanged.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-1">
             <div className="space-y-1.5">
               <label htmlFor="edit-template-name" className="eyebrow block">
-                Template name
+                Bookmark name
               </label>
               <Input
                 id="edit-template-name"
