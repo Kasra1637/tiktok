@@ -330,7 +330,7 @@ export const TOURS = {
  * Resolve which tour (if any) applies to a given route pathname.
  */
 export function getTourIdForPath(pathname) {
-  if (pathname === "/") return "landing";
+  if (pathname === "/") return null; // Landing page — no onboarding tour
   if (pathname.startsWith("/discover")) return "discover";
   if (pathname.startsWith("/analysis/")) return "analysis";
   if (pathname.startsWith("/face-swap")) return "faceswap";
