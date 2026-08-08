@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import {
   Sparkles, Search, Repeat2, Clapperboard, Globe, Save, Film,
   TrendingUp, ArrowRight, Zap, Target, Layers, Music2,
-  Bookmark, Hash, BarChart3, FileText, BadgeAlert,
+  Bookmark, FileText, BadgeAlert,
   RotateCcw, Play, Check, Wand2,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -10,87 +10,75 @@ import { Button } from "../components/ui/button";
 const FEATURES = [
   {
     icon: Search,
-    title: "Discover Viral Hooks",
+    title: "10-Niche Discovery",
     description:
-      "Browse 10 niches of trending TikTok videos ranked by virality score. Search by keyword or hashtag. Curated creators + trending hashtags per niche.",
+      "Browse trending TikTok videos across 10 niches, ranked by a live virality score. Search any keyword or hashtag.",
   },
   {
     icon: TrendingUp,
     title: "AI Hook Analysis",
     description:
-      "Paste any TikTok URL or pick from discovery. AI extracts the first 2\u20133 seconds, analyzes facial expressions, gestures, pacing, text overlays, and audio cues. Effectiveness score 1\u201310.",
+      "AI breaks down the first 2\u20133 seconds of any video: expressions, gestures, pacing, overlays, and audio cues. Scores it 1\u201310.",
   },
   {
     icon: FileText,
-    title: "Transcript-Informed Analysis",
+    title: "Transcript-Grounded",
     description:
-      "When a video has captions available, we pull the actual spoken transcript and ground the hook analysis in real words \u2014 not just visual guesswork.",
+      "When captions exist, the analysis is grounded in the real spoken words \u2014 not just guesswork from the visuals.",
   },
   {
     icon: Music2,
-    title: "Sound & Music Data",
+    title: "Sound Intelligence",
     description:
-      "Every video includes the exact sound used \u2014 title, artist, and duration. See which sounds are trending, then toggle \u201cUse original sound\u201d to get a remix script written for that audio.",
+      "See the exact sound on every video \u2014 title, artist, duration. Toggle \u201cUse original sound\u201d to script your remix around it.",
   },
   {
     icon: BadgeAlert,
-    title: "Sponsored Post Filtering",
+    title: "Ad Filtering",
     description:
-      "Ad and sponsored posts are automatically flagged. Hide them with one toggle in Discovery to focus on organic hooks worth replicating.",
+      "Sponsored posts are auto-flagged. One toggle hides them so you only see organic hooks worth replicating.",
   },
   {
     icon: Repeat2,
     title: "Face Swap",
     description:
-      "Select any frame from a viral video. Your face is swapped in with production-quality identity preservation \u2014 pose, gesture, lighting, and environment stay identical.",
+      "Pick any frame. AI places your face into the exact pose, lighting, and environment \u2014 identity-preserving, 2K output.",
   },
   {
     icon: Save,
-    title: "Saved Face",
+    title: "One-Time Face Upload",
     description:
-      "Upload your face once \u2014 it persists across sessions. Next time you pick a viral video, just hit Generate. Zero re-uploads needed.",
+      "Upload your face once, it persists across sessions. Every future swap is a single click.",
   },
   {
     icon: Bookmark,
     title: "Hook Templates",
     description:
-      "Save a proven hook once \u2014 its analysis, prompt, and motion reference are cached. Reuse it on any future face swap with zero re-analysis cost, forever.",
+      "Save a proven hook. Its analysis, prompt, and motion reference are cached \u2014 reuse it on any future swap with zero AI cost.",
   },
   {
     icon: Clapperboard,
     title: "AI Video Generation",
     description:
-      "Your face-swapped image becomes the first frame. MiniMax H3 generates a 5\u201315 second video at 2K resolution with V2V motion transfer from the original clip and full face consistency \u2014 muted by default so you can add a trending sound on TikTok, with an optional AI-audio toggle.",
+      "Your swapped image becomes frame one. MiniMax H3 generates a 5\u201315s video at 2K with V2V motion transfer from the original clip.",
   },
   {
     icon: RotateCcw,
-    title: "Re-roll a Take",
+    title: "Re-roll Takes",
     description:
-      "Not quite right? Re-roll generates another take with the exact same prompt and references \u2014 no re-analysis, just a fresh render.",
+      "Not happy? Re-roll with the same prompt and references. No re-analysis, just a fresh render.",
   },
   {
     icon: Globe,
-    title: "Brand-Customized Prompts",
+    title: "Brand Prompts",
     description:
-      "Enter your website URL. AI extracts your brand identity \u2014 name, niche, products, audience, and tone \u2014 then writes a tailored video prompt that adapts the viral hook for your brand.",
+      "Paste your website URL. AI extracts your brand identity and writes a video prompt that adapts the viral hook to your product.",
   },
   {
     icon: Target,
     title: "Content Remixer",
     description:
-      "Chat with AI about your remix goal. It checks audience fit between the hook and your brand, asks focused questions, then writes a production-ready video script.",
-  },
-  {
-    icon: Hash,
-    title: "Hashtag & Creator Feed",
-    description:
-      "10 niches with curated creators and trending hashtags (fitness, comedy, beauty, food, fashion, tech, pets, travel, finance, education). Fresh data on every visit.",
-  },
-  {
-    icon: BarChart3,
-    title: "Virality Scoring Engine",
-    description:
-      "Every video gets a 0\u2013100 score blending engagement rate, view velocity, recency, raw scale, and save intent \u2014 so the best hooks always surface first.",
+      "Chat with AI about your goal. It checks audience fit, asks a few questions, then writes a production-ready video script.",
   },
 ];
 
@@ -99,25 +87,25 @@ const FLOW_STEPS = [
     step: "1",
     label: "Discover",
     icon: Search,
-    detail: "Browse trending TikTok videos in your niche. See the sound, creator stats, and virality score.",
+    detail: "Browse trending TikToks in your niche. Filter by virality, views, or recency.",
   },
   {
     step: "2",
-    label: "Analyze & Save",
+    label: "Analyze",
     icon: TrendingUp,
-    detail: "AI breaks down what makes the hook work, then save it as a reusable template for free future reuse.",
+    detail: "AI dissects the hook \u2014 expressions, pacing, overlays. Save it as a free-to-reuse template.",
   },
   {
     step: "3",
-    label: "Face Swap",
+    label: "Swap",
     icon: Repeat2,
-    detail: "Your face replaces the creator\u2019s. Pose, gesture, lighting, and environment stay identical.",
+    detail: "Your face drops into the creator\u2019s exact pose and scene. One click.",
   },
   {
     step: "4",
-    label: "Generate Video",
+    label: "Generate",
     icon: Clapperboard,
-    detail: "MiniMax H3 animates your swapped frame, muted by default \u2014 re-roll for another take, or extend it with your brand message.",
+    detail: "MiniMax H3 animates your frame into a 5\u201315s video. Re-roll or extend with your brand CTA.",
   },
 ];
 
@@ -239,9 +227,8 @@ const PIPELINE_BLOCKS = [
     title: "Image (Face Swap)",
     body: (
       <>
-        Grok Imagine (Image Quality) takes your cropped face photo as the identity reference and the selected
-        video frame as the scene reference. It places your face into that exact scene &mdash; matching pose,
-        outfit, background, lighting, and camera angle. Output: a 2K, 9:16 PNG with your face in the viral hook pose.
+        Grok Imagine places your face into the selected frame &mdash; matching pose, outfit,
+        background, lighting, and camera angle. Output: a 2K, 9:16 PNG ready for animation.
       </>
     ),
   },
@@ -252,14 +239,11 @@ const PIPELINE_BLOCKS = [
     title: "Video (Animation)",
     body: (
       <>
-        The swapped image is passed as{" "}
-        <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs">first_frame</code> to
-        MiniMax H3 via OpenRouter&apos;s unified API. The original viral video is fed as a V2V motion reference,
-        so H3 replicates the exact timing, camera work, and performance rhythm. Hook videos are muted by
-        default &mdash; most creators attach a trending sound or use TikTok&apos;s native text-to-speech after
-        exporting, so AI-generated audio would just get replaced. Flip the audio toggle on if you&apos;d rather
-        have H3 generate a native stereo track (dialogue, foley, ambient) in the same pass. Not quite right?
-        Re-roll the same prompt for another take, or extend the hook into a longer branded video with a CTA.
+        Your swapped image is the{" "}
+        <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs">first_frame</code>.
+        The original clip is the V2V motion reference. MiniMax H3 replicates the exact timing and camera work
+        at 2K resolution. Videos are muted by default (add a trending sound in TikTok) with an optional AI-audio toggle.
+        Re-roll for another take, or extend into a longer branded video with a CTA.
       </>
     ),
   },
@@ -267,12 +251,11 @@ const PIPELINE_BLOCKS = [
     icon: Bookmark,
     tone: "indigo",
     kicker: "Reuse",
-    title: "Hook Templates: Save Once, Reuse Free",
+    title: "Hook Templates",
     body: (
       <>
-        Found a hook that works? Save it as a template &mdash; the analysis, the generated prompt, and a copy
-        of the source clip (for V2V motion transfer) are all cached. Reusing that template on a new face swap
-        skips the AI hook analysis and prompt generation entirely, so you only ever pay for the video itself.
+        Save any hook that works. The analysis, prompt, and source clip are cached. Reusing a template
+        later skips all AI analysis &mdash; you only pay for the video render itself.
       </>
     ),
   },
@@ -283,9 +266,8 @@ const PIPELINE_BLOCKS = [
     title: "Transcript & Ad Detection",
     body: (
       <>
-        When TikTok provides captions for a video, we fetch the transcript link and use the actual spoken
-        words to ground the hook analysis. Posts flagged as ads or sponsored content are marked with a
-        &ldquo;Sponsored&rdquo; badge and can be hidden with one toggle in Discovery, so you focus on organic hooks.
+        Transcripts ground the analysis in real spoken words. Ads are auto-flagged and hideable
+        with one toggle so you focus on organic hooks.
       </>
     ),
   },
@@ -296,20 +278,20 @@ const PIPELINE_BLOCKS = [
     title: "Brand Integration",
     body: (
       <>
-        Enter your website URL &mdash; AI scrapes and analyzes your brand name, products, niche, target audience,
-        differentiation, and tone. This profile powers the Content Remixer to write video prompts that
-        specifically promote your product while replicating the viral hook&apos;s proven mechanics.
+        Paste your URL &mdash; AI extracts your brand name, products, audience, and tone. This profile
+        powers the Content Remixer to write prompts that promote your product while replicating the hook&apos;s
+        proven mechanics.
       </>
     ),
   },
 ];
 
 const MODELS = [
-  { label: "Hook Analysis", value: "Google Gemini 2.5 Flash (vision) \u2014 reads frames, outputs structured JSON" },
-  { label: "Face Swap", value: "Grok Imagine (Image Quality) \u2014 identity-preserving scene compositing, 2K" },
-  { label: "Video Generation", value: "MiniMax H3 \u2014 omni-modal, optional native stereo audio, V2V motion transfer, 2K, up to 15s" },
-  { label: "Brand & Remix Text", value: "Google Gemini 2.5 Flash \u2014 brand extraction, prompt writing, remix chat" },
-  { label: "Data", value: "Clockworks TikTok Scraper (Apify) + yt-dlp fallback \u2014 profiles, hashtags, keyword search, music metadata" },
+  { label: "Hook Analysis", value: "Gemini 2.5 Flash (vision) \u2014 frame reading, structured JSON output" },
+  { label: "Face Swap", value: "Grok Imagine \u2014 identity-preserving compositing, 2K" },
+  { label: "Video", value: "MiniMax H3 \u2014 V2V motion transfer, native audio, 2K, up to 15s" },
+  { label: "Brand & Remix", value: "Gemini 2.5 Flash \u2014 brand extraction, prompt writing, remix chat" },
+  { label: "Data", value: "Apify TikTok Scraper + yt-dlp \u2014 profiles, hashtags, keyword search, music" },
 ];
 
 function SectionHeading({ eyebrow, title, lede, id }) {
@@ -375,28 +357,27 @@ export default function Landing() {
               <span className="absolute inset-0 animate-pulse-ring rounded-full bg-[color:var(--brand-teal)]" />
               <span className="relative h-1.5 w-1.5 rounded-full bg-[color:var(--brand-teal)]" />
             </span>
-            Viral TikTok Hooks &rarr; Branded Videos
+            Viral hooks &rarr; Your face &rarr; Branded video
           </div>
 
           <h1
             className="animate-fade-up font-display mt-8 text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-[4.5rem]"
             style={{ animationDelay: "60ms" }}
           >
-            <span className="text-shine">Discover viral hooks.</span>
+            <span className="text-shine">Your face.</span>
             <br />
-            <span className="text-gradient-brand">Swap your face in.</span>
+            <span className="text-gradient-brand">Proven TikTok hooks.</span>
             <br />
-            <span className="text-shine">Generate branded videos.</span>
+            <span className="text-shine">Infinite video.</span>
           </h1>
 
           <p
-            className="animate-fade-up mx-auto mt-7 max-w-3xl text-lg leading-relaxed text-muted-foreground sm:text-xl"
+            className="animate-fade-up mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl"
             style={{ animationDelay: "120ms" }}
           >
-            Find trending TikTok videos in your niche, analyze what makes their hook work,
-            face-swap yourself into the key frame, then generate a full branded video
-            customized to your product and audience &mdash; all from one pipeline. Save any
-            hook that works as a template and reuse it for free, forever.
+            Pick a trending hook, swap yourself into the key frame, and generate a branded
+            video in under two minutes. Save any hook as a template &mdash; every future
+            remix costs nothing.
           </p>
 
           <div
@@ -473,7 +454,7 @@ export default function Landing() {
           id="how-it-works"
           eyebrow="The loop"
           title="How It Works"
-          lede="Four steps from trending video to your own branded content — and every hook you save gets cheaper to reuse."
+          lede="Four steps. Under two minutes. Every saved hook makes the next one free."
         />
 
         <div className="relative">
@@ -505,8 +486,8 @@ export default function Landing() {
         <SectionHeading
           id="features"
           eyebrow="Capabilities"
-          title="Features & Capabilities"
-          lede="Everything the app does, at a glance."
+          title="What You Get"
+          lede="Every tool in the pipeline, from discovery to publish-ready video."
         />
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -531,7 +512,7 @@ export default function Landing() {
           id="pipeline"
           eyebrow="Under the hood"
           title="The Pipeline"
-          lede="What actually happens between picking a hook and downloading your video."
+          lede="What happens between picking a hook and downloading your video."
         />
 
         <div className="space-y-4">
@@ -607,10 +588,10 @@ export default function Landing() {
                 <Zap className="h-3 w-3" /> Under 2 minutes
               </span>
               <h2 className="font-display mt-5 text-3xl font-bold tracking-tight sm:text-4xl">
-                Ready to remix viral hooks?
+                Start making content that converts.
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">
-                Find the trending sound, swap your face in, and generate a branded video &mdash; all in under 2 minutes.
+                Find a trending hook, swap your face in, generate a branded video &mdash; done.
                 Save the hook as a template and every future remix is free.
               </p>
               <div className="mt-9 flex flex-col items-center justify-center gap-3.5 sm:flex-row">
@@ -649,8 +630,7 @@ export default function Landing() {
                 <span className="font-display text-base font-bold tracking-tight">HookForge</span>
               </div>
               <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted-foreground">
-                Turn viral TikTok hooks into branded videos with your own face &mdash; discover, analyze,
-                swap, generate.
+                Your face in proven viral hooks &mdash; discover, swap, generate, publish.
               </p>
             </div>
 
