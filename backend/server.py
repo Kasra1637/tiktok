@@ -724,18 +724,9 @@ def build_frame_docs(video_hash: str, frame_paths: list) -> list:
 
 async def _recover_missing_frame(relative_path: str) -> bool:
     """
-    Best-effort self-heal for a frame file that's missing on this machine
-    (ephemeral storage after a redeploy, cache eviction, multi-instance
-    deploys, etc.) even though the DB still has a valid analysis row
-    referencing it.
-
-    Frame media URLs look like "frames/<video_hash>/<filename>". Re-download
-    the source video (a no-op if it's already on disk) and re-extract its
-    hook frames — `pipeline.download_video` names the file deterministically
-    from `url_hash(tiktok_url)`, and `pipeline.extract_hook_frames` reuses
-    that same hash for the frame directory, so this reproduces the exact
-    frame paths the original analysis stored, without needing a full
-    re-analysis (no new AI call).
+    Best-effort self-heal for a missing frame file. Only re-extracts from
+    an already-cached video file — does NOT re-download the video, which
+    would exceed Render free tier's 512MB RAM limit and cause an OOM crash.
 
     Returns True if recovery succeeded (the file exists now), False otherwise.
     """
@@ -744,22 +735,12 @@ async def _recover_missing_frame(relative_path: str) -> bool:
         return False
     video_hash = parts[1]
 
-    analysis = await _fetch_one(
-        "SELECT * FROM analyses WHERE frames LIKE ? ORDER BY created_at DESC LIMIT 1",
-        (f"%/frames/{video_hash}/%",),
-    )
-    if not analysis:
-        return False
-
-    video = await _fetch_one("SELECT * FROM videos WHERE id = ?", (analysis["video_id"],))
-    if not video or not video.get("tiktok_url"):
+    # Only attempt if the video file is already on disk (no download = no OOM risk)
+    video_path = pipeline.VIDEOS_DIR / f"{video_hash}.mp4"
+    if not video_path.is_file():
         return False
 
     try:
-        async with _ytdlp_semaphore:
-            video_path = await pipeline.download_video(
-                video["tiktok_url"], direct_video_url=video.get("direct_video_url", "")
-            )
         await pipeline.extract_hook_frames(
             video_path, num_frames=FRAME_COUNT, duration=HOOK_DURATION_SECONDS
         )
@@ -3359,28 +3340,27 @@ app.include_router(api_router)
 @app.get("/api/media/frames/{video_hash}/{filename}")
 async def serve_frame(video_hash: str, filename: str):
     """
-    Serve an extracted frame, recovering it on-the-fly if the file is missing
-    (ephemeral storage after a redeploy). This takes priority over the static
-    mount for frame paths specifically so users always see their filmstrip.
+    Serve an extracted frame if it exists on disk. On Render's free tier
+    (512MB RAM), re-downloading + re-extracting videos causes OOM crashes,
+    so we only serve what's already cached — frames from the current session.
+    After a redeploy, frames are gone until the user re-analyzes the video.
     """
     frame_path = pipeline.FRAMES_DIR / video_hash / filename
     if frame_path.is_file():
         return FileResponse(str(frame_path), media_type="image/jpeg")
 
-    # Frame missing — attempt recovery
-    logger.info(f"Frame missing, attempting recovery: {video_hash}/{filename}")
-    relative_path = f"frames/{video_hash}/{filename}"
-    try:
-        recovered = await _recover_missing_frame(relative_path)
-    except Exception as e:
-        logger.error(f"Frame recovery crashed for {video_hash}/{filename}: {e}")
-        raise HTTPException(status_code=404, detail="Frame not found and recovery failed.")
+    # Try lightweight recovery: if the video file is already on disk (no download needed),
+    # just re-extract frames from it. This avoids the OOM from yt-dlp download.
+    video_path = pipeline.VIDEOS_DIR / f"{video_hash}.mp4"
+    if video_path.is_file():
+        try:
+            await pipeline.extract_hook_frames(video_path, num_frames=8, duration=3.0)
+            if frame_path.is_file():
+                return FileResponse(str(frame_path), media_type="image/jpeg")
+        except Exception as e:
+            logger.warning(f"Frame re-extraction failed for {video_hash}: {e}")
 
-    if recovered and frame_path.is_file():
-        return FileResponse(str(frame_path), media_type="image/jpeg")
-
-    logger.warning(f"Frame recovery failed for {video_hash}/{filename}")
-    raise HTTPException(status_code=404, detail="Frame not found on server.")
+    raise HTTPException(status_code=404, detail="Frame not available. Please re-analyze the video.")
 
 
 app.mount("/api/media", StaticFiles(directory=str(pipeline.STORAGE_DIR)), name="media")
