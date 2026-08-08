@@ -153,7 +153,7 @@ function SidebarFooter({ collapsed }) {
         )}
         <Link
           to="/"
-          title="Product overview"
+          title="Show me around"
           className="flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-[color:var(--indigo-6)] hover:text-foreground"
         >
           <ArrowUpRight className="h-[18px] w-[18px]" />
@@ -185,7 +185,7 @@ function SidebarFooter({ collapsed }) {
         className="flex items-center gap-2.5 rounded-2xl border border-[color:var(--hairline)] bg-[color:var(--indigo-4)] p-3.5 transition-colors hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] tall:flex hidden"
       >
         <ArrowUpRight className="h-4 w-4 shrink-0 text-[color:var(--brand-teal)]" />
-        <span className="font-display text-[13px] font-semibold leading-tight">Product overview</span>
+        <span className="font-display text-[13px] font-semibold leading-tight">Show me around</span>
       </Link>
     </div>
   );
