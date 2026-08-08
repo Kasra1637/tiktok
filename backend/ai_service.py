@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # Models
 VISION_MODEL = "google/gemini-2.5-flash"
 IMAGE_GEN_MODEL = "google/gemini-2.5-flash-image"
-FACE_SWAP_MODEL = "x-ai/grok-imagine-image-quality"  # Grok Imagine — strong identity preservation, no content filter issues, 2K
+FACE_SWAP_MODEL = "google/gemini-3.1-flash-image"  # Nano Banana 2 — confirmed working identity transfer for this project's use case (see git history f1afdc8); supports up to 14 input references, up to 4K
 TEXT_MODEL = "google/gemini-2.5-flash"
 
 # Video generation models — MiniMax H3 (Hailuo 3) is the sole model.
@@ -653,7 +653,7 @@ async def generate_video(
     duration: int = 5,
     model: str = None,
     generate_audio: bool = True,
-    reference_video_path: Path = None,
+    reference_video_url: str = None,
     reference_audio_url: str = None,
     input_references: list = None,
 ) -> dict:
@@ -673,9 +673,12 @@ async def generate_video(
         model: Model key (only "minimax-h3" supported now).
         generate_audio: Whether to generate native audio. Defaults to True since H3
                        produces synced audio in one pass (dialogue, foley, ambient).
-        reference_video_path: Optional path to the original viral video for V2V motion
-                            transfer — H3 will replicate the timing, camera movement,
-                            and performance rhythm from this video.
+        reference_video_url: Optional public HTTPS URL to the original viral video for
+                            V2V motion transfer — H3 will replicate the timing, camera
+                            movement, and performance rhythm from this video. MUST be a
+                            real HTTPS URL: OpenRouter's video API rejects base64 data
+                            URIs for video_url references (unlike image references,
+                            which do accept them) with "Only HTTPS URLs are allowed".
         reference_audio_url: Optional URL to an audio file to use as voice/music reference.
         input_references: Optional pre-built list of reference objects to pass directly.
                          Each item should follow OpenRouter's input_references schema.
@@ -710,14 +713,13 @@ async def generate_video(
     refs = list(input_references) if input_references else []
 
     # V2V motion transfer: feed the original viral video so H3 replicates its
-    # timing, camera language, performance rhythm, and editing pace.
-    if reference_video_path and reference_video_path.exists():
-        video_b64 = _video_to_base64(reference_video_path)
-        if video_b64:
-            refs.append({
-                "type": "video_url",
-                "video_url": {"url": f"data:video/mp4;base64,{video_b64}"},
-            })
+    # timing, camera language, performance rhythm, and editing pace. Must be a
+    # real HTTPS URL — base64 data URIs are rejected for video_url references.
+    if reference_video_url:
+        refs.append({
+            "type": "video_url",
+            "video_url": {"url": reference_video_url},
+        })
 
     # Audio reference: feed an audio file (voice/music) so H3 syncs lip movement
     # and pacing to the original sound.
@@ -734,7 +736,7 @@ async def generate_video(
         f"Submitting video generation (MiniMax H3): duration={payload['duration']}s, "
         f"resolution={payload['resolution']}, has_frame_image={bool(payload.get('frame_images'))}, "
         f"audio={generate_audio}, num_references={len(refs)}, "
-        f"has_v2v_motion={bool(reference_video_path and reference_video_path.exists())}"
+        f"has_v2v_motion={bool(reference_video_url)}"
     )
 
     async with httpx.AsyncClient(timeout=90) as client:
@@ -755,27 +757,6 @@ async def generate_video(
         # Normalize: ensure 'id' key is always present
         data["id"] = job_id
         return data
-
-
-def _video_to_base64(path: Path, max_size_mb: int = 25) -> Optional[str]:
-    """Encode a video file to base64 for use as a V2V motion reference.
-
-    Returns None if the file is too large (avoids inflating the API payload
-    beyond reasonable limits — H3 accepts references up to ~25MB).
-    """
-    try:
-        file_size = path.stat().st_size
-        if file_size > max_size_mb * 1024 * 1024:
-            logger.warning(
-                f"Video reference {path.name} is {file_size / 1024 / 1024:.1f}MB "
-                f"(max {max_size_mb}MB). Skipping V2V motion transfer."
-            )
-            return None
-        with open(path, "rb") as f:
-            return base64.b64encode(f.read()).decode("utf-8")
-    except Exception as e:
-        logger.warning(f"Could not read video reference {path}: {e}")
-        return None
 
 
 async def poll_video_job(job_id: str) -> dict:

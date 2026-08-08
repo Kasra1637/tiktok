@@ -58,6 +58,13 @@ HOOK_DURATION_SECONDS = 3.0
 SEARCH_QUERY_MAX_LENGTH = 100
 BRAND_URL_TEXT_MAX_CHARS = 8000
 
+# Public HTTPS base URL this server is reachable at. OpenRouter's video
+# generation API requires V2V motion-reference videos (input_references[].video_url)
+# to be real HTTPS URLs — base64 data URIs, unlike for images, are rejected with
+# "Only HTTPS URLs are allowed". PUBLIC_BASE_URL lets this be set explicitly;
+# RENDER_EXTERNAL_URL is populated automatically on Render deployments.
+PUBLIC_BASE_URL = (os.environ.get("PUBLIC_BASE_URL") or os.environ.get("RENDER_EXTERNAL_URL") or "").rstrip("/")
+
 _ytdlp_semaphore = asyncio.Semaphore(3)
 
 
@@ -735,6 +742,25 @@ async def get_active_brand_or_404() -> dict:
             detail="No brand profile yet. Analyze your website URL first.",
         )
     return brand
+
+
+def public_media_url(local_path) -> Optional[str]:
+    """
+    Build an absolute HTTPS URL for a file under storage/, for use as a
+    video_url V2V motion reference. Returns None if the file isn't under
+    storage/ or if PUBLIC_BASE_URL isn't configured (e.g. local dev without
+    a public hostname) — callers must treat None as "skip this reference"
+    rather than fall back to base64, which the video API rejects outright.
+    """
+    if not local_path or not PUBLIC_BASE_URL:
+        return None
+    try:
+        storage_root = pipeline.STORAGE_DIR.resolve()
+        resolved = Path(local_path).resolve()
+        relative_path = resolved.relative_to(storage_root)
+    except (ValueError, OSError):
+        return None
+    return f"{PUBLIC_BASE_URL}/api/media/{relative_path.as_posix()}"
 
 
 def require_ai_configured():
@@ -1822,7 +1848,7 @@ async def face_swap_generate_hook_video(
             reference_image_path=image_path,
             duration=5,
             generate_audio=include_audio,
-            reference_video_path=reference_video_path,  # V2V motion transfer
+            reference_video_url=public_media_url(reference_video_path),  # V2V motion transfer
         )
     except Exception as e:
         logger.error(f"Hook video generation failed: {e}")
@@ -2012,7 +2038,7 @@ async def face_swap_extend_video(
             reference_image_path=first_frame_path,
             duration=duration,
             generate_audio=True,  # H3 native audio in one pass
-            reference_video_path=reference_video_path,  # V2V motion transfer if available
+            reference_video_url=public_media_url(reference_video_path),  # V2V motion transfer if available
         )
     except Exception as e:
         logger.error(f"Extend video generation failed: {e}")
@@ -2835,7 +2861,7 @@ async def submit_video_job(job_id: str, user_id: str = Depends(get_current_user_
             reference_image_path=reference_image_path,
             duration=job.get("target_duration_seconds", 10) or 10,
             generate_audio=True,  # H3 native audio
-            reference_video_path=reference_video_path,  # V2V motion transfer
+            reference_video_url=public_media_url(reference_video_path),  # V2V motion transfer
         )
     except Exception as e:
         logger.error(f"Video submission failed for {job_id}: {e}")
