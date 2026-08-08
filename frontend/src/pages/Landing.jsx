@@ -25,67 +25,67 @@ const FEATURES = [
     icon: TrendingUp,
     title: "AI Hook Analysis",
     description:
-      "AI breaks down the first 2\u20133 seconds of any video: expressions, gestures, pacing, overlays, and audio cues. Scores it 1\u201310.",
+      "AI dissects the first 2\u20133 seconds of any video \u2014 expressions, gestures, pacing, overlays. Scored 1\u201310.",
   },
   {
     icon: FileText,
     title: "Transcript-Grounded",
     description:
-      "When captions exist, the analysis is grounded in the real spoken words \u2014 not just guesswork from the visuals.",
+      "When captions exist, hook analysis is grounded in real spoken words \u2014 not just guesswork from the visuals.",
   },
   {
     icon: Music2,
     title: "Sound Intelligence",
     description:
-      "See the exact sound on every video \u2014 title, artist, duration. Toggle \u201cUse original sound\u201d to script your remix around it.",
+      "See the exact sound on every video \u2014 title, artist, duration. Script your remix around the trending audio.",
   },
   {
     icon: BadgeAlert,
     title: "Ad Filtering",
     description:
-      "Sponsored posts are auto-flagged. One toggle hides them so you only see organic hooks worth replicating.",
+      "Sponsored posts are auto-flagged and hideable with one toggle. Focus only on organic hooks worth replicating.",
   },
   {
     icon: Repeat2,
     title: "Face Swap",
     description:
-      "Pick any frame. AI places your face into the exact pose, lighting, and environment \u2014 identity-preserving, 2K output.",
+      "Pick any frame from a viral hook. AI places your face into the exact pose, lighting, and scene at 2K quality.",
   },
   {
     icon: Save,
     title: "One-Time Face Upload",
     description:
-      "Upload your face once, it persists across sessions. Every future swap is a single click.",
+      "Upload your face once \u2014 it persists across sessions. Every future swap starts instantly, zero re-uploads.",
   },
   {
     icon: Bookmark,
     title: "Hook Templates",
     description:
-      "Save a proven hook. Its analysis, prompt, and motion reference are cached \u2014 reuse it on any future swap with zero AI cost.",
+      "Save a proven hook once. The analysis, prompt, and motion reference are cached \u2014 reuse it free forever.",
   },
   {
     icon: Clapperboard,
     title: "AI Video Generation",
     description:
-      "Your swapped image becomes frame one. MiniMax H3 generates a 5\u201315s video at 2K with V2V motion transfer from the original clip.",
+      "Your swapped image becomes frame one. MiniMax H3 generates a 5\u201315s vertical video at 2K resolution.",
   },
   {
     icon: RotateCcw,
     title: "Re-roll Takes",
     description:
-      "Not happy? Re-roll with the same prompt and references. No re-analysis, just a fresh render.",
+      "Not happy with a take? Re-roll with the same prompt and references. No re-analysis, just a fresh render.",
   },
   {
     icon: Globe,
     title: "Brand Prompts",
     description:
-      "Paste your website URL. AI extracts your brand identity and writes a video prompt that adapts the viral hook to your product.",
+      "Paste your website URL. AI extracts your brand identity and writes a video prompt tailored to your product.",
   },
   {
     icon: Target,
     title: "Content Remixer",
     description:
-      "Chat with AI about your goal. It checks audience fit, asks a few questions, then writes a production-ready video script.",
+      "Chat with AI about your remix goal. It checks audience fit, asks focused questions, then writes the script.",
   },
 ];
 
@@ -482,14 +482,15 @@ export default function Landing() {
           lede="Every tool in the pipeline, from discovery to publish-ready video."
         />
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {FEATURES.map((f) => (
             <div
               key={f.title}
-              className="surface surface-interactive shimmer-on-hover group rounded-2xl p-5 sm:p-6"
+              className="surface surface-interactive shimmer-on-hover group rounded-2xl p-6 text-center"
             >
-              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] transition-colors duration-200 group-hover:border-[color:var(--indigo-35)] group-hover:bg-[color:var(--indigo-15)]">
-                <f.icon className="h-5 w-5 text-[color:var(--brand-teal)]" />
+              <div className="relative mx-auto mb-4 flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-gradient-to-br from-[color:var(--brand-teal)] to-[color:var(--brand-teal-dark)] text-white shadow-[var(--glow-indigo)]">
+                <f.icon className="h-5 w-5" />
+                <span className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-b from-white/25 to-transparent" />
               </div>
               <h3 className="font-display text-base font-semibold">{f.title}</h3>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{f.description}</p>
