@@ -390,7 +390,14 @@ async def generate_customized_preview(
             "Keep everything else in the first image exactly as it is: the pose, body position, hand "
             "gestures, clothing, background, lighting, camera angle, and any on-screen text. "
             "The output must clearly show the face from the SECOND image — do not keep the face that "
-            "was originally in the first image."
+            "was originally in the first image. "
+            "SKIN TONE CONSISTENCY: The face's skin tone from the second image is the reference for "
+            "the ENTIRE person. Recolor the neck, chest, arms, and hands from the first image to match "
+            "the exact skin tone and undertone of the new face — do not leave the original body's skin "
+            "tone from the first image unchanged. There must be no visible tone mismatch or hard edge "
+            "at the jawline, neck, or collar. Apply the scene's natural lighting and shadows on top of "
+            "this matched skin tone, but the underlying base color must be uniform across face, neck, "
+            "and body."
             f"{scene_instruction}"
         ),
         "input_references": [
@@ -443,7 +450,14 @@ async def generate_face_swap(
             "Keep everything else in the first image exactly as it is: the pose, body position, hand "
             "gestures, clothing, background, lighting, camera angle, and any on-screen text. "
             "The output must clearly show the face from the SECOND image — do not keep the face that "
-            "was originally in the first image."
+            "was originally in the first image. "
+            "SKIN TONE CONSISTENCY: The face's skin tone from the second image is the reference for "
+            "the ENTIRE person. Recolor the neck, chest, arms, and hands from the first image to match "
+            "the exact skin tone and undertone of the new face — do not leave the original body's skin "
+            "tone from the first image unchanged. There must be no visible tone mismatch or hard edge "
+            "at the jawline, neck, or collar. Apply the scene's natural lighting and shadows on top of "
+            "this matched skin tone, but the underlying base color must be uniform across face, neck, "
+            "and body."
         ),
         "input_references": [
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{target_b64}"}},
