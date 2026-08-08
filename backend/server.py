@@ -86,26 +86,34 @@ async def get_db():
     libsql_experimental (cloud-persisted, survives Render redeploys).
     Otherwise falls back to local aiosqlite (for dev/testing).
     """
+    use_turso = False
     if TURSO_DATABASE_URL:
-        import libsql_experimental as libsql
-        conn = libsql.connect(
-            "hookforge.db",
-            sync_url=TURSO_DATABASE_URL,
-            auth_token=TURSO_AUTH_TOKEN,
-        )
-        conn.execute("PRAGMA journal_mode=WAL")
+        try:
+            import libsql_experimental as libsql
+            conn = libsql.connect(
+                "hookforge.db",
+                sync_url=TURSO_DATABASE_URL,
+                auth_token=TURSO_AUTH_TOKEN,
+            )
+            conn.execute("PRAGMA journal_mode=WAL")
+            use_turso = True
+        except Exception as e:
+            logger.warning(f"Turso connection failed, falling back to local SQLite: {e}")
+            use_turso = False
+
+    if use_turso:
         try:
             yield _LibsqlAsyncWrapper(conn)
         finally:
             conn.close()
     else:
-        conn = await aiosqlite.connect(str(DB_PATH))
-        conn.row_factory = aiosqlite.Row
-        await conn.execute("PRAGMA journal_mode=WAL")
+        local_conn = await aiosqlite.connect(str(DB_PATH))
+        local_conn.row_factory = aiosqlite.Row
+        await local_conn.execute("PRAGMA journal_mode=WAL")
         try:
-            yield conn
+            yield local_conn
         finally:
-            await conn.close()
+            await local_conn.close()
 
 
 class _LibsqlAsyncWrapper:
@@ -3356,12 +3364,23 @@ async def serve_frame(video_hash: str, filename: str):
     mount for frame paths specifically so users always see their filmstrip.
     """
     frame_path = pipeline.FRAMES_DIR / video_hash / filename
-    if not frame_path.is_file():
-        relative_path = f"frames/{video_hash}/{filename}"
+    if frame_path.is_file():
+        return FileResponse(str(frame_path), media_type="image/jpeg")
+
+    # Frame missing — attempt recovery
+    logger.info(f"Frame missing, attempting recovery: {video_hash}/{filename}")
+    relative_path = f"frames/{video_hash}/{filename}"
+    try:
         recovered = await _recover_missing_frame(relative_path)
-        if not recovered:
-            raise HTTPException(status_code=404, detail="Frame not found.")
-    return FileResponse(str(frame_path), media_type="image/jpeg")
+    except Exception as e:
+        logger.error(f"Frame recovery crashed for {video_hash}/{filename}: {e}")
+        raise HTTPException(status_code=404, detail="Frame not found and recovery failed.")
+
+    if recovered and frame_path.is_file():
+        return FileResponse(str(frame_path), media_type="image/jpeg")
+
+    logger.warning(f"Frame recovery failed for {video_hash}/{filename}")
+    raise HTTPException(status_code=404, detail="Frame not found on server.")
 
 
 app.mount("/api/media", StaticFiles(directory=str(pipeline.STORAGE_DIR)), name="media")
