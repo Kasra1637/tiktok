@@ -146,6 +146,7 @@ export default function FaceSwap() {
   const [sourcePreview, setSourcePreview] = useState(null);
   const [videoInfo, setVideoInfo] = useState(null);
   const [savedFaceLoaded, setSavedFaceLoaded] = useState(false);
+  const [customPrompt, setCustomPrompt] = useState("");
 
   // Generation state
   const [generating, setGenerating] = useState(false);
@@ -398,6 +399,7 @@ export default function FaceSwap() {
       formData.append("source_face", sourceFile);
       if (targetFrameUrl) formData.append("target_frame_url", targetFrameUrl);
       else formData.append("target_image", targetFile);
+      if (customPrompt.trim()) formData.append("customization_prompt", customPrompt.trim());
       const submission = await api.faceSwap(formData);
       localStorage.setItem(ACTIVE_FACE_SWAP_JOB_KEY, JSON.stringify({
         jobId: submission.job_id,
@@ -423,6 +425,7 @@ export default function FaceSwap() {
       if (targetFrameUrl) formData.append("target_frame_url", targetFrameUrl);
       else formData.append("target_image", targetFile);
       formData.append("variants", String(Math.min(2, 4 - (result.variants?.length || 1))));
+      if (customPrompt.trim()) formData.append("customization_prompt", customPrompt.trim());
       const submission = await api.faceSwap(formData);
       startImagePolling(submission.job_id, true);
     } catch (err) {
@@ -535,7 +538,7 @@ export default function FaceSwap() {
   const handleReset = () => {
     setTargetFile(null); setTargetPreview(null); setTargetFrameUrl(null); setVideoInfo(null);
     setSourceFile(null); setSourcePreview(null); setResult(null); setGenError(null);
-    setSelectedVariant(0);
+    setSelectedVariant(0); setCustomPrompt("");
     setGeneratingVideo(false);
     setVideoStatus(null); setVideoUrl(null); setVideoError(null); setFailedPhase(null);
     setVideoPhase("hook"); setMotionStyle("lean-in");
@@ -737,6 +740,27 @@ export default function FaceSwap() {
                   )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Customization prompt (optional) */}
+          {targetFile && sourceFile && !generating && (
+            <div className="mx-auto max-w-md space-y-2" data-testid="customization-prompt-section">
+              <label htmlFor="custom-prompt" className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                <Sparkles className="h-3 w-3 text-[color:var(--brand-teal)]" />
+                Customize (optional)
+              </label>
+              <Input
+                id="custom-prompt"
+                placeholder="e.g. Change the outfit to a black leather jacket, or Put me in a coffee shop..."
+                value={customPrompt}
+                onChange={(e) => setCustomPrompt(e.target.value)}
+                className="text-sm"
+                data-testid="customization-prompt-input"
+              />
+              <p className="text-[10px] leading-snug text-muted-foreground">
+                Describe changes to clothing, environment, or style. Leave empty to keep the original scene.
+              </p>
             </div>
           )}
 

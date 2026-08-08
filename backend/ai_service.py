@@ -387,8 +387,11 @@ async def generate_customized_preview(
             "Edit the first image. Replace ONLY the face and identity of the person shown in it with "
             "the face of the person shown in the second image — matching that person's facial "
             "structure, eyes, nose, lips, and skin tone. "
-            "Keep everything else in the first image exactly as it is: the pose, body position, hand "
-            "gestures, clothing, background, lighting, camera angle, and any on-screen text. "
+            "Keep the pose, body position, hand gestures, background, lighting, and camera angle from "
+            "the first image. "
+            "TEXT OVERLAYS: Remove ALL text overlays, captions, watermarks, and visual text elements "
+            "that appear in the first image. The output must have a clean image with NO on-screen text, "
+            "no subtitles, no branded overlays, no emoji overlays, and no caption graphics. "
             "The output must clearly show the face from the SECOND image — do not keep the face that "
             "was originally in the first image. "
             "HAIRSTYLE: Also replace the hairstyle from the first image with the hairstyle of the "
@@ -425,6 +428,7 @@ async def generate_face_swap(
     target_image_path: Path,
     source_face_path: Path,
     session_id: str,
+    customization_prompt: str = "",
 ) -> bytes:
     """
     Standalone identity-preserving scene edit through OpenRouter's Images API.
@@ -438,6 +442,9 @@ async def generate_face_swap(
     direct, local edit of image 1 using image 2's face is what actually
     swaps the identity. See git history (bcbf905, fe70420, 48c1082) for prior
     instances of this same failure mode across different underlying models.
+
+    Optional customization_prompt lets the user request changes to clothing,
+    environment, or other scene elements while keeping the identity swap intact.
     """
     target_b64 = image_to_base64(target_image_path)
 
@@ -445,14 +452,25 @@ async def generate_face_swap(
     cropped_source_path = crop_face_from_path(source_face_path)
     source_b64 = image_to_base64(cropped_source_path)
 
+    # Build optional customization instruction
+    custom_instruction = ""
+    if customization_prompt and customization_prompt.strip():
+        custom_instruction = (
+            f" CUSTOMIZATION: Additionally, apply these changes to the output: {customization_prompt.strip()}. "
+            "Apply these changes while still preserving the face swap, hairstyle, and skin tone instructions above."
+        )
+
     payload = {
         "model": FACE_SWAP_MODEL,
         "prompt": (
             "Edit the first image. Replace ONLY the face and identity of the person shown in it with "
             "the face of the person shown in the second image — matching that person's facial "
             "structure, eyes, nose, lips, and skin tone. "
-            "Keep everything else in the first image exactly as it is: the pose, body position, hand "
-            "gestures, clothing, background, lighting, camera angle, and any on-screen text. "
+            "Keep the pose, body position, hand gestures, background, lighting, and camera angle from "
+            "the first image. "
+            "TEXT OVERLAYS: Remove ALL text overlays, captions, watermarks, and visual text elements "
+            "that appear in the first image. The output must have a clean image with NO on-screen text, "
+            "no subtitles, no branded overlays, no emoji overlays, and no caption graphics. "
             "The output must clearly show the face from the SECOND image — do not keep the face that "
             "was originally in the first image. "
             "HAIRSTYLE: Also replace the hairstyle from the first image with the hairstyle of the "
@@ -466,6 +484,7 @@ async def generate_face_swap(
             "at the jawline, neck, or collar. Apply the scene's natural lighting and shadows on top of "
             "this matched skin tone, but the underlying base color must be uniform across face, neck, "
             "and body."
+            f"{custom_instruction}"
         ),
         "input_references": [
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{target_b64}"}},

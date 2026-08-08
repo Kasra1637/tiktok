@@ -1147,12 +1147,14 @@ async def _generate_face_swap_variant(
     source_path: Path,
     job_id: str,
     variant_index: int,
+    customization_prompt: str = "",
 ) -> dict:
     """Generate and persist one face-swap variant for an asynchronous job."""
     image_bytes = await generate_face_swap(
         target_image_path=target_path,
         source_face_path=source_path,
         session_id=f"face-swap-{job_id}-v{variant_index}",
+        customization_prompt=customization_prompt,
     )
     gen_id = str(uuid.uuid4())
     gen_path = pipeline.GENERATED_DIR / f"{gen_id}.png"
@@ -1178,6 +1180,7 @@ async def _run_face_swap_job(
     target_image_url: str,
     source_face_url: str,
     variants: int,
+    customization_prompt: str = "",
 ):
     """Run image generation after the submission response has reached the browser."""
     await _execute(
@@ -1186,7 +1189,7 @@ async def _run_face_swap_job(
     )
     try:
         tasks = [
-            _generate_face_swap_variant(target_path, source_path, job_id, index)
+            _generate_face_swap_variant(target_path, source_path, job_id, index, customization_prompt)
             for index in range(variants)
         ]
         raw_results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -1231,6 +1234,7 @@ async def face_swap(
     source_face: UploadFile = File(...),
     target_frame_url: str = Form(""),
     variants: int = Form(1),
+    customization_prompt: str = Form(""),
     user_id: str = Depends(get_current_user_id),
 ):
     """
@@ -1319,6 +1323,7 @@ async def face_swap(
         target_image_url,
         source_face_url,
         variants,
+        customization_prompt,
     )
 
     return {
