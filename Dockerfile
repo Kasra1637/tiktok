@@ -8,8 +8,26 @@ RUN yarn install --frozen-lockfile || yarn install
 
 COPY frontend/ ./
 
+# Create React App inlines REACT_APP_* variables at BUILD time, so anything
+# the browser needs must be present here — not just in the runtime container.
+# Pass the Clerk key with either:
+#   docker build --build-arg REACT_APP_CLERK_PUBLISHABLE_KEY=pk_live_...
+# or, on Render, by declaring it as an Environment Variable (Render forwards
+# service env vars to the build as --build-arg automatically).
+#
+# If it's absent the app still builds and runs, just with sign-in disabled
+# (see frontend/src/lib/clerk.js) rather than rendering a blank page.
+ARG REACT_APP_CLERK_PUBLISHABLE_KEY=""
+
 # Build with empty BACKEND_URL so API calls use same-origin
-RUN REACT_APP_BACKEND_URL="" yarn build
+RUN REACT_APP_BACKEND_URL="" \
+    REACT_APP_CLERK_PUBLISHABLE_KEY="$REACT_APP_CLERK_PUBLISHABLE_KEY" \
+    yarn build && \
+    if [ -n "$REACT_APP_CLERK_PUBLISHABLE_KEY" ]; then \
+      echo "Clerk key baked into frontend build."; \
+    else \
+      echo "WARNING: REACT_APP_CLERK_PUBLISHABLE_KEY not set — auth disabled in this build."; \
+    fi
 
 
 # Stage 2: Python runtime with backend + built frontend
@@ -40,7 +58,7 @@ RUN mkdir -p /app/backend/storage/videos /app/backend/storage/frames \
 # frontend code changed. It busts Docker BuildKit's runtime stage cache
 # which otherwise reuses the old COPY --from=builder output independently
 # of whether the builder stage produced new files.
-RUN echo "FRONTEND_VERSION=hookflow-v3-2026-07-15T04" > /tmp/frontend_version.txt
+RUN echo "FRONTEND_VERSION=hookflow-v4-clerk-auth-2026-08-07" > /tmp/frontend_version.txt
 COPY --from=builder /app/frontend/build /app/frontend_build/
 
 # Expose the application port

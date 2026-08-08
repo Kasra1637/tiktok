@@ -90,6 +90,9 @@ frontend/node_modules/.cache/default-development/4.pack
 .env
 .env.*
 *.env
+# ...but DO track the committed templates that document which vars are needed.
+!.env.example
+!**/.env.example
 credentials.json
 *.key
 .credentials

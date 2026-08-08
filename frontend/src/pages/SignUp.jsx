@@ -1,6 +1,7 @@
 import { SignUp as ClerkSignUp } from "@clerk/clerk-react";
 import { Link } from "react-router-dom";
 import { Sparkles, ArrowLeft } from "lucide-react";
+import { isClerkConfigured } from "../lib/clerk";
 
 /**
  * Sign-up page. Same pattern as SignIn — Clerk handles the full flow, we
@@ -23,7 +24,21 @@ export default function SignUp() {
           <p className="text-sm text-muted-foreground">Create your account to get started.</p>
         </div>
 
-        {/* Clerk's embedded sign-up component */}
+        {!isClerkConfigured ? (
+          <div className="surface-solid w-full max-w-[400px] rounded-2xl p-6 text-center">
+            <p className="font-display text-sm font-semibold">Authentication isn&apos;t configured</p>
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              Set <code className="font-mono">REACT_APP_CLERK_PUBLISHABLE_KEY</code> at build time to
+              enable sign up. Until then the app runs without accounts.
+            </p>
+            <Link
+              to="/discover"
+              className="mt-4 inline-flex text-xs font-semibold text-[color:var(--brand-teal)] hover:underline"
+            >
+              Continue to the app
+            </Link>
+          </div>
+        ) : (
         <ClerkSignUp
           routing="path"
           path="/sign-up"
@@ -42,6 +57,7 @@ export default function SignUp() {
             },
           }}
         />
+        )}
 
         <Link
           to="/"

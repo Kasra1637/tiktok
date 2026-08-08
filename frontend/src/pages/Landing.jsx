@@ -1,5 +1,11 @@
 import { Link } from "react-router-dom";
-import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/clerk-react";
+import {
+  AuthedOnly,
+  UnauthedOnly,
+  SignInTrigger,
+  SignUpTrigger,
+  AccountButton,
+} from "../components/auth/AuthControls";
 import {
   Sparkles, Search, Repeat2, Clapperboard, Globe, Save, Film,
   TrendingUp, ArrowRight, Zap, Target, Layers, Music2,
@@ -338,22 +344,25 @@ export default function Landing() {
           </nav>
 
           <div className="flex items-center gap-2">
-            <SignedOut>
-              <SignInButton mode="modal">
+            <UnauthedOnly>
+              <SignInTrigger>
                 <button className="rounded-xl px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-[color:var(--indigo-6)] hover:text-foreground">
                   Sign In
                 </button>
-              </SignInButton>
-              <SignUpButton mode="modal">
+              </SignInTrigger>
+              {/* Same testid as the signed-in "Enter App" button — the two
+                  branches are mutually exclusive, so the onboarding tour
+                  always finds exactly one primary CTA to anchor to. */}
+              <SignUpTrigger>
                 <Button
                   className="gap-2 rounded-xl bg-[color:var(--brand-teal)] px-4 text-sm font-semibold text-white shadow-[var(--glow-indigo)] hover:bg-[color:var(--brand-teal-dark)]"
                   data-testid="landing-enter-app-button"
                 >
                   Get Started <ArrowRight className="h-4 w-4" />
                 </Button>
-              </SignUpButton>
-            </SignedOut>
-            <SignedIn>
+              </SignUpTrigger>
+            </UnauthedOnly>
+            <AuthedOnly>
               <Link to="/discover">
                 <Button
                   className="gap-2 rounded-xl bg-[color:var(--brand-teal)] px-4 text-sm font-semibold text-white shadow-[var(--glow-indigo)] hover:bg-[color:var(--brand-teal-dark)]"
@@ -362,8 +371,8 @@ export default function Landing() {
                   Enter App <ArrowRight className="h-4 w-4" />
                 </Button>
               </Link>
-              <UserButton afterSignOutUrl="/" />
-            </SignedIn>
+              <AccountButton />
+            </AuthedOnly>
           </div>
         </div>
       </header>
@@ -405,16 +414,16 @@ export default function Landing() {
             className="animate-fade-up mt-10 flex flex-col items-center justify-center gap-3.5 sm:flex-row"
             style={{ animationDelay: "180ms" }}
           >
-            <SignedOut>
-              <SignUpButton mode="modal">
+            <UnauthedOnly>
+              <SignUpTrigger>
                 <Button
                   size="lg"
                   className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-white shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
                 >
                   <Sparkles className="h-5 w-5" /> Start Free
                 </Button>
-              </SignUpButton>
-              <SignInButton mode="modal">
+              </SignUpTrigger>
+              <SignInTrigger>
                 <Button
                   size="lg"
                   variant="outline"
@@ -422,9 +431,9 @@ export default function Landing() {
                 >
                   I have an account
                 </Button>
-              </SignInButton>
-            </SignedOut>
-            <SignedIn>
+              </SignInTrigger>
+            </UnauthedOnly>
+            <AuthedOnly>
               <Link to="/discover" className="w-full sm:w-auto">
                 <Button
                   size="lg"
@@ -442,7 +451,7 @@ export default function Landing() {
                   <Repeat2 className="h-5 w-5" /> Face Swap
                 </Button>
               </Link>
-            </SignedIn>
+            </AuthedOnly>
           </div>
 
           <div
@@ -637,16 +646,16 @@ export default function Landing() {
                 Save the hook as a template and every future remix is free.
               </p>
               <div className="mt-9 flex flex-col items-center justify-center gap-3.5 sm:flex-row">
-                <SignedOut>
-                  <SignUpButton mode="modal">
+                <UnauthedOnly>
+                  <SignUpTrigger>
                     <Button
                       size="lg"
                       className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-white shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
                     >
                       <Sparkles className="h-5 w-5" /> Get Started Free
                     </Button>
-                  </SignUpButton>
-                  <SignInButton mode="modal">
+                  </SignUpTrigger>
+                  <SignInTrigger>
                     <Button
                       size="lg"
                       variant="outline"
@@ -654,9 +663,9 @@ export default function Landing() {
                     >
                       Sign In
                     </Button>
-                  </SignInButton>
-                </SignedOut>
-                <SignedIn>
+                  </SignInTrigger>
+                </UnauthedOnly>
+                <AuthedOnly>
                   <Link to="/discover" className="w-full sm:w-auto">
                     <Button
                       size="lg"
@@ -674,7 +683,7 @@ export default function Landing() {
                       <Globe className="h-5 w-5" /> Set Up Your Brand
                     </Button>
                   </Link>
-                </SignedIn>
+                </AuthedOnly>
               </div>
             </div>
           </div>

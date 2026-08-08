@@ -1,17 +1,10 @@
-import { useAuth, useClerk } from "@clerk/clerk-react";
+import { useAuth } from "@clerk/clerk-react";
 import { Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
+import { isClerkConfigured } from "../lib/clerk";
 
-/**
- * Wraps authenticated app routes. Redirects to /sign-in when the user is not
- * signed in, and shows a branded loading spinner while Clerk resolves the
- * session (avoids a flash of the sign-in page on refresh).
- *
- * If Clerk fails to load entirely (missing key, blocked network), the spinner
- * has a timeout fallback that redirects to sign-in after 8 seconds rather
- * than showing a permanent blank screen.
- */
-export function ProtectedRoute({ children }) {
+/** The real gate — only ever rendered inside a mounted <ClerkProvider>. */
+function ClerkGate({ children }) {
   const { isLoaded, isSignedIn } = useAuth();
 
   if (!isLoaded) {
@@ -25,11 +18,22 @@ export function ProtectedRoute({ children }) {
     );
   }
 
-  if (!isSignedIn) {
-    return <Navigate to="/sign-in" replace />;
-  }
+  if (!isSignedIn) return <Navigate to="/sign-in" replace />;
 
   return children;
+}
+
+/**
+ * Gates the authenticated app routes.
+ *
+ * When Clerk isn't configured there is no <ClerkProvider> in the tree, so
+ * calling useAuth() would throw. In that case we let the request through —
+ * the backend does the same thing (everything is filed under the "anonymous"
+ * user), which keeps the app fully usable before auth keys are added.
+ */
+export function ProtectedRoute({ children }) {
+  if (!isClerkConfigured) return children;
+  return <ClerkGate>{children}</ClerkGate>;
 }
 
 export default ProtectedRoute;
