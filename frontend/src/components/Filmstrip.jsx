@@ -1,5 +1,38 @@
+import { useState } from "react";
 import { mediaUrl } from "../lib/api";
-import { Check, Film } from "lucide-react";
+import { Check, Film, ImageOff } from "lucide-react";
+
+function FrameImage({ src, alt }) {
+  const [failed, setFailed] = useState(false);
+  const [retried, setRetried] = useState(false);
+
+  if (failed) {
+    return (
+      <div className="flex h-[160px] w-full items-center justify-center bg-secondary/60 md:h-[190px]">
+        <ImageOff className="h-5 w-5 text-muted-foreground/40" />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className="h-[160px] w-full object-cover transition-transform duration-500 ease-out-expo group-hover:scale-[1.05] md:h-[190px]"
+      onError={(e) => {
+        // Retry once (the dynamic endpoint may need a moment to recover the frame)
+        if (!retried) {
+          setRetried(true);
+          setTimeout(() => {
+            e.target.src = src + (src.includes("?") ? "&" : "?") + "retry=1";
+          }, 2000);
+        } else {
+          setFailed(true);
+        }
+      }}
+    />
+  );
+}
 
 export function Filmstrip({ frames, selectedIndex, onSelect }) {
   return (
@@ -30,11 +63,7 @@ export function Filmstrip({ frames, selectedIndex, onSelect }) {
                     : "border-[color:var(--hairline)] hover:-translate-y-0.5 hover:border-[color:var(--indigo-45)] hover:shadow-[var(--shadow-md)]"
                 }`}
               >
-                <img
-                  src={mediaUrl(frame.media_url)}
-                  alt={`Frame ${frame.index}`}
-                  className="h-[160px] w-full object-cover transition-transform duration-500 ease-out-expo group-hover:scale-[1.05] md:h-[190px]"
-                />
+                <FrameImage src={mediaUrl(frame.media_url)} alt={`Frame ${frame.index}`} />
                 {/* Dim unselected frames so the active one visually wins. */}
                 <span
                   aria-hidden="true"
