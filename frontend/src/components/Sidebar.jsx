@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { AccountButton } from "./auth/AuthControls";
 import { isClerkConfigured } from "../lib/clerk";
+import { useOnboarding } from "./onboarding/OnboardingProvider";
 import {
   Sparkles,
   Compass,
@@ -12,6 +13,7 @@ import {
   PanelLeftOpen,
   X,
   ArrowUpRight,
+  HelpCircle,
 } from "lucide-react";
 
 /**
@@ -141,6 +143,8 @@ function NavGroups({ collapsed, onNavigate, testIdPrefix = "" }) {
 }
 
 function SidebarFooter({ collapsed }) {
+  const { hasTourForPage, replayCurrentPageTour } = useOnboarding();
+
   if (collapsed) {
     return (
       <div className="mt-auto flex flex-col items-center gap-3 px-4 pb-4">
@@ -151,13 +155,16 @@ function SidebarFooter({ collapsed }) {
             />
           </div>
         )}
-        <Link
-          to="/"
-          title="Show me around"
-          className="flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-[color:var(--indigo-6)] hover:text-foreground"
-        >
-          <ArrowUpRight className="h-[18px] w-[18px]" />
-        </Link>
+        {hasTourForPage && (
+          <button
+            type="button"
+            onClick={replayCurrentPageTour}
+            title="Show me around"
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-[color:var(--indigo-6)] hover:text-foreground"
+          >
+            <HelpCircle className="h-[18px] w-[18px]" />
+          </button>
+        )}
       </div>
     );
   }
@@ -178,15 +185,17 @@ function SidebarFooter({ collapsed }) {
         </div>
       )}
 
-      {/* Only shown when the window is tall enough that it isn't stealing
-          room from the nav list (see the `tall` screen in tailwind.config). */}
-      <Link
-        to="/"
-        className="flex items-center gap-2.5 rounded-2xl border border-[color:var(--hairline)] bg-[color:var(--indigo-4)] p-3.5 transition-colors hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] tall:flex hidden"
-      >
-        <ArrowUpRight className="h-4 w-4 shrink-0 text-[color:var(--brand-teal)]" />
-        <span className="font-display text-[13px] font-semibold leading-tight">Show me around</span>
-      </Link>
+      {/* Tour replay button — matches the floating help button's style */}
+      {hasTourForPage && (
+        <button
+          type="button"
+          onClick={replayCurrentPageTour}
+          className="flex w-full items-center gap-2 rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3.5 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:border-[color:var(--indigo-35)] hover:text-[color:var(--brand-teal)]"
+        >
+          <HelpCircle className="h-3.5 w-3.5" />
+          <span>Show me around</span>
+        </button>
+      )}
     </div>
   );
 }
