@@ -116,14 +116,6 @@ const FLOW_STEPS = [
   },
 ];
 
-const STATS = [
-  { value: "10", label: "Niches" },
-  { value: "2K", label: "Resolution" },
-  { value: "8", label: "Hook Metrics" },
-  { value: "15s", label: "Max Video" },
-  { value: "$0", label: "Template Reuse" },
-];
-
 const NAV_LINKS = [
   { href: "#how-it-works", label: "How it works" },
   { href: "#features", label: "Features" },
@@ -411,31 +403,8 @@ export default function Landing() {
             </span>
           </div>
 
-          {/* Quick stats bar */}
-          <div
-            className="animate-fade-up surface-glass mt-14 rounded-2xl px-2 py-5 sm:px-6"
-            data-testid="landing-stats"
-            style={{ animationDelay: "260ms" }}
-          >
-            <dl className="grid grid-cols-3 gap-y-5 sm:grid-cols-5 sm:gap-y-0">
-              {STATS.map((stat, i) => (
-                <div
-                  key={stat.label}
-                  className={`text-center sm:px-2 ${
-                    i > 0 ? "sm:border-l sm:border-border/50" : ""
-                  }`}
-                >
-                  <dt className="sr-only">{stat.label}</dt>
-                  <dd>
-                    <span className="font-display block text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-                      {stat.value}
-                    </span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground sm:text-sm">{stat.label}</span>
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </div>
+          {/* Stats bar anchor kept for onboarding tour compatibility */}
+          <div data-testid="landing-stats" className="hidden" />
 
         </div>
       </section>
