@@ -2,6 +2,7 @@ aiohappyeyeballs==2.6.2
 aiohttp==3.14.1
 aiosignal==1.4.0
 aiosqlite==0.20.0
+libsql_experimental>=0.0.55
 annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.14.1

@@ -65,6 +65,13 @@ BRAND_URL_TEXT_MAX_CHARS = 8000
 # RENDER_EXTERNAL_URL is populated automatically on Render deployments.
 PUBLIC_BASE_URL = (os.environ.get("PUBLIC_BASE_URL") or os.environ.get("RENDER_EXTERNAL_URL") or "").rstrip("/")
 
+# Turso (cloud SQLite) configuration — free tier provides persistent storage
+# that survives Render's ephemeral filesystem wipes on redeploy. When
+# TURSO_DATABASE_URL is set, the app uses libsql_experimental to connect to
+# Turso over HTTP(S). When unset, it falls back to local aiosqlite (for dev).
+TURSO_DATABASE_URL = os.environ.get("TURSO_DATABASE_URL", "").strip()
+TURSO_AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "").strip()
+
 _ytdlp_semaphore = asyncio.Semaphore(3)
 
 
@@ -73,14 +80,76 @@ _ytdlp_semaphore = asyncio.Semaphore(3)
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def get_db():
-    """Async context manager for SQLite connections."""
-    conn = await aiosqlite.connect(str(DB_PATH))
-    conn.row_factory = aiosqlite.Row
-    await conn.execute("PRAGMA journal_mode=WAL")
-    try:
-        yield conn
-    finally:
-        await conn.close()
+    """Async context manager for database connections.
+
+    When TURSO_DATABASE_URL is set, connects to a remote Turso database via
+    libsql_experimental (cloud-persisted, survives Render redeploys).
+    Otherwise falls back to local aiosqlite (for dev/testing).
+    """
+    if TURSO_DATABASE_URL:
+        import libsql_experimental as libsql
+        conn = libsql.connect(
+            "hookforge.db",
+            sync_url=TURSO_DATABASE_URL,
+            auth_token=TURSO_AUTH_TOKEN,
+        )
+        conn.execute("PRAGMA journal_mode=WAL")
+        try:
+            yield _LibsqlAsyncWrapper(conn)
+        finally:
+            conn.close()
+    else:
+        conn = await aiosqlite.connect(str(DB_PATH))
+        conn.row_factory = aiosqlite.Row
+        await conn.execute("PRAGMA journal_mode=WAL")
+        try:
+            yield conn
+        finally:
+            await conn.close()
+
+
+class _LibsqlAsyncWrapper:
+    """
+    Thin wrapper that gives a libsql_experimental sync connection the same
+    async interface that aiosqlite provides (await conn.execute(), await
+    conn.commit(), etc.) so the rest of the codebase doesn't need changes.
+    """
+
+    def __init__(self, conn):
+        self._conn = conn
+
+    async def execute(self, sql, params=()):
+        return _CursorWrapper(self._conn.execute(sql, params))
+
+    async def executescript(self, sql):
+        self._conn.executescript(sql)
+        self._conn.commit()
+
+    async def commit(self):
+        self._conn.commit()
+        # Sync local embedded replica to/from Turso cloud
+        if hasattr(self._conn, "sync"):
+            self._conn.sync()
+
+    async def close(self):
+        pass  # handled by get_db's finally block
+
+
+class _CursorWrapper:
+    """Wraps a libsql cursor to provide awaitable fetchone/fetchall + description."""
+
+    def __init__(self, cursor):
+        self._cursor = cursor
+
+    @property
+    def description(self):
+        return self._cursor.description
+
+    async def fetchone(self):
+        return self._cursor.fetchone()
+
+    async def fetchall(self):
+        return self._cursor.fetchall()
 
 
 async def init_db():

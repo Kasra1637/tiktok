@@ -4,10 +4,6 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: free
-    disk:
-      name: hookforge-data
-      mountPath: /app/backend/storage
-      sizeGB: 1
     envVars:
       - key: OPENROUTER_API_KEY
         sync: false
@@ -18,4 +14,8 @@ services:
       - key: CLERK_JWKS_URL
         sync: false
       - key: PUBLIC_BASE_URL
+        sync: false
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
         sync: false
