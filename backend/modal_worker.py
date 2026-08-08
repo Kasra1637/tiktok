@@ -71,7 +71,7 @@ def _run(cmd: list, timeout: int = 100):
     return proc.returncode, proc.stdout.decode(errors="ignore"), proc.stderr.decode(errors="ignore")
 
 
-@app.function(image=image, timeout=180, memory=2048)
+@app.function(image=image, timeout=180, memory=2048, secrets=[modal.Secret.from_name("hookforge-shared-secret")])
 @modal.fastapi_endpoint(method="POST")
 def extract(payload: dict):
     """
