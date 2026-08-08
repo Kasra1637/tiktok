@@ -638,6 +638,54 @@ def build_frame_docs(video_hash: str, frame_paths: list) -> list:
     return docs
 
 
+async def _recover_missing_frame(relative_path: str) -> bool:
+    """
+    Best-effort self-heal for a frame file that's missing on this machine
+    (ephemeral storage after a redeploy, cache eviction, multi-instance
+    deploys, etc.) even though the DB still has a valid analysis row
+    referencing it.
+
+    Frame media URLs look like "frames/<video_hash>/<filename>". Re-download
+    the source video (a no-op if it's already on disk) and re-extract its
+    hook frames — `pipeline.download_video` names the file deterministically
+    from `url_hash(tiktok_url)`, and `pipeline.extract_hook_frames` reuses
+    that same hash for the frame directory, so this reproduces the exact
+    frame paths the original analysis stored, without needing a full
+    re-analysis (no new AI call).
+
+    Returns True if recovery succeeded (the file exists now), False otherwise.
+    """
+    parts = relative_path.split("/")
+    if len(parts) != 3 or parts[0] != "frames":
+        return False
+    video_hash = parts[1]
+
+    analysis = await _fetch_one(
+        "SELECT * FROM analyses WHERE frames LIKE ? ORDER BY created_at DESC LIMIT 1",
+        (f"%/frames/{video_hash}/%",),
+    )
+    if not analysis:
+        return False
+
+    video = await _fetch_one("SELECT * FROM videos WHERE id = ?", (analysis["video_id"],))
+    if not video or not video.get("tiktok_url"):
+        return False
+
+    try:
+        async with _ytdlp_semaphore:
+            video_path = await pipeline.download_video(
+                video["tiktok_url"], direct_video_url=video.get("direct_video_url", "")
+            )
+        await pipeline.extract_hook_frames(
+            video_path, num_frames=FRAME_COUNT, duration=HOOK_DURATION_SECONDS
+        )
+    except Exception as e:
+        logger.warning(f"Frame recovery failed for hash {video_hash}: {e}")
+        return False
+
+    return (pipeline.FRAMES_DIR / video_hash / parts[2]).is_file()
+
+
 def filter_ads(videos: list, include_ads: bool) -> list:
     """Drop ad/sponsored posts from a list of video dicts unless include_ads is True."""
     if include_ads:
@@ -1174,11 +1222,21 @@ async def face_swap(
         relative_path = url_path[len("/api/media/"):]
         storage_root = pipeline.STORAGE_DIR.resolve()
         target_path = (storage_root / relative_path).resolve()
-        if storage_root not in target_path.parents or not target_path.is_file():
+        if storage_root not in target_path.parents:
             raise HTTPException(
                 status_code=400,
                 detail="Target frame not found on server. Please re-analyze the video.",
             )
+        if not target_path.is_file():
+            # The frame file may be missing on this machine even though the
+            # analysis is still valid (ephemeral storage, redeploy, cache
+            # eviction). Try to reproduce it deterministically before failing.
+            recovered = await _recover_missing_frame(relative_path)
+            if not recovered:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Target frame not found on server. Please re-analyze the video.",
+                )
         target_image_url = url_path
     elif target_image:
         target_bytes = await target_image.read()

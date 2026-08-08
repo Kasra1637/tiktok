@@ -340,7 +340,7 @@ export default function AnalysisDetail() {
         </div>
 
         {/* ---------- Right column: the breakdown ---------- */}
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           {analyzing || !analysis ? (
             <div className="surface rounded-2xl p-6">
               <div className="mb-5 flex items-center gap-3">

@@ -38,16 +38,16 @@ export function HookBreakdown({ analysis }) {
         {SECTIONS.map(({ key, label, icon: Icon }) => (
           <div
             key={key}
-            className="surface surface-interactive rounded-2xl p-5"
+            className="surface surface-interactive min-w-0 rounded-2xl p-5"
             data-testid={`hook-section-${key}`}
           >
             <div className="mb-2.5 flex items-center gap-2.5">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
                 <Icon className="h-4 w-4" />
               </span>
-              <h4 className="font-display text-sm font-semibold leading-snug">{label}</h4>
+              <h4 className="min-w-0 break-words font-display text-sm font-semibold leading-snug">{label}</h4>
             </div>
-            <p className="text-sm leading-relaxed text-muted-foreground">{analysis[key]}</p>
+            <p className="break-words text-sm leading-relaxed text-muted-foreground">{analysis[key]}</p>
           </div>
         ))}
       </div>
@@ -65,7 +65,7 @@ export function HookBreakdown({ analysis }) {
               <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[color:var(--indigo-15)] text-[color:var(--brand-teal)]">
                 <Check className="h-2.5 w-2.5" />
               </span>
-              <span className="leading-relaxed">{m}</span>
+              <span className="min-w-0 break-words leading-relaxed">{m}</span>
             </li>
           ))}
         </ul>
