@@ -3,9 +3,12 @@ import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-
 import { Toaster } from "./components/ui/sonner";
 import AppShell from "./components/AppShell";
 import PageTransition from "./components/PageTransition";
+import ProtectedRoute from "./components/ProtectedRoute";
 import Landing from "./pages/Landing";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
+import SignIn from "./pages/SignIn";
+import SignUp from "./pages/SignUp";
 import NicheFeed from "./pages/NicheFeed";
 import AnalysisDetail from "./pages/AnalysisDetail";
 import GenerateVideo from "./pages/GenerateVideo";
@@ -27,27 +30,31 @@ function App() {
       <div className="noise-overlay" />
       <OnboardingProvider>
         <Routes>
-          {/* Landing + legal pages — no AppShell wrapper */}
+          {/* Public pages — no auth required */}
           <Route path="/" element={<Landing />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/terms" element={<Terms />} />
+          <Route path="/sign-in/*" element={<SignIn />} />
+          <Route path="/sign-up/*" element={<SignUp />} />
 
-          {/* App pages — wrapped in AppShell */}
+          {/* Authenticated app pages — wrapped in ProtectedRoute + AppShell */}
           <Route path="/*" element={
-            <AppShell>
-              <PageTransition>
-                <Routes>
-                  <Route path="/discover" element={<NicheFeed />} />
-                  <Route path="/face-swap" element={<FaceSwap />} />
-                  <Route path="/analysis/:videoId" element={<AnalysisDetail />} />
-                  <Route path="/customize/:videoId" element={<CustomizeRedirect />} />
-                  <Route path="/generate-video/:customizationId" element={<GenerateVideo />} />
-                  <Route path="/templates" element={<HookTemplates />} />
-                  <Route path="/history" element={<History />} />
-                  <Route path="/brand" element={<BrandSetup />} />
-                </Routes>
-              </PageTransition>
-            </AppShell>
+            <ProtectedRoute>
+              <AppShell>
+                <PageTransition>
+                  <Routes>
+                    <Route path="/discover" element={<NicheFeed />} />
+                    <Route path="/face-swap" element={<FaceSwap />} />
+                    <Route path="/analysis/:videoId" element={<AnalysisDetail />} />
+                    <Route path="/customize/:videoId" element={<CustomizeRedirect />} />
+                    <Route path="/generate-video/:customizationId" element={<GenerateVideo />} />
+                    <Route path="/templates" element={<HookTemplates />} />
+                    <Route path="/history" element={<History />} />
+                    <Route path="/brand" element={<BrandSetup />} />
+                  </Routes>
+                </PageTransition>
+              </AppShell>
+            </ProtectedRoute>
           } />
         </Routes>
       </OnboardingProvider>

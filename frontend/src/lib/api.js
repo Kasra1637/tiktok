@@ -11,6 +11,33 @@ export const mediaUrl = (path) => {
 
 const client = axios.create({ baseURL: API, timeout: 120000 });
 
+/**
+ * Attach the Clerk session JWT to every outgoing request.
+ *
+ * @clerk/clerk-react exposes `window.Clerk` after initialization. We call
+ * `session.getToken()` which returns the current short-lived JWT (and
+ * silently refreshes it when needed). If Clerk isn't loaded yet or the user
+ * is not signed in, the request goes out without a token — the backend will
+ * return 401 which the ProtectedRoute wrapper prevents from ever reaching
+ * the UI in normal use.
+ */
+client.interceptors.request.use(async (config) => {
+  try {
+    const clerk = window.Clerk;
+    if (clerk && clerk.session) {
+      const token = await clerk.session.getToken();
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    }
+  } catch (e) {
+    // Token fetch failed — let the request proceed unauthenticated.
+    // The backend will reject it if the route requires auth.
+    console.warn("Failed to attach auth token:", e);
+  }
+  return config;
+});
+
 export const api = {
   getNiches: () => client.get("/niches").then((r) => r.data),
   getNicheVideos: (nicheKey, mode = "curated", includeAds = true) =>

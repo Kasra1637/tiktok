@@ -98,3 +98,4 @@ yt-dlp==2026.6.9
 zipp==4.1.0
 
 opencv-python-headless==5.0.0.93
+PyJWT[crypto]

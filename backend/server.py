@@ -13,7 +13,7 @@ from typing import Optional
 import aiosqlite
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, APIRouter, BackgroundTasks, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, APIRouter, BackgroundTasks, HTTPException, UploadFile, File, Form, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from PIL import Image
@@ -35,6 +35,7 @@ from models import (
     now_iso, row_to_dict,
 )
 from niches_config import NICHES, NICHE_MAP
+from auth import get_current_user_id, get_optional_user_id
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -497,6 +498,25 @@ async def init_db():
         """)
         await conn.commit()
 
+        # Migration: add user_id column to all per-user tables for Clerk auth
+        # isolation. Existing rows get user_id = 'anonymous' (the default for
+        # unauthenticated/dev-mode usage), so the app stays backward-compatible
+        # with databases created before auth was added.
+        user_id_tables = [
+            "videos", "analyses", "customizations", "video_jobs",
+            "brand_profiles", "remix_chats", "face_swap_jobs",
+            "face_swap_video_jobs", "hook_templates",
+        ]
+        for table in user_id_tables:
+            cursor = await conn.execute(f"PRAGMA table_info({table})")
+            cols = {row[1] for row in await cursor.fetchall()}
+            if "user_id" not in cols:
+                logger.info(f"Migration: adding user_id column to {table}")
+                await conn.execute(
+                    f"ALTER TABLE {table} ADD COLUMN user_id TEXT DEFAULT 'anonymous'"
+                )
+        await conn.commit()
+
         # Clear stale trending/curated caches (force fresh fetch with more results)
         await conn.execute("DELETE FROM trending_videos")
         await conn.execute("DELETE FROM curated_videos")
@@ -875,7 +895,7 @@ async def trending_search(q: str = "", limit: int = 20, include_ads: bool = True
 # Video ingestion + analysis
 # ---------------------------------------------------------------------------
 @api_router.post("/videos/ingest")
-async def ingest_video(payload: IngestVideoRequest):
+async def ingest_video(payload: IngestVideoRequest, user_id: str = Depends(get_current_user_id)):
     tiktok_url = payload.tiktok_url.strip()
     if "tiktok.com" not in tiktok_url:
         raise HTTPException(status_code=400, detail="Please provide a valid TikTok video URL.")
@@ -913,8 +933,8 @@ async def ingest_video(payload: IngestVideoRequest):
             song_id, song_title, song_artist, song_album, song_duration, song_cover_url,
             subtitles_url, subtitles_language, is_ad,
             creator_followers, creator_following, creator_verified, creator_bio, creator_avatar,
-            status, local_video_path, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            status, local_video_path, created_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (video_id, tiktok_url, niche, meta.get("video_platform_id"), meta.get("creator"),
          meta.get("creator_display"), meta.get("title"), meta.get("description", ""),
          meta.get("view_count", 0), meta.get("like_count", 0), meta.get("comment_count", 0),
@@ -929,18 +949,18 @@ async def ingest_video(payload: IngestVideoRequest):
          meta.get("creator_followers", 0), meta.get("creator_following", 0),
          1 if meta.get("creator_verified") else 0,
          meta.get("creator_bio", ""), meta.get("creator_avatar", ""),
-         "metadata_ready", None, created_at),
+         "metadata_ready", None, created_at, user_id),
     )
     return await get_video_or_404(video_id)
 
 
 @api_router.get("/videos/{video_id}")
-async def get_video(video_id: str):
+async def get_video(video_id: str, user_id: str = Depends(get_current_user_id)):
     return await get_video_or_404(video_id)
 
 
 @api_router.post("/videos/{video_id}/analyze-hook")
-async def analyze_video_hook(video_id: str):
+async def analyze_video_hook(video_id: str, user_id: str = Depends(get_current_user_id)):
     require_ai_configured()
     video = await get_video_or_404(video_id)
     tiktok_url = video["tiktok_url"]
@@ -1009,14 +1029,14 @@ async def analyze_video_hook(video_id: str):
         """INSERT INTO analyses
            (id, video_id, frames, facial_expressions, body_language_gestures, pacing_cuts,
             text_overlays_timing, audio_cues_inferred, hook_summary, effectiveness_score,
-            key_hook_frame_index, replicable_mechanics, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            key_hook_frame_index, replicable_mechanics, created_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (analysis_id, video_id, json.dumps(frame_docs),
          analysis_result.get("facial_expressions"), analysis_result.get("body_language_gestures"),
          analysis_result.get("pacing_cuts"), analysis_result.get("text_overlays_timing"),
          analysis_result.get("audio_cues_inferred"), analysis_result.get("hook_summary"),
          analysis_result.get("effectiveness_score"), analysis_result.get("key_hook_frame_index"),
-         json.dumps(analysis_result.get("replicable_mechanics", [])), created_at),
+         json.dumps(analysis_result.get("replicable_mechanics", [])), created_at, user_id),
     )
     await _execute(
         "UPDATE videos SET status = ?, local_video_path = ?, last_analysis_id = ? WHERE id = ?",
@@ -1026,7 +1046,7 @@ async def analyze_video_hook(video_id: str):
 
 
 @api_router.get("/videos/{video_id}/analysis")
-async def get_video_analysis(video_id: str):
+async def get_video_analysis(video_id: str, user_id: str = Depends(get_current_user_id)):
     return await get_latest_analysis_or_404(video_id)
 
 
@@ -1137,6 +1157,7 @@ async def face_swap(
     source_face: UploadFile = File(...),
     target_frame_url: str = Form(""),
     variants: int = Form(1),
+    user_id: str = Depends(get_current_user_id),
 ):
     """
     Validate and persist both inputs, then return an app job ID immediately.
@@ -1192,8 +1213,8 @@ async def face_swap(
     await _execute(
         """INSERT INTO face_swap_jobs
            (id, status, target_image_url, source_face_url, target_image_path,
-            source_face_path, variants_requested, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            source_face_path, variants_requested, created_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             job_id,
             "pending",
@@ -1203,6 +1224,7 @@ async def face_swap(
             str(source_path),
             variants,
             now_iso(),
+            user_id,
         ),
     )
     background_tasks.add_task(
@@ -1225,7 +1247,7 @@ async def face_swap(
 
 
 @api_router.get("/face-swap/status/{job_id}")
-async def face_swap_status(job_id: str):
+async def face_swap_status(job_id: str, user_id: str = Depends(get_current_user_id)):
     """Return the latest state and completed result for a face-swap image job."""
     job = await _fetch_one("SELECT * FROM face_swap_jobs WHERE id = ?", (job_id,))
     if not job:
@@ -1450,7 +1472,7 @@ def _template_thumbnail_source(video: dict, analysis: dict) -> Optional[Path]:
 
 
 @api_router.post("/hook-templates", status_code=201)
-async def create_hook_template(payload: CreateHookTemplateRequest):
+async def create_hook_template(payload: CreateHookTemplateRequest, user_id: str = Depends(get_current_user_id)):
     """
     Save an already-analyzed hook as a reusable template.
 
@@ -1507,8 +1529,8 @@ async def create_hook_template(payload: CreateHookTemplateRequest):
             text_overlays_timing, audio_cues_inferred, hook_summary,
             effectiveness_score, replicable_mechanics, prompt_template,
             reference_video_path, song_title, song_artist,
-            times_used, last_used_at, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            times_used, last_used_at, created_at, updated_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (template_id, name, _normalize_template_category(payload.category),
          (payload.notes or "").strip()[:HOOK_TEMPLATE_NOTES_MAX],
          video["id"], analysis["id"], video.get("tiktok_url"), video.get("creator"),
@@ -1520,7 +1542,7 @@ async def create_hook_template(payload: CreateHookTemplateRequest):
          json.dumps(_coerce_mechanics(analysis.get("replicable_mechanics"))),
          prompt_template, reference_video_path,
          video.get("song_title"), video.get("song_artist"),
-         0, None, created_at, created_at),
+         0, None, created_at, created_at, user_id),
     )
     logger.info(
         f"Saved hook template {template_id} ('{name}') from video {video['id']} — "
@@ -1530,10 +1552,10 @@ async def create_hook_template(payload: CreateHookTemplateRequest):
 
 
 @api_router.get("/hook-templates")
-async def list_hook_templates(category: str = "", source_video_id: str = ""):
+async def list_hook_templates(category: str = "", source_video_id: str = "", user_id: str = Depends(get_current_user_id)):
     """List saved hook templates, most recently used first."""
-    clauses = []
-    params = []
+    clauses = ["user_id = ?"]
+    params = [user_id]
     if category.strip():
         clauses.append("category = ?")
         params.append(_normalize_template_category(category))
@@ -1554,8 +1576,8 @@ async def list_hook_templates(category: str = "", source_video_id: str = ""):
 
 
 @api_router.get("/hook-templates/{template_id}")
-async def get_hook_template(template_id: str):
-    template = await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
+async def get_hook_template(template_id: str, user_id: str = Depends(get_current_user_id)):
+    template = await _fetch_one("SELECT * FROM hook_templates WHERE id = ? AND user_id = ?", (template_id, user_id))
     if not template:
         raise HTTPException(status_code=404, detail="Hook template not found.")
     template["has_motion_reference"] = bool(
@@ -1565,7 +1587,7 @@ async def get_hook_template(template_id: str):
 
 
 @api_router.patch("/hook-templates/{template_id}")
-async def update_hook_template(template_id: str, payload: UpdateHookTemplateRequest):
+async def update_hook_template(template_id: str, payload: UpdateHookTemplateRequest, user_id: str = Depends(get_current_user_id)):
     """Rename, recategorize, or annotate a saved template."""
     existing = await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
     if not existing:
@@ -1600,7 +1622,7 @@ async def update_hook_template(template_id: str, payload: UpdateHookTemplateRequ
 
 
 @api_router.delete("/hook-templates/{template_id}")
-async def delete_hook_template(template_id: str):
+async def delete_hook_template(template_id: str, user_id: str = Depends(get_current_user_id)):
     """Delete a template and its copied motion reference / thumbnail."""
     existing = await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
     if not existing:
@@ -1627,6 +1649,7 @@ async def face_swap_generate_hook_video(
     video_id: str = Form(""),
     template_id: str = Form(""),
     include_audio: bool = Form(False),
+    user_id: str = Depends(get_current_user_id),
 ):
     """
     Generate a hook video from the face-swapped image using MiniMax H3.
@@ -1793,6 +1816,7 @@ async def face_swap_extend_video(
     duration: int = Form(10),
     model: str = Form(""),
     video_id: str = Form(""),
+    user_id: str = Depends(get_current_user_id),
 ):
     """
     Generate an extended brand video using MiniMax H3 with native audio.
@@ -1971,6 +1995,7 @@ async def face_swap_generate_video(
     prompt: str = Form(""),
     duration: int = Form(10),
     model: str = Form(""),
+    user_id: str = Depends(get_current_user_id),
 ):
     """
     Legacy endpoint — generates a video from the face-swapped image using MiniMax H3.
@@ -2032,7 +2057,7 @@ async def face_swap_generate_video(
 
 
 @api_router.get("/face-swap/video-status/{job_id}")
-async def face_swap_video_status(job_id: str):
+async def face_swap_video_status(job_id: str, user_id: str = Depends(get_current_user_id)):
     """
     Poll the status of a face-swap video generation job.
     Returns the current status and, when completed, the video URL.
@@ -2115,6 +2140,7 @@ async def face_swap_branded_prompt(
     video_id: str = Form(""),
     duration: int = Form(15),
     use_original_sound: bool = Form(False),
+    user_id: str = Depends(get_current_user_id),
 ):
     """
     Generate a brand-customized video prompt for the face-swapped image.
@@ -2296,6 +2322,7 @@ async def customize_video(
     background: str = Form(""),
     clothing: str = Form(""),
     custom_instructions: str = Form(""),
+    user_id: str = Depends(get_current_user_id),
 ):
     require_ai_configured()
     video = await get_video_or_404(video_id)
@@ -2424,24 +2451,24 @@ async def customize_video(
         """INSERT INTO customizations
            (id, video_id, analysis_id, mode, person_photo_url, reference_frame_url,
             environment, background, clothing, custom_instructions, generation_spec,
-            generated_images, generated_image_url, video_title, video_niche, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            generated_images, generated_image_url, video_title, video_niche, created_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (customization_id, video_id, analysis["id"], mode, f"/api/media/uploads/{photo_id}.png",
          generated_images[0]["reference_frame_url"] if generated_images else None,
          environment, background, clothing, custom_instructions, json.dumps(generation_spec),
          json.dumps(generated_images), generated_images[0]["image_url"] if generated_images else None,
-         video.get("title"), video.get("niche"), created_at),
+         video.get("title"), video.get("niche"), created_at, user_id),
     )
     return await _fetch_one("SELECT * FROM customizations WHERE id = ?", (customization_id,))
 
 
 @api_router.get("/customizations")
-async def list_customizations():
-    return await _fetch_all("SELECT * FROM customizations ORDER BY created_at DESC LIMIT 200")
+async def list_customizations(user_id: str = Depends(get_current_user_id)):
+    return await _fetch_all("SELECT * FROM customizations WHERE user_id = ? ORDER BY created_at DESC LIMIT 200", (user_id,))
 
 
 @api_router.get("/customizations/{customization_id}")
-async def get_customization(customization_id: str):
+async def get_customization(customization_id: str, user_id: str = Depends(get_current_user_id)):
     item = await _fetch_one("SELECT * FROM customizations WHERE id = ?", (customization_id,))
     if not item:
         raise HTTPException(status_code=404, detail="Customization not found")
@@ -2481,7 +2508,7 @@ async def _get_or_create_remix_chat(customization_id: str) -> dict:
 
 
 @api_router.get("/customizations/{customization_id}/remix-chat")
-async def get_remix_chat(customization_id: str):
+async def get_remix_chat(customization_id: str, user_id: str = Depends(get_current_user_id)):
     customization = await _fetch_one("SELECT * FROM customizations WHERE id = ?", (customization_id,))
     if not customization:
         raise HTTPException(status_code=404, detail="Customization not found")
@@ -2489,7 +2516,7 @@ async def get_remix_chat(customization_id: str):
 
 
 @api_router.post("/customizations/{customization_id}/remix-chat")
-async def post_remix_chat_message(customization_id: str, payload: RemixChatMessageRequest):
+async def post_remix_chat_message(customization_id: str, payload: RemixChatMessageRequest, user_id: str = Depends(get_current_user_id)):
     require_ai_configured()
     message = payload.message.strip()
     if not message:
@@ -2587,7 +2614,7 @@ def _build_sound_reference(music_context: Optional[dict], use_original_sound: bo
 
 
 @api_router.post("/customizations/{customization_id}/generate-video-prompt")
-async def generate_video_prompt_endpoint(customization_id: str, payload: BrandContextRequest):
+async def generate_video_prompt_endpoint(customization_id: str, payload: BrandContextRequest, user_id: str = Depends(get_current_user_id)):
     require_ai_configured()
     customization = await _fetch_one("SELECT * FROM customizations WHERE id = ?", (customization_id,))
     if not customization:
@@ -2625,18 +2652,18 @@ async def generate_video_prompt_endpoint(customization_id: str, payload: BrandCo
         """INSERT INTO video_jobs
            (id, customization_id, video_id, brand_name, brand_goal, brand_details,
             target_duration_seconds, prompt_breakdown, full_prompt_text, reference_image_ids,
-            use_original_sound, sound_reference, status, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            use_original_sound, sound_reference, status, created_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (job_id, customization_id, customization["video_id"], payload.brand_name, payload.brand_goal,
          payload.brand_details, duration, json.dumps(prompt_result), prompt_result.get("full_video_prompt"),
          json.dumps(reference_image_ids), 1 if payload.use_original_sound else 0,
-         json.dumps(sound_reference) if sound_reference else None, "prompt_ready", created_at),
+         json.dumps(sound_reference) if sound_reference else None, "prompt_ready", created_at, user_id),
     )
     return await _fetch_one("SELECT * FROM video_jobs WHERE id = ?", (job_id,))
 
 
 @api_router.post("/customizations/{customization_id}/generate-remix-script")
-async def generate_remix_script_endpoint(customization_id: str, payload: GenerateRemixScriptRequest):
+async def generate_remix_script_endpoint(customization_id: str, payload: GenerateRemixScriptRequest, user_id: str = Depends(get_current_user_id)):
     """Content Remixer: adapt this hook's script to the active brand profile's niche/products/tone."""
     require_ai_configured()
     brand_profile = await get_active_brand_or_404()
@@ -2678,19 +2705,19 @@ async def generate_remix_script_endpoint(customization_id: str, payload: Generat
         """INSERT INTO video_jobs
            (id, customization_id, video_id, brand_name, brand_goal, brand_details,
             target_duration_seconds, prompt_breakdown, full_prompt_text, reference_image_ids,
-            use_original_sound, sound_reference, status, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            use_original_sound, sound_reference, status, created_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (job_id, customization_id, customization["video_id"], brand_profile.get("brand_name"),
          "Content Remixer: adapt viral hook to brand", brand_profile.get("brand_description"),
          duration, json.dumps(prompt_result), prompt_result.get("full_video_prompt"),
          json.dumps(reference_image_ids), 1 if payload.use_original_sound else 0,
-         json.dumps(sound_reference) if sound_reference else None, "prompt_ready", created_at),
+         json.dumps(sound_reference) if sound_reference else None, "prompt_ready", created_at, user_id),
     )
     return await _fetch_one("SELECT * FROM video_jobs WHERE id = ?", (job_id,))
 
 
 @api_router.post("/video-jobs/{job_id}/generate-video")
-async def generate_video_endpoint(job_id: str, payload: GenerateVideoRequest):
+async def generate_video_endpoint(job_id: str, payload: GenerateVideoRequest, user_id: str = Depends(get_current_user_id)):
     job = await _fetch_one("SELECT * FROM video_jobs WHERE id = ?", (job_id,))
     if not job:
         raise HTTPException(status_code=404, detail="Video job not found")
@@ -2708,7 +2735,7 @@ async def generate_video_endpoint(job_id: str, payload: GenerateVideoRequest):
 
 
 @api_router.post("/video-jobs/{job_id}/submit-video")
-async def submit_video_job(job_id: str):
+async def submit_video_job(job_id: str, user_id: str = Depends(get_current_user_id)):
     """Actually submit the video generation job to OpenRouter using MiniMax H3."""
     require_ai_configured()
     job = await _fetch_one("SELECT * FROM video_jobs WHERE id = ?", (job_id,))
@@ -2768,7 +2795,7 @@ async def submit_video_job(job_id: str):
 
 
 @api_router.get("/video-jobs/{job_id}/poll")
-async def poll_video_job_endpoint(job_id: str):
+async def poll_video_job_endpoint(job_id: str, user_id: str = Depends(get_current_user_id)):
     """Poll OpenRouter for the video generation job status."""
     require_ai_configured()
     job = await _fetch_one("SELECT * FROM video_jobs WHERE id = ?", (job_id,))
@@ -2796,7 +2823,7 @@ async def poll_video_job_endpoint(job_id: str):
 
 
 @api_router.get("/video-jobs/{job_id}")
-async def get_video_job(job_id: str):
+async def get_video_job(job_id: str, user_id: str = Depends(get_current_user_id)):
     job = await _fetch_one("SELECT * FROM video_jobs WHERE id = ?", (job_id,))
     if not job:
         raise HTTPException(status_code=404, detail="Video job not found")
@@ -2804,7 +2831,7 @@ async def get_video_job(job_id: str):
 
 
 @api_router.get("/customizations/{customization_id}/video-jobs")
-async def get_customization_video_jobs(customization_id: str):
+async def get_customization_video_jobs(customization_id: str, user_id: str = Depends(get_current_user_id)):
     return await _fetch_all(
         "SELECT * FROM video_jobs WHERE customization_id = ? ORDER BY created_at DESC LIMIT 50",
         (customization_id,),
@@ -2815,7 +2842,7 @@ async def get_customization_video_jobs(customization_id: str):
 # Brand profile ("Your Brand" — URL analysis + manual editing)
 # ---------------------------------------------------------------------------
 @api_router.post("/brand/analyze-url")
-async def analyze_brand_url(payload: AnalyzeBrandUrlRequest):
+async def analyze_brand_url(payload: AnalyzeBrandUrlRequest, user_id: str = Depends(get_current_user_id)):
     require_ai_configured()
     url = payload.url.strip()
     if not url:
@@ -2885,16 +2912,16 @@ async def analyze_brand_url(payload: AnalyzeBrandUrlRequest):
             """INSERT INTO brand_profiles
                (id, website_url, brand_name, brand_description, niche, products_services,
                 target_audience, ideal_customer_profile, differentiation, tone_voice,
-                raw_extracted_text, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (brand_id, url) + values + (now, now),
+                raw_extracted_text, created_at, updated_at, user_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (brand_id, url) + values + (now, now, user_id),
         )
         logger.info(f"Created brand profile {brand_id} from {url}")
     return await _fetch_one("SELECT * FROM brand_profiles WHERE id = ?", (brand_id,))
 
 
 @api_router.post("/brand", status_code=201)
-async def create_brand(payload: BrandProfileCreateRequest):
+async def create_brand(payload: BrandProfileCreateRequest, user_id: str = Depends(get_current_user_id)):
     """
     Create a brand profile from manually entered fields.
 
@@ -2916,25 +2943,31 @@ async def create_brand(payload: BrandProfileCreateRequest):
         """INSERT INTO brand_profiles
            (id, website_url, brand_name, brand_description, niche, products_services,
             target_audience, ideal_customer_profile, differentiation, tone_voice,
-            raw_extracted_text, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            raw_extracted_text, created_at, updated_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (brand_id, website or None, name, payload.brand_description or "",
          payload.niche or "", json.dumps(payload.products_services or []),
          payload.target_audience or "", payload.ideal_customer_profile or "",
          payload.differentiation or "", payload.tone_voice or "", None,
-         created_at, created_at),
+         created_at, created_at, user_id),
     )
     logger.info(f"Created brand profile {brand_id} ('{name}') from manual entry")
     return await _fetch_one("SELECT * FROM brand_profiles WHERE id = ?", (brand_id,))
 
 
 @api_router.get("/brand/active")
-async def get_active_brand():
-    return await get_active_brand_or_404()
+async def get_active_brand(user_id: str = Depends(get_current_user_id)):
+    row = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE user_id = ? ORDER BY updated_at DESC, created_at DESC LIMIT 1",
+        (user_id,)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="No brand profile found. Set one up first.")
+    return row
 
 
 @api_router.get("/brand/{brand_id}")
-async def get_brand(brand_id: str):
+async def get_brand(brand_id: str, user_id: str = Depends(get_current_user_id)):
     brand = await _fetch_one("SELECT * FROM brand_profiles WHERE id = ?", (brand_id,))
     if not brand:
         raise HTTPException(status_code=404, detail="Brand profile not found")
@@ -2942,7 +2975,7 @@ async def get_brand(brand_id: str):
 
 
 @api_router.patch("/brand/{brand_id}")
-async def update_brand(brand_id: str, payload: BrandProfileUpdateRequest):
+async def update_brand(brand_id: str, payload: BrandProfileUpdateRequest, user_id: str = Depends(get_current_user_id)):
     existing = await _fetch_one("SELECT * FROM brand_profiles WHERE id = ?", (brand_id,))
     if not existing:
         raise HTTPException(status_code=404, detail="Brand profile not found")
@@ -2973,9 +3006,10 @@ async def update_brand(brand_id: str, payload: BrandProfileUpdateRequest):
 # History
 # ---------------------------------------------------------------------------
 @api_router.get("/history")
-async def get_history():
+async def get_history(user_id: str = Depends(get_current_user_id)):
     videos = await _fetch_all(
-        "SELECT * FROM videos WHERE status IN ('analyzed', 'failed') ORDER BY created_at DESC LIMIT 200"
+        "SELECT * FROM videos WHERE status IN ('analyzed', 'failed') AND user_id = ? ORDER BY created_at DESC LIMIT 200",
+        (user_id,)
     )
     results = []
     for v in videos:

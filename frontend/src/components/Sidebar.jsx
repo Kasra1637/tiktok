@@ -1,4 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
+import { UserButton } from "@clerk/clerk-react";
 import {
   Sparkles,
   Compass,
@@ -141,7 +142,17 @@ function NavGroups({ collapsed, onNavigate, testIdPrefix = "" }) {
 function SidebarFooter({ collapsed }) {
   if (collapsed) {
     return (
-      <div className="mt-auto flex flex-col items-center gap-2 px-4 pb-4">
+      <div className="mt-auto flex flex-col items-center gap-3 px-4 pb-4">
+        <div className="flex justify-center">
+          <UserButton
+            afterSignOutUrl="/"
+            appearance={{
+              elements: {
+                avatarBox: "h-8 w-8 rounded-lg",
+              },
+            }}
+          />
+        </div>
         <Link
           to="/"
           title="Product overview"
@@ -154,7 +165,23 @@ function SidebarFooter({ collapsed }) {
   }
 
   return (
-    <div className="mt-auto px-4 pb-4">
+    <div className="mt-auto px-4 pb-4 space-y-3">
+      {/* User avatar + sign-out */}
+      <div className="flex items-center gap-3 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 px-3 py-2.5">
+        <UserButton
+          afterSignOutUrl="/"
+          appearance={{
+            elements: {
+              avatarBox: "h-8 w-8 rounded-lg",
+            },
+          }}
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[12px] font-medium leading-tight">Your Account</p>
+          <p className="text-[10px] text-muted-foreground">Manage profile</p>
+        </div>
+      </div>
+
       {/* Only shown when the window is tall enough that it isn't stealing
           room from the nav list (see the `tall` screen in tailwind.config). */}
       <div className="hidden rounded-2xl border border-[color:var(--hairline)] bg-[color:var(--indigo-4)] p-3.5 tall:block">
