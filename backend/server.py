@@ -3346,6 +3346,24 @@ async def proxy_thumbnail(url: str = ""):
 
 
 app.include_router(api_router)
+
+
+@app.get("/api/media/frames/{video_hash}/{filename}")
+async def serve_frame(video_hash: str, filename: str):
+    """
+    Serve an extracted frame, recovering it on-the-fly if the file is missing
+    (ephemeral storage after a redeploy). This takes priority over the static
+    mount for frame paths specifically so users always see their filmstrip.
+    """
+    frame_path = pipeline.FRAMES_DIR / video_hash / filename
+    if not frame_path.is_file():
+        relative_path = f"frames/{video_hash}/{filename}"
+        recovered = await _recover_missing_frame(relative_path)
+        if not recovered:
+            raise HTTPException(status_code=404, detail="Frame not found.")
+    return FileResponse(str(frame_path), media_type="image/jpeg")
+
+
 app.mount("/api/media", StaticFiles(directory=str(pipeline.STORAGE_DIR)), name="media")
 
 app.add_middleware(
