@@ -200,7 +200,6 @@ export default function HookTemplates() {
     <div className="space-y-6">
       <PageHeader
         icon={Bookmark}
-        eyebrow="Library"
         title="Hook Templates"
         description="Saved hooks keep their analysis, prompt, and motion reference on file. Reusing one skips hook analysis and prompt generation entirely — you only pay for the video itself."
       />

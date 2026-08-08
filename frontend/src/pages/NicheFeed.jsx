@@ -314,7 +314,6 @@ export default function NicheFeed() {
     <div className="space-y-6">
       <PageHeader
         icon={Compass}
-        eyebrow="Discover"
         title="Discover Hooks"
         description="Browse trending TikToks and analyze what makes their hooks work."
       />

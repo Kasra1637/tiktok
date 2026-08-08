@@ -151,7 +151,6 @@ export default function BrandSetup() {
     <div className="mx-auto max-w-3xl space-y-6">
       <PageHeader
         icon={Briefcase}
-        eyebrow="Setup"
         title="Your Brand"
         description="This profile powers brand-adapted scripts across the Content Remixer."
         actions={

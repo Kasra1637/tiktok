@@ -557,7 +557,6 @@ export default function FaceSwap() {
       {/* ---------- HEADER ---------- */}
       <PageHeader
         icon={Repeat2}
-        eyebrow="Pipeline"
         title="Face Swap"
         align="center"
         description={

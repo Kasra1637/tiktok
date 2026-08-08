@@ -288,7 +288,6 @@ export default function GenerateVideo() {
 
       <PageHeader
         icon={Sparkles}
-        eyebrow="Remix"
         title="Content Remixer"
         description="Remix this viral hook for your brand with AI-powered scriptwriting."
         actions={

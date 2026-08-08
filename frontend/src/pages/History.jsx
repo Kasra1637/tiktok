@@ -67,7 +67,6 @@ export default function History() {
       <div className="space-y-6">
         <PageHeader
           icon={HistoryIcon}
-          eyebrow="Library"
           title="History"
           description="Every hook you've analyzed, face-swapped, or turned into a video brief."
         />
@@ -84,7 +83,6 @@ export default function History() {
     <div className="space-y-6">
       <PageHeader
         icon={HistoryIcon}
-        eyebrow="Library"
         title="History"
         description="Every hook you've analyzed, face-swapped, or turned into a video brief — nothing is lost between sessions."
         actions={
