@@ -65,6 +65,49 @@ REQUIRED_BRAND_ANALYSIS_KEYS = {
 }
 
 
+def _build_face_swap_prompt(customization_prompt: str = "") -> str:
+    """Build the shared target-performance-first contract for image face swaps."""
+    customization = customization_prompt.strip()
+    customization_instruction = ""
+    if customization:
+        customization_instruction = (
+            " CUSTOMIZATION: Apply this request only to the scene, clothing, environment, or visual "
+            f"style: {customization}."
+        )
+
+    return (
+        "IMAGE 1 IS THE IMMUTABLE TARGET SCENE AND FACIAL-PERFORMANCE REFERENCE. Edit the first image "
+        "and replace only the person's identity with the person in the second image. Preserve exactly from "
+        "the FIRST image: facial expression and facial-muscle configuration; head orientation; eyebrow "
+        "position; gaze and iris/pupil direction; eye opening or closure; upper- and lower-eyelid aperture "
+        "and placement; blink or wink state; mouth and lip pose; jaw opening; and the full intensity of the "
+        "reaction or emotion. These target-frame facial-performance properties are mandatory and override "
+        "every other instruction. IMAGE 2 supplies identity only: facial bone structure, intrinsic eye shape "
+        "and eye color (not gaze, eye opening, eyelid aperture, or blink state), nose anatomy, intrinsic lip "
+        "shape (not mouth pose), skin tone, and hairstyle. Do NOT transfer from the second image its facial "
+        "expression, eyebrow position, gaze, iris or pupil direction, eye opening, eyelid aperture, blink or "
+        "wink state, mouth pose, jaw opening, head orientation, or body pose. Keep the pose, body position, "
+        "hand gestures, background, lighting, and camera angle from the first image. "
+        "TEXT OVERLAYS: Remove ALL text overlays, captions, watermarks, and visual text elements that appear "
+        "in the first image. The output must have a clean image with NO on-screen text, no subtitles, no "
+        "branded overlays, no emoji overlays, and no caption graphics. The output must clearly show the face "
+        "from the SECOND image — do not keep the face that was originally in the first image. "
+        "HAIRSTYLE: Also replace the hairstyle from the first image with the hairstyle of the person in the "
+        "second image — match its hair color, length, texture (straight, wavy, or curly), volume, and parting "
+        "exactly as shown in the second image. Do not keep the hairstyle, hair color, or hair length that was "
+        "originally in the first image. SKIN TONE CONSISTENCY: The face's skin tone from the second image is "
+        "the reference for the ENTIRE person. Recolor the neck, chest, arms, and hands from the first image "
+        "to match the exact skin tone and undertone of the new face — do not leave the original body's skin "
+        "tone from the first image unchanged. There must be no visible tone mismatch or hard edge at the "
+        "jawline, neck, or collar. Apply the scene's natural lighting and shadows on top of this matched skin "
+        "tone, but the underlying base color must be uniform across face, neck, and body."
+        f"{customization_instruction}"
+        " Customization must never override the FIRST image's facial expression, eye state, gaze, eyelid "
+        "aperture, blink state, eyebrow position, mouth pose, jaw opening, head orientation, or reaction "
+        "intensity."
+    )
+
+
 def _headers():
     return {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -367,13 +410,6 @@ async def generate_customized_preview(
     (bcbf905, fe70420, 48c1082) for prior instances of this same failure mode
     across different underlying models.
     """
-    if mode == "custom" and customization_prompt.strip():
-        scene_instruction = (
-            f" Additionally, apply these customizations to the scene: {customization_prompt}."
-        )
-    else:
-        scene_instruction = ""
-
     ref_b64 = image_to_base64(reference_frame_path)
 
     # Crop the person photo to just the face region before sending to the model.
@@ -383,29 +419,8 @@ async def generate_customized_preview(
     # Use OpenRouter's dedicated Images API with explicit identity + scene references.
     payload = {
         "model": FACE_SWAP_MODEL,
-        "prompt": (
-            "Edit the first image. Replace ONLY the face and identity of the person shown in it with "
-            "the face of the person shown in the second image — matching that person's facial "
-            "structure, eyes, nose, lips, and skin tone. "
-            "Keep the pose, body position, hand gestures, background, lighting, and camera angle from "
-            "the first image. "
-            "TEXT OVERLAYS: Remove ALL text overlays, captions, watermarks, and visual text elements "
-            "that appear in the first image. The output must have a clean image with NO on-screen text, "
-            "no subtitles, no branded overlays, no emoji overlays, and no caption graphics. "
-            "The output must clearly show the face from the SECOND image — do not keep the face that "
-            "was originally in the first image. "
-            "HAIRSTYLE: Also replace the hairstyle from the first image with the hairstyle of the "
-            "person in the second image — match its hair color, length, texture (straight, wavy, or "
-            "curly), volume, and parting exactly as shown in the second image. Do not keep the "
-            "hairstyle, hair color, or hair length that was originally in the first image. "
-            "SKIN TONE CONSISTENCY: The face's skin tone from the second image is the reference for "
-            "the ENTIRE person. Recolor the neck, chest, arms, and hands from the first image to match "
-            "the exact skin tone and undertone of the new face — do not leave the original body's skin "
-            "tone from the first image unchanged. There must be no visible tone mismatch or hard edge "
-            "at the jawline, neck, or collar. Apply the scene's natural lighting and shadows on top of "
-            "this matched skin tone, but the underlying base color must be uniform across face, neck, "
-            "and body."
-            f"{scene_instruction}"
+        "prompt": _build_face_swap_prompt(
+            customization_prompt if mode == "custom" else ""
         ),
         "input_references": [
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{ref_b64}"}},
@@ -452,40 +467,9 @@ async def generate_face_swap(
     cropped_source_path = crop_face_from_path(source_face_path)
     source_b64 = image_to_base64(cropped_source_path)
 
-    # Build optional customization instruction
-    custom_instruction = ""
-    if customization_prompt and customization_prompt.strip():
-        custom_instruction = (
-            f" CUSTOMIZATION: Additionally, apply these changes to the output: {customization_prompt.strip()}. "
-            "Apply these changes while still preserving the face swap, hairstyle, and skin tone instructions above."
-        )
-
     payload = {
         "model": FACE_SWAP_MODEL,
-        "prompt": (
-            "Edit the first image. Replace ONLY the face and identity of the person shown in it with "
-            "the face of the person shown in the second image — matching that person's facial "
-            "structure, eyes, nose, lips, and skin tone. "
-            "Keep the pose, body position, hand gestures, background, lighting, and camera angle from "
-            "the first image. "
-            "TEXT OVERLAYS: Remove ALL text overlays, captions, watermarks, and visual text elements "
-            "that appear in the first image. The output must have a clean image with NO on-screen text, "
-            "no subtitles, no branded overlays, no emoji overlays, and no caption graphics. "
-            "The output must clearly show the face from the SECOND image — do not keep the face that "
-            "was originally in the first image. "
-            "HAIRSTYLE: Also replace the hairstyle from the first image with the hairstyle of the "
-            "person in the second image — match its hair color, length, texture (straight, wavy, or "
-            "curly), volume, and parting exactly as shown in the second image. Do not keep the "
-            "hairstyle, hair color, or hair length that was originally in the first image. "
-            "SKIN TONE CONSISTENCY: The face's skin tone from the second image is the reference for "
-            "the ENTIRE person. Recolor the neck, chest, arms, and hands from the first image to match "
-            "the exact skin tone and undertone of the new face — do not leave the original body's skin "
-            "tone from the first image unchanged. There must be no visible tone mismatch or hard edge "
-            "at the jawline, neck, or collar. Apply the scene's natural lighting and shadows on top of "
-            "this matched skin tone, but the underlying base color must be uniform across face, neck, "
-            "and body."
-            f"{custom_instruction}"
-        ),
+        "prompt": _build_face_swap_prompt(customization_prompt),
         "input_references": [
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{target_b64}"}},
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{source_b64}"}},
