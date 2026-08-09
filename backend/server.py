@@ -1699,6 +1699,86 @@ HOOK_TEMPLATE_CATEGORIES = [
 HOOK_TEMPLATE_NAME_MAX = 80
 HOOK_TEMPLATE_NOTES_MAX = 500
 
+# ---------------------------------------------------------------------------
+# Hook Style Directives — category-based prompt modifiers that let users
+# specify the *type* of hook energy they want, independent of the reference
+# video's mechanics. Injected into the prompt as an additional layer on top
+# of whatever base prompt was built (analysis, template, image, or fallback).
+# ---------------------------------------------------------------------------
+HOOK_STYLE_DIRECTIVES = {
+    "intrigue": (
+        "\n\nHOOK STYLE — INTRIGUE: The energy of this hook must be curiosity-driven. "
+        "Create a 'wait, what?' moment — a mysterious expression, an incomplete reveal, "
+        "something partially hidden or hinted at. The viewer MUST feel compelled to stay "
+        "to find out what happens next. Use a knowing look, a half-smile, or a gesture "
+        "that says 'I know something you don't.' Build tension through what is NOT shown."
+    ),
+    "reveal": (
+        "\n\nHOOK STYLE — REVEAL: This hook must set up a dramatic before/after moment. "
+        "Start obscured, hidden, or in an unremarkable state — then SNAP into the reveal. "
+        "The transition should be instant and dramatic: a hand pull-away, a quick turn, "
+        "a sudden lighting change. The viewer should feel the 'wow' moment viscerally. "
+        "Think transformation, unveiling, or the curtain being pulled back."
+    ),
+    "reaction": (
+        "\n\nHOOK STYLE — REACTION: This hook must be driven by an exaggerated reaction. "
+        "The character should display a dramatic emotional response — shocked face, wide eyes, "
+        "jaw drop, hands to face, dramatic double-take, or a gasp-worthy turn toward camera. "
+        "It should feel like they just saw/heard/discovered something incredible and the viewer "
+        "wants to know what triggered that reaction. Overdramatic is better than subtle."
+    ),
+    "tutorial": (
+        "\n\nHOOK STYLE — TUTORIAL: This hook must radiate confident educator energy. "
+        "Direct, authoritative eye contact with the camera. A 'let me show you' gesture — "
+        "pointing, beckoning, or holding something up. The body language says 'I have valuable "
+        "information and you need to pay attention right now.' Lean in slightly, as if sharing "
+        "insider knowledge. Fast, purposeful movement — not casual, but commanding."
+    ),
+    "lifestyle": (
+        "\n\nHOOK STYLE — LIFESTYLE: This hook must feel aspirational and aesthetic. "
+        "Effortless coolness — the character is in their element, living a life others "
+        "want. Think morning routines, smooth transitions, calm confidence, aesthetic "
+        "surroundings. The energy is 'pull them into your world' rather than confrontational. "
+        "Cinematic but fast — a glance over the shoulder, a hair flip, picking something up "
+        "with intention. The viewer should want to BE this person."
+    ),
+    "transformation": (
+        "\n\nHOOK STYLE — TRANSFORMATION: This hook must show dramatic change happening. "
+        "Start in one state (messy, plain, before) and rapidly transition to another "
+        "(polished, stunning, after). The snap/cut between states should be instant and "
+        "satisfying. Use a hand swipe, a spin, a blink-and-you-miss-it transition. "
+        "The viewer should feel the 'glow-up' energy — progress, improvement, dramatic "
+        "difference from start to end of the 5 seconds."
+    ),
+}
+HOOK_STYLE_CUSTOM_PROMPT_MAX = 500
+
+
+def apply_hook_style_directive(prompt: str, hook_category: str = "", hook_custom_prompt: str = "") -> str:
+    """
+    Inject a category-based style directive and/or custom prompt into the
+    generation prompt. Applied AFTER the base prompt is built but BEFORE
+    the audio directive, so the style layer sits between content and
+    audio/text-overlay instructions.
+
+    - hook_category: one of the HOOK_STYLE_DIRECTIVES keys (optional)
+    - hook_custom_prompt: freeform user text (optional, max 500 chars)
+    """
+    category_key = (hook_category or "").strip().lower()
+    custom_text = (hook_custom_prompt or "").strip()[:HOOK_STYLE_CUSTOM_PROMPT_MAX]
+
+    if category_key and category_key in HOOK_STYLE_DIRECTIVES:
+        prompt += HOOK_STYLE_DIRECTIVES[category_key]
+
+    if custom_text:
+        prompt += (
+            f"\n\nCUSTOM HOOK DIRECTION (from the creator): {custom_text}. "
+            "Incorporate this direction into the hook while preserving the core "
+            "mechanics, pacing, and face consistency requirements above."
+        )
+
+    return prompt
+
 
 def _normalize_template_category(category: Optional[str]) -> str:
     key = (category or "").strip().lower()
@@ -1902,6 +1982,8 @@ async def face_swap_generate_hook_video(
     video_id: str = Form(""),
     template_id: str = Form(""),
     include_audio: bool = Form(False),
+    hook_category: str = Form(""),
+    hook_custom_prompt: str = Form(""),
     user_id: str = Depends(get_current_user_id),
 ):
     """
@@ -1934,6 +2016,15 @@ async def face_swap_generate_hook_video(
     "trending sound" and would just be muted/replaced anyway. Set True to have
     H3 generate an ambient/music track in the same pass (useful for platforms
     without an in-app sound library).
+
+    hook_category: optional style directive (intrigue, reveal, reaction, tutorial,
+    lifestyle, transformation). When provided, injects a category-specific prompt
+    modifier that flavors the hook's energy/intent on top of the base prompt from
+    analysis, template, or motion-style fallback. Zero additional AI cost.
+
+    hook_custom_prompt: optional freeform text (max 500 chars) from the creator
+    describing exactly what they want the hook to convey. Injected alongside (not
+    replacing) the category directive and base prompt mechanics.
     """
     require_ai_configured()
 
@@ -2005,6 +2096,11 @@ async def face_swap_generate_hook_video(
             # Final fallback: hand-written motion template (no AI cost)
             prompt = build_hook_prompt_from_motion_style(motion_style)
 
+    # Apply the hook style directive (category + custom prompt) BEFORE audio.
+    # This layers the user's chosen hook energy on top of whatever base prompt
+    # was built, without overriding core mechanics or V2V motion transfer cues.
+    prompt = apply_hook_style_directive(prompt, hook_category, hook_custom_prompt)
+
     # Apply the audio directive last, uniformly, regardless of which branch
     # produced the base prompt (fresh analysis, saved template, image
     # analysis, or motion fallback) — including templates saved before this
@@ -2057,6 +2153,8 @@ async def face_swap_generate_hook_video(
         "from_template": bool(template),
         "template_id": template["id"] if template else None,
         "template_name": template.get("name") if template else None,
+        "hook_category": hook_category.strip().lower() or None,
+        "hook_custom_prompt": hook_custom_prompt.strip()[:HOOK_STYLE_CUSTOM_PROMPT_MAX] or None,
     }
 
 

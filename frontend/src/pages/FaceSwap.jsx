@@ -5,6 +5,7 @@ import { Input } from "../components/ui/input";
 import { Alert, AlertDescription } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import GenerationProgress from "../components/GenerationProgress";
+import HookStyleSelector from "../components/HookStyleSelector";
 import PageHeader from "../components/PageHeader";
 import { api, mediaUrl, getErrorMessage } from "../lib/api";
 import {
@@ -168,6 +169,8 @@ export default function FaceSwap() {
   // would just be replaced. Off by default; opt in for platforms without an
   // in-app sound library (e.g. Reels/Shorts).
   const [includeHookAudio, setIncludeHookAudio] = useState(false);
+  const [hookCategory, setHookCategory] = useState("");
+  const [hookCustomPrompt, setHookCustomPrompt] = useState("");
   const pollingRef = useRef(null);
   const imagePollingRef = useRef(null);
   const imageJobIdRef = useRef(null);
@@ -476,7 +479,7 @@ export default function FaceSwap() {
     hookVideoUrlRef.current = null;
     try {
       const d = await api.faceSwapGenerateHook(
-        activeId, motionStyle, videoModel, videoInfo?.videoId || "", "", includeHookAudio
+        activeId, motionStyle, videoModel, videoInfo?.videoId || "", "", includeHookAudio, hookCategory, hookCustomPrompt
       );
       hookJobIdRef.current = d.job_id;
       startPolling(d.job_id, "hook");
@@ -519,6 +522,7 @@ export default function FaceSwap() {
     setGeneratingVideo(false);
     setVideoStatus(null); setVideoUrl(null); setVideoError(null); setFailedPhase(null);
     setVideoPhase("hook"); setMotionStyle("lean-in");
+    setHookCategory(""); setHookCustomPrompt("");
     // Match the initial state (15s), not an arbitrary different default.
     setBrandUrl(""); setBrandedDuration(15); setGeneratingMore(false);
     setIncludeHookAudio(false);
@@ -1003,6 +1007,15 @@ export default function FaceSwap() {
                   </span>
                 </button>
 
+
+                {/* Hook style selector — optional category + custom prompt */}
+                <HookStyleSelector
+                  hookCategory={hookCategory}
+                  onCategoryChange={setHookCategory}
+                  hookCustomPrompt={hookCustomPrompt}
+                  onCustomPromptChange={setHookCustomPrompt}
+                  disabled={generatingVideo}
+                />
 
                 {/* Motion style selector — only relevant when not reusing a template
                     and no viral-video analysis is available */}
