@@ -15,13 +15,13 @@ import {
   RotateCcw,
   X,
   Download,
-  ImageIcon,
   User,
   Check,
   Film,
   Clapperboard,
   Loader2,
-  ArrowRight,
+  Compass,
+  Bookmark,
   Save,
   Trash2,
   Volume2,
@@ -144,6 +144,7 @@ export default function FaceSwap() {
   const [sourceFile, setSourceFile] = useState(null);
   const [sourcePreview, setSourcePreview] = useState(null);
   const [videoInfo, setVideoInfo] = useState(null);
+  const [templateInfo, setTemplateInfo] = useState(null);
   const [savedFaceLoaded, setSavedFaceLoaded] = useState(false);
   const [customPrompt, setCustomPrompt] = useState("");
 
@@ -190,16 +191,24 @@ export default function FaceSwap() {
   const [brandedDuration, setBrandedDuration] = useState(15);
   const [videoModel, setVideoModel] = useState("minimax-h3"); // MiniMax H3 — sole model
 
-  // Load target from query params
+  // Load the target from query params. This is the ONLY way a target enters
+  // the page — there is no target upload. Callers are the analysis screen
+  // ("Face Swap This Hook") and the bookmarks screen, which pass an
+  // /api/media/frames/... or /api/media/templates/... path respectively. The
+  // backend independently allowlists those two subtrees, so a hand-edited
+  // query string can't widen this.
   useEffect(() => {
     const frameUrl = searchParams.get("target");
     const videoId = searchParams.get("videoId");
     const frameIndex = searchParams.get("frame");
+    const templateId = searchParams.get("templateId");
+    const templateName = searchParams.get("templateName");
     if (frameUrl) {
       setTargetPreview(mediaUrl(frameUrl));
       setTargetFrameUrl(frameUrl);
-      setTargetFile({ name: "video_frame.jpg", fromVideo: true });
+      setTargetFile({ name: "target_frame.jpg", fromVideo: true });
       if (videoId) setVideoInfo({ videoId, frameIndex: frameIndex || "key" });
+      if (templateId) setTemplateInfo({ templateId, name: templateName || "" });
     }
   }, [searchParams]);
 
@@ -243,9 +252,10 @@ export default function FaceSwap() {
   const currentStep = !targetFile ? 1 : !sourceFile ? 2 : 3;
 
   /* --- Handlers --- */
-  const handleTargetSelect = (file) => { setTargetFile(file); setTargetPreview(URL.createObjectURL(file)); setTargetFrameUrl(null); setVideoInfo(null); setResult(null); setGenError(null); };
   const handleSourceSelect = (file) => { setSourceFile(file); setSourcePreview(URL.createObjectURL(file)); setSavedFaceLoaded(false); setResult(null); setGenError(null); };
-  const handleRemoveTarget = () => { setTargetFile(null); setTargetPreview(null); setTargetFrameUrl(null); setVideoInfo(null); setResult(null); };
+  // Clearing the target drops back to the picker prompt — there is nothing to
+  // upload in its place, so the only way forward is Discover or Bookmarks.
+  const handleRemoveTarget = () => { setTargetFile(null); setTargetPreview(null); setTargetFrameUrl(null); setVideoInfo(null); setTemplateInfo(null); setResult(null); };
   const handleRemoveSource = () => { setSourceFile(null); setSourcePreview(null); setSavedFaceLoaded(false); setResult(null); };
 
   const handleSaveFace = () => {
@@ -372,13 +382,16 @@ export default function FaceSwap() {
   }, []);
 
   const handleGenerate = async () => {
-    if (!targetFile || !sourceFile) { toast.error("Upload both images first."); return; }
+    if (!targetFrameUrl) {
+      toast.error("Pick a hook from Discover or your bookmarks first.");
+      return;
+    }
+    if (!sourceFile) { toast.error("Upload a photo of your face first."); return; }
     setGenerating(true); setGenError(null); setResult(null); setSelectedVariant(0); setGeneratingMore(false);
     try {
       const formData = new FormData();
       formData.append("source_face", sourceFile);
-      if (targetFrameUrl) formData.append("target_frame_url", targetFrameUrl);
-      else formData.append("target_image", targetFile);
+      formData.append("target_frame_url", targetFrameUrl);
       if (customPrompt.trim()) formData.append("customization_prompt", customPrompt.trim());
       const submission = await api.faceSwap(formData);
       localStorage.setItem(ACTIVE_FACE_SWAP_JOB_KEY, JSON.stringify({
@@ -397,13 +410,12 @@ export default function FaceSwap() {
   const [generatingMore, setGeneratingMore] = useState(false);
 
   const handleGenerateMoreVariants = async () => {
-    if (!targetFile || !sourceFile) return;
+    if (!targetFrameUrl || !sourceFile) return;
     setGeneratingMore(true);
     try {
       const formData = new FormData();
       formData.append("source_face", sourceFile);
-      if (targetFrameUrl) formData.append("target_frame_url", targetFrameUrl);
-      else formData.append("target_image", targetFile);
+      formData.append("target_frame_url", targetFrameUrl);
       formData.append("variants", String(Math.min(2, 4 - (result.variants?.length || 1))));
       if (customPrompt.trim()) formData.append("customization_prompt", customPrompt.trim());
       const submission = await api.faceSwap(formData);
@@ -543,14 +555,17 @@ export default function FaceSwap() {
         icon={Repeat2}
         title="Face Swap"
         align="center"
+        // Keyed off targetPreview rather than videoInfo: a target can now come
+        // from a saved template too, which sets templateInfo and leaves
+        // videoInfo null.
         description={
-          videoInfo && savedFaceLoaded
-            ? "Your video frame and saved face are ready. Hit Generate."
-            : videoInfo
-            ? "Your video frame is ready. Upload your face to swap."
+          targetPreview && savedFaceLoaded
+            ? "Your hook frame and saved face are ready. Hit Generate."
+            : targetPreview
+            ? "Your hook frame is ready. Add your face to swap."
             : savedFaceLoaded
-            ? "Your saved face is loaded. Select a viral video or upload a target."
-            : "Select a viral video frame or upload a target, then add your face."
+            ? "Your saved face is loaded. Pick a hook from Discover or your bookmarks."
+            : "Pick a hook from Discover or your bookmarks, then add your face."
         }
       />
 
@@ -586,17 +601,23 @@ export default function FaceSwap() {
       {/* ---------- UPLOAD PHASE ---------- */}
       {!result && (
         <>
-          {videoInfo && targetPreview ? (
-            /* --- VIDEO FRAME ALREADY SELECTED (from discovery) --- */
+          {targetPreview ? (
+            /* --- TARGET FRAME ALREADY CHOSEN (discovery or bookmark) --- */
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-              {/* Selected frame (locked in, not an upload zone) */}
+              {/* Chosen frame — always read-only, never an upload zone */}
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <StepBadge done>1</StepBadge>
-                  <span className="text-sm font-semibold">Video Frame Selected</span>
-                  <Badge variant="indigo" className="text-xs">
-                    <Film className="h-3 w-3" /> Frame {videoInfo.frameIndex}
-                  </Badge>
+                  <span className="text-sm font-semibold">Hook Frame Selected</span>
+                  {videoInfo ? (
+                    <Badge variant="indigo" className="text-xs">
+                      <Film className="h-3 w-3" /> Frame {videoInfo.frameIndex}
+                    </Badge>
+                  ) : templateInfo ? (
+                    <Badge variant="indigo" className="text-xs">
+                      <Bookmark className="h-3 w-3" /> Saved template
+                    </Badge>
+                  ) : null}
                 </div>
                 <div className="group relative overflow-hidden rounded-2xl border border-[color:var(--hairline)]">
                   <img src={targetPreview} alt="Selected video frame" className="aspect-[3/4] w-full object-cover" />
@@ -608,7 +629,7 @@ export default function FaceSwap() {
                     <X className="h-3.5 w-3.5" />
                   </button>
                   <div className="absolute bottom-2.5 left-2.5 inline-flex items-center gap-1 rounded-full bg-[color:var(--brand-indigo)] px-2 py-0.5 text-xs font-bold text-white">
-                    <Check className="h-2.5 w-2.5" /> From discovery
+                    <Check className="h-2.5 w-2.5" /> {templateInfo ? "From bookmark" : "From discovery"}
                   </div>
                 </div>
               </div>
@@ -638,60 +659,45 @@ export default function FaceSwap() {
               </div>
             </div>
           ) : (
-            /* --- MANUAL MODE (no video selected, user uploads both) --- */
-            <div className="space-y-5">
-              {/* Prominent CTA to go to discovery */}
-              {!targetFile && (
-                <div className="flex flex-col gap-3 rounded-2xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-6)] p-4 sm:flex-row sm:items-center">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-10)] text-[color:var(--brand-indigo)]">
-                    <Film className="h-[18px] w-[18px]" />
-                  </span>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold">No video selected</p>
-                    <p className="text-xs leading-relaxed text-muted-foreground">Pick a viral video from your niche — that frame becomes your target automatically.</p>
-                  </div>
-                  <a href="/discover" className="shrink-0">
-                    <Button size="sm" variant="accent" className="gap-1.5" data-testid="go-to-discover-cta">
-                      <ArrowRight className="h-3.5 w-3.5" /> Discover Hooks
-                    </Button>
-                  </a>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                {/* Target */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <StepBadge done={!!targetFile}>1</StepBadge>
-                    <span className="text-sm font-semibold">Target Image</span>
-                  </div>
-                  <DropZone onFileSelect={handleTargetSelect} accept="image/jpeg,image/png,image/webp" label="Drop target image here" sublabel="Or select a video from Discover Hooks" preview={targetPreview} onRemove={handleRemoveTarget} testId="target" icon={ImageIcon} />
-                </div>
-
-                {/* Source */}
-                <div className="space-y-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <StepBadge done={!!sourceFile || !!targetFile}>2</StepBadge>
-                    <span className={`text-sm font-semibold ${!targetFile ? "text-muted-foreground" : ""}`}>Your Face</span>
-                    {savedFaceLoaded && (
-                      <Badge className="border-emerald-500/25 bg-emerald-500/10 text-xs text-emerald-400">
-                        <Save className="h-2.5 w-2.5" /> Saved
-                      </Badge>
-                    )}
-                  </div>
-                  <DropZone onFileSelect={handleSourceSelect} accept="image/jpeg,image/png,image/webp" label="Drop your face photo here" sublabel="Clear, frontal view works best" preview={sourcePreview} onRemove={handleRemoveSource} testId="source" icon={User} />
-                  {sourceFile && !savedFaceLoaded && (
-                    <button onClick={handleSaveFace} className="flex items-center gap-1.5 text-xs font-medium text-[color:var(--brand-indigo)] transition-colors hover:text-[color:var(--brand-indigo-dark)]" data-testid="save-face-button">
-                      <Save className="h-3 w-3" /> Save this face for next time
-                    </button>
-                  )}
-                  {savedFaceLoaded && (
-                    <button onClick={handleRemoveSavedFace} className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-[color:var(--brand-coral)]" data-testid="remove-saved-face-button">
-                      <Trash2 className="h-3 w-3" /> Remove saved face
-                    </button>
-                  )}
-                </div>
+            /* --- NO TARGET YET ---------------------------------------------
+               There is deliberately no target upload. A swap only makes sense
+               against a hook that has been analyzed, so the two entry points
+               are the discovery feed and saved templates. This screen exists
+               to route the user to one of them rather than dead-ending. */
+            <div
+              className="surface mx-auto max-w-xl space-y-5 rounded-2xl p-6 text-center"
+              data-testid="face-swap-no-target"
+            >
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
+                <Film className="h-5 w-5" />
+              </span>
+              <div className="space-y-1.5">
+                <h2 className="font-display text-lg font-semibold">Pick a hook to swap into</h2>
+                <p className="mx-auto max-w-md text-sm leading-relaxed text-muted-foreground">
+                  Face swaps run against a frame from a hook that's already been analyzed. Choose a
+                  trending video, or reuse one of your saved templates.
+                </p>
               </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+                <a href="/discover" className="sm:w-auto">
+                  <Button variant="brand" className="w-full gap-1.5" data-testid="go-to-discover-cta">
+                    <Compass className="h-4 w-4" /> Browse trending hooks
+                  </Button>
+                </a>
+                <a href="/bookmarks" className="sm:w-auto">
+                  <Button variant="outline" className="w-full gap-1.5" data-testid="go-to-bookmarks-cta">
+                    <Bookmark className="h-4 w-4" /> Use a saved template
+                  </Button>
+                </a>
+              </div>
+
+              {savedFaceLoaded && (
+                <p className="flex items-center justify-center gap-1.5 border-t border-[color:var(--hairline)] pt-4 text-xs text-muted-foreground">
+                  <Save className="h-3 w-3 text-emerald-400" />
+                  Your saved face is ready — it'll load automatically once you pick a hook.
+                </p>
+              )}
             </div>
           )}
 

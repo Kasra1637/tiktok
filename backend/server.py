@@ -1329,10 +1329,23 @@ async def _run_face_swap_job(
         )
 
 
+# The face-swap target is never uploaded by the client. It must be a file this
+# server produced itself, from one of exactly two provenances:
+#   frames/    — a hook frame extracted from a video in the discovery feed
+#   templates/ — the stored thumbnail of a saved hook template (bookmark)
+#
+# The allowlist is the enforcement point, not the absence of an upload field.
+# `/api/media` is a blanket static mount over the whole storage dir, so a bare
+# "starts with /api/media/" check would still let a caller launder an arbitrary
+# photo into a target by first writing it to uploads/ through another endpoint
+# (e.g. a prior source_face, whose URL is returned in this endpoint's own 202
+# response, or customize_video's person_photo) and passing that path back here.
+ALLOWED_TARGET_PREFIXES = ("/api/media/frames/", "/api/media/templates/")
+
+
 @api_router.post("/face-swap", status_code=202)
 async def face_swap(
     background_tasks: BackgroundTasks,
-    target_image: UploadFile = File(None),
     source_face: UploadFile = File(...),
     target_frame_url: str = Form(""),
     variants: int = Form(1),
@@ -1340,52 +1353,67 @@ async def face_swap(
     user_id: str = Depends(get_current_user_id),
 ):
     """
-    Validate and persist both inputs, then return an app job ID immediately.
+    Validate and persist the inputs, then return an app job ID immediately.
     GPT-5.4 Image 2 runs after the response so browser and reverse-proxy request
     timeouts cannot discard a completed generation.
+
+    `source_face` is the only image the caller supplies. The target is
+    identified by URL and must already exist under an allowlisted storage
+    subtree — see ALLOWED_TARGET_PREFIXES.
     """
     require_ai_configured()
     variants = max(1, min(variants, 4))
 
-    if target_frame_url and target_frame_url.strip():
-        url_path = target_frame_url.strip()
-        if not url_path.startswith("/api/media/"):
-            raise HTTPException(status_code=400, detail="Invalid target frame URL.")
-        relative_path = url_path[len("/api/media/"):]
-        storage_root = pipeline.STORAGE_DIR.resolve()
-        target_path = (storage_root / relative_path).resolve()
-        if storage_root not in target_path.parents:
-            raise HTTPException(
-                status_code=400,
-                detail="Target frame not found on server. Please re-analyze the video.",
-            )
-        if not target_path.is_file():
-            # The frame file may be missing on this machine even though the
-            # analysis is still valid (ephemeral storage, redeploy, cache
-            # eviction). Try to reproduce it deterministically before failing.
-            recovered = await _recover_missing_frame(relative_path)
-            if not recovered:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Target frame not found on server. Please re-analyze the video.",
-                )
-        target_image_url = url_path
-    elif target_image:
-        target_bytes = await target_image.read()
-        if not target_bytes:
-            raise HTTPException(status_code=400, detail="Target image is empty.")
-        if len(target_bytes) > 12 * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="Target image is too large (max 12MB).")
-        normalized_target = validate_and_normalize_photo(target_bytes)
-        target_id = str(uuid.uuid4())
-        target_path = pipeline.UPLOADS_DIR / f"{target_id}.png"
-        target_path.write_bytes(normalized_target)
-        target_image_url = f"/api/media/uploads/{target_id}.png"
-    else:
+    url_path = (target_frame_url or "").strip()
+    if not url_path:
         raise HTTPException(
             status_code=400,
-            detail="Please provide either a target image upload or a target frame URL.",
+            detail=(
+                "A target frame is required. Choose a hook from the discovery "
+                "feed or one of your saved templates."
+            ),
         )
+    if not url_path.startswith(ALLOWED_TARGET_PREFIXES):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Invalid target frame. Targets must be an analyzed video frame "
+                "or a saved hook template thumbnail."
+            ),
+        )
+
+    relative_path = url_path[len("/api/media/"):]
+    storage_root = pipeline.STORAGE_DIR.resolve()
+    target_path = (storage_root / relative_path).resolve()
+
+    # The allowlist above is a string check, so on its own it is defeated by
+    # traversal that stays inside storage: "/api/media/templates/../uploads/x.png"
+    # starts with an allowed prefix but resolves into uploads/. The resolved
+    # path is therefore the authoritative gate — it must sit inside one of the
+    # two permitted directories. This also subsumes the escape-the-storage-root
+    # check, since neither directory can be a parent of a path outside storage.
+    allowed_roots = (pipeline.FRAMES_DIR.resolve(), pipeline.TEMPLATES_DIR.resolve())
+    if not any(root in target_path.parents for root in allowed_roots):
+        raise HTTPException(status_code=400, detail="Invalid target frame path.")
+
+    if not target_path.is_file():
+        # An extracted frame can be missing on this machine even though the
+        # analysis is still valid (ephemeral storage, redeploy, cache
+        # eviction). Try to reproduce it deterministically before failing.
+        # Template thumbnails are copies rather than derivations, so there is
+        # nothing to recompute for those.
+        recovered = await _recover_missing_frame(relative_path)
+        if not recovered:
+            if relative_path.startswith("templates/"):
+                detail = (
+                    "That template's thumbnail is no longer on the server. "
+                    "Open the source analysis and bookmark the hook again."
+                )
+            else:
+                detail = "Target frame not found on server. Please re-analyze the video."
+            raise HTTPException(status_code=400, detail=detail)
+
+    target_image_url = url_path
 
     source_bytes = await source_face.read()
     if not source_bytes:

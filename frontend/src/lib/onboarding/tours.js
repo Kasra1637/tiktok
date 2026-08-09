@@ -151,11 +151,11 @@ export const TOURS = {
           "Target scene \u2192 your face \u2192 generate. Your face photo is saved locally so you only ever need to upload it once.",
       },
       {
-        target: '[data-testid="target-dropzone"], [data-testid="face-swap-step-indicator"]',
+        target: '[data-testid="face-swap-no-target"], [data-testid="face-swap-step-indicator"]',
         title: "Your target scene",
         optional: true,
         body:
-          "This is the pose, lighting, and background your face will be placed into \u2014 either chosen from a viral hook or uploaded directly.",
+          "This is the pose, lighting, and background your face gets placed into. It always comes from a hook you've analyzed \u2014 pick one in Discover, or reuse a saved template.",
       },
       {
         target: '[data-testid="source-dropzone"]',

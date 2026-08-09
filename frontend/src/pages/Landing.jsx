@@ -376,13 +376,16 @@ export default function Landing() {
                   <Sparkles className="h-5 w-5" /> Go to App
                 </Button>
               </Link>
-              <Link to="/face-swap" className="w-full sm:w-auto">
+              {/* Points at Bookmarks rather than /face-swap: a swap needs a
+                  target frame, which only Discover or a saved template can
+                  supply, so a direct Face Swap CTA would dead-end. */}
+              <Link to="/bookmarks" className="w-full sm:w-auto">
                 <Button
                   size="lg"
                   variant="outline"
                   className="w-full gap-2.5 rounded-xl border-[color:var(--hairline-strong)] bg-[color:var(--indigo-4)] px-8 py-6 text-base font-semibold backdrop-blur-sm hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] sm:w-auto"
                 >
-                  <Repeat2 className="h-5 w-5" /> Face Swap
+                  <Bookmark className="h-5 w-5" /> Saved Hooks
                 </Button>
               </Link>
             </AuthedOnly>
@@ -624,7 +627,8 @@ export default function Landing() {
                   <Link to="/discover" className="transition-colors hover:text-foreground">Discover Hooks</Link>
                 </li>
                 <li>
-                  <Link to="/face-swap" className="transition-colors hover:text-foreground">Face Swap</Link>
+                  {/* Face swaps start from a hook, so this points at Discover. */}
+                  <Link to="/discover" className="transition-colors hover:text-foreground">Face Swap</Link>
                 </li>
                 <li>
                   <Link to="/bookmarks" className="transition-colors hover:text-foreground">Bookmarks</Link>

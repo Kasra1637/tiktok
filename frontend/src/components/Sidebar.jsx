@@ -5,7 +5,6 @@ import { useOnboarding } from "./onboarding/OnboardingProvider";
 import {
   Sparkles,
   Compass,
-  Repeat2,
   Bookmark,
   Briefcase,
   History as HistoryIcon,
@@ -29,8 +28,11 @@ export const NAV_GROUPS = [
   {
     label: "Pipeline",
     items: [
+      // Face Swap is deliberately absent. It has no standalone entry point:
+      // a swap always needs a target frame, and a target can only come from
+      // an analyzed video in Discover or from a saved template in Bookmarks.
+      // Linking it here would land users on a screen they can't act on.
       { to: "/discover", label: "Discover", icon: Compass, testId: "discover-nav-link", hint: "Trending hooks" },
-      { to: "/face-swap", label: "Face Swap", icon: Repeat2, testId: "face-swap-nav-link", hint: "Swap yourself in" },
     ],
   },
   {
