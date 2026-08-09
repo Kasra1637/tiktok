@@ -171,7 +171,7 @@ async def init_db():
         await conn.executescript("""
             CREATE TABLE IF NOT EXISTS videos (
                 id TEXT PRIMARY KEY,
-                tiktok_url TEXT UNIQUE,
+                tiktok_url TEXT,
                 niche TEXT,
                 video_platform_id TEXT,
                 creator TEXT,
@@ -466,7 +466,7 @@ async def init_db():
         await conn.executescript("""
             CREATE TABLE IF NOT EXISTS videos (
                 id TEXT PRIMARY KEY,
-                tiktok_url TEXT UNIQUE,
+                tiktok_url TEXT,
                 niche TEXT,
                 video_platform_id TEXT,
                 creator TEXT,
@@ -1038,7 +1038,11 @@ async def ingest_video(payload: IngestVideoRequest, user_id: str = Depends(get_c
     if "tiktok.com" not in tiktok_url:
         raise HTTPException(status_code=400, detail="Please provide a valid TikTok video URL.")
 
-    existing = await _fetch_one("SELECT * FROM videos WHERE tiktok_url = ?", (tiktok_url,))
+    # Check if THIS user already ingested this URL (not globally — each user
+    # gets their own video record so analyses are isolated per account).
+    existing = await _fetch_one(
+        "SELECT * FROM videos WHERE tiktok_url = ? AND user_id = ?", (tiktok_url, user_id)
+    )
     if existing:
         return existing
 
@@ -1063,32 +1067,44 @@ async def ingest_video(payload: IngestVideoRequest, user_id: str = Depends(get_c
 
     video_id = str(uuid.uuid4())
     created_at = now_iso()
-    await _execute(
-        """INSERT INTO videos
-           (id, tiktok_url, niche, video_platform_id, creator, creator_display, title,
-            description, view_count, like_count, comment_count, share_count, bookmark_count,
-            duration, thumbnail_url, direct_video_url, hashtags,
-            song_id, song_title, song_artist, song_album, song_duration, song_cover_url,
-            subtitles_url, subtitles_language, is_ad,
-            creator_followers, creator_following, creator_verified, creator_bio, creator_avatar,
-            status, local_video_path, created_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (video_id, tiktok_url, niche, meta.get("video_platform_id"), meta.get("creator"),
-         meta.get("creator_display"), meta.get("title"), meta.get("description", ""),
-         meta.get("view_count", 0), meta.get("like_count", 0), meta.get("comment_count", 0),
-         meta.get("share_count", 0), meta.get("bookmark_count", 0),
-         meta.get("duration", 0), meta.get("thumbnail_url"),
-         meta.get("direct_video_url", ""), json.dumps(meta.get("hashtags", [])),
-         meta.get("song_id", ""), meta.get("song_title", ""),
-         meta.get("song_artist", ""), meta.get("song_album", ""),
-         meta.get("song_duration", 0), meta.get("song_cover_url", ""),
-         meta.get("subtitles_url", ""), meta.get("subtitles_language", ""),
-         1 if meta.get("is_ad") else 0,
-         meta.get("creator_followers", 0), meta.get("creator_following", 0),
-         1 if meta.get("creator_verified") else 0,
-         meta.get("creator_bio", ""), meta.get("creator_avatar", ""),
-         "metadata_ready", None, created_at, user_id),
-    )
+    try:
+        await _execute(
+            """INSERT INTO videos
+               (id, tiktok_url, niche, video_platform_id, creator, creator_display, title,
+                description, view_count, like_count, comment_count, share_count, bookmark_count,
+                duration, thumbnail_url, direct_video_url, hashtags,
+                song_id, song_title, song_artist, song_album, song_duration, song_cover_url,
+                subtitles_url, subtitles_language, is_ad,
+                creator_followers, creator_following, creator_verified, creator_bio, creator_avatar,
+                status, local_video_path, created_at, user_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (video_id, tiktok_url, niche, meta.get("video_platform_id"), meta.get("creator"),
+             meta.get("creator_display"), meta.get("title"), meta.get("description", ""),
+             meta.get("view_count", 0), meta.get("like_count", 0), meta.get("comment_count", 0),
+             meta.get("share_count", 0), meta.get("bookmark_count", 0),
+             meta.get("duration", 0), meta.get("thumbnail_url"),
+             meta.get("direct_video_url", ""), json.dumps(meta.get("hashtags", [])),
+             meta.get("song_id", ""), meta.get("song_title", ""),
+             meta.get("song_artist", ""), meta.get("song_album", ""),
+             meta.get("song_duration", 0), meta.get("song_cover_url", ""),
+             meta.get("subtitles_url", ""), meta.get("subtitles_language", ""),
+             1 if meta.get("is_ad") else 0,
+             meta.get("creator_followers", 0), meta.get("creator_following", 0),
+             1 if meta.get("creator_verified") else 0,
+             meta.get("creator_bio", ""), meta.get("creator_avatar", ""),
+             "metadata_ready", None, created_at, user_id),
+        )
+    except Exception as e:
+        # On older databases with UNIQUE(tiktok_url), a second user ingesting the
+        # same URL hits a constraint violation. Return the existing record for
+        # this user if one exists, otherwise the global one (legacy compat).
+        logger.warning(f"Video insert failed (likely UNIQUE constraint): {e}")
+        fallback = await _fetch_one(
+            "SELECT * FROM videos WHERE tiktok_url = ?", (tiktok_url,)
+        )
+        if fallback:
+            return fallback
+        raise HTTPException(status_code=500, detail="Could not save the video. Please try again.")
     return await get_video_or_404(video_id)
 
 
