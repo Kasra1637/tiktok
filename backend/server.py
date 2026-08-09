@@ -407,6 +407,10 @@ async def init_db():
                 job_id TEXT,
                 target_image_url TEXT,
                 user_id TEXT DEFAULT 'anonymous',
+                -- Durable PNG backup. The working filesystem can disappear on
+                -- a redeploy or differ between backend instances, while this
+                -- database record remains available to restore the asset.
+                image_bytes BLOB,
                 created_at TEXT
             );
 
@@ -628,6 +632,17 @@ async def init_db():
                 )
         await conn.commit()
 
+        # Migration: generated face-swap files previously existed only on the
+        # local container filesystem. Persist their normalized PNG bytes with
+        # provenance so a new backend instance can restore a selected image
+        # before generating or extending a video.
+        cursor = await conn.execute("PRAGMA table_info(generated_images)")
+        generated_image_cols = {row[1] for row in await cursor.fetchall()}
+        if "image_bytes" not in generated_image_cols:
+            logger.info("Migration: adding durable image_bytes backup to generated_images")
+            await conn.execute("ALTER TABLE generated_images ADD COLUMN image_bytes BLOB")
+        await conn.commit()
+
         # Migration: backfill the generated_images provenance registry for
         # databases created before it existed. Without this, every image a user
         # already generated would be unusable for video generation after the
@@ -762,20 +777,47 @@ async def _record_generated_image(
     target_image_url: str,
     user_id: str,
     job_id: str = "",
+    image_bytes: bytes = b"",
 ):
     """
-    Register what a generated image was derived from.
+    Register a generated image's provenance and durable PNG backup.
 
-    Called at every point that writes into storage/generated. Without a row
-    here an image cannot be used for video generation — see
-    require_frame_derived_image.
+    The local generated/ file is only a cache: containers can restart and
+    horizontally scaled instances do not share it. Video generation can
+    restore image_bytes on demand, while provenance remains the authority for
+    deciding whether the image is allowed to become a video.
     """
     await _execute(
         """INSERT OR REPLACE INTO generated_images
-           (id, origin, job_id, target_image_url, user_id, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (image_id, origin, job_id, target_image_url, user_id, now_iso()),
+           (id, origin, job_id, target_image_url, user_id, image_bytes, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (image_id, origin, job_id, target_image_url, user_id, image_bytes, now_iso()),
     )
+
+
+def _restore_generated_image(image_path: Path, image_bytes: bytes) -> None:
+    """Validate and atomically restore a durable generated-image backup."""
+    if not isinstance(image_bytes, (bytes, bytearray, memoryview)):
+        raise ValueError("Generated image backup is invalid.")
+    image_bytes = bytes(image_bytes)
+    if not image_bytes:
+        raise ValueError("Generated image backup is empty.")
+
+    # Never write unvalidated data into the public media directory, even
+    # though it came from the database. The original image is normalized to a
+    # PNG before persistence; verify the backup still decodes as one.
+    with Image.open(io.BytesIO(image_bytes)) as restored_image:
+        if restored_image.format != "PNG":
+            raise ValueError("Generated image backup is not a PNG.")
+        restored_image.verify()
+
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = image_path.with_suffix(".restore.tmp")
+    try:
+        temporary_path.write_bytes(image_bytes)
+        temporary_path.replace(image_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
 
 
 async def require_frame_derived_image(image_id: str) -> Path:
@@ -783,7 +825,7 @@ async def require_frame_derived_image(image_id: str) -> Path:
     Resolve a client-supplied `image_id` to a generated image, proving it
     descends from a permitted target, and return its path.
 
-    Three independent checks, because each catches something the others don't:
+    Four independent checks, because each catches something the others don't:
 
     1. Shape. `image_id` is interpolated into a path, so anything but a bare
        UUID is refused. This alone kills "../uploads/<id>", which otherwise
@@ -793,12 +835,15 @@ async def require_frame_derived_image(image_id: str) -> Path:
        legitimate client input.
     2. Containment. Belt-and-braces on the resolved path, so any future change
        to the shape rule can't silently reopen traversal.
-    3. Provenance. Existence on disk proves nothing about origin, so the image
-       must have a generated_images row whose target_image_url is an
-       allowlisted frame or template. Uploads have no row; previews derived
-       from an uploaded person photo have a row pointing at the analysis frame
-       they were built on, which is exactly what we want to permit.
-    """
+    3. Provenance. The image must have a generated_images row whose
+       target_image_url is an allowlisted frame or template. Uploads have no
+       row; previews derived from an uploaded person photo have a row pointing
+       at the analysis frame they were built on, which is exactly what we want
+       to permit.
+    4. Durable recovery. A missing local cache file is restored only from the
+       validated PNG backup stored alongside the provenance record. This keeps
+       extensions working after deploys and across backend instances without
+       treating disk existence as proof of origin.    """
     if not image_id or not GENERATED_ID_RE.match(image_id.strip()):
         raise HTTPException(
             status_code=400,
@@ -810,12 +855,6 @@ async def require_frame_derived_image(image_id: str) -> Path:
     image_path = (generated_root / f"{image_id}.png").resolve()
     if generated_root not in image_path.parents:
         raise HTTPException(status_code=400, detail="Invalid image reference.")
-
-    if not image_path.is_file():
-        raise HTTPException(
-            status_code=404,
-            detail="Generated face-swap image not found. Please generate the image first.",
-        )
 
     row = await _fetch_one("SELECT * FROM generated_images WHERE id = ?", (image_id,))
     if not row:
@@ -834,6 +873,23 @@ async def require_frame_derived_image(image_id: str) -> Path:
                 "not from an uploaded image."
             ),
         )
+
+    if not image_path.is_file():
+        # The database survives deploys and may be shared by multiple backend
+        # instances; the generated/ directory is neither. Rehydrate the exact
+        # normalized PNG before submitting the video request.
+        try:
+            _restore_generated_image(image_path, row.get("image_bytes"))
+            logger.info("Restored generated image %s from durable backup", image_id)
+        except (OSError, ValueError) as exc:
+            logger.warning("Could not restore generated image %s: %s", image_id, exc)
+            raise HTTPException(
+                status_code=410,
+                detail=(
+                    "This generated face-swap image is no longer available. Please generate a new "
+                    "face swap before creating or extending a video."
+                ),
+            ) from exc
 
     return image_path
 
@@ -1464,13 +1520,20 @@ async def _generate_face_swap_variant(
     with Image.open(io.BytesIO(image_bytes)) as generated_image:
         normalized = generated_image.convert("RGB")
         width, height = normalized.size
-        normalized.save(gen_path, format="PNG")
+        output = io.BytesIO()
+        normalized.save(output, format="PNG")
+
+    normalized_bytes = output.getvalue()
+    gen_path.write_bytes(normalized_bytes)
 
     return {
         "id": gen_id,
         "image_url": f"/api/media/generated/{gen_id}.png",
         "resolution": f"{width}x{height}",
         "variant_index": variant_index,
+        # Internal-only: removed before serializing the browser result, but
+        # committed with provenance before the job becomes visible as complete.
+        "_image_bytes": normalized_bytes,
     }
 
 
@@ -1512,6 +1575,7 @@ async def _run_face_swap_job(
                 target_image_url=target_image_url,
                 user_id=user_id,
                 job_id=job_id,
+                image_bytes=variant.pop("_image_bytes"),
             )
 
         result = {
@@ -3049,6 +3113,7 @@ async def customize_video(
             target_image_url=frame_meta["media_url"],
             user_id=user_id,
             job_id=video_id,
+            image_bytes=image_bytes,
         )
 
         generated_images.append({
