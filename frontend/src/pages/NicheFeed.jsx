@@ -206,7 +206,7 @@ export default function NicheFeed() {
   // clicking a niche chip with text still in the box would look like it did
   // nothing, since Search would just re-run the keyword query.
   const handleSelectNiche = useCallback((nicheKey) => {
-    setActiveNiche(nicheKey);
+    setActiveNiche((prev) => (prev === nicheKey ? null : nicheKey));
     setSearchQuery("");
     setSearchResults(null);
   }, []);
