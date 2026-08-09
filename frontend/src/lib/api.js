@@ -97,7 +97,7 @@ export const api = {
       })
       .then((r) => r.data);
   },
-  faceSwapGenerateHook: (imageId, motionStyle, model, videoId, templateId, includeAudio = false) => {
+  faceSwapGenerateHook: (imageId, motionStyle, model, videoId, templateId, includeAudio = false, hookCategory = "", hookCustomPrompt = "") => {
     const formData = new FormData();
     formData.append("image_id", imageId);
     formData.append("motion_style", motionStyle || "lean-in");
@@ -105,6 +105,8 @@ export const api = {
     formData.append("video_id", videoId || "");
     formData.append("template_id", templateId || "");
     formData.append("include_audio", includeAudio ? "true" : "false");
+    formData.append("hook_category", hookCategory || "");
+    formData.append("hook_custom_prompt", hookCustomPrompt || "");
     return client
       .post("/face-swap/generate-hook-video", formData, {
         headers: { "Content-Type": "multipart/form-data" },
