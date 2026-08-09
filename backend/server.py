@@ -259,6 +259,19 @@ async def init_db():
                 created_at TEXT
             );
 
+            -- Durable backups for the small extracted JPEGs listed in
+            -- analyses.frames. The public frame URLs are metadata only; the
+            -- actual files otherwise disappear on a clean container deploy.
+            CREATE TABLE IF NOT EXISTS analysis_frame_assets (
+                video_hash TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                image_bytes BLOB NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (video_hash, filename)
+            );
+            CREATE INDEX IF NOT EXISTS idx_analysis_frame_assets_lookup
+                ON analysis_frame_assets (video_hash, filename);
+
             CREATE TABLE IF NOT EXISTS customizations (
                 id TEXT PRIMARY KEY,
                 video_id TEXT,
@@ -633,6 +646,40 @@ async def init_db():
                 await conn.execute(
                     f"ALTER TABLE {table} ADD COLUMN user_id TEXT DEFAULT 'anonymous'"
                 )
+        await conn.commit()
+
+        # Best-effort backfill for analyses whose local extracted frames still
+        # exist at this deployment. Existing rows whose frames were already
+        # lost cannot be reconstructed safely without re-downloading TikTok.
+        frame_backfilled = 0
+        cursor = await conn.execute("SELECT frames FROM analyses WHERE frames IS NOT NULL")
+        for (frames_json,) in await cursor.fetchall():
+            try:
+                frame_docs = json.loads(frames_json)
+            except (TypeError, ValueError):
+                continue
+            for frame_doc in frame_docs if isinstance(frame_docs, list) else []:
+                media_url = frame_doc.get("media_url") if isinstance(frame_doc, dict) else ""
+                match = re.fullmatch(r"/api/media/frames/([0-9a-f]{16})/(frame_\d{3}\.jpg)", media_url or "")
+                if not match:
+                    continue
+                video_hash, filename = match.groups()
+                try:
+                    frame_path = _analysis_frame_path(video_hash, filename)
+                    if not frame_path.is_file():
+                        continue
+                    image_bytes = _normalize_analysis_frame(frame_path.read_bytes())
+                    await conn.execute(
+                        """INSERT OR IGNORE INTO analysis_frame_assets
+                           (video_hash, filename, image_bytes, created_at)
+                           VALUES (?, ?, ?, ?)""",
+                        (video_hash, filename, image_bytes, now_iso()),
+                    )
+                    frame_backfilled += 1
+                except (OSError, ValueError) as exc:
+                    logger.warning("Could not backfill extracted frame %s/%s: %s", video_hash, filename, exc)
+        if frame_backfilled:
+            logger.info("Migration: backfilled %s durable extracted frame(s)", frame_backfilled)
         await conn.commit()
 
         # Migration: generated face-swap files previously existed only on the
@@ -1087,34 +1134,138 @@ def build_frame_docs(video_hash: str, frame_paths: list) -> list:
     return docs
 
 
+FRAME_VIDEO_HASH_RE = re.compile(r"^[0-9a-f]{16}$")
+FRAME_FILENAME_RE = re.compile(r"^frame_\d{3}\.jpg$")
+
+
+def _analysis_frame_path(video_hash: str, filename: str) -> Path:
+    """Resolve exactly one expected extracted-frame cache path."""
+    if not FRAME_VIDEO_HASH_RE.match(video_hash or ""):
+        raise ValueError("Invalid frame video hash.")
+    if not FRAME_FILENAME_RE.match(filename or ""):
+        raise ValueError("Invalid frame filename.")
+
+    frames_root = pipeline.FRAMES_DIR.resolve()
+    frame_path = (frames_root / video_hash / filename).resolve()
+    if frames_root not in frame_path.parents:
+        raise ValueError("Invalid frame path.")
+    return frame_path
+
+
+def _normalize_analysis_frame(image_bytes: bytes) -> bytes:
+    """Validate arbitrary image bytes and persist a consistent JPEG frame."""
+    if not isinstance(image_bytes, (bytes, bytearray, memoryview)):
+        raise ValueError("Analysis frame is invalid.")
+    with Image.open(io.BytesIO(bytes(image_bytes))) as image:
+        normalized = image.convert("RGB")
+        output = io.BytesIO()
+        normalized.save(output, format="JPEG", quality=90, optimize=True)
+    return output.getvalue()
+
+
+def _restore_analysis_frame(frame_path: Path, image_bytes: bytes) -> None:
+    """Atomically restore a validated durable extracted-frame backup."""
+    normalized_bytes = _normalize_analysis_frame(image_bytes)
+    frame_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = frame_path.with_suffix(".restore.tmp")
+    try:
+        temporary_path.write_bytes(normalized_bytes)
+        temporary_path.replace(frame_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+async def _record_analysis_frame_assets(video_hash: str, frame_paths: list) -> None:
+    """Persist normalized extracted frames before exposing their public URLs."""
+    assets = []
+    for frame_path in frame_paths:
+        filename = frame_path.name
+        destination = _analysis_frame_path(video_hash, filename)
+        image_bytes = _normalize_analysis_frame(frame_path.read_bytes())
+        assets.append((filename, destination, image_bytes))
+
+    async with get_db() as conn:
+        for filename, _destination, image_bytes in assets:
+            await conn.execute(
+                """INSERT OR REPLACE INTO analysis_frame_assets
+                   (video_hash, filename, image_bytes, created_at)
+                   VALUES (?, ?, ?, ?)""",
+                (video_hash, filename, image_bytes, now_iso()),
+            )
+        await conn.commit()
+
+    # The cache may disappear at any time, so it is not the source of truth.
+    # Refresh it after the durable write for immediate static/media access.
+    for _filename, destination, image_bytes in assets:
+        _restore_analysis_frame(destination, image_bytes)
+
+
+async def _ensure_analysis_frame(video_hash: str, filename: str) -> Optional[Path]:
+    """Return a valid frame cache file, restoring it from durable storage if needed."""
+    try:
+        frame_path = _analysis_frame_path(video_hash, filename)
+    except ValueError:
+        return None
+
+    if frame_path.is_file():
+        try:
+            _normalize_analysis_frame(frame_path.read_bytes())
+            return frame_path
+        except (OSError, ValueError) as exc:
+            logger.warning("Extracted frame cache is invalid for %s/%s: %s", video_hash, filename, exc)
+
+    row = await _fetch_one(
+        """SELECT image_bytes FROM analysis_frame_assets
+           WHERE video_hash = ? AND filename = ?""",
+        (video_hash, filename),
+    )
+    if not row:
+        return None
+
+    try:
+        _restore_analysis_frame(frame_path, row.get("image_bytes"))
+        logger.info("Restored extracted frame %s/%s from durable backup", video_hash, filename)
+        return frame_path
+    except (OSError, ValueError) as exc:
+        logger.warning("Could not restore extracted frame %s/%s: %s", video_hash, filename, exc)
+        return None
+
+
 async def _recover_missing_frame(relative_path: str) -> bool:
     """
-    Best-effort self-heal for a missing OR corrupted (0-byte) frame file.
-    Only re-extracts from an already-cached video file — does NOT re-download
-    the video, which would exceed Render free tier's 512MB RAM limit and
-    cause an OOM crash.
+    Best-effort self-heal for a missing/corrupt frame cache.
 
-    Returns True if recovery succeeded (a real, non-empty file exists now).
+    Prefer the durable JPEG backup. If an older analysis predates that backup,
+    only re-extract from an already-cached video file — never re-download a
+    remote TikTok video on this RAM-constrained backend.
     """
     parts = relative_path.split("/")
     if len(parts) != 3 or parts[0] != "frames":
         return False
-    video_hash = parts[1]
+    video_hash, filename = parts[1], parts[2]
 
-    # Only attempt if the video file is already on disk (no download = no OOM risk)
+    if await _ensure_analysis_frame(video_hash, filename):
+        return True
+
+    try:
+        target = _analysis_frame_path(video_hash, filename)
+    except ValueError:
+        return False
+
+    # Only attempt if the video file is already on disk (no download = no OOM risk).
     video_path = pipeline.VIDEOS_DIR / f"{video_hash}.mp4"
     if not video_path.is_file():
         return False
 
     try:
-        await pipeline.extract_hook_frames(
+        frame_paths = await pipeline.extract_hook_frames(
             video_path, num_frames=FRAME_COUNT, duration=HOOK_DURATION_SECONDS
         )
+        await _record_analysis_frame_assets(video_hash, frame_paths)
     except Exception as e:
         logger.warning(f"Frame recovery failed for hash {video_hash}: {e}")
         return False
 
-    target = pipeline.FRAMES_DIR / video_hash / parts[2]
     return target.is_file() and target.stat().st_size > 1024
 
 
@@ -1562,6 +1713,18 @@ async def analyze_video_hook(video_id: str, user_id: str = Depends(get_current_u
 
     analysis_id = str(uuid.uuid4())
     created_at = now_iso()
+    try:
+        # analyses.frames only holds browser-facing URLs. Store the matching
+        # JPEG bytes before publishing that analysis so History can restore
+        # every thumbnail after a clean deploy or on another backend instance.
+        await _record_analysis_frame_assets(video_hash, frame_paths)
+    except Exception as e:
+        logger.error(f"Could not durably preserve frames for {video_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to preserve extracted frames. Please retry the analysis.",
+        )
+
     await _execute(
         """INSERT INTO analyses
            (id, video_id, frames, facial_expressions, body_language_gestures, pacing_cuts,
@@ -4028,28 +4191,33 @@ app.include_router(api_router)
 @app.get("/api/media/frames/{video_hash}/{filename}")
 async def serve_frame(video_hash: str, filename: str):
     """
-    Serve an extracted frame if it exists on disk AND is a real, non-empty
-    image. On Render's free tier (512MB RAM), re-downloading + re-extracting
-    full videos causes OOM crashes, so recovery only re-extracts from a video
-    already on disk — it never re-downloads.
+    Serve an extracted analysis frame from its local cache or durable JPEG
+    backup. Older analyses may still have only a cached MP4, which remains a
+    final no-network re-extraction fallback.
     """
-    frame_path = pipeline.FRAMES_DIR / video_hash / filename
-    if frame_path.is_file() and frame_path.stat().st_size > 1024:
-        return FileResponse(str(frame_path), media_type="image/jpeg")
+    frame_path = await _ensure_analysis_frame(video_hash, filename)
+    if frame_path:
+        return FileResponse(
+            str(frame_path),
+            media_type="image/jpeg",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
 
-    # File is missing OR corrupted/empty (e.g. ffmpeg was killed mid-extraction
-    # under memory pressure). Try lightweight recovery: re-extract from the
-    # video if it's already on disk — never re-download (that's what OOMs).
-    video_path = pipeline.VIDEOS_DIR / f"{video_hash}.mp4"
-    if video_path.is_file():
-        try:
-            await pipeline.extract_hook_frames(video_path, num_frames=8, duration=3.0)
-            if frame_path.is_file() and frame_path.stat().st_size > 1024:
-                return FileResponse(str(frame_path), media_type="image/jpeg")
-        except Exception as e:
-            logger.warning(f"Frame re-extraction failed for {video_hash}: {e}")
+    # Legacy analysis with no durable frame record: use an already-local video
+    # only. This never downloads a remote TikTok clip during an image request.
+    if await _recover_missing_frame(f"frames/{video_hash}/{filename}"):
+        frame_path = await _ensure_analysis_frame(video_hash, filename)
+        if frame_path:
+            return FileResponse(
+                str(frame_path),
+                media_type="image/jpeg",
+                headers={"Cache-Control": "public, max-age=86400"},
+            )
 
-    raise HTTPException(status_code=404, detail="Frame not available. Please re-analyze the video.")
+    raise HTTPException(
+        status_code=404,
+        detail="Extracted frame is unavailable. Please re-analyze the video.",
+    )
 
 
 @app.get("/api/media/templates/{template_id}.jpg")
