@@ -7,6 +7,7 @@ import { Badge } from "../components/ui/badge";
 import GenerationProgress from "../components/GenerationProgress";
 import HookStyleSelector from "../components/HookStyleSelector";
 import PageHeader from "../components/PageHeader";
+import { StepDots, StepBadge } from "../components/Stepper";
 import { api, mediaUrl, getErrorMessage } from "../lib/api";
 import {
   Upload,
@@ -96,23 +97,6 @@ function DropZone({ onFileSelect, accept, label, sublabel, preview, onRemove, te
         <span className="text-xs text-muted-foreground">{sublabel}</span>
       </button>
     </div>
-  );
-}
-
-/** Numbered step badge used by the two upload columns. */
-function StepBadge({ done, current, children }) {
-  return (
-    <span
-      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-        done
-          ? "bg-[color:var(--brand-indigo)] text-white"
-          : current
-          ? "bg-[color:var(--brand-coral)] text-white"
-          : "bg-secondary text-muted-foreground"
-      }`}
-    >
-      {done ? <Check className="h-3 w-3" /> : children}
-    </span>
   );
 }
 
@@ -570,32 +554,12 @@ export default function FaceSwap() {
       />
 
       {/* ---------- STEP INDICATOR ---------- */}
-      <div className="flex items-center justify-center gap-2" data-testid="face-swap-step-indicator">
-        {[1, 2, 3].map((s) => {
-          const filled = result || s < currentStep;
-          const active = !result && s === currentStep;
-          return (
-            <div key={s} className="flex items-center gap-2">
-              <div
-                className={`h-2 rounded-full transition-all duration-300 ${
-                  filled
-                    ? "w-2 bg-[color:var(--brand-indigo)]"
-                    : active
-                    ? "w-7 bg-[color:var(--brand-indigo)]"
-                    : "w-2 bg-border"
-                }`}
-              />
-              {s < 3 && (
-                <div
-                  className={`h-px w-8 transition-colors duration-300 ${
-                    s < currentStep || result ? "bg-[color:var(--brand-indigo)]" : "bg-border"
-                  }`}
-                />
-              )}
-            </div>
-          );
-        })}
-      </div>
+      <StepDots
+        total={3}
+        current={currentStep}
+        complete={!!result}
+        testId="face-swap-step-indicator"
+      />
 
 
       {/* ---------- UPLOAD PHASE ---------- */}

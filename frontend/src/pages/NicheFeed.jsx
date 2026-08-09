@@ -70,7 +70,12 @@ function FilterRow({ label, children }) {
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
       <span className="eyebrow w-16 shrink-0 text-xs">{label}</span>
-      <div className="flex flex-wrap gap-1.5">{children}</div>
+      {/* role="group" + aria-label ties the chips to their heading. Without it
+          a screen reader announces "All, pressed" with no indication of which
+          filter it belongs to, since the visible label is a sibling span. */}
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label={label}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -505,7 +510,12 @@ export default function NicheFeed() {
 
           {/* Niche chips — selecting one only sets the filter, it never fetches
               on its own. Click Search to actually load videos for it. */}
-          <div className="flex flex-wrap gap-1.5" data-testid="niche-selector-tabs">
+          <div
+            className="flex flex-wrap gap-1.5"
+            role="group"
+            aria-label="Filter by niche"
+            data-testid="niche-selector-tabs"
+          >
             {niches.map((n) => {
               const Icon = LucideIcons[n.icon] || Compass;
               return (

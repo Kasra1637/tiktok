@@ -156,7 +156,7 @@ Radii: cards `rounded-2xl`, buttons/inputs/chips `rounded-xl`, pills `rounded-fu
 Build on `frontend/src/components/ui/*` (shadcn). Before hand-rolling anything,
 check whether a shared primitive already exists:
 
-`AppShell` · `Sidebar` · `PageHeader` · `Chip` · `Stepper` · `EmptyState` ·
+`AppShell` · `Sidebar` · `PageHeader` · `Chip` · `StepDots` / `StepBadge` · `EmptyState` ·
 `VideoCard` · `Filmstrip` · `HookBreakdown` · `GenerationProgress` ·
 `JsonSpecPanel` · `SideBySideCompare` · `HookStyleSelector` · `RemixChat` ·
 `PageTransition` · `ErrorBoundary` · `LegalPage`
@@ -175,9 +175,16 @@ check whether a shared primitive already exists:
 `indigo` and `coral` are tinted chips (`--indigo-10` / `--coral-12` fills) —
 accents, not buttons. Plus shadcn's `default` / `secondary` / `destructive` / `outline`.
 
-**One pattern per job.** `Stepper` is the canonical pipeline indicator
-(find → analyze → swap → video); don't hand-roll a second progress model
-beside it.
+**One pattern per job.** `StepDots` (dot-and-rail progress for a screen's own
+linear flow) and `StepBadge` (numbered badge beside a step heading) in
+`components/Stepper.jsx` are the only progress vocabulary. Don't hand-roll a
+second model beside them.
+
+Progress is scoped to a single screen's steps, not the whole app pipeline —
+cross-page position is conveyed by the sidebar's active nav item. An earlier
+four-stage pipeline stepper (find → analyze → swap → video) was specified here
+but never imported by anything, while FaceSwap hand-rolled its own dots; the
+shipped model is the one documented above.
 
 ---
 

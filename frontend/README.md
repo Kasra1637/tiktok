@@ -2,6 +2,29 @@
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
+## Install with yarn, not npm
+
+```bash
+yarn install
+```
+
+`yarn.lock` is the tracked lockfile and the Docker image builds with
+`yarn install --frozen-lockfile`. A `preinstall` guard
+(`scripts/require-yarn.js`) rejects npm, because:
+
+- `npm install` fails peer resolution outright (`ERESOLVE`, React 19 vs
+  `@clerk/clerk-react`), and
+- `npm install --legacy-peer-deps` *appears* to succeed but hoists
+  `ajv-keywords@5` next to `ajv@6` instead of the `ajv@8` it requires. The
+  build then dies with `Cannot find module 'ajv/dist/compile/codegen'`. yarn
+  avoids this by nesting `schema-utils@4`'s own `ajv@8` beneath it, leaving the
+  top-level `ajv@6` for eslint and fork-ts-checker.
+
+Set `ALLOW_NPM_INSTALL=true` to bypass the guard.
+
+The script names below are CRA's defaults; run them with `yarn` (`yarn start`,
+`yarn build`, `yarn test`).
+
 ## Available Scripts
 
 In the project directory, you can run:

@@ -37,7 +37,11 @@ function EffectivenessScore({ score }) {
       className="flex items-center gap-3.5 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-3"
       data-testid="effectiveness-score-badge"
     >
+      {/* The dial is a visual restatement of the score; the text block beside
+          it carries the accessible version, so this is hidden rather than
+          announced as a loose "9 / 10". */}
       <div
+        aria-hidden="true"
         className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full"
         style={{
           background: `conic-gradient(${tone.ring} ${pct}%, hsl(var(--secondary)) ${pct}% 100%)`,
@@ -50,7 +54,10 @@ function EffectivenessScore({ score }) {
       </div>
       <div className="min-w-0">
         <span className="eyebrow block">Effectiveness</span>
-        <p className="mt-0.5 text-sm font-semibold">{tone.label} hook</p>
+        <p className="mt-0.5 text-sm font-semibold">
+          {tone.label} hook
+          <span className="sr-only"> — scored {score} out of 10</span>
+        </p>
         <p className="text-xs leading-snug text-muted-foreground">Scroll-stopping potential</p>
       </div>
     </div>
@@ -226,18 +233,21 @@ export default function AnalysisDetail() {
                 data-testid="analysis-view-count"
               >
                 <Eye className="h-3 w-3" /> {formatCount(video.view_count)}
+                <span className="sr-only"> views</span>
               </span>
               <span
                 className="inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-xs font-semibold text-white backdrop-blur-sm"
                 data-testid="analysis-like-count"
               >
                 <Heart className="h-3 w-3" /> {formatCount(video.like_count)}
+                <span className="sr-only"> likes</span>
               </span>
               <span
                 className="inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-xs font-semibold text-white backdrop-blur-sm"
                 data-testid="analysis-comment-count"
               >
                 <MessageCircle className="h-3 w-3" /> {formatCount(video.comment_count)}
+                <span className="sr-only"> comments</span>
               </span>
             </div>
             {video.is_ad && (
@@ -255,7 +265,10 @@ export default function AnalysisDetail() {
           <div className="space-y-2">
             <h2 className="font-display text-[17px] font-semibold leading-snug">{video.title}</h2>
             <div className="flex items-center gap-2">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[color:var(--indigo-10)] text-xs font-bold uppercase text-[color:var(--brand-indigo)]">
+              <span
+                aria-hidden="true"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[color:var(--indigo-10)] text-xs font-bold uppercase text-[color:var(--brand-indigo)]"
+              >
                 {(video.creator || "?").charAt(0)}
               </span>
               <p className="truncate text-sm text-muted-foreground">@{video.creator}</p>
@@ -267,6 +280,7 @@ export default function AnalysisDetail() {
                 data-testid="view-on-tiktok-link"
               >
                 TikTok <ExternalLink className="h-3 w-3" />
+                <span className="sr-only"> — open the original video on TikTok in a new tab</span>
               </a>
             </div>
           </div>

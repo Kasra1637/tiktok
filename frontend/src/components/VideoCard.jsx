@@ -58,7 +58,14 @@ function Thumbnail({ url, alt }) {
   );
 }
 
-function StatPill({ icon: Icon, value, testId }) {
+/**
+ * A stat chip over the thumbnail. The icon is the only thing distinguishing
+ * views from likes from comments, and lucide marks icons aria-hidden, so
+ * without `label` a screen reader just hears three bare numbers in a row.
+ * Visually-hidden text is used rather than aria-label because it is announced
+ * reliably on a non-interactive element.
+ */
+function StatPill({ icon: Icon, value, label, testId }) {
   return (
     <span
       className="inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-xs font-semibold text-white backdrop-blur-sm"
@@ -66,6 +73,7 @@ function StatPill({ icon: Icon, value, testId }) {
     >
       <Icon className="h-3 w-3" />
       {value}
+      {label && <span className="sr-only"> {label}</span>}
     </span>
   );
 }
@@ -105,6 +113,7 @@ export function VideoCard({ video, onAnalyze, analyzing, index = 0 }) {
               data-testid="video-tiktok-link"
             >
               <ExternalLink className="h-2.5 w-2.5" /> TikTok
+              <span className="sr-only"> — open original video on TikTok in a new tab</span>
             </a>
           )}
 
@@ -126,17 +135,19 @@ export function VideoCard({ video, onAnalyze, analyzing, index = 0 }) {
               <Badge
                 className={`text-xs font-bold shadow-[var(--shadow-sm)] backdrop-blur-sm ${getViralityStyle(video.virality_score)}`}
                 data-testid="virality-badge"
+                title={`Virality score ${Math.round(video.virality_score)} out of 100`}
               >
                 <Flame className="h-3 w-3" />
                 {Math.round(video.virality_score)}
+                <span className="sr-only"> virality score out of 100</span>
               </Badge>
             </div>
           )}
 
           <div className="absolute inset-x-2.5 bottom-2.5 flex flex-wrap items-center gap-1.5">
-            <StatPill icon={Eye} value={formatCount(video.view_count)} testId="video-card-view-count" />
-            <StatPill icon={Heart} value={formatCount(video.like_count)} testId="video-card-like-count" />
-            <StatPill icon={MessageCircle} value={formatCount(video.comment_count)} testId="video-card-comment-count" />
+            <StatPill icon={Eye} value={formatCount(video.view_count)} label="views" testId="video-card-view-count" />
+            <StatPill icon={Heart} value={formatCount(video.like_count)} label="likes" testId="video-card-like-count" />
+            <StatPill icon={MessageCircle} value={formatCount(video.comment_count)} label="comments" testId="video-card-comment-count" />
           </div>
         </AspectRatio>
 
@@ -144,7 +155,12 @@ export function VideoCard({ video, onAnalyze, analyzing, index = 0 }) {
           <p className="line-clamp-2 min-h-[2.5rem] text-sm font-medium leading-snug">{video.title}</p>
 
           <div className="flex items-center gap-2">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[color:var(--indigo-10)] text-xs font-bold uppercase text-[color:var(--brand-indigo)]">
+            {/* Initial-letter avatar: decorative duplicate of the handle
+                beside it, so it would otherwise announce a stray letter. */}
+            <span
+              aria-hidden="true"
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[color:var(--indigo-10)] text-xs font-bold uppercase text-[color:var(--brand-indigo)]"
+            >
               {(video.creator || "?").charAt(0)}
             </span>
             <p className="truncate text-xs text-muted-foreground">@{video.creator}</p>

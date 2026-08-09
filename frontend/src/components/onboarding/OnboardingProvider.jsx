@@ -6,6 +6,31 @@ import TourHelpButton from "./TourHelpButton";
 
 const OnboardingContext = createContext(null);
 
+const SEEN_TOURS_KEY = "hookforge_seen_tours";
+
+/** Tour ids the user has already been shown, from localStorage. */
+function readSeenTours() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SEEN_TOURS_KEY) || "null");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    // Unavailable or corrupt storage. Returning [] means the tour auto-starts
+    // again, which is the safe direction to fail: annoying, never broken.
+    return [];
+  }
+}
+
+function markTourSeen(tourId) {
+  try {
+    const seen = readSeenTours();
+    if (!seen.includes(tourId)) {
+      localStorage.setItem(SEEN_TOURS_KEY, JSON.stringify([...seen, tourId]));
+    }
+  } catch {
+    // Private mode / quota. The tour will simply offer itself again.
+  }
+}
+
 export function useOnboarding() {
   const ctx = useContext(OnboardingContext);
   if (!ctx) {
@@ -19,11 +44,13 @@ export function useOnboarding() {
  *
  * Wraps the routed app (must live inside <BrowserRouter> since it reads the
  * current location) and:
- *  - Auto-starts the relevant page tour every time a user visits (or
- *    revisits) a route that has one. Unlike a typical one-time onboarding
- *    flow, this is intentionally NOT tracked/suppressed across sessions —
- *    the tour reappears on every page load, per the product requirement
- *    that it act as an always-on guide rather than a first-run-only intro.
+ *  - Auto-starts a page's tour the FIRST time a user reaches a route that has
+ *    one, then never again: seen tour ids are persisted to localStorage under
+ *    `hookforge_seen_tours`. Previously the tour re-ran on every visit and
+ *    every reload, which meant a returning creator moving between Discover,
+ *    Face Swap and Bookmarks was interrupted by a modal spotlight on each
+ *    hop. Replay stays available on demand via the sidebar's
+ *    "Show me around" button, which bypasses the seen check.
  *  - Exposes controls (next/back/skip/replay) consumed by <TourOverlay />.
  *  - Renders a small floating "Tour" button on any page with a tour so users
  *    can replay it on demand, and the spotlight/tooltip overlay itself.
@@ -73,9 +100,10 @@ export function OnboardingProvider({ children }) {
     stopTour();
   }, [stopTour]);
 
-  // Auto-start the page's tour every time its route is entered, a beat after
-  // navigation so async data (niche list, hook analysis, etc.) has a moment
-  // to load before the overlay starts probing the DOM for its first target.
+  // Auto-start the page's tour the first time its route is entered, a beat
+  // after navigation so async data (niche list, hook analysis, etc.) has a
+  // moment to load before the overlay starts probing the DOM for its first
+  // target.
   useEffect(() => {
     if (autoStartTimerRef.current) {
       clearTimeout(autoStartTimerRef.current);
@@ -83,8 +111,15 @@ export function OnboardingProvider({ children }) {
     }
     if (!pageTourId) return;
     if (autoStartedForPathRef.current === location.pathname) return;
+    // First-run only. Checked here rather than inside the timeout so no timer
+    // is even scheduled for a tour the user has already seen.
+    if (readSeenTours().includes(pageTourId)) return;
     autoStartTimerRef.current = setTimeout(() => {
       autoStartedForPathRef.current = location.pathname;
+      // Marked on start, not on completion: a user who dismisses the tour or
+      // reloads midway through has still been shown it, and re-running would
+      // be the exact nagging this replaced.
+      markTourSeen(pageTourId);
       startTour(pageTourId);
     }, 700);
     return () => {

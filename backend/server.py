@@ -3,6 +3,7 @@ import io
 import json
 import logging
 import os
+import re
 import shutil
 import uuid
 from contextlib import asynccontextmanager
@@ -387,6 +388,28 @@ async def init_db():
                 created_at TEXT
             );
 
+            -- Provenance registry for every image written to storage/generated.
+            --
+            -- Video generation takes an `image_id` and loads
+            -- generated/{image_id}.png. Existence on disk is not evidence of
+            -- origin: storage/generated also receives previews derived from
+            -- uploaded person photos, and a raw upload can be reached from
+            -- there by traversal. This table is the record of what each
+            -- generated image was actually derived FROM, so the video
+            -- endpoints can require that the chain starts at a hook frame
+            -- (frames/) or a saved template thumbnail (templates/) rather
+            -- than at an arbitrary upload.
+            --
+            -- origin: 'face_swap' | 'customize'
+            CREATE TABLE IF NOT EXISTS generated_images (
+                id TEXT PRIMARY KEY,
+                origin TEXT,
+                job_id TEXT,
+                target_image_url TEXT,
+                user_id TEXT DEFAULT 'anonymous',
+                created_at TEXT
+            );
+
             -- Saved hook templates. Each row is a full snapshot of a proven
             -- hook: the AI analysis, the ready-to-submit video prompt, and a
             -- local copy of the source clip for V2V motion transfer. Reusing a
@@ -605,6 +628,81 @@ async def init_db():
                 )
         await conn.commit()
 
+        # Migration: backfill the generated_images provenance registry for
+        # databases created before it existed. Without this, every image a user
+        # already generated would be unusable for video generation after the
+        # deploy, because the gate requires a provenance row.
+        #
+        # Face-swap variants recover their target from the job's result_json;
+        # customization previews from the frame each was built on. Images whose
+        # recovered target is an upload (produced before targets were
+        # restricted) are backfilled honestly and will be refused by the gate —
+        # that is the intended outcome, not a bug.
+        cursor = await conn.execute("SELECT COUNT(*) FROM generated_images")
+        (existing_rows,) = await cursor.fetchone()
+        if not existing_rows:
+            backfilled = 0
+            cursor = await conn.execute(
+                """SELECT id, result_json, user_id FROM face_swap_jobs
+                   WHERE status = 'completed' AND result_json IS NOT NULL"""
+            )
+            for job_id, result_json, job_user in await cursor.fetchall():
+                try:
+                    result = json.loads(result_json)
+                except (TypeError, ValueError):
+                    continue
+                target = result.get("target_image_url") or ""
+                image_ids = {
+                    variant.get("id")
+                    for variant in (result.get("variants") or [])
+                    if variant.get("id")
+                }
+                if result.get("id"):
+                    image_ids.add(result["id"])
+                for image_id in image_ids:
+                    await conn.execute(
+                        """INSERT OR IGNORE INTO generated_images
+                           (id, origin, job_id, target_image_url, user_id, created_at)
+                           VALUES (?, ?, ?, ?, ?, ?)""",
+                        (image_id, "face_swap", job_id, target, job_user or "anonymous", now_iso()),
+                    )
+                    backfilled += 1
+
+            cursor = await conn.execute(
+                """SELECT id, generated_images, user_id FROM customizations
+                   WHERE generated_images IS NOT NULL"""
+            )
+            for cust_id, images_json, cust_user in await cursor.fetchall():
+                try:
+                    images = json.loads(images_json)
+                except (TypeError, ValueError):
+                    continue
+                if not isinstance(images, list):
+                    continue
+                for image in images:
+                    if not isinstance(image, dict) or not image.get("id"):
+                        continue
+                    await conn.execute(
+                        """INSERT OR IGNORE INTO generated_images
+                           (id, origin, job_id, target_image_url, user_id, created_at)
+                           VALUES (?, ?, ?, ?, ?, ?)""",
+                        (
+                            image["id"],
+                            "customize",
+                            cust_id,
+                            image.get("reference_frame_url") or "",
+                            cust_user or "anonymous",
+                            now_iso(),
+                        ),
+                    )
+                    backfilled += 1
+
+            if backfilled:
+                logger.info(
+                    f"Migration: backfilled provenance for {backfilled} generated image(s)"
+                )
+            await conn.commit()
+
         # Clear stale trending/curated caches (force fresh fetch with more results)
         await conn.execute("DELETE FROM trending_videos")
         await conn.execute("DELETE FROM curated_videos")
@@ -638,6 +736,107 @@ async def _execute(query: str, params: tuple = ()):
     async with get_db() as conn:
         await conn.execute(query, params)
         await conn.commit()
+
+
+# The face-swap target is never uploaded by the client. It must be a file this
+# server produced itself, from one of exactly two provenances:
+#   frames/    — a hook frame extracted from a video in the discovery feed
+#   templates/ — the stored thumbnail of a saved hook template (bookmark)
+#
+# The allowlist is the enforcement point, not the absence of an upload field.
+# `/api/media` is a blanket static mount over the whole storage dir, so a bare
+# "starts with /api/media/" check would still let a caller launder an arbitrary
+# photo into a target by first writing it to uploads/ through another endpoint
+# (e.g. a prior source_face, whose URL is returned in this endpoint's own 202
+# response, or customize_video's person_photo) and passing that path back here.
+ALLOWED_TARGET_PREFIXES = ("/api/media/frames/", "/api/media/templates/")
+
+GENERATED_ID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+
+
+async def _record_generated_image(
+    image_id: str,
+    origin: str,
+    target_image_url: str,
+    user_id: str,
+    job_id: str = "",
+):
+    """
+    Register what a generated image was derived from.
+
+    Called at every point that writes into storage/generated. Without a row
+    here an image cannot be used for video generation — see
+    require_frame_derived_image.
+    """
+    await _execute(
+        """INSERT OR REPLACE INTO generated_images
+           (id, origin, job_id, target_image_url, user_id, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (image_id, origin, job_id, target_image_url, user_id, now_iso()),
+    )
+
+
+async def require_frame_derived_image(image_id: str) -> Path:
+    """
+    Resolve a client-supplied `image_id` to a generated image, proving it
+    descends from a permitted target, and return its path.
+
+    Three independent checks, because each catches something the others don't:
+
+    1. Shape. `image_id` is interpolated into a path, so anything but a bare
+       UUID is refused. This alone kills "../uploads/<id>", which otherwise
+       feeds a raw uploaded photo into video generation with no AI step and no
+       frame involved. It also excludes the server-generated `bridge-*.png`
+       stills, which are an internal detail of extend-video and are never a
+       legitimate client input.
+    2. Containment. Belt-and-braces on the resolved path, so any future change
+       to the shape rule can't silently reopen traversal.
+    3. Provenance. Existence on disk proves nothing about origin, so the image
+       must have a generated_images row whose target_image_url is an
+       allowlisted frame or template. Uploads have no row; previews derived
+       from an uploaded person photo have a row pointing at the analysis frame
+       they were built on, which is exactly what we want to permit.
+    """
+    if not image_id or not GENERATED_ID_RE.match(image_id.strip()):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid image reference. Generate a face swap from a hook frame first.",
+        )
+    image_id = image_id.strip()
+
+    generated_root = pipeline.GENERATED_DIR.resolve()
+    image_path = (generated_root / f"{image_id}.png").resolve()
+    if generated_root not in image_path.parents:
+        raise HTTPException(status_code=400, detail="Invalid image reference.")
+
+    if not image_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="Generated face-swap image not found. Please generate the image first.",
+        )
+
+    row = await _fetch_one("SELECT * FROM generated_images WHERE id = ?", (image_id,))
+    if not row:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "That image has no recorded source hook, so it can't be turned into a "
+                "video. Start from a frame in the discovery feed or a saved template."
+            ),
+        )
+    if not (row.get("target_image_url") or "").startswith(ALLOWED_TARGET_PREFIXES):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Videos can only be generated from a hook frame or a saved template, "
+                "not from an uploaded image."
+            ),
+        )
+
+    return image_path
+
 
 
 # ---------------------------------------------------------------------------
@@ -1283,6 +1482,7 @@ async def _run_face_swap_job(
     source_face_url: str,
     variants: int,
     customization_prompt: str = "",
+    user_id: str = "anonymous",
 ):
     """Run image generation after the submission response has reached the browser."""
     await _execute(
@@ -1301,6 +1501,18 @@ async def _run_face_swap_job(
         if not successful:
             provider_error = "; ".join(failures)[:1000] or "The image model returned no result."
             raise RuntimeError(provider_error)
+
+        # Register every variant's provenance before the job is marked
+        # complete, so an image is never usable for video generation before
+        # its origin is on record.
+        for variant in successful:
+            await _record_generated_image(
+                image_id=variant["id"],
+                origin="face_swap",
+                target_image_url=target_image_url,
+                user_id=user_id,
+                job_id=job_id,
+            )
 
         result = {
             "id": successful[0]["id"],
@@ -1327,20 +1539,6 @@ async def _run_face_swap_job(
             "UPDATE face_swap_jobs SET status = ?, error = ?, completed_at = ? WHERE id = ?",
             ("failed", error, now_iso(), job_id),
         )
-
-
-# The face-swap target is never uploaded by the client. It must be a file this
-# server produced itself, from one of exactly two provenances:
-#   frames/    — a hook frame extracted from a video in the discovery feed
-#   templates/ — the stored thumbnail of a saved hook template (bookmark)
-#
-# The allowlist is the enforcement point, not the absence of an upload field.
-# `/api/media` is a blanket static mount over the whole storage dir, so a bare
-# "starts with /api/media/" check would still let a caller launder an arbitrary
-# photo into a target by first writing it to uploads/ through another endpoint
-# (e.g. a prior source_face, whose URL is returned in this endpoint's own 202
-# response, or customize_video's person_photo) and passing that path back here.
-ALLOWED_TARGET_PREFIXES = ("/api/media/frames/", "/api/media/templates/")
 
 
 @api_router.post("/face-swap", status_code=202)
@@ -1454,6 +1652,7 @@ async def face_swap(
         source_face_url,
         variants,
         customization_prompt,
+        user_id,
     )
 
     return {
@@ -2123,12 +2322,9 @@ async def face_swap_generate_hook_video(
     """
     require_ai_configured()
 
-    image_path = pipeline.GENERATED_DIR / f"{image_id}.png"
-    if not image_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="Generated face-swap image not found. Please generate the image first.",
-        )
+    # Existence on disk is not proof of origin — require the image to trace
+    # back to a hook frame or saved template. See require_frame_derived_image.
+    image_path = await require_frame_derived_image(image_id)
 
     analysis = None
     reference_video_path = None
@@ -2280,12 +2476,9 @@ async def face_swap_extend_video(
     """
     require_ai_configured()
 
-    image_path = pipeline.GENERATED_DIR / f"{image_id}.png"
-    if not image_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="Face-swap image not found. Please generate the image first.",
-        )
+    # Existence on disk is not proof of origin — require the image to trace
+    # back to a hook frame or saved template. See require_frame_derived_image.
+    image_path = await require_frame_derived_image(image_id)
 
     duration = max(5, min(duration, 15))
 
@@ -2452,12 +2645,9 @@ async def face_swap_generate_video(
     """
     require_ai_configured()
 
-    image_path = pipeline.GENERATED_DIR / f"{image_id}.png"
-    if not image_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="Generated face-swap image not found. Please generate the image first.",
-        )
+    # Existence on disk is not proof of origin — require the image to trace
+    # back to a hook frame or saved template. See require_frame_derived_image.
+    image_path = await require_frame_derived_image(image_id)
 
     if not prompt.strip():
         prompt = (
@@ -2598,10 +2788,9 @@ async def face_swap_branded_prompt(
     """
     require_ai_configured()
 
-    # Validate image exists
-    image_path = pipeline.GENERATED_DIR / f"{image_id}.png"
-    if not image_path.exists():
-        raise HTTPException(status_code=404, detail="Face-swap image not found.")
+    # Existence on disk is not proof of origin — require the image to trace
+    # back to a hook frame or saved template. See require_frame_derived_image.
+    image_path = await require_frame_derived_image(image_id)
 
     # Resolve brand profile
     brand_profile = None
@@ -2848,6 +3037,19 @@ async def customize_video(
         generated_path = pipeline.GENERATED_DIR / f"{generated_id}.png"
         with open(generated_path, "wb") as f:
             f.write(image_bytes)
+
+        # These previews are built from an uploaded person photo, but the
+        # SCENE is the analysis frame — the same relationship face swap has
+        # between source_face and target. Recording that frame as the target
+        # keeps this flow usable for video generation while still excluding
+        # anything that isn't frame-derived.
+        await _record_generated_image(
+            image_id=generated_id,
+            origin="customize",
+            target_image_url=frame_meta["media_url"],
+            user_id=user_id,
+            job_id=video_id,
+        )
 
         generated_images.append({
             "id": generated_id,
