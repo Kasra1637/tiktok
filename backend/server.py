@@ -3228,6 +3228,35 @@ async def update_brand(brand_id: str, payload: BrandProfileUpdateRequest, user_i
 # ---------------------------------------------------------------------------
 # History
 # ---------------------------------------------------------------------------
+@api_router.delete("/videos/{video_id}")
+async def delete_video(video_id: str, user_id: str = Depends(get_current_user_id)):
+    """Delete a video and all its associated data (analyses, frames, etc.)."""
+    video = await _fetch_one("SELECT * FROM videos WHERE id = ? AND user_id = ?", (video_id, user_id))
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found.")
+
+    # Delete associated analyses
+    await _execute("DELETE FROM analyses WHERE video_id = ?", (video_id,))
+    # Delete associated customizations
+    await _execute("DELETE FROM customizations WHERE video_id = ?", (video_id,))
+    # Delete associated video jobs
+    await _execute("DELETE FROM video_jobs WHERE video_id = ?", (video_id,))
+    # Delete the video record itself
+    await _execute("DELETE FROM videos WHERE id = ?", (video_id,))
+
+    # Clean up local files if they exist (frames, video)
+    if video.get("tiktok_url"):
+        vhash = pipeline.url_hash(video["tiktok_url"])
+        frame_dir = pipeline.FRAMES_DIR / vhash
+        if frame_dir.exists():
+            import shutil
+            shutil.rmtree(frame_dir, ignore_errors=True)
+        video_file = pipeline.VIDEOS_DIR / f"{vhash}.mp4"
+        video_file.unlink(missing_ok=True)
+
+    return {"deleted": True, "id": video_id}
+
+
 @api_router.get("/history")
 async def get_history(user_id: str = Depends(get_current_user_id)):
     """

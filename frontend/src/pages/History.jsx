@@ -7,7 +7,7 @@ import EmptyState from "../components/EmptyState";
 import JsonSpecPanel from "../components/JsonSpecPanel";
 import PageHeader from "../components/PageHeader";
 import { api, mediaUrl, getErrorMessage } from "../lib/api";
-import { Clock, Eye, Heart, MessageCircle, ImageOff, History as HistoryIcon, Clapperboard, Film, ArrowRight } from "lucide-react";
+import { Clock, Eye, Heart, MessageCircle, ImageOff, History as HistoryIcon, Clapperboard, Film, ArrowRight, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 function formatCount(n) {
@@ -125,11 +125,31 @@ export default function History() {
                   >
                     {video.title}
                   </Link>
-                  {video.status === "failed" && (
-                    <Badge variant="destructive" className="shrink-0 text-[10px]">
-                      Analysis failed
-                    </Badge>
-                  )}
+                  <div className="flex shrink-0 items-center gap-2">
+                    {video.status === "failed" && (
+                      <Badge variant="destructive" className="text-[10px]">
+                        Analysis failed
+                      </Badge>
+                    )}
+                    <button
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        if (!window.confirm("Delete this video and its analysis? This can't be undone.")) return;
+                        try {
+                          await api.deleteVideo(video.id);
+                          setItems((prev) => prev.filter((item) => item.video.id !== video.id));
+                          toast.success("Video deleted.");
+                        } catch (err) {
+                          toast.error(getErrorMessage(err));
+                        }
+                      }}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-[color:var(--brand-coral)]/10 hover:text-[color:var(--brand-coral)]"
+                      title="Delete this video"
+                      data-testid="history-delete-button"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5">

@@ -61,6 +61,7 @@ export const api = {
   getCustomization: (id) => client.get(`/customizations/${id}`).then((r) => r.data),
   getVideoInfo: (videoId) => client.get(`/videos/${videoId}`).then((r) => r.data),
   getHistory: () => client.get("/history").then((r) => r.data),
+  deleteVideo: (videoId) => client.delete(`/videos/${videoId}`).then((r) => r.data),
   getRemixChat: (customizationId) =>
     client.get(`/customizations/${customizationId}/remix-chat`).then((r) => r.data),
   sendRemixChatMessage: (customizationId, message) =>
