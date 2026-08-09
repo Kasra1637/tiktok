@@ -17,7 +17,7 @@ export function PageHeader({ icon: Icon, eyebrow, title, description, actions, a
       <div className={`min-w-0 ${centered ? "flex flex-col items-center" : ""}`}>
         <div className={`flex items-center gap-3 ${centered ? "justify-center" : ""}`}>
           {Icon && (
-            <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
+            <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
               <Icon className="h-[18px] w-[18px]" />
             </span>
           )}

@@ -23,12 +23,12 @@ export function JsonSpecPanel({ spec }) {
             className="group flex min-w-0 items-center gap-2.5 text-left"
             data-testid="toggle-generation-spec-button"
           >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
               <Braces className="h-4 w-4" />
             </span>
             <span className="min-w-0">
               <span className="font-display block truncate text-sm font-semibold">Generation Spec</span>
-              <span className="block truncate text-[11px] text-muted-foreground">
+              <span className="block truncate text-xs text-muted-foreground">
                 For the future video-gen API
               </span>
             </span>
@@ -47,7 +47,7 @@ export function JsonSpecPanel({ spec }) {
           data-testid="copy-generation-spec-button"
         >
           {copied ? (
-            <Check className="h-3.5 w-3.5 text-[color:var(--brand-teal)]" />
+            <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" />
           ) : (
             <Copy className="h-3.5 w-3.5" />
           )}

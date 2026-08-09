@@ -63,7 +63,7 @@ function LogoMark({ size = "md" }) {
   const icon = size === "sm" ? "h-4 w-4" : "h-[18px] w-[18px]";
   return (
     <span
-      className={`relative flex ${box} shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[color:var(--brand-teal)] to-[color:var(--brand-teal-dark)] text-white shadow-[var(--glow-indigo)]`}
+      className={`relative flex ${box} shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] text-white shadow-[var(--glow-indigo)]`}
     >
       <Sparkles className={icon} />
       {/* Lit top edge — reads as a physical, beveled tile. */}
@@ -93,13 +93,13 @@ function NavItem({ item, collapsed, active, onNavigate, testId }) {
       {/* Active rail — a 3px indigo bar pinned to the panel edge. */}
       <span
         aria-hidden="true"
-        className={`absolute left-0 top-1/2 -translate-y-1/2 rounded-r-full bg-[color:var(--brand-teal)] transition-all duration-200 ${
+        className={`absolute left-0 top-1/2 -translate-y-1/2 rounded-r-full bg-[color:var(--brand-indigo)] transition-all duration-200 ${
           active ? "h-5 w-[3px] opacity-100" : "h-2 w-[3px] opacity-0"
         } ${collapsed ? "-left-2" : "-left-3"}`}
       />
       <Icon
         className={`h-[18px] w-[18px] shrink-0 transition-colors ${
-          active ? "text-[color:var(--brand-teal)]" : "text-muted-foreground group-hover:text-foreground"
+          active ? "text-[color:var(--brand-indigo)]" : "text-muted-foreground group-hover:text-foreground"
         }`}
       />
       {!collapsed && (
@@ -107,7 +107,9 @@ function NavItem({ item, collapsed, active, onNavigate, testId }) {
           <span className={`truncate text-sm leading-tight ${active ? "font-semibold" : "font-medium"}`}>
             {item.label}
           </span>
-          <span className="truncate text-[10.5px] leading-tight text-muted-foreground/70">{item.hint}</span>
+          {/* Full --muted-foreground, no opacity modifier: at 12px the /70
+              variant fell below the WCAG AA 4.5:1 threshold on this bg. */}
+          <span className="truncate text-xs leading-tight text-muted-foreground">{item.hint}</span>
         </span>
       )}
     </Link>
@@ -124,7 +126,7 @@ function NavGroups({ collapsed, onNavigate, testIdPrefix = "" }) {
           {collapsed ? (
             <span aria-hidden="true" className="mb-1 h-px w-6 bg-border" />
           ) : (
-            <span className="eyebrow mb-1 px-3 text-[10px]">{group.label}</span>
+            <span className="eyebrow mb-1 px-3">{group.label}</span>
           )}
           {group.items.map((item) => (
             <NavItem
@@ -179,8 +181,8 @@ function SidebarFooter({ collapsed }) {
             appearance={{ elements: { avatarBox: "h-8 w-8 rounded-lg" } }}
           />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[12px] font-medium leading-tight">Your Account</p>
-            <p className="text-[10px] text-muted-foreground">Manage profile</p>
+            <p className="truncate text-xs font-medium leading-tight">Your Account</p>
+            <p className="text-xs text-muted-foreground">Manage profile</p>
           </div>
         </div>
       )}
@@ -190,7 +192,7 @@ function SidebarFooter({ collapsed }) {
         <button
           type="button"
           onClick={replayCurrentPageTour}
-          className="flex w-full items-center gap-2 rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3.5 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:border-[color:var(--indigo-35)] hover:text-[color:var(--brand-teal)]"
+          className="flex w-full items-center gap-2 rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3.5 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:border-[color:var(--indigo-35)] hover:text-[color:var(--brand-indigo)]"
         >
           <HelpCircle className="h-3.5 w-3.5" />
           <span>Show me around</span>

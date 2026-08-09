@@ -17,7 +17,7 @@ const badgeVariants = cva(
         outline: "border-[color:var(--hairline-strong)] text-foreground",
         // Brand tints — subtle chips that read as accents rather than buttons.
         indigo:
-          "border-[color:var(--indigo-15)] bg-[color:var(--indigo-10)] text-[color:var(--brand-teal)]",
+          "border-[color:var(--indigo-15)] bg-[color:var(--indigo-10)] text-[color:var(--brand-indigo)]",
         coral:
           "border-[color:var(--coral-25)] bg-[color:var(--coral-12)] text-[color:var(--brand-coral)]",
       },

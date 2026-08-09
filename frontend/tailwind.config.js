@@ -39,8 +39,8 @@ module.exports = {
         // Brand colors exposed as utilities. Values are read from the same
         // CSS variables the app already used, so nothing shifts visually.
         brand: {
-          indigo: 'var(--brand-teal)',
-          'indigo-dark': 'var(--brand-teal-dark)',
+          indigo: 'var(--brand-indigo)',
+          'indigo-dark': 'var(--brand-indigo-dark)',
           coral: 'var(--brand-coral)'
         },
         background: 'hsl(var(--background))',

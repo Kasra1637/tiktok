@@ -68,12 +68,12 @@ export function RemixChat({
     >
       {/* Chat header — gives the panel an identity and a status line. */}
       <div className="flex shrink-0 items-center gap-2.5 border-b border-[color:var(--hairline)] bg-[color:var(--indigo-4)] px-4 py-2.5 md:px-5">
-        <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-10)] text-[color:var(--brand-teal)]">
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-10)] text-[color:var(--brand-indigo)]">
           <Sparkles className="h-3.5 w-3.5" />
         </span>
         <div className="min-w-0 flex-1">
           <p className="font-display text-[13px] font-semibold leading-tight">Remix assistant</p>
-          <p className="truncate text-[11px] text-muted-foreground">
+          <p className="truncate text-xs text-muted-foreground">
             {sending ? "Thinking..." : readyToGenerate ? "Ready to write your prompt" : "Describe your brand and goal"}
           </p>
         </div>
@@ -126,7 +126,7 @@ export function RemixChat({
 
       {readyToGenerate && (
         <div
-          className="flex items-center gap-2 border-t border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] px-4 py-2.5 text-xs font-medium text-[color:var(--brand-teal)] md:px-5"
+          className="flex items-center gap-2 border-t border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] px-4 py-2.5 text-xs font-medium text-[color:var(--brand-indigo)] md:px-5"
           data-testid="remix-chat-ready-banner"
         >
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
@@ -145,12 +145,12 @@ export function RemixChat({
           data-testid="remix-chat-input"
         />
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[11px] text-muted-foreground">
-            <kbd className="rounded border border-[color:var(--hairline)] bg-secondary/60 px-1 py-px font-mono text-[10px]">
+          <span className="text-xs text-muted-foreground">
+            <kbd className="rounded border border-[color:var(--hairline)] bg-secondary/60 px-1 py-px font-mono text-xs">
               Enter
             </kbd>{" "}
             to send &middot;{" "}
-            <kbd className="rounded border border-[color:var(--hairline)] bg-secondary/60 px-1 py-px font-mono text-[10px]">
+            <kbd className="rounded border border-[color:var(--hairline)] bg-secondary/60 px-1 py-px font-mono text-xs">
               Shift+Enter
             </kbd>{" "}
             for a new line
@@ -178,9 +178,9 @@ function Avatar({ role }) {
   return (
     <span
       aria-hidden="true"
-      className={`mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border text-[10px] ${
+      className={`mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border text-xs ${
         isUser
-          ? "border-[color:var(--indigo-25)] bg-[color:var(--brand-teal)] text-white"
+          ? "border-[color:var(--indigo-25)] bg-[color:var(--brand-indigo)] text-white"
           : "border-[color:var(--hairline)] bg-secondary/60 text-muted-foreground"
       }`}
     >
@@ -200,7 +200,7 @@ function ChatBubble({ role, content }) {
       <div
         className={`max-w-[85%] whitespace-pre-wrap px-4 py-3 text-sm leading-relaxed ${
           isUser
-            ? "rounded-2xl rounded-br-md bg-gradient-to-br from-[color:var(--brand-teal)] to-[color:var(--brand-teal-dark)] text-white shadow-[var(--shadow-sm)]"
+            ? "rounded-2xl rounded-br-md bg-gradient-to-br from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] text-white shadow-[var(--shadow-sm)]"
             : "rounded-2xl rounded-bl-md border border-[color:var(--hairline)] bg-secondary/50 text-foreground"
         }`}
       >

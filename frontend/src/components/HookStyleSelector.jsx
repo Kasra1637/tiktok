@@ -122,15 +122,15 @@ export default function HookStyleSelector({
         disabled={disabled}
         className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 transition-colors duration-200 ${
           hasSelection
-            ? "border-[color:var(--brand-teal)]/40 bg-[color:var(--indigo-8)]"
+            ? "border-[color:var(--brand-indigo)]/40 bg-[color:var(--indigo-8)]"
             : "border-[color:var(--hairline)] bg-secondary/30 hover:border-[color:var(--indigo-35)]"
         } disabled:cursor-not-allowed disabled:opacity-50`}
         aria-expanded={expanded}
         data-testid="hook-style-toggle"
       >
         <span className="flex items-center gap-2.5 text-left">
-          <Sparkles className={`h-4 w-4 ${hasSelection ? "text-[color:var(--brand-teal)]" : "text-muted-foreground"}`} />
-          <span className="text-[11px] font-semibold">
+          <Sparkles className={`h-4 w-4 ${hasSelection ? "text-[color:var(--brand-indigo)]" : "text-muted-foreground"}`} />
+          <span className="text-xs font-semibold">
             {hasSelection
               ? `Hook style: ${HOOK_STYLE_CATEGORIES.find((c) => c.key === hookCategory)?.label || "Custom"}`
               : "Customize hook style (optional)"}
@@ -148,7 +148,7 @@ export default function HookStyleSelector({
         <div className="space-y-3 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-3.5 animate-in fade-in-0 slide-in-from-top-1 duration-200">
           {/* Category chips */}
           <div className="space-y-1.5">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Hook energy
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -169,7 +169,7 @@ export default function HookStyleSelector({
             </div>
             {/* Selected category description */}
             {hookCategory && (
-              <p className="text-[10px] leading-snug text-muted-foreground italic">
+              <p className="text-xs leading-snug text-muted-foreground italic">
                 {HOOK_STYLE_CATEGORIES.find((c) => c.key === hookCategory)?.description}
               </p>
             )}
@@ -179,7 +179,7 @@ export default function HookStyleSelector({
           <div className="space-y-1.5">
             <label
               htmlFor="hook-custom-prompt"
-              className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+              className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
             >
               <PenLine className="h-3 w-3" />
               Custom direction (optional)
@@ -188,7 +188,7 @@ export default function HookStyleSelector({
             {/* Guidelines */}
             <div className="flex items-start gap-1.5 rounded-lg bg-secondary/40 px-2.5 py-1.5">
               <Info className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
-              <p className="text-[9px] leading-snug text-muted-foreground">
+              <p className="text-xs leading-snug text-muted-foreground">
                 Describe the <span className="font-medium text-foreground/80">physical movement, expression, or energy</span> you want.
                 Keep it short and specific — e.g. body language, facial expressions, gestures, or camera framing.
               </p>
@@ -205,7 +205,7 @@ export default function HookStyleSelector({
               className={`w-full resize-none rounded-lg border bg-background px-3 py-2 text-xs leading-relaxed text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 disabled:cursor-not-allowed disabled:opacity-50 ${
                 isAtLimit
                   ? "border-destructive/60 focus:border-destructive focus:ring-destructive/30"
-                  : "border-[color:var(--hairline)] focus:border-[color:var(--brand-teal)] focus:ring-[color:var(--brand-teal)]/30"
+                  : "border-[color:var(--hairline)] focus:border-[color:var(--brand-indigo)] focus:ring-[color:var(--brand-indigo)]/30"
               }`}
               data-testid="hook-custom-prompt-input"
             />
@@ -213,14 +213,14 @@ export default function HookStyleSelector({
             {/* Character counter + limit warning */}
             <div className="flex items-center justify-between">
               {isAtLimit ? (
-                <span className="flex items-center gap-1 text-[9px] text-destructive">
+                <span className="flex items-center gap-1 text-xs text-destructive">
                   <AlertTriangle className="h-2.5 w-2.5" />
                   Character limit reached
                 </span>
               ) : (
-                <span className="text-[9px] text-muted-foreground" />
+                <span className="text-xs text-muted-foreground" />
               )}
-              <span className={`text-[9px] font-medium tabular-nums ${counterColor}`}>
+              <span className={`text-xs font-medium tabular-nums ${counterColor}`}>
                 {charCount}/{CUSTOM_PROMPT_MAX}
               </span>
             </div>
@@ -235,7 +235,7 @@ export default function HookStyleSelector({
                 onCustomPromptChange("");
               }}
               disabled={disabled}
-              className="text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+              className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
               data-testid="hook-style-clear"
             >
               Clear style customization

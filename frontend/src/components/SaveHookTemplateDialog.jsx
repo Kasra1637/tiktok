@@ -61,7 +61,7 @@ export function SaveHookTemplateDialog({ open, onOpenChange, videoId, analysis, 
       <DialogContent className="sm:max-w-md" data-testid="bookmark-hook-dialog">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
               <Bookmark className="h-4 w-4" />
             </span>
             Bookmark This Hook
@@ -84,7 +84,7 @@ export function SaveHookTemplateDialog({ open, onOpenChange, videoId, analysis, 
               placeholder="e.g. Lean-in Secret Reveal"
               data-testid="bookmark-name-input"
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Leave blank to use the hook summary as the name.
             </p>
           </div>
@@ -103,7 +103,7 @@ export function SaveHookTemplateDialog({ open, onOpenChange, videoId, analysis, 
                 </Chip>
               ))}
             </div>
-            <p className="text-[11px] leading-snug text-muted-foreground" data-testid="category-description">
+            <p className="text-xs leading-snug text-muted-foreground" data-testid="category-description">
               {HOOK_TEMPLATE_CATEGORIES.find((c) => c.key === category)?.description}
             </p>
           </div>
@@ -126,8 +126,8 @@ export function SaveHookTemplateDialog({ open, onOpenChange, videoId, analysis, 
 
           {video && (
             <div className="flex items-center gap-2.5 rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-6)] px-3 py-2.5">
-              <Zap className="h-3.5 w-3.5 shrink-0 text-[color:var(--brand-teal)]" />
-              <p className="text-[11px] leading-snug text-muted-foreground">
+              <Zap className="h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />
+              <p className="text-xs leading-snug text-muted-foreground">
                 Source: <span className="font-semibold text-foreground">@{video.creator}</span>
                 {analysis?.effectiveness_score ? ` · scored ${analysis.effectiveness_score}/10` : ""}
               </p>

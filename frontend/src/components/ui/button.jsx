@@ -18,14 +18,14 @@ const buttonVariants = cva(
         secondary:
           "border border-[color:var(--hairline)] bg-secondary/70 text-secondary-foreground shadow-[var(--shadow-xs)] hover:bg-secondary",
         ghost: "hover:bg-[color:var(--indigo-8)] hover:text-foreground hover:-translate-y-0 active:scale-100",
-        link: "text-[color:var(--brand-teal)] underline-offset-4 hover:underline hover:-translate-y-0 active:scale-100",
+        link: "text-[color:var(--brand-indigo)] underline-offset-4 hover:underline hover:-translate-y-0 active:scale-100",
         /* Brand variants — the primary CTA (coral) and the secondary brand
            action (indigo). Previously every call site hand-rolled these with
            arbitrary `bg-[color:var(--brand-coral)] hover:bg-[#e0264c]` classes. */
         brand:
           "bg-[color:var(--brand-coral)] font-semibold text-white shadow-[var(--glow-coral)] hover:bg-[#e0264c] hover:shadow-[var(--shadow-lg)]",
         accent:
-          "bg-[color:var(--brand-teal)] font-semibold text-white shadow-[var(--glow-indigo)] hover:bg-[color:var(--brand-teal-dark)] hover:shadow-[var(--shadow-lg)]",
+          "bg-[color:var(--brand-indigo)] font-semibold text-white shadow-[var(--glow-indigo)] hover:bg-[color:var(--brand-indigo-dark)] hover:shadow-[var(--shadow-lg)]",
       },
       size: {
         default: "h-10 px-4 py-2",

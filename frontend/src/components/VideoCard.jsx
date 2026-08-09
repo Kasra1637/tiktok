@@ -14,7 +14,7 @@ function formatCount(n) {
 
 function getViralityStyle(score) {
   if (score >= 70) return "bg-[color:var(--brand-coral)] text-white border-transparent";
-  if (score >= 40) return "bg-[color:var(--brand-teal)] text-white border-transparent";
+  if (score >= 40) return "bg-[color:var(--brand-indigo)] text-white border-transparent";
   return "bg-black/70 text-white border-transparent";
 }
 
@@ -61,7 +61,7 @@ function Thumbnail({ url, alt }) {
 function StatPill({ icon: Icon, value, testId }) {
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[10.5px] font-semibold text-white backdrop-blur-sm"
+      className="inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-xs font-semibold text-white backdrop-blur-sm"
       data-testid={testId}
     >
       <Icon className="h-3 w-3" />
@@ -98,7 +98,7 @@ export function VideoCard({ video, onAnalyze, analyzing, index = 0 }) {
               href={video.tiktok_url}
               target="_blank"
               rel="noreferrer"
-              className={`absolute left-2.5 flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-semibold text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/90 group-hover:opacity-100 ${
+              className={`absolute left-2.5 flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-xs font-semibold text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/90 group-hover:opacity-100 ${
                 video.is_ad ? "top-10" : "top-2.5"
               }`}
               onClick={(e) => e.stopPropagation()}
@@ -111,7 +111,7 @@ export function VideoCard({ video, onAnalyze, analyzing, index = 0 }) {
           {video.is_ad && (
             <div className="absolute left-2.5 top-2.5">
               <Badge
-                className="border-transparent bg-amber-500/90 text-[10px] font-semibold text-white shadow-[var(--shadow-sm)]"
+                className="border-transparent bg-amber-500/90 text-xs font-semibold text-white shadow-[var(--shadow-sm)]"
                 data-testid="sponsored-badge"
                 title="This post is flagged as an ad or sponsored content"
               >
@@ -144,7 +144,7 @@ export function VideoCard({ video, onAnalyze, analyzing, index = 0 }) {
           <p className="line-clamp-2 min-h-[2.5rem] text-sm font-medium leading-snug">{video.title}</p>
 
           <div className="flex items-center gap-2">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[color:var(--indigo-10)] text-[9px] font-bold uppercase text-[color:var(--brand-teal)]">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[color:var(--indigo-10)] text-xs font-bold uppercase text-[color:var(--brand-indigo)]">
               {(video.creator || "?").charAt(0)}
             </span>
             <p className="truncate text-xs text-muted-foreground">@{video.creator}</p>
@@ -152,11 +152,11 @@ export function VideoCard({ video, onAnalyze, analyzing, index = 0 }) {
 
           {(video.song_title || video.song_artist) && (
             <div
-              className="flex max-w-full items-center gap-1.5 rounded-full border border-[color:var(--hairline)] bg-secondary/40 px-2.5 py-1 text-[11px] text-muted-foreground"
+              className="flex max-w-full items-center gap-1.5 rounded-full border border-[color:var(--hairline)] bg-secondary/40 px-2.5 py-1 text-xs text-muted-foreground"
               data-testid="video-card-sound-badge"
               title={`${video.song_title || "Original sound"}${video.song_artist ? ` — ${video.song_artist}` : ""}`}
             >
-              <Music2 className="h-3 w-3 shrink-0 text-[color:var(--brand-teal)]" />
+              <Music2 className="h-3 w-3 shrink-0 text-[color:var(--brand-indigo)]" />
               <span className="truncate">
                 {video.song_title || "Original sound"}
                 {video.song_artist ? ` · ${video.song_artist}` : ""}

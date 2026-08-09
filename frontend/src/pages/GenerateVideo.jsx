@@ -17,7 +17,7 @@ import { toast } from "sonner";
 function RemixChatEmptyState() {
   return (
     <div className="mx-auto max-w-sm px-6 text-center" data-testid="remix-chat-empty-state">
-      <span className="mx-auto mb-3.5 flex h-12 w-12 items-center justify-center rounded-2xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
+      <span className="mx-auto mb-3.5 flex h-12 w-12 items-center justify-center rounded-2xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
         <Sparkles className="h-5 w-5" />
       </span>
       <p className="font-display text-sm font-semibold">Tell us how you want to remix this hook</p>
@@ -380,13 +380,13 @@ export default function GenerateVideo() {
               data-testid="use-original-sound-toggle-row"
             >
               <div className="flex min-w-0 items-center gap-2.5">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
                   <Music2 className="h-3.5 w-3.5" />
                 </span>
                 <div className="min-w-0">
                   <p className="text-sm font-medium leading-tight">Use original sound</p>
                   <p
-                    className="truncate text-[11px] text-muted-foreground"
+                    className="truncate text-xs text-muted-foreground"
                     title={`${sourceVideo.song_title || ""} ${sourceVideo.song_artist ? `— ${sourceVideo.song_artist}` : ""}`}
                   >
                     {sourceVideo.song_title || "Untitled sound"}
@@ -444,7 +444,7 @@ export default function GenerateVideo() {
           {generatingPrompt && (
             <div className="surface rounded-2xl p-6">
               <div className="mb-5 flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
                   <Clapperboard className="h-[18px] w-[18px]" />
                 </span>
                 <div>
@@ -481,7 +481,7 @@ export default function GenerateVideo() {
                 {BREAKDOWN_SECTIONS.map(({ key, label, icon: Icon }) => (
                   <div key={key} className="surface surface-interactive rounded-2xl p-4">
                     <div className="mb-2 flex items-center gap-2">
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
                         <Icon className="h-3.5 w-3.5" />
                       </span>
                       <h4 className="font-display text-sm font-semibold">{label}</h4>
@@ -498,16 +498,16 @@ export default function GenerateVideo() {
                   <h4 className="font-display text-sm font-semibold">Full video prompt (editable)</h4>
                   <div className="flex flex-wrap items-center gap-1.5">
                     {usingRemix && (
-                      <Badge variant="coral" className="text-[10px]">
+                      <Badge variant="coral" className="text-xs">
                         Content Remix
                       </Badge>
                     )}
                     {useOriginalSound && hasSound && (
-                      <Badge variant="indigo" className="text-[10px]" data-testid="using-original-sound-badge">
+                      <Badge variant="indigo" className="text-xs" data-testid="using-original-sound-badge">
                         <Music2 className="h-2.5 w-2.5" /> Original sound
                       </Badge>
                     )}
-                    <Badge variant="secondary" className="text-[10px]">
+                    <Badge variant="secondary" className="text-xs">
                       ~{job.target_duration_seconds}s
                     </Badge>
                   </div>
@@ -523,7 +523,7 @@ export default function GenerateVideo() {
                     className="border-[color:var(--indigo-15)] bg-[color:var(--indigo-6)]"
                     data-testid="original-sound-reminder"
                   >
-                    <Music2 className="h-3.5 w-3.5 text-[color:var(--brand-teal)]" />
+                    <Music2 className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" />
                     <AlertDescription className="text-xs text-muted-foreground">
                       This prompt is written for the original sound "{sourceVideo.song_title || "Untitled sound"}"
                       {sourceVideo.song_artist ? ` by ${sourceVideo.song_artist}` : ""} playing underneath. Since AI
@@ -532,7 +532,7 @@ export default function GenerateVideo() {
                         href={sourceVideo.tiktok_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="font-medium text-[color:var(--brand-teal)] underline"
+                        className="font-medium text-[color:var(--brand-indigo)] underline"
                       >
                         the original TikTok
                       </a>{" "}
@@ -558,7 +558,7 @@ export default function GenerateVideo() {
                   className="border-[color:var(--indigo-15)] bg-[color:var(--indigo-6)]"
                   data-testid="video-brief-ready-alert"
                 >
-                  <CheckCircle2 className="h-4 w-4 text-[color:var(--brand-teal)]" />
+                  <CheckCircle2 className="h-4 w-4 text-[color:var(--brand-indigo)]" />
                   <AlertTitle>Video brief ready</AlertTitle>
                   <AlertDescription className="text-muted-foreground">
                     Your face-swapped reference image(s), prompt, and target duration ({videoJob.target_duration_seconds}s)

@@ -235,7 +235,7 @@ export default function TourOverlay() {
         {rect && (
           <motion.div
             key={`spotlight-${stepIndex}`}
-            className="absolute rounded-xl pointer-events-none border-2 border-[color:var(--brand-teal)]"
+            className="absolute rounded-xl pointer-events-none border-2 border-[color:var(--brand-indigo)]"
             initial={reduceMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.2 }}
@@ -263,7 +263,7 @@ export default function TourOverlay() {
         >
           <div className="flex items-start justify-between gap-2 mb-1.5">
             <div className="flex items-center gap-1.5 min-w-0">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[color:rgba(13,148,136,0.12)] text-[color:var(--brand-teal)] shrink-0">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[color:rgba(13,148,136,0.12)] text-[color:var(--brand-indigo)] shrink-0">
                 <Sparkles className="h-2.5 w-2.5" />
               </span>
               <h3 className="font-display text-sm font-semibold leading-snug truncate">{currentStep.title}</h3>
@@ -285,7 +285,7 @@ export default function TourOverlay() {
                 <span
                   key={i}
                   className={`h-1.5 rounded-full transition-all ${
-                    i === stepIndex ? "w-4 bg-[color:var(--brand-teal)]" : "w-1.5 bg-border"
+                    i === stepIndex ? "w-4 bg-[color:var(--brand-indigo)]" : "w-1.5 bg-border"
                   }`}
                 />
               ))}
@@ -305,7 +305,7 @@ export default function TourOverlay() {
               <Button
                 size="sm"
                 onClick={next}
-                className="h-7 px-2.5 gap-1 text-xs bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] text-white"
+                className="h-7 px-2.5 gap-1 text-xs bg-[color:var(--brand-indigo)] hover:bg-[color:var(--brand-indigo-dark)] text-white"
                 data-testid="onboarding-tour-next-button"
               >
                 {isLast ? "Done" : "Next"} {!isLast && <ChevronRight className="h-3 w-3" />}

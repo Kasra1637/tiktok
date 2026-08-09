@@ -11,7 +11,7 @@ function ClerkGate({ children }) {
     return (
       <div className="flex min-h-screen items-center justify-center hero-wash">
         <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-6 w-6 animate-spin text-[color:var(--brand-teal)]" />
+          <Loader2 className="h-6 w-6 animate-spin text-[color:var(--brand-indigo)]" />
           <p className="text-sm text-muted-foreground">Loading your session...</p>
         </div>
       </div>

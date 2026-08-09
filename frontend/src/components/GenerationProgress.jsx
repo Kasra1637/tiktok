@@ -27,7 +27,7 @@ export function GenerationProgress({ stages, active }) {
         <span className="eyebrow">
           Step {stepIndex + 1} of {stages.length}
         </span>
-        <span className="font-mono text-[11px] text-[color:var(--brand-teal)]">
+        <span className="font-mono text-xs text-[color:var(--brand-indigo)]">
           {Math.round(progressPct)}%
         </span>
       </div>
@@ -44,9 +44,9 @@ export function GenerationProgress({ stages, active }) {
                 <span
                   className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
                     done
-                      ? "border-transparent bg-[color:var(--brand-teal)] text-white"
+                      ? "border-transparent bg-[color:var(--brand-indigo)] text-white"
                       : current
-                      ? "border-[color:var(--brand-teal)] text-[color:var(--brand-teal)]"
+                      ? "border-[color:var(--brand-indigo)] text-[color:var(--brand-indigo)]"
                       : "border-[color:var(--hairline-strong)] text-muted-foreground"
                   }`}
                 >
@@ -63,7 +63,7 @@ export function GenerationProgress({ stages, active }) {
                   <span
                     aria-hidden="true"
                     className={`my-0.5 w-px flex-1 ${
-                      done ? "bg-[color:var(--brand-teal)]" : "bg-border"
+                      done ? "bg-[color:var(--brand-indigo)]" : "bg-border"
                     }`}
                     style={{ minHeight: "0.75rem" }}
                   />

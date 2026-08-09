@@ -8,8 +8,8 @@ export function SideBySideCompare({ originalUrl, generatedUrl }) {
         <div className="px-4 py-2 text-xs font-medium text-muted-foreground border-b border-border">Original Hook Frame</div>
         <img src={mediaUrl(originalUrl)} alt="Original hook frame" className="w-full object-contain bg-black/5 max-h-[480px]" />
       </Card>
-      <Card className="overflow-hidden rounded-2xl border-[color:var(--brand-teal)]" data-testid="generated-preview-image">
-        <div className="px-4 py-2 text-xs font-medium text-[color:var(--brand-teal-dark)] border-b border-border">Your Customized Preview</div>
+      <Card className="overflow-hidden rounded-2xl border-[color:var(--brand-indigo)]" data-testid="generated-preview-image">
+        <div className="px-4 py-2 text-xs font-medium text-[color:var(--brand-indigo-dark)] border-b border-border">Your Customized Preview</div>
         <img src={mediaUrl(generatedUrl)} alt="Generated customized preview" className="w-full object-contain bg-black/5 max-h-[480px]" />
       </Card>
     </div>

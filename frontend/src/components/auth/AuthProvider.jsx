@@ -10,7 +10,7 @@ import { CLERK_PUBLISHABLE_KEY, isClerkConfigured } from "../../lib/clerk";
 const clerkAppearance = {
   variables: {
     // Brand colors
-    colorPrimary: "#818CF8",           // --brand-teal (indigo-400)
+    colorPrimary: "#818CF8",           // --brand-indigo (indigo-400)
     colorDanger: "#FE2C55",            // --brand-coral
     colorSuccess: "#10B981",           // emerald-500
     colorWarning: "#F59E0B",           // amber-500

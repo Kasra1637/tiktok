@@ -15,7 +15,7 @@ export default function SignUp() {
         {/* Compact brand header */}
         <div className="mb-8 flex flex-col items-center gap-4">
           <Link to="/" className="flex items-center gap-2.5">
-            <span className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[color:var(--brand-teal)] to-[color:var(--brand-teal-dark)] text-white shadow-[var(--glow-indigo)]">
+            <span className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] text-white shadow-[var(--glow-indigo)]">
               <Sparkles className="h-5 w-5" />
               <span className="pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-b from-white/25 to-transparent" />
             </span>
@@ -33,7 +33,7 @@ export default function SignUp() {
             </p>
             <Link
               to="/discover"
-              className="mt-4 inline-flex text-xs font-semibold text-[color:var(--brand-teal)] hover:underline"
+              className="mt-4 inline-flex text-xs font-semibold text-[color:var(--brand-indigo)] hover:underline"
             >
               Continue to the app
             </Link>
@@ -50,10 +50,10 @@ export default function SignUp() {
               headerTitle: "font-display",
               headerSubtitle: "text-muted-foreground",
               socialButtonsBlockButton: "rounded-xl border-[color:var(--hairline)] bg-secondary/40 hover:bg-secondary transition-colors",
-              formButtonPrimary: "rounded-xl bg-[color:var(--brand-teal)] hover:bg-[color:var(--brand-teal-dark)] shadow-[var(--glow-indigo)]",
+              formButtonPrimary: "rounded-xl bg-[color:var(--brand-indigo)] hover:bg-[color:var(--brand-indigo-dark)] shadow-[var(--glow-indigo)]",
               formFieldInput: "rounded-xl border-[color:var(--hairline)] bg-secondary/40 focus:border-[color:var(--indigo-35)]",
-              footerActionLink: "text-[color:var(--brand-teal)] hover:text-[color:var(--brand-teal-dark)]",
-              identityPreviewEditButton: "text-[color:var(--brand-teal)]",
+              footerActionLink: "text-[color:var(--brand-indigo)] hover:text-[color:var(--brand-indigo-dark)]",
+              identityPreviewEditButton: "text-[color:var(--brand-indigo)]",
             },
           }}
         />

@@ -226,7 +226,7 @@ export default function HookTemplates() {
             className="surface flex flex-col gap-4 rounded-2xl p-4 sm:flex-row sm:items-center"
             data-testid="templates-savings-summary"
           >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
               <Zap className="h-[18px] w-[18px]" />
             </span>
             <div className="flex flex-1 flex-wrap items-center gap-x-8 gap-y-3">
@@ -236,12 +236,12 @@ export default function HookTemplates() {
               </div>
               <div className="h-8 w-px bg-border/60" aria-hidden="true" />
               <div>
-                <p className="font-display text-xl font-bold leading-none text-[color:var(--brand-teal)]">
+                <p className="font-display text-xl font-bold leading-none text-[color:var(--brand-indigo)]">
                   {totalReuses}
                 </p>
                 <p className="eyebrow mt-1">{totalReuses === 1 ? "Reuse" : "Reuses"} so far</p>
               </div>
-              <p className="max-w-xs text-[11px] leading-snug text-muted-foreground">
+              <p className="max-w-xs text-xs leading-snug text-muted-foreground">
                 Each reuse skips a fresh hook analysis and prompt generation.
               </p>
             </div>
@@ -292,12 +292,12 @@ export default function HookTemplates() {
                     className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/60 to-transparent"
                   />
                   <div className="absolute left-2 top-2 flex flex-col items-start gap-1">
-                    <Badge className="border-transparent bg-black/65 text-[10px] font-semibold text-white backdrop-blur-sm">
+                    <Badge className="border-transparent bg-black/65 text-xs font-semibold text-white backdrop-blur-sm">
                       {categoryLabel(t.category)}
                     </Badge>
                     {t.has_motion_reference && (
                       <Badge
-                        className="border-transparent bg-[color:var(--brand-teal)] text-[10px] font-semibold text-white"
+                        className="border-transparent bg-[color:var(--brand-indigo)] text-xs font-semibold text-white"
                         title="The source clip is stored with this template for V2V motion transfer"
                       >
                         <Film className="h-2.5 w-2.5" /> Motion ref
@@ -306,13 +306,13 @@ export default function HookTemplates() {
                   </div>
                   {t.effectiveness_score ? (
                     <Badge
-                      className="absolute right-2 top-2 border-transparent bg-[color:var(--brand-coral)] text-[10px] font-bold text-white shadow-[var(--shadow-sm)]"
+                      className="absolute right-2 top-2 border-transparent bg-[color:var(--brand-coral)] text-xs font-bold text-white shadow-[var(--shadow-sm)]"
                       title="Hook effectiveness score from the original analysis"
                     >
                       {t.effectiveness_score}/10
                     </Badge>
                   ) : null}
-                  <p className="absolute bottom-2 left-2.5 right-2.5 text-[10px] font-semibold text-white/90">
+                  <p className="absolute bottom-2 left-2.5 right-2.5 text-xs font-semibold text-white/90">
                     {formatUsed(t.times_used)}
                   </p>
                 </div>
@@ -323,14 +323,14 @@ export default function HookTemplates() {
                     {t.name}
                   </h3>
                   {t.source_creator && (
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       from @{t.source_creator}
                       {t.source_tiktok_url && (
                         <a
                           href={t.source_tiktok_url}
                           target="_blank"
                           rel="noreferrer"
-                          className="ml-1 inline-flex align-middle text-[color:var(--brand-teal)] transition-colors hover:text-[color:var(--brand-teal-dark)]"
+                          className="ml-1 inline-flex align-middle text-[color:var(--brand-indigo)] transition-colors hover:text-[color:var(--brand-indigo-dark)]"
                           title="View the original video on TikTok"
                         >
                           <ExternalLink className="h-2.5 w-2.5" />
@@ -339,12 +339,12 @@ export default function HookTemplates() {
                     </p>
                   )}
                   {t.hook_summary && (
-                    <p className="line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+                    <p className="line-clamp-2 text-xs leading-snug text-muted-foreground">
                       {t.hook_summary}
                     </p>
                   )}
                   {(t.song_title || t.song_artist) && (
-                    <p className="flex items-center gap-1 truncate text-[10px] text-muted-foreground">
+                    <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
                       <Music2 className="h-2.5 w-2.5 shrink-0" />
                       <span className="truncate">
                         {t.song_title || "Untitled sound"}
@@ -353,7 +353,7 @@ export default function HookTemplates() {
                     </p>
                   )}
                   {t.notes && (
-                    <p className="line-clamp-2 text-[10px] italic leading-snug text-muted-foreground">
+                    <p className="line-clamp-2 text-xs italic leading-snug text-muted-foreground">
                       {t.notes}
                     </p>
                   )}
@@ -408,7 +408,7 @@ export default function HookTemplates() {
         <DialogContent className="sm:max-w-md" data-testid="edit-template-dialog">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
                 <Pencil className="h-4 w-4" />
               </span>
               Edit Bookmark

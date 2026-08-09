@@ -39,10 +39,10 @@ export function Filmstrip({ frames, selectedIndex, onSelect }) {
     <div className="surface rounded-2xl p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Film className="h-3.5 w-3.5 text-[color:var(--brand-teal)]" />
+          <Film className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" />
           <span className="eyebrow">Extracted frames</span>
         </div>
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
           Tap a frame to pick your swap target
         </span>
       </div>
@@ -59,7 +59,7 @@ export function Filmstrip({ frames, selectedIndex, onSelect }) {
                 aria-pressed={selected}
                 className={`group relative w-[120px] shrink-0 overflow-hidden rounded-xl border transition-[transform,box-shadow,border-color] duration-200 focus-visible:outline-none md:w-[140px] ${
                   selected
-                    ? "-translate-y-0.5 border-[color:var(--brand-teal)] shadow-[var(--glow-indigo)]"
+                    ? "-translate-y-0.5 border-[color:var(--brand-indigo)] shadow-[var(--glow-indigo)]"
                     : "border-[color:var(--hairline)] hover:-translate-y-0.5 hover:border-[color:var(--indigo-45)] hover:shadow-[var(--shadow-md)]"
                 }`}
               >
@@ -71,11 +71,11 @@ export function Filmstrip({ frames, selectedIndex, onSelect }) {
                     selected ? "opacity-0" : "bg-background/35 group-hover:opacity-0"
                   }`}
                 />
-                <span className="absolute bottom-2 left-2 rounded-full bg-black/70 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
+                <span className="absolute bottom-2 left-2 rounded-full bg-black/70 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
                   {frame.timestamp_seconds}s
                 </span>
                 {selected && (
-                  <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-[color:var(--brand-teal)] px-2 py-0.5 text-[10px] font-bold text-white shadow-[var(--shadow-sm)]">
+                  <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-[color:var(--brand-indigo)] px-2 py-0.5 text-xs font-bold text-white shadow-[var(--shadow-sm)]">
                     <Check className="h-2.5 w-2.5" /> Hook
                   </span>
                 )}

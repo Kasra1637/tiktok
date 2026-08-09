@@ -14,20 +14,20 @@ export function Stepper({ current }) {
           <div
             className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
               i < idx
-                ? "bg-[color:var(--brand-teal)] text-white"
+                ? "bg-[color:var(--brand-indigo)] text-white"
                 : i === idx
                 ? "bg-[color:var(--brand-coral)] text-white"
                 : "bg-secondary border border-border text-muted-foreground"
             }`}
             data-testid={`stepper-step-${s.key}`}
           >
-            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-black/15 text-[10px]">
+            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-black/15 text-xs">
               {i + 1}
             </span>
             {s.label}
           </div>
           {i < STEPS.length - 1 && (
-            <div className={`h-px w-4 md:w-6 ${i < idx ? "bg-[color:var(--brand-teal)]" : "bg-border"}`} />
+            <div className={`h-px w-4 md:w-6 ${i < idx ? "bg-[color:var(--brand-indigo)]" : "bg-border"}`} />
           )}
         </div>
       ))}

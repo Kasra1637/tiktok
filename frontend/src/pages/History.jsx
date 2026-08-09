@@ -120,14 +120,14 @@ export default function History() {
                 <div className="flex items-start justify-between gap-3">
                   <Link
                     to={`/analysis/${video.id}`}
-                    className="font-display line-clamp-2 block font-semibold leading-snug transition-colors hover:text-[color:var(--brand-teal)]"
+                    className="font-display line-clamp-2 block font-semibold leading-snug transition-colors hover:text-[color:var(--brand-indigo)]"
                     data-testid="history-video-link"
                   >
                     {video.title}
                   </Link>
                   <div className="flex shrink-0 items-center gap-2">
                     {video.status === "failed" && (
-                      <Badge variant="destructive" className="text-[10px]">
+                      <Badge variant="destructive" className="text-xs">
                         Analysis failed
                       </Badge>
                     )}
@@ -158,7 +158,7 @@ export default function History() {
                   <MetaItem icon={Heart} testId="history-like-count">{formatCount(video.like_count)}</MetaItem>
                   <MetaItem icon={MessageCircle} testId="history-comment-count">{formatCount(video.comment_count)}</MetaItem>
                   {video.niche && (
-                    <Badge variant="indigo" className="text-[10px]">
+                    <Badge variant="indigo" className="text-xs">
                       {video.niche}
                     </Badge>
                   )}
@@ -179,7 +179,7 @@ export default function History() {
                               <button
                                 key={img.id}
                                 onClick={() => setActiveCustomization(c)}
-                                className="group h-16 w-16 overflow-hidden rounded-xl border border-[color:var(--hairline)] transition-colors hover:border-[color:var(--brand-teal)]"
+                                className="group h-16 w-16 overflow-hidden rounded-xl border border-[color:var(--hairline)] transition-colors hover:border-[color:var(--brand-indigo)]"
                                 data-testid="history-customization-thumb"
                               >
                                 <img
@@ -211,7 +211,7 @@ export default function History() {
                             key={j.id}
                             onClick={() => setActiveVideoJob(j)}
                             data-testid="history-video-job-item"
-                            className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--hairline)] bg-secondary/40 px-3 py-1.5 text-xs transition-colors hover:border-[color:var(--brand-teal)] hover:bg-[color:var(--indigo-8)]"
+                            className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--hairline)] bg-secondary/40 px-3 py-1.5 text-xs transition-colors hover:border-[color:var(--brand-indigo)] hover:bg-[color:var(--indigo-8)]"
                           >
                             <span className="max-w-[140px] truncate font-medium">
                               {j.brand_name || "Untitled brief"}

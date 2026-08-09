@@ -25,7 +25,7 @@ export function EmptyState({ icon: Icon, title, description, action }) {
               initial={reduceMotion ? { scale: 1 } : { scale: 0.85 }}
               animate={{ scale: 1 }}
               transition={{ duration: 0.3, ease: "easeOut", delay: 0.05 }}
-              className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)] shadow-[var(--shadow-md)]"
+              className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)] shadow-[var(--shadow-md)]"
             >
               <Icon className="h-6 w-6" />
             </motion.span>

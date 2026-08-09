@@ -42,7 +42,7 @@ export function HookBreakdown({ analysis }) {
             data-testid={`hook-section-${key}`}
           >
             <div className="mb-2.5 flex items-center gap-2.5">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
                 <Icon className="h-4 w-4" />
               </span>
               <h4 className="min-w-0 break-words font-display text-sm font-semibold leading-snug">{label}</h4>
@@ -54,7 +54,7 @@ export function HookBreakdown({ analysis }) {
 
       <div className="surface rounded-2xl p-5">
         <div className="mb-3.5 flex items-center gap-2.5">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
             <ListChecks className="h-4 w-4" />
           </span>
           <h4 className="font-display text-sm font-semibold">Replicable Mechanics Checklist</h4>
@@ -62,7 +62,7 @@ export function HookBreakdown({ analysis }) {
         <ul className="space-y-2.5">
           {(analysis.replicable_mechanics || []).map((m, i) => (
             <li key={i} className="flex items-start gap-2.5 text-sm">
-              <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[color:var(--indigo-15)] text-[color:var(--brand-teal)]">
+              <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[color:var(--indigo-15)] text-[color:var(--brand-indigo)]">
                 <Check className="h-2.5 w-2.5" />
               </span>
               <span className="min-w-0 break-words leading-relaxed">{m}</span>

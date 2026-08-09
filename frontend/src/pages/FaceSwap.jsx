@@ -78,7 +78,7 @@ function DropZone({ onFileSelect, accept, label, sublabel, preview, onRemove, te
         onDrop={handleDrop}
         className={`flex w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed py-14 transition-[background-color,border-color,transform] duration-200 ${
           isDragging
-            ? "scale-[1.01] border-[color:var(--brand-teal)] bg-[color:var(--indigo-8)]"
+            ? "scale-[1.01] border-[color:var(--brand-indigo)] bg-[color:var(--indigo-8)]"
             : "border-[color:var(--hairline-strong)] bg-card/40 hover:border-[color:var(--indigo-45)] hover:bg-[color:var(--indigo-4)]"
         }`}
         data-testid={`${testId}-dropzone`}
@@ -90,10 +90,10 @@ function DropZone({ onFileSelect, accept, label, sublabel, preview, onRemove, te
               : "border-[color:var(--hairline)] bg-secondary/50"
           }`}
         >
-          <Icon className={`h-5 w-5 ${isDragging ? "text-[color:var(--brand-teal)]" : "text-muted-foreground"}`} />
+          <Icon className={`h-5 w-5 ${isDragging ? "text-[color:var(--brand-indigo)]" : "text-muted-foreground"}`} />
         </span>
         <span className="text-sm font-semibold">{label}</span>
-        <span className="text-[11px] text-muted-foreground">{sublabel}</span>
+        <span className="text-xs text-muted-foreground">{sublabel}</span>
       </button>
     </div>
   );
@@ -103,9 +103,9 @@ function DropZone({ onFileSelect, accept, label, sublabel, preview, onRemove, te
 function StepBadge({ done, current, children }) {
   return (
     <span
-      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
         done
-          ? "bg-[color:var(--brand-teal)] text-white"
+          ? "bg-[color:var(--brand-indigo)] text-white"
           : current
           ? "bg-[color:var(--brand-coral)] text-white"
           : "bg-secondary text-muted-foreground"
@@ -121,8 +121,8 @@ function StepLabel({ step, tone = "indigo", title, done }) {
   return (
     <div className="flex items-center gap-2">
       <span
-        className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white ${
-          tone === "coral" ? "bg-[color:var(--brand-coral)]" : "bg-[color:var(--brand-teal)]"
+        className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-white ${
+          tone === "coral" ? "bg-[color:var(--brand-coral)]" : "bg-[color:var(--brand-indigo)]"
         }`}
       >
         {step}
@@ -564,16 +564,16 @@ export default function FaceSwap() {
               <div
                 className={`h-2 rounded-full transition-all duration-300 ${
                   filled
-                    ? "w-2 bg-[color:var(--brand-teal)]"
+                    ? "w-2 bg-[color:var(--brand-indigo)]"
                     : active
-                    ? "w-7 bg-[color:var(--brand-teal)]"
+                    ? "w-7 bg-[color:var(--brand-indigo)]"
                     : "w-2 bg-border"
                 }`}
               />
               {s < 3 && (
                 <div
                   className={`h-px w-8 transition-colors duration-300 ${
-                    s < currentStep || result ? "bg-[color:var(--brand-teal)]" : "bg-border"
+                    s < currentStep || result ? "bg-[color:var(--brand-indigo)]" : "bg-border"
                   }`}
                 />
               )}
@@ -594,7 +594,7 @@ export default function FaceSwap() {
                 <div className="flex flex-wrap items-center gap-2">
                   <StepBadge done>1</StepBadge>
                   <span className="text-sm font-semibold">Video Frame Selected</span>
-                  <Badge variant="indigo" className="text-[10px]">
+                  <Badge variant="indigo" className="text-xs">
                     <Film className="h-3 w-3" /> Frame {videoInfo.frameIndex}
                   </Badge>
                 </div>
@@ -607,7 +607,7 @@ export default function FaceSwap() {
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
-                  <div className="absolute bottom-2.5 left-2.5 inline-flex items-center gap-1 rounded-full bg-[color:var(--brand-teal)] px-2 py-0.5 text-[10px] font-bold text-white">
+                  <div className="absolute bottom-2.5 left-2.5 inline-flex items-center gap-1 rounded-full bg-[color:var(--brand-indigo)] px-2 py-0.5 text-xs font-bold text-white">
                     <Check className="h-2.5 w-2.5" /> From discovery
                   </div>
                 </div>
@@ -619,14 +619,14 @@ export default function FaceSwap() {
                   <StepBadge done={!!sourceFile} current={!sourceFile}>2</StepBadge>
                   <span className="text-sm font-semibold">Your Face</span>
                   {savedFaceLoaded && (
-                    <Badge className="border-emerald-500/25 bg-emerald-500/10 text-[10px] text-emerald-400">
+                    <Badge className="border-emerald-500/25 bg-emerald-500/10 text-xs text-emerald-400">
                       <Save className="h-2.5 w-2.5" /> Saved
                     </Badge>
                   )}
                 </div>
                 <DropZone onFileSelect={handleSourceSelect} accept="image/jpeg,image/png,image/webp" label="Drop your face photo here" sublabel="Clear, frontal view works best" preview={sourcePreview} onRemove={handleRemoveSource} testId="source" icon={User} />
                 {sourceFile && !savedFaceLoaded && (
-                  <button onClick={handleSaveFace} className="flex items-center gap-1.5 text-xs font-medium text-[color:var(--brand-teal)] transition-colors hover:text-[color:var(--brand-teal-dark)]" data-testid="save-face-button">
+                  <button onClick={handleSaveFace} className="flex items-center gap-1.5 text-xs font-medium text-[color:var(--brand-indigo)] transition-colors hover:text-[color:var(--brand-indigo-dark)]" data-testid="save-face-button">
                     <Save className="h-3 w-3" /> Save this face for next time
                   </button>
                 )}
@@ -643,7 +643,7 @@ export default function FaceSwap() {
               {/* Prominent CTA to go to discovery */}
               {!targetFile && (
                 <div className="flex flex-col gap-3 rounded-2xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-6)] p-4 sm:flex-row sm:items-center">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-10)] text-[color:var(--brand-teal)]">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-10)] text-[color:var(--brand-indigo)]">
                     <Film className="h-[18px] w-[18px]" />
                   </span>
                   <div className="flex-1">
@@ -674,14 +674,14 @@ export default function FaceSwap() {
                     <StepBadge done={!!sourceFile || !!targetFile}>2</StepBadge>
                     <span className={`text-sm font-semibold ${!targetFile ? "text-muted-foreground" : ""}`}>Your Face</span>
                     {savedFaceLoaded && (
-                      <Badge className="border-emerald-500/25 bg-emerald-500/10 text-[10px] text-emerald-400">
+                      <Badge className="border-emerald-500/25 bg-emerald-500/10 text-xs text-emerald-400">
                         <Save className="h-2.5 w-2.5" /> Saved
                       </Badge>
                     )}
                   </div>
                   <DropZone onFileSelect={handleSourceSelect} accept="image/jpeg,image/png,image/webp" label="Drop your face photo here" sublabel="Clear, frontal view works best" preview={sourcePreview} onRemove={handleRemoveSource} testId="source" icon={User} />
                   {sourceFile && !savedFaceLoaded && (
-                    <button onClick={handleSaveFace} className="flex items-center gap-1.5 text-xs font-medium text-[color:var(--brand-teal)] transition-colors hover:text-[color:var(--brand-teal-dark)]" data-testid="save-face-button">
+                    <button onClick={handleSaveFace} className="flex items-center gap-1.5 text-xs font-medium text-[color:var(--brand-indigo)] transition-colors hover:text-[color:var(--brand-indigo-dark)]" data-testid="save-face-button">
                       <Save className="h-3 w-3" /> Save this face for next time
                     </button>
                   )}
@@ -699,7 +699,7 @@ export default function FaceSwap() {
           {targetFile && sourceFile && !generating && (
             <div className="mx-auto max-w-md space-y-2" data-testid="customization-prompt-section">
               <label htmlFor="custom-prompt" className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
-                <Sparkles className="h-3 w-3 text-[color:var(--brand-teal)]" />
+                <Sparkles className="h-3 w-3 text-[color:var(--brand-indigo)]" />
                 Customize (optional)
               </label>
               <Input
@@ -710,7 +710,7 @@ export default function FaceSwap() {
                 className="text-sm"
                 data-testid="customization-prompt-input"
               />
-              <p className="text-[10px] leading-snug text-muted-foreground">
+              <p className="text-xs leading-snug text-muted-foreground">
                 Describe changes to clothing, environment, or style. Leave empty to keep the original scene.
               </p>
             </div>
@@ -752,7 +752,10 @@ export default function FaceSwap() {
             className="overflow-hidden rounded-2xl border border-[color:var(--indigo-35)] shadow-[var(--glow-indigo)]"
             data-testid="face-swap-result"
           >
-            <div className="grid grid-cols-3 gap-px bg-border">
+            {/* On phones the two inputs sit side by side and the result spans
+                the full width beneath them, so the payoff image never shrinks
+                to a third of a 375px screen. Three-up from md upwards. */}
+            <div className="grid grid-cols-2 gap-px bg-border md:grid-cols-3">
               <div className="bg-card p-3 text-center">
                 <p className="eyebrow mb-2">Target</p>
                 <img src={targetPreview} alt="Target" className="aspect-[3/4] w-full rounded-lg object-cover" />
@@ -761,11 +764,11 @@ export default function FaceSwap() {
                 <p className="eyebrow mb-2">Your Face</p>
                 <img src={sourcePreview} alt="Source" className="aspect-[3/4] w-full rounded-lg object-cover" />
               </div>
-              <div className="bg-[color:var(--indigo-6)] p-3 text-center">
-                <p className="eyebrow mb-2 flex items-center justify-center gap-1 text-[color:var(--brand-teal)]">
+              <div className="col-span-2 bg-[color:var(--indigo-6)] p-3 text-center md:col-span-1">
+                <p className="eyebrow mb-2 flex items-center justify-center gap-1 text-[color:var(--brand-indigo)]">
                   <Sparkles className="h-2.5 w-2.5" /> Result
                 </p>
-                <img src={mediaUrl((result.variants && result.variants[selectedVariant]?.image_url) || result.generated_image_url)} alt="Result" className="aspect-[3/4] w-full rounded-lg object-cover ring-1 ring-[color:var(--brand-teal)]" data-testid="face-swap-generated-image" />
+                <img src={mediaUrl((result.variants && result.variants[selectedVariant]?.image_url) || result.generated_image_url)} alt="Result" className="aspect-[3/4] w-full rounded-lg object-cover ring-1 ring-[color:var(--brand-indigo)]" data-testid="face-swap-generated-image" />
               </div>
             </div>
           </div>
@@ -775,19 +778,22 @@ export default function FaceSwap() {
             <div className="surface space-y-3 rounded-2xl p-4" data-testid="variant-picker">
               <div className="flex items-center justify-between gap-3">
                 <p className="flex items-center gap-1.5 text-sm font-semibold">
-                  <Sparkles className="h-3.5 w-3.5 text-[color:var(--brand-teal)]" />
+                  <Sparkles className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" />
                   Pick your best variant
                 </p>
-                <span className="text-[10px] text-muted-foreground">{selectedVariant + 1} of {result.variants.length} selected</span>
+                <span className="text-xs text-muted-foreground">{selectedVariant + 1} of {result.variants.length} selected</span>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              {/* Two-up on phones keeps each variant large enough to actually
+                  judge a face swap; four-up on large screens avoids leaving a
+                  lone orphan on the second row when all 4 variants exist. */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                 {result.variants.map((variant, idx) => (
                   <button
                     key={variant.id}
                     onClick={() => setSelectedVariant(idx)}
                     className={`relative overflow-hidden rounded-xl border-2 transition-[transform,border-color,box-shadow] duration-200 ${
                       selectedVariant === idx
-                        ? "scale-[1.02] border-[color:var(--brand-teal)] shadow-[var(--glow-indigo)]"
+                        ? "scale-[1.02] border-[color:var(--brand-indigo)] shadow-[var(--glow-indigo)]"
                         : "border-[color:var(--hairline)] hover:scale-[1.01] hover:border-[color:var(--indigo-45)]"
                     }`}
                     data-testid={`variant-option-${idx}`}
@@ -798,13 +804,13 @@ export default function FaceSwap() {
                       className="aspect-[3/4] w-full object-cover"
                     />
                     {selectedVariant === idx && (
-                      <div className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--brand-teal)] text-white shadow-[var(--shadow-sm)]">
+                      <div className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--brand-indigo)] text-white shadow-[var(--shadow-sm)]">
                         <Check className="h-3 w-3" />
                       </div>
                     )}
                     <div className="absolute bottom-1.5 left-1.5">
-                      <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                        selectedVariant === idx ? "bg-[color:var(--brand-teal)] text-white" : "bg-black/60 text-white"
+                      <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${
+                        selectedVariant === idx ? "bg-[color:var(--brand-indigo)] text-white" : "bg-black/60 text-white"
                       }`}>
                         {idx + 1}
                       </span>
@@ -878,13 +884,13 @@ export default function FaceSwap() {
                   <StepLabel step="Step 2" tone="coral" title="Extend with brand message" />
                   <p className="text-xs leading-relaxed text-muted-foreground">
                     Now add a longer continuation with your brand message, voiceover, and CTA.
-                    {brandProfile && <span className="text-[color:var(--brand-teal)]"> Brand profile detected.</span>}
+                    {brandProfile && <span className="text-[color:var(--brand-indigo)]"> Brand profile detected.</span>}
                   </p>
                   <div className="flex gap-2">
                     <Input value={brandUrl} onChange={(e) => setBrandUrl(e.target.value)} placeholder="https://yourbrand.com" className="flex-1 text-sm" data-testid="extend-brand-url-input" />
                     <div className="w-20 shrink-0">
                       <Input type="number" min={5} max={15} value={brandedDuration} onChange={(e) => setBrandedDuration(Math.max(5, Math.min(15, Number(e.target.value) || 10)))} className="text-center text-sm" />
-                      <p className="mt-1 text-center text-[9px] text-muted-foreground">{brandedDuration}s</p>
+                      <p className="mt-1 text-center text-xs text-muted-foreground">{brandedDuration}s</p>
                     </div>
                   </div>
                   {/* Model selector */}
@@ -894,8 +900,8 @@ export default function FaceSwap() {
                     ].map((m) => (
                       <button key={m.key} onClick={() => setVideoModel(m.key)}
                         className={`flex-1 rounded-lg px-2 py-1.5 text-center transition-colors duration-200 ${videoModel === m.key ? "bg-[color:var(--indigo-10)]" : "hover:bg-[color:var(--indigo-6)]"}`}>
-                        <span className={`block text-[11px] font-semibold ${videoModel === m.key ? "text-[color:var(--brand-teal)]" : "text-muted-foreground"}`}>{m.label}</span>
-                        <span className="text-[9px] text-muted-foreground">{m.sub}</span>
+                        <span className={`block text-xs font-semibold ${videoModel === m.key ? "text-[color:var(--brand-indigo)]" : "text-muted-foreground"}`}>{m.label}</span>
+                        <span className="text-xs text-muted-foreground">{m.sub}</span>
                       </button>
                     ))}
                   </div>
@@ -910,7 +916,7 @@ export default function FaceSwap() {
             {videoUrl && videoPhase === "extend" && (
               <div className="space-y-3.5" data-testid="extended-video-result">
                 <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Complete</span>
+                  <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-white">Complete</span>
                   <span className="text-xs font-semibold">Extended branded video ready</span>
                 </div>
                 <video src={videoUrl} controls autoPlay loop className="w-full rounded-xl border border-[color:var(--hairline)]" data-testid="extended-video-player" />
@@ -936,7 +942,7 @@ export default function FaceSwap() {
             {/* Video in progress */}
             {!videoUrl && (videoStatus === "pending" || videoStatus === "in_progress") && (
               <div className="flex items-center gap-3.5 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-4">
-                <Loader2 className="h-5 w-5 shrink-0 animate-spin text-[color:var(--brand-teal)]" />
+                <Loader2 className="h-5 w-5 shrink-0 animate-spin text-[color:var(--brand-indigo)]" />
                 <div>
                   <p className="text-sm font-semibold">{videoStatus === "pending" ? "Queued..." : "Generating..."}</p>
                   <p className="text-xs text-muted-foreground">
@@ -986,17 +992,17 @@ export default function FaceSwap() {
                 >
                   <span className="flex items-center gap-2.5 text-left">
                     {includeHookAudio ? (
-                      <Volume2 className="h-4 w-4 text-[color:var(--brand-teal)]" />
+                      <Volume2 className="h-4 w-4 text-[color:var(--brand-indigo)]" />
                     ) : (
                       <VolumeX className="h-4 w-4 text-muted-foreground" />
                     )}
-                    <span className="text-[11px] font-semibold">
+                    <span className="text-xs font-semibold">
                       {includeHookAudio ? "AI audio on" : "Muted (recommended for TikTok)"}
                     </span>
                   </span>
                   <span
                     className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors ${
-                      includeHookAudio ? "bg-[color:var(--brand-teal)]" : "bg-border"
+                      includeHookAudio ? "bg-[color:var(--brand-indigo)]" : "bg-border"
                     }`}
                   >
                     <span
@@ -1031,10 +1037,10 @@ export default function FaceSwap() {
                         { key: "stop-motion", label: "Stop Motion", desc: "Sudden freeze-frame pose snap — eye-catching pattern interrupt that holds attention" },
                       ].map((m) => (
                         <button key={m.key} onClick={() => setMotionStyle(m.key)}
-                          className={`rounded-xl border p-2.5 text-left transition-colors duration-200 ${motionStyle === m.key ? "border-[color:var(--brand-teal)] bg-[color:var(--indigo-8)]" : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"}`}
+                          className={`rounded-xl border p-2.5 text-left transition-colors duration-200 ${motionStyle === m.key ? "border-[color:var(--brand-indigo)] bg-[color:var(--indigo-8)]" : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"}`}
                           data-testid={`motion-${m.key}`}>
-                          <span className={`block text-[11px] font-semibold ${motionStyle === m.key ? "text-[color:var(--brand-teal)]" : "text-foreground"}`}>{m.label}</span>
-                          <span className="text-[9px] leading-snug text-muted-foreground">{m.desc}</span>
+                          <span className={`block text-xs font-semibold ${motionStyle === m.key ? "text-[color:var(--brand-indigo)]" : "text-foreground"}`}>{m.label}</span>
+                          <span className="text-xs leading-snug text-muted-foreground">{m.desc}</span>
                         </button>
                       ))}
                     </div>
@@ -1051,8 +1057,8 @@ export default function FaceSwap() {
                     <button key={m.key} onClick={() => setVideoModel(m.key)}
                       className={`flex-1 rounded-lg px-2 py-1.5 text-center transition-colors duration-200 ${videoModel === m.key ? "bg-[color:var(--indigo-10)]" : "hover:bg-[color:var(--indigo-6)]"}`}
                       data-testid={`model-${m.key}`}>
-                      <span className={`block text-[11px] font-semibold ${videoModel === m.key ? "text-[color:var(--brand-teal)]" : "text-muted-foreground"}`}>{m.label}</span>
-                      <span className="text-[9px] text-muted-foreground">{m.sub}</span>
+                      <span className={`block text-xs font-semibold ${videoModel === m.key ? "text-[color:var(--brand-indigo)]" : "text-muted-foreground"}`}>{m.label}</span>
+                      <span className="text-xs text-muted-foreground">{m.sub}</span>
                     </button>
                   ))}
                 </div>

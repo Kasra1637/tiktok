@@ -23,7 +23,7 @@ function formatCount(n) {
 /** Score colour ramp mirrors VideoCard's virality thresholds. */
 function scoreTone(score) {
   if (score >= 8) return { ring: "var(--brand-coral)", text: "text-[color:var(--brand-coral)]", label: "Strong" };
-  if (score >= 5) return { ring: "var(--brand-teal)", text: "text-[color:var(--brand-teal)]", label: "Decent" };
+  if (score >= 5) return { ring: "var(--brand-indigo)", text: "text-[color:var(--brand-indigo)]", label: "Decent" };
   return { ring: "hsl(var(--muted-foreground))", text: "text-muted-foreground", label: "Weak" };
 }
 
@@ -45,13 +45,13 @@ function EffectivenessScore({ score }) {
       >
         <span className="flex h-11 w-11 flex-col items-center justify-center rounded-full bg-card">
           <span className={`font-display text-base font-bold leading-none ${tone.text}`}>{score}</span>
-          <span className="text-[8px] leading-none text-muted-foreground">/ 10</span>
+          <span className="text-xs leading-none text-muted-foreground">/ 10</span>
         </span>
       </div>
       <div className="min-w-0">
         <span className="eyebrow block">Effectiveness</span>
         <p className="mt-0.5 text-sm font-semibold">{tone.label} hook</p>
-        <p className="text-[11px] leading-snug text-muted-foreground">Scroll-stopping potential</p>
+        <p className="text-xs leading-snug text-muted-foreground">Scroll-stopping potential</p>
       </div>
     </div>
   );
@@ -65,7 +65,7 @@ function SignalRow({ icon: Icon, label, value, testId, title }) {
       data-testid={testId}
       title={title}
     >
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
         <Icon className="h-3.5 w-3.5" />
       </span>
       <div className="min-w-0">
@@ -222,19 +222,19 @@ export default function AnalysisDetail() {
             />
             <div className="absolute inset-x-3 bottom-3 flex flex-wrap items-center gap-1.5">
               <span
-                className="inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[10.5px] font-semibold text-white backdrop-blur-sm"
+                className="inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-xs font-semibold text-white backdrop-blur-sm"
                 data-testid="analysis-view-count"
               >
                 <Eye className="h-3 w-3" /> {formatCount(video.view_count)}
               </span>
               <span
-                className="inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[10.5px] font-semibold text-white backdrop-blur-sm"
+                className="inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-xs font-semibold text-white backdrop-blur-sm"
                 data-testid="analysis-like-count"
               >
                 <Heart className="h-3 w-3" /> {formatCount(video.like_count)}
               </span>
               <span
-                className="inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[10.5px] font-semibold text-white backdrop-blur-sm"
+                className="inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-xs font-semibold text-white backdrop-blur-sm"
                 data-testid="analysis-comment-count"
               >
                 <MessageCircle className="h-3 w-3" /> {formatCount(video.comment_count)}
@@ -242,7 +242,7 @@ export default function AnalysisDetail() {
             </div>
             {video.is_ad && (
               <Badge
-                className="absolute left-3 top-3 border-transparent bg-amber-500/90 text-[10px] font-semibold text-white shadow-[var(--shadow-sm)]"
+                className="absolute left-3 top-3 border-transparent bg-amber-500/90 text-xs font-semibold text-white shadow-[var(--shadow-sm)]"
                 data-testid="analysis-sponsored-badge"
                 title="This post is flagged as an ad or sponsored content"
               >
@@ -255,7 +255,7 @@ export default function AnalysisDetail() {
           <div className="space-y-2">
             <h2 className="font-display text-[17px] font-semibold leading-snug">{video.title}</h2>
             <div className="flex items-center gap-2">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[color:var(--indigo-10)] text-[10px] font-bold uppercase text-[color:var(--brand-teal)]">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[color:var(--indigo-10)] text-xs font-bold uppercase text-[color:var(--brand-indigo)]">
                 {(video.creator || "?").charAt(0)}
               </span>
               <p className="truncate text-sm text-muted-foreground">@{video.creator}</p>
@@ -263,7 +263,7 @@ export default function AnalysisDetail() {
                 href={video.tiktok_url}
                 target="_blank"
                 rel="noreferrer"
-                className="ml-auto inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[color:var(--brand-teal)] transition-colors hover:text-[color:var(--brand-teal-dark)]"
+                className="ml-auto inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[color:var(--brand-indigo)] transition-colors hover:text-[color:var(--brand-indigo-dark)]"
                 data-testid="view-on-tiktok-link"
               >
                 TikTok <ExternalLink className="h-3 w-3" />
@@ -318,7 +318,7 @@ export default function AnalysisDetail() {
               >
                 {savedTemplates.length > 0 ? (
                   <>
-                    <BookmarkCheck className="h-4 w-4 text-[color:var(--brand-teal)]" /> Bookmark Again
+                    <BookmarkCheck className="h-4 w-4 text-[color:var(--brand-indigo)]" /> Bookmark Again
                   </>
                 ) : (
                   <>
@@ -329,7 +329,7 @@ export default function AnalysisDetail() {
               {savedTemplates.length > 0 && (
                 <button
                   onClick={() => navigate("/bookmarks")}
-                  className="w-full text-center text-[11px] text-muted-foreground transition-colors hover:text-[color:var(--brand-teal)]"
+                  className="w-full text-center text-xs text-muted-foreground transition-colors hover:text-[color:var(--brand-indigo)]"
                   data-testid="view-bookmarks-link"
                 >
                   Already bookmarked {savedTemplates.length === 1 ? "once" : `${savedTemplates.length} times`} — view bookmarks
@@ -344,7 +344,7 @@ export default function AnalysisDetail() {
           {analyzing || !analysis ? (
             <div className="surface rounded-2xl p-6">
               <div className="mb-5 flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
                   <Sparkles className="h-[18px] w-[18px] animate-pulse" />
                 </span>
                 <div>

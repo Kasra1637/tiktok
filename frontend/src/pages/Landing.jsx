@@ -239,7 +239,7 @@ function SectionHeading({ eyebrow, title, lede, id }) {
   return (
     <div className="mx-auto mb-12 max-w-2xl text-center" id={id}>
       {eyebrow && (
-        <span className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-[color:var(--hairline)] bg-[color:var(--indigo-6)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--brand-teal)]">
+        <span className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-[color:var(--hairline)] bg-[color:var(--indigo-6)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-[color:var(--brand-indigo)]">
           {eyebrow}
         </span>
       )}
@@ -258,7 +258,7 @@ export default function Landing() {
       <header className="sticky top-0 z-30 border-b border-[color:var(--hairline)] bg-[hsl(228_14%_7%_/_0.72)] backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
           <Link to="/" className="flex items-center gap-2.5">
-            <span className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[color:var(--brand-teal)] to-[color:var(--brand-teal-dark)] text-white shadow-[var(--glow-indigo)]">
+            <span className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] text-white shadow-[var(--glow-indigo)]">
               <Sparkles className="h-[18px] w-[18px]" />
               <span className="pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-b from-white/25 to-transparent" />
             </span>
@@ -289,7 +289,7 @@ export default function Landing() {
                   always finds exactly one primary CTA to anchor to. */}
               <SignUpTrigger>
                 <Button
-                  className="gap-2 rounded-xl bg-[color:var(--brand-teal)] px-4 text-sm font-semibold text-white shadow-[var(--glow-indigo)] hover:bg-[color:var(--brand-teal-dark)]"
+                  className="gap-2 rounded-xl bg-[color:var(--brand-indigo)] px-4 text-sm font-semibold text-white shadow-[var(--glow-indigo)] hover:bg-[color:var(--brand-indigo-dark)]"
                   data-testid="landing-enter-app-button"
                 >
                   Get Started <ArrowRight className="h-4 w-4" />
@@ -299,7 +299,7 @@ export default function Landing() {
             <AuthedOnly>
               <Link to="/discover">
                 <Button
-                  className="gap-2 rounded-xl bg-[color:var(--brand-teal)] px-4 text-sm font-semibold text-white shadow-[var(--glow-indigo)] hover:bg-[color:var(--brand-teal-dark)]"
+                  className="gap-2 rounded-xl bg-[color:var(--brand-indigo)] px-4 text-sm font-semibold text-white shadow-[var(--glow-indigo)] hover:bg-[color:var(--brand-indigo-dark)]"
                   data-testid="landing-enter-app-button"
                 >
                   Enter App <ArrowRight className="h-4 w-4" />
@@ -316,10 +316,10 @@ export default function Landing() {
         <Aurora />
         <div className="grid-overlay" />
         <div className="relative z-10 mx-auto max-w-5xl px-5 pb-24 pt-20 text-center sm:pt-28">
-          <div className="animate-fade-up inline-flex items-center gap-2 rounded-full border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] px-3.5 py-1.5 text-sm font-semibold text-[color:var(--brand-teal)] backdrop-blur-sm">
+          <div className="animate-fade-up inline-flex items-center gap-2 rounded-full border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] px-3.5 py-1.5 text-sm font-semibold text-[color:var(--brand-indigo)] backdrop-blur-sm">
             <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inset-0 animate-pulse-ring rounded-full bg-[color:var(--brand-teal)]" />
-              <span className="relative h-1.5 w-1.5 rounded-full bg-[color:var(--brand-teal)]" />
+              <span className="absolute inset-0 animate-pulse-ring rounded-full bg-[color:var(--brand-indigo)]" />
+              <span className="relative h-1.5 w-1.5 rounded-full bg-[color:var(--brand-indigo)]" />
             </span>
             Viral hooks &rarr; Your face &rarr; Branded video
           </div>
@@ -393,13 +393,13 @@ export default function Landing() {
             style={{ animationDelay: "220ms" }}
           >
             <span className="inline-flex items-center gap-1.5">
-              <Check className="h-3.5 w-3.5 text-[color:var(--brand-teal)]" /> Upload your face once
+              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Upload your face once
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <Check className="h-3.5 w-3.5 text-[color:var(--brand-teal)]" /> 2K vertical output
+              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> 2K vertical output
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <Check className="h-3.5 w-3.5 text-[color:var(--brand-teal)]" /> Free bookmark reuse
+              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Free bookmark reuse
             </span>
           </div>
 
@@ -430,7 +430,7 @@ export default function Landing() {
                 key={s.step}
                 className="surface surface-interactive shimmer-on-hover group rounded-2xl p-6 text-center"
               >
-                <div className="relative mx-auto mb-4 flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-gradient-to-br from-[color:var(--brand-teal)] to-[color:var(--brand-teal-dark)] font-bold text-white shadow-[var(--glow-indigo)]">
+                <div className="relative mx-auto mb-4 flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-gradient-to-br from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] font-bold text-white shadow-[var(--glow-indigo)]">
                   <span className="font-display text-lg">{s.step}</span>
                   <span className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-b from-white/25 to-transparent" />
                 </div>
@@ -457,7 +457,7 @@ export default function Landing() {
               key={f.title}
               className="surface surface-interactive shimmer-on-hover group rounded-2xl p-6 text-center"
             >
-              <div className="relative mx-auto mb-4 flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-gradient-to-br from-[color:var(--brand-teal)] to-[color:var(--brand-teal-dark)] text-white shadow-[var(--glow-indigo)]">
+              <div className="relative mx-auto mb-4 flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-gradient-to-br from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] text-white shadow-[var(--glow-indigo)]">
                 <f.icon className="h-5 w-5" />
                 <span className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-b from-white/25 to-transparent" />
               </div>
@@ -495,14 +495,14 @@ export default function Landing() {
                   >
                     <block.icon
                       className={`h-5 w-5 ${
-                        isCoral ? "text-[color:var(--brand-coral)]" : "text-[color:var(--brand-teal)]"
+                        isCoral ? "text-[color:var(--brand-coral)]" : "text-[color:var(--brand-indigo)]"
                       }`}
                     />
                   </div>
                   <div className="min-w-0 flex-1">
                     <span
                       className={`eyebrow ${
-                        isCoral ? "text-[color:var(--brand-coral)]" : "text-[color:var(--brand-teal)]"
+                        isCoral ? "text-[color:var(--brand-coral)]" : "text-[color:var(--brand-indigo)]"
                       }`}
                     >
                       {block.kicker}
@@ -546,7 +546,7 @@ export default function Landing() {
           <div className="surface-glass relative overflow-hidden rounded-3xl px-6 py-12 text-center sm:px-12 sm:py-16">
             <div className="spotlight-indigo absolute inset-0" aria-hidden="true" />
             <div className="relative">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--brand-teal)]">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-[color:var(--brand-indigo)]">
                 <Zap className="h-3 w-3" /> Under 2 minutes
               </span>
               <h2 className="font-display mt-5 text-3xl font-bold tracking-tight sm:text-4xl">
@@ -607,7 +607,7 @@ export default function Landing() {
           <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
             <div className="lg:col-span-2">
               <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[color:var(--brand-teal)] to-[color:var(--brand-teal-dark)] text-white">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] text-white">
                   <Sparkles className="h-4 w-4" />
                 </span>
                 <span className="font-display text-base font-bold tracking-tight">HookForge</span>
@@ -653,7 +653,7 @@ export default function Landing() {
               &copy; {new Date().getFullYear()} HookForge. Built for creators.
             </p>
             <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Wand2 className="h-3 w-3 text-[color:var(--brand-teal)]" /> Powered by MiniMax H3 &amp; Gemini 2.5 Flash
+              <Wand2 className="h-3 w-3 text-[color:var(--brand-indigo)]" /> Powered by MiniMax H3 &amp; Gemini 2.5 Flash
             </p>
           </div>
         </div>

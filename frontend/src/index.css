@@ -48,11 +48,16 @@ code, .font-mono {
         --chart-5: 220 15% 58%;
         --radius: 0.75rem;
 
-        --brand-teal: #818CF8;
-        --brand-teal-dark: #6366F1;
+        /* ---- Brand hues ----
+           Two accents only: indigo carries navigation and selection state,
+           coral (TikTok's own red) is reserved for primary actions so a CTA
+           is never ambiguous with a selected filter.
+           These were previously named --brand-teal/--brand-mint even though
+           both resolved to indigo; the names now match the values. For
+           translucent indigo use the --indigo-* tints defined below. */
+        --brand-indigo: #818CF8;
+        --brand-indigo-dark: #6366F1;
         --brand-coral: #FE2C55;
-        --brand-mint: rgba(129, 140, 248, 0.12);
-        --brand-red: #FE2C55;
         --shadow-soft: 0 10px 40px rgba(0, 0, 0, 0.35);
         --shadow-tight: 0 4px 20px rgba(0, 0, 0, 0.4);
         --noise-opacity: 0.03;
@@ -114,7 +119,7 @@ code, .font-mono {
 
     /* Consistent, visible focus ring across every interactive element. */
     :focus-visible {
-        outline: 2px solid var(--brand-teal);
+        outline: 2px solid var(--brand-indigo);
         outline-offset: 2px;
     }
 }
@@ -245,8 +250,11 @@ code, .font-mono {
     color: transparent;
 }
 
+/* 0.75rem (12px) is the project's minimum type size — uppercase tracked-out
+   labels are the most contrast-sensitive text in the UI, so they sit at the
+   floor rather than below it. */
 .eyebrow {
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -350,12 +358,12 @@ code, .font-mono {
     font-weight: 600;
 }
 .legal-prose a {
-    color: var(--brand-teal);
+    color: var(--brand-indigo);
     text-decoration: underline;
     text-underline-offset: 2px;
 }
 .legal-prose a:hover {
-    color: var(--brand-teal-dark);
+    color: var(--brand-indigo-dark);
 }
 
 .filmstrip-scroll {

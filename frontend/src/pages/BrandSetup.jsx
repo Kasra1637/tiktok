@@ -39,7 +39,7 @@ function Field({ label, hint, children }) {
     <div className="space-y-1.5">
       <label className="block text-sm font-medium">{label}</label>
       {children}
-      {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }
@@ -174,7 +174,7 @@ export default function BrandSetup() {
           />
           <form onSubmit={handleAnalyzeUrl} className="relative space-y-3" data-testid="brand-url-card">
             <div className="flex items-start gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
                 <Wand2 className="h-[18px] w-[18px]" />
               </span>
               <div className="min-w-0">
@@ -227,7 +227,7 @@ export default function BrandSetup() {
             <h2 className="font-display text-base font-semibold">Brand Details</h2>
           </div>
           {brand?.id && (
-            <Badge variant="secondary" className="shrink-0 text-[10px]">
+            <Badge variant="secondary" className="shrink-0 text-xs">
               {brand.website_url ? "From website + edits" : "Manually entered"}
             </Badge>
           )}
@@ -241,7 +241,7 @@ export default function BrandSetup() {
           <>
             {!brand && (
               <Alert data-testid="no-brand-profile-alert">
-                <AlertTriangle className="h-4 w-4 text-[color:var(--brand-teal)]" />
+                <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
                 <AlertTitle>No brand profile yet</AlertTitle>
                 <AlertDescription>
                   Analyze your website above to fill this in automatically, or just type your
@@ -342,7 +342,7 @@ export default function BrandSetup() {
 
             {brand?.id && (
               <Alert className="border-[color:var(--indigo-15)] bg-[color:var(--indigo-6)]">
-                <CheckCircle2 className="h-4 w-4 text-[color:var(--brand-teal)]" />
+                <CheckCircle2 className="h-4 w-4 text-[color:var(--brand-indigo)]" />
                 <AlertTitle>Ready for the Content Remixer</AlertTitle>
                 <AlertDescription className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                   <span className="text-muted-foreground">

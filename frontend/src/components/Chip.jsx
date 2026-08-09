@@ -18,12 +18,12 @@ export function Chip({
   disabled,
 }) {
   const sizing =
-    size === "md" ? "px-3.5 py-1.5 text-[13px] gap-1.5" : "px-2.5 py-1 text-[11px] gap-1";
+    size === "md" ? "px-3.5 py-1.5 text-[13px] gap-1.5" : "px-2.5 py-1 text-xs gap-1";
 
   const activeTone =
     tone === "coral"
       ? "border-transparent bg-[color:var(--brand-coral)] text-white shadow-[var(--glow-coral)]"
-      : "border-transparent bg-[color:var(--brand-teal)] text-white shadow-[var(--glow-indigo)]";
+      : "border-transparent bg-[color:var(--brand-indigo)] text-white shadow-[var(--glow-indigo)]";
 
   return (
     <button

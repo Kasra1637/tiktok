@@ -22,7 +22,7 @@ export function LegalPage({ title, updated, children }) {
             <ArrowLeft className="h-3.5 w-3.5" /> Back to home
           </Link>
           <Link to="/" className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[color:var(--brand-teal)] to-[color:var(--brand-teal-dark)] text-white">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] text-white">
               <Sparkles className="h-3.5 w-3.5" />
             </span>
             <span className="font-display text-sm font-bold tracking-tight">HookForge</span>
@@ -58,7 +58,7 @@ export function LegalSection({ number, title, children }) {
   return (
     <section className="scroll-mt-8">
       <h2 className="font-display flex items-baseline gap-2.5 text-lg font-semibold tracking-tight">
-        <span className="font-mono text-xs font-medium text-[color:var(--brand-teal)]">
+        <span className="font-mono text-xs font-medium text-[color:var(--brand-indigo)]">
           {String(number).padStart(2, "0")}
         </span>
         {title}

@@ -69,7 +69,7 @@ function publishedAtMs(video) {
 function FilterRow({ label, children }) {
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-      <span className="eyebrow w-16 shrink-0 text-[10px]">{label}</span>
+      <span className="eyebrow w-16 shrink-0 text-xs">{label}</span>
       <div className="flex flex-wrap gap-1.5">{children}</div>
     </div>
   );
@@ -471,9 +471,9 @@ export default function NicheFeed() {
                     onClick={() => handleSelectMode(m.key)}
                     data-testid={`mode-${m.key}`}
                     aria-pressed={mode === m.key}
-                    className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors duration-200 ${
+                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors duration-200 ${
                       mode === m.key
-                        ? "bg-[color:var(--brand-teal)] text-white shadow-[var(--shadow-sm)]"
+                        ? "bg-[color:var(--brand-indigo)] text-white shadow-[var(--shadow-sm)]"
                         : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
@@ -484,9 +484,9 @@ export default function NicheFeed() {
 
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-[11px] font-semibold transition-colors duration-200 ${
+                className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors duration-200 ${
                   showFilters || activeFilterCount > 0
-                    ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-8)] text-[color:var(--brand-teal)]"
+                    ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]"
                     : "border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--indigo-35)] hover:text-foreground"
                 }`}
                 data-testid="toggle-filters"
@@ -495,7 +495,7 @@ export default function NicheFeed() {
                 <SlidersHorizontal className="h-3.5 w-3.5" />
                 Filters
                 {activeFilterCount > 0 && (
-                  <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[color:var(--brand-teal)] px-1 text-[9px] font-bold text-white">
+                  <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[color:var(--brand-indigo)] px-1 text-xs font-bold text-white">
                     {activeFilterCount}
                   </span>
                 )}
@@ -525,10 +525,10 @@ export default function NicheFeed() {
 
           {activeNiche && !hasLoadedNiche && !loadingVideos && (
             <p
-              className="flex items-center gap-1.5 rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-6)] px-3 py-2 text-[11px] text-muted-foreground"
+              className="flex items-center gap-1.5 rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-6)] px-3 py-2 text-xs text-muted-foreground"
               data-testid="niche-pending-search-hint"
             >
-              <Search className="h-3 w-3 shrink-0 text-[color:var(--brand-teal)]" /> Click{" "}
+              <Search className="h-3 w-3 shrink-0 text-[color:var(--brand-indigo)]" /> Click{" "}
               <span className="font-semibold text-foreground">Search</span> to load videos for this niche.
             </p>
           )}
@@ -578,7 +578,7 @@ export default function NicheFeed() {
             {activeFilterCount > 0 && (
               <button
                 onClick={resetFilters}
-                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-[color:var(--brand-teal)]"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-[color:var(--brand-indigo)]"
               >
                 <RotateCcw className="h-3 w-3" /> Reset all filters
               </button>
