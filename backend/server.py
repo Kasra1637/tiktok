@@ -1751,7 +1751,52 @@ HOOK_STYLE_DIRECTIVES = {
         "difference from start to end of the 5 seconds."
     ),
 }
-HOOK_STYLE_CUSTOM_PROMPT_MAX = 500
+HOOK_STYLE_CUSTOM_PROMPT_MAX = 200
+
+
+def _sanitize_custom_hook_prompt(raw: str) -> str:
+    """
+    Sanitize the user-supplied custom hook prompt before injection.
+
+    Defence-in-depth: even though the frontend enforces limits, the backend
+    independently validates and cleans the input. This prevents:
+    - Prompt injection via XML-like tags or system/role delimiters
+    - Excessive length bypassing frontend limits (direct API calls)
+    - Control characters or unicode trickery
+    - Attempts to override the base prompt's safety instructions
+
+    Returns the cleaned text (may be shorter than input, or empty).
+    """
+    import re
+
+    text = (raw or "").strip()
+    if not text:
+        return ""
+
+    # Strip control characters (keep only printable + basic whitespace)
+    text = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]", "", text)
+
+    # Collapse newlines and excessive whitespace into single spaces
+    text = re.sub(r"[\r\n]+", " ", text)
+    text = re.sub(r"\s{2,}", " ", text)
+
+    # Remove prompt-injection patterns:
+    # - Triple backticks (code fences used to break out of context)
+    text = text.replace("```", "")
+    # - XML/HTML-style system, instruction, role, or context tags
+    text = re.sub(r"</?(?:system|instruction|prompt|role|assistant|user|context|ignore|override|admin)[^>]*>", "", text, flags=re.IGNORECASE)
+    # - "Ignore previous instructions" / "disregard above" type phrases
+    text = re.sub(r"(?:ignore|disregard|forget|override|bypass)\s+(?:previous|above|prior|all|the)\s+(?:instructions?|prompts?|rules?|context|directions?)", "", text, flags=re.IGNORECASE)
+    # - Attempts to redefine role ("you are now", "act as", "pretend to be")
+    text = re.sub(r"(?:you\s+are\s+now|act\s+as|pretend\s+(?:to\s+be|you(?:'re| are)))", "", text, flags=re.IGNORECASE)
+
+    # Final cleanup: re-collapse any double spaces introduced by removals
+    text = re.sub(r"\s{2,}", " ", text).strip()
+
+    # Hard character limit (defense against direct API calls bypassing frontend)
+    text = text[:HOOK_STYLE_CUSTOM_PROMPT_MAX]
+
+    return text
 
 
 def apply_hook_style_directive(prompt: str, hook_category: str = "", hook_custom_prompt: str = "") -> str:
@@ -1762,10 +1807,10 @@ def apply_hook_style_directive(prompt: str, hook_category: str = "", hook_custom
     audio/text-overlay instructions.
 
     - hook_category: one of the HOOK_STYLE_DIRECTIVES keys (optional)
-    - hook_custom_prompt: freeform user text (optional, max 500 chars)
+    - hook_custom_prompt: freeform user text (optional, sanitized + max 200 chars)
     """
     category_key = (hook_category or "").strip().lower()
-    custom_text = (hook_custom_prompt or "").strip()[:HOOK_STYLE_CUSTOM_PROMPT_MAX]
+    custom_text = _sanitize_custom_hook_prompt(hook_custom_prompt)
 
     if category_key and category_key in HOOK_STYLE_DIRECTIVES:
         prompt += HOOK_STYLE_DIRECTIVES[category_key]
@@ -2022,9 +2067,11 @@ async def face_swap_generate_hook_video(
     modifier that flavors the hook's energy/intent on top of the base prompt from
     analysis, template, or motion-style fallback. Zero additional AI cost.
 
-    hook_custom_prompt: optional freeform text (max 500 chars) from the creator
-    describing exactly what they want the hook to convey. Injected alongside (not
-    replacing) the category directive and base prompt mechanics.
+    hook_custom_prompt: optional freeform text (max 200 chars) from the creator
+    describing exactly what they want the hook to convey. Sanitized server-side
+    to strip prompt-injection attempts, control characters, and excessive length.
+    Injected alongside (not replacing) the category directive and base prompt
+    mechanics.
     """
     require_ai_configured()
 
@@ -2154,7 +2201,7 @@ async def face_swap_generate_hook_video(
         "template_id": template["id"] if template else None,
         "template_name": template.get("name") if template else None,
         "hook_category": hook_category.strip().lower() or None,
-        "hook_custom_prompt": hook_custom_prompt.strip()[:HOOK_STYLE_CUSTOM_PROMPT_MAX] or None,
+        "hook_custom_prompt": _sanitize_custom_hook_prompt(hook_custom_prompt) or None,
     }
 
 

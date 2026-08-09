@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Sparkles, PenLine } from "lucide-react";
+import { ChevronDown, ChevronUp, Sparkles, PenLine, AlertTriangle, Info } from "lucide-react";
 import { Chip } from "./Chip";
 
 /**
@@ -8,6 +8,12 @@ import { Chip } from "./Chip";
  *
  * Collapsed by default so casual users get the existing flow untouched,
  * while power users can expand it to fine-tune their hook's intent.
+ *
+ * Safety features:
+ * - Hard character limit (200 chars) enforced on input
+ * - Visual feedback: green/amber/red counter as user approaches limit
+ * - Guidelines shown to set expectations about allowed content
+ * - Frontend filters obvious prompt-injection patterns before sending
  *
  * Props:
  *   hookCategory    — currently selected category key (string or "")
@@ -50,7 +56,36 @@ const HOOK_STYLE_CATEGORIES = [
   },
 ];
 
-const CUSTOM_PROMPT_MAX = 500;
+// ─── Safety Constants ────────────────────────────────────────────────────────
+// Hard max enforced at input level. Backend also enforces the same limit.
+const CUSTOM_PROMPT_MAX = 200;
+// Warning threshold — counter turns amber
+const CUSTOM_PROMPT_WARN = 160;
+
+/**
+ * Sanitize user input on the client side before it's stored in state.
+ * This is a first line of defense — the backend does its own sanitization too.
+ *
+ * - Collapses multiple whitespace/newlines into single spaces
+ * - Strips control characters (non-printable)
+ * - Removes obvious prompt-injection delimiters that serve no legitimate
+ *   video-description purpose (triple backticks, XML-like system tags, etc.)
+ */
+function sanitizeInput(raw) {
+  let text = raw;
+  // Strip control characters except basic whitespace
+  text = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+  // Collapse newlines and excessive whitespace into single spaces
+  text = text.replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ");
+  // Remove obvious injection patterns (these have no legitimate use in a
+  // video direction prompt):
+  // - Triple backticks (code fences)
+  text = text.replace(/```/g, "");
+  // - XML/HTML-style system or instruction tags
+  text = text.replace(/<\/?(?:system|instruction|prompt|role|assistant|user|context)[^>]*>/gi, "");
+  // Enforce hard character limit
+  return text.slice(0, CUSTOM_PROMPT_MAX);
+}
 
 export default function HookStyleSelector({
   hookCategory = "",
@@ -62,6 +97,21 @@ export default function HookStyleSelector({
   const [expanded, setExpanded] = useState(false);
 
   const hasSelection = !!(hookCategory || hookCustomPrompt.trim());
+  const charCount = hookCustomPrompt.length;
+  const isAtLimit = charCount >= CUSTOM_PROMPT_MAX;
+  const isNearLimit = charCount >= CUSTOM_PROMPT_WARN;
+
+  // Counter color: green (ok) → amber (approaching) → red (at limit)
+  const counterColor = isAtLimit
+    ? "text-destructive"
+    : isNearLimit
+      ? "text-amber-500"
+      : "text-muted-foreground";
+
+  const handlePromptChange = (e) => {
+    const sanitized = sanitizeInput(e.target.value);
+    onCustomPromptChange(sanitized);
+  };
 
   return (
     <div className="space-y-2" data-testid="hook-style-selector">
@@ -134,19 +184,46 @@ export default function HookStyleSelector({
               <PenLine className="h-3 w-3" />
               Custom direction (optional)
             </label>
+
+            {/* Guidelines */}
+            <div className="flex items-start gap-1.5 rounded-lg bg-secondary/40 px-2.5 py-1.5">
+              <Info className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
+              <p className="text-[9px] leading-snug text-muted-foreground">
+                Describe the <span className="font-medium text-foreground/80">physical movement, expression, or energy</span> you want.
+                Keep it short and specific — e.g. body language, facial expressions, gestures, or camera framing.
+              </p>
+            </div>
+
             <textarea
               id="hook-custom-prompt"
               value={hookCustomPrompt}
-              onChange={(e) => onCustomPromptChange(e.target.value.slice(0, CUSTOM_PROMPT_MAX))}
+              onChange={handlePromptChange}
               disabled={disabled}
-              placeholder="E.g. 'Start with a confused expression, then slowly realize something amazing — end with a big smile pointing at camera'"
-              rows={3}
-              className="w-full resize-none rounded-lg border border-[color:var(--hairline)] bg-background px-3 py-2 text-xs leading-relaxed text-foreground placeholder:text-muted-foreground/60 focus:border-[color:var(--brand-teal)] focus:outline-none focus:ring-1 focus:ring-[color:var(--brand-teal)]/30 disabled:cursor-not-allowed disabled:opacity-50"
+              maxLength={CUSTOM_PROMPT_MAX}
+              placeholder="E.g. 'Lean in with raised eyebrows, then point at camera with a confident smile'"
+              rows={2}
+              className={`w-full resize-none rounded-lg border bg-background px-3 py-2 text-xs leading-relaxed text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 disabled:cursor-not-allowed disabled:opacity-50 ${
+                isAtLimit
+                  ? "border-destructive/60 focus:border-destructive focus:ring-destructive/30"
+                  : "border-[color:var(--hairline)] focus:border-[color:var(--brand-teal)] focus:ring-[color:var(--brand-teal)]/30"
+              }`}
               data-testid="hook-custom-prompt-input"
             />
-            <p className="text-right text-[9px] text-muted-foreground">
-              {hookCustomPrompt.length}/{CUSTOM_PROMPT_MAX}
-            </p>
+
+            {/* Character counter + limit warning */}
+            <div className="flex items-center justify-between">
+              {isAtLimit ? (
+                <span className="flex items-center gap-1 text-[9px] text-destructive">
+                  <AlertTriangle className="h-2.5 w-2.5" />
+                  Character limit reached
+                </span>
+              ) : (
+                <span className="text-[9px] text-muted-foreground" />
+              )}
+              <span className={`text-[9px] font-medium tabular-nums ${counterColor}`}>
+                {charCount}/{CUSTOM_PROMPT_MAX}
+              </span>
+            </div>
           </div>
 
           {/* Clear all button */}
