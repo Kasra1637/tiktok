@@ -1,12 +1,12 @@
 // Hook template categories. Must stay in sync with HOOK_TEMPLATE_CATEGORIES
 // in backend/server.py — the backend normalizes any unknown value to "other".
 export const HOOK_TEMPLATE_CATEGORIES = [
-  { key: "intrigue", label: "Intrigue", description: "Curiosity-driven openers that make viewers stay to find out more — \"wait, what?\" moments." },
-  { key: "reveal", label: "Reveal", description: "Before/after, transformation reveals, or \"watch what happens next\" style hooks." },
-  { key: "reaction", label: "Reaction", description: "Reacting to something — a shocked face, a response to a trend or comment." },
-  { key: "tutorial", label: "Tutorial", description: "\"Here's how to...\" — educational or how-to openers that promise value." },
-  { key: "lifestyle", label: "Lifestyle", description: "Day-in-my-life, aesthetic, or aspirational content that draws people in." },
-  { key: "transformation", label: "Transformation", description: "Glow-ups, makeovers, progress clips — showing dramatic change." },
+  { key: "curiosity-gap", label: "Curiosity Gap", description: "Irresistible 'wait, what?' — show something partially, make them NEED to stay." },
+  { key: "pattern-interrupt", label: "Pattern Interrupt", description: "Break passive scrolling — unexpected movement or visual that jolts the brain." },
+  { key: "reveal", label: "Reveal / Transformation", description: "Dramatic before/after snap — start hidden or plain, instantly show the payoff." },
+  { key: "reaction", label: "Reaction", description: "Exaggerated emotional response — shocked face, jaw drop, 'what did I just see?'" },
+  { key: "authority", label: "Authority", description: "Confident expert energy — commanding eye contact, 'listen to me right now.'" },
+  { key: "confrontation", label: "Confrontation", description: "Challenge the viewer — 'you're doing it wrong' energy, pointed finger, tough love." },
   { key: "other", label: "Other", description: "Anything that doesn't fit the categories above." },
 ];
 

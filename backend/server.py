@@ -1694,61 +1694,81 @@ def build_hook_prompt_from_motion_style(motion_style: str) -> str:
 # itself is billed, which is unavoidable for a new output.
 # ---------------------------------------------------------------------------
 HOOK_TEMPLATE_CATEGORIES = [
-    "intrigue", "reveal", "reaction", "tutorial", "lifestyle", "transformation", "other",
+    "curiosity-gap", "pattern-interrupt", "reveal", "reaction", "authority", "confrontation", "other",
 ]
 HOOK_TEMPLATE_NAME_MAX = 80
 HOOK_TEMPLATE_NOTES_MAX = 500
 
 # ---------------------------------------------------------------------------
-# Hook Style Directives — category-based prompt modifiers that let users
-# specify the *type* of hook energy they want, independent of the reference
-# video's mechanics. Injected into the prompt as an additional layer on top
-# of whatever base prompt was built (analysis, template, image, or fallback).
+# Hook Style Directives — mechanism-based prompt modifiers that map to
+# proven 2026 TikTok scroll-stopping patterns (backed by OpusClip's
+# analysis of 34,635 clips and multiple UGC performance studies).
+#
+# These are HOOK MECHANISMS (the psychological trigger that stops the scroll
+# in the first 1.5-3 seconds), NOT content genres. Each one produces
+# meaningfully different body language, facial expressions, and camera
+# energy from the AI video model.
 # ---------------------------------------------------------------------------
 HOOK_STYLE_DIRECTIVES = {
-    "intrigue": (
-        "\n\nHOOK STYLE — INTRIGUE: The energy of this hook must be curiosity-driven. "
-        "Create a 'wait, what?' moment — a mysterious expression, an incomplete reveal, "
-        "something partially hidden or hinted at. The viewer MUST feel compelled to stay "
-        "to find out what happens next. Use a knowing look, a half-smile, or a gesture "
-        "that says 'I know something you don't.' Build tension through what is NOT shown."
+    "curiosity-gap": (
+        "\n\nHOOK STYLE — CURIOSITY GAP: This hook must create an irresistible 'wait, what?' "
+        "moment that makes the viewer NEED to keep watching. Show something partially — an "
+        "incomplete reveal, a mysterious expression, an object hinted at but not shown. The "
+        "character should have a knowing smirk, a half-smile, or a 'I know something you don't' "
+        "look. Build tension through what is deliberately withheld. The body language should "
+        "signal 'I have a secret' — slight lean-in, eyebrow raise, conspiratorial energy. "
+        "The viewer's brain cannot leave the gap unresolved, so they stay."
+    ),
+    "pattern-interrupt": (
+        "\n\nHOOK STYLE — PATTERN INTERRUPT: This hook must BREAK the viewer's passive scrolling "
+        "state with something visually or physically unexpected. The brain pauses involuntarily "
+        "when it encounters something that doesn't fit the expected pattern. Use: a sudden "
+        "contradictory movement (start one action, snap into something completely different), "
+        "an impossible-seeming gesture, an unexpected frozen pose that breaks into motion, or "
+        "a jarring visual change. The key is to be STRATEGICALLY strange — the unexpected "
+        "element must register in under 1.5 seconds. Think 'cognitive jolt' — the viewer's "
+        "brain says 'wait, am I seeing this correctly?' and pauses to resolve it."
     ),
     "reveal": (
-        "\n\nHOOK STYLE — REVEAL: This hook must set up a dramatic before/after moment. "
-        "Start obscured, hidden, or in an unremarkable state — then SNAP into the reveal. "
-        "The transition should be instant and dramatic: a hand pull-away, a quick turn, "
-        "a sudden lighting change. The viewer should feel the 'wow' moment viscerally. "
-        "Think transformation, unveiling, or the curtain being pulled back."
+        "\n\nHOOK STYLE — REVEAL / TRANSFORMATION: This hook must set up a dramatic before/after "
+        "in one rapid snap. Start in one state — obscured, hidden, unremarkable, messy, or plain — "
+        "then INSTANTLY transition to the payoff: polished, stunning, revealed, or transformed. "
+        "The transition should be viscerally satisfying: a hand pull-away, a quick spin, a "
+        "blink-and-you-miss-it cut, a dramatic lighting change, or a hand swipe across frame. "
+        "This works because showing the OUTCOME in the first 2 seconds is the #1 performing "
+        "hook type on TikTok — the viewer knows immediately what they'll get if they stay. "
+        "Lead with the payoff, make the transformation instant and dramatic."
     ),
     "reaction": (
-        "\n\nHOOK STYLE — REACTION: This hook must be driven by an exaggerated reaction. "
-        "The character should display a dramatic emotional response — shocked face, wide eyes, "
-        "jaw drop, hands to face, dramatic double-take, or a gasp-worthy turn toward camera. "
-        "It should feel like they just saw/heard/discovered something incredible and the viewer "
-        "wants to know what triggered that reaction. Overdramatic is better than subtle."
+        "\n\nHOOK STYLE — REACTION: This hook must be driven by an exaggerated, larger-than-life "
+        "emotional response that makes the viewer wonder 'what did they just see?' The character "
+        "should display: shocked wide eyes, jaw drop, hands flying to face, dramatic double-take "
+        "toward camera, or a gasp-worthy sudden turn. The reaction must be OVERDRAMATIC — "
+        "subtle doesn't stop the scroll. It should feel like they just saw/heard/discovered "
+        "something incredible. The viewer stays because they want to know what triggered "
+        "that extreme response. This exploits emotional contagion — seeing someone react "
+        "intensely makes us feel it too."
     ),
-    "tutorial": (
-        "\n\nHOOK STYLE — TUTORIAL: This hook must radiate confident educator energy. "
-        "Direct, authoritative eye contact with the camera. A 'let me show you' gesture — "
-        "pointing, beckoning, or holding something up. The body language says 'I have valuable "
-        "information and you need to pay attention right now.' Lean in slightly, as if sharing "
-        "insider knowledge. Fast, purposeful movement — not casual, but commanding."
+    "authority": (
+        "\n\nHOOK STYLE — AUTHORITY / EXPERT SIGNAL: This hook must radiate confident credibility "
+        "in the first second, open a curiosity gap in the second, and promise payoff by the third. "
+        "The character should have: direct, commanding eye contact, authoritative posture "
+        "(squared shoulders, purposeful lean-in), and a 'listen to me' gesture — a pointed "
+        "finger, a deliberate hand raise, or holding something up with intention. The body "
+        "language says 'I have valuable information and you need to pay attention RIGHT NOW.' "
+        "Fast, purposeful, no-nonsense movement. This works because TikTok viewers trust "
+        "short-form experts who telegraph credibility in under 3 seconds."
     ),
-    "lifestyle": (
-        "\n\nHOOK STYLE — LIFESTYLE: This hook must feel aspirational and aesthetic. "
-        "Effortless coolness — the character is in their element, living a life others "
-        "want. Think morning routines, smooth transitions, calm confidence, aesthetic "
-        "surroundings. The energy is 'pull them into your world' rather than confrontational. "
-        "Cinematic but fast — a glance over the shoulder, a hair flip, picking something up "
-        "with intention. The viewer should want to BE this person."
-    ),
-    "transformation": (
-        "\n\nHOOK STYLE — TRANSFORMATION: This hook must show dramatic change happening. "
-        "Start in one state (messy, plain, before) and rapidly transition to another "
-        "(polished, stunning, after). The snap/cut between states should be instant and "
-        "satisfying. Use a hand swipe, a spin, a blink-and-you-miss-it transition. "
-        "The viewer should feel the 'glow-up' energy — progress, improvement, dramatic "
-        "difference from start to end of the 5 seconds."
+    "confrontation": (
+        "\n\nHOOK STYLE — CONFRONTATION / CONTRARIAN: This hook must directly challenge the "
+        "viewer — it says 'you're doing it wrong' or 'everyone believes X, but it's false.' "
+        "The character should display: slightly aggressive lean toward camera, pointed finger "
+        "or accusatory gesture, 'are you serious?' facial expression, raised eyebrow with "
+        "head shake, or a disapproving look that breaks into explanation. The energy is "
+        "challenging but not hostile — more 'tough love' than angry. This exploits the brain's "
+        "inability to leave a contradiction unresolved. The viewer MUST stay to defend their "
+        "position or find out if they're wrong. Use urgent, confrontational body language "
+        "that says 'stop what you're doing and listen.'"
     ),
 }
 HOOK_STYLE_CUSTOM_PROMPT_MAX = 200
