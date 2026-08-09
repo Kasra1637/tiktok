@@ -1499,13 +1499,17 @@ async def list_face_swap_jobs(user_id: str = Depends(get_current_user_id)):
 
 HOOK_VIDEO_PROMPT_TEMPLATE = (
     "Create a 5-second vertical video (9:16) starting from this exact first frame. "
-    "The character should perform a single attention-grabbing movement that creates "
+    "The character should perform a FAST, punchy, attention-grabbing movement that creates "
     "curiosity: {motion_type}. "
-    "Requirements: "
+    "PACING IS CRITICAL — match the energy of a viral TikTok hook (first 2-3 seconds): "
+    "- The movement must happen QUICKLY — within the first 1-2 seconds, not gradually "
+    "- Fast, snappy transitions — NOT slow or cinematic "
+    "- Immediate eye contact and direct energy toward the camera from the very first frame "
+    "- The viewer should feel startled or hooked within the first second "
+    "- Think 'scroll-stopper' speed — if someone is swiping fast, this catches their eye instantly "
+    "Additional requirements: "
     "- Maintain perfect face consistency with the first frame throughout "
-    "- Smooth, natural motion — no jerky or artificial movement "
     "- Camera holds steady or has a very subtle push-in for tension "
-    "- The movement should feel like it's building up to something (creates anticipation) "
     "- End on a moment that makes the viewer want to see what happens next"
 )
 
@@ -1551,11 +1555,11 @@ def apply_audio_directive(prompt: str, include_audio: bool) -> str:
     return prompt + (AUDIO_ON_INSTRUCTION if include_audio else AUDIO_OFF_INSTRUCTION) + NO_TEXT_OVERLAY_INSTRUCTION
 
 HOOK_MOTION_TYPES = [
-    "a confident lean-in toward camera with a knowing expression, as if about to reveal a secret",
-    "a slow dramatic turn from profile to face-on, making eye contact with the camera",
-    "a quick attention-grabbing gesture (pointing, hand raise, or prop reveal) that implies 'watch this'",
-    "a subtle head tilt and raised eyebrow with a half-smile, building intrigue",
-    "a sudden stop-motion-style pose change that catches the eye, then holds",
+    "a FAST confident lean-in toward camera with a knowing expression, snapping into position within the first second — as if about to reveal a secret",
+    "a QUICK dramatic turn from profile to face-on, making immediate eye contact with the camera — fast snap, not a slow rotation",
+    "a RAPID attention-grabbing gesture (pointing, hand raise, or prop reveal) that happens instantly — implies 'watch this' with urgency",
+    "a FAST head tilt and raised eyebrow with a half-smile, snapping into the intrigue pose within the first second",
+    "a SUDDEN stop-motion-style pose change that catches the eye instantly, then holds with intensity",
 ]
 
 
@@ -1589,12 +1593,18 @@ def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = 
         f"BODY LANGUAGE & GESTURE: {analysis.get('body_language_gestures') or 'confident body language'}\n"
         f"PACING & MOVEMENT: {analysis.get('pacing_cuts') or 'quick, attention-grabbing pacing'}\n"
         f"HOOK SUMMARY: {analysis.get('hook_summary') or 'attention-grabbing opening'}\n\n"
-        "CRITICAL REQUIREMENTS:\n"
+        "PACING IS CRITICAL — this must match the speed and energy of a viral TikTok hook:\n"
+        "- The action must start IMMEDIATELY from frame 1 — no slow build-up or pause at the start\n"
+        "- All movements should be FAST and snappy, matching the rapid pace of the original 2-3 second hook window\n"
+        "- Quick, punchy gestures — NOT slow or cinematic movements\n"
+        "- Immediate direct eye contact with the camera from the very first frame\n"
+        "- Energy level should be HIGH from the start — think 'scroll-stopper' urgency\n"
+        "- The body language tempo must match how fast the original creator moved\n"
+        "- Compress all the described movements into the first 2-3 seconds, not spread across 5\n\n"
+        "ADDITIONAL REQUIREMENTS:\n"
         "- Perform the EXACT movements and expressions described above — these are proven to grab attention\n"
         "- Maintain perfect face consistency with the first frame throughout\n"
-        "- Smooth, natural motion — no jerky or artificial movement\n"
         "- Camera holds steady or has a subtle push-in matching the original's pacing\n"
-        "- The movement should build curiosity and make the viewer want to see more\n"
         "- End on a moment of anticipation (the viewer wants to know what happens next)"
     )
 
@@ -1621,17 +1631,23 @@ def build_hook_prompt_from_image_analysis(image_analysis: dict) -> str:
         f"BODY LANGUAGE & MOVEMENT: {image_analysis.get('body_language_gestures') or 'confident movement'}\n"
         f"PACING: {image_analysis.get('pacing_cuts') or 'quick, attention-grabbing pacing'}\n"
         f"HOOK CONCEPT: {image_analysis.get('hook_summary') or 'attention-grabbing opening'}\n\n"
-        "CRITICAL REQUIREMENTS:\n"
+        "PACING IS CRITICAL — this must match the speed and energy of a viral TikTok hook:\n"
+        "- Start moving IMMEDIATELY from frame 1 — no pause or slow build-up\n"
+        "- All movements should be FAST and snappy, matching a real creator's rapid energy\n"
+        "- Quick, punchy gestures — NOT slow or cinematic\n"
+        "- Immediate direct eye contact with the camera\n"
+        "- Compress all the action into the first 2-3 seconds\n"
+        "- Energy level HIGH from the very start — scroll-stopper urgency\n\n"
+        "ADDITIONAL REQUIREMENTS:\n"
         "- Animate naturally from the starting pose shown in the first frame\n"
         "- Maintain perfect face consistency throughout\n"
-        "- Smooth, natural motion — no jerky or artificial movement\n"
         "- The movement should build curiosity and make the viewer want to see more\n"
         "- End on a moment of anticipation"
     )
     mechanics = _coerce_mechanics(image_analysis.get("replicable_mechanics"))
     if mechanics:
         mechanics_str = "; ".join(str(m) for m in mechanics[:5])
-        prompt += f"\n\nSPECIFIC MOVEMENTS TO PERFORM: {mechanics_str}"
+        prompt += f"\n\nSPECIFIC MOVEMENTS TO PERFORM (do these FAST): {mechanics_str}"
     return prompt
 
 
