@@ -102,18 +102,18 @@ export default function History() {
               >
                 {video.thumbnail_url ? (
                   <img
-                    src={video.thumbnail_url}
+                    src={`/api/proxy-thumb?url=${encodeURIComponent(video.thumbnail_url)}`}
                     alt={video.title}
                     className="h-full w-full object-cover transition-transform duration-500 ease-out-expo hover:scale-[1.06]"
                     onError={(e) => {
                       e.currentTarget.style.display = "none";
+                      e.currentTarget.nextElementSibling && (e.currentTarget.nextElementSibling.style.display = "flex");
                     }}
                   />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-gradient-to-b from-secondary/60 to-muted">
-                    <ImageOff className="h-5 w-5 text-muted-foreground/50" />
-                  </div>
-                )}
+                ) : null}
+                <div className={`${video.thumbnail_url ? "hidden" : "flex"} h-full w-full items-center justify-center bg-gradient-to-b from-secondary/60 to-muted`}>
+                  <ImageOff className="h-5 w-5 text-muted-foreground/50" />
+                </div>
               </Link>
 
               <div className="min-w-0 flex-1 space-y-2.5">

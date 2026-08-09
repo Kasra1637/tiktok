@@ -2099,14 +2099,14 @@ async def face_swap_extend_video(
 
     # Auto-generate extension prompt if not provided
     if not prompt.strip():
-        # Try to get brand context
+        # Try to get brand context — non-fatal, falls back gracefully
         brand_profile = None
         if brand_url and brand_url.strip():
             url = brand_url.strip()
             if not url.lower().startswith(("http://", "https://")):
                 url = f"https://{url}"
             try:
-                async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers={
+                async with httpx.AsyncClient(timeout=10, follow_redirects=True, headers={
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
                 }) as client:
                     resp = await client.get(url)
@@ -2115,7 +2115,7 @@ async def face_swap_extend_video(
                     if page_text.strip():
                         brand_profile = await analyze_brand_from_text(url, page_text)
             except Exception as e:
-                logger.warning(f"Brand URL fetch failed for extend-video: {e}")
+                logger.warning(f"Brand URL fetch/analysis failed for extend-video: {e} — continuing without brand context")
 
         if not brand_profile:
             brand_row = await _fetch_active_brand()
