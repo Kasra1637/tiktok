@@ -1,12 +1,12 @@
 import axios from "axios";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
+const BACKEND_URL = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/+$/, "");
 const API = `${BACKEND_URL}/api`;
 
 export const mediaUrl = (path) => {
   if (!path) return null;
   if (path.startsWith("http")) return path;
-  return `${BACKEND_URL}${path}`;
+  return `${BACKEND_URL}${path.startsWith("/") ? path : `/${path}`}`;
 };
 
 const client = axios.create({ baseURL: API, timeout: 120000 });

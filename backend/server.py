@@ -430,6 +430,9 @@ async def init_db():
                 source_creator TEXT,
                 source_title TEXT,
                 thumbnail_url TEXT,
+                -- Durable JPEG backup for the bookmark card. Template media is
+                -- otherwise only a per-container cache and disappears on redeploy.
+                thumbnail_bytes BLOB,
                 facial_expressions TEXT,
                 body_language_gestures TEXT,
                 pacing_cuts TEXT,
@@ -643,6 +646,40 @@ async def init_db():
             await conn.execute("ALTER TABLE generated_images ADD COLUMN image_bytes BLOB")
         await conn.commit()
 
+        # Migration: templates are durable database records, but their local
+        # thumbnail files are not. Keep a normalized JPEG backup with each
+        # template so cards remain renderable after a redeploy or on another
+        # backend instance.
+        cursor = await conn.execute("PRAGMA table_info(hook_templates)")
+        template_cols = {row[1] for row in await cursor.fetchall()}
+        if "thumbnail_bytes" not in template_cols:
+            logger.info("Migration: adding durable thumbnail_bytes backup to hook_templates")
+            await conn.execute("ALTER TABLE hook_templates ADD COLUMN thumbnail_bytes BLOB")
+        await conn.commit()
+
+        # Best-effort backfill for templates whose cache file still exists at
+        # this deployment. Files already lost before this change cannot be
+        # reconstructed locally, so the listing will use the source cover when
+        # available rather than rendering a broken image.
+        cursor = await conn.execute(
+            "SELECT id FROM hook_templates WHERE thumbnail_bytes IS NULL"
+        )
+        for (template_id,) in await cursor.fetchall():
+            if not GENERATED_ID_RE.match(template_id or ""):
+                continue
+            thumbnail_path = pipeline.TEMPLATES_DIR / f"{template_id}.jpg"
+            if not thumbnail_path.is_file():
+                continue
+            try:
+                thumbnail_bytes = _normalize_template_thumbnail(thumbnail_path.read_bytes())
+                await conn.execute(
+                    "UPDATE hook_templates SET thumbnail_bytes = ? WHERE id = ?",
+                    (thumbnail_bytes, template_id),
+                )
+            except (OSError, ValueError) as exc:
+                logger.warning("Could not backfill thumbnail for template %s: %s", template_id, exc)
+        await conn.commit()
+
         # Migration: backfill the generated_images provenance registry for
         # databases created before it existed. Without this, every image a user
         # already generated would be unusable for video generation after the
@@ -820,6 +857,74 @@ def _restore_generated_image(image_path: Path, image_bytes: bytes) -> None:
         temporary_path.unlink(missing_ok=True)
 
 
+def _template_thumbnail_path(template_id: str) -> Path:
+    """Return the only permitted local cache path for a template thumbnail."""
+    if not GENERATED_ID_RE.match(template_id or ""):
+        raise ValueError("Invalid template thumbnail reference.")
+    return pipeline.TEMPLATES_DIR / f"{template_id}.jpg"
+
+
+def _normalize_template_thumbnail(image_bytes: bytes) -> bytes:
+    """Validate arbitrary image bytes and persist a consistent JPEG thumbnail."""
+    if not isinstance(image_bytes, (bytes, bytearray, memoryview)):
+        raise ValueError("Template thumbnail is invalid.")
+    with Image.open(io.BytesIO(bytes(image_bytes))) as image:
+        normalized = image.convert("RGB")
+        output = io.BytesIO()
+        normalized.save(output, format="JPEG", quality=90, optimize=True)
+    return output.getvalue()
+
+
+def _restore_template_thumbnail(image_path: Path, thumbnail_bytes: bytes) -> None:
+    """Validate and atomically rehydrate a template thumbnail cache file."""
+    normalized_bytes = _normalize_template_thumbnail(thumbnail_bytes)
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = image_path.with_suffix(".restore.tmp")
+    try:
+        temporary_path.write_bytes(normalized_bytes)
+        temporary_path.replace(image_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+async def _ensure_template_thumbnail(template_id: str) -> Optional[Path]:
+    """Resolve a template thumbnail, restoring its durable JPEG backup if needed."""
+    try:
+        thumbnail_path = _template_thumbnail_path(template_id)
+    except ValueError:
+        return None
+
+    template = await _fetch_one(
+        "SELECT thumbnail_url, thumbnail_bytes FROM hook_templates WHERE id = ?",
+        (template_id,),
+    )
+    expected_url = f"/api/media/templates/{template_id}.jpg"
+    if not template or template.get("thumbnail_url") != expected_url:
+        return None
+
+    if thumbnail_path.is_file():
+        try:
+            _normalize_template_thumbnail(thumbnail_path.read_bytes())
+            return thumbnail_path
+        except (OSError, ValueError) as exc:
+            logger.warning("Template thumbnail cache is invalid for %s: %s", template_id, exc)
+
+    try:
+        _restore_template_thumbnail(thumbnail_path, template.get("thumbnail_bytes"))
+        logger.info("Restored template thumbnail %s from durable backup", template_id)
+        return thumbnail_path
+    except (OSError, ValueError) as exc:
+        logger.warning("Could not restore template thumbnail %s: %s", template_id, exc)
+        return None
+
+
+def _public_template(template: dict) -> dict:
+    """Remove storage-only thumbnail bytes before serializing a template."""
+    public_template = dict(template)
+    public_template.pop("thumbnail_bytes", None)
+    return public_template
+
+
 async def require_frame_derived_image(image_id: str) -> Path:
     """
     Resolve a client-supplied `image_id` to a generated image, proving it
@@ -843,7 +948,8 @@ async def require_frame_derived_image(image_id: str) -> Path:
     4. Durable recovery. A missing local cache file is restored only from the
        validated PNG backup stored alongside the provenance record. This keeps
        extensions working after deploys and across backend instances without
-       treating disk existence as proof of origin.    """
+       treating disk existence as proof of origin.
+    """
     if not image_id or not GENERATED_ID_RE.match(image_id.strip()):
         raise HTTPException(
             status_code=400,
@@ -1658,6 +1764,13 @@ async def face_swap(
     if not any(root in target_path.parents for root in allowed_roots):
         raise HTTPException(status_code=400, detail="Invalid target frame path.")
 
+    if relative_path.startswith("templates/") and not target_path.is_file():
+        # Template thumbnails are restored from their durable record before a
+        # saved hook is used as a face-swap target on a fresh backend instance.
+        restored_template = await _ensure_template_thumbnail(Path(relative_path).stem)
+        if restored_template:
+            target_path = restored_template
+
     if not target_path.is_file():
         # An extracted frame can be missing on this machine even though the
         # analysis is still valid (ephemeral storage, redeploy, cache
@@ -2186,16 +2299,21 @@ async def create_hook_template(payload: CreateHookTemplateRequest, user_id: str 
             except OSError as e:
                 logger.warning(f"Could not copy motion reference for template {template_id}: {e}")
 
-    # Copy the key hook frame as a stable thumbnail.
+    # Normalize the key hook frame to JPEG, persist its bytes in the durable
+    # template record, and keep a local copy only as a cache. That keeps the
+    # Bookmarks card renderable after container restarts and across instances.
     thumbnail_url = None
+    thumbnail_bytes = None
     src_frame = _template_thumbnail_source(video, analysis)
     if src_frame:
-        dest_frame = pipeline.TEMPLATES_DIR / f"{template_id}.jpg"
         try:
-            shutil.copy2(src_frame, dest_frame)
+            thumbnail_bytes = _normalize_template_thumbnail(src_frame.read_bytes())
+            dest_frame = _template_thumbnail_path(template_id)
+            _restore_template_thumbnail(dest_frame, thumbnail_bytes)
             thumbnail_url = f"/api/media/templates/{template_id}.jpg"
-        except OSError as e:
-            logger.warning(f"Could not copy thumbnail for template {template_id}: {e}")
+        except (OSError, ValueError) as e:
+            logger.warning(f"Could not persist thumbnail for template {template_id}: {e}")
+            thumbnail_bytes = None
     if not thumbnail_url:
         thumbnail_url = video.get("thumbnail_url")
 
@@ -2214,16 +2332,16 @@ async def create_hook_template(payload: CreateHookTemplateRequest, user_id: str 
         """INSERT INTO hook_templates
            (id, name, category, notes, source_video_id, source_analysis_id,
             source_tiktok_url, source_creator, source_title, thumbnail_url,
-            facial_expressions, body_language_gestures, pacing_cuts,
+            thumbnail_bytes, facial_expressions, body_language_gestures, pacing_cuts,
             text_overlays_timing, audio_cues_inferred, hook_summary,
             effectiveness_score, replicable_mechanics, prompt_template,
             reference_video_path, song_title, song_artist,
             times_used, last_used_at, created_at, updated_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (template_id, name, _normalize_template_category(payload.category),
          (payload.notes or "").strip()[:HOOK_TEMPLATE_NOTES_MAX],
          video["id"], analysis["id"], video.get("tiktok_url"), video.get("creator"),
-         video.get("title"), thumbnail_url,
+         video.get("title"), thumbnail_url, thumbnail_bytes,
          analysis.get("facial_expressions"), analysis.get("body_language_gestures"),
          analysis.get("pacing_cuts"), analysis.get("text_overlays_timing"),
          analysis.get("audio_cues_inferred"), analysis.get("hook_summary"),
@@ -2237,7 +2355,9 @@ async def create_hook_template(payload: CreateHookTemplateRequest, user_id: str 
         f"Saved hook template {template_id} ('{name}') from video {video['id']} — "
         f"motion_reference={bool(reference_video_path)}"
     )
-    return await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
+    return _public_template(
+        await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
+    )
 
 
 @api_router.get("/bookmarks")
@@ -2261,6 +2381,23 @@ async def list_hook_templates(category: str = "", source_video_id: str = "", use
         row["has_motion_reference"] = bool(
             row.get("reference_video_path") and Path(row["reference_video_path"]).exists()
         )
+        expected_local_url = f"/api/media/templates/{row['id']}.jpg"
+        if (
+            row.get("thumbnail_url") == expected_local_url
+            and GENERATED_ID_RE.match(row["id"] or "")
+            and not row.get("thumbnail_bytes")
+            and not _template_thumbnail_path(row["id"]).is_file()
+        ):
+            # Legacy templates created before durable thumbnails may have lost
+            # their local cache in a prior deploy. Keep the card renderable
+            # with its source video's cover, while avoiding a misleading local
+            # target URL that could not seed Face Swap.
+            source_video = await _fetch_one(
+                "SELECT thumbnail_url FROM videos WHERE id = ?", (row.get("source_video_id"),)
+            )
+            if source_video and source_video.get("thumbnail_url"):
+                row["thumbnail_url"] = source_video["thumbnail_url"]
+        row.pop("thumbnail_bytes", None)
     return rows
 
 
@@ -2272,7 +2409,7 @@ async def get_hook_template(template_id: str, user_id: str = Depends(get_current
     template["has_motion_reference"] = bool(
         template.get("reference_video_path") and Path(template["reference_video_path"]).exists()
     )
-    return template
+    return _public_template(template)
 
 
 @api_router.patch("/bookmarks/{template_id}")
@@ -2299,7 +2436,7 @@ async def update_hook_template(template_id: str, payload: UpdateHookTemplateRequ
         values.append((updates["notes"] or "").strip()[:HOOK_TEMPLATE_NOTES_MAX])
 
     if not set_clauses:
-        return existing
+        return _public_template(existing)
 
     set_clauses.append("updated_at = ?")
     values.append(now_iso())
@@ -2307,7 +2444,9 @@ async def update_hook_template(template_id: str, payload: UpdateHookTemplateRequ
     await _execute(
         f"UPDATE hook_templates SET {', '.join(set_clauses)} WHERE id = ?", tuple(values)
     )
-    return await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
+    return _public_template(
+        await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
+    )
 
 
 @api_router.delete("/bookmarks/{template_id}")
@@ -3911,6 +4050,22 @@ async def serve_frame(video_hash: str, filename: str):
             logger.warning(f"Frame re-extraction failed for {video_hash}: {e}")
 
     raise HTTPException(status_code=404, detail="Frame not available. Please re-analyze the video.")
+
+
+@app.get("/api/media/templates/{template_id}.jpg")
+async def serve_template_thumbnail(template_id: str):
+    """Serve a durable bookmark thumbnail, restoring its local cache if needed."""
+    thumbnail_path = await _ensure_template_thumbnail(template_id)
+    if not thumbnail_path:
+        raise HTTPException(
+            status_code=404,
+            detail="Bookmark thumbnail is unavailable. Open the source analysis and save the hook again.",
+        )
+    return FileResponse(
+        str(thumbnail_path),
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 app.mount("/api/media", StaticFiles(directory=str(pipeline.STORAGE_DIR)), name="media")

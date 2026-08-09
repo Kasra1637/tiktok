@@ -73,13 +73,21 @@ function canSeedFaceSwap(template) {
  * fail to load in-browser due to referrer restrictions. Same proxy VideoCard uses.
  */
 function proxyThumb(url) {
-  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
-  return `${BACKEND_URL}/api/proxy-thumb?url=${encodeURIComponent(url)}`;
+  const backendUrl = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/+$/, "");
+  return `${backendUrl}/api/proxy-thumb?url=${encodeURIComponent(url)}`;
 }
 
 function TemplateThumbnail({ url, alt }) {
   const [src, setSrc] = useState(url ? mediaUrl(url) : null);
   const [failed, setFailed] = useState(!url);
+
+  // The list may replace a legacy missing local asset with its source cover
+  // after a refresh. Reset image state when that URL changes rather than
+  // leaving the card in its previous broken-image fallback.
+  useEffect(() => {
+    setSrc(url ? mediaUrl(url) : null);
+    setFailed(!url);
+  }, [url]);
 
   if (failed) {
     return (
