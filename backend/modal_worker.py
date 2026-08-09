@@ -126,11 +126,21 @@ def extract(payload: dict):
                 downloaded = False
 
         if not downloaded:
-            cmd = [sys.executable, "-m", "yt_dlp", "-f", "b[ext=mp4]/best",
-                   "--no-warnings", "-o", str(video_path), tiktok_url]
+            # Use yt-dlp with additional flags to avoid TikTok's anti-bot detection
+            cmd = [sys.executable, "-m", "yt_dlp",
+                   "-f", "b[ext=mp4]/best",
+                   "--no-warnings",
+                   "--no-check-certificates",
+                   "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                   "--referer", "https://www.tiktok.com/",
+                   "--extractor-args", "tiktok:api_hostname=api22-normal-c-useast2a.tiktokv.com",
+                   "-o", str(video_path), tiktok_url]
             rc, _out, err = _run(cmd, timeout=120)
             if rc != 0 or not video_path.exists():
-                raise HTTPException(status_code=502, detail=f"Video download failed: {err[-400:]}")
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Video download failed: {err[-400:] or 'TikTok blocked the download. Try a different video.'}",
+                )
 
         frame_dir = Path(tmp) / "frames"
         frame_dir.mkdir()
