@@ -76,15 +76,15 @@ def _build_face_swap_prompt(customization_prompt: str = "") -> str:
         )
 
     return (
-        "Replace the face in IMAGE 2 with the face from IMAGE 1. "
-        "OUTPUT MUST BE A PIXEL-PERFECT COPY OF IMAGE 2 with only the face changed. "
-        "Do NOT change ANYTHING else about image 2: same head angle, same mouth openness, "
+        "Replace the face in IMAGE 1 with the face from IMAGE 2. "
+        "OUTPUT MUST BE A PIXEL-PERFECT COPY OF IMAGE 1 with only the face changed. "
+        "Do NOT change ANYTHING else about image 1: same head angle, same mouth openness, "
         "same body position, same arms visibility, same framing, same zoom, same background. "
-        "If arms are not visible in image 2, they must not appear in the output. "
-        "The only difference between image 2 and the output should be the face identity. "
-        "FACE QUALITY: The face must exactly match IMAGE 1's skin texture, makeup level, and complexion. "
-        "Do NOT add eyeshadow, contour, dark patches, or any makeup not present in image 1. "
-        "The skin must be clean and match image 1's exact appearance — no artificial shading or blemishes. "
+        "If arms are not visible in image 1, they must not appear in the output. "
+        "The only difference between image 1 and the output should be the face identity. "
+        "FACE QUALITY: The face must exactly match IMAGE 2's skin texture, makeup level, and complexion. "
+        "Do NOT add eyeshadow, contour, dark patches, or any makeup not present in image 2. "
+        "The skin must be clean and match image 2's exact appearance — no artificial shading or blemishes. "
         "Do NOT include any text, captions, watermarks, emojis, or overlays in the output image."
         f"{customization_instruction}"
     )
@@ -405,8 +405,8 @@ async def generate_customized_preview(
             customization_prompt if mode == "custom" else ""
         ),
         "input_references": [
-            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{person_b64}"}},
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{ref_b64}"}},
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{person_b64}"}},
         ],
         "aspect_ratio": "9:16",
         "n": 1,
@@ -452,8 +452,8 @@ async def generate_face_swap(
         "model": FACE_SWAP_MODEL,
         "prompt": _build_face_swap_prompt(customization_prompt),
         "input_references": [
-            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{source_b64}"}},
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{target_b64}"}},
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{source_b64}"}},
         ],
         "aspect_ratio": "9:16",
         "n": 1,
