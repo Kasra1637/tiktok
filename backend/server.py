@@ -2846,12 +2846,47 @@ async def face_swap_generate_hook_video(
         if analysis_row:
             analysis = analysis_row
 
-        # Get the downloaded video file for V2V motion transfer
+        # Get the downloaded video file for V2V motion transfer / Aleph editing.
+        # local_video_path points at Render's EPHEMERAL local disk — it is
+        # wiped on every redeploy/restart and may not exist on whichever
+        # container instance handles this request even without a redeploy.
+        # Without a re-download fallback here, a missing file silently drops
+        # reference_video_path to None, which makes use_aleph_edit False and
+        # downgrades this generation to the generative fallback model with
+        # NO error surfaced — exactly the "used MiniMax instead of Aleph"
+        # symptom this is fixing. Re-download from the original source (Apify
+        # direct_video_url first, then tiktok_url via yt-dlp) so Aleph stays
+        # available whenever the video record itself still exists.
         video_record = await _fetch_one("SELECT * FROM videos WHERE id = ?", (video_id.strip(),))
-        if video_record and video_record.get("local_video_path"):
-            v_path = Path(video_record["local_video_path"])
-            if v_path.exists():
+        if video_record:
+            v_path = Path(video_record["local_video_path"]) if video_record.get("local_video_path") else None
+            if v_path and v_path.exists():
                 reference_video_path = v_path
+            elif video_record.get("tiktok_url") or video_record.get("direct_video_url"):
+                try:
+                    async with _ytdlp_semaphore:
+                        redownloaded_path = await pipeline.download_video(
+                            video_record.get("tiktok_url") or "",
+                            direct_video_url=video_record.get("direct_video_url") or "",
+                        )
+                    if redownloaded_path and redownloaded_path.exists():
+                        reference_video_path = redownloaded_path
+                        # Heal the DB record so subsequent requests on this
+                        # instance skip straight to the fast path.
+                        await _execute(
+                            "UPDATE videos SET local_video_path = ? WHERE id = ?",
+                            (str(redownloaded_path), video_id.strip()),
+                        )
+                        logger.info(
+                            f"Re-downloaded source video for {video_id.strip()} — "
+                            "local_video_path was missing (ephemeral disk wipe or "
+                            "different container instance)."
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"Could not re-download source video for {video_id.strip()}: {e}. "
+                        "Falling back to the generative model for this generation."
+                    )
 
     # Determine early whether this generation will use Runway Aleph 2.0's
     # video-edit path (default "replicate the exact hook" flow) or a
