@@ -147,7 +147,7 @@ export default function FaceSwap() {
   // Which phase the last error came from, so the retry affordance repeats the
   // action that actually failed rather than always regenerating the hook.
   const [failedPhase, setFailedPhase] = useState(null);
-  const [motionStyle, setMotionStyle] = useState("lean-in");
+  const [motionStyle, setMotionStyle] = useState("");
   // Hook videos are muted/silent by default. TikTok creators normally attach
   // a trending sound or native text-to-speech in TikTok's own editor after
   // exporting — AI-generated audio can't be posted as a "trending sound" and
@@ -173,7 +173,10 @@ export default function FaceSwap() {
   const [brandUrl, setBrandUrl] = useState("");
   const [brandProfile, setBrandProfile] = useState(null);
   const [brandedDuration, setBrandedDuration] = useState(15);
-  const [videoModel, setVideoModel] = useState("minimax-h3"); // MiniMax H3 — sole model
+  const [videoModel, setVideoModel] = useState("minimax-h3"); // generative fallback engine
+  // "" = Default (match the original hook's movement). Any explicit value is a
+  // customization and routes generation to the generative engine instead of
+  // Aleph's exact edit, so the default must be empty — not a real motion.
 
   // Load the target from query params. This is the ONLY way a target enters
   // the page — there is no target upload. Callers are the analysis screen
@@ -517,7 +520,7 @@ export default function FaceSwap() {
     setSelectedVariant(0); setCustomPrompt("");
     setGeneratingVideo(false);
     setVideoStatus(null); setVideoUrl(null); setVideoError(null); setFailedPhase(null);
-    setVideoPhase("hook"); setMotionStyle("lean-in");
+    setVideoPhase("hook"); setMotionStyle("");
     setHookCategory(""); setHookCustomPrompt("");
     // Match the initial state (15s), not an arbitrary different default.
     setBrandUrl(""); setBrandedDuration(15); setGeneratingMore(false);
@@ -917,7 +920,7 @@ export default function FaceSwap() {
                   <p className="text-sm font-semibold">{videoStatus === "pending" ? "Queued..." : "Generating..."}</p>
                   <p className="text-xs text-muted-foreground">
                     {videoPhase === "hook"
-                      ? (videoInfo && !hookCategory && !hookCustomPrompt.trim()
+                      ? (videoInfo && !hookCategory && !hookCustomPrompt.trim() && !motionStyle
                           ? "Editing the original hook video with your face (30s-2min)"
                           : `Creating 3s ${includeHookAudio ? "hook with AI audio" : "silent hook"} (30s-2min)`)
                       : "Extending video with brand message (1-3min)"}
@@ -999,27 +1002,66 @@ export default function FaceSwap() {
                   disabled={generatingVideo}
                 />
 
-                {/* Motion style selector — only relevant when not reusing a template
-                    and no viral-video analysis is available */}
-                {!videoInfo && (
-                  <div className="space-y-2">
-                    <p className="eyebrow">Motion style</p>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      {[
-                        { key: "lean-in", label: "Lean In", desc: "Move toward camera like you're about to share a secret — builds instant curiosity" },
-                        { key: "turn", label: "Dramatic Turn", desc: "Start from the side, then turn to face the viewer — creates a reveal moment" },
-                        { key: "gesture", label: "Gesture", desc: "Point, raise hand, or reveal something — signals 'watch this' to stop the scroll" },
-                        { key: "intrigue", label: "Intrigue", desc: "Subtle head tilt + raised eyebrow — makes viewers think 'what do they know?'" },
-                        { key: "stop-motion", label: "Stop Motion", desc: "Sudden freeze-frame pose snap — eye-catching pattern interrupt that holds attention" },
-                      ].map((m) => (
-                        <button key={m.key} onClick={() => setMotionStyle(m.key)}
-                          className={`rounded-xl border p-2.5 text-left transition-colors duration-200 ${motionStyle === m.key ? "border-[color:var(--brand-indigo)] bg-[color:var(--indigo-8)]" : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"}`}
-                          data-testid={`motion-${m.key}`}>
-                          <span className={`block text-xs font-semibold ${motionStyle === m.key ? "text-[color:var(--brand-indigo)]" : "text-foreground"}`}>{m.label}</span>
-                          <span className="text-xs leading-snug text-muted-foreground">{m.desc}</span>
-                        </button>
-                      ))}
-                    </div>
+                {/* Motion style selector. Always shown so "Default" is an explicit,
+                    visible choice rather than an invisible one — previously this was
+                    hidden whenever a source video existed while still shipping
+                    "lean-in" to the backend, so users had no way to see or control it.
+                    Default ("") means "don't dictate the movement", which is what keeps
+                    a video-backed hook eligible for Aleph's exact edit. */}
+                <div className="space-y-2">
+                  <p className="eyebrow">Motion style</p>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {/* Default / no override */}
+                    <button
+                      onClick={() => setMotionStyle("")}
+                      className={`rounded-xl border p-2.5 text-left transition-colors duration-200 ${!motionStyle ? "border-[color:var(--brand-indigo)] bg-[color:var(--indigo-8)]" : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"}`}
+                      data-testid="motion-default"
+                    >
+                      <span className={`block text-xs font-semibold ${!motionStyle ? "text-[color:var(--brand-indigo)]" : "text-foreground"}`}>
+                        Default {videoInfo ? "— Match original" : "— Auto"}
+                      </span>
+                      <span className="text-xs leading-snug text-muted-foreground">
+                        {videoInfo
+                          ? "Replicate the original hook's real movement exactly. Recommended — this is the only option that uses the exact-edit engine."
+                          : "Let AI pick the movement that best fits your photo."}
+                      </span>
+                    </button>
+
+                    {[
+                      { key: "lean-in", label: "Lean In", desc: "Move toward camera like you're about to share a secret — builds instant curiosity" },
+                      { key: "turn", label: "Dramatic Turn", desc: "Start from the side, then turn to face the viewer — creates a reveal moment" },
+                      { key: "gesture", label: "Gesture", desc: "Point, raise hand, or reveal something — signals 'watch this' to stop the scroll" },
+                      { key: "intrigue", label: "Intrigue", desc: "Subtle head tilt + raised eyebrow — makes viewers think 'what do they know?'" },
+                      { key: "stop-motion", label: "Stop Motion", desc: "Sudden freeze-frame pose snap — eye-catching pattern interrupt that holds attention" },
+                    ].map((m) => (
+                      <button
+                        key={m.key}
+                        /* Toggle: clicking the active card returns to Default, so a
+                           selection is never a one-way door. */
+                        onClick={() => setMotionStyle(motionStyle === m.key ? "" : m.key)}
+                        className={`rounded-xl border p-2.5 text-left transition-colors duration-200 ${motionStyle === m.key ? "border-[color:var(--brand-indigo)] bg-[color:var(--indigo-8)]" : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"}`}
+                        data-testid={`motion-${m.key}`}
+                      >
+                        <span className={`block text-xs font-semibold ${motionStyle === m.key ? "text-[color:var(--brand-indigo)]" : "text-foreground"}`}>{m.label}</span>
+                        <span className="text-xs leading-snug text-muted-foreground">{m.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Explicit tradeoff notice — only meaningful when a source video
+                    exists, since that's the only case where an exact edit was
+                    actually available to give up. */}
+                {videoInfo && (hookCategory || hookCustomPrompt.trim() || motionStyle) && (
+                  <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-2.5" data-testid="aleph-tradeoff-notice">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                    <p className="text-xs leading-snug text-muted-foreground">
+                      <span className="font-semibold text-amber-500">Exact edit turned off.</span>{" "}
+                      Custom {[hookCategory && "energy", hookCustomPrompt.trim() && "direction", motionStyle && "motion"].filter(Boolean).join(", ")}{" "}
+                      means the hook is regenerated instead of edited, so body movement,
+                      gestures, camera, and clothing won't match the original pixel-for-pixel.
+                      Clear your selections to restore the exact edit.
+                    </p>
                   </div>
                 )}
 
@@ -1030,7 +1072,7 @@ export default function FaceSwap() {
                     the generative fallback synthesizes a new scene when there's no
                     source video to edit or the hook was customized. */}
                 <div className="rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-2.5" data-testid="hook-model-indicator">
-                  {videoInfo && !hookCategory && !hookCustomPrompt.trim() ? (
+                  {videoInfo && !hookCategory && !hookCustomPrompt.trim() && !motionStyle ? (
                     <>
                       <span className="block text-xs font-semibold text-[color:var(--brand-indigo)]">Runway Aleph 2.0 &middot; Exact edit</span>
                       <span className="text-xs text-muted-foreground">Edits the original hook video directly — body movement, gestures, camera, and clothing stay pixel-for-pixel identical. Only the face changes.</span>
@@ -1040,7 +1082,7 @@ export default function FaceSwap() {
                       <span className="block text-xs font-semibold text-muted-foreground">Generative engine</span>
                       <span className="text-xs text-muted-foreground">
                         {videoInfo
-                          ? "A custom style or prompt was set, so a new scene is generated instead of editing the original video."
+                          ? `Custom ${[hookCategory && "energy", hookCustomPrompt.trim() && "direction", motionStyle && "motion"].filter(Boolean).join(", ")} was set, so a new scene is generated instead of editing the original video.`
                           : "No source video to edit — a new scene is generated from your photo."}
                       </span>
                     </>

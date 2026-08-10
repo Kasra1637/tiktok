@@ -2211,6 +2211,18 @@ HOOK_MOTION_TYPES = [
     "a SUDDEN stop-motion-style pose change that catches the eye instantly, then holds with intensity",
 ]
 
+# Maps the frontend's motion-style keys onto HOOK_MOTION_TYPES indices. Shared
+# by build_hook_prompt_from_motion_style() (base prompt when nothing else is
+# available) and apply_motion_style_directive() (layered onto any prompt when
+# the creator explicitly picks a motion), so both paths stay in sync.
+MOTION_STYLE_INDEX = {
+    "lean-in": 0,
+    "turn": 1,
+    "gesture": 2,
+    "intrigue": 3,
+    "stop-motion": 4,
+}
+
 
 def _coerce_mechanics(mechanics) -> list:
     """Normalize replicable_mechanics into a list (it may be stored as JSON text)."""
@@ -2350,17 +2362,44 @@ def build_hook_prompt_from_image_analysis(image_analysis: dict) -> str:
 
 
 def build_hook_prompt_from_motion_style(motion_style: str) -> str:
-    """Final fallback: a hand-written motion template. Costs zero AI calls."""
-    motion_map = {
-        "lean-in": HOOK_MOTION_TYPES[0],
-        "turn": HOOK_MOTION_TYPES[1],
-        "gesture": HOOK_MOTION_TYPES[2],
-        "intrigue": HOOK_MOTION_TYPES[3],
-        "stop-motion": HOOK_MOTION_TYPES[4],
-    }
-    key = (motion_style or "").strip()
-    motion = motion_map.get(key, HOOK_MOTION_TYPES[0])
+    """Final fallback: a hand-written motion template. Costs zero AI calls.
+
+    Reached only when there is no template, no hook analysis, and the
+    single-image analysis returned nothing usable. When motion_style is empty
+    (the creator left it on Default), lean-in is used as the house default
+    since this branch has no other signal to work from.
+    """
+    key = (motion_style or "").strip().lower()
+    motion = HOOK_MOTION_TYPES[MOTION_STYLE_INDEX.get(key, 0)]
     return HOOK_VIDEO_PROMPT_TEMPLATE.format(motion_type=motion)
+
+
+def apply_motion_style_directive(prompt: str, motion_style: str) -> str:
+    """
+    Layer an explicitly-chosen motion style onto an already-built prompt.
+
+    Previously motion_style only reached the output through
+    build_hook_prompt_from_motion_style(), i.e. the deepest fallback branch —
+    so on every normal path (template, hook analysis, or a successful
+    single-image analysis) the creator's Motion Style pick was silently
+    discarded. This applies it as an explicit movement directive on top of
+    whatever base prompt was produced, the same way apply_hook_style_directive
+    layers hook energy, so the control actually does something.
+
+    No-ops when motion_style is empty (Default) or unrecognized, which is what
+    keeps the untouched-default path eligible for Aleph's exact edit.
+    """
+    key = (motion_style or "").strip().lower()
+    if key not in MOTION_STYLE_INDEX:
+        return prompt
+
+    motion = HOOK_MOTION_TYPES[MOTION_STYLE_INDEX[key]]
+    return prompt + (
+        f"\n\nMOTION STYLE (chosen by the creator): The character must perform {motion}. "
+        "This is the primary physical action of the hook — where it conflicts with any "
+        "other body movement described above, this movement wins. Keep the face "
+        "consistency, pacing, and framing requirements above intact."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -2782,8 +2821,12 @@ async def face_swap_generate_hook_video(
 
     Falls back to a motion-style template if no analysis is available.
 
-    motion_style options: lean-in, turn, gesture, intrigue, stop-motion
-    (used as fallback when no hook analysis exists)
+    motion_style options: "" (Default), lean-in, turn, gesture, intrigue,
+    stop-motion. Empty means "match the original hook's movement" and keeps
+    the request eligible for Aleph's exact edit. An explicit value is applied
+    as a movement directive on top of whichever base prompt was built (see
+    apply_motion_style_directive) and counts as customization, which routes
+    the request to the generative engine.
 
     include_audio: defaults to False. Hook videos are silent by default because
     TikTok creators attach a trending sound or native text-to-speech in TikTok's
@@ -2957,9 +3000,17 @@ async def face_swap_generate_hook_video(
     # Aleph cannot text-generate a scene — it can only edit footage that
     # already exists — so any customization or missing source video routes
     # to the generative fallback.
+    # motion_style is included here now that it actually affects the output
+    # (see apply_motion_style_directive). An explicit movement choice is a
+    # request to deviate from the source's real movement, which is exactly what
+    # Aleph's "change only the face" contract cannot honor — so it must route
+    # to the generative engine, same as hook_category/hook_custom_prompt.
+    # An empty motion_style means "Default / match the original" and keeps
+    # Aleph eligible.
     user_customized = bool(
         (hook_category and hook_category.strip())
         or (hook_custom_prompt and hook_custom_prompt.strip())
+        or (motion_style and motion_style.strip())
     )
     use_aleph_edit = (
         bool(analysis)
@@ -2967,6 +3018,10 @@ async def face_swap_generate_hook_video(
         and not user_customized
         and not template
     )
+
+    # Set when the base prompt was itself built from motion_style, so the
+    # motion directive isn't appended a second time further down.
+    motion_style_consumed = False
 
     if prompt is not None:
         pass  # already resolved from a saved template
@@ -2991,23 +3046,32 @@ async def face_swap_generate_hook_video(
         if image_analysis and image_analysis.get("body_language_gestures"):
             prompt = build_hook_prompt_from_image_analysis(image_analysis)
         else:
-            # Final fallback: hand-written motion template (no AI cost)
+            # Final fallback: hand-written motion template (no AI cost).
+            # This branch builds the whole prompt AROUND motion_style, so the
+            # directive must not also be appended below or the same movement
+            # would be specified twice.
             prompt = build_hook_prompt_from_motion_style(motion_style)
+            motion_style_consumed = True
 
-    # Apply the hook style directive (category + custom prompt) BEFORE audio.
-    # This layers the user's chosen hook energy on top of whatever base prompt
-    # was built, without overriding core mechanics or V2V motion transfer cues.
-    prompt = apply_hook_style_directive(prompt, hook_category, hook_custom_prompt)
-
-    # Apply the audio directive last, uniformly, regardless of which branch
-    # produced the base prompt (fresh analysis, saved template, image
-    # analysis, or motion fallback) — including templates saved before this
-    # toggle existed, whose cached text may still reference audio.
-    # Skip this for the Aleph edit path — its prompt is not a generative
-    # scene description, and appending audio/style directives to it would
-    # add exactly the kind of extra scene detail Aleph's docs warn causes
-    # drift in what should otherwise stay untouched.
+    # All prompt decoration is skipped on the Aleph edit path. That prompt is a
+    # minimal "replace the face, keep everything else" instruction, and appending
+    # scene/movement/audio detail to it is exactly what Aleph's docs warn causes
+    # drift in regions that should stay untouched. In practice any style input
+    # being set already routes away from Aleph via user_customized; this guard
+    # makes that non-negotiable rather than incidental.
+    #
+    # On the generative paths these are applied in a fixed order — hook energy,
+    # then custom direction, then motion style, then audio — so the audio
+    # directive always lands last regardless of which branch built the base
+    # prompt (fresh analysis, saved template, image analysis, or motion
+    # fallback), including templates saved before the audio toggle existed
+    # whose cached text may still reference audio.
     if not use_aleph_edit:
+        # Hook energy (category) + freeform custom direction.
+        prompt = apply_hook_style_directive(prompt, hook_category, hook_custom_prompt)
+        # Explicit motion style, unless it already formed the base prompt above.
+        if not motion_style_consumed:
+            prompt = apply_motion_style_directive(prompt, motion_style)
         prompt = apply_audio_directive(prompt, False)
 
     # Trim the source video to the first 3 seconds so it's a clean 1:1
@@ -3092,7 +3156,10 @@ async def face_swap_generate_hook_video(
         "image_id": image_id,
         "duration": actual_duration,
         "phase": "hook",
-        "motion_style": motion_style.strip() or "lean-in",
+        # None (not "lean-in") when the creator left Motion Style on Default —
+        # reporting a style that was never selected made the old response
+        # indistinguishable from an explicit lean-in pick.
+        "motion_style": motion_style.strip().lower() or None,
         "model": "aleph-2" if use_aleph_edit else DEFAULT_VIDEO_MODEL,
         "has_v2v_motion": bool(reference_video_path),
         "has_native_audio": include_audio,
