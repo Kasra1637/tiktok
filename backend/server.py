@@ -1819,17 +1819,18 @@ async def get_video_analysis(video_id: str, user_id: str = Depends(get_current_u
 @api_router.get("/hook-motion-styles")
 async def get_hook_motion_styles():
     """
-    The selectable motion styles, including the exact prompt text each one
-    sends to the video model.
+    The selectable motion styles: short summary, the exact prompt text sent to
+    the model, and which hook-energy categories each one overlaps.
 
-    Exists so the UI can render the real instruction instead of a separately
-    maintained paraphrase. Previously the card descriptions lived in
-    FaceSwap.jsx and the prompt fragments lived in HOOK_MOTION_STYLES, saying
-    the same thing in different words with nothing keeping them in sync — so a
-    creator could read one description while the model received another.
+    Serving all three from here keeps them from drifting. The card copy and the
+    prompt fragments used to live in two places (FaceSwap.jsx and this module)
+    describing the same motions in different words, so a creator could read one
+    thing while the model received another. `summary` is what the card shows by
+    default and `motion` is available on request, so the UI stays readable
+    without hiding what actually gets sent.
 
-    Unauthenticated and static: this is presentation metadata with no user
-    data, and it changes only when the motion definitions themselves change.
+    Unauthenticated and static: presentation metadata with no user data, which
+    changes only when the motion definitions themselves change.
     """
     return {"styles": HOOK_MOTION_STYLES}
 
@@ -2296,31 +2297,48 @@ def apply_audio_directive(prompt: str, include_audio: bool) -> str:
 # thing while the model was told another, with nothing keeping them aligned.
 # The UI now renders `motion` verbatim (see GET /hook-motion-styles), so what a
 # creator reads on the card is literally what gets sent.
+# Each entry carries three things, all served to the UI so none of them can
+# drift from the others:
+#   summary  — short, human-readable product copy for the card
+#   motion   — the verbatim fragment sent to the model (shown on request)
+#   overlaps — hook-energy keys this motion conceptually duplicates, so the UI
+#              can warn when both are set and would layer two competing
+#              directives describing the same effect into one prompt
 HOOK_MOTION_STYLES = [
     {
         "key": "lean-in",
         "label": "Lean In",
+        "summary": "Moves toward camera like you're about to share a secret — builds instant curiosity",
         "motion": "a FAST confident lean-in toward camera with a knowing expression, snapping into position within the first second — as if about to reveal a secret",
+        "overlaps": [],
     },
     {
         "key": "turn",
         "label": "Dramatic Turn",
+        "summary": "Starts from the side, then turns to face the viewer — creates a reveal moment",
         "motion": "a QUICK dramatic turn from profile to face-on, making immediate eye contact with the camera — fast snap, not a slow rotation",
+        "overlaps": ["reveal"],
     },
     {
         "key": "gesture",
         "label": "Gesture",
+        "summary": "Points, raises a hand, or reveals something — signals 'watch this' to stop the scroll",
         "motion": "a RAPID attention-grabbing gesture (pointing, hand raise, or prop reveal) that happens instantly — implies 'watch this' with urgency",
+        "overlaps": [],
     },
     {
         "key": "intrigue",
         "label": "Intrigue",
+        "summary": "Subtle head tilt + raised eyebrow — makes viewers think 'what do they know?'",
         "motion": "a FAST head tilt and raised eyebrow with a half-smile, snapping into the intrigue pose within the first second",
+        "overlaps": ["curiosity-gap"],
     },
     {
         "key": "stop-motion",
         "label": "Stop Motion",
+        "summary": "Sudden freeze-frame pose snap — eye-catching jolt that holds attention",
         "motion": "a SUDDEN stop-motion-style pose change that catches the eye instantly, then holds with intensity",
+        "overlaps": ["pattern-interrupt"],
     },
 ]
 

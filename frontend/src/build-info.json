@@ -1,4 +1,4 @@
 {
-  "buildId": "motion-desc-sync-2026-08-10",
+  "buildId": "hook-style-consolidated-2026-08-10",
   "note": "This file's content changes on every deploy-relevant commit to bust Docker layer caching on Render. If the UI does not match the buildId shown in the footer/console, the deployed build is stale."
 }

@@ -1085,62 +1085,22 @@ export default function FaceSwap() {
                 </button>
 
 
-                {/* Hook style selector — optional category + custom prompt */}
+                {/* Every control that steers the hook away from a literal
+                    replication lives here — hook energy, motion style, and
+                    custom direction. They share one consequence (each turns off
+                    the exact edit), so they're presented together at equal
+                    weight instead of one being prominent and the others hidden. */}
                 <HookStyleSelector
                   hookCategory={hookCategory}
                   onCategoryChange={setHookCategory}
                   hookCustomPrompt={hookCustomPrompt}
                   onCustomPromptChange={setHookCustomPrompt}
+                  motionStyle={motionStyle}
+                  onMotionStyleChange={setMotionStyle}
+                  motionStyles={motionStyles}
+                  exactEditAvailable={exactEditAvailable}
                   disabled={generatingVideo}
                 />
-
-                {/* Motion style selector. Always shown so "Default" is an explicit,
-                    visible choice rather than an invisible one — previously this was
-                    hidden whenever a source video existed while still shipping
-                    "lean-in" to the backend, so users had no way to see or control it.
-                    Default ("") means "don't dictate the movement", which is what keeps
-                    a video-backed hook eligible for Aleph's exact edit. */}
-                <div className="space-y-2">
-                  <p className="eyebrow">Motion style</p>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {/* Default / no override */}
-                    <button
-                      onClick={() => setMotionStyle("")}
-                      className={`rounded-xl border p-2.5 text-left transition-colors duration-200 ${!motionStyle ? "border-[color:var(--brand-indigo)] bg-[color:var(--indigo-8)]" : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"}`}
-                      data-testid="motion-default"
-                    >
-                      <span className={`block text-xs font-semibold ${!motionStyle ? "text-[color:var(--brand-indigo)]" : "text-foreground"}`}>
-                        Default {exactEditAvailable === true ? "— Match original" : "— Auto"}
-                      </span>
-                      <span className="text-xs leading-snug text-muted-foreground">
-                        {exactEditAvailable === true
-                          ? "Replicate the original hook's real movement exactly. Recommended — this is the only option that uses the exact-edit engine."
-                          : "Let AI pick the movement that best fits your photo."}
-                      </span>
-                    </button>
-
-                    {(motionStyles || []).map((m) => (
-                      <button
-                        key={m.key}
-                        /* Toggle: clicking the active card returns to Default, so a
-                           selection is never a one-way door. */
-                        onClick={() => setMotionStyle(motionStyle === m.key ? "" : m.key)}
-                        className={`rounded-xl border p-2.5 text-left transition-colors duration-200 ${motionStyle === m.key ? "border-[color:var(--brand-indigo)] bg-[color:var(--indigo-8)]" : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"}`}
-                        data-testid={`motion-${m.key}`}
-                      >
-                        <span className={`block text-xs font-semibold ${motionStyle === m.key ? "text-[color:var(--brand-indigo)]" : "text-foreground"}`}>{m.label}</span>
-                        {/* Rendered verbatim from the backend — this is the actual
-                            instruction the video model receives, capitalized for
-                            readability only. */}
-                        {m.motion && (
-                          <span className="text-xs leading-snug text-muted-foreground">
-                            {m.motion.charAt(0).toUpperCase() + m.motion.slice(1)}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
 
                 {/* Explicit tradeoff notice — only meaningful when a source video
                     exists, since that's the only case where an exact edit was

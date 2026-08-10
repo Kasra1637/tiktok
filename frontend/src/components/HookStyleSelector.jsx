@@ -15,11 +15,25 @@ import { Chip } from "./Chip";
  * - Guidelines shown to set expectations about allowed content
  * - Frontend filters obvious prompt-injection patterns before sending
  *
+ * Owns every control that steers the hook away from a literal replication of
+ * the source: hook energy, motion style, and freeform direction. They live
+ * together because they share one consequence — any of them turns off the
+ * exact-edit engine — so surfacing some prominently and burying others
+ * misrepresented their relative importance.
+ *
  * Props:
  *   hookCategory    — currently selected category key (string or "")
  *   onCategoryChange — (key: string) => void
  *   hookCustomPrompt — freeform prompt text (string)
  *   onCustomPromptChange — (text: string) => void
+ *   motionStyle     — currently selected motion key (string, "" = Default)
+ *   onMotionStyleChange — (key: string) => void
+ *   motionStyles    — [{key,label,summary,motion,overlaps}] from the backend,
+ *                     or null while loading. Never hardcoded here: the server
+ *                     is the single source of truth for both the copy and the
+ *                     prompt text so the two cannot diverge.
+ *   exactEditAvailable — true | false | null, from the backend. Only `true`
+ *                     means an exact edit is genuinely on the table.
  *   disabled        — disable interactions during generation
  */
 
@@ -92,11 +106,26 @@ export default function HookStyleSelector({
   onCategoryChange,
   hookCustomPrompt = "",
   onCustomPromptChange,
+  motionStyle = "",
+  onMotionStyleChange,
+  motionStyles = null,
+  exactEditAvailable = null,
   disabled = false,
 }) {
   const [expanded, setExpanded] = useState(false);
+  // Off by default: the exact prompt text is the ground truth but reads like a
+  // model instruction, so it's available on request rather than as the primary
+  // description.
+  const [showPromptText, setShowPromptText] = useState(false);
 
-  const hasSelection = !!(hookCategory || hookCustomPrompt.trim());
+  const selectedMotion = (motionStyles || []).find((m) => m.key === motionStyle) || null;
+  // A motion and a hook energy that describe the same effect layer two competing
+  // directives into one prompt. Surfaced rather than silently allowed.
+  const overlapsSelectedEnergy = !!(
+    selectedMotion && hookCategory && (selectedMotion.overlaps || []).includes(hookCategory)
+  );
+
+  const hasSelection = !!(hookCategory || hookCustomPrompt.trim() || motionStyle);
   const charCount = hookCustomPrompt.length;
   const isAtLimit = charCount >= CUSTOM_PROMPT_MAX;
   const isNearLimit = charCount >= CUSTOM_PROMPT_WARN;
@@ -132,7 +161,13 @@ export default function HookStyleSelector({
           <Sparkles className={`h-4 w-4 ${hasSelection ? "text-[color:var(--brand-indigo)]" : "text-muted-foreground"}`} />
           <span className="text-xs font-semibold">
             {hasSelection
-              ? `Hook style: ${HOOK_STYLE_CATEGORIES.find((c) => c.key === hookCategory)?.label || "Custom"}`
+              ? `Hook style: ${[
+                  HOOK_STYLE_CATEGORIES.find((c) => c.key === hookCategory)?.label,
+                  selectedMotion?.label,
+                  hookCustomPrompt.trim() ? "custom direction" : null,
+                ]
+                  .filter(Boolean)
+                  .join(" + ")}`
               : "Customize hook style (optional)"}
           </span>
         </span>
@@ -172,6 +207,110 @@ export default function HookStyleSelector({
               <p className="text-xs leading-snug text-muted-foreground italic">
                 {HOOK_STYLE_CATEGORIES.find((c) => c.key === hookCategory)?.description}
               </p>
+            )}
+          </div>
+
+          {/* Motion style */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Motion style
+              </p>
+              {/* The verbatim instruction stays one click away rather than being
+                  the default description — readable copy first, ground truth on
+                  demand. */}
+              <button
+                type="button"
+                onClick={() => setShowPromptText((v) => !v)}
+                disabled={disabled}
+                className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                data-testid="toggle-prompt-text"
+              >
+                {showPromptText ? "Hide exact instruction" : "Show exact instruction"}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              {/* Default / no override */}
+              <button
+                type="button"
+                onClick={() => onMotionStyleChange("")}
+                disabled={disabled}
+                className={`rounded-lg border p-2 text-left transition-colors duration-200 ${
+                  !motionStyle
+                    ? "border-[color:var(--brand-indigo)] bg-[color:var(--indigo-8)]"
+                    : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
+                } disabled:cursor-not-allowed disabled:opacity-50`}
+                data-testid="motion-default"
+              >
+                <span
+                  className={`block text-xs font-semibold ${
+                    !motionStyle ? "text-[color:var(--brand-indigo)]" : "text-foreground"
+                  }`}
+                >
+                  Default {exactEditAvailable === true ? "— Match original" : "— Let AI choose"}
+                </span>
+                <span className="text-xs leading-snug text-muted-foreground">
+                  {exactEditAvailable === true
+                    ? "Replicate the original hook's real movement exactly. The only option that uses the exact-edit engine."
+                    : "Let AI pick the movement that best fits your photo."}
+                </span>
+              </button>
+
+              {(motionStyles || []).map((m) => {
+                const active = motionStyle === m.key;
+                return (
+                  <button
+                    key={m.key}
+                    type="button"
+                    /* Toggle: clicking the active card returns to Default, so a
+                       selection is never a one-way door. */
+                    onClick={() => onMotionStyleChange(active ? "" : m.key)}
+                    disabled={disabled}
+                    className={`rounded-lg border p-2 text-left transition-colors duration-200 ${
+                      active
+                        ? "border-[color:var(--brand-indigo)] bg-[color:var(--indigo-8)]"
+                        : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
+                    } disabled:cursor-not-allowed disabled:opacity-50`}
+                    data-testid={`motion-${m.key}`}
+                  >
+                    <span
+                      className={`block text-xs font-semibold ${
+                        active ? "text-[color:var(--brand-indigo)]" : "text-foreground"
+                      }`}
+                    >
+                      {m.label}
+                    </span>
+                    <span className="text-xs leading-snug text-muted-foreground">{m.summary}</span>
+                    {showPromptText && m.motion && (
+                      <span className="mt-1 block border-t border-[color:var(--hairline)] pt-1 text-xs italic leading-snug text-muted-foreground/70">
+                        Sends: “{m.motion}”
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Overlap warning — both inputs describing the same effect */}
+            {overlapsSelectedEnergy && (
+              <div
+                className="flex items-start gap-1.5 rounded-lg bg-amber-500/5 px-2.5 py-1.5"
+                data-testid="motion-energy-overlap"
+              >
+                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-amber-500" />
+                <p className="text-xs leading-snug text-muted-foreground">
+                  <span className="font-medium text-amber-500">
+                    {selectedMotion.label}
+                  </span>{" "}
+                  and{" "}
+                  <span className="font-medium text-amber-500">
+                    {HOOK_STYLE_CATEGORIES.find((c) => c.key === hookCategory)?.label}
+                  </span>{" "}
+                  describe the same effect. Setting both sends two competing
+                  instructions for one moment — consider picking just one.
+                </p>
+              </div>
             )}
           </div>
 
@@ -233,6 +372,7 @@ export default function HookStyleSelector({
               onClick={() => {
                 onCategoryChange("");
                 onCustomPromptChange("");
+                onMotionStyleChange("");
               }}
               disabled={disabled}
               className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
