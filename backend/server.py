@@ -2209,7 +2209,7 @@ def _coerce_mechanics(mechanics) -> list:
     return [mechanics]
 
 
-def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = False) -> str:
+def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = False, v2v_motion_active: bool = False) -> str:
     """
     Build the hook-video prompt from a viral video's hook analysis.
 
@@ -2217,35 +2217,62 @@ def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = 
     template stores exactly the prompt that a fresh analysis would have produced.
     With H3's V2V motion transfer the video reference carries timing and camera
     work, while this text reinforces expressions and intent.
+
+    Args:
+        v2v_motion_active: When True, the reference video is actually being
+            delivered to the model (not dropped). The prompt emphasizes replicating
+            the exact physical movements from the video rather than interpreting
+            text descriptions.
     """
-    prompt = (
-        "Create a 5-second vertical video (9:16) starting from this exact first frame. "
-        "Recreate the EXACT hook mechanics that made the original viral video work:\n\n"
-        f"FACIAL EXPRESSION: {analysis.get('facial_expressions') or 'engaging expression'}\n"
-        f"BODY LANGUAGE & GESTURE: {analysis.get('body_language_gestures') or 'confident body language'}\n"
-        f"PACING & MOVEMENT: {analysis.get('pacing_cuts') or 'quick, attention-grabbing pacing'}\n"
-        f"HOOK SUMMARY: {analysis.get('hook_summary') or 'attention-grabbing opening'}\n\n"
-        "PACING IS CRITICAL — this must match the speed and energy of a viral TikTok hook:\n"
-        "- The action must start IMMEDIATELY from frame 1 — no slow build-up or pause at the start\n"
-        "- All movements should be FAST and snappy, matching the rapid pace of the original 2-3 second hook window\n"
-        "- Quick, punchy gestures — NOT slow or cinematic movements\n"
-        "- Immediate direct eye contact with the camera from the very first frame\n"
-        "- Energy level should be HIGH from the start — think 'scroll-stopper' urgency\n"
-        "- The body language tempo must match how fast the original creator moved\n"
-        "- Compress all the described movements into the first 2-3 seconds, not spread across 5\n\n"
-        "ADDITIONAL REQUIREMENTS:\n"
-        "- Perform the EXACT movements and expressions described above — these are proven to grab attention\n"
-        "- Maintain perfect face consistency with the first frame throughout\n"
-        "- Camera holds steady or has a subtle push-in matching the original's pacing\n"
-        "- End on a moment of anticipation (the viewer wants to know what happens next)"
-    )
+    if v2v_motion_active:
+        # V2V mode: the model receives the actual viral video — emphasize
+        # replicating its exact body mechanics rather than interpreting text.
+        prompt = (
+            "Create a 5-second vertical video (9:16). A reference video of the original viral hook "
+            "is provided — REPLICATE ITS EXACT BODY MOVEMENTS, hand gestures, head movements, "
+            "posture shifts, and physical timing frame-by-frame. The reference image shows the "
+            "character's face and appearance — use this identity but perform the EXACT same "
+            "physical movements as the person in the reference video.\n\n"
+            f"HOOK CONTEXT: {analysis.get('hook_summary') or 'attention-grabbing opening'}\n"
+            f"BODY MECHANICS TO MATCH: {analysis.get('body_language_gestures') or 'confident body language'}\n"
+            f"PACING TO MATCH: {analysis.get('pacing_cuts') or 'quick, attention-grabbing pacing'}\n\n"
+            "CRITICAL INSTRUCTIONS:\n"
+            "- Copy the reference video's movements EXACTLY — same speed, same timing, same gestures\n"
+            "- The character's face must match the reference image (identity transfer)\n"
+            "- Match the camera angle and framing from the reference video\n"
+            "- Match the energy level and tempo precisely — if the original is fast, be fast\n"
+            "- Replicate hand positions, arm movements, head tilts at the same timestamps\n"
+            "- The output should look like the same video but with a different person's face"
+        )
+    else:
+        prompt = (
+            "Create a 5-second vertical video (9:16) starting from this exact first frame. "
+            "Recreate the EXACT hook mechanics that made the original viral video work:\n\n"
+            f"FACIAL EXPRESSION: {analysis.get('facial_expressions') or 'engaging expression'}\n"
+            f"BODY LANGUAGE & GESTURE: {analysis.get('body_language_gestures') or 'confident body language'}\n"
+            f"PACING & MOVEMENT: {analysis.get('pacing_cuts') or 'quick, attention-grabbing pacing'}\n"
+            f"HOOK SUMMARY: {analysis.get('hook_summary') or 'attention-grabbing opening'}\n\n"
+            "PACING IS CRITICAL — this must match the speed and energy of a viral TikTok hook:\n"
+            "- The action must start IMMEDIATELY from frame 1 — no slow build-up or pause at the start\n"
+            "- All movements should be FAST and snappy, matching the rapid pace of the original 2-3 second hook window\n"
+            "- Quick, punchy gestures — NOT slow or cinematic movements\n"
+            "- Immediate direct eye contact with the camera from the very first frame\n"
+            "- Energy level should be HIGH from the start — think 'scroll-stopper' urgency\n"
+            "- The body language tempo must match how fast the original creator moved\n"
+            "- Compress all the described movements into the first 2-3 seconds, not spread across 5\n\n"
+            "ADDITIONAL REQUIREMENTS:\n"
+            "- Perform the EXACT movements and expressions described above — these are proven to grab attention\n"
+            "- Maintain perfect face consistency with the first frame throughout\n"
+            "- Camera holds steady or has a subtle push-in matching the original's pacing\n"
+            "- End on a moment of anticipation (the viewer wants to know what happens next)"
+        )
 
     mechanics = _coerce_mechanics(analysis.get("replicable_mechanics"))
     if mechanics:
         mechanics_str = "; ".join(str(m) for m in mechanics[:5])
         prompt += f"\n\nKEY MECHANICS TO REPLICATE: {mechanics_str}"
 
-    if has_reference_video:
+    if has_reference_video and not v2v_motion_active:
         prompt += (
             "\n\nNOTE: A reference video is provided for V2V motion transfer. "
             "Replicate its timing, camera movement, performance rhythm, and editing pace "
@@ -2788,9 +2815,22 @@ async def face_swap_generate_hook_video(
     if prompt is not None:
         pass  # already resolved from a saved template
     elif analysis:
+        # Determine if V2V motion transfer will be active for this generation.
+        # We need this now to build the appropriate prompt variant.
+        user_customized = bool(
+            (hook_category and hook_category.strip())
+            or (hook_custom_prompt and hook_custom_prompt.strip())
+        )
+        v2v_will_be_active = (
+            bool(reference_video_path)
+            and not user_customized
+            and not template
+        )
         # USE THE PROVEN HOOK STRUCTURE from the analyzed viral video.
         prompt = build_hook_prompt_from_analysis(
-            analysis, has_reference_video=bool(reference_video_path)
+            analysis,
+            has_reference_video=bool(reference_video_path),
+            v2v_motion_active=v2v_will_be_active,
         )
     else:
         # No video analysis available (manual upload) — analyze the IMAGE itself
@@ -2813,6 +2853,27 @@ async def face_swap_generate_hook_video(
     # toggle existed, whose cached text may still reference audio.
     prompt = apply_audio_directive(prompt, False)
 
+    # Use true V2V motion transfer (replicating the original video's exact body
+    # movements) when ALL of these hold:
+    #   1. An analyzed video exists (we have the hook analysis)
+    #   2. The original viral video is available locally for V2V reference
+    #   3. The user did NOT select a custom hook style or write a custom prompt
+    #      (those indicate intent to deviate from the original's movements)
+    #   4. This is NOT from a saved template (templates have their own prompt)
+    # In V2V mode the face-swap image is sent as an image reference (identity
+    # guide) instead of a hard first-frame lock, allowing both the face and
+    # the video motion reference to coexist in one MiniMax H3 request.
+    user_customized = bool(
+        (hook_category and hook_category.strip())
+        or (hook_custom_prompt and hook_custom_prompt.strip())
+    )
+    use_v2v = (
+        bool(analysis)
+        and bool(reference_video_path)
+        and not user_customized
+        and not template
+    )
+
     try:
         result = await generate_video(
             prompt=prompt,
@@ -2820,6 +2881,7 @@ async def face_swap_generate_hook_video(
             duration=5,
             generate_audio=False,  # Always silent — creator adds sound in TikTok editor
             reference_video_url=public_media_url(reference_video_path),  # V2V motion transfer
+            prefer_v2v_motion=use_v2v,
         )
     except Exception as e:
         logger.error(f"Hook video generation failed: {e}")

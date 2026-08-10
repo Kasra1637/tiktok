@@ -681,6 +681,7 @@ async def generate_video(
     reference_video_url: str = None,
     reference_audio_url: str = None,
     input_references: list = None,
+    prefer_v2v_motion: bool = False,
 ) -> dict:
     """Submit a video generation job to OpenRouter using MiniMax H3.
 
@@ -693,7 +694,8 @@ async def generate_video(
 
     Args:
         prompt: Text prompt describing the video to generate.
-        reference_image_path: Face-swapped image used as first_frame (identity anchor).
+        reference_image_path: Face-swapped image used as first_frame (identity anchor)
+                             OR as an image reference (when prefer_v2v_motion=True).
         duration: Target duration in seconds (1-15).
         model: Model key (only "minimax-h3" supported now).
         generate_audio: Whether to generate native audio. Defaults to True since H3
@@ -707,6 +709,13 @@ async def generate_video(
         reference_audio_url: Optional URL to an audio file to use as voice/music reference.
         input_references: Optional pre-built list of reference objects to pass directly.
                          Each item should follow OpenRouter's input_references schema.
+        prefer_v2v_motion: When True AND a reference_video_url is provided, the face
+                          image is sent as an image reference inside input_references
+                          (instead of frame_images) so both can coexist in one request.
+                          This enables true V2V motion transfer at the cost of slightly
+                          less rigid first-frame identity lock. When False (default),
+                          the face image is a hard first-frame anchor and V2V references
+                          are dropped due to the MiniMax API constraint.
     """
     # Always use MiniMax H3
     model_id = VIDEO_MODELS[DEFAULT_VIDEO_MODEL]["id"]
@@ -727,8 +736,14 @@ async def generate_video(
     if generate_audio:
         payload["generate_audio"] = True
 
-    # First frame: the face-swapped image anchors identity throughout the video
-    if reference_image_path and reference_image_path.exists():
+    # Determine whether to use V2V motion mode: face image goes into
+    # input_references (as image ref) so it can coexist with the video ref,
+    # enabling true motion transfer from the original viral video.
+    use_v2v_mode = prefer_v2v_motion and reference_video_url and reference_image_path and reference_image_path.exists()
+
+    # First frame: the face-swapped image anchors identity throughout the video.
+    # In V2V mode, we skip frame_images and put the image in input_references instead.
+    if reference_image_path and reference_image_path.exists() and not use_v2v_mode:
         b64 = image_to_base64(reference_image_path)
         mime = "image/png"
         payload["frame_images"] = [
@@ -742,6 +757,16 @@ async def generate_video(
     # Omni-reference inputs: H3 can accept images, videos, and audio as references
     # to guide subject identity, motion/timing, and sound in one generation.
     refs = list(input_references) if input_references else []
+
+    # V2V motion mode: put the face-swap image as an image reference so H3 uses
+    # it for identity guidance while also accepting the video motion reference.
+    if use_v2v_mode:
+        b64 = image_to_base64(reference_image_path)
+        mime = "image/png"
+        refs.insert(0, {
+            "type": "image_url",
+            "image_url": {"url": f"data:{mime};base64,{b64}"},
+        })
 
     # V2V motion transfer: feed the original viral video so H3 replicates its
     # timing, camera language, performance rhythm, and editing pace. Must be a
@@ -762,10 +787,10 @@ async def generate_video(
 
     # MiniMax Hailuo rejects any request that combines frame_images with
     # input_references ("do not support frame_images and input_references in
-    # the same [request]", HTTP 400). frame_images anchors the face-swapped
-    # image as the video's first frame — that identity anchor matters more
-    # than the V2V motion/audio references, so when both would apply, drop
-    # the references rather than let the whole request fail.
+    # the same [request]", HTTP 400). When NOT in V2V mode, frame_images
+    # anchors the face-swapped image as the video's first frame — that identity
+    # anchor matters more than references, so drop them. In V2V mode this
+    # conflict doesn't arise because the image is already in input_references.
     if payload.get("frame_images") and refs:
         logger.warning(
             "MiniMax H3 does not support frame_images + input_references together — "
@@ -780,7 +805,7 @@ async def generate_video(
     logger.info(
         f"Submitting video generation (MiniMax H3): duration={payload['duration']}s, "
         f"resolution={payload['resolution']}, has_frame_image={bool(payload.get('frame_images'))}, "
-        f"audio={generate_audio}, num_references={len(refs)}, "
+        f"v2v_mode={use_v2v_mode}, audio={generate_audio}, num_references={len(refs)}, "
         f"has_v2v_motion={bool(reference_video_url) and bool(refs)}"
     )
 
