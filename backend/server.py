@@ -2157,7 +2157,7 @@ HOOK_VIDEO_PROMPT_TEMPLATE = (
     "- The viewer should feel startled or hooked within the first second "
     "- Think 'scroll-stopper' speed — if someone is swiping fast, this catches their eye instantly "
     "Additional requirements: "
-    "- Maintain perfect face consistency with the first frame throughout "
+    "- Maintain perfect character consistency with the first frame throughout "
     "- Camera holds steady or has a very subtle push-in for tension "
     "- End on a moment that makes the viewer want to see what happens next"
 )
@@ -2247,14 +2247,19 @@ def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = 
     if v2v_motion_active:
         # V2V mode: Seedance 2.5 receives the viral video as motion reference
         # AND the face-swapped image as first_frame (identity anchor).
-        # Keep the prompt MINIMAL — let the video reference be the sole motion
-        # authority. Text descriptions of movement compete with video pixels.
+        # Keep the prompt MINIMAL and framed as creative video production.
+        #
+        # IMPORTANT: Seedance moderation (error 1026) flags prompts that sound
+        # like face-swap/deepfake instructions ("replace the face", "swap identity",
+        # etc.). The fix is cinematic production framing — describe what the camera
+        # should capture, not what faces to change. The first_frame image already
+        # carries the character's appearance; the prompt just directs motion.
         prompt = (
-            "Replicate the exact movement, gestures, body language, camera angle, "
-            "and pacing from the reference video. The person's identity and appearance "
-            "comes from the first frame image — preserve that face throughout. "
-            "Match frame-by-frame: same timing, same energy, same physical performance. "
-            "Do NOT add, remove, or alter any movements from the reference video."
+            "Create a 4-second vertical video (9:16). The character from the first frame "
+            "performs the exact choreography shown in the reference video — same body movements, "
+            "same hand gestures, same head movements, same timing, same camera angle, same energy. "
+            "Match the reference video frame-by-frame: identical pacing, identical physical "
+            "performance, identical framing. Cinematic quality, natural lighting, sharp focus."
         )
     else:
         prompt = (
@@ -2274,7 +2279,7 @@ def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = 
             "- Compress all the described movements into the first 2 seconds\n\n"
             "ADDITIONAL REQUIREMENTS:\n"
             "- Perform the EXACT movements and expressions described above — these are proven to grab attention\n"
-            "- Maintain perfect face consistency with the first frame throughout\n"
+            "- Maintain perfect character consistency with the first frame throughout\n"
             "- Camera holds steady or has a subtle push-in matching the original's pacing\n"
             "- End on a moment of anticipation (the viewer wants to know what happens next)"
         )
