@@ -76,24 +76,12 @@ def _build_face_swap_prompt(customization_prompt: str = "") -> str:
         )
 
     return (
-        "EDIT IMAGE 2: Replace the person's face with the face from IMAGE 1. "
-        "The output must look like THE PERSON IN IMAGE 1 placed into the scene from IMAGE 2.\n\n"
-        "FROM IMAGE 1 — the output person MUST look like this person:\n"
-        "- Same face shape, same eyes, same nose, same lips, same skin tone\n"
-        "- Same hairstyle, hair color, hair length\n"
-        "- The result should be immediately recognizable as the person in image 1\n\n"
-        "FROM IMAGE 2 — keep these EXACTLY unchanged:\n"
-        "- FRAMING/ZOOM: same crop, same distance from camera — do NOT zoom out or change framing\n"
-        "- CAMERA ANGLE: same exact camera angle and perspective — do NOT change the viewpoint\n"
-        "- HEAD ANGLE: same exact tilt, rotation, and direction the head is facing — match precisely\n"
-        "- MOUTH: match the EXACT degree of opening — if slightly open, be slightly open, NOT wider\n"
-        "- EXPRESSION: same emotion intensity — if surprised, be surprised to the same degree\n"
-        "- GAZE: eyes looking the same direction as in image 2\n"
-        "- CLOTHING: the person must wear the EXACT same outfit shown in image 2 — same garment, same color, same print/pattern. Do NOT invent different clothing\n"
-        "- BODY POSE: same position — if hands/arms are visible in image 2, show them in the same position; if NOT visible, do NOT add them\n"
-        "- BACKGROUND: same scene, same lighting, same camera angle\n\n"
-        "REMOVE all text overlays, captions, and watermarks from the output.\n"
-        "SKIN TONE: Use image 1's natural skin tone on the entire body (neck, arms, hands)."
+        "Replace the face in IMAGE 2 with the face from IMAGE 1. "
+        "OUTPUT MUST BE A PIXEL-PERFECT COPY OF IMAGE 2 with only the face changed. "
+        "Do NOT change ANYTHING else about image 2: same head angle, same mouth openness, "
+        "same body position, same arms visibility, same framing, same zoom, same background. "
+        "If arms are not visible in image 2, they must not appear in the output. "
+        "The only difference between image 2 and the output should be the face identity."
         f"{customization_instruction}"
     )
 
