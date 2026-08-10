@@ -81,7 +81,8 @@ def _build_face_swap_prompt(customization_prompt: str = "") -> str:
         "Do NOT change ANYTHING else about image 2: same head angle, same mouth openness, "
         "same body position, same arms visibility, same framing, same zoom, same background. "
         "If arms are not visible in image 2, they must not appear in the output. "
-        "The only difference between image 2 and the output should be the face identity."
+        "The only difference between image 2 and the output should be the face identity. "
+        "Do NOT include any text, captions, watermarks, emojis, or overlays in the output image."
         f"{customization_instruction}"
     )
 
