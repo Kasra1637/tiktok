@@ -22,6 +22,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 import pipeline
 import viral_detection
+import storage_service
 from ai_service import (
     analyze_hook, generate_customized_preview, generate_face_swap, generate_video_prompt,
     generate_video, poll_video_job, analyze_brand_from_text, generate_remix_script,
@@ -474,6 +475,22 @@ async def init_db():
                 created_at TEXT,
                 updated_at TEXT
             );
+
+            -- Persistent video storage registry. Each row tracks a generated
+            -- video uploaded to Cloudflare R2 so it survives container redeploys
+            -- and remains accessible in the user's history until they delete it.
+            CREATE TABLE IF NOT EXISTS video_assets (
+                job_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL DEFAULT 'anonymous',
+                r2_url TEXT NOT NULL,
+                phase TEXT DEFAULT 'hook',
+                source_video_id TEXT,
+                source_hook_template_id TEXT,
+                duration INTEGER,
+                created_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_video_assets_user
+                ON video_assets (user_id, created_at);
         """)
         await conn.commit()
 
@@ -3239,9 +3256,29 @@ async def face_swap_video_status(job_id: str, user_id: str = Depends(get_current
                 response["video_urls"] = video_urls
                 return response
 
-        # Serve from our own stable URL
+        # Upload to R2 for permanent storage (survives redeploys).
+        # This is non-blocking for the user — if R2 fails, the local URL
+        # still works for this container's lifetime.
+        r2_url = storage_service.upload_video(user_id, job_id, local_video_path)
+        if r2_url:
+            await _execute(
+                "UPDATE face_swap_video_jobs SET video_url = ? WHERE id = ?",
+                (r2_url, job_id),
+            )
+            # Also persist in the video_assets table for user history
+            await _execute(
+                """INSERT OR IGNORE INTO video_assets
+                   (job_id, user_id, r2_url, phase, created_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (job_id, user_id, r2_url, "hook", now_iso()),
+            )
+
+        # Serve from our own stable URL (local cache for this container)
         response["video_url"] = f"/api/media/videos/{job_id}.mp4"
         response["video_urls"] = [f"/api/media/videos/{job_id}.mp4"]
+        # Include R2 URL so frontend can use it as a permanent link
+        if r2_url:
+            response["r2_url"] = r2_url
 
     if status == "failed":
         response["error"] = result.get("error", "Video generation failed.")
@@ -3250,6 +3287,58 @@ async def face_swap_video_status(job_id: str, user_id: str = Depends(get_current
         response["usage"] = result["usage"]
 
     return response
+
+
+# ---------------------------------------------------------------------------
+# Video Assets — persistent history of generated videos stored in R2.
+# Users can list their videos, get a permanent URL, or delete them.
+# ---------------------------------------------------------------------------
+@api_router.get("/video-assets")
+async def list_video_assets(user_id: str = Depends(get_current_user_id)):
+    """List all persisted videos for the current user, newest first."""
+    cursor = await _execute(
+        """SELECT job_id, r2_url, phase, source_video_id,
+                  source_hook_template_id, duration, created_at
+           FROM video_assets
+           WHERE user_id = ?
+           ORDER BY created_at DESC
+           LIMIT 100""",
+        (user_id,),
+    )
+    rows = await cursor.fetchall()
+    cols = [d[0] for d in cursor.description]
+    return [row_to_dict(row, cols) for row in rows]
+
+
+@api_router.delete("/video-assets/{job_id}")
+async def delete_video_asset(job_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Delete a persisted video — removes it from R2 and the database.
+    The video is gone permanently. Only the owning user can delete.
+    """
+    asset = await _fetch_one(
+        "SELECT * FROM video_assets WHERE job_id = ? AND user_id = ?",
+        (job_id, user_id),
+    )
+    if not asset:
+        raise HTTPException(status_code=404, detail="Video not found or you don't own it.")
+
+    # Delete from R2
+    storage_service.delete_video(user_id, job_id)
+
+    # Delete from database
+    await _execute("DELETE FROM video_assets WHERE job_id = ? AND user_id = ?", (job_id, user_id))
+
+    # Also clean up the video job record's URL (it's now gone)
+    await _execute(
+        "UPDATE face_swap_video_jobs SET video_url = NULL WHERE id = ?", (job_id,)
+    )
+
+    # Remove local cache if it exists
+    local_path = pipeline.STORAGE_DIR / "videos" / f"{job_id}.mp4"
+    local_path.unlink(missing_ok=True)
+
+    return {"status": "deleted", "job_id": job_id}
 
 
 # ---------------------------------------------------------------------------
