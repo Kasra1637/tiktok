@@ -1816,6 +1816,24 @@ async def get_video_analysis(video_id: str, user_id: str = Depends(get_current_u
     return await get_latest_analysis_or_404(video_id)
 
 
+@api_router.get("/hook-motion-styles")
+async def get_hook_motion_styles():
+    """
+    The selectable motion styles, including the exact prompt text each one
+    sends to the video model.
+
+    Exists so the UI can render the real instruction instead of a separately
+    maintained paraphrase. Previously the card descriptions lived in
+    FaceSwap.jsx and the prompt fragments lived in HOOK_MOTION_STYLES, saying
+    the same thing in different words with nothing keeping them in sync — so a
+    creator could read one description while the model received another.
+
+    Unauthenticated and static: this is presentation metadata with no user
+    data, and it changes only when the motion definitions themselves change.
+    """
+    return {"styles": HOOK_MOTION_STYLES}
+
+
 @api_router.get("/videos/{video_id}/hook-engine")
 async def get_hook_engine_availability(video_id: str, user_id: str = Depends(get_current_user_id)):
     """
@@ -2213,7 +2231,7 @@ async def list_face_swap_jobs(user_id: str = Depends(get_current_user_id)):
 # ---------------------------------------------------------------------------
 
 HOOK_VIDEO_PROMPT_TEMPLATE = (
-    "Create a 5-second vertical video (9:16) starting from this exact first frame. "
+    "Create a 3-second vertical video (9:16) starting from this exact first frame. "
     "The character should perform a FAST, punchy, attention-grabbing movement that creates "
     "curiosity: {motion_type}. "
     "PACING IS CRITICAL — match the energy of a viral TikTok hook (first 2-3 seconds): "
@@ -2269,25 +2287,50 @@ def apply_audio_directive(prompt: str, include_audio: bool) -> str:
     """
     return prompt + (AUDIO_ON_INSTRUCTION if include_audio else AUDIO_OFF_INSTRUCTION) + NO_TEXT_OVERLAY_INSTRUCTION
 
-HOOK_MOTION_TYPES = [
-    "a FAST confident lean-in toward camera with a knowing expression, snapping into position within the first second — as if about to reveal a secret",
-    "a QUICK dramatic turn from profile to face-on, making immediate eye contact with the camera — fast snap, not a slow rotation",
-    "a RAPID attention-grabbing gesture (pointing, hand raise, or prop reveal) that happens instantly — implies 'watch this' with urgency",
-    "a FAST head tilt and raised eyebrow with a half-smile, snapping into the intrigue pose within the first second",
-    "a SUDDEN stop-motion-style pose change that catches the eye instantly, then holds with intensity",
+# Canonical motion-style definitions — the single source of truth for both the
+# prompt text sent to the model and the description shown in the UI.
+#
+# These were previously two independent lists: the prompt fragments here and a
+# separate hand-written set of card descriptions in FaceSwap.jsx. They described
+# the same five motions in different words, so the UI could tell a creator one
+# thing while the model was told another, with nothing keeping them aligned.
+# The UI now renders `motion` verbatim (see GET /hook-motion-styles), so what a
+# creator reads on the card is literally what gets sent.
+HOOK_MOTION_STYLES = [
+    {
+        "key": "lean-in",
+        "label": "Lean In",
+        "motion": "a FAST confident lean-in toward camera with a knowing expression, snapping into position within the first second — as if about to reveal a secret",
+    },
+    {
+        "key": "turn",
+        "label": "Dramatic Turn",
+        "motion": "a QUICK dramatic turn from profile to face-on, making immediate eye contact with the camera — fast snap, not a slow rotation",
+    },
+    {
+        "key": "gesture",
+        "label": "Gesture",
+        "motion": "a RAPID attention-grabbing gesture (pointing, hand raise, or prop reveal) that happens instantly — implies 'watch this' with urgency",
+    },
+    {
+        "key": "intrigue",
+        "label": "Intrigue",
+        "motion": "a FAST head tilt and raised eyebrow with a half-smile, snapping into the intrigue pose within the first second",
+    },
+    {
+        "key": "stop-motion",
+        "label": "Stop Motion",
+        "motion": "a SUDDEN stop-motion-style pose change that catches the eye instantly, then holds with intensity",
+    },
 ]
 
-# Maps the frontend's motion-style keys onto HOOK_MOTION_TYPES indices. Shared
-# by build_hook_prompt_from_motion_style() (base prompt when nothing else is
-# available) and apply_motion_style_directive() (layered onto any prompt when
-# the creator explicitly picks a motion), so both paths stay in sync.
-MOTION_STYLE_INDEX = {
-    "lean-in": 0,
-    "turn": 1,
-    "gesture": 2,
-    "intrigue": 3,
-    "stop-motion": 4,
-}
+# Derived views over HOOK_MOTION_STYLES so there is exactly one place to edit a
+# motion. HOOK_MOTION_TYPES preserves the original positional list used by
+# HOOK_VIDEO_PROMPT_TEMPLATE; MOTION_STYLE_INDEX maps the frontend's keys onto
+# it for build_hook_prompt_from_motion_style() and
+# apply_motion_style_directive().
+HOOK_MOTION_TYPES = [m["motion"] for m in HOOK_MOTION_STYLES]
+MOTION_STYLE_INDEX = {m["key"]: i for i, m in enumerate(HOOK_MOTION_STYLES)}
 
 
 def _coerce_mechanics(mechanics) -> list:
@@ -2401,7 +2444,7 @@ def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = 
 def build_hook_prompt_from_image_analysis(image_analysis: dict) -> str:
     """Build the hook-video prompt when only a single still image was analyzed."""
     prompt = (
-        "Create a 5-second vertical video (9:16) starting from this exact first frame. "
+        "Create a 3-second vertical video (9:16) starting from this exact first frame. "
         "Animate from this starting pose using these movement cues:\n\n"
         f"FACIAL EXPRESSION: {image_analysis.get('facial_expressions') or 'engaging expression'}\n"
         f"BODY LANGUAGE & MOVEMENT: {image_analysis.get('body_language_gestures') or 'confident movement'}\n"

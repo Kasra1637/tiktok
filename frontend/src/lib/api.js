@@ -64,6 +64,10 @@ export const api = {
   // and side-effect free; the caller ANDs it with its own style inputs.
   getHookEngine: (videoId) =>
     client.get(`/videos/${videoId}/hook-engine`).then((r) => r.data),
+  // Motion styles + the exact prompt text each one sends, so the UI can show
+  // the real instruction rather than a separately maintained paraphrase.
+  getHookMotionStyles: () =>
+    client.get("/hook-motion-styles").then((r) => r.data),
   getHistory: () => client.get("/history").then((r) => r.data),
   deleteVideo: (videoId) => client.delete(`/videos/${videoId}`).then((r) => r.data),
   getRemixChat: (customizationId) =>

@@ -159,6 +159,12 @@ export default function FaceSwap() {
   // at request time and silently route to the generative engine. Reporting the
   // real value after the fact is the only way the UI can never overclaim.
   const [actualEngine, setActualEngine] = useState(null);
+  // Motion styles come from the backend so each card shows the exact prompt
+  // text that will be sent. Falls back to labels only (no description) if the
+  // fetch fails — showing a hardcoded description here is what allowed the UI
+  // and the prompt to drift apart in the first place, so we'd rather show
+  // nothing than something we can't guarantee.
+  const [motionStyles, setMotionStyles] = useState(null);
   // Hook videos are muted/silent by default. TikTok creators normally attach
   // a trending sound or native text-to-speech in TikTok's own editor after
   // exporting — AI-generated audio can't be posted as a "trending sound" and
@@ -213,6 +219,14 @@ export default function FaceSwap() {
   // Load brand profile
   useEffect(() => {
     api.getActiveBrand().then(setBrandProfile).catch(() => setBrandProfile(null));
+  }, []);
+
+  // Load the canonical motion styles (key, label, and the exact prompt text).
+  useEffect(() => {
+    api
+      .getHookMotionStyles()
+      .then((d) => setMotionStyles(Array.isArray(d?.styles) ? d.styles : []))
+      .catch(() => setMotionStyles([]));
   }, []);
 
   // Ask the backend whether the exact-edit path is actually available for this
@@ -1105,13 +1119,7 @@ export default function FaceSwap() {
                       </span>
                     </button>
 
-                    {[
-                      { key: "lean-in", label: "Lean In", desc: "Move toward camera like you're about to share a secret — builds instant curiosity" },
-                      { key: "turn", label: "Dramatic Turn", desc: "Start from the side, then turn to face the viewer — creates a reveal moment" },
-                      { key: "gesture", label: "Gesture", desc: "Point, raise hand, or reveal something — signals 'watch this' to stop the scroll" },
-                      { key: "intrigue", label: "Intrigue", desc: "Subtle head tilt + raised eyebrow — makes viewers think 'what do they know?'" },
-                      { key: "stop-motion", label: "Stop Motion", desc: "Sudden freeze-frame pose snap — eye-catching pattern interrupt that holds attention" },
-                    ].map((m) => (
+                    {(motionStyles || []).map((m) => (
                       <button
                         key={m.key}
                         /* Toggle: clicking the active card returns to Default, so a
@@ -1121,7 +1129,14 @@ export default function FaceSwap() {
                         data-testid={`motion-${m.key}`}
                       >
                         <span className={`block text-xs font-semibold ${motionStyle === m.key ? "text-[color:var(--brand-indigo)]" : "text-foreground"}`}>{m.label}</span>
-                        <span className="text-xs leading-snug text-muted-foreground">{m.desc}</span>
+                        {/* Rendered verbatim from the backend — this is the actual
+                            instruction the video model receives, capitalized for
+                            readability only. */}
+                        {m.motion && (
+                          <span className="text-xs leading-snug text-muted-foreground">
+                            {m.motion.charAt(0).toUpperCase() + m.motion.slice(1)}
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
