@@ -137,12 +137,23 @@ class _LibsqlAsyncWrapper:
     async def executescript(self, sql):
         self._conn.executescript(sql)
         self._conn.commit()
+        if hasattr(self._conn, "sync"):
+            try:
+                self._conn.sync()
+            except Exception as e:
+                logger.warning(f"Turso sync after executescript failed (local replica is safe): {e}")
 
     async def commit(self):
         self._conn.commit()
-        # Sync local embedded replica to/from Turso cloud
+        # Sync local embedded replica to/from Turso cloud.
+        # Network hiccups during sync must not crash the caller — unsynced
+        # writes are still durable in the local embedded replica and will be
+        # pushed on the next successful sync.
         if hasattr(self._conn, "sync"):
-            self._conn.sync()
+            try:
+                self._conn.sync()
+            except Exception as e:
+                logger.warning(f"Turso sync failed (writes are safe in local replica): {e}")
 
     async def close(self):
         pass  # handled by get_db's finally block
@@ -4184,7 +4195,26 @@ async def debug_apify_test():
 # ---------------------------------------------------------------------------
 @app.on_event("startup")
 async def on_startup():
-    await init_db()
+    # Retry init_db up to 3 times — Turso or network hiccups during a cold
+    # deploy must not permanently kill the container (uvicorn exits with code 3
+    # if this handler raises, and Render marks the deploy as failed).
+    last_error: Optional[Exception] = None
+    for attempt in range(1, 4):
+        try:
+            await init_db()
+            break
+        except Exception as e:
+            last_error = e
+            logger.error(f"init_db attempt {attempt}/3 failed: {e}")
+            if attempt < 3:
+                await asyncio.sleep(2 * attempt)
+    else:
+        # All retries exhausted — log but do NOT re-raise. The app can still
+        # serve non-DB requests, and the next inbound request will trigger
+        # lazy table creation via get_db's fallback path.
+        logger.critical(
+            f"init_db failed after 3 attempts, starting anyway: {last_error}"
+        )
     if not os.environ.get("OPENROUTER_API_KEY"):
         logger.warning(
             "OPENROUTER_API_KEY is not set. The app will run, but AI features "
