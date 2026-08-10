@@ -56,7 +56,7 @@ logger = logging.getLogger(__name__)
 NICHE_CACHE_TTL = timedelta(hours=6)
 TRENDING_CACHE_TTL = timedelta(hours=2)
 FRAME_COUNT = 8
-HOOK_DURATION_SECONDS = 5.0
+HOOK_DURATION_SECONDS = 4.0
 SEARCH_QUERY_MAX_LENGTH = 100
 BRAND_URL_TEXT_MAX_CHARS = 8000
 
@@ -2138,7 +2138,7 @@ async def list_face_swap_jobs(user_id: str = Depends(get_current_user_id)):
 # Phase 2a: HOOK VIDEO (5s, silent, movement-focused)
 #   Generates a short attention-grabbing clip with pure visual motion —
 #   no voice, just character movement to spark curiosity. This is the
-#   "scroll-stopper" that TikTok's algorithm tests in the first 2-3 seconds.
+#   "scroll-stopper" that TikTok's algorithm tests in the first 2-4 seconds.
 #
 # Phase 2b: EXTEND VIDEO (optional continuation)
 #   After the user approves the hook, generates a longer continuation with
@@ -2150,7 +2150,7 @@ HOOK_VIDEO_PROMPT_TEMPLATE = (
     "Create a 5-second vertical video (9:16) starting from this exact first frame. "
     "The character should perform a FAST, punchy, attention-grabbing movement that creates "
     "curiosity: {motion_type}. "
-    "PACING IS CRITICAL — match the energy of a viral TikTok hook (first 2-3 seconds): "
+    "PACING IS CRITICAL — match the energy of a viral TikTok hook (first 2-4 seconds): "
     "- The movement must happen QUICKLY — within the first 1-2 seconds, not gradually "
     "- Fast, snappy transitions — NOT slow or cinematic "
     "- Immediate eye contact and direct energy toward the camera from the very first frame "
@@ -2305,7 +2305,7 @@ def build_hook_prompt_from_image_analysis(image_analysis: dict) -> str:
         "- All movements should be FAST and snappy, matching a real creator's rapid energy\n"
         "- Quick, punchy gestures — NOT slow or cinematic\n"
         "- Immediate direct eye contact with the camera\n"
-        "- Compress all the action into the first 2-3 seconds\n"
+        "- Compress all the action into the first 2-4 seconds\n"
         "- Energy level HIGH from the very start — scroll-stopper urgency\n\n"
         "ADDITIONAL REQUIREMENTS:\n"
         "- Animate naturally from the starting pose shown in the first frame\n"
@@ -2893,7 +2893,7 @@ async def face_swap_generate_hook_video(
     # trimming fails.
     v2v_video_path = reference_video_path
     if use_v2v and reference_video_path:
-        trimmed = await pipeline.trim_video_to_hook(reference_video_path, duration=5.0)
+        trimmed = await pipeline.trim_video_to_hook(reference_video_path, duration=4.0)
         if trimmed:
             v2v_video_path = trimmed
 
@@ -2901,7 +2901,7 @@ async def face_swap_generate_hook_video(
         result = await generate_video(
             prompt=prompt,
             reference_image_path=image_path,
-            duration=5,
+            duration=4,
             generate_audio=False,  # Always silent — creator adds sound in TikTok editor
             reference_video_url=public_media_url(v2v_video_path) if use_v2v else None,
             prefer_v2v_motion=use_v2v,
@@ -2935,7 +2935,7 @@ async def face_swap_generate_hook_video(
         "status": "pending",
         "polling_url": polling_url,
         "image_id": image_id,
-        "duration": 5,
+        "duration": 4,
         "phase": "hook",
         "motion_style": motion_style.strip() or "lean-in",
         "model": "seedance-2.5",
