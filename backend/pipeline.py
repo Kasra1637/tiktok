@@ -28,6 +28,11 @@ logger = logging.getLogger(__name__)
 MODAL_FRAME_EXTRACTOR_URL = os.environ.get("MODAL_FRAME_EXTRACTOR_URL", "").strip()
 MODAL_SHARED_SECRET = os.environ.get("MODAL_SHARED_SECRET", "").strip()
 
+
+class ModalFrameDownloadError(RuntimeError):
+    """The Modal worker could not obtain the TikTok source video."""
+
+
 STORAGE_DIR = Path(__file__).parent / "storage"
 VIDEOS_DIR = STORAGE_DIR / "videos"
 FRAMES_DIR = STORAGE_DIR / "frames"
@@ -206,7 +211,13 @@ async def download_and_extract_via_modal(
             },
         )
         if resp.status_code >= 400:
-            raise RuntimeError(f"Modal frame extraction failed (HTTP {resp.status_code}): {resp.text[:400]}")
+            message = f"Modal frame extraction failed (HTTP {resp.status_code}): {resp.text[:400]}"
+            # The worker returns this specific 502 only after both its direct
+            # CDN request and TikTok yt-dlp request fail. Other 502s can be
+            # gateway/provider failures and must remain terminal.
+            if resp.status_code == 502 and "Video download failed" in resp.text:
+                raise ModalFrameDownloadError(message)
+            raise RuntimeError(message)
         data = resp.json()
 
     video_bytes = base64.b64decode(data["video_b64"])

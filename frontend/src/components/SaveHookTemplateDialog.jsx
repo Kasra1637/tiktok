@@ -24,8 +24,10 @@ import { HOOK_TEMPLATE_CATEGORIES, inferHookTemplateCategory } from "../lib/hook
  */
 export function SaveHookTemplateDialog({ open, onOpenChange, videoId, analysis, video, onSaved }) {
   const [name, setName] = useState("");
-  const [category, setCategory] = useState("other");
+  const [category, setCategory] = useState("");
   const [notes, setNotes] = useState("");
+  const suggestedCategory = inferHookTemplateCategory(analysis);
+  const selectedCategory = category || suggestedCategory;
   const [saving, setSaving] = useState(false);
   const wasOpenRef = useRef(false);
 
@@ -34,6 +36,7 @@ export function SaveHookTemplateDialog({ open, onOpenChange, videoId, analysis, 
   useEffect(() => {
     if (!open) {
       wasOpenRef.current = false;
+      setCategory("");
       return;
     }
     if (wasOpenRef.current) return;
@@ -45,17 +48,25 @@ export function SaveHookTemplateDialog({ open, onOpenChange, videoId, analysis, 
     setNotes("");
   }, [open, analysis]);
 
+  const handleOpenChange = (nextOpen) => {
+    if (!nextOpen) {
+      wasOpenRef.current = false;
+      setCategory("");
+    }
+    onOpenChange(nextOpen);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
       const saved = await api.createBookmark({
         video_id: videoId,
         name: name.trim(),
-        category,
+        category: selectedCategory,
         notes: notes.trim(),
       });
       toast.success(`Bookmarked "${saved.name}" — find it in your history.`);
-      onOpenChange(false);
+      handleOpenChange(false);
       onSaved?.(saved);
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -65,7 +76,7 @@ export function SaveHookTemplateDialog({ open, onOpenChange, videoId, analysis, 
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md" data-testid="bookmark-hook-dialog">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5">
@@ -103,7 +114,7 @@ export function SaveHookTemplateDialog({ open, onOpenChange, videoId, analysis, 
               {HOOK_TEMPLATE_CATEGORIES.map((c) => (
                 <Chip
                   key={c.key}
-                  active={category === c.key}
+                  active={selectedCategory === c.key}
                   onClick={() => setCategory(c.key)}
                   testId={`bookmark-category-${c.key}`}
                 >
@@ -112,7 +123,7 @@ export function SaveHookTemplateDialog({ open, onOpenChange, videoId, analysis, 
               ))}
             </div>
             <p className="text-xs leading-snug text-muted-foreground" data-testid="category-description">
-              {HOOK_TEMPLATE_CATEGORIES.find((c) => c.key === category)?.description}
+              {HOOK_TEMPLATE_CATEGORIES.find((c) => c.key === selectedCategory)?.description}
             </p>
           </div>
 
@@ -146,7 +157,7 @@ export function SaveHookTemplateDialog({ open, onOpenChange, videoId, analysis, 
         <DialogFooter>
           <Button
             variant="ghost"
-            onClick={() => onOpenChange(false)}
+            onClick={() => handleOpenChange(false)}
             disabled={saving}
             data-testid="bookmark-cancel-button"
           >

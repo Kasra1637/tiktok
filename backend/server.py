@@ -1563,6 +1563,7 @@ async def ingest_video(payload: IngestVideoRequest, user_id: str = Depends(get_c
         meta = {k: curated.get(k) for k in [
             "video_platform_id", "creator", "creator_display", "title",
             "view_count", "like_count", "comment_count", "duration", "thumbnail_url",
+            "direct_video_url",
         ]}
         niche = curated.get("niche") or payload.niche
     else:
@@ -1635,14 +1636,51 @@ async def analyze_video_hook(video_id: str, user_id: str = Depends(get_current_u
     # When MODAL_FRAME_EXTRACTOR_URL is configured, the memory-heavy
     # download + ffmpeg decode runs on Modal (dedicated RAM) instead of on
     # this Render instance — see pipeline.py module docstring for context.
+    direct_video_url = video.get("direct_video_url", "")
+    # Older curated-video ingests dropped the CDN source. Recover and persist
+    # it from the curated record so those existing videos also avoid TikTok's
+    # webpage extraction when an Apify download URL is available.
+    if not direct_video_url:
+        curated = await _fetch_one(
+            "SELECT direct_video_url FROM curated_videos WHERE tiktok_url = ?", (tiktok_url,)
+        )
+        direct_video_url = (curated or {}).get("direct_video_url", "")
+        if direct_video_url:
+            await _execute(
+                "UPDATE videos SET direct_video_url = ? WHERE id = ?", (direct_video_url, video_id)
+            )
+
     if pipeline.MODAL_FRAME_EXTRACTOR_URL:
         try:
             video_path, frame_paths = await pipeline.download_and_extract_via_modal(
                 tiktok_url,
-                direct_video_url=video.get("direct_video_url", ""),
+                direct_video_url=direct_video_url,
                 num_frames=FRAME_COUNT,
                 duration=HOOK_DURATION_SECONDS,
             )
+        except pipeline.ModalFrameDownloadError as modal_error:
+            # A provider-side TikTok download rejection is recoverable: retry
+            # the already-supported local direct-CDN then yt-dlp path before
+            # marking the analysis as failed. Other Modal failures remain
+            # terminal to avoid moving memory-heavy work off Modal needlessly.
+            logger.warning(f"Modal video download failed for {tiktok_url}; trying local recovery: {modal_error}")
+            try:
+                async with _ytdlp_semaphore:
+                    video_path = await pipeline.download_video(tiktok_url, direct_video_url=direct_video_url)
+                frame_paths = await pipeline.extract_hook_frames(
+                    video_path, num_frames=FRAME_COUNT, duration=HOOK_DURATION_SECONDS
+                )
+            except Exception as local_error:
+                error_detail = f"Modal download failed: {modal_error}; local recovery failed: {local_error}"
+                logger.error(f"Download+extract failed for {tiktok_url}: {error_detail}")
+                await _execute(
+                    "UPDATE videos SET status = ?, error = ? WHERE id = ?",
+                    ("failed", error_detail[:400], video_id),
+                )
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Failed to download/extract the video. ({error_detail[:150]})",
+                )
         except Exception as e:
             logger.error(f"Modal download+extract failed for {tiktok_url}: {e}")
             await _execute(
@@ -1656,7 +1694,7 @@ async def analyze_video_hook(video_id: str, user_id: str = Depends(get_current_u
     else:
         try:
             async with _ytdlp_semaphore:
-                video_path = await pipeline.download_video(tiktok_url, direct_video_url=video.get("direct_video_url", ""))
+                video_path = await pipeline.download_video(tiktok_url, direct_video_url=direct_video_url)
         except Exception as e:
             logger.error(f"Download failed for {tiktok_url}: {e}")
             await _execute(
