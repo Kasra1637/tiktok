@@ -2731,18 +2731,20 @@ async def face_swap_generate_hook_video(
     user_id: str = Depends(get_current_user_id),
 ):
     """
-    Generate a hook video from the face-swapped image using MiniMax H3.
+    Generate a hook video from the face-swapped image using Seedance 2.5.
 
-    H3 advantages leveraged here:
-    - Native audio generation in one pass (OFF by default — see include_audio below).
-    - V2V motion transfer: if a viral video was analyzed, passes it as a reference
-      so H3 replicates the exact timing, camera movement, and performance rhythm.
-    - Omni-reference: face-swapped image as first_frame + viral video as motion ref.
-    - 2K resolution output.
+    Seedance 2.5 advantages leveraged here:
+    - Motion reference control: video reference drives body movement, gestures,
+      camera angle, and performance rhythm from the original viral hook.
+    - Combined references: face image as first_frame (identity anchor) PLUS
+      video as motion reference in the same request — no conflict.
+    - Up to 50 multimodal references (30 images, 10 videos, 10 audio).
+    - Native audio generation (OFF by default — see include_audio below).
+    - Built by ByteDance (TikTok's parent) for short-form hook content.
 
     If video_id is provided, pulls the hook analysis AND the downloaded video file
-    to feed as a V2V motion reference — H3 will replicate the proven hook mechanics
-    directly from the source video rather than relying on text descriptions alone.
+    to feed as a V2V motion reference — Seedance 2.5 will replicate the proven
+    hook mechanics (gestures, camera, pacing) directly from the source video.
 
     If template_id is provided, reuses a saved hook template. This is the cheapest
     path: the prompt and the V2V motion reference are already cached on disk, so
@@ -2758,8 +2760,8 @@ async def face_swap_generate_hook_video(
     TikTok creators attach a trending sound or native text-to-speech in TikTok's
     own editor after exporting — audio generated here can't be posted as a
     "trending sound" and would just be muted/replaced anyway. Set True to have
-    H3 generate an ambient/music track in the same pass (useful for platforms
-    without an in-app sound library).
+    the model generate an ambient/music track (useful for platforms without an
+    in-app sound library).
 
     hook_category: optional style directive (intrigue, reveal, reaction, tutorial,
     lifestyle, transformation). When provided, injects a category-specific prompt
@@ -2870,9 +2872,9 @@ async def face_swap_generate_hook_video(
     #   3. The user did NOT select a custom hook style or write a custom prompt
     #      (those indicate intent to deviate from the original's movements)
     #   4. This is NOT from a saved template (templates have their own prompt)
-    # In V2V mode the face-swap image is sent as an image reference (identity
-    # guide) instead of a hard first-frame lock, allowing both the face and
-    # the video motion reference to coexist in one MiniMax H3 request.
+    # With Seedance 2.5, both the face image (first_frame identity anchor) and the
+    # video motion reference coexist in the same request without conflict — the model
+    # uses the face for identity and the video for motion/gesture/camera replication.
     user_customized = bool(
         (hook_category and hook_category.strip())
         or (hook_custom_prompt and hook_custom_prompt.strip())
@@ -2884,9 +2886,9 @@ async def face_swap_generate_hook_video(
         and not template
     )
 
-    # When V2V is active, trim the source video to the first 3 seconds so the
-    # motion reference is a clean 1:1 match for the 5-second output. This gives
-    # MiniMax H3 an exact timing template rather than forcing it to guess which
+    # When V2V is active, trim the source video to the first 5 seconds so the
+    # motion reference is a clean 1:1 duration match for the output. This gives
+    # Seedance 2.5 an exact timing template rather than forcing it to guess which
     # segment of a longer clip to replicate. Falls back to the full video if
     # trimming fails.
     v2v_video_path = reference_video_path
@@ -2901,7 +2903,7 @@ async def face_swap_generate_hook_video(
             reference_image_path=image_path,
             duration=5,
             generate_audio=False,  # Always silent — creator adds sound in TikTok editor
-            reference_video_url=public_media_url(v2v_video_path),  # V2V motion transfer
+            reference_video_url=public_media_url(v2v_video_path) if use_v2v else None,
             prefer_v2v_motion=use_v2v,
         )
     except Exception as e:
@@ -2936,7 +2938,7 @@ async def face_swap_generate_hook_video(
         "duration": 5,
         "phase": "hook",
         "motion_style": motion_style.strip() or "lean-in",
-        "model": "minimax-h3",
+        "model": "seedance-2.5",
         "has_v2v_motion": bool(reference_video_path),
         "has_native_audio": include_audio,
         "from_template": bool(template),
