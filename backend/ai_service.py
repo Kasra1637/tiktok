@@ -90,7 +90,7 @@ def _build_face_swap_prompt(customization_prompt: str = "") -> str:
         "- EXPRESSION: same emotion intensity — if surprised, be surprised to the same degree\n"
         "- GAZE: eyes looking the same direction as in image 2\n"
         "- CLOTHING: same outfit, same color, same fabric — absolutely no changes\n"
-        "- BODY POSE: same position, same hand gestures\n"
+        "- BODY POSE: same position — if hands/arms are NOT visible in image 2, do NOT add them\n"
         "- BACKGROUND: same scene, same lighting, same camera angle\n\n"
         "REMOVE all text overlays, captions, and watermarks from the output.\n"
         "SKIN TONE: Use image 1's natural skin tone on the entire body (neck, arms, hands)."
