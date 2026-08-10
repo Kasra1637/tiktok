@@ -2922,6 +2922,17 @@ async def face_swap_generate_hook_video(
         if trimmed:
             v2v_video_path = trimmed
 
+    # Each model has its own minimum duration (Aleph: 2s, Seedance 2.5: 4s,
+    # MiniMax H3: 5s — confirmed via API error responses). Request our
+    # preferred 3s hook length; generate_video() clamps it up to whatever
+    # the resolved model actually requires, and we track the real value here
+    # so the DB record and API response don't lie about what was generated.
+    requested_duration = 3
+    actual_model_key = "aleph-2" if use_aleph_edit else DEFAULT_VIDEO_MODEL
+    actual_duration = max(
+        VIDEO_MODELS[actual_model_key].get("min_duration", 1), requested_duration
+    )
+
     try:
         if use_aleph_edit:
             # Runway Aleph 2.0: edits the actual hook video directly, changing
@@ -2930,7 +2941,7 @@ async def face_swap_generate_hook_video(
             result = await generate_video(
                 prompt=prompt,
                 reference_image_path=image_path,
-                duration=3,
+                duration=requested_duration,
                 model="aleph-2",
                 reference_video_url=public_media_url(v2v_video_path),
             )
@@ -2947,7 +2958,7 @@ async def face_swap_generate_hook_video(
             result = await generate_video(
                 prompt=prompt,
                 reference_image_path=image_path,
-                duration=3,
+                duration=requested_duration,
                 generate_audio=False,  # Always silent — creator adds sound in TikTok editor
                 reference_video_url=public_media_url(v2v_video_path) if use_v2v else None,
                 prefer_v2v_motion=use_v2v,
@@ -2966,7 +2977,7 @@ async def face_swap_generate_hook_video(
         """INSERT OR REPLACE INTO face_swap_video_jobs
            (id, image_id, prompt, duration, status, polling_url, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (job_id, image_id, prompt, 3, "pending", polling_url, now_iso()),
+        (job_id, image_id, prompt, actual_duration, "pending", polling_url, now_iso()),
     )
 
     # Track template reuse so the UI can surface the most effective saved hooks.
@@ -2981,7 +2992,7 @@ async def face_swap_generate_hook_video(
         "status": "pending",
         "polling_url": polling_url,
         "image_id": image_id,
-        "duration": 3,
+        "duration": actual_duration,
         "phase": "hook",
         "motion_style": motion_style.strip() or "lean-in",
         "model": "aleph-2" if use_aleph_edit else DEFAULT_VIDEO_MODEL,

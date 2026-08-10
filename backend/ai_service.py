@@ -58,6 +58,7 @@ VIDEO_MODELS = {
         "name": "Seedance 2.5",
         "description": "30s one-pass video with motion reference control. Up to 50 multimodal refs, native audio.",
         "max_duration": 30,
+        "min_duration": 4,
         "supports_references": True,
         "supports_native_audio": True,
         "supports_v2v_motion": True,
@@ -69,6 +70,7 @@ VIDEO_MODELS = {
         "name": "MiniMax H3",
         "description": "Omni-modal video generation. Native audio, V2V motion transfer, 2K resolution, up to 15s.",
         "max_duration": 15,
+        "min_duration": 5,  # Confirmed via API: "Supported durations: 5, 6, 7, 8, 9, ..."
         "supports_references": True,
         "supports_native_audio": True,
         "supports_v2v_motion": True,
@@ -868,6 +870,7 @@ async def generate_video(
     model_config = VIDEO_MODELS[model_key]
     model_id = model_config["id"]
     max_dur = model_config["max_duration"]
+    min_dur = model_config.get("min_duration", 1)
     supports_combined = model_config.get("supports_combined_refs", False)
 
     # === Runway Aleph 2.0: video EDITOR, not a generator ===
@@ -889,7 +892,7 @@ async def generate_video(
     payload = {
         "model": model_id,
         "prompt": prompt,
-        "duration": min(duration, max_dur),
+        "duration": max(min_dur, min(duration, max_dur)),
         "resolution": model_config.get("resolution", "1080p"),
         "aspect_ratio": "9:16",
     }
