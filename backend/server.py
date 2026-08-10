@@ -2242,27 +2242,17 @@ def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = 
             text descriptions.
     """
     if v2v_motion_active:
-        # V2V mode: the model receives the actual viral video — emphasize
-        # replicating its exact body mechanics rather than interpreting text.
+        # V2V mode: the model receives the actual viral video. Keep the prompt
+        # SHORT and let the video reference be the sole motion authority — long
+        # text descriptions of movements compete with what the model sees in the
+        # video pixels and produce worse results.
         prompt = (
-            "Create a 5-second vertical video (9:16). A reference video of the original viral hook "
-            "is provided — REPLICATE ITS EXACT BODY MOVEMENTS, hand gestures, head movements, "
-            "posture shifts, and physical timing frame-by-frame. The reference image shows the "
-            "character's face and appearance — use this identity but perform the EXACT same "
-            "physical movements as the person in the reference video.\n\n"
-            f"HOOK CONTEXT: {analysis.get('hook_summary') or 'attention-grabbing opening'}\n"
-            f"BODY MECHANICS TO MATCH: {analysis.get('body_language_gestures') or 'confident body language'}\n"
-            f"PACING TO MATCH: {analysis.get('pacing_cuts') or 'quick, attention-grabbing pacing'}\n\n"
-            "CRITICAL INSTRUCTIONS:\n"
-            "- Copy the reference video's movements EXACTLY — same speed, same timing, same gestures\n"
-            "- The character's face must match the reference image (identity transfer)\n"
-            "- Match the camera angle and framing from the reference video EXACTLY\n"
-            "- Match the energy level and tempo precisely — if the original is fast, be fast\n"
-            "- Replicate hand positions, arm movements, head tilts at the same timestamps\n"
-            "- CLOTHING: The character must wear the SAME clothing/outfit visible in the reference video — same color, same style, same fit. Do NOT change the outfit\n"
-            "- ENVIRONMENT: Keep the same background, room, and setting from the reference video\n"
-            "- The output should look like the EXACT same video but with the reference image person's face\n"
-            "- Frame 1 of the output must match frame 1 of the reference video in pose and position"
+            "Recreate this exact video with the person from the reference image. "
+            "Replace ONLY the face and identity — keep everything else identical: "
+            "same body movements, same hand gestures, same timing, same clothing, "
+            "same background, same camera angle, same energy. "
+            "The output should be indistinguishable from the original except for "
+            "the person's face."
         )
     else:
         prompt = (
@@ -2288,7 +2278,7 @@ def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = 
         )
 
     mechanics = _coerce_mechanics(analysis.get("replicable_mechanics"))
-    if mechanics:
+    if mechanics and not v2v_motion_active:
         mechanics_str = "; ".join(str(m) for m in mechanics[:5])
         prompt += f"\n\nKEY MECHANICS TO REPLICATE: {mechanics_str}"
 
