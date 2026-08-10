@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +14,7 @@ import Chip from "./Chip";
 import { Loader2, Bookmark, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { api, getErrorMessage } from "../lib/api";
-import { HOOK_TEMPLATE_CATEGORIES } from "../lib/hookTemplateCategories";
+import { HOOK_TEMPLATE_CATEGORIES, inferHookTemplateCategory } from "../lib/hookTemplateCategories";
 
 /**
  * Bookmark an analyzed hook for quick access from the history page.
@@ -24,16 +24,24 @@ import { HOOK_TEMPLATE_CATEGORIES } from "../lib/hookTemplateCategories";
  */
 export function SaveHookTemplateDialog({ open, onOpenChange, videoId, analysis, video, onSaved }) {
   const [name, setName] = useState("");
-  const [category, setCategory] = useState("intrigue");
+  const [category, setCategory] = useState("other");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const wasOpenRef = useRef(false);
 
-  // Pre-fill the name from the hook summary each time the dialog opens.
+  // Pre-fill the form when the dialog opens without overwriting category chips
+  // the user adjusts while it remains open.
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      wasOpenRef.current = false;
+      return;
+    }
+    if (wasOpenRef.current) return;
+
+    wasOpenRef.current = true;
     const suggested = (analysis?.hook_summary || "").trim();
     setName(suggested ? suggested.slice(0, 60).replace(/[.,\s]+$/, "") : "");
-    setCategory("intrigue");
+    setCategory(inferHookTemplateCategory(analysis));
     setNotes("");
   }, [open, analysis]);
 
