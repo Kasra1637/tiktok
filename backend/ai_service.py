@@ -36,6 +36,23 @@ TEXT_MODEL = "google/gemini-2.5-flash"
 # Built by ByteDance (TikTok's parent), it's designed specifically for short-form
 # hook-style content with precise motion/gesture/camera replication from a source clip.
 VIDEO_MODELS = {
+    "aleph-2": {
+        "id": "runway/aleph-2",
+        "name": "Runway Aleph 2.0",
+        "description": (
+            "In-context video EDITING (not generation) — edits the original hook video "
+            "directly, preserving body movement, gestures, camera, clothing, and framing "
+            "pixel-for-pixel, changing only the face. The closest thing to exact hook "
+            "replication available: it never regenerates the scene."
+        ),
+        "max_duration": 30,
+        "min_duration": 2,
+        "supports_references": True,
+        "supports_native_audio": False,
+        "supports_v2v_motion": False,  # not motion transfer — direct video editing
+        "resolution": "1080p",
+        "is_video_editor": True,  # fundamentally different request shape — see generate_video()
+    },
     "seedance-2.5": {
         "id": "bytedance/seedance-2.5",
         "name": "Seedance 2.5",
@@ -59,6 +76,9 @@ VIDEO_MODELS = {
         "supports_combined_refs": False,  # Cannot combine frame_images with input_references
     },
 }
+# Generative fallback used when there's no source video to edit, or the user
+# customized the hook (style/prompt/template) — Aleph cannot text-generate,
+# it can only edit footage that already exists.
 DEFAULT_VIDEO_MODEL = "minimax-h3"
 # Legacy fallback
 VIDEO_MODEL = VIDEO_MODELS[DEFAULT_VIDEO_MODEL]["id"]
@@ -691,6 +711,115 @@ async def analyze_image_for_hook(image_path: Path, session_id: str) -> dict:
         return {}
 
 
+async def _edit_video_with_aleph(
+    prompt: str,
+    source_video_url: Optional[str],
+    face_anchor_path: Optional[Path],
+    model_id: str,
+    min_dur: int,
+    max_dur: int,
+) -> dict:
+    """
+    Submit a video EDIT job to Runway Aleph 2.0 via OpenRouter.
+
+    Unlike generative models (Seedance, MiniMax H3), Aleph does not synthesize
+    a new scene — it takes the actual source video and applies ONLY the named
+    edit, preserving every pixel it wasn't told to change (body movement,
+    hand gestures, camera angle, clothing, background, timing). This is why
+    it's used for the default "replicate this exact hook" flow instead of the
+    generative models: there's no scene to regenerate, no motion to guess at.
+
+    Request shape (best-effort mapping onto OpenRouter's normalized video
+    schema, since Aleph is exposed as a video-output model there like any
+    other): the video TO EDIT is sent as a video_url reference inside
+    input_references (the only video-input slot in OpenRouter's schema), and
+    the face-swapped still is sent as a frame_images entry pinned to
+    frame_type="first_frame" so Aleph anchors the target identity to the
+    opening frame and carries it through the rest of the clip. If OpenRouter's
+    actual routing for Aleph differs from this, the resulting 400 error body
+    will name the expected field — same iterative approach used to fix the
+    Seedance 2.5 resolution and TaskTypeConstraint issues.
+
+    Raises RuntimeError if no source video is available — Aleph has nothing
+    to edit without one; callers should fall back to a generative model.
+    """
+    if not source_video_url:
+        raise RuntimeError(
+            "Runway Aleph 2.0 requires a source video to edit — no reference "
+            "video is available for this generation. Fall back to a generative "
+            "model (Seedance 2.5 or MiniMax H3) instead."
+        )
+
+    payload = {
+        "model": model_id,
+        "prompt": prompt,
+        "duration": max(min_dur, min(3, max_dur)),
+        "resolution": "1080p",
+        "aspect_ratio": "9:16",
+        "input_references": [
+            {
+                "type": "video_url",
+                "video_url": {"url": source_video_url},
+            }
+        ],
+    }
+
+    if face_anchor_path and face_anchor_path.exists():
+        b64 = image_to_base64(face_anchor_path)
+        payload["frame_images"] = [
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{b64}"},
+                "frame_type": "first_frame",
+            }
+        ]
+
+    logger.info(
+        f"Submitting video EDIT (Runway Aleph 2.0): duration={payload['duration']}s, "
+        f"has_source_video=True, has_face_anchor={bool(payload.get('frame_images'))}, "
+        f"model={model_id}"
+    )
+
+    async with httpx.AsyncClient(timeout=90) as client:
+        last_error = None
+        for attempt in range(2):
+            try:
+                resp = await client.post(f"{OPENROUTER_BASE}/videos", headers=_headers(), json=payload)
+            except httpx.TimeoutException as e:
+                last_error = RuntimeError(f"Video edit timed out: {e}")
+                if attempt == 0:
+                    logger.warning("Aleph video edit attempt 1 timed out, retrying...")
+                    await asyncio.sleep(2)
+                    continue
+                raise last_error
+
+            if resp.status_code in (502, 503, 429) and attempt == 0:
+                logger.warning(
+                    f"Aleph video edit attempt 1 got HTTP {resp.status_code}: "
+                    f"{resp.text[:200]} — retrying..."
+                )
+                await asyncio.sleep(3)
+                continue
+
+            if resp.status_code >= 400:
+                error_text = resp.text[:500]
+                logger.error(f"Aleph video edit submission failed: HTTP {resp.status_code}: {error_text}")
+                raise RuntimeError(f"Video edit failed (HTTP {resp.status_code}): {error_text}")
+            break
+
+        data = resp.json()
+        job_id = data.get("id") or data.get("generation_id") or ""
+        logger.info(
+            f"Aleph video edit submitted: job_id={job_id}, status={data.get('status')}, "
+            f"polling_url={data.get('polling_url')}"
+        )
+        if not job_id:
+            logger.error(f"Aleph video edit returned no job ID. Full response: {resp.text[:1000]}")
+            raise RuntimeError("Video edit returned no job ID.")
+        data["id"] = job_id
+        return data
+
+
 async def generate_video(
     prompt: str,
     reference_image_path: Path = None,
@@ -740,6 +869,22 @@ async def generate_video(
     model_id = model_config["id"]
     max_dur = model_config["max_duration"]
     supports_combined = model_config.get("supports_combined_refs", False)
+
+    # === Runway Aleph 2.0: video EDITOR, not a generator ===
+    # Aleph doesn't synthesize a new scene from a prompt — it edits the actual
+    # source video pixel-for-pixel, changing only what the prompt names. This
+    # requires reference_video_url (the real hook clip to edit) AND a face
+    # anchor image. It has its own request/response handling below because
+    # the semantics differ fundamentally from generative models.
+    if model_config.get("is_video_editor"):
+        return await _edit_video_with_aleph(
+            prompt=prompt,
+            source_video_url=reference_video_url,
+            face_anchor_path=reference_image_path,
+            model_id=model_id,
+            min_dur=model_config.get("min_duration", 2),
+            max_dur=max_dur,
+        )
 
     payload = {
         "model": model_id,

@@ -916,7 +916,11 @@ export default function FaceSwap() {
                 <div>
                   <p className="text-sm font-semibold">{videoStatus === "pending" ? "Queued..." : "Generating..."}</p>
                   <p className="text-xs text-muted-foreground">
-                    {videoPhase === "hook" ? `Creating 3s ${includeHookAudio ? "hook with AI audio" : "silent hook"} (30s-2min)` : "Extending video with brand message (1-3min)"}
+                    {videoPhase === "hook"
+                      ? (videoInfo && !hookCategory && !hookCustomPrompt.trim()
+                          ? "Editing the original hook video with your face (30s-2min)"
+                          : `Creating 3s ${includeHookAudio ? "hook with AI audio" : "silent hook"} (30s-2min)`)
+                      : "Extending video with brand message (1-3min)"}
                   </p>
                 </div>
               </div>
@@ -947,8 +951,10 @@ export default function FaceSwap() {
                 <div className="space-y-2">
                   <StepLabel step="Step 1" title="Generate 3s Hook" />
                   <p className="text-xs leading-relaxed text-muted-foreground">
-                    Replicates the original hook&rsquo;s exact body movements, hand gestures, and timing with your face.
-                    Muted by default — add a trending sound or text-to-speech in TikTok's editor after exporting.
+                    {videoInfo
+                      ? "Edits the original hook video directly with your face — body movements, hand gestures, camera, and clothing stay pixel-for-pixel identical."
+                      : "Animates your photo into a hook using your face."}
+                    {" "}Muted by default — add a trending sound or text-to-speech in TikTok's editor after exporting.
                   </p>
                 </div>
 
@@ -1017,20 +1023,28 @@ export default function FaceSwap() {
                   </div>
                 )}
 
-                {/* Selected template summary */}
-
-                {/* Model */}
-                <div className="flex gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1" data-testid="hook-model-selector">
-                  {[
-                    { key: "minimax-h3", label: "Seedance 2.5", sub: "1080p · Motion reference · V2V" },
-                  ].map((m) => (
-                    <button key={m.key} onClick={() => setVideoModel(m.key)}
-                      className={`flex-1 rounded-lg px-2 py-1.5 text-center transition-colors duration-200 ${videoModel === m.key ? "bg-[color:var(--indigo-10)]" : "hover:bg-[color:var(--indigo-6)]"}`}
-                      data-testid={`model-${m.key}`}>
-                      <span className={`block text-xs font-semibold ${videoModel === m.key ? "text-[color:var(--brand-indigo)]" : "text-muted-foreground"}`}>{m.label}</span>
-                      <span className="text-xs text-muted-foreground">{m.sub}</span>
-                    </button>
-                  ))}
+                {/* Engine indicator — the engine is chosen automatically based on
+                    whether an exact source video exists to edit and whether the
+                    user customized the hook away from a literal replication.
+                    Aleph 2.0 edits the real hook video directly (exact replication);
+                    the generative fallback synthesizes a new scene when there's no
+                    source video to edit or the hook was customized. */}
+                <div className="rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-2.5" data-testid="hook-model-indicator">
+                  {videoInfo && !hookCategory && !hookCustomPrompt.trim() ? (
+                    <>
+                      <span className="block text-xs font-semibold text-[color:var(--brand-indigo)]">Runway Aleph 2.0 &middot; Exact edit</span>
+                      <span className="text-xs text-muted-foreground">Edits the original hook video directly — body movement, gestures, camera, and clothing stay pixel-for-pixel identical. Only the face changes.</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="block text-xs font-semibold text-muted-foreground">Generative engine</span>
+                      <span className="text-xs text-muted-foreground">
+                        {videoInfo
+                          ? "A custom style or prompt was set, so a new scene is generated instead of editing the original video."
+                          : "No source video to edit — a new scene is generated from your photo."}
+                      </span>
+                    </>
+                  )}
                 </div>
 
                 <Button onClick={handleGenerateHook} disabled={generatingVideo} variant="brand" size="lg" className="w-full" data-testid="generate-hook-button">

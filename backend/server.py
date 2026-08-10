@@ -2226,6 +2226,28 @@ def _coerce_mechanics(mechanics) -> list:
     return [mechanics]
 
 
+def build_aleph_edit_prompt() -> str:
+    """
+    Build the prompt for Runway Aleph 2.0's video EDIT mode.
+
+    Aleph is fundamentally different from generative models: it doesn't
+    synthesize a scene, it edits the actual source video and preserves
+    everything it isn't told to change. Its docs are explicit that the prompt
+    must (1) lead with a transformation verb, (2) name only the single change,
+    and (3) end with a clause pinning everything else in place — vague or
+    descriptive prompts cause the model to "redraw" parts that should stay
+    untouched. This is why this prompt is much shorter than the generative
+    prompts below: there's no scene, motion, or camera work to describe,
+    because none of that is being regenerated.
+    """
+    return (
+        "Replace the person's face and identity to match the reference face shown "
+        "in the first-frame anchor image. Keep everything else in the video exactly "
+        "as it is in the source: the body movements, hand gestures, head movements, "
+        "camera angle, framing, clothing, background, lighting, and timing."
+    )
+
+
 def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = False, v2v_motion_active: bool = False) -> str:
     """
     Build the hook-video prompt from a viral video's hook analysis.
@@ -2831,21 +2853,34 @@ async def face_swap_generate_hook_video(
             if v_path.exists():
                 reference_video_path = v_path
 
+    # Determine early whether this generation will use Runway Aleph 2.0's
+    # video-edit path (default "replicate the exact hook" flow) or a
+    # generative model (user customized the hook, or no source video exists).
+    # Aleph cannot text-generate a scene — it can only edit footage that
+    # already exists — so any customization or missing source video routes
+    # to the generative fallback.
+    user_customized = bool(
+        (hook_category and hook_category.strip())
+        or (hook_custom_prompt and hook_custom_prompt.strip())
+    )
+    use_aleph_edit = (
+        bool(analysis)
+        and bool(reference_video_path)
+        and not user_customized
+        and not template
+    )
+
     if prompt is not None:
         pass  # already resolved from a saved template
+    elif use_aleph_edit:
+        # Aleph EDITS the real video directly — no scene/motion/camera
+        # description needed, just "replace the face, keep everything else."
+        prompt = build_aleph_edit_prompt()
     elif analysis:
-        # Determine if V2V motion transfer will be active for this generation.
-        # We need this now to build the appropriate prompt variant.
-        user_customized = bool(
-            (hook_category and hook_category.strip())
-            or (hook_custom_prompt and hook_custom_prompt.strip())
-        )
-        v2v_will_be_active = (
-            bool(reference_video_path)
-            and not user_customized
-            and not template
-        )
-        # USE THE PROVEN HOOK STRUCTURE from the analyzed viral video.
+        # Generative fallback (MiniMax H3 / Seedance 2.5): no exact source
+        # video edit available, so describe the hook mechanics for the model
+        # to regenerate as closely as possible.
+        v2v_will_be_active = bool(reference_video_path) and not user_customized and not template
         prompt = build_hook_prompt_from_analysis(
             analysis,
             has_reference_video=bool(reference_video_path),
@@ -2870,49 +2905,53 @@ async def face_swap_generate_hook_video(
     # produced the base prompt (fresh analysis, saved template, image
     # analysis, or motion fallback) — including templates saved before this
     # toggle existed, whose cached text may still reference audio.
-    prompt = apply_audio_directive(prompt, False)
+    # Skip this for the Aleph edit path — its prompt is not a generative
+    # scene description, and appending audio/style directives to it would
+    # add exactly the kind of extra scene detail Aleph's docs warn causes
+    # drift in what should otherwise stay untouched.
+    if not use_aleph_edit:
+        prompt = apply_audio_directive(prompt, False)
 
-    # Use true V2V motion transfer (replicating the original video's exact body
-    # movements) when ALL of these hold:
-    #   1. An analyzed video exists (we have the hook analysis)
-    #   2. The original viral video is available locally for V2V reference
-    #   3. The user did NOT select a custom hook style or write a custom prompt
-    #      (those indicate intent to deviate from the original's movements)
-    #   4. This is NOT from a saved template (templates have their own prompt)
-    # With Seedance 2.5, both the face image (first_frame identity anchor) and the
-    # video motion reference coexist in the same request without conflict — the model
-    # uses the face for identity and the video for motion/gesture/camera replication.
-    user_customized = bool(
-        (hook_category and hook_category.strip())
-        or (hook_custom_prompt and hook_custom_prompt.strip())
-    )
-    use_v2v = (
-        bool(analysis)
-        and bool(reference_video_path)
-        and not user_customized
-        and not template
-    )
-
-    # When V2V is active, trim the source video to the first 5 seconds so the
-    # motion reference is a clean 1:1 duration match for the output. This gives
-    # Seedance 2.5 an exact timing template rather than forcing it to guess which
-    # segment of a longer clip to replicate. Falls back to the full video if
-    # trimming fails.
+    # Trim the source video to the first 3 seconds so it's a clean 1:1
+    # duration match for the output — this gives whichever model is used
+    # (Aleph edit or generative V2V) an exact timing template rather than
+    # forcing it to guess which segment of a longer clip to use/replicate.
     v2v_video_path = reference_video_path
-    if use_v2v and reference_video_path:
+    if (use_aleph_edit or reference_video_path) and reference_video_path:
         trimmed = await pipeline.trim_video_to_hook(reference_video_path, duration=3.0)
         if trimmed:
             v2v_video_path = trimmed
 
     try:
-        result = await generate_video(
-            prompt=prompt,
-            reference_image_path=image_path,
-            duration=3,
-            generate_audio=False,  # Always silent — creator adds sound in TikTok editor
-            reference_video_url=public_media_url(v2v_video_path) if use_v2v else None,
-            prefer_v2v_motion=use_v2v,
-        )
+        if use_aleph_edit:
+            # Runway Aleph 2.0: edits the actual hook video directly, changing
+            # only the face. Body movement, gestures, camera, clothing, and
+            # background are the ORIGINAL video's pixels — not regenerated.
+            result = await generate_video(
+                prompt=prompt,
+                reference_image_path=image_path,
+                duration=3,
+                model="aleph-2",
+                reference_video_url=public_media_url(v2v_video_path),
+            )
+        else:
+            # Generative fallback (MiniMax H3 / Seedance 2.5): no source video
+            # to edit, or the user customized the hook away from a literal
+            # replication — so a new scene must be generated instead.
+            use_v2v = (
+                bool(analysis)
+                and bool(reference_video_path)
+                and not user_customized
+                and not template
+            )
+            result = await generate_video(
+                prompt=prompt,
+                reference_image_path=image_path,
+                duration=3,
+                generate_audio=False,  # Always silent — creator adds sound in TikTok editor
+                reference_video_url=public_media_url(v2v_video_path) if use_v2v else None,
+                prefer_v2v_motion=use_v2v,
+            )
     except Exception as e:
         logger.error(f"Hook video generation failed: {e}")
         raise HTTPException(
@@ -2945,7 +2984,7 @@ async def face_swap_generate_hook_video(
         "duration": 3,
         "phase": "hook",
         "motion_style": motion_style.strip() or "lean-in",
-        "model": "seedance-2.5",
+        "model": "aleph-2" if use_aleph_edit else DEFAULT_VIDEO_MODEL,
         "has_v2v_motion": bool(reference_video_path),
         "has_native_audio": include_audio,
         "from_template": bool(template),

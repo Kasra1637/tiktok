@@ -67,7 +67,7 @@ const FEATURES = [
     icon: Clapperboard,
     title: "AI Video Generation",
     description:
-      "Replicates the original hook\u2019s exact body movements with your face. 3s hook, then extend to a branded video.",
+      "Edits the original hook video directly with your face \u2014 exact body movements, gestures, and camera preserved. 3s hook, then extend to a branded video.",
   },
   {
     icon: RotateCcw,
@@ -112,7 +112,7 @@ const FLOW_STEPS = [
     step: "4",
     label: "Generate",
     icon: Clapperboard,
-    detail: "Seedance 2.5 replicates the hook\u2019s exact body movements with your face. Extend with your brand CTA.",
+    detail: "Runway Aleph 2.0 edits the hook video directly with your face \u2014 body movement, gestures, and camera stay pixel-for-pixel identical. Extend with your brand CTA.",
   },
 ];
 
@@ -180,11 +180,11 @@ const PIPELINE_BLOCKS = [
     title: "Video (Motion Replication)",
     body: (
       <>
-        The first 3 seconds of the original viral video become the motion reference.
-        The video model replicates the exact body movements, hand gestures, and camera work
-        &mdash; with your face as the identity anchor. Output is muted by default
-        (add a trending sound in TikTok). Re-roll for another take, or extend into a
-        longer branded video with your CTA.
+        The first 3 seconds of the original viral video are edited directly by Runway
+        Aleph 2.0 &mdash; not regenerated. Body movement, hand gestures, camera angle,
+        clothing, and background stay pixel-for-pixel identical to the source; only
+        your face changes. Output is muted by default (add a trending sound in TikTok).
+        Re-roll for another take, or extend into a longer branded video with your CTA.
       </>
     ),
   },
@@ -230,7 +230,7 @@ const PIPELINE_BLOCKS = [
 const MODELS = [
   { label: "Hook Analysis", value: "Gemini 2.5 Flash (vision) \u2014 frame reading, structured JSON output" },
   { label: "Face Swap", value: "Grok Imagine \u2014 identity-preserving compositing, 2K" },
-  { label: "Video", value: "Seedance 2.5 \u2014 V2V motion replication from the original hook, identity transfer, 1080p, up to 30s" },
+  { label: "Video", value: "Runway Aleph 2.0 \u2014 in-context video editing that changes only the face on the original hook footage, 1080p, 2\u201330s (falls back to MiniMax H3 for customized hooks)" },
   { label: "Brand & Remix", value: "Gemini 2.5 Flash \u2014 brand extraction, prompt writing, remix chat" },
   { label: "Data", value: "Apify TikTok Scraper + yt-dlp \u2014 profiles, hashtags, keyword search, music" },
 ];
@@ -657,7 +657,7 @@ export default function Landing() {
               &copy; {new Date().getFullYear()} HookForge. Built for creators.
             </p>
             <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Wand2 className="h-3 w-3 text-[color:var(--brand-indigo)]" /> Powered by Seedance 2.5 &amp; Gemini 2.5 Flash
+              <Wand2 className="h-3 w-3 text-[color:var(--brand-indigo)]" /> Powered by Runway Aleph 2.0 &amp; Gemini 2.5 Flash
             </p>
           </div>
         </div>

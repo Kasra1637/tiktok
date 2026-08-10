@@ -42,7 +42,7 @@ export default function Privacy() {
         <LegalList>
           <LegalItem><strong>OpenRouter API:</strong> For AI image generation (face swap), video generation, and text analysis. Your images are sent to their API for processing.</LegalItem>
           <LegalItem><strong>Google Gemini:</strong> For vision-based hook analysis and image generation (via OpenRouter).</LegalItem>
-          <LegalItem><strong>Seedance 2.5 (ByteDance):</strong> For AI video generation with motion reference control and V2V transfer (via OpenRouter).</LegalItem>
+          <LegalItem><strong>Runway Aleph 2.0:</strong> For in-context video editing that replaces facial identity on the original hook footage (via OpenRouter). Falls back to MiniMax H3 for customized or generated hooks.</LegalItem>
           <LegalItem><strong>TikTok Content Discovery API:</strong> For displaying publicly available trending videos within the app.</LegalItem>
         </LegalList>
         <p>Each third-party service has its own privacy policy governing how they handle data sent to them.</p>
