@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # Models
 VISION_MODEL = "google/gemini-2.5-flash"
 IMAGE_GEN_MODEL = "google/gemini-2.5-flash-image"
-FACE_SWAP_MODEL = "black-forest-labs/flux.2-klein-4b"  # FLUX.2 Klein — purpose-built for face swap editing, preserves scene/pose/expression while replacing only the face identity
+FACE_SWAP_MODEL = "black-forest-labs/flux.2-max"  # FLUX.2 Max — top-tier image editing, preserves facial features/proportions/expressions/identity across complex edits; up to 8 input references
 TEXT_MODEL = "google/gemini-2.5-flash"
 
 # Video generation models — MiniMax H3 (Hailuo 3) is the sole model.
