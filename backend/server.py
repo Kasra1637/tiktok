@@ -2232,31 +2232,33 @@ def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = 
 
     Shared by the live analysis path and by hook-template creation, so a saved
     template stores exactly the prompt that a fresh analysis would have produced.
-    With H3's V2V motion transfer the video reference carries timing and camera
-    work, while this text reinforces expressions and intent.
+    With Seedance 2.5's V2V motion reference, the video reference carries the
+    full motion/gesture/camera authority, while the first_frame image anchors
+    identity. This text prompt should stay minimal to avoid conflicting with
+    the video pixels.
 
     Args:
         v2v_motion_active: When True, the reference video is actually being
-            delivered to the model (not dropped). The prompt emphasizes replicating
-            the exact physical movements from the video rather than interpreting
-            text descriptions.
+            delivered to the model as a motion reference AND the face image is
+            locked as first_frame. The prompt is kept deliberately minimal so
+            the video reference is the sole authority on motion, gestures,
+            camera, and timing.
     """
     if v2v_motion_active:
-        # V2V mode: the model receives the actual viral video. Keep the prompt
-        # SHORT and let the video reference be the sole motion authority — long
-        # text descriptions of movements compete with what the model sees in the
-        # video pixels and produce worse results.
+        # V2V mode: Seedance 2.5 receives the viral video as motion reference
+        # AND the face-swapped image as first_frame (identity anchor).
+        # Keep the prompt MINIMAL — let the video reference be the sole motion
+        # authority. Text descriptions of movement compete with video pixels.
         prompt = (
-            "Recreate this exact video with the person from the reference image. "
-            "Replace ONLY the face and identity — keep everything else identical: "
-            "same body movements, same hand gestures, same timing, same clothing, "
-            "same background, same camera angle, same energy. "
-            "The output should be indistinguishable from the original except for "
-            "the person's face."
+            "Replicate the exact movement, gestures, body language, camera angle, "
+            "and pacing from the reference video. The person's identity and appearance "
+            "comes from the first frame image — preserve that face throughout. "
+            "Match frame-by-frame: same timing, same energy, same physical performance. "
+            "Do NOT add, remove, or alter any movements from the reference video."
         )
     else:
         prompt = (
-            "Create a 5-second vertical video (9:16) starting from this exact first frame. "
+            "Create a 4-second vertical video (9:16) starting from this exact first frame. "
             "Recreate the EXACT hook mechanics that made the original viral video work:\n\n"
             f"FACIAL EXPRESSION: {analysis.get('facial_expressions') or 'engaging expression'}\n"
             f"BODY LANGUAGE & GESTURE: {analysis.get('body_language_gestures') or 'confident body language'}\n"
@@ -2264,12 +2266,12 @@ def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = 
             f"HOOK SUMMARY: {analysis.get('hook_summary') or 'attention-grabbing opening'}\n\n"
             "PACING IS CRITICAL — this must match the speed and energy of a viral TikTok hook:\n"
             "- The action must start IMMEDIATELY from frame 1 — no slow build-up or pause at the start\n"
-            "- All movements should be FAST and snappy, matching the rapid pace of the original 2-3 second hook window\n"
+            "- All movements should be FAST and snappy, matching the rapid pace of the original hook window\n"
             "- Quick, punchy gestures — NOT slow or cinematic movements\n"
             "- Immediate direct eye contact with the camera from the very first frame\n"
             "- Energy level should be HIGH from the start — think 'scroll-stopper' urgency\n"
             "- The body language tempo must match how fast the original creator moved\n"
-            "- Compress all the described movements into the first 2 seconds, not spread across 3\n\n"
+            "- Compress all the described movements into the first 2 seconds\n\n"
             "ADDITIONAL REQUIREMENTS:\n"
             "- Perform the EXACT movements and expressions described above — these are proven to grab attention\n"
             "- Maintain perfect face consistency with the first frame throughout\n"
