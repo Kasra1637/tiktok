@@ -67,7 +67,7 @@ const FEATURES = [
     icon: Clapperboard,
     title: "AI Video Generation",
     description:
-      "MiniMax H3 replicates the original hook\u2019s exact body movements with your face. 3s hook at 2K, then extend to a branded video.",
+      "MiniMax H3 replicates the original hook\u2019s exact body movements with your face. 5s hook at 2K, then extend to a branded video.",
   },
   {
     icon: RotateCcw,

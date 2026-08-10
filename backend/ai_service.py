@@ -590,18 +590,18 @@ async def analyze_image_for_hook(image_path: Path, session_id: str) -> dict:
     system_message = (
         "You are an expert short-form video (TikTok/Reels) hook strategist. You examine a single "
         "still image of a person and determine what attention-grabbing movement is happening or "
-        "about to happen — then describe how to animate this into a 3-second silent hook video. "
+        "about to happen — then describe how to animate this into a 5-second silent hook video. "
         "Respond with STRICT JSON only, no markdown fences, no extra commentary."
     )
 
     prompt = (
-        "Here is a still image that will be the first frame of a 3-second TikTok hook video. "
+        "Here is a still image that will be the first frame of a 5-second TikTok hook video. "
         "Analyze what's in this image and describe how to animate it into an attention-grabbing "
         "silent hook. Return ONLY a JSON object with this exact schema:\n"
         "{\n"
         '  "facial_expressions": "describe the expression visible and how it should evolve over 3 seconds",\n'
         '  "body_language_gestures": "describe the pose/gesture visible and what movement should follow",\n'
-        '  "pacing_cuts": "describe the ideal pacing and camera movement for a 3s hook starting from this frame",\n'
+        '  "pacing_cuts": "describe the ideal pacing and camera movement for a 5s hook starting from this frame",\n'
         '  "hook_summary": "1-2 sentence description of the hook concept that would work from this image",\n'
         '  "replicable_mechanics": ["list", "of", "specific", "movements", "to", "animate"]\n'
         "}\n"
