@@ -39,12 +39,12 @@ VIDEO_MODELS = {
     "seedance-2.5": {
         "id": "bytedance/seedance-2.5",
         "name": "Seedance 2.5",
-        "description": "30s one-pass video with motion reference control. Up to 50 multimodal refs, 4K, native audio.",
+        "description": "30s one-pass video with motion reference control. Up to 50 multimodal refs, native audio.",
         "max_duration": 30,
         "supports_references": True,
         "supports_native_audio": True,
         "supports_v2v_motion": True,
-        "resolution": "1080p",
+        "resolution": "720p",
         "supports_combined_refs": True,  # Can use frame_images + input_references together
     },
     "minimax-h3": {
