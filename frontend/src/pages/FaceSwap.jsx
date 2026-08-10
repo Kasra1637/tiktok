@@ -252,7 +252,7 @@ export default function FaceSwap() {
     return () => {
       cancelled = true;
     };
-  }, [videoInfo?.videoId]);
+  }, [videoInfo && videoInfo.videoId]);
 
   // Load saved face from localStorage
   useEffect(() => {
