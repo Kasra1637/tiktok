@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # Models
 VISION_MODEL = "google/gemini-2.5-flash"
 IMAGE_GEN_MODEL = "google/gemini-2.5-flash-image"
-FACE_SWAP_MODEL = "google/gemini-3.1-flash-image"  # Nano Banana 2 — confirmed working identity transfer for this project's use case (see git history f1afdc8); supports up to 14 input references, up to 4K
+FACE_SWAP_MODEL = "bytedance-seed/seedream-4.5"  # Seedream 4.5 — identity-preserving edits, strictly preserves subject details/lighting/skin tone from references; up to 14 input references, up to 4K
 TEXT_MODEL = "google/gemini-2.5-flash"
 
 # Video generation models — MiniMax H3 (Hailuo 3) is the sole model.
