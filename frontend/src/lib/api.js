@@ -60,6 +60,10 @@ export const api = {
   getCustomizations: () => client.get("/customizations").then((r) => r.data),
   getCustomization: (id) => client.get(`/customizations/${id}`).then((r) => r.data),
   getVideoInfo: (videoId) => client.get(`/videos/${videoId}`).then((r) => r.data),
+  // Structural availability of Aleph's exact-edit path for this video. Cheap
+  // and side-effect free; the caller ANDs it with its own style inputs.
+  getHookEngine: (videoId) =>
+    client.get(`/videos/${videoId}/hook-engine`).then((r) => r.data),
   getHistory: () => client.get("/history").then((r) => r.data),
   deleteVideo: (videoId) => client.delete(`/videos/${videoId}`).then((r) => r.data),
   getRemixChat: (customizationId) =>

@@ -1816,6 +1816,72 @@ async def get_video_analysis(video_id: str, user_id: str = Depends(get_current_u
     return await get_latest_analysis_or_404(video_id)
 
 
+@api_router.get("/videos/{video_id}/hook-engine")
+async def get_hook_engine_availability(video_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Report whether Runway Aleph's exact-edit path is structurally available for
+    this video, so the UI can stop inferring it.
+
+    The frontend previously guessed eligibility from "is a video attached?",
+    which can't see the two conditions that actually decide it server-side:
+    whether a hook analysis is obtainable, and whether the source clip is
+    still retrievable. That made the "Exact edit" badge capable of promising
+    something the backend would then silently downgrade.
+
+    This reports only the STRUCTURAL half of the decision. The caller ANDs it
+    with its own inputs (hook energy / custom direction / motion style), which
+    it already knows, keeping the split clean and avoiding a round-trip on
+    every keystroke.
+
+    Deliberately cheap and side-effect free: it never downloads or analyzes,
+    it only checks whether those are possible. Returns 200 with a reason
+    instead of 404 so the client has one code path.
+
+    Note both recovery mechanisms this accounts for:
+      - a missing local file is recoverable when tiktok_url/direct_video_url
+        is on record (the hook endpoint re-downloads on demand)
+      - a missing analysis is recoverable whenever the clip is, since the hook
+        endpoint auto-analyzes on demand
+    So a missing analysis alone is NOT disqualifying — only an unobtainable
+    source clip is.
+    """
+    vid = (video_id or "").strip()
+    video = await _fetch_one("SELECT * FROM videos WHERE id = ?", (vid,))
+    if not video:
+        return {
+            "video_id": vid,
+            "exact_edit_available": False,
+            "reason": "video_not_found",
+            "has_analysis": False,
+            "source_ready": False,
+            "source_recoverable": False,
+        }
+
+    analysis = await _fetch_one(
+        "SELECT id FROM analyses WHERE video_id = ? ORDER BY created_at DESC LIMIT 1",
+        (vid,),
+    )
+
+    local_path = video.get("local_video_path")
+    source_ready = bool(local_path) and Path(local_path).exists()
+    source_recoverable = bool(
+        (video.get("tiktok_url") or "").strip()
+        or (video.get("direct_video_url") or "").strip()
+    )
+
+    available = source_ready or source_recoverable
+    reason = None if available else "source_unavailable"
+
+    return {
+        "video_id": vid,
+        "exact_edit_available": available,
+        "reason": reason,
+        "has_analysis": bool(analysis),
+        "source_ready": source_ready,
+        "source_recoverable": source_recoverable,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Video Models (available for video generation)
 # ---------------------------------------------------------------------------

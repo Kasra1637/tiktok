@@ -148,6 +148,12 @@ export default function FaceSwap() {
   // action that actually failed rather than always regenerating the hook.
   const [failedPhase, setFailedPhase] = useState(null);
   const [motionStyle, setMotionStyle] = useState("");
+  // Backend-reported availability of Aleph's exact-edit path for the attached
+  // video. null = not yet known (or no video attached). Previously this was
+  // inferred from "is a video attached?", which couldn't see whether the
+  // analysis and source clip were actually obtainable server-side — so the
+  // badge could promise an exact edit the backend would then downgrade.
+  const [exactEditAvailable, setExactEditAvailable] = useState(null);
   // Hook videos are muted/silent by default. TikTok creators normally attach
   // a trending sound or native text-to-speech in TikTok's own editor after
   // exporting — AI-generated audio can't be posted as a "trending sound" and
@@ -203,6 +209,31 @@ export default function FaceSwap() {
   useEffect(() => {
     api.getActiveBrand().then(setBrandProfile).catch(() => setBrandProfile(null));
   }, []);
+
+  // Ask the backend whether the exact-edit path is actually available for this
+  // video instead of inferring it. Ignores a stale response if the attached
+  // video changes mid-flight. On failure we leave it null rather than assuming
+  // true, so the UI degrades to a neutral message instead of over-promising.
+  useEffect(() => {
+    const vid = videoInfo?.videoId;
+    if (!vid) {
+      setExactEditAvailable(null);
+      return;
+    }
+    let cancelled = false;
+    setExactEditAvailable(null);
+    api
+      .getHookEngine(vid)
+      .then((d) => {
+        if (!cancelled) setExactEditAvailable(!!d.exact_edit_available);
+      })
+      .catch(() => {
+        if (!cancelled) setExactEditAvailable(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [videoInfo?.videoId]);
 
   // Load saved face from localStorage
   useEffect(() => {
@@ -470,6 +501,19 @@ export default function FaceSwap() {
   const activeImageId = () =>
     (result?.variants && result.variants[selectedVariant]?.id) || result?.id;
 
+  // ── Hook engine derivation ────────────────────────────────────────────────
+  // Mirrors the backend's routing: exact edit requires the source to be
+  // usable (reported by /hook-engine) AND no style input asking to deviate
+  // from a literal replication. Kept in one place so the engine badge,
+  // progress copy, tradeoff notice, and Default card can't drift apart.
+  const styleOverrides = [
+    hookCategory && "energy",
+    hookCustomPrompt.trim() && "direction",
+    motionStyle && "motion",
+  ].filter(Boolean);
+  const hasStyleOverride = styleOverrides.length > 0;
+  const willUseExactEdit = exactEditAvailable === true && !hasStyleOverride;
+
   const handleGenerateHook = async () => {
     const activeId = activeImageId();
     if (!activeId) return;
@@ -522,6 +566,10 @@ export default function FaceSwap() {
     setVideoStatus(null); setVideoUrl(null); setVideoError(null); setFailedPhase(null);
     setVideoPhase("hook"); setMotionStyle("");
     setHookCategory(""); setHookCustomPrompt("");
+    // videoInfo is cleared here too, and the effect keyed on it will null this
+    // out — set it explicitly so there's no frame where a stale availability
+    // from the previous video is still on screen.
+    setExactEditAvailable(null);
     // Match the initial state (15s), not an arbitrary different default.
     setBrandUrl(""); setBrandedDuration(15); setGeneratingMore(false);
     setIncludeHookAudio(false);
@@ -920,7 +968,7 @@ export default function FaceSwap() {
                   <p className="text-sm font-semibold">{videoStatus === "pending" ? "Queued..." : "Generating..."}</p>
                   <p className="text-xs text-muted-foreground">
                     {videoPhase === "hook"
-                      ? (videoInfo && !hookCategory && !hookCustomPrompt.trim() && !motionStyle
+                      ? (willUseExactEdit
                           ? "Editing the original hook video with your face (30s-2min)"
                           : `Creating 3s ${includeHookAudio ? "hook with AI audio" : "silent hook"} (30s-2min)`)
                       : "Extending video with brand message (1-3min)"}
@@ -1018,10 +1066,10 @@ export default function FaceSwap() {
                       data-testid="motion-default"
                     >
                       <span className={`block text-xs font-semibold ${!motionStyle ? "text-[color:var(--brand-indigo)]" : "text-foreground"}`}>
-                        Default {videoInfo ? "— Match original" : "— Auto"}
+                        Default {exactEditAvailable === true ? "— Match original" : "— Auto"}
                       </span>
                       <span className="text-xs leading-snug text-muted-foreground">
-                        {videoInfo
+                        {exactEditAvailable === true
                           ? "Replicate the original hook's real movement exactly. Recommended — this is the only option that uses the exact-edit engine."
                           : "Let AI pick the movement that best fits your photo."}
                       </span>
@@ -1052,12 +1100,12 @@ export default function FaceSwap() {
                 {/* Explicit tradeoff notice — only meaningful when a source video
                     exists, since that's the only case where an exact edit was
                     actually available to give up. */}
-                {videoInfo && (hookCategory || hookCustomPrompt.trim() || motionStyle) && (
+                {exactEditAvailable === true && hasStyleOverride && (
                   <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-2.5" data-testid="aleph-tradeoff-notice">
                     <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
                     <p className="text-xs leading-snug text-muted-foreground">
                       <span className="font-semibold text-amber-500">Exact edit turned off.</span>{" "}
-                      Custom {[hookCategory && "energy", hookCustomPrompt.trim() && "direction", motionStyle && "motion"].filter(Boolean).join(", ")}{" "}
+                      Custom {styleOverrides.join(", ")}{" "}
                       means the hook is regenerated instead of edited, so body movement,
                       gestures, camera, and clothing won't match the original pixel-for-pixel.
                       Clear your selections to restore the exact edit.
@@ -1072,18 +1120,27 @@ export default function FaceSwap() {
                     the generative fallback synthesizes a new scene when there's no
                     source video to edit or the hook was customized. */}
                 <div className="rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-2.5" data-testid="hook-model-indicator">
-                  {videoInfo && !hookCategory && !hookCustomPrompt.trim() && !motionStyle ? (
+                  {willUseExactEdit ? (
                     <>
                       <span className="block text-xs font-semibold text-[color:var(--brand-indigo)]">Runway Aleph 2.0 &middot; Exact edit</span>
                       <span className="text-xs text-muted-foreground">Edits the original hook video directly — body movement, gestures, camera, and clothing stay pixel-for-pixel identical. Only the face changes.</span>
+                    </>
+                  ) : videoInfo && exactEditAvailable === null ? (
+                    /* Availability not yet known (request in flight, or it failed).
+                       Stay neutral rather than claiming either engine. */
+                    <>
+                      <span className="block text-xs font-semibold text-muted-foreground">Checking engine…</span>
+                      <span className="text-xs text-muted-foreground">Determining whether this hook can be edited exactly.</span>
                     </>
                   ) : (
                     <>
                       <span className="block text-xs font-semibold text-muted-foreground">Generative engine</span>
                       <span className="text-xs text-muted-foreground">
-                        {videoInfo
-                          ? `Custom ${[hookCategory && "energy", hookCustomPrompt.trim() && "direction", motionStyle && "motion"].filter(Boolean).join(", ")} was set, so a new scene is generated instead of editing the original video.`
-                          : "No source video to edit — a new scene is generated from your photo."}
+                        {exactEditAvailable === true && hasStyleOverride
+                          ? `Custom ${styleOverrides.join(", ")} was set, so a new scene is generated instead of editing the original video.`
+                          : videoInfo
+                            ? "The original clip for this video isn't available to edit, so a new scene is generated instead."
+                            : "No source video to edit — a new scene is generated from your photo."}
                       </span>
                     </>
                   )}
