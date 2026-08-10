@@ -25,7 +25,7 @@ const FEATURES = [
     icon: TrendingUp,
     title: "AI Hook Analysis",
     description:
-      "AI dissects the first 2\u20133 seconds of any video \u2014 expressions, gestures, pacing, overlays. Scored 1\u201310.",
+      "AI dissects the first 4 seconds of any video \u2014 expressions, gestures, pacing, overlays. Scored 1\u201310.",
   },
   {
     icon: FileText,
