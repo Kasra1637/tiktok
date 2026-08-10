@@ -759,93 +759,70 @@ async def generate_video(
     use_v2v_mode = prefer_v2v_motion and reference_video_url and reference_image_path and reference_image_path.exists()
 
     # === Reference Strategy ===
-    # Seedance 2.5: supports frame_images + input_references together.
-    #   - Face image → frame_images (first_frame) for hard identity anchor
-    #   - Video → input_references (video_url) for motion/gesture replication
-    #   This gives us BOTH identity lock AND motion transfer in one request.
+    # Both Seedance 2.5 and MiniMax H3 via OpenRouter CANNOT combine frame_images
+    # with input_references (BytePlus returns TaskTypeConstraint error, MiniMax
+    # returns a 400). The strategy for V2V mode is the same for both:
+    #   - Face image → input_references (as image ref for identity guidance)
+    #   - Video → input_references (as video ref for motion replication)
+    #   Both coexist in input_references without conflict.
     #
-    # MiniMax H3: CANNOT combine frame_images with input_references.
-    #   - V2V mode: face image → input_references (image ref for identity guidance)
-    #   - Non-V2V mode: face image → frame_images (first_frame), drop all refs
+    # When NOT in V2V mode (no reference video):
+    #   - Face image → frame_images (first_frame) for hard identity anchor
+    #   - No input_references needed
 
-    if supports_combined:
-        # Seedance 2.5 path: always use first_frame for identity anchor
-        if reference_image_path and reference_image_path.exists():
-            b64 = image_to_base64(reference_image_path)
-            mime = "image/png"
-            payload["frame_images"] = [
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:{mime};base64,{b64}"},
-                    "frame_type": "first_frame",
-                }
-            ]
-
-        # Build input_references for motion (video) and audio references
-        refs = list(input_references) if input_references else []
-
-        if reference_video_url:
-            refs.append({
-                "type": "video_url",
-                "video_url": {"url": reference_video_url},
-            })
-
-        if reference_audio_url:
-            refs.append({
-                "type": "audio_url",
-                "audio_url": {"url": reference_audio_url},
-            })
-
-        if refs:
-            payload["input_references"] = refs
-
-    else:
-        # MiniMax H3 path: cannot combine frame_images + input_references
-        if reference_image_path and reference_image_path.exists() and not use_v2v_mode:
-            b64 = image_to_base64(reference_image_path)
-            mime = "image/png"
-            payload["frame_images"] = [
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:{mime};base64,{b64}"},
-                    "frame_type": "first_frame",
-                }
-            ]
-
-        refs = list(input_references) if input_references else []
-
-        # V2V mode for H3: face goes into input_references as image ref
-        if use_v2v_mode:
-            b64 = image_to_base64(reference_image_path)
-            mime = "image/png"
-            refs.insert(0, {
+    # First frame: the face-swapped image anchors identity throughout the video.
+    # In V2V mode, we skip frame_images and put the image in input_references instead.
+    if reference_image_path and reference_image_path.exists() and not use_v2v_mode:
+        b64 = image_to_base64(reference_image_path)
+        mime = "image/png"
+        payload["frame_images"] = [
+            {
                 "type": "image_url",
                 "image_url": {"url": f"data:{mime};base64,{b64}"},
-            })
+                "frame_type": "first_frame",
+            }
+        ]
 
-        if reference_video_url:
-            refs.append({
-                "type": "video_url",
-                "video_url": {"url": reference_video_url},
-            })
+    # Build input_references for V2V mode
+    refs = list(input_references) if input_references else []
 
-        if reference_audio_url:
-            refs.append({
-                "type": "audio_url",
-                "audio_url": {"url": reference_audio_url},
-            })
+    # V2V mode: put the face-swap image as an image reference so the model uses
+    # it for identity guidance while also accepting the video motion reference.
+    if use_v2v_mode:
+        b64 = image_to_base64(reference_image_path)
+        mime = "image/png"
+        refs.insert(0, {
+            "type": "image_url",
+            "image_url": {"url": f"data:{mime};base64,{b64}"},
+        })
 
-        # H3 constraint: drop refs if frame_images is present
-        if payload.get("frame_images") and refs:
-            logger.warning(
-                "MiniMax H3 does not support frame_images + input_references together — "
-                f"dropping {len(refs)} reference(s) (video/audio) to keep the first-frame "
-                "identity anchor."
-            )
-            refs = []
+    # V2V motion transfer: feed the original viral video so the model replicates
+    # its timing, camera language, performance rhythm, and editing pace.
+    if reference_video_url:
+        refs.append({
+            "type": "video_url",
+            "video_url": {"url": reference_video_url},
+        })
 
-        if refs:
-            payload["input_references"] = refs
+    # Audio reference
+    if reference_audio_url:
+        refs.append({
+            "type": "audio_url",
+            "audio_url": {"url": reference_audio_url},
+        })
+
+    # Safety: if frame_images is set AND refs exist, drop refs to avoid the
+    # TaskTypeConstraint error. This shouldn't happen with the logic above
+    # (frame_images is only set when NOT in V2V mode), but guard against it.
+    if payload.get("frame_images") and refs:
+        logger.warning(
+            f"Cannot combine frame_images + input_references — "
+            f"dropping {len(refs)} reference(s) to keep first-frame identity anchor."
+        )
+        refs = []
+
+    if refs:
+        payload["input_references"] = refs
 
     logger.info(
         f"Submitting video generation ({model_config['name']}): duration={payload['duration']}s, "
