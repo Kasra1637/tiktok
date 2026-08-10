@@ -76,22 +76,22 @@ def _build_face_swap_prompt(customization_prompt: str = "") -> str:
         )
 
     return (
-        "EDIT IMAGE 1: Replace the person's face with the face from IMAGE 2. "
-        "The output must look like THE PERSON IN IMAGE 2 placed into the scene from IMAGE 1.\n\n"
-        "FROM IMAGE 2 — the output person MUST look like this person:\n"
+        "EDIT IMAGE 2: Replace the person's face with the face from IMAGE 1. "
+        "The output must look like THE PERSON IN IMAGE 1 placed into the scene from IMAGE 2.\n\n"
+        "FROM IMAGE 1 — the output person MUST look like this person:\n"
         "- Same face shape, same eyes, same nose, same lips, same skin tone\n"
         "- Same hairstyle, hair color, hair length\n"
-        "- The result should be immediately recognizable as the person in image 2\n\n"
-        "FROM IMAGE 1 — keep these EXACTLY unchanged:\n"
+        "- The result should be immediately recognizable as the person in image 1\n\n"
+        "FROM IMAGE 2 — keep these EXACTLY unchanged:\n"
         "- HEAD ANGLE: same tilt, rotation, and direction the head is facing\n"
         "- MOUTH: same open/closed state and same degree of opening — do NOT widen or close\n"
         "- EXPRESSION: same emotion intensity — if surprised, be surprised to the same degree\n"
-        "- GAZE: eyes looking the same direction as in image 1\n"
+        "- GAZE: eyes looking the same direction as in image 2\n"
         "- CLOTHING: same outfit, same color, same fabric — absolutely no changes\n"
         "- BODY POSE: same position, same hand gestures\n"
         "- BACKGROUND: same scene, same lighting, same camera angle\n\n"
         "REMOVE all text overlays, captions, and watermarks from the output.\n"
-        "SKIN TONE: Use image 2's natural skin tone on the entire body (neck, arms, hands)."
+        "SKIN TONE: Use image 1's natural skin tone on the entire body (neck, arms, hands)."
         f"{customization_instruction}"
     )
 
@@ -411,8 +411,8 @@ async def generate_customized_preview(
             customization_prompt if mode == "custom" else ""
         ),
         "input_references": [
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{ref_b64}"}},
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{person_b64}"}},
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{ref_b64}"}},
         ],
         "resolution": "2K",
         "aspect_ratio": "9:16",
@@ -459,8 +459,8 @@ async def generate_face_swap(
         "model": FACE_SWAP_MODEL,
         "prompt": _build_face_swap_prompt(customization_prompt),
         "input_references": [
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{target_b64}"}},
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{source_b64}"}},
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{target_b64}"}},
         ],
         "resolution": "2K",
         "aspect_ratio": "9:16",
