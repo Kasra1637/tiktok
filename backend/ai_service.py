@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # Models
 VISION_MODEL = "google/gemini-2.5-flash"
 IMAGE_GEN_MODEL = "google/gemini-2.5-flash-image"
-FACE_SWAP_MODEL = "black-forest-labs/flux.2-max"  # FLUX.2 Max — top-tier image editing, preserves facial features/proportions/expressions/identity across complex edits; up to 8 input references
+FACE_SWAP_MODEL = "google/gemini-3.1-flash-image"  # Gemini 3.1 Flash Image — reliable face identity transfer, up to 14 input references, up to 4K
 TEXT_MODEL = "google/gemini-2.5-flash"
 
 # Video generation models — MiniMax H3 (Hailuo 3) is the sole model.
@@ -408,6 +408,7 @@ async def generate_customized_preview(
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{ref_b64}"}},
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{person_b64}"}},
         ],
+        "resolution": "2K",
         "aspect_ratio": "9:16",
         "n": 1,
     }
@@ -455,6 +456,7 @@ async def generate_face_swap(
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{target_b64}"}},
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{source_b64}"}},
         ],
+        "resolution": "2K",
         "aspect_ratio": "9:16",
         "n": 1,
     }
