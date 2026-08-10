@@ -59,7 +59,7 @@ VIDEO_MODELS = {
         "supports_combined_refs": False,  # Cannot combine frame_images with input_references
     },
 }
-DEFAULT_VIDEO_MODEL = "seedance-2.5"
+DEFAULT_VIDEO_MODEL = "minimax-h3"
 # Legacy fallback
 VIDEO_MODEL = VIDEO_MODELS[DEFAULT_VIDEO_MODEL]["id"]
 
@@ -319,7 +319,7 @@ async def analyze_hook(frame_paths: list, session_id: str, music_context: dict =
             if music_context.get("song_duration"):
                 audio_context_parts.append(f"Sound duration: {music_context['song_duration']}s.")
     if transcript_text:
-        # Limit transcript to first ~500 chars (hook is first 4 seconds)
+        # Limit transcript to first ~500 chars (hook is first 3 seconds)
         truncated_transcript = transcript_text[:500]
         audio_context_parts.append(
             f"Transcript/spoken words in the video: \"{truncated_transcript}\""
@@ -329,7 +329,7 @@ async def analyze_hook(frame_paths: list, session_id: str, music_context: dict =
 
     system_message = (
         "You are an expert short-form video (TikTok/Reels) hook analyst. You examine the "
-        "first 4 seconds of a video (given as a sequence of frames in chronological order) "
+        "first 3 seconds of a video (given as a sequence of frames in chronological order) "
         "and identify exactly what makes the hook effective at grabbing attention. "
         "Respond with STRICT JSON only, no markdown fences, no extra commentary."
     )
@@ -345,7 +345,7 @@ async def analyze_hook(frame_paths: list, session_id: str, music_context: dict =
         )
 
     prompt = (
-        "Here are sequential frames from the first ~4 seconds of a short-form video "
+        "Here are sequential frames from the first ~3 seconds of a short-form video "
         "(frame_001 is earliest). Analyze the hook and return ONLY a JSON object with this "
         "exact schema:\n"
         "{\n"
@@ -552,7 +552,7 @@ async def generate_video_prompt(analysis: dict, brand_context: dict, target_dura
         )
 
     prompt = (
-        "Hook analysis of the original viral video's first 4 seconds:\n"
+        "Hook analysis of the original viral video's first 3 seconds:\n"
         f"- Facial expressions: {analysis.get('facial_expressions')}\n"
         f"- Body language & gestures: {analysis.get('body_language_gestures')}\n"
         f"- Pacing & cuts: {analysis.get('pacing_cuts')}\n"
@@ -633,18 +633,18 @@ async def analyze_image_for_hook(image_path: Path, session_id: str) -> dict:
     system_message = (
         "You are an expert short-form video (TikTok/Reels) hook strategist. You examine a single "
         "still image of a person and determine what attention-grabbing movement is happening or "
-        "about to happen — then describe how to animate this into a 4-second silent hook video. "
+        "about to happen — then describe how to animate this into a 3-second silent hook video. "
         "Respond with STRICT JSON only, no markdown fences, no extra commentary."
     )
 
     prompt = (
-        "Here is a still image that will be the first frame of a 4-second TikTok hook video. "
+        "Here is a still image that will be the first frame of a 3-second TikTok hook video. "
         "Analyze what's in this image and describe how to animate it into an attention-grabbing "
         "silent hook. Return ONLY a JSON object with this exact schema:\n"
         "{\n"
-        '  "facial_expressions": "describe the expression visible and how it should evolve over 4 seconds",\n'
+        '  "facial_expressions": "describe the expression visible and how it should evolve over 3 seconds",\n'
         '  "body_language_gestures": "describe the pose/gesture visible and what movement should follow",\n'
-        '  "pacing_cuts": "describe the ideal pacing and camera movement for a 4s hook starting from this frame",\n'
+        '  "pacing_cuts": "describe the ideal pacing and camera movement for a 3s hook starting from this frame",\n'
         '  "hook_summary": "1-2 sentence description of the hook concept that would work from this image",\n'
         '  "replicable_mechanics": ["list", "of", "specific", "movements", "to", "animate"]\n'
         "}\n"
@@ -1022,7 +1022,7 @@ async def generate_remix_script(analysis: dict, brand_profile: dict, target_dura
         )
 
     prompt = (
-        "Hook analysis of the original viral video's first 4 seconds:\n"
+        "Hook analysis of the original viral video's first 3 seconds:\n"
         f"- Facial expressions: {analysis.get('facial_expressions')}\n"
         f"- Body language & gestures: {analysis.get('body_language_gestures')}\n"
         f"- Pacing & cuts: {analysis.get('pacing_cuts')}\n"

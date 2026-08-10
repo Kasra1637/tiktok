@@ -13,7 +13,7 @@ export default function Terms() {
         <p>HookForge is a content creation tool that provides the following services:</p>
         <LegalList>
           <LegalItem>Discovery of trending TikTok video content via the TikTok Content Discovery API</LegalItem>
-          <LegalItem>AI-powered analysis of video hooks (first 4 seconds)</LegalItem>
+          <LegalItem>AI-powered analysis of video hooks (first 3 seconds)</LegalItem>
           <LegalItem>AI face swap technology for inserting your likeness into video frames</LegalItem>
           <LegalItem>AI video generation from face-swapped reference frames</LegalItem>
           <LegalItem>Brand profile analysis and customized video prompt generation</LegalItem>

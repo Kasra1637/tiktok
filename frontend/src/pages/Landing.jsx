@@ -25,7 +25,7 @@ const FEATURES = [
     icon: TrendingUp,
     title: "AI Hook Analysis",
     description:
-      "AI dissects the first 4 seconds of any video \u2014 expressions, gestures, pacing, overlays. Scored 1\u201310.",
+      "AI dissects the first 3 seconds of any video \u2014 expressions, gestures, pacing, overlays. Scored 1\u201310.",
   },
   {
     icon: FileText,
@@ -67,7 +67,7 @@ const FEATURES = [
     icon: Clapperboard,
     title: "AI Video Generation",
     description:
-      "Seedance 2.5 replicates the original hook\u2019s exact body movements with your face. 4s hook at 1080p, then extend to a branded video.",
+      "Replicates the original hook\u2019s exact body movements with your face. 3s hook, then extend to a branded video.",
   },
   {
     icon: RotateCcw,
@@ -180,9 +180,9 @@ const PIPELINE_BLOCKS = [
     title: "Video (Motion Replication)",
     body: (
       <>
-        The first 4 seconds of the original viral video become the V2V motion reference.
-        Seedance 2.5 replicates the exact body movements, hand gestures, and camera work
-        &mdash; with your face as the identity anchor. Output is 1080p, muted by default
+        The first 3 seconds of the original viral video become the motion reference.
+        The video model replicates the exact body movements, hand gestures, and camera work
+        &mdash; with your face as the identity anchor. Output is muted by default
         (add a trending sound in TikTok). Re-roll for another take, or extend into a
         longer branded video with your CTA.
       </>

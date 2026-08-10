@@ -11,7 +11,7 @@ import SaveHookTemplateDialog from "../components/SaveHookTemplateDialog";
 import { api, getErrorMessage } from "../lib/api";
 import { ArrowLeft, Eye, Heart, MessageCircle, AlertTriangle, RotateCcw, ExternalLink, Repeat2, Music2, FileText, BadgeAlert, Bookmark, BookmarkCheck, Sparkles, ImageOff } from "lucide-react";
 
-const ANALYZE_STAGES = ["Downloading video", "Extracting first 4 seconds", "Analyzing hook mechanics with AI"];
+const ANALYZE_STAGES = ["Downloading video", "Extracting first 3 seconds", "Analyzing hook mechanics with AI"];
 
 function formatCount(n) {
   if (!n) return "0";
@@ -364,7 +364,7 @@ export default function AnalysisDetail() {
                 <div>
                   <h3 className="font-display font-semibold">Analyzing hook...</h3>
                   <p className="text-xs text-muted-foreground">
-                    Reading the first 4 seconds frame by frame
+                    Reading the first 3 seconds frame by frame
                   </p>
                 </div>
               </div>

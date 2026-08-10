@@ -821,7 +821,7 @@ export default function FaceSwap() {
               </span>
               <div>
                 <h2 className="font-display text-base font-semibold">Create Video</h2>
-                <p className="text-xs text-muted-foreground">Step 1: 4s hook &rarr; Step 2: Extend with brand message</p>
+                <p className="text-xs text-muted-foreground">Step 1: 3s hook &rarr; Step 2: Extend with brand message</p>
               </div>
             </div>
 
@@ -916,7 +916,7 @@ export default function FaceSwap() {
                 <div>
                   <p className="text-sm font-semibold">{videoStatus === "pending" ? "Queued..." : "Generating..."}</p>
                   <p className="text-xs text-muted-foreground">
-                    {videoPhase === "hook" ? `Creating 4s ${includeHookAudio ? "hook with AI audio" : "silent hook"} (30s-2min)` : "Extending video with brand message (1-3min)"}
+                    {videoPhase === "hook" ? `Creating 3s ${includeHookAudio ? "hook with AI audio" : "silent hook"} (30s-2min)` : "Extending video with brand message (1-3min)"}
                   </p>
                 </div>
               </div>
@@ -945,7 +945,7 @@ export default function FaceSwap() {
             {!videoUrl && !videoStatus && (
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <StepLabel step="Step 1" title="Generate 4s Hook" />
+                  <StepLabel step="Step 1" title="Generate 3s Hook" />
                   <p className="text-xs leading-relaxed text-muted-foreground">
                     Replicates the original hook&rsquo;s exact body movements, hand gestures, and timing with your face.
                     Muted by default — add a trending sound or text-to-speech in TikTok's editor after exporting.
@@ -1035,7 +1035,7 @@ export default function FaceSwap() {
 
                 <Button onClick={handleGenerateHook} disabled={generatingVideo} variant="brand" size="lg" className="w-full" data-testid="generate-hook-button">
                   <Clapperboard className="h-4 w-4" />
-                  Generate 4s Hook Video
+                  Generate 3s Hook Video
                 </Button>
               </div>
             )}

@@ -368,14 +368,14 @@ async def extract_last_frame(video_path: Path, out_path: Path) -> Optional[Path]
     return out_path
 
 
-async def trim_video_to_hook(video_path: Path, duration: float = 4.0) -> Optional[Path]:
+async def trim_video_to_hook(video_path: Path, duration: float = 3.0) -> Optional[Path]:
     """
     Extract the first `duration` seconds of a video as a standalone clip.
 
-    Used for V2V motion transfer: sending only the hook portion (first 4s)
-    gives Seedance 2.5 a clean 1:1 timing reference that matches the generated
-    video's length, rather than forcing the model to guess which segment of
-    a longer clip to replicate.
+    Used for V2V motion transfer: sending only the hook portion (first 3s)
+    gives the video model a clean 1:1 timing reference that matches the
+    generated video's length, rather than forcing the model to guess which
+    segment of a longer clip to replicate.
 
     The trimmed clip is cached at storage/videos/{stem}_hook{duration}s.mp4
     so repeated generations from the same source video don't re-encode.
