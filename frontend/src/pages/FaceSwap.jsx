@@ -947,7 +947,7 @@ export default function FaceSwap() {
                 <div className="space-y-2">
                   <StepLabel step="Step 1" title="Generate 5s Hook" />
                   <p className="text-xs leading-relaxed text-muted-foreground">
-                    A short scroll-stopping clip with attention-grabbing movement, designed to hold attention in the first 2-3 seconds.
+                    Replicates the original hook&rsquo;s exact body movements, hand gestures, and timing with your face.
                     Muted by default — add a trending sound or text-to-speech in TikTok's editor after exporting.
                   </p>
                 </div>

@@ -67,7 +67,7 @@ const FEATURES = [
     icon: Clapperboard,
     title: "AI Video Generation",
     description:
-      "Your swapped image becomes frame one. MiniMax H3 generates a 5\u201315s vertical video at 2K resolution.",
+      "MiniMax H3 replicates the original hook\u2019s exact body movements with your face. 5s hook at 2K, then extend to a branded video.",
   },
   {
     icon: RotateCcw,
@@ -112,7 +112,7 @@ const FLOW_STEPS = [
     step: "4",
     label: "Generate",
     icon: Clapperboard,
-    detail: "MiniMax H3 animates your frame into a 5\u201315s video. Re-roll or extend with your brand CTA.",
+    detail: "MiniMax H3 replicates the hook\u2019s exact body movements with your face. Extend with your brand CTA.",
   },
 ];
 
@@ -177,14 +177,14 @@ const PIPELINE_BLOCKS = [
     icon: Clapperboard,
     tone: "coral",
     kicker: "Phase 2",
-    title: "Video (Animation)",
+    title: "Video (Motion Replication)",
     body: (
       <>
-        Your swapped image is the{" "}
-        <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs">first_frame</code>.
-        The original clip is the V2V motion reference. MiniMax H3 replicates the exact timing and camera work
-        at 2K resolution. Videos are muted by default (add a trending sound in TikTok) with an optional AI-audio toggle.
-        Re-roll for another take, or extend into a longer branded video with a CTA.
+        The first 5 seconds of the original viral video become the V2V motion reference.
+        MiniMax H3 replicates the exact body movements, hand gestures, and camera work
+        &mdash; with your face as the identity anchor. Output is 2K, muted by default
+        (add a trending sound in TikTok). Re-roll for another take, or extend into a
+        longer branded video with your CTA.
       </>
     ),
   },
@@ -230,7 +230,7 @@ const PIPELINE_BLOCKS = [
 const MODELS = [
   { label: "Hook Analysis", value: "Gemini 2.5 Flash (vision) \u2014 frame reading, structured JSON output" },
   { label: "Face Swap", value: "Grok Imagine \u2014 identity-preserving compositing, 2K" },
-  { label: "Video", value: "MiniMax H3 \u2014 V2V motion transfer, native audio, 2K, up to 15s" },
+  { label: "Video", value: "MiniMax H3 \u2014 V2V motion replication from the original hook, identity transfer, 2K, up to 15s" },
   { label: "Brand & Remix", value: "Gemini 2.5 Flash \u2014 brand extraction, prompt writing, remix chat" },
   { label: "Data", value: "Apify TikTok Scraper + yt-dlp \u2014 profiles, hashtags, keyword search, music" },
 ];
@@ -339,8 +339,8 @@ export default function Landing() {
             className="animate-fade-up mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl"
             style={{ animationDelay: "120ms" }}
           >
-            Pick a trending hook, swap yourself into the key frame, and generate a branded
-            video in under two minutes. Bookmark any hook &mdash; every future
+            Pick a trending hook, swap yourself into the key frame, and generate a video that
+            replicates the original&rsquo;s exact movements &mdash; in under two minutes. Bookmark any hook &mdash; every future
             remix costs nothing.
           </p>
 

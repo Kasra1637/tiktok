@@ -2874,13 +2874,24 @@ async def face_swap_generate_hook_video(
         and not template
     )
 
+    # When V2V is active, trim the source video to the first 5 seconds so the
+    # motion reference is a clean 1:1 match for the 5-second output. This gives
+    # MiniMax H3 an exact timing template rather than forcing it to guess which
+    # segment of a longer clip to replicate. Falls back to the full video if
+    # trimming fails.
+    v2v_video_path = reference_video_path
+    if use_v2v and reference_video_path:
+        trimmed = await pipeline.trim_video_to_hook(reference_video_path, duration=5.0)
+        if trimmed:
+            v2v_video_path = trimmed
+
     try:
         result = await generate_video(
             prompt=prompt,
             reference_image_path=image_path,
             duration=5,
             generate_audio=False,  # Always silent — creator adds sound in TikTok editor
-            reference_video_url=public_media_url(reference_video_path),  # V2V motion transfer
+            reference_video_url=public_media_url(v2v_video_path),  # V2V motion transfer
             prefer_v2v_motion=use_v2v,
         )
     except Exception as e:
