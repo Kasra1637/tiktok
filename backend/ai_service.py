@@ -82,6 +82,9 @@ def _build_face_swap_prompt(customization_prompt: str = "") -> str:
         "same body position, same arms visibility, same framing, same zoom, same background. "
         "If arms are not visible in image 2, they must not appear in the output. "
         "The only difference between image 2 and the output should be the face identity. "
+        "FACE QUALITY: The face must exactly match IMAGE 1's skin texture, makeup level, and complexion. "
+        "Do NOT add eyeshadow, contour, dark patches, or any makeup not present in image 1. "
+        "The skin must be clean and match image 1's exact appearance — no artificial shading or blemishes. "
         "Do NOT include any text, captions, watermarks, emojis, or overlays in the output image."
         f"{customization_instruction}"
     )
