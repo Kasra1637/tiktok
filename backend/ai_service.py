@@ -718,8 +718,14 @@ async def generate_video(
         "duration": min(duration, max_dur),
         "resolution": "2K",
         "aspect_ratio": "9:16",
-        "generate_audio": generate_audio,
     }
+
+    # Only include generate_audio when explicitly requested. Sending False for
+    # models that don't support the parameter (OpenRouter rejects unsupported
+    # fields for some providers like MiniMax Hailuo) causes a 400. Omitting it
+    # lets the provider use its own default (typically no audio).
+    if generate_audio:
+        payload["generate_audio"] = True
 
     # First frame: the face-swapped image anchors identity throughout the video
     if reference_image_path and reference_image_path.exists():
@@ -779,11 +785,33 @@ async def generate_video(
     )
 
     async with httpx.AsyncClient(timeout=90) as client:
-        resp = await client.post(f"{OPENROUTER_BASE}/videos", headers=_headers(), json=payload)
-        if resp.status_code >= 400:
-            error_text = resp.text[:500]
-            logger.error(f"Video generation submission failed: HTTP {resp.status_code}: {error_text}")
-            raise RuntimeError(f"Video generation failed (HTTP {resp.status_code}): {error_text}")
+        # Retry once on transient failures (502/503/429/timeout) from OpenRouter.
+        last_error = None
+        for attempt in range(2):
+            try:
+                resp = await client.post(f"{OPENROUTER_BASE}/videos", headers=_headers(), json=payload)
+            except httpx.TimeoutException as e:
+                last_error = RuntimeError(f"Video generation timed out: {e}")
+                if attempt == 0:
+                    logger.warning(f"Video generation attempt 1 timed out, retrying...")
+                    await asyncio.sleep(2)
+                    continue
+                raise last_error
+
+            if resp.status_code in (502, 503, 429) and attempt == 0:
+                error_text = resp.text[:200]
+                logger.warning(
+                    f"Video generation attempt 1 got HTTP {resp.status_code}: {error_text} — retrying..."
+                )
+                await asyncio.sleep(3)
+                continue
+
+            if resp.status_code >= 400:
+                error_text = resp.text[:500]
+                logger.error(f"Video generation submission failed: HTTP {resp.status_code}: {error_text}")
+                raise RuntimeError(f"Video generation failed (HTTP {resp.status_code}): {error_text}")
+            break
+
         data = resp.json()
         job_id = data.get("id") or data.get("generation_id") or ""
         logger.info(
