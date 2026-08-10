@@ -2888,6 +2888,69 @@ async def face_swap_generate_hook_video(
                         "Falling back to the generative model for this generation."
                     )
 
+        # --- Auto-analyze if no analysis exists yet ---
+        # This ensures Aleph is always available for default hook generation,
+        # even when a user comes from a bookmark that was never manually
+        # analyzed. Requires: a video file (downloaded above) to extract
+        # frames from. The auto-analysis is lightweight (extract 8 frames,
+        # call the vision model once) and its result is persisted for future
+        # reuse — so this cost is paid at most once per video.
+        if not analysis and reference_video_path and reference_video_path.exists():
+            try:
+                logger.info(
+                    f"Auto-analyzing video {video_id.strip()} — no prior analysis "
+                    "exists, triggering on-demand so Aleph can be used."
+                )
+                frame_paths = await pipeline.extract_hook_frames(
+                    reference_video_path,
+                    num_frames=FRAME_COUNT,
+                    duration=HOOK_DURATION_SECONDS,
+                )
+                analysis_result = await analyze_hook(
+                    frame_paths, session_id=f"auto-hook-{video_id.strip()}",
+                )
+                auto_analysis_id = str(uuid.uuid4())
+                auto_created_at = now_iso()
+                video_hash = pipeline.url_hash(
+                    video_record.get("tiktok_url") or video_id.strip()
+                )
+                frame_docs = build_frame_docs(video_hash, frame_paths)
+                await _record_analysis_frame_assets(video_hash, frame_paths)
+                await _execute(
+                    """INSERT INTO analyses
+                       (id, video_id, frames, facial_expressions, body_language_gestures, pacing_cuts,
+                        text_overlays_timing, audio_cues_inferred, hook_summary, effectiveness_score,
+                        key_hook_frame_index, replicable_mechanics, created_at, user_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (auto_analysis_id, video_id.strip(), json.dumps(frame_docs),
+                     analysis_result.get("facial_expressions"),
+                     analysis_result.get("body_language_gestures"),
+                     analysis_result.get("pacing_cuts"),
+                     analysis_result.get("text_overlays_timing"),
+                     analysis_result.get("audio_cues_inferred"),
+                     analysis_result.get("hook_summary"),
+                     analysis_result.get("effectiveness_score"),
+                     analysis_result.get("key_hook_frame_index"),
+                     json.dumps(analysis_result.get("replicable_mechanics", [])),
+                     auto_created_at, user_id),
+                )
+                await _execute(
+                    "UPDATE videos SET status = ?, last_analysis_id = ? WHERE id = ?",
+                    ("analyzed", auto_analysis_id, video_id.strip()),
+                )
+                analysis = await _fetch_one(
+                    "SELECT * FROM analyses WHERE id = ?", (auto_analysis_id,)
+                )
+                logger.info(
+                    f"Auto-analysis complete for {video_id.strip()} — "
+                    f"analysis_id={auto_analysis_id}, Aleph is now eligible."
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Auto-analysis failed for {video_id.strip()}: {e}. "
+                    "Proceeding without analysis (generative fallback will be used)."
+                )
+
     # Determine early whether this generation will use Runway Aleph 2.0's
     # video-edit path (default "replicate the exact hook" flow) or a
     # generative model (user customized the hook, or no source video exists).
