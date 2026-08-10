@@ -866,7 +866,7 @@ export default function FaceSwap() {
                   {/* Model selector */}
                   <div className="flex gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1" data-testid="extend-model-selector">
                     {[
-                      { key: "minimax-h3", label: "MiniMax H3", sub: "2K · Native audio · V2V" },
+                      { key: "minimax-h3", label: "MiniMax H3", sub: "2K · Native audio · V2V (extend)" },
                     ].map((m) => (
                       <button key={m.key} onClick={() => setVideoModel(m.key)}
                         className={`flex-1 rounded-lg px-2 py-1.5 text-center transition-colors duration-200 ${videoModel === m.key ? "bg-[color:var(--indigo-10)]" : "hover:bg-[color:var(--indigo-6)]"}`}>
@@ -1022,7 +1022,7 @@ export default function FaceSwap() {
                 {/* Model */}
                 <div className="flex gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1" data-testid="hook-model-selector">
                   {[
-                    { key: "minimax-h3", label: "MiniMax H3", sub: "2K · Optional audio · V2V" },
+                    { key: "minimax-h3", label: "Seedance 2.5", sub: "1080p · Motion reference · V2V" },
                   ].map((m) => (
                     <button key={m.key} onClick={() => setVideoModel(m.key)}
                       className={`flex-1 rounded-lg px-2 py-1.5 text-center transition-colors duration-200 ${videoModel === m.key ? "bg-[color:var(--indigo-10)]" : "hover:bg-[color:var(--indigo-6)]"}`}
