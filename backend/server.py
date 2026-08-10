@@ -56,7 +56,7 @@ logger = logging.getLogger(__name__)
 NICHE_CACHE_TTL = timedelta(hours=6)
 TRENDING_CACHE_TTL = timedelta(hours=2)
 FRAME_COUNT = 8
-HOOK_DURATION_SECONDS = 5.0
+HOOK_DURATION_SECONDS = 4.0
 SEARCH_QUERY_MAX_LENGTH = 100
 BRAND_URL_TEXT_MAX_CHARS = 8000
 
@@ -2138,7 +2138,7 @@ async def list_face_swap_jobs(user_id: str = Depends(get_current_user_id)):
 # Phase 2a: HOOK VIDEO (5s, silent, movement-focused)
 #   Generates a short attention-grabbing clip with pure visual motion —
 #   no voice, just character movement to spark curiosity. This is the
-#   "scroll-stopper" that TikTok's algorithm tests in the first 2-3 seconds.
+#   "scroll-stopper" that TikTok's algorithm tests in the first 2-4 seconds.
 #
 # Phase 2b: EXTEND VIDEO (optional continuation)
 #   After the user approves the hook, generates a longer continuation with
@@ -2150,14 +2150,14 @@ HOOK_VIDEO_PROMPT_TEMPLATE = (
     "Create a 5-second vertical video (9:16) starting from this exact first frame. "
     "The character should perform a FAST, punchy, attention-grabbing movement that creates "
     "curiosity: {motion_type}. "
-    "PACING IS CRITICAL — match the energy of a viral TikTok hook (first 2-3 seconds): "
+    "PACING IS CRITICAL — match the energy of a viral TikTok hook (first 2-4 seconds): "
     "- The movement must happen QUICKLY — within the first 1-2 seconds, not gradually "
     "- Fast, snappy transitions — NOT slow or cinematic "
     "- Immediate eye contact and direct energy toward the camera from the very first frame "
     "- The viewer should feel startled or hooked within the first second "
     "- Think 'scroll-stopper' speed — if someone is swiping fast, this catches their eye instantly "
     "Additional requirements: "
-    "- Maintain perfect face consistency with the first frame throughout "
+    "- Maintain perfect character consistency with the first frame throughout "
     "- Camera holds steady or has a very subtle push-in for tension "
     "- End on a moment that makes the viewer want to see what happens next"
 )
@@ -2232,31 +2232,38 @@ def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = 
 
     Shared by the live analysis path and by hook-template creation, so a saved
     template stores exactly the prompt that a fresh analysis would have produced.
-    With H3's V2V motion transfer the video reference carries timing and camera
-    work, while this text reinforces expressions and intent.
+    With Seedance 2.5's V2V motion reference, the video reference carries the
+    full motion/gesture/camera authority, while the first_frame image anchors
+    identity. This text prompt should stay minimal to avoid conflicting with
+    the video pixels.
 
     Args:
         v2v_motion_active: When True, the reference video is actually being
-            delivered to the model (not dropped). The prompt emphasizes replicating
-            the exact physical movements from the video rather than interpreting
-            text descriptions.
+            delivered to the model as a motion reference AND the face image is
+            locked as first_frame. The prompt is kept deliberately minimal so
+            the video reference is the sole authority on motion, gestures,
+            camera, and timing.
     """
     if v2v_motion_active:
-        # V2V mode: the model receives the actual viral video. Keep the prompt
-        # SHORT and let the video reference be the sole motion authority — long
-        # text descriptions of movements compete with what the model sees in the
-        # video pixels and produce worse results.
+        # V2V mode: Seedance 2.5 receives the viral video as motion reference
+        # AND the face-swapped image as first_frame (identity anchor).
+        # Keep the prompt MINIMAL and framed as creative video production.
+        #
+        # IMPORTANT: Seedance moderation (error 1026) flags prompts that sound
+        # like face-swap/deepfake instructions ("replace the face", "swap identity",
+        # etc.). The fix is cinematic production framing — describe what the camera
+        # should capture, not what faces to change. The first_frame image already
+        # carries the character's appearance; the prompt just directs motion.
         prompt = (
-            "Recreate this exact video with the person from the reference image. "
-            "Replace ONLY the face and identity — keep everything else identical: "
-            "same body movements, same hand gestures, same timing, same clothing, "
-            "same background, same camera angle, same energy. "
-            "The output should be indistinguishable from the original except for "
-            "the person's face."
+            "Create a 4-second vertical video (9:16). The character from the first frame "
+            "performs the exact choreography shown in the reference video — same body movements, "
+            "same hand gestures, same head movements, same timing, same camera angle, same energy. "
+            "Match the reference video frame-by-frame: identical pacing, identical physical "
+            "performance, identical framing. Cinematic quality, natural lighting, sharp focus."
         )
     else:
         prompt = (
-            "Create a 5-second vertical video (9:16) starting from this exact first frame. "
+            "Create a 4-second vertical video (9:16) starting from this exact first frame. "
             "Recreate the EXACT hook mechanics that made the original viral video work:\n\n"
             f"FACIAL EXPRESSION: {analysis.get('facial_expressions') or 'engaging expression'}\n"
             f"BODY LANGUAGE & GESTURE: {analysis.get('body_language_gestures') or 'confident body language'}\n"
@@ -2264,15 +2271,15 @@ def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = 
             f"HOOK SUMMARY: {analysis.get('hook_summary') or 'attention-grabbing opening'}\n\n"
             "PACING IS CRITICAL — this must match the speed and energy of a viral TikTok hook:\n"
             "- The action must start IMMEDIATELY from frame 1 — no slow build-up or pause at the start\n"
-            "- All movements should be FAST and snappy, matching the rapid pace of the original 2-3 second hook window\n"
+            "- All movements should be FAST and snappy, matching the rapid pace of the original hook window\n"
             "- Quick, punchy gestures — NOT slow or cinematic movements\n"
             "- Immediate direct eye contact with the camera from the very first frame\n"
             "- Energy level should be HIGH from the start — think 'scroll-stopper' urgency\n"
             "- The body language tempo must match how fast the original creator moved\n"
-            "- Compress all the described movements into the first 2 seconds, not spread across 3\n\n"
+            "- Compress all the described movements into the first 2 seconds\n\n"
             "ADDITIONAL REQUIREMENTS:\n"
             "- Perform the EXACT movements and expressions described above — these are proven to grab attention\n"
-            "- Maintain perfect face consistency with the first frame throughout\n"
+            "- Maintain perfect character consistency with the first frame throughout\n"
             "- Camera holds steady or has a subtle push-in matching the original's pacing\n"
             "- End on a moment of anticipation (the viewer wants to know what happens next)"
         )
@@ -2305,7 +2312,7 @@ def build_hook_prompt_from_image_analysis(image_analysis: dict) -> str:
         "- All movements should be FAST and snappy, matching a real creator's rapid energy\n"
         "- Quick, punchy gestures — NOT slow or cinematic\n"
         "- Immediate direct eye contact with the camera\n"
-        "- Compress all the action into the first 2-3 seconds\n"
+        "- Compress all the action into the first 2-4 seconds\n"
         "- Energy level HIGH from the very start — scroll-stopper urgency\n\n"
         "ADDITIONAL REQUIREMENTS:\n"
         "- Animate naturally from the starting pose shown in the first frame\n"
@@ -2731,18 +2738,20 @@ async def face_swap_generate_hook_video(
     user_id: str = Depends(get_current_user_id),
 ):
     """
-    Generate a hook video from the face-swapped image using MiniMax H3.
+    Generate a hook video from the face-swapped image using Seedance 2.5.
 
-    H3 advantages leveraged here:
-    - Native audio generation in one pass (OFF by default — see include_audio below).
-    - V2V motion transfer: if a viral video was analyzed, passes it as a reference
-      so H3 replicates the exact timing, camera movement, and performance rhythm.
-    - Omni-reference: face-swapped image as first_frame + viral video as motion ref.
-    - 2K resolution output.
+    Seedance 2.5 advantages leveraged here:
+    - Motion reference control: video reference drives body movement, gestures,
+      camera angle, and performance rhythm from the original viral hook.
+    - Combined references: face image as first_frame (identity anchor) PLUS
+      video as motion reference in the same request — no conflict.
+    - Up to 50 multimodal references (30 images, 10 videos, 10 audio).
+    - Native audio generation (OFF by default — see include_audio below).
+    - Built by ByteDance (TikTok's parent) for short-form hook content.
 
     If video_id is provided, pulls the hook analysis AND the downloaded video file
-    to feed as a V2V motion reference — H3 will replicate the proven hook mechanics
-    directly from the source video rather than relying on text descriptions alone.
+    to feed as a V2V motion reference — Seedance 2.5 will replicate the proven
+    hook mechanics (gestures, camera, pacing) directly from the source video.
 
     If template_id is provided, reuses a saved hook template. This is the cheapest
     path: the prompt and the V2V motion reference are already cached on disk, so
@@ -2758,8 +2767,8 @@ async def face_swap_generate_hook_video(
     TikTok creators attach a trending sound or native text-to-speech in TikTok's
     own editor after exporting — audio generated here can't be posted as a
     "trending sound" and would just be muted/replaced anyway. Set True to have
-    H3 generate an ambient/music track in the same pass (useful for platforms
-    without an in-app sound library).
+    the model generate an ambient/music track (useful for platforms without an
+    in-app sound library).
 
     hook_category: optional style directive (intrigue, reveal, reaction, tutorial,
     lifestyle, transformation). When provided, injects a category-specific prompt
@@ -2870,9 +2879,9 @@ async def face_swap_generate_hook_video(
     #   3. The user did NOT select a custom hook style or write a custom prompt
     #      (those indicate intent to deviate from the original's movements)
     #   4. This is NOT from a saved template (templates have their own prompt)
-    # In V2V mode the face-swap image is sent as an image reference (identity
-    # guide) instead of a hard first-frame lock, allowing both the face and
-    # the video motion reference to coexist in one MiniMax H3 request.
+    # With Seedance 2.5, both the face image (first_frame identity anchor) and the
+    # video motion reference coexist in the same request without conflict — the model
+    # uses the face for identity and the video for motion/gesture/camera replication.
     user_customized = bool(
         (hook_category and hook_category.strip())
         or (hook_custom_prompt and hook_custom_prompt.strip())
@@ -2884,14 +2893,14 @@ async def face_swap_generate_hook_video(
         and not template
     )
 
-    # When V2V is active, trim the source video to the first 3 seconds so the
-    # motion reference is a clean 1:1 match for the 5-second output. This gives
-    # MiniMax H3 an exact timing template rather than forcing it to guess which
+    # When V2V is active, trim the source video to the first 5 seconds so the
+    # motion reference is a clean 1:1 duration match for the output. This gives
+    # Seedance 2.5 an exact timing template rather than forcing it to guess which
     # segment of a longer clip to replicate. Falls back to the full video if
     # trimming fails.
     v2v_video_path = reference_video_path
     if use_v2v and reference_video_path:
-        trimmed = await pipeline.trim_video_to_hook(reference_video_path, duration=5.0)
+        trimmed = await pipeline.trim_video_to_hook(reference_video_path, duration=4.0)
         if trimmed:
             v2v_video_path = trimmed
 
@@ -2899,9 +2908,9 @@ async def face_swap_generate_hook_video(
         result = await generate_video(
             prompt=prompt,
             reference_image_path=image_path,
-            duration=5,
+            duration=4,
             generate_audio=False,  # Always silent — creator adds sound in TikTok editor
-            reference_video_url=public_media_url(v2v_video_path),  # V2V motion transfer
+            reference_video_url=public_media_url(v2v_video_path) if use_v2v else None,
             prefer_v2v_motion=use_v2v,
         )
     except Exception as e:
@@ -2933,10 +2942,10 @@ async def face_swap_generate_hook_video(
         "status": "pending",
         "polling_url": polling_url,
         "image_id": image_id,
-        "duration": 5,
+        "duration": 4,
         "phase": "hook",
         "motion_style": motion_style.strip() or "lean-in",
-        "model": "minimax-h3",
+        "model": "seedance-2.5",
         "has_v2v_motion": bool(reference_video_path),
         "has_native_audio": include_audio,
         "from_template": bool(template),

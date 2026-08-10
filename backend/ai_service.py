@@ -28,11 +28,25 @@ IMAGE_GEN_MODEL = "google/gemini-2.5-flash-image"
 FACE_SWAP_MODEL = "google/gemini-3.1-flash-image"  # Gemini 3.1 Flash Image — reliable face identity transfer, up to 14 input references, up to 4K
 TEXT_MODEL = "google/gemini-2.5-flash"
 
-# Video generation models — MiniMax H3 (Hailuo 3) is the sole model.
-# H3 supports omni-reference inputs (up to 9 images, 3 videos, 3 audio files),
-# native stereo audio generation in a single pass, V2V motion transfer,
-# and up to 2K resolution at 15 seconds.
+# Video generation models.
+# Seedance 2.5 is the default for hook replication (V2V motion transfer).
+# It supports up to 50 multimodal references (30 images, 10 videos, 10 audio),
+# allowing the motion reference (video) and identity reference (face image) to
+# coexist without the frame_images/input_references conflict that MiniMax H3 has.
+# Built by ByteDance (TikTok's parent), it's designed specifically for short-form
+# hook-style content with precise motion/gesture/camera replication from a source clip.
 VIDEO_MODELS = {
+    "seedance-2.5": {
+        "id": "bytedance/seedance-2.5",
+        "name": "Seedance 2.5",
+        "description": "30s one-pass video with motion reference control. Up to 50 multimodal refs, 4K, native audio.",
+        "max_duration": 30,
+        "supports_references": True,
+        "supports_native_audio": True,
+        "supports_v2v_motion": True,
+        "resolution": "1080p",
+        "supports_combined_refs": True,  # Can use frame_images + input_references together
+    },
     "minimax-h3": {
         "id": "minimax/hailuo-3",
         "name": "MiniMax H3",
@@ -42,9 +56,10 @@ VIDEO_MODELS = {
         "supports_native_audio": True,
         "supports_v2v_motion": True,
         "resolution": "2K",
+        "supports_combined_refs": False,  # Cannot combine frame_images with input_references
     },
 }
-DEFAULT_VIDEO_MODEL = "minimax-h3"
+DEFAULT_VIDEO_MODEL = "seedance-2.5"
 # Legacy fallback
 VIDEO_MODEL = VIDEO_MODELS[DEFAULT_VIDEO_MODEL]["id"]
 
@@ -95,12 +110,16 @@ def _build_face_swap_prompt(customization_prompt: str = "") -> str:
         "HAIRSTYLE: Also replace the hairstyle from the first image with the hairstyle of the person in the "
         "second image — match its hair color, length, texture (straight, wavy, or curly), volume, and parting "
         "exactly as shown in the second image. Do not keep the hairstyle, hair color, or hair length that was "
-        "originally in the first image. SKIN TONE CONSISTENCY: The face's skin tone from the second image is "
-        "the reference for the ENTIRE person. Recolor the neck, chest, arms, and hands from the first image "
-        "to match the exact skin tone and undertone of the new face — do not leave the original body's skin "
-        "tone from the first image unchanged. There must be no visible tone mismatch or hard edge at the "
-        "jawline, neck, or collar. Apply the scene's natural lighting and shadows on top of this matched skin "
-        "tone, but the underlying base color must be uniform across face, neck, and body."
+        "originally in the first image. SKIN TONE CONSISTENCY (MANDATORY): The second image's face "
+        "establishes the EXCLUSIVE skin color reference for the ENTIRE body. Every square centimeter of "
+        "visible skin — face, neck, ears, chest, shoulders, upper arms, forearms, hands, fingers, legs, "
+        "feet, and any other exposed area — MUST match the exact skin color and undertone from the second "
+        "image's face. Do NOT retain the original body's skin tone from the first image anywhere. "
+        "The skin must appear as one continuous, uniform tone across the whole person as if they were born "
+        "with that skin color. There must be zero visible boundary, hard edge, or color shift at the "
+        "jawline, neck, collar, shoulders, or any transition between face and body. Apply the scene's "
+        "natural lighting and shadows on top of this matched skin tone, but the underlying base pigment "
+        "must be identical everywhere — face, body, limbs, hands, all one person's natural skin color."
         f"{customization_instruction}"
         " Customization must never override the FIRST image's facial expression, eye state, gaze, eyelid "
         "aperture, blink state, eyebrow position, mouth pose, jaw opening, head orientation, or reaction "
@@ -300,7 +319,7 @@ async def analyze_hook(frame_paths: list, session_id: str, music_context: dict =
             if music_context.get("song_duration"):
                 audio_context_parts.append(f"Sound duration: {music_context['song_duration']}s.")
     if transcript_text:
-        # Limit transcript to first ~500 chars (hook is first 3 seconds)
+        # Limit transcript to first ~500 chars (hook is first 4 seconds)
         truncated_transcript = transcript_text[:500]
         audio_context_parts.append(
             f"Transcript/spoken words in the video: \"{truncated_transcript}\""
@@ -310,7 +329,7 @@ async def analyze_hook(frame_paths: list, session_id: str, music_context: dict =
 
     system_message = (
         "You are an expert short-form video (TikTok/Reels) hook analyst. You examine the "
-        "first 2-3 seconds of a video (given as a sequence of frames in chronological order) "
+        "first 4 seconds of a video (given as a sequence of frames in chronological order) "
         "and identify exactly what makes the hook effective at grabbing attention. "
         "Respond with STRICT JSON only, no markdown fences, no extra commentary."
     )
@@ -326,7 +345,7 @@ async def analyze_hook(frame_paths: list, session_id: str, music_context: dict =
         )
 
     prompt = (
-        "Here are sequential frames from the first ~3 seconds of a short-form video "
+        "Here are sequential frames from the first ~4 seconds of a short-form video "
         "(frame_001 is earliest). Analyze the hook and return ONLY a JSON object with this "
         "exact schema:\n"
         "{\n"
@@ -533,7 +552,7 @@ async def generate_video_prompt(analysis: dict, brand_context: dict, target_dura
         )
 
     prompt = (
-        "Hook analysis of the original viral video's first 2-3 seconds:\n"
+        "Hook analysis of the original viral video's first 4 seconds:\n"
         f"- Facial expressions: {analysis.get('facial_expressions')}\n"
         f"- Body language & gestures: {analysis.get('body_language_gestures')}\n"
         f"- Pacing & cuts: {analysis.get('pacing_cuts')}\n"
@@ -614,18 +633,18 @@ async def analyze_image_for_hook(image_path: Path, session_id: str) -> dict:
     system_message = (
         "You are an expert short-form video (TikTok/Reels) hook strategist. You examine a single "
         "still image of a person and determine what attention-grabbing movement is happening or "
-        "about to happen — then describe how to animate this into a 5-second silent hook video. "
+        "about to happen — then describe how to animate this into a 4-second silent hook video. "
         "Respond with STRICT JSON only, no markdown fences, no extra commentary."
     )
 
     prompt = (
-        "Here is a still image that will be the first frame of a 5-second TikTok hook video. "
+        "Here is a still image that will be the first frame of a 4-second TikTok hook video. "
         "Analyze what's in this image and describe how to animate it into an attention-grabbing "
         "silent hook. Return ONLY a JSON object with this exact schema:\n"
         "{\n"
-        '  "facial_expressions": "describe the expression visible and how it should evolve over 3 seconds",\n'
+        '  "facial_expressions": "describe the expression visible and how it should evolve over 4 seconds",\n'
         '  "body_language_gestures": "describe the pose/gesture visible and what movement should follow",\n'
-        '  "pacing_cuts": "describe the ideal pacing and camera movement for a 5s hook starting from this frame",\n'
+        '  "pacing_cuts": "describe the ideal pacing and camera movement for a 4s hook starting from this frame",\n'
         '  "hook_summary": "1-2 sentence description of the hook concept that would work from this image",\n'
         '  "replicable_mechanics": ["list", "of", "specific", "movements", "to", "animate"]\n'
         "}\n"
@@ -695,118 +714,145 @@ async def generate_video(
     Args:
         prompt: Text prompt describing the video to generate.
         reference_image_path: Face-swapped image used as first_frame (identity anchor)
-                             OR as an image reference (when prefer_v2v_motion=True).
-        duration: Target duration in seconds (1-15).
-        model: Model key (only "minimax-h3" supported now).
-        generate_audio: Whether to generate native audio. Defaults to True since H3
-                       produces synced audio in one pass (dialogue, foley, ambient).
+                             AND/OR as an image reference for identity guidance.
+        duration: Target duration in seconds.
+        model: Model key from VIDEO_MODELS (defaults to DEFAULT_VIDEO_MODEL).
+        generate_audio: Whether to generate native audio. Defaults to False for hooks
+                       (creators attach trending sounds in TikTok's editor).
         reference_video_url: Optional public HTTPS URL to the original viral video for
-                            V2V motion transfer — H3 will replicate the timing, camera
-                            movement, and performance rhythm from this video. MUST be a
-                            real HTTPS URL: OpenRouter's video API rejects base64 data
-                            URIs for video_url references (unlike image references,
-                            which do accept them) with "Only HTTPS URLs are allowed".
+                            V2V motion transfer — the model will replicate the timing,
+                            camera movement, gestures, and performance rhythm from this
+                            video. MUST be a real HTTPS URL: OpenRouter's video API
+                            rejects base64 data URIs for video_url references.
         reference_audio_url: Optional URL to an audio file to use as voice/music reference.
         input_references: Optional pre-built list of reference objects to pass directly.
                          Each item should follow OpenRouter's input_references schema.
-        prefer_v2v_motion: When True AND a reference_video_url is provided, the face
-                          image is sent as an image reference inside input_references
-                          (instead of frame_images) so both can coexist in one request.
-                          This enables true V2V motion transfer at the cost of slightly
-                          less rigid first-frame identity lock. When False (default),
-                          the face image is a hard first-frame anchor and V2V references
-                          are dropped due to the MiniMax API constraint.
+        prefer_v2v_motion: When True AND a reference_video_url is provided, enables
+                          V2V motion transfer mode. For Seedance 2.5, both the face
+                          image (as first_frame) and the video motion reference can
+                          coexist in the same request. For MiniMax H3, the face image
+                          is moved to input_references (as identity guide) since H3
+                          cannot combine frame_images with input_references.
     """
-    # Always use MiniMax H3
-    model_id = VIDEO_MODELS[DEFAULT_VIDEO_MODEL]["id"]
-    max_dur = VIDEO_MODELS[DEFAULT_VIDEO_MODEL]["max_duration"]
+    # Resolve which model to use
+    model_key = model if model and model in VIDEO_MODELS else DEFAULT_VIDEO_MODEL
+    model_config = VIDEO_MODELS[model_key]
+    model_id = model_config["id"]
+    max_dur = model_config["max_duration"]
+    supports_combined = model_config.get("supports_combined_refs", False)
 
     payload = {
         "model": model_id,
         "prompt": prompt,
         "duration": min(duration, max_dur),
-        "resolution": "2K",
+        "resolution": model_config.get("resolution", "1080p"),
         "aspect_ratio": "9:16",
     }
 
     # Only include generate_audio when explicitly requested. Sending False for
-    # models that don't support the parameter (OpenRouter rejects unsupported
-    # fields for some providers like MiniMax Hailuo) causes a 400. Omitting it
-    # lets the provider use its own default (typically no audio).
+    # models that don't support the parameter causes a 400. Omitting it lets
+    # the provider use its own default.
     if generate_audio:
         payload["generate_audio"] = True
 
-    # Determine whether to use V2V motion mode: face image goes into
-    # input_references (as image ref) so it can coexist with the video ref,
-    # enabling true motion transfer from the original viral video.
+    # Determine whether to use V2V motion mode.
     use_v2v_mode = prefer_v2v_motion and reference_video_url and reference_image_path and reference_image_path.exists()
 
-    # First frame: the face-swapped image anchors identity throughout the video.
-    # In V2V mode, we skip frame_images and put the image in input_references instead.
-    if reference_image_path and reference_image_path.exists() and not use_v2v_mode:
-        b64 = image_to_base64(reference_image_path)
-        mime = "image/png"
-        payload["frame_images"] = [
-            {
+    # === Reference Strategy ===
+    # Seedance 2.5: supports frame_images + input_references together.
+    #   - Face image → frame_images (first_frame) for hard identity anchor
+    #   - Video → input_references (video_url) for motion/gesture replication
+    #   This gives us BOTH identity lock AND motion transfer in one request.
+    #
+    # MiniMax H3: CANNOT combine frame_images with input_references.
+    #   - V2V mode: face image → input_references (image ref for identity guidance)
+    #   - Non-V2V mode: face image → frame_images (first_frame), drop all refs
+
+    if supports_combined:
+        # Seedance 2.5 path: always use first_frame for identity anchor
+        if reference_image_path and reference_image_path.exists():
+            b64 = image_to_base64(reference_image_path)
+            mime = "image/png"
+            payload["frame_images"] = [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{mime};base64,{b64}"},
+                    "frame_type": "first_frame",
+                }
+            ]
+
+        # Build input_references for motion (video) and audio references
+        refs = list(input_references) if input_references else []
+
+        if reference_video_url:
+            refs.append({
+                "type": "video_url",
+                "video_url": {"url": reference_video_url},
+            })
+
+        if reference_audio_url:
+            refs.append({
+                "type": "audio_url",
+                "audio_url": {"url": reference_audio_url},
+            })
+
+        if refs:
+            payload["input_references"] = refs
+
+    else:
+        # MiniMax H3 path: cannot combine frame_images + input_references
+        if reference_image_path and reference_image_path.exists() and not use_v2v_mode:
+            b64 = image_to_base64(reference_image_path)
+            mime = "image/png"
+            payload["frame_images"] = [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{mime};base64,{b64}"},
+                    "frame_type": "first_frame",
+                }
+            ]
+
+        refs = list(input_references) if input_references else []
+
+        # V2V mode for H3: face goes into input_references as image ref
+        if use_v2v_mode:
+            b64 = image_to_base64(reference_image_path)
+            mime = "image/png"
+            refs.insert(0, {
                 "type": "image_url",
                 "image_url": {"url": f"data:{mime};base64,{b64}"},
-                "frame_type": "first_frame",
-            }
-        ]
+            })
 
-    # Omni-reference inputs: H3 can accept images, videos, and audio as references
-    # to guide subject identity, motion/timing, and sound in one generation.
-    refs = list(input_references) if input_references else []
+        if reference_video_url:
+            refs.append({
+                "type": "video_url",
+                "video_url": {"url": reference_video_url},
+            })
 
-    # V2V motion mode: put the face-swap image as an image reference so H3 uses
-    # it for identity guidance while also accepting the video motion reference.
-    if use_v2v_mode:
-        b64 = image_to_base64(reference_image_path)
-        mime = "image/png"
-        refs.insert(0, {
-            "type": "image_url",
-            "image_url": {"url": f"data:{mime};base64,{b64}"},
-        })
+        if reference_audio_url:
+            refs.append({
+                "type": "audio_url",
+                "audio_url": {"url": reference_audio_url},
+            })
 
-    # V2V motion transfer: feed the original viral video so H3 replicates its
-    # timing, camera language, performance rhythm, and editing pace. Must be a
-    # real HTTPS URL — base64 data URIs are rejected for video_url references.
-    if reference_video_url:
-        refs.append({
-            "type": "video_url",
-            "video_url": {"url": reference_video_url},
-        })
+        # H3 constraint: drop refs if frame_images is present
+        if payload.get("frame_images") and refs:
+            logger.warning(
+                "MiniMax H3 does not support frame_images + input_references together — "
+                f"dropping {len(refs)} reference(s) (video/audio) to keep the first-frame "
+                "identity anchor."
+            )
+            refs = []
 
-    # Audio reference: feed an audio file (voice/music) so H3 syncs lip movement
-    # and pacing to the original sound.
-    if reference_audio_url:
-        refs.append({
-            "type": "audio_url",
-            "audio_url": {"url": reference_audio_url},
-        })
-
-    # MiniMax Hailuo rejects any request that combines frame_images with
-    # input_references ("do not support frame_images and input_references in
-    # the same [request]", HTTP 400). When NOT in V2V mode, frame_images
-    # anchors the face-swapped image as the video's first frame — that identity
-    # anchor matters more than references, so drop them. In V2V mode this
-    # conflict doesn't arise because the image is already in input_references.
-    if payload.get("frame_images") and refs:
-        logger.warning(
-            "MiniMax H3 does not support frame_images + input_references together — "
-            f"dropping {len(refs)} reference(s) (video/audio) to keep the first-frame "
-            "identity anchor."
-        )
-        refs = []
-
-    if refs:
-        payload["input_references"] = refs
+        if refs:
+            payload["input_references"] = refs
 
     logger.info(
-        f"Submitting video generation (MiniMax H3): duration={payload['duration']}s, "
+        f"Submitting video generation ({model_config['name']}): duration={payload['duration']}s, "
         f"resolution={payload['resolution']}, has_frame_image={bool(payload.get('frame_images'))}, "
-        f"v2v_mode={use_v2v_mode}, audio={generate_audio}, num_references={len(refs)}, "
-        f"has_v2v_motion={bool(reference_video_url) and bool(refs)}"
+        f"v2v_mode={use_v2v_mode}, audio={generate_audio}, "
+        f"num_references={len(payload.get('input_references', []))}, "
+        f"has_v2v_motion={bool(reference_video_url)}, model={model_id}"
     )
 
     async with httpx.AsyncClient(timeout=90) as client:
@@ -999,7 +1045,7 @@ async def generate_remix_script(analysis: dict, brand_profile: dict, target_dura
         )
 
     prompt = (
-        "Hook analysis of the original viral video's first 2-3 seconds:\n"
+        "Hook analysis of the original viral video's first 4 seconds:\n"
         f"- Facial expressions: {analysis.get('facial_expressions')}\n"
         f"- Body language & gestures: {analysis.get('body_language_gestures')}\n"
         f"- Pacing & cuts: {analysis.get('pacing_cuts')}\n"

@@ -25,7 +25,7 @@ const FEATURES = [
     icon: TrendingUp,
     title: "AI Hook Analysis",
     description:
-      "AI dissects the first 2\u20133 seconds of any video \u2014 expressions, gestures, pacing, overlays. Scored 1\u201310.",
+      "AI dissects the first 4 seconds of any video \u2014 expressions, gestures, pacing, overlays. Scored 1\u201310.",
   },
   {
     icon: FileText,
@@ -67,7 +67,7 @@ const FEATURES = [
     icon: Clapperboard,
     title: "AI Video Generation",
     description:
-      "MiniMax H3 replicates the original hook\u2019s exact body movements with your face. 5s hook at 2K, then extend to a branded video.",
+      "Seedance 2.5 replicates the original hook\u2019s exact body movements with your face. 4s hook at 1080p, then extend to a branded video.",
   },
   {
     icon: RotateCcw,
@@ -112,7 +112,7 @@ const FLOW_STEPS = [
     step: "4",
     label: "Generate",
     icon: Clapperboard,
-    detail: "MiniMax H3 replicates the hook\u2019s exact body movements with your face. Extend with your brand CTA.",
+    detail: "Seedance 2.5 replicates the hook\u2019s exact body movements with your face. Extend with your brand CTA.",
   },
 ];
 
@@ -180,9 +180,9 @@ const PIPELINE_BLOCKS = [
     title: "Video (Motion Replication)",
     body: (
       <>
-        The first 5 seconds of the original viral video become the V2V motion reference.
-        MiniMax H3 replicates the exact body movements, hand gestures, and camera work
-        &mdash; with your face as the identity anchor. Output is 2K, muted by default
+        The first 4 seconds of the original viral video become the V2V motion reference.
+        Seedance 2.5 replicates the exact body movements, hand gestures, and camera work
+        &mdash; with your face as the identity anchor. Output is 1080p, muted by default
         (add a trending sound in TikTok). Re-roll for another take, or extend into a
         longer branded video with your CTA.
       </>
@@ -230,7 +230,7 @@ const PIPELINE_BLOCKS = [
 const MODELS = [
   { label: "Hook Analysis", value: "Gemini 2.5 Flash (vision) \u2014 frame reading, structured JSON output" },
   { label: "Face Swap", value: "Grok Imagine \u2014 identity-preserving compositing, 2K" },
-  { label: "Video", value: "MiniMax H3 \u2014 V2V motion replication from the original hook, identity transfer, 2K, up to 15s" },
+  { label: "Video", value: "Seedance 2.5 \u2014 V2V motion replication from the original hook, identity transfer, 1080p, up to 30s" },
   { label: "Brand & Remix", value: "Gemini 2.5 Flash \u2014 brand extraction, prompt writing, remix chat" },
   { label: "Data", value: "Apify TikTok Scraper + yt-dlp \u2014 profiles, hashtags, keyword search, music" },
 ];
@@ -657,7 +657,7 @@ export default function Landing() {
               &copy; {new Date().getFullYear()} HookForge. Built for creators.
             </p>
             <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Wand2 className="h-3 w-3 text-[color:var(--brand-indigo)]" /> Powered by MiniMax H3 &amp; Gemini 2.5 Flash
+              <Wand2 className="h-3 w-3 text-[color:var(--brand-indigo)]" /> Powered by Seedance 2.5 &amp; Gemini 2.5 Flash
             </p>
           </div>
         </div>
