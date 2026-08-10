@@ -59,7 +59,7 @@ RUN mkdir -p /app/backend/storage/videos /app/backend/storage/frames \
 # frontend code changed. It busts Docker BuildKit's runtime stage cache
 # which otherwise reuses the old COPY --from=builder output independently
 # of whether the builder stage produced new files.
-RUN echo "FRONTEND_VERSION=hookflow-v4-clerk-auth-2026-08-10" > /tmp/frontend_version.txt
+RUN echo "FRONTEND_VERSION=hookflow-v4-seedream-2026-08-10" > /tmp/frontend_version.txt
 COPY --from=builder /app/frontend/build /app/frontend_build/
 
 # Expose the application port
