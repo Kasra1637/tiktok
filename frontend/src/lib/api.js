@@ -122,11 +122,14 @@ export const api = {
       })
       .then((r) => r.data);
   },
-  faceSwapExtendVideo: (imageId, hookJobId, brandUrl, duration, model, videoId) => {
+  faceSwapExtendVideo: (imageId, hookJobId, brandUrl, duration, model, videoId, brandId) => {
     const formData = new FormData();
     formData.append("image_id", imageId);
     formData.append("hook_job_id", hookJobId || "");
     formData.append("brand_url", brandUrl || "");
+    // Explicitly chosen saved brand. Takes precedence over brand_url server-side
+    // so the creator picks the brand instead of re-entering a website.
+    formData.append("brand_id", brandId || "");
     formData.append("duration", String(duration || 10));
     formData.append("model", model || "");
     formData.append("video_id", videoId || "");
@@ -174,6 +177,9 @@ export const api = {
   // Brand profile / Content Remixer
   analyzeBrandUrl: (url) => client.post("/brand/analyze-url", { url }).then((r) => r.data),
   getActiveBrand: () => client.get("/brand/active").then((r) => r.data),
+  // All saved brands for the current user, active first — powers the brand
+  // picker so generation flows don't require re-entering a URL.
+  getBrands: () => client.get("/brands").then((r) => r.data),
   getBrand: (id) => client.get(`/brand/${id}`).then((r) => r.data),
   createBrand: (payload) => client.post("/brand", payload).then((r) => r.data),
   updateBrand: (id, payload) => client.patch(`/brand/${id}`, payload).then((r) => r.data),

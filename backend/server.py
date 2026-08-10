@@ -1324,22 +1324,54 @@ async def get_latest_analysis_or_404(video_id: str) -> dict:
     return analysis
 
 
-async def _fetch_active_brand() -> Optional[dict]:
+async def _fetch_active_brand(user_id: str) -> Optional[dict]:
     """
-    The "active" brand profile: the most recently created *or edited* one.
+    The "active" brand profile for a user: their most recently created *or
+    edited* one.
 
     Single source of truth so every caller agrees on which profile is active.
     Previously the /brand/active endpoint ordered by created_at while the video
     flows ordered by updated_at, so editing an older profile made the Brand page
     and the generators disagree about which brand was in effect.
+
+    user_id is REQUIRED. This query previously had no user filter while the
+    /brand/active endpoint did, so the video-generation flows that call this
+    could pull a different user's brand profile into someone else's generation
+    whenever that other profile happened to be the most recently updated row in
+    the table.
     """
     return await _fetch_one(
-        "SELECT * FROM brand_profiles ORDER BY updated_at DESC, created_at DESC LIMIT 1"
+        "SELECT * FROM brand_profiles WHERE user_id = ? "
+        "ORDER BY updated_at DESC, created_at DESC LIMIT 1",
+        (user_id,),
     )
 
 
-async def get_active_brand_or_404() -> dict:
-    brand = await _fetch_active_brand()
+async def _resolve_brand_profile(user_id: str, brand_id: str = "") -> Optional[dict]:
+    """
+    Resolve which saved brand profile to use for a generation.
+
+    Prefers an explicitly chosen brand_id so the creator controls which brand a
+    video is built for, instead of it silently depending on which profile was
+    edited most recently. Falls back to the active profile when no explicit
+    choice was made. Always user-scoped: an unknown or another user's brand_id
+    resolves to None rather than leaking across accounts.
+    """
+    bid = (brand_id or "").strip()
+    if bid:
+        brand = await _fetch_one(
+            "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (bid, user_id)
+        )
+        if brand:
+            return brand
+        logger.warning(
+            f"brand_id {bid} not found for this user — falling back to the active profile."
+        )
+    return await _fetch_active_brand(user_id)
+
+
+async def get_active_brand_or_404(user_id: str) -> dict:
+    brand = await _fetch_active_brand(user_id)
     if not brand:
         raise HTTPException(
             status_code=404,
@@ -3303,6 +3335,7 @@ async def face_swap_extend_video(
     image_id: str = Form(...),
     hook_job_id: str = Form(""),
     brand_url: str = Form(""),
+    brand_id: str = Form(""),
     prompt: str = Form(""),
     duration: int = Form(10),
     model: str = Form(""),
@@ -3366,10 +3399,13 @@ async def face_swap_extend_video(
 
     # Auto-generate extension prompt if not provided
     if not prompt.strip():
-        # Try to get brand context — prefer the saved brand profile (instant)
-        # over re-fetching/analyzing the URL (can take 30-60s and risk timeouts).
+        # Prefer a saved brand profile (instant) over re-fetching/analyzing a
+        # URL (30-60s and can time out). An explicitly selected brand_id wins
+        # over the active profile so the creator controls which brand this video
+        # is for; the URL path remains only as a fallback for users who haven't
+        # set up a profile yet.
         brand_profile = None
-        brand_row = await _fetch_active_brand()
+        brand_row = await _resolve_brand_profile(user_id, brand_id)
         if brand_row:
             brand_profile = brand_row
         elif brand_url and brand_url.strip():
@@ -3695,6 +3731,7 @@ async def delete_video_asset(job_id: str, user_id: str = Depends(get_current_use
 async def face_swap_branded_prompt(
     image_id: str = Form(...),
     brand_url: str = Form(""),
+    brand_id: str = Form(""),
     video_id: str = Form(""),
     duration: int = Form(15),
     use_original_sound: bool = Form(False),
@@ -3741,14 +3778,15 @@ async def face_swap_branded_prompt(
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"Brand analysis failed. ({str(e)[:100]})")
     else:
-        # Try to use saved brand profile
-        brand_row = await _fetch_active_brand()
+        # Use a saved brand profile — the one explicitly chosen if provided,
+        # otherwise the user's active profile.
+        brand_row = await _resolve_brand_profile(user_id, brand_id)
         if brand_row:
             brand_profile = brand_row
         else:
             raise HTTPException(
                 status_code=400,
-                detail="Please provide a brand URL or set up your brand profile first.",
+                detail="Please select a brand profile, provide a brand URL, or set up your brand profile first.",
             )
 
     # Get hook analysis if video_id is available
@@ -4237,7 +4275,7 @@ async def generate_video_prompt_endpoint(customization_id: str, payload: BrandCo
 async def generate_remix_script_endpoint(customization_id: str, payload: GenerateRemixScriptRequest, user_id: str = Depends(get_current_user_id)):
     """Content Remixer: adapt this hook's script to the active brand profile's niche/products/tone."""
     require_ai_configured()
-    brand_profile = await get_active_brand_or_404()
+    brand_profile = await get_active_brand_or_404(user_id)
 
     customization = await _fetch_one("SELECT * FROM customizations WHERE id = ?", (customization_id,))
     if not customization:
@@ -4524,6 +4562,28 @@ async def create_brand(payload: BrandProfileCreateRequest, user_id: str = Depend
     )
     logger.info(f"Created brand profile {brand_id} ('{name}') from manual entry")
     return await _fetch_one("SELECT * FROM brand_profiles WHERE id = ?", (brand_id,))
+
+
+@api_router.get("/brands")
+async def list_brands(user_id: str = Depends(get_current_user_id)):
+    """
+    All brand profiles belonging to this user, most recently active first.
+
+    Exists so generation flows can offer a real choice of saved brand instead of
+    making the creator re-enter a website URL. Ordering matches
+    _fetch_active_brand, so the first item is the same profile that would be
+    used by default when no explicit brand_id is sent.
+
+    Returns a trimmed projection rather than full rows — this feeds a picker, so
+    it doesn't need raw_extracted_text (which can be several KB per brand).
+    """
+    rows = await _fetch_all(
+        "SELECT id, brand_name, website_url, niche, updated_at, created_at "
+        "FROM brand_profiles WHERE user_id = ? "
+        "ORDER BY updated_at DESC, created_at DESC",
+        (user_id,),
+    )
+    return {"brands": rows or []}
 
 
 @api_router.get("/brand/active")

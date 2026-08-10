@@ -189,6 +189,14 @@ export default function FaceSwap() {
   // Brand video state
   const [brandUrl, setBrandUrl] = useState("");
   const [brandProfile, setBrandProfile] = useState(null);
+  // Saved brands available to pick from, and which one is selected. Selecting a
+  // saved brand is the primary path — the URL field is only a fallback for users
+  // who haven't set one up, since the backend ignores the URL whenever a saved
+  // profile resolves anyway.
+  const [brands, setBrands] = useState(null);
+  const [selectedBrandId, setSelectedBrandId] = useState("");
+  // Escape hatch so a user with saved brands can still analyze a one-off URL.
+  const [useBrandUrlInstead, setUseBrandUrlInstead] = useState(false);
   const [brandedDuration, setBrandedDuration] = useState(15);
   const [videoModel, setVideoModel] = useState("minimax-h3"); // generative fallback engine
   // "" = Default (match the original hook's movement). Any explicit value is a
@@ -219,6 +227,20 @@ export default function FaceSwap() {
   // Load brand profile
   useEffect(() => {
     api.getActiveBrand().then(setBrandProfile).catch(() => setBrandProfile(null));
+  }, []);
+
+  // Load every saved brand so the extend step can offer a choice. Preselects the
+  // first (the active profile), which is the one the backend would have used
+  // anyway — so the UI shows what's actually going to happen by default.
+  useEffect(() => {
+    api
+      .getBrands()
+      .then((d) => {
+        const list = Array.isArray(d?.brands) ? d.brands : [];
+        setBrands(list);
+        setSelectedBrandId((prev) => prev || (list.length > 0 ? list[0].id : ""));
+      })
+      .catch(() => setBrands([]));
   }, []);
 
   // Load the canonical motion styles (key, label, and the exact prompt text).
@@ -564,7 +586,19 @@ export default function FaceSwap() {
     try {
       // Always bridge off the HOOK clip so re-rolling an extension regenerates
       // it from the hook's ending rather than chaining onto the last extension.
-      const d = await api.faceSwapExtendVideo(activeId, hookJobIdRef.current || "", brandUrl.trim(), brandedDuration, videoModel, videoInfo?.videoId || "");
+      // Send whichever brand source the user actually chose. Sending both would
+      // be ambiguous, and the backend prefers brand_id — so a leftover URL in
+      // state must not ride along when a saved brand is selected.
+      const usingSavedBrand = !useBrandUrlInstead && !!selectedBrandId;
+      const d = await api.faceSwapExtendVideo(
+        activeId,
+        hookJobIdRef.current || "",
+        usingSavedBrand ? "" : brandUrl.trim(),
+        brandedDuration,
+        videoModel,
+        videoInfo?.videoId || "",
+        usingSavedBrand ? selectedBrandId : ""
+      );
       startPolling(d.job_id, "extend");
     } catch (err) {
       setVideoError(getErrorMessage(err)); setFailedPhase("extend");
@@ -596,6 +630,10 @@ export default function FaceSwap() {
     setActualEngine(null);
     // Match the initial state (15s), not an arbitrary different default.
     setBrandUrl(""); setBrandedDuration(15); setGeneratingMore(false);
+    // Back to the saved-brand path with the active profile preselected, matching
+    // the initial state rather than leaving a one-off URL choice sticky.
+    setUseBrandUrlInstead(false);
+    setSelectedBrandId(brands && brands.length > 0 ? brands[0].id : "");
     setIncludeHookAudio(false);
     hookVideoUrlRef.current = null;
     hookJobIdRef.current = null;
@@ -949,10 +987,124 @@ export default function FaceSwap() {
                   <StepLabel step="Step 2" tone="coral" title="Extend with brand message" />
                   <p className="text-xs leading-relaxed text-muted-foreground">
                     Now add a longer continuation with your brand message, voiceover, and CTA.
-                    {brandProfile && <span className="text-[color:var(--brand-indigo)]"> Brand profile detected.</span>}
                   </p>
-                  <div className="flex gap-2">
-                    <Input value={brandUrl} onChange={(e) => setBrandUrl(e.target.value)} placeholder="https://yourbrand.com" className="flex-1 text-sm" data-testid="extend-brand-url-input" />
+
+                  {/* Brand source. A saved profile is the primary path: the
+                      backend prefers it over a URL anyway, so presenting a URL
+                      field first meant users typed a website that was then
+                      ignored. The URL remains available as an explicit choice
+                      and as the only option when no profile exists yet. */}
+                  <div className="space-y-2">
+                    {brands && brands.length > 0 && !useBrandUrlInstead ? (
+                      <>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                            Brand
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setUseBrandUrlInstead(true)}
+                            disabled={generatingVideo}
+                            className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                            data-testid="extend-use-url-instead"
+                          >
+                            Use a URL instead
+                          </button>
+                        </div>
+                        <div className="space-y-1.5">
+                          {brands.map((b) => (
+                            <button
+                              key={b.id}
+                              type="button"
+                              onClick={() => setSelectedBrandId(b.id)}
+                              disabled={generatingVideo}
+                              className={`flex w-full items-center gap-2 rounded-lg border p-2 text-left transition-colors duration-200 ${
+                                selectedBrandId === b.id
+                                  ? "border-[color:var(--brand-indigo)] bg-[color:var(--indigo-8)]"
+                                  : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
+                              } disabled:cursor-not-allowed disabled:opacity-50`}
+                              data-testid={`extend-brand-${b.id}`}
+                            >
+                              <Check
+                                className={`h-3.5 w-3.5 shrink-0 ${
+                                  selectedBrandId === b.id
+                                    ? "text-[color:var(--brand-indigo)]"
+                                    : "text-transparent"
+                                }`}
+                              />
+                              <span className="min-w-0 flex-1">
+                                <span
+                                  className={`block truncate text-xs font-semibold ${
+                                    selectedBrandId === b.id
+                                      ? "text-[color:var(--brand-indigo)]"
+                                      : "text-foreground"
+                                  }`}
+                                >
+                                  {b.brand_name || "Untitled brand"}
+                                </span>
+                                {(b.niche || b.website_url) && (
+                                  <span className="block truncate text-xs text-muted-foreground">
+                                    {[b.niche, b.website_url].filter(Boolean).join(" · ")}
+                                  </span>
+                                )}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                        <a
+                          href="/brand"
+                          className="inline-block text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                          data-testid="extend-manage-brands"
+                        >
+                          Manage brands
+                        </a>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                            Brand website
+                          </p>
+                          {brands && brands.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setUseBrandUrlInstead(false)}
+                              disabled={generatingVideo}
+                              className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                              data-testid="extend-use-saved-instead"
+                            >
+                              Use a saved brand
+                            </button>
+                          )}
+                        </div>
+                        <Input
+                          value={brandUrl}
+                          onChange={(e) => setBrandUrl(e.target.value)}
+                          placeholder="https://yourbrand.com"
+                          className="w-full text-sm"
+                          data-testid="extend-brand-url-input"
+                        />
+                        <p className="text-xs leading-snug text-muted-foreground">
+                          {brands && brands.length === 0 ? (
+                            <>
+                              No saved brands yet — analyzing a URL takes 30-60s each time.{" "}
+                              <a href="/brand" className="text-[color:var(--brand-indigo)] hover:underline">
+                                Set up a brand profile
+                              </a>{" "}
+                              to skip this step from now on.
+                            </>
+                          ) : (
+                            "This URL will be analyzed for this video only and won't be saved."
+                          )}
+                        </p>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <p className="flex-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Duration
+                    </p>
                     <div className="w-20 shrink-0">
                       <Input type="number" min={5} max={15} value={brandedDuration} onChange={(e) => setBrandedDuration(Math.max(5, Math.min(15, Number(e.target.value) || 10)))} className="text-center text-sm" />
                       <p className="mt-1 text-center text-xs text-muted-foreground">{brandedDuration}s</p>
