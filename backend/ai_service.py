@@ -89,7 +89,7 @@ def _build_face_swap_prompt(customization_prompt: str = "") -> str:
         "- MOUTH: match the EXACT degree of opening — if slightly open, be slightly open, NOT wider\n"
         "- EXPRESSION: same emotion intensity — if surprised, be surprised to the same degree\n"
         "- GAZE: eyes looking the same direction as in image 2\n"
-        "- CLOTHING: same outfit, same color, same fabric — absolutely no changes\n"
+        "- CLOTHING: the person must wear the EXACT same outfit shown in image 2 — same garment, same color, same print/pattern. Do NOT invent different clothing\n"
         "- BODY POSE: same position — if hands/arms are visible in image 2, show them in the same position; if NOT visible, do NOT add them\n"
         "- BACKGROUND: same scene, same lighting, same camera angle\n\n"
         "REMOVE all text overlays, captions, and watermarks from the output.\n"
