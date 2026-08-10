@@ -86,8 +86,17 @@ def _build_face_swap_prompt(customization_prompt: str = "") -> str:
         "and eye color (not gaze, eye opening, eyelid aperture, or blink state), nose anatomy, intrinsic lip "
         "shape (not mouth pose), skin tone, and hairstyle. Do NOT transfer from the second image its facial "
         "expression, eyebrow position, gaze, iris or pupil direction, eye opening, eyelid aperture, blink or "
-        "wink state, mouth pose, jaw opening, head orientation, or body pose. Keep the pose, body position, "
-        "hand gestures, background, lighting, and camera angle from the first image. "
+        "wink state, mouth pose, jaw opening, head orientation, or body pose. "
+        "CLOTHING & OUTFIT: Keep the EXACT clothing, outfit, accessories, jewelry, and garments from the "
+        "FIRST image completely unchanged. Do NOT replace, alter, or reinterpret the clothing in any way. "
+        "The shirt, jacket, dress, necklace, or any worn item visible in the first image must appear "
+        "identically in the output — same color, same fabric, same fit, same style. Do NOT hallucinate "
+        "different clothing from the second image or from imagination. "
+        "MOUTH STATE IS CRITICAL: If the mouth in the FIRST image is CLOSED, the output mouth MUST be "
+        "CLOSED. If it is open, it must be open to the same degree. Do NOT change the mouth state under "
+        "any circumstance — this is the single most important facial-performance property to preserve. "
+        "Keep the pose, body position, hand gestures, background, lighting, and camera angle from the "
+        "first image. "
         "TEXT OVERLAYS: Remove ALL text overlays, captions, watermarks, and visual text elements that appear "
         "in the first image. The output must have a clean image with NO on-screen text, no subtitles, no "
         "branded overlays, no emoji overlays, and no caption graphics. The output must clearly show the face "
@@ -103,8 +112,8 @@ def _build_face_swap_prompt(customization_prompt: str = "") -> str:
         "tone, but the underlying base color must be uniform across face, neck, and body."
         f"{customization_instruction}"
         " Customization must never override the FIRST image's facial expression, eye state, gaze, eyelid "
-        "aperture, blink state, eyebrow position, mouth pose, jaw opening, head orientation, or reaction "
-        "intensity."
+        "aperture, blink state, eyebrow position, mouth pose, jaw opening, head orientation, clothing, "
+        "or reaction intensity."
     )
 
 
@@ -614,18 +623,18 @@ async def analyze_image_for_hook(image_path: Path, session_id: str) -> dict:
     system_message = (
         "You are an expert short-form video (TikTok/Reels) hook strategist. You examine a single "
         "still image of a person and determine what attention-grabbing movement is happening or "
-        "about to happen — then describe how to animate this into a 5-second silent hook video. "
+        "about to happen — then describe how to animate this into a 3-second silent hook video. "
         "Respond with STRICT JSON only, no markdown fences, no extra commentary."
     )
 
     prompt = (
-        "Here is a still image that will be the first frame of a 5-second TikTok hook video. "
+        "Here is a still image that will be the first frame of a 3-second TikTok hook video. "
         "Analyze what's in this image and describe how to animate it into an attention-grabbing "
         "silent hook. Return ONLY a JSON object with this exact schema:\n"
         "{\n"
-        '  "facial_expressions": "describe the expression visible and how it should evolve over 5 seconds",\n'
+        '  "facial_expressions": "describe the expression visible and how it should evolve over 3 seconds",\n'
         '  "body_language_gestures": "describe the pose/gesture visible and what movement should follow",\n'
-        '  "pacing_cuts": "describe the ideal pacing and camera movement for a 5s hook starting from this frame",\n'
+        '  "pacing_cuts": "describe the ideal pacing and camera movement for a 3s hook starting from this frame",\n'
         '  "hook_summary": "1-2 sentence description of the hook concept that would work from this image",\n'
         '  "replicable_mechanics": ["list", "of", "specific", "movements", "to", "animate"]\n'
         "}\n"
@@ -681,6 +690,7 @@ async def generate_video(
     reference_video_url: str = None,
     reference_audio_url: str = None,
     input_references: list = None,
+    prefer_v2v_motion: bool = False,
 ) -> dict:
     """Submit a video generation job to OpenRouter using MiniMax H3.
 
@@ -693,7 +703,8 @@ async def generate_video(
 
     Args:
         prompt: Text prompt describing the video to generate.
-        reference_image_path: Face-swapped image used as first_frame (identity anchor).
+        reference_image_path: Face-swapped image used as first_frame (identity anchor)
+                             OR as an image reference (when prefer_v2v_motion=True).
         duration: Target duration in seconds (1-15).
         model: Model key (only "minimax-h3" supported now).
         generate_audio: Whether to generate native audio. Defaults to True since H3
@@ -707,6 +718,13 @@ async def generate_video(
         reference_audio_url: Optional URL to an audio file to use as voice/music reference.
         input_references: Optional pre-built list of reference objects to pass directly.
                          Each item should follow OpenRouter's input_references schema.
+        prefer_v2v_motion: When True AND a reference_video_url is provided, the face
+                          image is sent as an image reference inside input_references
+                          (instead of frame_images) so both can coexist in one request.
+                          This enables true V2V motion transfer at the cost of slightly
+                          less rigid first-frame identity lock. When False (default),
+                          the face image is a hard first-frame anchor and V2V references
+                          are dropped due to the MiniMax API constraint.
     """
     # Always use MiniMax H3
     model_id = VIDEO_MODELS[DEFAULT_VIDEO_MODEL]["id"]
@@ -718,11 +736,23 @@ async def generate_video(
         "duration": min(duration, max_dur),
         "resolution": "2K",
         "aspect_ratio": "9:16",
-        "generate_audio": generate_audio,
     }
 
-    # First frame: the face-swapped image anchors identity throughout the video
-    if reference_image_path and reference_image_path.exists():
+    # Only include generate_audio when explicitly requested. Sending False for
+    # models that don't support the parameter (OpenRouter rejects unsupported
+    # fields for some providers like MiniMax Hailuo) causes a 400. Omitting it
+    # lets the provider use its own default (typically no audio).
+    if generate_audio:
+        payload["generate_audio"] = True
+
+    # Determine whether to use V2V motion mode: face image goes into
+    # input_references (as image ref) so it can coexist with the video ref,
+    # enabling true motion transfer from the original viral video.
+    use_v2v_mode = prefer_v2v_motion and reference_video_url and reference_image_path and reference_image_path.exists()
+
+    # First frame: the face-swapped image anchors identity throughout the video.
+    # In V2V mode, we skip frame_images and put the image in input_references instead.
+    if reference_image_path and reference_image_path.exists() and not use_v2v_mode:
         b64 = image_to_base64(reference_image_path)
         mime = "image/png"
         payload["frame_images"] = [
@@ -736,6 +766,16 @@ async def generate_video(
     # Omni-reference inputs: H3 can accept images, videos, and audio as references
     # to guide subject identity, motion/timing, and sound in one generation.
     refs = list(input_references) if input_references else []
+
+    # V2V motion mode: put the face-swap image as an image reference so H3 uses
+    # it for identity guidance while also accepting the video motion reference.
+    if use_v2v_mode:
+        b64 = image_to_base64(reference_image_path)
+        mime = "image/png"
+        refs.insert(0, {
+            "type": "image_url",
+            "image_url": {"url": f"data:{mime};base64,{b64}"},
+        })
 
     # V2V motion transfer: feed the original viral video so H3 replicates its
     # timing, camera language, performance rhythm, and editing pace. Must be a
@@ -756,10 +796,10 @@ async def generate_video(
 
     # MiniMax Hailuo rejects any request that combines frame_images with
     # input_references ("do not support frame_images and input_references in
-    # the same [request]", HTTP 400). frame_images anchors the face-swapped
-    # image as the video's first frame — that identity anchor matters more
-    # than the V2V motion/audio references, so when both would apply, drop
-    # the references rather than let the whole request fail.
+    # the same [request]", HTTP 400). When NOT in V2V mode, frame_images
+    # anchors the face-swapped image as the video's first frame — that identity
+    # anchor matters more than references, so drop them. In V2V mode this
+    # conflict doesn't arise because the image is already in input_references.
     if payload.get("frame_images") and refs:
         logger.warning(
             "MiniMax H3 does not support frame_images + input_references together — "
@@ -774,16 +814,38 @@ async def generate_video(
     logger.info(
         f"Submitting video generation (MiniMax H3): duration={payload['duration']}s, "
         f"resolution={payload['resolution']}, has_frame_image={bool(payload.get('frame_images'))}, "
-        f"audio={generate_audio}, num_references={len(refs)}, "
+        f"v2v_mode={use_v2v_mode}, audio={generate_audio}, num_references={len(refs)}, "
         f"has_v2v_motion={bool(reference_video_url) and bool(refs)}"
     )
 
     async with httpx.AsyncClient(timeout=90) as client:
-        resp = await client.post(f"{OPENROUTER_BASE}/videos", headers=_headers(), json=payload)
-        if resp.status_code >= 400:
-            error_text = resp.text[:500]
-            logger.error(f"Video generation submission failed: HTTP {resp.status_code}: {error_text}")
-            raise RuntimeError(f"Video generation failed (HTTP {resp.status_code}): {error_text}")
+        # Retry once on transient failures (502/503/429/timeout) from OpenRouter.
+        last_error = None
+        for attempt in range(2):
+            try:
+                resp = await client.post(f"{OPENROUTER_BASE}/videos", headers=_headers(), json=payload)
+            except httpx.TimeoutException as e:
+                last_error = RuntimeError(f"Video generation timed out: {e}")
+                if attempt == 0:
+                    logger.warning(f"Video generation attempt 1 timed out, retrying...")
+                    await asyncio.sleep(2)
+                    continue
+                raise last_error
+
+            if resp.status_code in (502, 503, 429) and attempt == 0:
+                error_text = resp.text[:200]
+                logger.warning(
+                    f"Video generation attempt 1 got HTTP {resp.status_code}: {error_text} — retrying..."
+                )
+                await asyncio.sleep(3)
+                continue
+
+            if resp.status_code >= 400:
+                error_text = resp.text[:500]
+                logger.error(f"Video generation submission failed: HTTP {resp.status_code}: {error_text}")
+                raise RuntimeError(f"Video generation failed (HTTP {resp.status_code}): {error_text}")
+            break
+
         data = resp.json()
         job_id = data.get("id") or data.get("generation_id") or ""
         logger.info(

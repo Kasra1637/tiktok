@@ -7,8 +7,9 @@ import EmptyState from "../components/EmptyState";
 import JsonSpecPanel from "../components/JsonSpecPanel";
 import PageHeader from "../components/PageHeader";
 import { api, mediaUrl, getErrorMessage } from "../lib/api";
-import { Clock, Eye, Heart, MessageCircle, ImageOff, History as HistoryIcon, Clapperboard, Film, ArrowRight, Trash2 } from "lucide-react";
+import { Clock, Eye, Heart, MessageCircle, ImageOff, History as HistoryIcon, Clapperboard, Film, ArrowRight, Trash2, Download, Video } from "lucide-react";
 import { toast } from "sonner";
+import { Button } from "../components/ui/button";
 
 function formatCount(n) {
   if (!n) return "0";
@@ -31,11 +32,17 @@ export default function History() {
   const [loading, setLoading] = useState(true);
   const [activeCustomization, setActiveCustomization] = useState(null);
   const [activeVideoJob, setActiveVideoJob] = useState(null);
+  const [videoAssets, setVideoAssets] = useState([]);
 
   useEffect(() => {
-    api
-      .getHistory()
-      .then((data) => setItems(Array.isArray(data) ? data : data?.videos || []))
+    Promise.all([
+      api.getHistory(),
+      api.getVideoAssets().catch(() => []),
+    ])
+      .then(([historyData, assets]) => {
+        setItems(Array.isArray(historyData) ? historyData : historyData?.videos || []);
+        setVideoAssets(Array.isArray(assets) ? assets : []);
+      })
       .catch((err) => toast.error(getErrorMessage(err)))
       .finally(() => setLoading(false));
   }, []);
@@ -93,6 +100,62 @@ export default function History() {
       />
 
       <div className="space-y-3" data-testid="history-list">
+        {/* Generated Videos — persisted in R2 */}
+        {videoAssets.length > 0 && (
+          <div className="space-y-3" data-testid="video-assets-section">
+            <h3 className="font-display text-sm font-semibold flex items-center gap-2">
+              <Video className="h-4 w-4 text-[color:var(--brand-coral)]" />
+              Generated Videos
+              <Badge variant="secondary" className="ml-1 px-2 py-0.5 text-xs">{videoAssets.length}</Badge>
+            </h3>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {videoAssets.map((asset) => (
+                <div key={asset.job_id} className="surface rounded-2xl overflow-hidden">
+                  <video
+                    src={asset.r2_url}
+                    controls
+                    preload="metadata"
+                    className="w-full aspect-[9/16] max-h-[280px] object-cover bg-black"
+                  />
+                  <div className="p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Badge variant={asset.phase === "hook" ? "indigo" : "secondary"} className="text-xs">
+                        {asset.phase === "hook" ? "3s Hook" : "Extension"}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {asset.created_at ? new Date(asset.created_at).toLocaleDateString() : ""}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <a href={asset.r2_url} download target="_blank" rel="noreferrer" className="flex-1">
+                        <Button variant="outline" size="sm" className="w-full gap-1.5 text-xs">
+                          <Download className="h-3 w-3" /> Download
+                        </Button>
+                      </a>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 text-xs text-destructive hover:bg-destructive/10"
+                        onClick={async () => {
+                          if (!window.confirm("Delete this video permanently?")) return;
+                          try {
+                            await api.deleteVideoAsset(asset.job_id);
+                            setVideoAssets((prev) => prev.filter((a) => a.job_id !== asset.job_id));
+                            toast.success("Video deleted.");
+                          } catch (err) {
+                            toast.error(getErrorMessage(err));
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {items.map(({ video, customizations, video_jobs }) => (
           <div key={video.id} className="surface surface-interactive rounded-2xl p-4">
             <div className="flex flex-col gap-4 md:flex-row">

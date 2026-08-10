@@ -22,6 +22,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 import pipeline
 import viral_detection
+import storage_service
 from ai_service import (
     analyze_hook, generate_customized_preview, generate_face_swap, generate_video_prompt,
     generate_video, poll_video_job, analyze_brand_from_text, generate_remix_script,
@@ -137,12 +138,23 @@ class _LibsqlAsyncWrapper:
     async def executescript(self, sql):
         self._conn.executescript(sql)
         self._conn.commit()
+        if hasattr(self._conn, "sync"):
+            try:
+                self._conn.sync()
+            except Exception as e:
+                logger.warning(f"Turso sync after executescript failed (local replica is safe): {e}")
 
     async def commit(self):
         self._conn.commit()
-        # Sync local embedded replica to/from Turso cloud
+        # Sync local embedded replica to/from Turso cloud.
+        # Network hiccups during sync must not crash the caller — unsynced
+        # writes are still durable in the local embedded replica and will be
+        # pushed on the next successful sync.
         if hasattr(self._conn, "sync"):
-            self._conn.sync()
+            try:
+                self._conn.sync()
+            except Exception as e:
+                logger.warning(f"Turso sync failed (writes are safe in local replica): {e}")
 
     async def close(self):
         pass  # handled by get_db's finally block
@@ -463,6 +475,22 @@ async def init_db():
                 created_at TEXT,
                 updated_at TEXT
             );
+
+            -- Persistent video storage registry. Each row tracks a generated
+            -- video uploaded to Cloudflare R2 so it survives container redeploys
+            -- and remains accessible in the user's history until they delete it.
+            CREATE TABLE IF NOT EXISTS video_assets (
+                job_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL DEFAULT 'anonymous',
+                r2_url TEXT NOT NULL,
+                phase TEXT DEFAULT 'hook',
+                source_video_id TEXT,
+                source_hook_template_id TEXT,
+                duration INTEGER,
+                created_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_video_assets_user
+                ON video_assets (user_id, created_at);
         """)
         await conn.commit()
 
@@ -2119,7 +2147,7 @@ async def list_face_swap_jobs(user_id: str = Depends(get_current_user_id)):
 # ---------------------------------------------------------------------------
 
 HOOK_VIDEO_PROMPT_TEMPLATE = (
-    "Create a 5-second vertical video (9:16) starting from this exact first frame. "
+    "Create a 3-second vertical video (9:16) starting from this exact first frame. "
     "The character should perform a FAST, punchy, attention-grabbing movement that creates "
     "curiosity: {motion_type}. "
     "PACING IS CRITICAL — match the energy of a viral TikTok hook (first 2-3 seconds): "
@@ -2198,7 +2226,7 @@ def _coerce_mechanics(mechanics) -> list:
     return [mechanics]
 
 
-def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = False) -> str:
+def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = False, v2v_motion_active: bool = False) -> str:
     """
     Build the hook-video prompt from a viral video's hook analysis.
 
@@ -2206,35 +2234,55 @@ def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = 
     template stores exactly the prompt that a fresh analysis would have produced.
     With H3's V2V motion transfer the video reference carries timing and camera
     work, while this text reinforces expressions and intent.
+
+    Args:
+        v2v_motion_active: When True, the reference video is actually being
+            delivered to the model (not dropped). The prompt emphasizes replicating
+            the exact physical movements from the video rather than interpreting
+            text descriptions.
     """
-    prompt = (
-        "Create a 5-second vertical video (9:16) starting from this exact first frame. "
-        "Recreate the EXACT hook mechanics that made the original viral video work:\n\n"
-        f"FACIAL EXPRESSION: {analysis.get('facial_expressions') or 'engaging expression'}\n"
-        f"BODY LANGUAGE & GESTURE: {analysis.get('body_language_gestures') or 'confident body language'}\n"
-        f"PACING & MOVEMENT: {analysis.get('pacing_cuts') or 'quick, attention-grabbing pacing'}\n"
-        f"HOOK SUMMARY: {analysis.get('hook_summary') or 'attention-grabbing opening'}\n\n"
-        "PACING IS CRITICAL — this must match the speed and energy of a viral TikTok hook:\n"
-        "- The action must start IMMEDIATELY from frame 1 — no slow build-up or pause at the start\n"
-        "- All movements should be FAST and snappy, matching the rapid pace of the original 2-3 second hook window\n"
-        "- Quick, punchy gestures — NOT slow or cinematic movements\n"
-        "- Immediate direct eye contact with the camera from the very first frame\n"
-        "- Energy level should be HIGH from the start — think 'scroll-stopper' urgency\n"
-        "- The body language tempo must match how fast the original creator moved\n"
-        "- Compress all the described movements into the first 2-3 seconds, not spread across 5\n\n"
-        "ADDITIONAL REQUIREMENTS:\n"
-        "- Perform the EXACT movements and expressions described above — these are proven to grab attention\n"
-        "- Maintain perfect face consistency with the first frame throughout\n"
-        "- Camera holds steady or has a subtle push-in matching the original's pacing\n"
-        "- End on a moment of anticipation (the viewer wants to know what happens next)"
-    )
+    if v2v_motion_active:
+        # V2V mode: the model receives the actual viral video. Keep the prompt
+        # SHORT and let the video reference be the sole motion authority — long
+        # text descriptions of movements compete with what the model sees in the
+        # video pixels and produce worse results.
+        prompt = (
+            "Recreate this exact video with the person from the reference image. "
+            "Replace ONLY the face and identity — keep everything else identical: "
+            "same body movements, same hand gestures, same timing, same clothing, "
+            "same background, same camera angle, same energy. "
+            "The output should be indistinguishable from the original except for "
+            "the person's face."
+        )
+    else:
+        prompt = (
+            "Create a 3-second vertical video (9:16) starting from this exact first frame. "
+            "Recreate the EXACT hook mechanics that made the original viral video work:\n\n"
+            f"FACIAL EXPRESSION: {analysis.get('facial_expressions') or 'engaging expression'}\n"
+            f"BODY LANGUAGE & GESTURE: {analysis.get('body_language_gestures') or 'confident body language'}\n"
+            f"PACING & MOVEMENT: {analysis.get('pacing_cuts') or 'quick, attention-grabbing pacing'}\n"
+            f"HOOK SUMMARY: {analysis.get('hook_summary') or 'attention-grabbing opening'}\n\n"
+            "PACING IS CRITICAL — this must match the speed and energy of a viral TikTok hook:\n"
+            "- The action must start IMMEDIATELY from frame 1 — no slow build-up or pause at the start\n"
+            "- All movements should be FAST and snappy, matching the rapid pace of the original 2-3 second hook window\n"
+            "- Quick, punchy gestures — NOT slow or cinematic movements\n"
+            "- Immediate direct eye contact with the camera from the very first frame\n"
+            "- Energy level should be HIGH from the start — think 'scroll-stopper' urgency\n"
+            "- The body language tempo must match how fast the original creator moved\n"
+            "- Compress all the described movements into the first 2 seconds, not spread across 3\n\n"
+            "ADDITIONAL REQUIREMENTS:\n"
+            "- Perform the EXACT movements and expressions described above — these are proven to grab attention\n"
+            "- Maintain perfect face consistency with the first frame throughout\n"
+            "- Camera holds steady or has a subtle push-in matching the original's pacing\n"
+            "- End on a moment of anticipation (the viewer wants to know what happens next)"
+        )
 
     mechanics = _coerce_mechanics(analysis.get("replicable_mechanics"))
-    if mechanics:
+    if mechanics and not v2v_motion_active:
         mechanics_str = "; ".join(str(m) for m in mechanics[:5])
         prompt += f"\n\nKEY MECHANICS TO REPLICATE: {mechanics_str}"
 
-    if has_reference_video:
+    if has_reference_video and not v2v_motion_active:
         prompt += (
             "\n\nNOTE: A reference video is provided for V2V motion transfer. "
             "Replicate its timing, camera movement, performance rhythm, and editing pace "
@@ -2246,7 +2294,7 @@ def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = 
 def build_hook_prompt_from_image_analysis(image_analysis: dict) -> str:
     """Build the hook-video prompt when only a single still image was analyzed."""
     prompt = (
-        "Create a 5-second vertical video (9:16) starting from this exact first frame. "
+        "Create a 3-second vertical video (9:16) starting from this exact first frame. "
         "Animate from this starting pose using these movement cues:\n\n"
         f"FACIAL EXPRESSION: {image_analysis.get('facial_expressions') or 'engaging expression'}\n"
         f"BODY LANGUAGE & MOVEMENT: {image_analysis.get('body_language_gestures') or 'confident movement'}\n"
@@ -2777,9 +2825,22 @@ async def face_swap_generate_hook_video(
     if prompt is not None:
         pass  # already resolved from a saved template
     elif analysis:
+        # Determine if V2V motion transfer will be active for this generation.
+        # We need this now to build the appropriate prompt variant.
+        user_customized = bool(
+            (hook_category and hook_category.strip())
+            or (hook_custom_prompt and hook_custom_prompt.strip())
+        )
+        v2v_will_be_active = (
+            bool(reference_video_path)
+            and not user_customized
+            and not template
+        )
         # USE THE PROVEN HOOK STRUCTURE from the analyzed viral video.
         prompt = build_hook_prompt_from_analysis(
-            analysis, has_reference_video=bool(reference_video_path)
+            analysis,
+            has_reference_video=bool(reference_video_path),
+            v2v_motion_active=v2v_will_be_active,
         )
     else:
         # No video analysis available (manual upload) — analyze the IMAGE itself
@@ -2802,13 +2863,46 @@ async def face_swap_generate_hook_video(
     # toggle existed, whose cached text may still reference audio.
     prompt = apply_audio_directive(prompt, False)
 
+    # Use true V2V motion transfer (replicating the original video's exact body
+    # movements) when ALL of these hold:
+    #   1. An analyzed video exists (we have the hook analysis)
+    #   2. The original viral video is available locally for V2V reference
+    #   3. The user did NOT select a custom hook style or write a custom prompt
+    #      (those indicate intent to deviate from the original's movements)
+    #   4. This is NOT from a saved template (templates have their own prompt)
+    # In V2V mode the face-swap image is sent as an image reference (identity
+    # guide) instead of a hard first-frame lock, allowing both the face and
+    # the video motion reference to coexist in one MiniMax H3 request.
+    user_customized = bool(
+        (hook_category and hook_category.strip())
+        or (hook_custom_prompt and hook_custom_prompt.strip())
+    )
+    use_v2v = (
+        bool(analysis)
+        and bool(reference_video_path)
+        and not user_customized
+        and not template
+    )
+
+    # When V2V is active, trim the source video to the first 3 seconds so the
+    # motion reference is a clean 1:1 match for the 3-second output. This gives
+    # MiniMax H3 an exact timing template rather than forcing it to guess which
+    # segment of a longer clip to replicate. Falls back to the full video if
+    # trimming fails.
+    v2v_video_path = reference_video_path
+    if use_v2v and reference_video_path:
+        trimmed = await pipeline.trim_video_to_hook(reference_video_path, duration=3.0)
+        if trimmed:
+            v2v_video_path = trimmed
+
     try:
         result = await generate_video(
             prompt=prompt,
             reference_image_path=image_path,
-            duration=5,
+            duration=3,
             generate_audio=False,  # Always silent — creator adds sound in TikTok editor
-            reference_video_url=public_media_url(reference_video_path),  # V2V motion transfer
+            reference_video_url=public_media_url(v2v_video_path),  # V2V motion transfer
+            prefer_v2v_motion=use_v2v,
         )
     except Exception as e:
         logger.error(f"Hook video generation failed: {e}")
@@ -2824,7 +2918,7 @@ async def face_swap_generate_hook_video(
         """INSERT OR REPLACE INTO face_swap_video_jobs
            (id, image_id, prompt, duration, status, polling_url, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (job_id, image_id, prompt, 5, "pending", polling_url, now_iso()),
+        (job_id, image_id, prompt, 3, "pending", polling_url, now_iso()),
     )
 
     # Track template reuse so the UI can surface the most effective saved hooks.
@@ -2839,7 +2933,7 @@ async def face_swap_generate_hook_video(
         "status": "pending",
         "polling_url": polling_url,
         "image_id": image_id,
-        "duration": 5,
+        "duration": 3,
         "phase": "hook",
         "motion_style": motion_style.strip() or "lean-in",
         "model": "minimax-h3",
@@ -2921,14 +3015,18 @@ async def face_swap_extend_video(
 
     # Auto-generate extension prompt if not provided
     if not prompt.strip():
-        # Try to get brand context — non-fatal, falls back gracefully
+        # Try to get brand context — prefer the saved brand profile (instant)
+        # over re-fetching/analyzing the URL (can take 30-60s and risk timeouts).
         brand_profile = None
-        if brand_url and brand_url.strip():
+        brand_row = await _fetch_active_brand()
+        if brand_row:
+            brand_profile = brand_row
+        elif brand_url and brand_url.strip():
             url = brand_url.strip()
             if not url.lower().startswith(("http://", "https://")):
                 url = f"https://{url}"
             try:
-                async with httpx.AsyncClient(timeout=10, follow_redirects=True, headers={
+                async with httpx.AsyncClient(timeout=8, follow_redirects=True, headers={
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
                 }) as client:
                     resp = await client.get(url)
@@ -2938,11 +3036,6 @@ async def face_swap_extend_video(
                         brand_profile = await analyze_brand_from_text(url, page_text)
             except Exception as e:
                 logger.warning(f"Brand URL fetch/analysis failed for extend-video: {e} — continuing without brand context")
-
-        if not brand_profile:
-            brand_row = await _fetch_active_brand()
-            if brand_row:
-                brand_profile = brand_row
 
         if brand_profile:
             brand_name = brand_profile.get("brand_name", "the brand")
@@ -3156,9 +3249,29 @@ async def face_swap_video_status(job_id: str, user_id: str = Depends(get_current
                 response["video_urls"] = video_urls
                 return response
 
-        # Serve from our own stable URL
+        # Upload to R2 for permanent storage (survives redeploys).
+        # This is non-blocking for the user — if R2 fails, the local URL
+        # still works for this container's lifetime.
+        r2_url = storage_service.upload_video(user_id, job_id, local_video_path)
+        if r2_url:
+            await _execute(
+                "UPDATE face_swap_video_jobs SET video_url = ? WHERE id = ?",
+                (r2_url, job_id),
+            )
+            # Also persist in the video_assets table for user history
+            await _execute(
+                """INSERT OR IGNORE INTO video_assets
+                   (job_id, user_id, r2_url, phase, created_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (job_id, user_id, r2_url, "hook", now_iso()),
+            )
+
+        # Serve from our own stable URL (local cache for this container)
         response["video_url"] = f"/api/media/videos/{job_id}.mp4"
         response["video_urls"] = [f"/api/media/videos/{job_id}.mp4"]
+        # Include R2 URL so frontend can use it as a permanent link
+        if r2_url:
+            response["r2_url"] = r2_url
 
     if status == "failed":
         response["error"] = result.get("error", "Video generation failed.")
@@ -3167,6 +3280,58 @@ async def face_swap_video_status(job_id: str, user_id: str = Depends(get_current
         response["usage"] = result["usage"]
 
     return response
+
+
+# ---------------------------------------------------------------------------
+# Video Assets — persistent history of generated videos stored in R2.
+# Users can list their videos, get a permanent URL, or delete them.
+# ---------------------------------------------------------------------------
+@api_router.get("/video-assets")
+async def list_video_assets(user_id: str = Depends(get_current_user_id)):
+    """List all persisted videos for the current user, newest first."""
+    cursor = await _execute(
+        """SELECT job_id, r2_url, phase, source_video_id,
+                  source_hook_template_id, duration, created_at
+           FROM video_assets
+           WHERE user_id = ?
+           ORDER BY created_at DESC
+           LIMIT 100""",
+        (user_id,),
+    )
+    rows = await cursor.fetchall()
+    cols = [d[0] for d in cursor.description]
+    return [row_to_dict(row, cols) for row in rows]
+
+
+@api_router.delete("/video-assets/{job_id}")
+async def delete_video_asset(job_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Delete a persisted video — removes it from R2 and the database.
+    The video is gone permanently. Only the owning user can delete.
+    """
+    asset = await _fetch_one(
+        "SELECT * FROM video_assets WHERE job_id = ? AND user_id = ?",
+        (job_id, user_id),
+    )
+    if not asset:
+        raise HTTPException(status_code=404, detail="Video not found or you don't own it.")
+
+    # Delete from R2
+    storage_service.delete_video(user_id, job_id)
+
+    # Delete from database
+    await _execute("DELETE FROM video_assets WHERE job_id = ? AND user_id = ?", (job_id, user_id))
+
+    # Also clean up the video job record's URL (it's now gone)
+    await _execute(
+        "UPDATE face_swap_video_jobs SET video_url = NULL WHERE id = ?", (job_id,)
+    )
+
+    # Remove local cache if it exists
+    local_path = pipeline.STORAGE_DIR / "videos" / f"{job_id}.mp4"
+    local_path.unlink(missing_ok=True)
+
+    return {"status": "deleted", "job_id": job_id}
 
 
 # ---------------------------------------------------------------------------
@@ -4184,7 +4349,26 @@ async def debug_apify_test():
 # ---------------------------------------------------------------------------
 @app.on_event("startup")
 async def on_startup():
-    await init_db()
+    # Retry init_db up to 3 times — Turso or network hiccups during a cold
+    # deploy must not permanently kill the container (uvicorn exits with code 3
+    # if this handler raises, and Render marks the deploy as failed).
+    last_error: Optional[Exception] = None
+    for attempt in range(1, 4):
+        try:
+            await init_db()
+            break
+        except Exception as e:
+            last_error = e
+            logger.error(f"init_db attempt {attempt}/3 failed: {e}")
+            if attempt < 3:
+                await asyncio.sleep(2 * attempt)
+    else:
+        # All retries exhausted — log but do NOT re-raise. The app can still
+        # serve non-DB requests, and the next inbound request will trigger
+        # lazy table creation via get_db's fallback path.
+        logger.critical(
+            f"init_db failed after 3 attempts, starting anyway: {last_error}"
+        )
     if not os.environ.get("OPENROUTER_API_KEY"):
         logger.warning(
             "OPENROUTER_API_KEY is not set. The app will run, but AI features "

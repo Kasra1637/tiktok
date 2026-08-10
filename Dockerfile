@@ -50,15 +50,16 @@ RUN pip install --no-cache-dir yt-dlp
 # Copy backend source
 COPY backend/ /app/backend/
 
-# Ensure storage directories exist (videos/frames/uploads/generated/db)
+# Ensure storage directories exist (videos/frames/uploads/generated/templates/db)
 RUN mkdir -p /app/backend/storage/videos /app/backend/storage/frames \
-             /app/backend/storage/uploads /app/backend/storage/generated
+             /app/backend/storage/uploads /app/backend/storage/generated \
+             /app/backend/storage/templates
 
 # IMPORTANT: This RUN instruction MUST change value on every deploy where
 # frontend code changed. It busts Docker BuildKit's runtime stage cache
 # which otherwise reuses the old COPY --from=builder output independently
 # of whether the builder stage produced new files.
-RUN echo "FRONTEND_VERSION=hookflow-v4-clerk-auth-2026-08-07" > /tmp/frontend_version.txt
+RUN echo "FRONTEND_VERSION=hookflow-v4-clerk-auth-2026-08-10" > /tmp/frontend_version.txt
 COPY --from=builder /app/frontend/build /app/frontend_build/
 
 # Expose the application port

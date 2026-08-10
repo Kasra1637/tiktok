@@ -1,10 +1,9 @@
-import { Smile, Hand, Scissors, Type, Volume2, ListChecks, Lightbulb, Check } from "lucide-react";
+import { Smile, Hand, Scissors, Volume2, ListChecks, Lightbulb, Check } from "lucide-react";
 
 const SECTIONS = [
   { key: "facial_expressions", label: "Facial Expressions & Micro-expressions", icon: Smile },
   { key: "body_language_gestures", label: "Body Language & Gestures", icon: Hand },
   { key: "pacing_cuts", label: "Pacing & Cuts", icon: Scissors },
-  { key: "text_overlays_timing", label: "Text Overlays & Timing", icon: Type },
   { key: "audio_cues_inferred", label: "Audio Cues", icon: Volume2 },
 ];
 

@@ -366,3 +366,59 @@ async def extract_last_frame(video_path: Path, out_path: Path) -> Optional[Path]
         )
         return None
     return out_path
+
+
+async def trim_video_to_hook(video_path: Path, duration: float = 5.0) -> Optional[Path]:
+    """
+    Extract the first `duration` seconds of a video as a standalone clip.
+
+    Used for V2V motion transfer: sending only the hook portion (first 5s)
+    gives MiniMax H3 a clean 1:1 timing reference that matches the generated
+    video's length, rather than forcing the model to guess which segment of
+    a longer clip to replicate.
+
+    The trimmed clip is cached at storage/videos/{stem}_hook{duration}s.mp4
+    so repeated generations from the same source video don't re-encode.
+
+    Returns None (rather than raising) when trimming isn't possible, so the
+    caller can fall back to the full video or skip the reference entirely.
+    """
+    if not video_path or not video_path.exists():
+        return None
+
+    # Cache the trimmed clip alongside the original
+    cache_name = f"{video_path.stem}_hook{int(duration)}s.mp4"
+    trimmed_path = video_path.parent / cache_name
+
+    # Reuse cached trim if it already exists and is non-empty
+    if trimmed_path.exists() and trimmed_path.stat().st_size > 0:
+        return trimmed_path
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(video_path),
+        "-t", str(duration),
+        "-c:v", "copy",    # No re-encoding — fast, lossless copy
+        "-c:a", "copy",
+        "-threads", "1",
+        str(trimmed_path),
+    ]
+    try:
+        rc, _out, err = await run_cmd(cmd, timeout=30)
+    except RuntimeError as e:
+        logger.warning(f"Hook trim timed out for {video_path.name}: {e}")
+        return None
+    except (FileNotFoundError, OSError) as e:
+        logger.warning(f"Hook trim unavailable (ffmpeg missing?) for {video_path.name}: {e}")
+        return None
+
+    if rc != 0 or not trimmed_path.exists() or trimmed_path.stat().st_size == 0:
+        logger.warning(
+            f"Hook trim failed for {video_path.name}: "
+            f"{err.strip()[-300:] or 'unknown error'}"
+        )
+        trimmed_path.unlink(missing_ok=True)
+        return None
+
+    logger.info(f"Trimmed {video_path.name} to {duration}s hook clip: {trimmed_path.name}")
+    return trimmed_path
