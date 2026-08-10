@@ -133,6 +133,10 @@ export const api = {
     client.get(`/face-swap/video-status/${jobId}`).then((r) => r.data),
   getVideoModels: () => client.get("/video-models").then((r) => r.data),
 
+  // Persisted video assets (R2 storage)
+  getVideoAssets: () => client.get("/video-assets").then((r) => r.data),
+  deleteVideoAsset: (jobId) => client.delete(`/video-assets/${jobId}`).then((r) => r.data),
+
   // Face Swap → Branded Video (Content Remixer)
   faceSwapBrandedPrompt: (imageId, brandUrl, videoId, duration, useOriginalSound = false) => {
     const formData = new FormData();

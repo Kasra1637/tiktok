@@ -2256,10 +2256,13 @@ def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = 
             "CRITICAL INSTRUCTIONS:\n"
             "- Copy the reference video's movements EXACTLY — same speed, same timing, same gestures\n"
             "- The character's face must match the reference image (identity transfer)\n"
-            "- Match the camera angle and framing from the reference video\n"
+            "- Match the camera angle and framing from the reference video EXACTLY\n"
             "- Match the energy level and tempo precisely — if the original is fast, be fast\n"
             "- Replicate hand positions, arm movements, head tilts at the same timestamps\n"
-            "- The output should look like the same video but with a different person's face"
+            "- CLOTHING: The character must wear the SAME clothing/outfit visible in the reference video — same color, same style, same fit. Do NOT change the outfit\n"
+            "- ENVIRONMENT: Keep the same background, room, and setting from the reference video\n"
+            "- The output should look like the EXACT same video but with the reference image person's face\n"
+            "- Frame 1 of the output must match frame 1 of the reference video in pose and position"
         )
     else:
         prompt = (
