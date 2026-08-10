@@ -2147,7 +2147,7 @@ async def list_face_swap_jobs(user_id: str = Depends(get_current_user_id)):
 # ---------------------------------------------------------------------------
 
 HOOK_VIDEO_PROMPT_TEMPLATE = (
-    "Create a 5-second vertical video (9:16) starting from this exact first frame. "
+    "Create a 3-second vertical video (9:16) starting from this exact first frame. "
     "The character should perform a FAST, punchy, attention-grabbing movement that creates "
     "curiosity: {motion_type}. "
     "PACING IS CRITICAL — match the energy of a viral TikTok hook (first 2-3 seconds): "
@@ -2256,7 +2256,7 @@ def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = 
         )
     else:
         prompt = (
-            "Create a 5-second vertical video (9:16) starting from this exact first frame. "
+            "Create a 3-second vertical video (9:16) starting from this exact first frame. "
             "Recreate the EXACT hook mechanics that made the original viral video work:\n\n"
             f"FACIAL EXPRESSION: {analysis.get('facial_expressions') or 'engaging expression'}\n"
             f"BODY LANGUAGE & GESTURE: {analysis.get('body_language_gestures') or 'confident body language'}\n"
@@ -2269,7 +2269,7 @@ def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = 
             "- Immediate direct eye contact with the camera from the very first frame\n"
             "- Energy level should be HIGH from the start — think 'scroll-stopper' urgency\n"
             "- The body language tempo must match how fast the original creator moved\n"
-            "- Compress all the described movements into the first 2-3 seconds, not spread across 5\n\n"
+            "- Compress all the described movements into the first 2 seconds, not spread across 3\n\n"
             "ADDITIONAL REQUIREMENTS:\n"
             "- Perform the EXACT movements and expressions described above — these are proven to grab attention\n"
             "- Maintain perfect face consistency with the first frame throughout\n"
@@ -2294,7 +2294,7 @@ def build_hook_prompt_from_analysis(analysis: dict, has_reference_video: bool = 
 def build_hook_prompt_from_image_analysis(image_analysis: dict) -> str:
     """Build the hook-video prompt when only a single still image was analyzed."""
     prompt = (
-        "Create a 5-second vertical video (9:16) starting from this exact first frame. "
+        "Create a 3-second vertical video (9:16) starting from this exact first frame. "
         "Animate from this starting pose using these movement cues:\n\n"
         f"FACIAL EXPRESSION: {image_analysis.get('facial_expressions') or 'engaging expression'}\n"
         f"BODY LANGUAGE & MOVEMENT: {image_analysis.get('body_language_gestures') or 'confident movement'}\n"
@@ -2884,14 +2884,14 @@ async def face_swap_generate_hook_video(
         and not template
     )
 
-    # When V2V is active, trim the source video to the first 5 seconds so the
-    # motion reference is a clean 1:1 match for the 5-second output. This gives
+    # When V2V is active, trim the source video to the first 3 seconds so the
+    # motion reference is a clean 1:1 match for the 3-second output. This gives
     # MiniMax H3 an exact timing template rather than forcing it to guess which
     # segment of a longer clip to replicate. Falls back to the full video if
     # trimming fails.
     v2v_video_path = reference_video_path
     if use_v2v and reference_video_path:
-        trimmed = await pipeline.trim_video_to_hook(reference_video_path, duration=5.0)
+        trimmed = await pipeline.trim_video_to_hook(reference_video_path, duration=3.0)
         if trimmed:
             v2v_video_path = trimmed
 
@@ -2899,7 +2899,7 @@ async def face_swap_generate_hook_video(
         result = await generate_video(
             prompt=prompt,
             reference_image_path=image_path,
-            duration=5,
+            duration=3,
             generate_audio=False,  # Always silent — creator adds sound in TikTok editor
             reference_video_url=public_media_url(v2v_video_path),  # V2V motion transfer
             prefer_v2v_motion=use_v2v,
@@ -2918,7 +2918,7 @@ async def face_swap_generate_hook_video(
         """INSERT OR REPLACE INTO face_swap_video_jobs
            (id, image_id, prompt, duration, status, polling_url, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (job_id, image_id, prompt, 5, "pending", polling_url, now_iso()),
+        (job_id, image_id, prompt, 3, "pending", polling_url, now_iso()),
     )
 
     # Track template reuse so the UI can surface the most effective saved hooks.
@@ -2933,7 +2933,7 @@ async def face_swap_generate_hook_video(
         "status": "pending",
         "polling_url": polling_url,
         "image_id": image_id,
-        "duration": 5,
+        "duration": 3,
         "phase": "hook",
         "motion_style": motion_style.strip() or "lean-in",
         "model": "minimax-h3",

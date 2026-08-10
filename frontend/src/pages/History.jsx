@@ -120,7 +120,7 @@ export default function History() {
                   <div className="p-3 space-y-2">
                     <div className="flex items-center justify-between">
                       <Badge variant={asset.phase === "hook" ? "indigo" : "secondary"} className="text-xs">
-                        {asset.phase === "hook" ? "5s Hook" : "Extension"}
+                        {asset.phase === "hook" ? "3s Hook" : "Extension"}
                       </Badge>
                       <span className="text-xs text-muted-foreground">
                         {asset.created_at ? new Date(asset.created_at).toLocaleDateString() : ""}
