@@ -76,20 +76,22 @@ def _build_face_swap_prompt(customization_prompt: str = "") -> str:
         )
 
     return (
-        "EDIT IMAGE 1: Replace ONLY the face identity with the person from IMAGE 2. "
-        "Everything else in IMAGE 1 must remain PIXEL-PERFECT unchanged.\n\n"
-        "MANDATORY — copy EXACTLY from IMAGE 1 (do NOT change these):\n"
-        "- HEAD ANGLE: same tilt, rotation, and orientation — if facing camera, output faces camera\n"
-        "- MOUTH: same open/closed state and same degree of opening — do NOT widen or close it\n"
-        "- EXPRESSION: same emotion, eyebrow position, eye openness, gaze direction\n"
-        "- CLOTHING: same outfit, same color, same fabric — no changes\n"
+        "EDIT IMAGE 1: Replace the person's face with the face from IMAGE 2. "
+        "The output must look like THE PERSON IN IMAGE 2 placed into the scene from IMAGE 1.\n\n"
+        "FROM IMAGE 2 — the output person MUST look like this person:\n"
+        "- Same face shape, same eyes, same nose, same lips, same skin tone\n"
+        "- Same hairstyle, hair color, hair length\n"
+        "- The result should be immediately recognizable as the person in image 2\n\n"
+        "FROM IMAGE 1 — keep these EXACTLY unchanged:\n"
+        "- HEAD ANGLE: same tilt, rotation, and direction the head is facing\n"
+        "- MOUTH: same open/closed state and same degree of opening — do NOT widen or close\n"
+        "- EXPRESSION: same emotion intensity — if surprised, be surprised to the same degree\n"
+        "- GAZE: eyes looking the same direction as in image 1\n"
+        "- CLOTHING: same outfit, same color, same fabric — absolutely no changes\n"
         "- BODY POSE: same position, same hand gestures\n"
         "- BACKGROUND: same scene, same lighting, same camera angle\n\n"
-        "FROM IMAGE 2 — take ONLY these identity features:\n"
-        "- Face bone structure, eye color, nose shape, skin tone, hairstyle\n"
-        "- Do NOT take expression, mouth pose, head angle, or clothing from image 2\n\n"
         "REMOVE all text overlays, captions, and watermarks from the output.\n"
-        "SKIN TONE: Match the entire body (neck, arms, hands) to image 2's skin tone."
+        "SKIN TONE: Use image 2's natural skin tone on the entire body (neck, arms, hands)."
         f"{customization_instruction}"
     )
 
