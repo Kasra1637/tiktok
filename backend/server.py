@@ -758,9 +758,20 @@ async def init_db():
             -- Structured feedback, captured at the moment something happened so
             -- it can steer later recommendations and prompts for that app.
             --
-            -- Deliberately a fixed vocabulary of reasons: free text cannot be
-            -- aggregated, and this data is only useful if "hook too weak" and
-            -- "CTA unclear" are distinguishable.
+            -- Two columns with deliberately different jobs:
+            --   signal: a FACTUAL trigger, captured automatically
+            --           (template_changed, regenerated, downloaded...). Always
+            --           knowable without asking the founder anything.
+            --   reason: a JUDGMENT about why, supplied explicitly
+            --           (hook_too_weak, cta_unclear...). Optional.
+            --
+            -- Keeping them apart matters: guessing a reason from a trigger
+            -- would poison the "common regeneration reasons" aggregate with
+            -- counterfactuals, since nothing knows the founder was unhappy
+            -- with the hook specifically.
+            --
+            -- reason is a fixed vocabulary, not free text, so it can be
+            -- aggregated at all.
             CREATE TABLE IF NOT EXISTS feedback_events (
                 id TEXT PRIMARY KEY,
                 brand_profile_id TEXT,
@@ -768,6 +779,7 @@ async def init_db():
                 generation_id TEXT,
                 template_id TEXT,
                 event TEXT,
+                signal TEXT,
                 reason TEXT,
                 detail TEXT,
                 created_at TEXT,
@@ -1083,6 +1095,16 @@ async def init_db():
             seeded += 1
         if seeded:
             logger.info("Seeded %d curated hook template(s)", seeded)
+        await conn.commit()
+
+        # Migration: feedback_events gains a `signal` column for automatically
+        # captured triggers, distinct from the optional founder-supplied
+        # `reason`. Existing rows predate automatic capture, so they keep a
+        # NULL signal rather than being backfilled with a guess.
+        cursor = await conn.execute("PRAGMA table_info(feedback_events)")
+        if "signal" not in {row[1] for row in await cursor.fetchall()}:
+            logger.info("Migration: adding signal column to feedback_events")
+            await conn.execute("ALTER TABLE feedback_events ADD COLUMN signal TEXT")
         await conn.commit()
 
         # Best-effort backfill for analyses whose local extracted frames still
@@ -7960,17 +7982,22 @@ async def run_trend_research(
 # ---------------------------------------------------------------------------
 @api_router.get("/feedback/catalog")
 async def feedback_catalog():
-    """Events and their permitted reasons, for building the feedback UI."""
+    """Events, permitted reasons, and the automatic triggers, for the UI."""
     return feedback_mod.catalog()
 
 
 @api_router.post("/feedback", status_code=201)
 async def record_feedback(payload: FeedbackRequest, user_id: str = Depends(get_current_user_id)):
     """
-    Record structured feedback at the moment it happens.
+    Record feedback: an automatic trigger, an explicit reason, or both.
 
-    The reason must belong to the event. An unrecognised pair is refused so
-    the table never accumulates codes that analytics cannot aggregate.
+    Either half is valid on its own. An automatic signal carries no reason,
+    because nothing knows the founder's judgment. An explicit reason carries no
+    signal. Storing a guessed reason against a trigger would corrupt the
+    "common regeneration reasons" aggregate, so it is never inferred here.
+
+    A reason that does not belong to its event is refused rather than stored,
+    so the table only ever holds codes that can be grouped meaningfully.
     """
     event = feedback_mod.normalize_event(payload.event)
     if not event:
@@ -7978,28 +8005,50 @@ async def record_feedback(payload: FeedbackRequest, user_id: str = Depends(get_c
             status_code=400,
             detail=f"Unknown event '{payload.event}'. Known: {', '.join(feedback_mod.EVENTS)}.",
         )
+
+    signal = feedback_mod.normalize_signal(payload.signal)
+    declared_signal = (payload.signal or "").strip()
+    if declared_signal and not signal:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown signal '{payload.signal}'.",
+        )
+    # A signal and an event must agree, otherwise the event is untrustworthy.
+    if signal and feedback_mod.signal_event(signal) != event:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Signal '{signal}' belongs to "
+                   f"'{feedback_mod.signal_event(signal)}', not '{event}'.",
+        )
+
     reason = feedback_mod.normalize_reason(event, payload.reason)
-    if not reason:
+    if (payload.reason or "").strip() and not reason:
         allowed = [r["key"] for r in feedback_mod.allowed_reasons(event)]
         raise HTTPException(
             status_code=400,
             detail=f"Reason '{payload.reason}' is not valid for {event}. "
                    f"Allowed: {', '.join(allowed) or 'none'}.",
         )
+    if not signal and not reason:
+        raise HTTPException(
+            status_code=400,
+            detail="Feedback needs a signal or a reason.",
+        )
 
     event_id = str(uuid.uuid4())
     await _execute(
         """INSERT INTO feedback_events
            (id, brand_profile_id, studio_project_id, generation_id, template_id,
-            event, reason, detail, created_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            event, signal, reason, detail, created_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (event_id, (payload.brand_profile_id or "").strip() or None,
          (payload.studio_project_id or "").strip() or None,
          (payload.generation_id or "").strip() or None,
          (payload.template_id or "").strip() or None,
-         event, reason, (payload.detail or "")[:500], now_iso(), user_id),
+         event, signal or None, reason or None, (payload.detail or "")[:500],
+         now_iso(), user_id),
     )
-    return {"id": event_id, "event": event, "reason": reason}
+    return {"id": event_id, "event": event, "signal": signal, "reason": reason}
 
 
 @api_router.get("/feedback")

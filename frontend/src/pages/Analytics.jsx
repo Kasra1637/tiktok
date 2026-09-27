@@ -176,9 +176,31 @@ export default function Analytics() {
         </div>
       </div>
 
+      {feedback.top_signals?.length > 0 && (
+        <div className="surface space-y-2 rounded-2xl p-4">
+          <h3 className="font-display text-sm font-semibold">What happened</h3>
+          <p className="text-xs text-muted-foreground">
+            Captured automatically as you worked. These are facts about the workflow, not
+            opinions about why.
+          </p>
+          {feedback.top_signals.map((s) => (
+            <div key={s.signal} className="flex items-center justify-between gap-3 text-sm">
+              <span className="text-muted-foreground">
+                {String(s.signal).replace(/_/g, " ")}
+              </span>
+              <Badge variant="secondary" className="text-[11px]">{s.count}</Badge>
+            </div>
+          ))}
+        </div>
+      )}
+
       {feedback.top_reasons?.length > 0 && (
         <div className="surface space-y-2 rounded-2xl p-4">
           <h3 className="font-display text-sm font-semibold">Why work was rejected or redone</h3>
+          <p className="text-xs text-muted-foreground">
+            Only the {feedback.explained ?? 0} of {feedback.total ?? 0} events you explained
+            yourself. The rest are counted above without a stated reason.
+          </p>
           {feedback.top_reasons.map((r) => (
             <div key={r.reason} className="flex items-center justify-between gap-3 text-sm">
               <span className="text-muted-foreground">

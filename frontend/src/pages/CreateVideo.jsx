@@ -11,6 +11,7 @@ import SafetyPanel from "../components/SafetyPanel";
 import GenerationPanel from "../components/GenerationPanel";
 import AssetLibrary from "./AssetLibrary";
 import { api, getErrorMessage } from "../lib/api";
+import { recordSignal, classifyScriptEdit } from "../lib/feedback";
 import {
   Clapperboard, Loader2, AlertTriangle, Briefcase, Target, LayoutTemplate,
   Image as ImageIcon, FileText, Check, ChevronLeft, ChevronRight, Sparkles,
@@ -177,6 +178,17 @@ export default function CreateVideo() {
     setBusy(true);
     setError(null);
     try {
+      // Switching template after a plan already exists is a rejection of the
+      // template the first plan was built from. Recorded here rather than at
+      // selection time, because selecting a template is a normal part of the
+      // flow and only the replacement is a signal.
+      if (ready.script_version > 0 && ready.template_id && ready.template_id !== templateId) {
+        recordSignal("template_rejected", "template_changed", {
+          brand_profile_id: profileId,
+          studio_project_id: ready.id,
+          template_id: ready.template_id,
+        });
+      }
       const updated = await api.generatePlan(ready.id, {
         objective,
         duration_seconds: duration,
@@ -197,7 +209,19 @@ export default function CreateVideo() {
     setBusy(true);
     setError(null);
     try {
+      // Measured against the saved script, not the textarea, so a save that
+      // changes nothing records nothing.
+      const editSignal = Object.prototype.hasOwnProperty.call(edits, "script")
+        ? classifyScriptEdit(project.script, edits.script)
+        : "";
       const updated = await api.updateStudioProject(project.id, edits);
+      if (editSignal) {
+        recordSignal("script_edited", editSignal, {
+          brand_profile_id: profileId,
+          studio_project_id: project.id,
+          template_id: project.template_id,
+        });
+      }
       setProject(updated);
       setEdits({});
     } catch (err) {

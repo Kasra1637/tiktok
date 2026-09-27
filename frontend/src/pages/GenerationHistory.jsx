@@ -7,9 +7,11 @@ import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import EmptyState from "../components/EmptyState";
 import { api, getErrorMessage, mediaUrl } from "../lib/api";
+import { recordSignal, recordReason } from "../lib/feedback";
 import {
   History as HistoryIcon, Loader2, AlertTriangle, Download, Trash2, Archive,
   RotateCcw, GitBranch, RefreshCw, ChevronRight, Film, Star, TrendingUp,
+  Check, ThumbsDown,
 } from "lucide-react";
 
 function humanize(value) {
@@ -56,6 +58,20 @@ function PerformanceForm({ generation, onSaved }) {
         outcome: form.outcome || undefined,
       };
       await api.recordPerformance(generation.id, payload);
+      // A recorded verdict is the one place the founder states a judgment
+      // outright, so it feeds the loop directly rather than as a bare trigger.
+      if (form.outcome === "successful" || form.outcome === "unsuccessful") {
+        await recordReason(
+          form.outcome === "successful" ? "marked_successful" : "marked_unsuccessful",
+          form.outcome === "successful" ? "good_performance" : "poor_performance",
+          {
+            brand_profile_id: generation.brand_profile_id,
+            studio_project_id: generation.studio_project_id,
+            generation_id: generation.id,
+            template_id: generation.template_id,
+          },
+        );
+      }
       setOpen(false);
       onSaved?.();
     } catch (err) {
@@ -127,10 +143,34 @@ function GenerationRow({ row, onChanged }) {
   const [varKind, setVarKind] = useState("hook_line");
   const [varValue, setVarValue] = useState("");
   const [children, setChildren] = useState([]);
+  // The founder's verdict on a finished video, or "" if they have not said.
+  // Local only: the outcome is a judgment about this render, and reloading the
+  // page should not invite them to answer twice.
+  const [verdict, setVerdict] = useState("");
 
   const downloadUrl = row.r2_url || row.video_url;
   const composedUrl = row.composition?.r2_url || row.composition?.output_url;
   const cost = money(row.cost_usd);
+
+  const signalRefs = {
+    brand_profile_id: row.brand_profile_id,
+    studio_project_id: row.studio_project_id,
+    generation_id: row.id,
+    template_id: row.template_id,
+  };
+
+  // Two buttons rather than a reason picker. The spec wants approval and
+  // rejection captured; asking the founder to also diagnose the cause at this
+  // moment would cost more attention than the answer is worth, so only the
+  // factual trigger is recorded and any reason stays optional.
+  const judge = (next) => {
+    setVerdict(next);
+    recordSignal(
+      next === "approved" ? "video_approved" : "generation_rejected",
+      next,
+      signalRefs,
+    );
+  };
 
   useEffect(() => {
     if (row.status !== "completed") return;
@@ -217,13 +257,21 @@ function GenerationRow({ row, onChanged }) {
           />
           <div className="flex flex-col gap-1.5">
             <Button variant="secondary" size="sm" asChild>
-              <a href={mediaUrl(downloadUrl)} download>
+              <a
+                href={mediaUrl(downloadUrl)}
+                download
+                onClick={() => recordSignal("video_downloaded", "downloaded", signalRefs)}
+              >
                 <Download className="h-3.5 w-3.5" /> Download
               </a>
             </Button>
             {composedUrl && (
               <Button variant="secondary" size="sm" asChild>
-                <a href={mediaUrl(composedUrl)} download>
+                <a
+                  href={mediaUrl(composedUrl)}
+                  download
+                  onClick={() => recordSignal("video_downloaded", "downloaded", signalRefs)}
+                >
                   <Star className="h-3.5 w-3.5" /> With real visuals
                 </a>
               </Button>
@@ -261,6 +309,29 @@ function GenerationRow({ row, onChanged }) {
           <GitBranch className="h-3.5 w-3.5" /> Variations
           {children.length > 0 && ` (${children.length})`}
         </Button>
+        {row.status === "completed" && (
+          <>
+            <span className="text-xs text-muted-foreground">How did this turn out?</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-pressed={verdict === "approved"}
+              onClick={() => judge("approved")}
+              className={verdict === "approved" ? "text-success" : undefined}
+            >
+              <Check className="h-3.5 w-3.5" /> Looks good
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-pressed={verdict === "rejected"}
+              onClick={() => judge("rejected")}
+              className={verdict === "rejected" ? "text-destructive" : undefined}
+            >
+              <ThumbsDown className="h-3.5 w-3.5" /> Not good
+            </Button>
+          </>
+        )}
         {row.status === "completed" && <PerformanceForm generation={row} onSaved={onChanged} />}
         <Button
           variant="ghost"

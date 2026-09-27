@@ -3,6 +3,7 @@ import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage, mediaUrl } from "../lib/api";
+import { recordSignal } from "../lib/feedback";
 import {
   Loader2, Clapperboard, AlertTriangle, Download, RefreshCw, RotateCcw,
   Play, Info, Clock, Layers,
@@ -112,10 +113,23 @@ export function GenerationPanel({ project, onGenerationChange }) {
     setBusy(true);
     setError(null);
     setNotice(null);
+    // "Generate another" re-rolls a video the founder has already seen, which
+    // is the rework signal. A first generation is not rework, and a retry is a
+    // recovery from a failure rather than a judgment about the result, so
+    // neither is recorded.
+    const isReroll = Boolean(generation);
     try {
       const created = await api.generateVideo(projectId, { model: selectedModel || undefined });
       setGeneration(created);
       onGenerationChange?.(created);
+      if (isReroll) {
+        recordSignal("video_regenerated", "regenerated", {
+          studio_project_id: projectId,
+          generation_id: created.id,
+          template_id: created.template_id,
+          brand_profile_id: created.brand_profile_id,
+        });
+      }
       if (created.duration_plan?.needs_extension) {
         setNotice(
           `${created.model} produces at most ${created.duration_plan.primary_seconds}s in one ` +

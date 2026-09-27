@@ -224,18 +224,35 @@ def template_usage(templates: Iterable[dict], generations: Iterable[dict]) -> li
 
 def feedback_summary(events: Iterable[dict]) -> dict:
     """
-    Most common reasons behind rework.
+    What happened, and why.
 
-    Free-text detail is deliberately excluded: only the fixed reason codes are
-    counted, because those are the ones that can change a recommendation.
+    Two independent breakdowns, kept apart on purpose:
+
+    - by_event / top_signals count factual triggers. Every regenerate is
+      recorded, so this says how often rework happens.
+    - top_reasons counts only the explicit judgments a founder supplied. Since
+      those are optional, this is usually smaller, and that is honest: it is
+      the subset of rework someone bothered to explain.
+
+    Reading them together is the point. A high regenerate count with a
+    near-empty top_reasons means rework is frequent but unexplained, which is a
+    different problem from a specific, repeatable complaint.
+
+    Free-text detail is deliberately excluded from both: it is not a fixed code
+    and cannot change a recommendation.
     """
     rows = list(events or [])
     by_event = Counter(r.get("event") or "unknown" for r in rows)
+    by_signal = Counter(r.get("signal") for r in rows if r.get("signal"))
     by_reason = Counter(r.get("reason") for r in rows if r.get("reason"))
     return {
         "total": len(rows),
         "by_event": dict(by_event.most_common()),
+        "top_signals": [{"signal": s, "count": n} for s, n in by_signal.most_common(10)],
         "top_reasons": [{"reason": r, "count": n} for r, n in by_reason.most_common(10)],
+        # How many events carry an explanation, so a thin top_reasons is
+        # readable as "unexplained" rather than mistaken for "no problem".
+        "explained": sum(by_reason.values()),
     }
 
 

@@ -465,10 +465,16 @@ class FeedbackRequest(BaseModel):
     """
     Structured feedback captured at the moment something happened.
 
-    reason must be one of the codes permitted for event; the API refuses
-    anything else so the table stays aggregable.
+    Exactly one of `signal` (an automatic, factual trigger) or `reason` (an
+    explicit judgment) is required, and both may be supplied together.
+
+    A reason must be one of the codes permitted for the event. A signal must
+    be a known trigger and must belong to the same event. Neither is ever
+    inferred from the other, because a guessed reason would corrupt the
+    "common regeneration reasons" aggregate.
     """
     event: str
+    signal: Optional[str] = ""
     reason: Optional[str] = ""
     detail: Optional[str] = ""
     brand_profile_id: Optional[str] = ""

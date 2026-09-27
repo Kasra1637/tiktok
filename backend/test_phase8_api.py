@@ -110,17 +110,22 @@ class TestRecordFeedback:
 
     def test_reason_must_belong_to_the_event(self, api):
         """
-        'hook_too_weak' is valid for a rejected template but not for a failed
+        'cta_unclear' is valid for an edited script but not for a rejected
         generation. Allowing it would put codes in the table that analytics
         cannot group meaningfully.
         """
         from models import FeedbackRequest
         with pytest.raises(HTTPException) as err:
             _run(api.record_feedback(
-                FeedbackRequest(event="generation_failed", reason="hook_too_weak"), ANON))
+                FeedbackRequest(event="generation_rejected", reason="cta_unclear"), ANON))
         assert err.value.status_code == 400
 
-    def test_empty_reason_is_rejected(self, api):
+    def test_event_with_neither_signal_nor_reason_is_rejected(self, api):
+        """
+        Feedback with no half at all says nothing. A reason alone is still
+        required to be valid, but it may now be omitted when a signal is
+        present, so this is the only bare case that must fail.
+        """
         from models import FeedbackRequest
         with pytest.raises(HTTPException):
             _run(api.record_feedback(FeedbackRequest(event="video_approved"), ANON))
@@ -149,6 +154,127 @@ class TestRecordFeedback:
             FeedbackRequest(event="script_edited", reason="cta_unclear"), ANON))
         summary = _run(api.list_feedback(user_id=ANON))["summary"]
         assert summary["by_event"]["script_edited"] >= 2
+
+
+class TestRecordSignal:
+    """
+    Signals are the automatic half of the feedback loop: factual triggers the
+    software observes, recorded without asking the founder anything.
+    """
+
+    def test_a_signal_alone_is_enough(self, api):
+        from models import FeedbackRequest
+        created = _run(api.record_feedback(
+            FeedbackRequest(event="video_downloaded", signal="downloaded"), ANON))
+        assert created["signal"] == "downloaded"
+        assert created["reason"] == ""
+
+    def test_a_signal_and_a_reason_can_travel_together(self, api):
+        from models import FeedbackRequest
+        created = _run(api.record_feedback(
+            FeedbackRequest(event="marked_successful", reason="good_performance"), ANON))
+        assert created["reason"] == "good_performance"
+        assert created["signal"] == ""
+
+    def test_unknown_signal_is_rejected(self, api):
+        from models import FeedbackRequest
+        with pytest.raises(HTTPException) as err:
+            _run(api.record_feedback(
+                FeedbackRequest(event="video_downloaded", signal="teleported"), ANON))
+        assert err.value.status_code == 400
+
+    def test_signal_must_belong_to_the_event(self, api):
+        """
+        The point of keeping signal and event separate is that neither is
+        inferred from the other. A mismatched pair means one of them is wrong,
+        so it is refused rather than stored.
+        """
+        from models import FeedbackRequest
+        with pytest.raises(HTTPException) as err:
+            _run(api.record_feedback(
+                FeedbackRequest(event="video_approved", signal="regenerated"), ANON))
+        assert err.value.status_code == 400
+
+    def test_every_signal_maps_to_a_known_event(self, api):
+        import feedback as fb
+        for signal, event in fb.SIGNALS.items():
+            assert event in fb.EVENTS, signal
+            assert fb.signal_event(signal) == event
+
+    def test_signals_and_reasons_are_never_inferred_from_each_other(self, api):
+        """
+        A regenerate says nothing about *why*. Storing a guessed reason against
+        a trigger would corrupt the "common regeneration reasons" aggregate
+        with counterfactuals, so the reason column stays empty.
+        """
+        from models import FeedbackRequest
+        # A dedicated user, so this test's summary is not diluted by the rows
+        # every other test in this file leaves behind.
+        solo = "signal-solo-user"
+        created = _run(api.record_feedback(
+            FeedbackRequest(event="video_regenerated", signal="regenerated"), solo))
+        assert created["reason"] == ""
+        summary = _run(api.list_feedback(user_id=solo))["summary"]
+        assert summary["top_signals"] == [
+            {"signal": "regenerated", "count": 1}
+        ]
+        assert summary["top_reasons"] == []
+
+    def test_summary_separates_triggers_from_explanations(self, api):
+        """
+        Frequent-but-unexplained rework must be readable as such, not mistaken
+        for an absence of problems.
+        """
+        from models import FeedbackRequest
+        solo = "signal-summary-user"
+        for _ in range(3):
+            _run(api.record_feedback(
+                FeedbackRequest(event="video_regenerated", signal="regenerated"), solo))
+        _run(api.record_feedback(
+            FeedbackRequest(event="marked_unsuccessful", reason="poor_performance"), solo))
+        summary = _run(api.list_feedback(user_id=solo))["summary"]
+        assert summary["total"] == 4
+        assert summary["explained"] == 1
+        assert summary["top_signals"][0]["count"] == 3
+
+    def test_catalog_publishes_the_heavy_edit_threshold(self, api):
+        """
+        The heavy/light boundary is arbitrary, so it is published rather than
+        hidden: both the backend and the frontend classifier must agree, and a
+        reader can check what the number actually is.
+        """
+        import feedback as fb
+        catalog = _run(api.feedback_catalog())
+        assert catalog["heavy_edit"]["ratio"] == fb.HEAVY_EDIT_RATIO
+        assert catalog["heavy_edit"]["min_chars"] == fb.HEAVY_EDIT_MIN_CHARS
+        assert {s["key"] for s in catalog["signals"]} == set(fb.SIGNALS)
+
+
+class TestClassifyScriptEdit:
+    def test_no_change_is_not_an_edit(self):
+        import feedback as fb
+        assert fb.classify_script_edit("same text", "same text") == ""
+
+    def test_a_large_rewrite_is_heavy(self):
+        import feedback as fb
+        original = "Open the app and tap the button to start your session today."
+        rewritten = "Try it free for three days, then decide."
+        assert fb.classify_script_edit(original, rewritten) == "script_edited_heavy"
+
+    def test_a_one_character_tweak_is_light(self):
+        import feedback as fb
+        original = "Open the app and tap the button to start your session today."
+        assert fb.classify_script_edit(original, original + "!") == "script_edited_light"
+
+    def test_a_growing_script_counts_as_heavy_once_past_the_floor(self):
+        """
+        Length is measured on the longer text, so padding a short script is
+        measured on what it became rather than on the tiny original.
+        """
+        import feedback as fb
+        short = "Try it."
+        padded = short + (" Very easy to use and very quick to set up." * 3)
+        assert fb.classify_script_edit(short, padded) == "script_edited_heavy"
 
 
 class TestAnalyticsReport:
