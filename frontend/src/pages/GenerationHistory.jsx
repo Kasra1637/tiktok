@@ -1,0 +1,453 @@
+import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Badge } from "../components/ui/badge";
+import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
+import PageHeader from "../components/PageHeader";
+import EmptyState from "../components/EmptyState";
+import { api, getErrorMessage, mediaUrl } from "../lib/api";
+import {
+  History as HistoryIcon, Loader2, AlertTriangle, Download, Trash2, Archive,
+  RotateCcw, GitBranch, RefreshCw, ChevronRight, Film, Star, TrendingUp,
+} from "lucide-react";
+
+function humanize(value) {
+  return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function money(value) {
+  if (value === null || value === undefined) return null;
+  return `$${Number(value).toFixed(2)}`;
+}
+
+function StatusBadge({ status }) {
+  const map = {
+    submitted: ["Queued", "secondary"],
+    generating: ["Generating", "indigo"],
+    completed: ["Completed", "indigo"],
+    failed: ["Failed", "destructive"],
+    archived: ["Archived", "secondary"],
+  };
+  const [label, variant] = map[status] || [humanize(status), "secondary"];
+  return <Badge variant={variant} className="text-xs">{label}</Badge>;
+}
+
+function PerformanceForm({ generation, onSaved }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [form, setForm] = useState({
+    views: "", likes: "", comments: "", shares: "", saves: "",
+    notes: "", outcome: "",
+  });
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const payload = {
+        views: form.views === "" ? undefined : Number(form.views),
+        likes: form.likes === "" ? undefined : Number(form.likes),
+        comments: form.comments === "" ? undefined : Number(form.comments),
+        shares: form.shares === "" ? undefined : Number(form.shares),
+        saves: form.saves === "" ? undefined : Number(form.saves),
+        notes: form.notes || undefined,
+        outcome: form.outcome || undefined,
+      };
+      await api.recordPerformance(generation.id, payload);
+      setOpen(false);
+      onSaved?.();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
+        <TrendingUp className="h-3.5 w-3.5" /> Record results
+      </Button>
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-3">
+      <span className="eyebrow block">Manually entered &mdash; not platform-verified</span>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {["views", "likes", "comments", "shares", "saves"].map((k) => (
+          <label key={k} className="space-y-1">
+            <span className="text-[11px] text-muted-foreground">{humanize(k)}</span>
+            <Input
+              type="number"
+              min="0"
+              value={form[k]}
+              onChange={(e) => setForm({ ...form, [k]: e.target.value })}
+              aria-label={humanize(k)}
+            />
+          </label>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <select
+          value={form.outcome}
+          onChange={(e) => setForm({ ...form, outcome: e.target.value })}
+          aria-label="Outcome"
+          className="rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
+        >
+          <option value="">No verdict</option>
+          <option value="successful">Worked</option>
+          <option value="unsuccessful">Did not work</option>
+        </select>
+        <Input
+          value={form.notes}
+          onChange={(e) => setForm({ ...form, notes: e.target.value })}
+          placeholder="Notes, e.g. posted 3pm"
+          aria-label="Notes"
+        />
+      </div>
+      <div className="flex gap-2">
+        <Button size="sm" variant="brand" onClick={save} disabled={busy}>
+          {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Save
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+      </div>
+    </div>
+  );
+}
+
+function GenerationRow({ row, onChanged }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [showVariations, setShowVariations] = useState(false);
+  const [variationKinds, setVariationKinds] = useState([]);
+  const [varKind, setVarKind] = useState("hook_line");
+  const [varValue, setVarValue] = useState("");
+  const [children, setChildren] = useState([]);
+
+  const downloadUrl = row.r2_url || row.video_url;
+  const composedUrl = row.composition?.r2_url || row.composition?.output_url;
+  const cost = money(row.cost_usd);
+
+  useEffect(() => {
+    if (row.status !== "completed") return;
+    api.getVariationKinds().then((d) => setVariationKinds(d.variations || [])).catch(() => {});
+  }, [row.status]);
+
+  const act = async (fn) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+      onChanged?.();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const loadChildren = async () => {
+    setShowVariations((v) => !v);
+    if (!showVariations) {
+      try {
+        const d = await api.getGenerationVariations(row.id);
+        setChildren(d.variations || []);
+      } catch (err) {
+        setError(getErrorMessage(err));
+      }
+    }
+  };
+
+  return (
+    <div className="surface space-y-3 rounded-2xl p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-display text-sm font-semibold">
+              {row.brand_name || "Unassigned app"}
+            </span>
+            <StatusBadge status={row.status} />
+            {row.parent_generation_id && (
+              <Badge variant="outline" className="text-[11px]">
+                <GitBranch className="mr-1 h-2.5 w-2.5" /> Variation
+              </Badge>
+            )}
+            {row.variation_kind && (
+              <Badge variant="secondary" className="text-[11px]">
+                {humanize(row.variation_kind)}
+              </Badge>
+            )}
+          </div>
+          {row.hook_line && (
+            <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">
+              &ldquo;{row.hook_line}&rdquo;
+            </p>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {row.model && <Badge variant="outline" className="text-[11px]">{row.model}</Badge>}
+          {row.duration && <Badge variant="outline" className="text-[11px]">{row.duration}s</Badge>}
+          {cost && <Badge variant="secondary" className="text-[11px]">{cost}</Badge>}
+          {row.attempt > 1 && (
+            <Badge variant="outline" className="text-[11px]">attempt {row.attempt}</Badge>
+          )}
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        {row.objective ? `${humanize(row.objective)} · ` : ""}
+        {row.template_id ? `template v${row.template_version} · ` : ""}
+        script v{row.script_version} ·{" "}
+        {new Date(row.created_at).toLocaleString()}
+      </p>
+
+      {error && <p className="text-xs text-destructive">{error}</p>}
+
+      {(row.status === "completed" && downloadUrl) && (
+        <div className="flex flex-wrap gap-2">
+          <video
+            src={mediaUrl(downloadUrl)}
+            controls
+            playsInline
+            className="w-full max-w-[240px] rounded-lg border border-[color:var(--hairline)]"
+          />
+          <div className="flex flex-col gap-1.5">
+            <Button variant="secondary" size="sm" asChild>
+              <a href={mediaUrl(downloadUrl)} download>
+                <Download className="h-3.5 w-3.5" /> Download
+              </a>
+            </Button>
+            {composedUrl && (
+              <Button variant="secondary" size="sm" asChild>
+                <a href={mediaUrl(composedUrl)} download>
+                  <Star className="h-3.5 w-3.5" /> With real visuals
+                </a>
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {row.status === "failed" && (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="flex-1 text-xs text-destructive">{row.error}</p>
+          {row.retryable && (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={busy}
+              onClick={() => act(() => api.retryGeneration(row.id))}
+            >
+              <RotateCcw className="h-3.5 w-3.5" /> Retry
+            </Button>
+          )}
+        </div>
+      )}
+
+      {row.performance && (
+        <p className="text-xs text-muted-foreground">
+          Manually logged: {row.performance.views ?? 0} views
+          {row.performance.likes != null && `, ${row.performance.likes} likes`}
+          {row.performance.outcome && ` — ${row.performance.outcome}`}
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Button variant="ghost" size="sm" onClick={loadChildren}>
+          <GitBranch className="h-3.5 w-3.5" /> Variations
+          {children.length > 0 && ` (${children.length})`}
+        </Button>
+        {row.status === "completed" && <PerformanceForm generation={row} onSaved={onChanged} />}
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={busy || row.status === "archived"}
+          onClick={() => act(() => api.archiveGeneration(row.id))}
+        >
+          <Archive className="h-3.5 w-3.5" /> Archive
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          onClick={() => act(() => api.deleteGeneration(row.id))}
+        >
+          <Trash2 className="h-3.5 w-3.5" /> Delete
+        </Button>
+      </div>
+
+      {showVariations && (
+        <div className="space-y-3 border-t border-[color:var(--hairline)] pt-3">
+          {children.length > 0 && (
+            <div className="space-y-1.5">
+              {children.map((c) => (
+                <div key={c.id} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="truncate text-muted-foreground">
+                    {humanize(c.variation_kind)} &rarr; {c.project_hook || c.status}
+                  </span>
+                  <StatusBadge status={c.status} />
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
+            <select
+              value={varKind}
+              onChange={(e) => setVarKind(e.target.value)}
+              aria-label="Variation type"
+              className="rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
+            >
+              {variationKinds.map((v) => (
+                <option key={v.key} value={v.key}>{v.label}</option>
+              ))}
+            </select>
+            <Input
+              value={varValue}
+              onChange={(e) => setVarValue(e.target.value)}
+              placeholder="New value"
+              aria-label="Variation value"
+            />
+            <Button
+              variant="brand"
+              size="sm"
+              disabled={busy || !varValue.trim()}
+              onClick={() =>
+                act(async () => {
+                  await api.createVariation(row.id, {
+                    kind: varKind,
+                    value: varValue.trim(),
+                  });
+                  setVarValue("");
+                  const d = await api.getGenerationVariations(row.id);
+                  setChildren(d.variations || []);
+                })
+              }
+            >
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              Create
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            A variation makes a draft. You review it and generate the video yourself, so
+            nothing is spent until you say so.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function GenerationHistory() {
+  const [rows, setRows] = useState([]);
+  const [profiles, setProfiles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [profileFilter, setProfileFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.getGenerationHistory({
+        brand_profile_id: profileFilter || undefined,
+        status: statusFilter || undefined,
+        limit: 100,
+      });
+      setRows(data.generations || []);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [profileFilter, statusFilter]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    api.getAppProfiles().then((d) => setProfiles(d.profiles || [])).catch(() => setProfiles([]));
+  }, []);
+
+  const spent = rows.reduce((sum, r) => sum + (r.cost_usd || 0), 0);
+  const completed = rows.filter((r) => r.status === "completed").length;
+  const failed = rows.filter((r) => r.status === "failed").length;
+
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        icon={HistoryIcon}
+        title="Generation History"
+        description="Every video produced, with the exact template, script version, model, and cost behind it. Publishing stays manual."
+      />
+
+      {error && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      <div className="surface flex flex-wrap items-center gap-2 rounded-2xl p-4">
+        <select
+          value={profileFilter}
+          onChange={(e) => setProfileFilter(e.target.value)}
+          aria-label="Filter by app"
+          className="rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3 py-1.5 text-xs font-medium"
+        >
+          <option value="">All apps</option>
+          {profiles.map((p) => (
+            <option key={p.id} value={p.id}>{p.brand_name}</option>
+          ))}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          aria-label="Filter by status"
+          className="rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3 py-1.5 text-xs font-medium"
+        >
+          <option value="">All statuses</option>
+          {["completed", "failed", "generating", "submitted", "archived"].map((s) => (
+            <option key={s} value={s}>{humanize(s)}</option>
+          ))}
+        </select>
+        {rows.length > 0 && (
+          <span className="ml-auto text-xs text-muted-foreground">
+            {rows.length} result{rows.length === 1 ? "" : "s"} · {completed} completed ·{" "}
+            {failed} failed · {money(spent)} spent
+          </span>
+        )}
+      </div>
+
+      {loading ? (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading history...
+        </p>
+      ) : rows.length === 0 ? (
+        <EmptyState
+          icon={Film}
+          title="Nothing generated yet"
+          description="Create a video from an approved App Profile and a hook template, and it will appear here."
+          action={
+            <Button variant="brand" asChild>
+              <Link to="/create">
+                Create a video <ChevronRight className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          }
+        />
+      ) : (
+        <div className="space-y-3">
+          {rows.map((row) => (
+            <GenerationRow key={row.id} row={row} onChanged={load} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

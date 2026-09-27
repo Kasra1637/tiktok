@@ -15,6 +15,7 @@ import NicheFeed from "./pages/NicheFeed";
 import AnalysisDetail from "./pages/AnalysisDetail";
 import GenerateVideo from "./pages/GenerateVideo";
 import History from "./pages/History";
+import GenerationHistory from "./pages/GenerationHistory";
 import BrandSetup from "./pages/BrandSetup";
 import FaceSwap from "./pages/FaceSwap";
 import HookTemplates from "./pages/HookTemplates";
@@ -65,7 +66,11 @@ function App() {
                         <Route path="/templates/:templateId" element={<TemplateDetail />} />
                         <Route path="/create" element={<CreateVideo />} />
                         <Route path="/brand" element={<BrandSetup />} />
-                        <Route path="/history" element={<History />} />
+                        {/* Generation History is now the primary /history view;
+                            the legacy exact-match history is kept at
+                            /legacy-history for the research flow. */}
+                        <Route path="/history" element={<GenerationHistory />} />
+                        <Route path="/legacy-history" element={<History />} />
 
                         {/* Legacy exact-match recreation. Routes and code are kept
                             working for Trend Research, but demoted out of the

@@ -265,6 +265,21 @@ export const api = {
     client.post(`/generations/${generationId}/overlay`, payload).then((r) => r.data),
   getOverlayComposition: (generationId) =>
     client.get(`/generations/${generationId}/overlay`).then((r) => r.data),
+
+  // Variations
+  getVariationKinds: () => client.get("/studio/variations").then((r) => r.data),
+  createVariation: (generationId, payload) =>
+    client.post(`/generations/${generationId}/variations`, payload).then((r) => r.data),
+  getGenerationVariations: (generationId) =>
+    client.get(`/generations/${generationId}/variations`).then((r) => r.data),
+
+  // History + manual performance
+  getGenerationHistory: (params = {}) =>
+    client.get("/history/generations", { params }).then((r) => r.data),
+  deleteGeneration: (id) => client.delete(`/generations/${id}`).then((r) => r.data),
+  getPerformance: (id) => client.get(`/generations/${id}/performance`).then((r) => r.data),
+  recordPerformance: (id, payload) =>
+    client.post(`/generations/${id}/performance`, payload).then((r) => r.data),
 };
 
 export const getErrorMessage = (err) => {

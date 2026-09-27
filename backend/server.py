@@ -28,6 +28,7 @@ import claim_safety
 import video_providers
 import generation_planning
 import overlays
+import variations
 from ai_service import (
     analyze_hook, generate_customized_preview, generate_face_swap, generate_video_prompt,
     generate_video, poll_video_job, analyze_brand_from_text, analyze_app_profile,
@@ -44,8 +45,8 @@ from models import (
     CreateTemplateRequest, UpdateTemplateRequest,
     CreateContentAngleRequest, UpdateContentAngleRequest,
     CreateStudioProjectRequest, UpdateStudioProjectRequest, GeneratePlanRequest,
-    StudioGenerationRequest, UpdateAssetRequest, AttachAssetRequest,
-    OverlayCompositionRequest,
+    StudioGenerationRequest,     UpdateAssetRequest, AttachAssetRequest,
+    OverlayCompositionRequest, CreateVariationRequest, PerformanceEntryRequest,
     APP_PROFILE_LIST_FIELDS, APP_PROFILE_EDITABLE_FIELDS,
     TEMPLATE_STRUCTURED_FIELDS, TEMPLATE_TEXT_FIELDS, TEMPLATE_EDITABLE_FIELDS,
     STUDIO_EDITABLE_FIELDS,
@@ -726,6 +727,29 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_overlay_generation
                 ON overlay_compositions (generation_id);
 
+            -- Manually entered performance for a downloaded video.
+            -- Named 'performance' to make the provenance obvious: these are
+            -- operator-supplied numbers, never verified against TikTok. The
+            -- app never connects to a platform or asks for credentials.
+            CREATE TABLE IF NOT EXISTS performance_entries (
+                id TEXT PRIMARY KEY,
+                generation_id TEXT,
+                brand_profile_id TEXT,
+                views INTEGER,
+                likes INTEGER,
+                comments INTEGER,
+                shares INTEGER,
+                saves INTEGER,
+                outcome TEXT,
+                notes TEXT,
+                source TEXT DEFAULT 'manual',
+                created_at TEXT,
+                updated_at TEXT,
+                user_id TEXT DEFAULT 'anonymous'
+            );
+            CREATE INDEX IF NOT EXISTS idx_performance_generation
+                ON performance_entries (generation_id);
+
             -- Persistent video storage registry. Each row tracks a generated
             -- video uploaded to Cloudflare R2 so it survives container redeploys
             -- and remains accessible in the user's history until they delete it.
@@ -963,7 +987,7 @@ async def init_db():
             "brand_profiles", "remix_chats", "face_swap_jobs",
             "face_swap_video_jobs", "hook_templates",
             "studio_projects", "content_angles", "generations",
-            "assets", "overlay_compositions",
+            "assets", "overlay_compositions", "performance_entries",
         ]
         for table in user_id_tables:
             cursor = await conn.execute(f"PRAGMA table_info({table})")
@@ -7422,6 +7446,315 @@ async def get_overlay_composition(generation_id: str, user_id: str = Depends(get
         except (json.JSONDecodeError, TypeError):
             out["spec"] = {}
     return {"composition": out}
+
+
+@api_router.get("/studio/variations")
+async def list_variation_kinds():
+    """The controlled variation axes, for the UI."""
+    return {"variations": variations.list_variations()}
+
+
+@api_router.get("/generations/{generation_id}/variations")
+async def list_generation_variations(generation_id: str, user_id: str = Depends(get_current_user_id)):
+    """Every generation descended from this one, with its variation axis."""
+    parent = await _fetch_one(
+        "SELECT id FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
+    )
+    if not parent:
+        raise HTTPException(status_code=404, detail="Generation not found")
+    rows = await _fetch_all(
+        """SELECT g.id, g.status, g.model, g.duration, g.cost_usd, g.variation_kind,
+                  g.variation_params, g.created_at, g.script_version, g.template_version,
+                  p.hook_line AS project_hook, p.cta AS project_cta
+           FROM generations g
+           LEFT JOIN studio_projects p ON p.id = g.studio_project_id
+           WHERE g.parent_generation_id = ? AND g.user_id = ?
+           ORDER BY g.created_at ASC""",
+        (generation_id, user_id),
+    )
+    return {"variations": rows}
+
+
+@api_router.post("/generations/{generation_id}/variations", status_code=201)
+async def create_variation(
+    generation_id: str, payload: CreateVariationRequest, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Create ONE controlled variation of an existing generation.
+
+    Produces a draft project, never a video: producing the video stays a
+    separate, explicit founder decision, so a variation can never spend money
+    on its own. Set regenerate_plan=true to also rewrite the script (a text
+    call) for the axes whose change is creative rather than structural.
+    """
+    parent = await _fetch_one(
+        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
+    )
+    if not parent:
+        raise HTTPException(status_code=404, detail="Generation not found")
+
+    spec = variations.get_variation(payload.kind)
+    if not spec:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown variation '{payload.kind}'. Known kinds: "
+                   f"{', '.join(variations.VARIATIONS)}.",
+        )
+
+    project = await _fetch_one(
+        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?",
+        (parent.get("studio_project_id"), user_id),
+    )
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail="The studio project behind this generation is gone, so it cannot be varied.",
+        )
+
+    try:
+        updates, _ = variations.apply_variation(project, spec, payload.value)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # A template swap must be a real, usable library template.
+    template_version = project.get("template_version")
+    if "template_id" in updates:
+        tpl = await _fetch_one(
+            "SELECT * FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",
+            (updates["template_id"], user_id),
+        )
+        if not tpl:
+            raise HTTPException(status_code=404, detail="Template not found")
+        if tpl.get("review_status") != "approved":
+            raise HTTPException(
+                status_code=409, detail="That template is an unpublished draft."
+            )
+        template_version = tpl.get("version")
+
+    profile = await _fetch_one(
+        "SELECT id FROM brand_profiles WHERE id = ?", (project.get("brand_profile_id"),)
+    )
+    if not profile:
+        raise HTTPException(status_code=409, detail="The App Profile for this project is gone.")
+
+    # Copy the project, applying only the varied fields.
+    new_id = str(uuid.uuid4())
+    now = now_iso()
+    duration = template_library.clamp_duration(
+        updates.get("duration_seconds", project.get("duration_seconds"))
+    )
+    await _execute(
+        """INSERT INTO studio_projects
+           (id, brand_profile_id, content_angle_id, template_id, template_version,
+            objective, audience, duration_seconds, tone, hook_line, script,
+            beat_timeline, visual_direction, feature_emphasis, overlays,
+            voice_direction, sound_direction, cta, assets, script_version,
+            status, created_at, updated_at, user_id)
+           SELECT ?, brand_profile_id, content_angle_id, ?, ?,
+                  objective, ?, ?, ?,
+                  COALESCE(?, hook_line), COALESCE(?, script),
+                  beat_timeline, COALESCE(?, visual_direction),
+                  COALESCE(?, feature_emphasis), overlays,
+                  voice_direction, sound_direction, COALESCE(?, cta), assets,
+                  0, 'draft', ?, ?, ?
+           FROM studio_projects WHERE id = ?""",
+        # Order MUST match the SELECT placeholder order: id, template_id,
+        # template_version, audience, duration, tone, hook_line, script,
+        # visual_direction, feature_emphasis, cta, created, updated, user, src.
+        (new_id,
+         updates.get("template_id", project.get("template_id")), template_version,
+         updates.get("audience", project.get("audience")), duration,
+         updates.get("tone", project.get("tone")),
+         updates.get("hook_line"), updates.get("script"),
+         updates.get("visual_direction"), updates.get("feature_emphasis"),
+         updates.get("cta"),
+         now, now, user_id, project["id"]),
+    )
+
+    # Record the lineage on the project so the derived draft is traceable
+    # before it ever becomes a generation.
+    await _execute(
+        "UPDATE generations SET variation_kind = COALESCE(variation_kind, ?), "
+        "variation_params = ? WHERE id = ?",
+        (spec.key, json.dumps({
+            "kind": spec.key,
+            "value": str(payload.value)[:200],
+            "note": (payload.note or "")[:200],
+            "derived_project_id": new_id,
+        }), parent["id"]),
+    )
+
+    logger.info(
+        f"Created {spec.key} variation project {new_id} from generation {generation_id}"
+    )
+    return {
+        "kind": spec.key,
+        "label": spec.label,
+        "project": _public_project(
+            await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (new_id,))
+        ),
+        "parent_generation_id": generation_id,
+        "regenerate_plan": bool(payload.regenerate_plan) and spec.needs_plan,
+        "note": "Draft only. Generate the video yourself when you are ready.",
+    }
+
+
+@api_router.get("/history/generations")
+async def generation_history(
+    brand_profile_id: str = "",
+    status: str = "",
+    limit: int = 100,
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    Generation history with everything needed to judge a result at a glance:
+    profile, template, objective, duration, status, cost, and output links.
+    The script itself stays on the detail endpoint to keep this list light.
+    """
+    clauses = ["g.user_id = ?"]
+    params: list = [user_id]
+    if brand_profile_id.strip():
+        clauses.append("g.brand_profile_id = ?")
+        params.append(brand_profile_id.strip())
+    if status.strip():
+        clauses.append("g.status = ?")
+        params.append(status.strip().lower())
+
+    rows = await _fetch_all(
+        f"""SELECT g.id, g.studio_project_id, g.brand_profile_id, g.template_id,
+                   g.template_version, g.script_version, g.model, g.duration,
+                   g.status, g.segment_role, g.attempt, g.parent_generation_id,
+                   g.variation_kind, g.cost_usd, g.cost_source, g.video_url,
+                   g.r2_url, g.error, g.retryable, g.created_at, g.completed_at,
+                   b.brand_name, p.objective, p.hook_line, p.cta, p.audience
+            FROM generations g
+            LEFT JOIN studio_projects p ON p.id = g.studio_project_id
+            LEFT JOIN brand_profiles b ON b.id = g.brand_profile_id
+            WHERE {' AND '.join(clauses)}
+            ORDER BY g.created_at DESC LIMIT ?""",
+        tuple(params) + (max(1, min(int(limit or 100), 500)),),
+    )
+
+    out = []
+    for row in rows:
+        entry = dict(row)
+        entry["retryable"] = bool(entry.get("retryable"))
+        composition = await _fetch_one(
+            "SELECT id, status, output_url, r2_url FROM overlay_compositions "
+            "WHERE generation_id = ? ORDER BY created_at DESC LIMIT 1",
+            (entry["id"],),
+        )
+        entry["composition"] = composition
+        performance = await _fetch_all(
+            "SELECT views, likes, comments, shares, saves, outcome, notes, created_at "
+            "FROM performance_entries WHERE generation_id = ? ORDER BY created_at DESC LIMIT 1",
+            (entry["id"],),
+        )
+        entry["performance"] = performance[0] if performance else None
+        out.append(entry)
+    return {"generations": out}
+
+
+@api_router.delete("/generations/{generation_id}")
+async def delete_generation(generation_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Delete a generation and its derived overlays.
+
+    Archiving is usually the better choice: it keeps the cost record that
+    analytics depends on. Delete is for removing something that was never
+    usable.
+    """
+    row = await _fetch_one(
+        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Generation not found")
+
+    await _execute(
+        "DELETE FROM overlay_compositions WHERE generation_id = ?", (generation_id,)
+    )
+    await _execute(
+        "DELETE FROM performance_entries WHERE generation_id = ?", (generation_id,)
+    )
+    await _execute("DELETE FROM video_assets WHERE job_id = ?", (generation_id,))
+    await _execute("DELETE FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id))
+    try:
+        storage_service.delete_video(user_id, generation_id)
+    except Exception as e:
+        logger.warning(f"R2 delete failed for generation {generation_id}: {e}")
+    for local in (pipeline.VIDEOS_DIR / f"{generation_id}.mp4",):
+        try:
+            if local.is_file():
+                local.unlink()
+        except OSError as e:
+            logger.warning(f"Could not remove {local}: {e}")
+    logger.info(f"Deleted generation {generation_id}")
+    return {"deleted": generation_id}
+
+
+@api_router.get("/generations/{generation_id}/performance")
+async def get_performance(generation_id: str, user_id: str = Depends(get_current_user_id)):
+    row = await _fetch_one(
+        "SELECT id FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Generation not found")
+    entries = await _fetch_all(
+        "SELECT * FROM performance_entries WHERE generation_id = ? ORDER BY created_at DESC",
+        (generation_id,),
+    )
+    return {"performance": entries, "source": "manual", "verified": False}
+
+
+@api_router.post("/generations/{generation_id}/performance", status_code=201)
+async def record_performance(
+    generation_id: str, payload: PerformanceEntryRequest, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Record performance a founder entered by hand after posting.
+
+    The response and every stored row are explicitly marked manual and
+    unverified. The app never asks for TikTok credentials and never reads a
+    platform account, so nothing here can be presented as platform-verified.
+    """
+    row = await _fetch_one(
+        "SELECT id, brand_profile_id FROM generations WHERE id = ? AND user_id = ?",
+        (generation_id, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Generation not found")
+
+    def clean(value):
+        if value is None:
+            return None
+        try:
+            number = int(value)
+        except (TypeError, ValueError):
+            return None
+        return max(0, number)
+
+    outcome = (payload.outcome or "").strip().lower()
+    if outcome not in ("successful", "unsuccessful", ""):
+        raise HTTPException(
+            status_code=400, detail="Outcome must be 'successful' or 'unsuccessful'."
+        )
+
+    entry_id = str(uuid.uuid4())
+    now = now_iso()
+    await _execute(
+        """INSERT INTO performance_entries
+           (id, generation_id, brand_profile_id, views, likes, comments, shares,
+            saves, outcome, notes, source, created_at, updated_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?, ?)""",
+        (entry_id, generation_id, row.get("brand_profile_id"),
+         clean(payload.views), clean(payload.likes), clean(payload.comments),
+         clean(payload.shares), clean(payload.saves), outcome or None,
+         (payload.notes or "")[:1000], now, now, user_id),
+    )
+    created = await _fetch_one("SELECT * FROM performance_entries WHERE id = ?", (entry_id,))
+    created["source"] = "manual"
+    created["verified"] = False
+    return created
 
 
 # ---------------------------------------------------------------------------

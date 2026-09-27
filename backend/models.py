@@ -411,3 +411,37 @@ class OverlayCompositionRequest(BaseModel):
     include_end_card: Optional[bool] = True
     captions: Optional[List[dict]] = None
     end_card_text: Optional[str] = None
+
+
+class CreateVariationRequest(BaseModel):
+    """
+    Create one controlled variation of an existing generation.
+
+    kind must be a known variation axis. value is interpreted per axis (a
+    number of seconds, a template id, "faster"/"slower", or free text).
+
+    A variation always produces a DRAFT project. Producing the video is a
+    separate, explicit action, so a variation can never spend money on its
+    own.
+    """
+    kind: str
+    value: Optional[str] = None
+    regenerate_plan: Optional[bool] = None
+    note: Optional[str] = ""
+
+
+class PerformanceEntryRequest(BaseModel):
+    """
+    Manually entered performance for a downloaded video.
+
+    Every field is optional and explicitly operator-supplied. Nothing here is
+    verified against TikTok, and the app never asks for account credentials
+    or connects to a platform to read it.
+    """
+    views: Optional[int] = None
+    likes: Optional[int] = None
+    comments: Optional[int] = None
+    shares: Optional[int] = None
+    saves: Optional[int] = None
+    notes: Optional[str] = ""
+    outcome: Optional[str] = None  # successful | unsuccessful | ""
