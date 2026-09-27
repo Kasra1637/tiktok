@@ -242,6 +242,29 @@ export const api = {
   extendGeneration: (id, payload = {}) =>
     client.post(`/generations/${id}/extend`, payload).then((r) => r.data),
   archiveGeneration: (id) => client.post(`/generations/${id}/archive`).then((r) => r.data),
+
+  // Asset library (per App Profile)
+  getAssets: (profileId, params = {}) =>
+    client.get(`/app-profiles/${profileId}/assets`, { params }).then((r) => r.data),
+  uploadAsset: (profileId, formData) =>
+    client
+      .post(`/app-profiles/${profileId}/assets`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 300000,
+      })
+      .then((r) => r.data),
+  updateAsset: (id, payload) => client.patch(`/assets/${id}`, payload).then((r) => r.data),
+  deleteAsset: (id) => client.delete(`/assets/${id}`).then((r) => r.data),
+  attachAsset: (projectId, payload) =>
+    client.post(`/studio/projects/${projectId}/assets`, payload).then((r) => r.data),
+  detachAsset: (projectId, assetId) =>
+    client.delete(`/studio/projects/${projectId}/assets/${assetId}`).then((r) => r.data),
+
+  // Deterministic overlay composition
+  composeOverlays: (generationId, payload = {}) =>
+    client.post(`/generations/${generationId}/overlay`, payload).then((r) => r.data),
+  getOverlayComposition: (generationId) =>
+    client.get(`/generations/${generationId}/overlay`).then((r) => r.data),
 };
 
 export const getErrorMessage = (err) => {

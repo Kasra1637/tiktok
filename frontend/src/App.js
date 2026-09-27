@@ -23,6 +23,7 @@ import AppProfileDetail from "./pages/AppProfileDetail";
 import Templates from "./pages/Templates";
 import TemplateDetail from "./pages/TemplateDetail";
 import CreateVideo from "./pages/CreateVideo";
+import AssetLibrary from "./pages/AssetLibrary";
 import { OnboardingProvider } from "./components/onboarding/OnboardingProvider";
 
 // Redirect old /customize/:videoId to /face-swap
@@ -58,6 +59,8 @@ function App() {
                         {/* Primary workflow: profiles -> templates -> studio (Phase 4) */}
                         <Route path="/app-profiles" element={<AppProfiles />} />
                         <Route path="/app-profiles/:profileId" element={<AppProfileDetail />} />
+                        <Route path="/app-profiles/:profileId/assets" element={<AssetLibrary />} />
+                        <Route path="/assets" element={<AssetLibrary />} />
                         <Route path="/templates" element={<Templates />} />
                         <Route path="/templates/:templateId" element={<TemplateDetail />} />
                         <Route path="/create" element={<CreateVideo />} />

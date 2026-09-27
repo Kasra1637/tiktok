@@ -27,6 +27,7 @@ import template_library
 import claim_safety
 import video_providers
 import generation_planning
+import overlays
 from ai_service import (
     analyze_hook, generate_customized_preview, generate_face_swap, generate_video_prompt,
     generate_video, poll_video_job, analyze_brand_from_text, analyze_app_profile,
@@ -43,7 +44,8 @@ from models import (
     CreateTemplateRequest, UpdateTemplateRequest,
     CreateContentAngleRequest, UpdateContentAngleRequest,
     CreateStudioProjectRequest, UpdateStudioProjectRequest, GeneratePlanRequest,
-    StudioGenerationRequest,
+    StudioGenerationRequest, UpdateAssetRequest, AttachAssetRequest,
+    OverlayCompositionRequest,
     APP_PROFILE_LIST_FIELDS, APP_PROFILE_EDITABLE_FIELDS,
     TEMPLATE_STRUCTURED_FIELDS, TEMPLATE_TEXT_FIELDS, TEMPLATE_EDITABLE_FIELDS,
     STUDIO_EDITABLE_FIELDS,
@@ -670,6 +672,60 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_generations_parent
                 ON generations (parent_generation_id);
 
+            -- Asset library, scoped to one App Profile.
+            --
+            -- Scoping is what prevents an app's screenshots, logo, or
+            -- character reference from leaking into another app's video: an
+            -- asset is only resolvable through a project that points at the
+            -- same brand_profile_id. Cross-app use is refused at generation
+            -- time, not merely discouraged in the UI.
+            CREATE TABLE IF NOT EXISTS assets (
+                id TEXT PRIMARY KEY,
+                brand_profile_id TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                name TEXT,
+                notes TEXT,
+                file_path TEXT NOT NULL,
+                preview_path TEXT,
+                content_type TEXT,
+                -- Rights are the operator's assertion, recorded so a reviewer
+                -- can see it was considered. Unconfirmed assets can be stored
+                -- but are refused for production use.
+                rights_confirmed INTEGER DEFAULT 0,
+                -- Short human label used in prompts and the overlay report,
+                -- e.g. "Onboarding" for a screenshot.
+                label TEXT,
+                status TEXT DEFAULT 'active',
+                created_at TEXT,
+                updated_at TEXT,
+                user_id TEXT DEFAULT 'anonymous'
+            );
+            CREATE INDEX IF NOT EXISTS idx_assets_profile
+                ON assets (brand_profile_id, status);
+
+            -- A deterministic overlay composition applied to a generated clip.
+            -- Kept separate from the generation so the exact composite can be
+            -- re-run or audited without re-generating the footage.
+            CREATE TABLE IF NOT EXISTS overlay_compositions (
+                id TEXT PRIMARY KEY,
+                generation_id TEXT,
+                studio_project_id TEXT,
+                brand_profile_id TEXT,
+                spec TEXT,
+                status TEXT DEFAULT 'pending',
+                error TEXT,
+                source_path TEXT,
+                output_path TEXT,
+                output_url TEXT,
+                r2_url TEXT,
+                applied TEXT,
+                created_at TEXT,
+                updated_at TEXT,
+                user_id TEXT DEFAULT 'anonymous'
+            );
+            CREATE INDEX IF NOT EXISTS idx_overlay_generation
+                ON overlay_compositions (generation_id);
+
             -- Persistent video storage registry. Each row tracks a generated
             -- video uploaded to Cloudflare R2 so it survives container redeploys
             -- and remains accessible in the user's history until they delete it.
@@ -907,6 +963,7 @@ async def init_db():
             "brand_profiles", "remix_chats", "face_swap_jobs",
             "face_swap_video_jobs", "hook_templates",
             "studio_projects", "content_angles", "generations",
+            "assets", "overlay_compositions",
         ]
         for table in user_id_tables:
             cursor = await conn.execute(f"PRAGMA table_info({table})")
@@ -6877,6 +6934,494 @@ async def archive_generation(generation_id: str, user_id: str = Depends(get_curr
     return _public_generation_detail(
         await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
     )
+
+
+# ---------------------------------------------------------------------------
+# Asset library (per App Profile)
+# ---------------------------------------------------------------------------
+ASSET_MAX_BYTES = 200 * 1024 * 1024  # 200 MB: long screen recordings included
+ASSET_IMAGE_TYPES = {
+    "screenshot": "image",
+    "logo": "image",
+    "product_image": "image",
+    "character_reference": "image",
+    "creator_photo": "image",
+    "background_image": "image",
+}
+ASSET_VIDEO_TYPES = {"screen_recording": "video", "background_video": "video"}
+ASSET_ALLOWED_EXT = {
+    "image": {".png", ".jpg", ".jpeg", ".webp", ".gif"},
+    "video": {".mp4", ".mov", ".webm", ".m4v"},
+}
+GENERATED_ID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+
+def _public_asset(row: dict) -> dict:
+    out = dict(row)
+    out["rights_confirmed"] = bool(out.get("rights_confirmed"))
+    if out.get("file_path"):
+        out["media_url"] = f"/api/media/assets/{out['id']}"
+    return out
+
+
+def _asset_dir(profile_id: str) -> Path:
+    """Per-App-Profile asset folder, resolved safely from a known UUID."""
+    safe = profile_id if GENERATED_ID_RE.match(profile_id or "") else "unscoped"
+    target = pipeline.ASSETS_DIR / safe
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
+@api_router.get("/app-profiles/{profile_id}/assets")
+async def list_assets(
+    profile_id: str,
+    kind: str = "",
+    include_archived: bool = False,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Library assets for one App Profile. Always scoped to that profile."""
+    profile = await _fetch_one(
+        "SELECT id FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="App Profile not found")
+    clauses = ["brand_profile_id = ?", "user_id = ?"]
+    params: list = [profile_id, user_id]
+    if not include_archived:
+        clauses.append("status = 'active'")
+    if kind.strip():
+        clauses.append("kind = ?")
+        params.append(template_library.normalize_asset_kind(kind))
+    rows = await _fetch_all(
+        f"SELECT * FROM assets WHERE {' AND '.join(clauses)} ORDER BY created_at DESC LIMIT 300",
+        tuple(params),
+    )
+    return {"assets": [_public_asset(r) for r in rows]}
+
+
+@api_router.post("/app-profiles/{profile_id}/assets", status_code=201)
+async def upload_asset(
+    profile_id: str,
+    kind: str = Form(...),
+    file: UploadFile = File(...),
+    label: str = Form(""),
+    notes: str = Form(""),
+    rights_confirmed: bool = Form(False),
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    Upload an asset into one App Profile's library.
+
+    The file extension must match the declared kind. That check exists
+    because a screenshot declared as a screen recording (or the reverse) would
+    make the overlay pass feed the wrong filter input and produce a silently
+    broken composite.
+    """
+    profile = await _fetch_one(
+        "SELECT id FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="App Profile not found")
+
+    asset_kind = template_library.normalize_asset_kind(kind)
+    expected_type = ASSET_IMAGE_TYPES.get(asset_kind) or ASSET_VIDEO_TYPES.get(asset_kind)
+    if not expected_type:
+        raise HTTPException(status_code=400, detail=f"Unsupported asset kind: {kind}")
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    if len(raw) > ASSET_MAX_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Asset is larger than {ASSET_MAX_BYTES // (1024 * 1024)} MB.",
+        )
+
+    ext = Path(file.filename or "").suffix.lower()
+    allowed = ASSET_ALLOWED_EXT[expected_type]
+    if ext not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"A {asset_kind.replace('_', ' ')} must be one of: "
+                   f"{', '.join(sorted(allowed))}",
+        )
+
+    asset_id = str(uuid.uuid4())
+    target = _asset_dir(profile_id) / f"{asset_id}{ext}"
+    target.write_bytes(raw)
+
+    now = now_iso()
+    await _execute(
+        """INSERT INTO assets
+           (id, brand_profile_id, kind, name, label, notes, file_path, content_type,
+            rights_confirmed, status, created_at, updated_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)""",
+        (asset_id, profile_id, asset_kind, (file.filename or "")[:200],
+         (label or "")[:120], (notes or "")[:500], str(target), file.content_type,
+         1 if rights_confirmed else 0, now, now, user_id),
+    )
+    logger.info(f"Uploaded {asset_kind} asset {asset_id} for profile {profile_id}")
+    return _public_asset(await _fetch_one("SELECT * FROM assets WHERE id = ?", (asset_id,)))
+
+
+@api_router.patch("/assets/{asset_id}")
+async def update_asset(
+    asset_id: str, payload: UpdateAssetRequest, user_id: str = Depends(get_current_user_id)
+):
+    row = await _fetch_one(
+        "SELECT * FROM assets WHERE id = ? AND user_id = ?", (asset_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+    set_clauses, values = [], []
+    for key, value in updates.items():
+        if key == "rights_confirmed":
+            value = 1 if value else 0
+        elif key == "kind":
+            value = template_library.normalize_asset_kind(value)
+        elif key == "status":
+            value = "archived" if str(value or "").lower() == "archived" else "active"
+        elif value is not None:
+            value = str(value).strip()
+        set_clauses.append(f"{key} = ?")
+        values.append(value)
+    if not set_clauses:
+        return _public_asset(row)
+
+    set_clauses.append("updated_at = ?")
+    values.append(now_iso())
+    values.extend([asset_id, user_id])
+    await _execute(
+        f"UPDATE assets SET {', '.join(set_clauses)} WHERE id = ? AND user_id = ?",
+        tuple(values),
+    )
+    return _public_asset(await _fetch_one("SELECT * FROM assets WHERE id = ?", (asset_id,)))
+
+
+@api_router.delete("/assets/{asset_id}")
+async def delete_asset(asset_id: str, user_id: str = Depends(get_current_user_id)):
+    row = await _fetch_one(
+        "SELECT * FROM assets WHERE id = ? AND user_id = ?", (asset_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    await _execute("DELETE FROM assets WHERE id = ? AND user_id = ?", (asset_id, user_id))
+    path = Path(row.get("file_path") or "")
+    try:
+        if path.is_file() and pipeline.ASSETS_DIR.resolve() in path.resolve().parents:
+            path.unlink()
+    except OSError as e:
+        logger.warning(f"Could not remove asset file {path}: {e}")
+    return {"deleted": asset_id}
+
+
+@api_router.post("/studio/projects/{project_id}/assets", status_code=201)
+async def attach_asset_to_project(
+    project_id: str, payload: AttachAssetRequest, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Attach a library asset to a project.
+
+    Enforces that the asset belongs to the SAME App Profile as the project.
+    This is the cross-app guard: without it, one app's logo or screenshots
+    could be composited into another app's video.
+    """
+    project = await _fetch_one(
+        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?", (project_id, user_id)
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Studio project not found")
+
+    asset = await _fetch_one(
+        "SELECT * FROM assets WHERE id = ? AND user_id = ?", (payload.asset_id, user_id)
+    )
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    if asset["brand_profile_id"] != project.get("brand_profile_id"):
+        raise HTTPException(
+            status_code=400,
+            detail="That asset belongs to a different app. Assets can only be used in "
+                   "their own App Profile's projects.",
+        )
+    if not asset.get("file_path") or not Path(asset["file_path"]).is_file():
+        raise HTTPException(status_code=409, detail="The asset file is missing on disk.")
+
+    current = project.get("assets") or []
+    if not isinstance(current, list):
+        current = []
+    entry = {
+        "asset_id": asset["id"],
+        "kind": asset["kind"],
+        "label": asset.get("label") or asset.get("name") or "",
+        "file_path": asset["file_path"],
+    }
+    for key in ("start", "end", "position", "scale"):
+        value = getattr(payload, key, None)
+        if value is not None:
+            entry[key] = value
+    current.append(entry)
+
+    await _execute(
+        "UPDATE studio_projects SET assets = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+        (json.dumps(current), now_iso(), project_id, user_id),
+    )
+    return {"assets": current}
+
+
+@api_router.delete("/studio/projects/{project_id}/assets/{asset_id}")
+async def detach_asset_from_project(
+    project_id: str, asset_id: str, user_id: str = Depends(get_current_user_id)
+):
+    project = await _fetch_one(
+        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?", (project_id, user_id)
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Studio project not found")
+    current = project.get("assets") or []
+    if not isinstance(current, list):
+        current = []
+    remaining = [a for a in current if a.get("asset_id") != asset_id]
+    await _execute(
+        "UPDATE studio_projects SET assets = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+        (json.dumps(remaining), now_iso(), project_id, user_id),
+    )
+    return {"assets": remaining}
+
+
+# ---------------------------------------------------------------------------
+# Deterministic overlay composition
+# ---------------------------------------------------------------------------
+async def _resolve_composition_assets(
+    asset_ids: list, brand_profile_id: str, user_id: str
+) -> tuple:
+    """
+    Resolve asset ids for a composition, refusing any from another app.
+
+    Returns (assets, rejected). Rejections are reported rather than silently
+    dropped, so a founder who attached the wrong asset finds out.
+    """
+    resolved, rejected = [], []
+    for asset_id in asset_ids or []:
+        asset = await _fetch_one(
+            "SELECT * FROM assets WHERE id = ? AND user_id = ?", (asset_id, user_id)
+        )
+        if not asset:
+            rejected.append({"asset_id": asset_id, "reason": "not found"})
+            continue
+        if asset["brand_profile_id"] != brand_profile_id:
+            rejected.append({"asset_id": asset_id, "reason": "belongs to a different App Profile"})
+            continue
+        if asset.get("status") != "active":
+            rejected.append({"asset_id": asset_id, "reason": "archived"})
+            continue
+        if not asset.get("file_path") or not Path(asset["file_path"]).is_file():
+            rejected.append({"asset_id": asset_id, "reason": "file missing on disk"})
+            continue
+        resolved.append(asset)
+    return resolved, rejected
+
+
+@api_router.post("/generations/{generation_id}/overlay", status_code=201)
+async def create_overlay_composition(
+    generation_id: str,
+    payload: OverlayCompositionRequest,
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    Compose real app visuals and verified text onto a generated clip.
+
+    This is the step that makes "no fabricated interfaces" true: the model
+    supplies a person and a scene, and every factual element -- screenshots,
+    logo, on-screen text, the CTA -- is composited deterministically here.
+
+    The composition is recorded separately from the generation so the exact
+    composite can be re-rendered or audited without paying for another
+    generation.
+    """
+    generation = await _fetch_one(
+        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
+    )
+    if not generation:
+        raise HTTPException(status_code=404, detail="Generation not found")
+    if generation.get("status") != "completed":
+        raise HTTPException(
+            status_code=409,
+            detail="Compose overlays only after the video has finished generating.",
+        )
+
+    project = await _fetch_one(
+        "SELECT * FROM studio_projects WHERE id = ?", (generation.get("studio_project_id"),)
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="The studio project for this generation is gone")
+
+    report = project.get("safety_report") or {}
+    if isinstance(report, str):
+        try:
+            report = json.loads(report)
+        except (json.JSONDecodeError, TypeError):
+            report = {}
+    if report and not report.get("passed", True):
+        raise HTTPException(
+            status_code=409,
+            detail="Fix prohibited claims before composing overlays: the overlay text is "
+                   "drawn from the same reviewed script.",
+        )
+
+    wanted = list(payload.asset_ids or [])
+    attached = project.get("assets") or []
+    for entry in attached if isinstance(attached, list) else []:
+        if isinstance(entry, dict) and entry.get("asset_id") and entry["asset_id"] not in wanted:
+            wanted.append(entry["asset_id"])
+
+    assets, rejected = await _resolve_composition_assets(
+        wanted, generation.get("brand_profile_id"), user_id
+    )
+
+    timing = {}
+    for entry in attached if isinstance(attached, list) else []:
+        if isinstance(entry, dict) and entry.get("asset_id"):
+            timing[entry["asset_id"]] = entry
+
+    composed_assets = []
+    for asset in assets:
+        entry = dict(timing.get(asset["id"]) or {})
+        composed_assets.append({
+            "asset_id": asset["id"],
+            "kind": asset["kind"],
+            "label": asset.get("label") or asset.get("name") or "",
+            "file_path": asset["file_path"],
+            "start": entry.get("start", 0),
+            "end": entry.get("end", generation.get("duration")),
+            "position": entry.get("position"),
+            "scale": entry.get("scale"),
+        })
+
+    spec = overlays.build_spec_from_plan(
+        plan=project,
+        assets=composed_assets,
+        cta=payload.end_card_text or project.get("cta") or "",
+        duration=float(generation.get("duration") or project.get("duration_seconds") or 0),
+    )
+    if payload.captions:
+        spec["captions"] = payload.captions[:12]
+    if payload.include_captions is False:
+        spec["captions"] = []
+    if payload.include_end_card is False:
+        spec["end_card"] = None
+
+    composition_id = str(uuid.uuid4())
+    now = now_iso()
+    await _execute(
+        """INSERT INTO overlay_compositions
+           (id, generation_id, studio_project_id, brand_profile_id, spec, status,
+            source_path, created_at, updated_at, user_id)
+           VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)""",
+        (composition_id, generation_id, project["id"], project.get("brand_profile_id"),
+         json.dumps(spec), generation.get("video_url") or "", now, now, user_id),
+    )
+
+    result = await _render_overlay_composition(composition_id, user_id)
+    result["rejected_assets"] = rejected
+    return result
+
+
+async def _render_overlay_composition(composition_id: str, user_id: str) -> dict:
+    """
+    Render a composition record to a finished MP4.
+
+    A failure here is SOFT: the un-composited clip is still a valid video, so
+    the generation is left intact and the composition is marked failed with a
+    reason. Losing an overlay must never lose the video itself.
+    """
+    row = await _fetch_one(
+        "SELECT * FROM generations g JOIN overlay_compositions o "
+        "ON o.generation_id = g.id WHERE o.id = ? AND o.user_id = ?",
+        (composition_id, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Overlay composition not found")
+
+    spec = row.get("spec") or {}
+    if isinstance(spec, str):
+        try:
+            spec = json.loads(spec)
+        except (json.JSONDecodeError, TypeError):
+            spec = {}
+
+    source = Path(row.get("source_path") or "")
+    if not source.is_file():
+        local = pipeline.VIDEOS_DIR / f"{row['generation_id']}.mp4"
+        source = local if local.is_file() else source
+    if not source.is_file():
+        await _execute(
+            "UPDATE overlay_compositions SET status = 'failed', error = ?, updated_at = ? WHERE id = ?",
+            ("The generated clip is no longer available on disk.", now_iso(), composition_id),
+        )
+        return {
+            "id": composition_id, "status": "failed",
+            "error": "The generated clip is no longer available on disk.",
+        }
+
+    output = pipeline.VIDEOS_DIR / f"{composition_id}.mp4"
+    result, warnings = overlays.compose(source, output, spec)
+
+    if not result:
+        message = "; ".join(warnings) or "Overlay render failed."
+        await _execute(
+            "UPDATE overlay_compositions SET status = 'failed', error = ?, updated_at = ? WHERE id = ?",
+            (message[:500], now_iso(), composition_id),
+        )
+        return {"id": composition_id, "status": "failed", "error": message[:500]}
+
+    r2_url = None
+    try:
+        r2_url = storage_service.upload_video(user_id, composition_id, Path(result))
+    except Exception as e:
+        logger.warning(f"Overlay R2 upload failed for {composition_id}: {e}")
+
+    applied_summary = {
+        "captions": len(spec.get("captions") or []),
+        "images": len(spec.get("images") or []),
+        "videos": len(spec.get("videos") or []),
+        "end_card": bool(spec.get("end_card")),
+    }
+    await _execute(
+        "UPDATE overlay_compositions SET status = 'completed', output_path = ?, "
+        "output_url = ?, r2_url = ?, applied = ?, error = NULL, updated_at = ? WHERE id = ?",
+        (str(result), f"/api/media/videos/{composition_id}.mp4", r2_url or "",
+         json.dumps(applied_summary), now_iso(), composition_id),
+    )
+    logger.info(f"Overlay composition {composition_id} completed (r2={'yes' if r2_url else 'no'})")
+    return {
+        "id": composition_id,
+        "status": "completed",
+        "output_url": f"/api/media/videos/{composition_id}.mp4",
+        "r2_url": r2_url or "",
+        "applied": applied_summary,
+        "warnings": warnings,
+    }
+
+
+@api_router.get("/generations/{generation_id}/overlay")
+async def get_overlay_composition(generation_id: str, user_id: str = Depends(get_current_user_id)):
+    """Latest composition for a generation, if any."""
+    row = await _fetch_one(
+        "SELECT * FROM overlay_compositions WHERE generation_id = ? AND user_id = ? "
+        "ORDER BY created_at DESC LIMIT 1",
+        (generation_id, user_id),
+    )
+    if not row:
+        return {"composition": None}
+    out = dict(row)
+    if isinstance(out.get("spec"), str):
+        try:
+            out["spec"] = json.loads(out["spec"])
+        except (json.JSONDecodeError, TypeError):
+            out["spec"] = {}
+    return {"composition": out}
 
 
 # ---------------------------------------------------------------------------

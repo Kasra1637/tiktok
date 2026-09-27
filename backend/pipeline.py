@@ -42,7 +42,11 @@ GENERATED_DIR = STORAGE_DIR / "generated"
 # reference) and key frame so a template stays reusable even after the
 # original download or frame cache is cleaned up.
 TEMPLATES_DIR = STORAGE_DIR / "templates"
-for _d in [VIDEOS_DIR, FRAMES_DIR, UPLOADS_DIR, GENERATED_DIR, TEMPLATES_DIR]:
+# App-scoped library assets (screenshots, logos, screen recordings). Files
+# live under a per-App-Profile subfolder so one app's media can never be
+# resolved through another app's project.
+ASSETS_DIR = STORAGE_DIR / "assets"
+for _d in [VIDEOS_DIR, FRAMES_DIR, UPLOADS_DIR, GENERATED_DIR, TEMPLATES_DIR, ASSETS_DIR]:
     _d.mkdir(parents=True, exist_ok=True)
 
 # Use `python -m yt_dlp` (same interpreter/venv as this process) instead of relying

@@ -25,6 +25,8 @@ def row_to_dict(row, columns: list) -> dict:
         "claims_to_respect", "evidence",
         # Studio projects (structured plan fields)
         "beat_timeline", "overlays", "assets", "safety_report",
+        # Overlay compositions
+        "spec", "applied",
     }
     d = {}
     for i, col in enumerate(columns):
@@ -376,3 +378,36 @@ class StudioGenerationRequest(BaseModel):
     model: Optional[str] = None
     duration_seconds: Optional[int] = None
     generate_audio: Optional[bool] = None
+
+
+class UpdateAssetRequest(BaseModel):
+    """Edit asset metadata. The file itself is immutable once uploaded."""
+    kind: Optional[str] = None
+    name: Optional[str] = None
+    label: Optional[str] = None
+    notes: Optional[str] = None
+    rights_confirmed: Optional[bool] = None
+    status: Optional[str] = None
+
+
+class AttachAssetRequest(BaseModel):
+    """Attach an existing library asset to a studio project, with timing."""
+    asset_id: str
+    start: Optional[float] = None
+    end: Optional[float] = None
+    position: Optional[str] = None
+    scale: Optional[float] = None
+
+
+class OverlayCompositionRequest(BaseModel):
+    """
+    Build a deterministic overlay composition for a completed generation.
+
+    asset_ids are resolved and checked against the generation's App Profile,
+    so an asset from another app can never be composited into this video.
+    """
+    asset_ids: Optional[List[str]] = None
+    include_captions: Optional[bool] = True
+    include_end_card: Optional[bool] = True
+    captions: Optional[List[dict]] = None
+    end_card_text: Optional[str] = None

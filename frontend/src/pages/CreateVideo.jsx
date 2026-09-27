@@ -9,12 +9,14 @@ import PageHeader from "../components/PageHeader";
 import EmptyState from "../components/EmptyState";
 import SafetyPanel from "../components/SafetyPanel";
 import GenerationPanel from "../components/GenerationPanel";
+import AssetLibrary from "./AssetLibrary";
 import { api, getErrorMessage } from "../lib/api";
 import {
   Clapperboard, Loader2, AlertTriangle, Briefcase, Target, LayoutTemplate,
   Image as ImageIcon, FileText, Check, ChevronLeft, ChevronRight, Sparkles,
   Save, CheckCircle2, Star,
 } from "lucide-react";
+import { toast } from "sonner";
 
 const STEPS = [
   { key: "profile", label: "App Profile", icon: Briefcase },
@@ -473,27 +475,58 @@ export default function CreateVideo() {
         <StepShell
           icon={ImageIcon}
           title="Assets"
-          description="Which real app visuals will you supply? Interfaces and text are composited from these, never generated."
+          description="Real app visuals get composited onto the video deterministically, so interfaces and text stay accurate."
         >
-          <div className="space-y-3">
-            {template?.required_assets?.length ? (
-              <div className="rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-4">
-                <span className="eyebrow block">This template needs</span>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {template.required_assets.map((a) => (
-                    <Badge key={a} variant="secondary" className="text-[11px]">{humanize(a)}</Badge>
-                  ))}
-                </div>
-              </div>
-            ) : (
+          <AssetLibrary
+            profileId={profileId}
+            onChanged={() => {
+              // Re-read the project's attached assets so the picker updates.
+              api.getStudioProject(project.id).then(setProject).catch(() => {});
+            }}
+          />
+
+          <div className="space-y-2 border-t border-[color:var(--hairline)] pt-4">
+            <span className="eyebrow block">Attached to this project</span>
+            {(project?.assets || []).length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                This template works without specific assets.
+                Nothing attached yet. Select assets above to place them on the timeline.
               </p>
+            ) : (
+              <div className="space-y-2">
+                {(project?.assets || []).map((a) => (
+                  <div
+                    key={a.asset_id}
+                    className="flex items-center gap-3 rounded-xl border border-[color:var(--hairline)] p-3"
+                  >
+                    <Badge variant="secondary" className="shrink-0 text-[11px]">
+                      {humanize(a.kind)}
+                    </Badge>
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      {a.label || a.asset_id.slice(0, 8)}
+                    </span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {a.start ?? 0}&ndash;{a.end ?? "end"}s
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label="Remove from project"
+                      onClick={async () => {
+                        try {
+                          await api.detachAsset(project.id, a.asset_id);
+                          const fresh = await api.getStudioProject(project.id);
+                          setProject(fresh);
+                        } catch (err) {
+                          toast.error(getErrorMessage(err));
+                        }
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+              </div>
             )}
-            <p className="text-sm text-muted-foreground">
-              Uploading and managing assets is the next step. You can generate a plan now and
-              attach assets before producing the video.
-            </p>
           </div>
         </StepShell>
       );

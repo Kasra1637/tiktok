@@ -2,10 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
-import { api, getErrorMessage } from "../lib/api";
+import { api, getErrorMessage, mediaUrl } from "../lib/api";
 import {
   Loader2, Clapperboard, AlertTriangle, Download, RefreshCw, RotateCcw,
-  Play, Info, Clock,
+  Play, Info, Clock, Layers,
 } from "lucide-react";
 
 /**
@@ -39,7 +39,9 @@ export function GenerationPanel({ project, onGenerationChange }) {
   const [models, setModels] = useState(null);
   const [selectedModel, setSelectedModel] = useState("");
   const [generation, setGeneration] = useState(null);
+  const [composition, setComposition] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [composing, setComposing] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const timer = useRef(null);
@@ -159,6 +161,31 @@ export function GenerationPanel({ project, onGenerationChange }) {
     }
   };
 
+  const handleCompose = async () => {
+    setComposing(true);
+    setError(null);
+    try {
+      const result = await api.composeOverlays(generation.id);
+      setComposition(result);
+      if (result.status === "completed") {
+        setNotice(
+          `Composed ${result.applied?.captions || 0} caption(s), ` +
+          `${result.applied?.images || 0} image(s), ${result.applied?.videos || 0} video layer(s)` +
+          `${result.applied?.end_card ? ", and a CTA end card" : ""}.`
+        );
+      } else {
+        setError(
+          result.error ||
+          "The composite could not be rendered. The original video is unaffected."
+        );
+      }
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setComposing(false);
+    }
+  };
+
   const capability = models?.models?.find((m) => m.key === selectedModel);
   const inFlight = generation && (generation.status === "submitted" || generation.status === "generating");
   const cost = generation ? money(generation.cost_usd) : null;
@@ -270,9 +297,37 @@ export function GenerationPanel({ project, onGenerationChange }) {
                 <Button variant="ghost" size="sm" onClick={handleExtend} disabled={busy}>
                   <RefreshCw className="h-3.5 w-3.5" /> Extend
                 </Button>
+                <Button variant="brand" size="sm" onClick={handleCompose} disabled={composing}>
+                  {composing ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Layers className="h-3.5 w-3.5" />
+                  )}
+                  {composition?.status === "completed" ? "Re-compose" : "Add real app visuals"}
+                </Button>
               </div>
+              {composition?.status === "completed" && composition.output_url && (
+                <div className="space-y-1.5 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-3">
+                  <span className="eyebrow block">With real app visuals</span>
+                  <video
+                    src={mediaUrl(composition.r2_url || composition.output_url)}
+                    controls
+                    playsInline
+                    className="w-full max-w-[280px] rounded-lg"
+                  />
+                  <Button variant="secondary" size="sm" asChild>
+                    <a
+                      href={mediaUrl(composition.r2_url || composition.output_url)}
+                      download
+                    >
+                      <Download className="h-3.5 w-3.5" /> Download composited MP4
+                    </a>
+                  </Button>
+                </div>
+              )}
               <p className="text-xs text-muted-foreground">
-                Post it yourself — this tool never publishes to any platform.
+                Screenshots, logo, and captions are drawn from your real assets, so app
+                interfaces and text stay accurate. Post it yourself — nothing is published.
               </p>
             </>
           )}
