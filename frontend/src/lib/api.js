@@ -194,6 +194,34 @@ export const api = {
   approveAppProfile: (id, applyPending = true) =>
     client.post(`/app-profiles/${id}/approve`, { apply_pending: applyPending }).then((r) => r.data),
   refreshAppProfile: (id) => client.post(`/app-profiles/${id}/refresh`).then((r) => r.data),
+
+  // Content angles (per App Profile)
+  getContentAngles: (profileId) =>
+    client.get(`/app-profiles/${profileId}/content-angles`).then((r) => r.data),
+  generateContentAngles: (profileId) =>
+    client.post(`/app-profiles/${profileId}/content-angles`).then((r) => r.data),
+  createContentAngle: (profileId, payload) =>
+    client.post(`/app-profiles/${profileId}/content-angles/manual`, payload).then((r) => r.data),
+  updateContentAngle: (profileId, angleId, payload) =>
+    client.patch(`/app-profiles/${profileId}/content-angles/${angleId}`, payload).then((r) => r.data),
+  deleteContentAngle: (profileId, angleId) =>
+    client.delete(`/app-profiles/${profileId}/content-angles/${angleId}`).then((r) => r.data),
+
+  // Hook Template Library
+  getTemplates: (params = {}) => client.get("/templates", { params }).then((r) => r.data),
+  getTemplateFacets: () => client.get("/templates/facets").then((r) => r.data),
+  getTemplate: (id) => client.get(`/templates/${id}`).then((r) => r.data),
+  createTemplate: (payload) => client.post("/templates", payload).then((r) => r.data),
+  updateTemplate: (id, payload) => client.patch(`/templates/${id}`, payload).then((r) => r.data),
+  duplicateTemplate: (id) => client.post(`/templates/${id}/duplicate`).then((r) => r.data),
+  toggleTemplateFavorite: (id) => client.post(`/templates/${id}/favorite`).then((r) => r.data),
+  archiveTemplate: (id, archived = true) =>
+    client.post(`/templates/${id}/archive`, null, { params: { archived } }).then((r) => r.data),
+  publishTemplate: (id) => client.post(`/templates/${id}/publish`).then((r) => r.data),
+
+  // Template recommendations
+  getTemplateRecommendations: (profileId, params = {}) =>
+    client.get(`/app-profiles/${profileId}/template-recommendations`, { params }).then((r) => r.data),
 };
 
 export const getErrorMessage = (err) => {

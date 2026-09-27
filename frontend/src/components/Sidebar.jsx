@@ -7,6 +7,8 @@ import {
   Compass,
   Bookmark,
   Briefcase,
+  LayoutTemplate,
+  Wrench,
   History as HistoryIcon,
   PanelLeftClose,
   PanelLeftOpen,
@@ -18,6 +20,11 @@ import {
 /**
  * Sidebar navigation model.
  *
+ * Ordering reflects the primary workflow: App Profiles -> Hook Templates ->
+ * History. The legacy exact-match recreation flow (Discover, Bookmarks) is
+ * demoted into a separate "Research" group — its routes and code still work
+ * for template research, but it is no longer the main way to make a video.
+ *
  * `testId` values are the canonical ones the rest of the app (and the
  * onboarding tour convention) expects — they must stay on the DESKTOP
  * sidebar instance. The mobile drawer renders the same model with
@@ -26,26 +33,24 @@ import {
  */
 export const NAV_GROUPS = [
   {
-    label: "Pipeline",
+    label: "Create",
     items: [
-      // Face Swap is deliberately absent. It has no standalone entry point:
-      // a swap always needs a target frame, and a target can only come from
-      // an analyzed video in Discover or from a saved template in Bookmarks.
-      // Linking it here would land users on a screen they can't act on.
-      { to: "/discover", label: "Discover", icon: Compass, testId: "discover-nav-link", hint: "Trending hooks" },
+      { to: "/app-profiles", label: "App Profiles", icon: Briefcase, testId: "app-profiles-nav-link", hint: "Your apps" },
+      { to: "/templates", label: "Hook Templates", icon: LayoutTemplate, testId: "templates-nav-link", hint: "Reusable structures" },
+      { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Everything you made" },
     ],
   },
   {
-    label: "Library",
+    label: "Research",
     items: [
-      { to: "/bookmarks", label: "Bookmarks", icon: Bookmark, testId: "bookmarks-nav-link", hint: "Saved hooks" },
-      { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Everything you made" },
+      { to: "/discover", label: "Discover", icon: Compass, testId: "discover-nav-link", hint: "Trending hooks" },
+      { to: "/bookmarks", label: "Saved Hooks", icon: Bookmark, testId: "bookmarks-nav-link", hint: "Saved analyses" },
     ],
   },
   {
     label: "Setup",
     items: [
-      { to: "/brand", label: "Your Brand", icon: Briefcase, testId: "brand-nav-link", hint: "Brand profile" },
+      { to: "/brand", label: "Profile Editor", icon: Wrench, testId: "brand-nav-link", hint: "Research and edit" },
     ],
   },
 ];

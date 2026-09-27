@@ -20,6 +20,9 @@ def row_to_dict(row, columns: list) -> dict:
         "problems_solved", "icp_segments", "desired_outcomes", "competitors",
         "claims_approved", "claims_review", "claims_banned", "ctas",
         "video_themes", "research_sources", "pending_research",
+        # Hook Template Library (hook_templates) structured fields
+        "app_categories", "audiences", "required_assets", "content_slots",
+        "claims_to_respect", "evidence",
     }
     d = {}
     for i, col in enumerate(columns):
@@ -201,3 +204,90 @@ class UpdateHookTemplateRequest(BaseModel):
     name: Optional[str] = None
     category: Optional[str] = None
     notes: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Hook Template Library
+# ---------------------------------------------------------------------------
+# Structured fields every library template carries. A curated template gets
+# these from template_library.py; a custom one supplies them directly.
+TEMPLATE_STRUCTURED_FIELDS = (
+    "app_categories", "audiences", "required_assets",
+)
+
+TEMPLATE_TEXT_FIELDS = (
+    "notes", "objective", "opening_structure", "continuation_structure",
+    "cta_pattern", "visual_style", "camera_pacing", "evidence_note",
+)
+
+TEMPLATE_EDITABLE_FIELDS = TEMPLATE_STRUCTURED_FIELDS + TEMPLATE_TEXT_FIELDS + (
+    "name", "category", "hook_seconds", "default_duration", "content_slots",
+)
+
+
+class CreateTemplateRequest(BaseModel):
+    """Create an internal hook template by hand (no AI calls)."""
+    name: str
+    category: Optional[str] = ""
+    app_categories: Optional[List[str]] = None
+    audiences: Optional[List[str]] = None
+    objective: Optional[str] = ""
+    opening_structure: Optional[str] = ""
+    hook_seconds: Optional[int] = 3
+    continuation_structure: Optional[str] = ""
+    cta_pattern: Optional[str] = ""
+    visual_style: Optional[str] = ""
+    camera_pacing: Optional[str] = ""
+    required_assets: Optional[List[str]] = None
+    default_duration: Optional[int] = 20
+    content_slots: Optional[dict] = None
+    evidence_note: Optional[str] = ""
+    notes: Optional[str] = ""
+
+
+class UpdateTemplateRequest(BaseModel):
+    """Edit a library template. Every field optional; only set fields change."""
+    name: Optional[str] = None
+    category: Optional[str] = None
+    app_categories: Optional[List[str]] = None
+    audiences: Optional[List[str]] = None
+    objective: Optional[str] = None
+    opening_structure: Optional[str] = None
+    hook_seconds: Optional[int] = None
+    continuation_structure: Optional[str] = None
+    cta_pattern: Optional[str] = None
+    visual_style: Optional[str] = None
+    camera_pacing: Optional[str] = None
+    required_assets: Optional[List[str]] = None
+    default_duration: Optional[int] = None
+    content_slots: Optional[dict] = None
+    evidence_note: Optional[str] = None
+    notes: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Content angles
+# ---------------------------------------------------------------------------
+class CreateContentAngleRequest(BaseModel):
+    """Add one hand-written content angle to an App Profile."""
+    kind: str = "problem_solution"
+    label: Optional[str] = ""
+    target_audience: Optional[str] = ""
+    user_problem: Optional[str] = ""
+    hook_promise: Optional[str] = ""
+    app_feature: Optional[str] = ""
+    desired_emotion: Optional[str] = ""
+    recommended_cta: Optional[str] = ""
+    claims_to_respect: Optional[List[str]] = None
+
+
+class UpdateContentAngleRequest(BaseModel):
+    kind: Optional[str] = None
+    label: Optional[str] = None
+    target_audience: Optional[str] = None
+    user_problem: Optional[str] = None
+    hook_promise: Optional[str] = None
+    app_feature: Optional[str] = None
+    desired_emotion: Optional[str] = None
+    recommended_cta: Optional[str] = None
+    claims_to_respect: Optional[List[str]] = None

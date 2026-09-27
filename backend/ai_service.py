@@ -16,6 +16,7 @@ from typing import Optional
 import httpx
 
 from face_crop import crop_face_from_path
+from template_library import CONTENT_ANGLE_KINDS, normalize_angle_kind
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
@@ -1239,6 +1240,149 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         result[key] = [str(v).strip() for v in val if str(v).strip()][:8]
 
     return result
+
+
+async def generate_content_angles(profile: dict, max_angles: int = 8) -> list:
+    """
+    Generate content angles for an approved App Profile.
+
+    Each angle carries the planning fields the studio needs: audience, problem,
+    hook promise, feature, desired emotion, CTA, and the claims to respect.
+
+    Guardrails enforced in the prompt:
+      - Functional framing only. Never infer sensitive personal traits about
+        viewers; for health-adjacent apps describe product functionality
+        ("low-friction journaling with short prompts and reminders"), never a
+        viewer diagnosis.
+      - Every angle must be satisfiable using only the profile's verified
+        fields. Anything speculative is pushed to claims_to_respect.
+      - No guaranteed outcomes, no testimonials, no invented pricing.
+
+    Args:
+        profile: an App Profile row (brand_profiles) with fields already
+            parsed into Python values by row_to_dict.
+        max_angles: hard cap on returned angles.
+    """
+    def _list(name):
+        val = profile.get(name)
+        if isinstance(val, list):
+            return [str(v) for v in val if str(v).strip()]
+        if val:
+            return [str(val)]
+        return []
+
+    context = {
+        "app_name": profile.get("brand_name") or "(unnamed app)",
+        "category": profile.get("app_category") or profile.get("niche") or "(unstated)",
+        "description": profile.get("brand_description") or "(unstated)",
+        "platforms": _list("platforms"),
+        "pricing_trial": profile.get("pricing_trial") or "(unstated)",
+        "features": _list("core_features"),
+        "use_cases": _list("primary_use_cases"),
+        "problems": _list("problems_solved"),
+        "audience": profile.get("target_audience") or "(unstated)",
+        "icp_segments": _list("icp_segments"),
+        "outcomes": _list("desired_outcomes"),
+        "differentiators": profile.get("differentiation") or "(unstated)",
+        "competitors": _list("competitors"),
+        "limitations": profile.get("known_limitations") or "(none recorded)",
+        "voice": profile.get("tone_voice") or "(unstated)",
+        "approved_claims": _list("claims_approved"),
+        "claims_needing_review": _list("claims_review"),
+        "banned_claims": _list("claims_banned"),
+        "ctas": _list("ctas"),
+    }
+
+    kinds = ", ".join(CONTENT_ANGLE_KINDS)
+
+    system_message = (
+        "You are a short-form video strategist for mobile apps. You propose content "
+        "angles that a founder can actually film, each grounded strictly in verified "
+        "product facts. Describe viewers by FUNCTIONAL need and use case only — never "
+        "infer sensitive personal traits (health diagnoses, mental-health labels, "
+        "finances, religion, sexuality, political leaning). For health-adjacent apps, "
+        "describe the product's functionality, never a condition the viewer may have. "
+        "Respond with STRICT JSON only, no markdown fences."
+    )
+
+    prompt = (
+        f"VERIFIED APP PROFILE:\n{json.dumps(context, indent=2)}\n\n"
+        f"Choose from these angle kinds: {kinds}\n\n"
+        f"Propose up to {max_angles} DISTINCT content angles, ordered strongest first. "
+        "Return ONLY a JSON array where each element is:\n"
+        "{\n"
+        '  "kind": "one of the kinds listed above",\n'
+        '  "label": "short 3-6 word title",\n'
+        '  "target_audience": "the audience segment, described functionally",\n'
+        '  "user_problem": "the concrete problem this angle speaks to",\n'
+        '  "hook_promise": "what the first 3 seconds promise",\n'
+        '  "app_feature": "the app feature this angle demonstrates",\n'
+        '  "desired_emotion": "the emotion the viewer should feel by the end",\n'
+        '  "recommended_cta": "one suitable call to action",\n'
+        '  "claims_to_respect": ["claims or limitations that bound this angle"]\n'
+        "}\n"
+        "Rules: use ONLY facts present in the profile. If an angle would require a "
+        "claim from claims_needing_review, list that claim in claims_to_respect. Never "
+        "promise guaranteed outcomes, invent testimonials or reviews, state pricing that "
+        "is not in the profile, or imply a feature the profile does not list. Vary the "
+        "kinds — do not return eight variations of the same angle. Return ONLY valid JSON."
+    )
+
+    payload = {
+        "model": TEXT_MODEL,
+        "messages": [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.4,
+        "max_tokens": 3000,
+    }
+
+    async with httpx.AsyncClient(timeout=90) as client:
+        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+
+    full_text = data["choices"][0]["message"]["content"]
+    parsed = _parse_json_response(full_text, "Content angles")
+
+    if isinstance(parsed, dict):
+        parsed = parsed.get("angles") or parsed.get("content_angles") or []
+    if not isinstance(parsed, list):
+        raise RuntimeError("Content angles response was not a list.")
+
+    angles = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+        normalized = {
+            "kind": normalize_angle_kind(item.get("kind")),
+            "label": (item.get("label") or "").strip()[:120],
+            "target_audience": (item.get("target_audience") or "").strip()[:400],
+            "user_problem": (item.get("user_problem") or "").strip()[:600],
+            "hook_promise": (item.get("hook_promise") or "").strip()[:300],
+            "app_feature": (item.get("app_feature") or "").strip()[:300],
+            "desired_emotion": (item.get("desired_emotion") or "").strip()[:200],
+            "recommended_cta": (item.get("recommended_cta") or "").strip()[:200],
+            "claims_to_respect": [],
+        }
+        raw_claims = item.get("claims_to_respect")
+        if isinstance(raw_claims, str):
+            raw_claims = [raw_claims]
+        if isinstance(raw_claims, list):
+            normalized["claims_to_respect"] = [
+                str(c).strip()[:200] for c in raw_claims if str(c).strip()
+            ][:6]
+        # An angle with no audience or no problem is not actionable downstream.
+        if not normalized["target_audience"] or not normalized["user_problem"]:
+            continue
+        angles.append(normalized)
+        if len(angles) >= max_angles:
+            break
+
+    if not angles:
+        raise RuntimeError("Content angles response contained no usable angles.")
+    return angles
 
 
 async def generate_remix_script(analysis: dict, brand_profile: dict, target_duration: int, session_id: str, music_context: dict = None, transcript_text: str = "", hashtags: list = None, use_original_sound: bool = False) -> dict:

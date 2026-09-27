@@ -23,10 +23,11 @@ from starlette.middleware.cors import CORSMiddleware
 import pipeline
 import viral_detection
 import storage_service
+import template_library
 from ai_service import (
     analyze_hook, generate_customized_preview, generate_face_swap, generate_video_prompt,
     generate_video, poll_video_job, analyze_brand_from_text, analyze_app_profile,
-    generate_remix_script,
+    generate_content_angles, generate_remix_script,
     strip_html_to_text, remix_chat_turn, empty_remix_brief, VIDEO_MODELS, DEFAULT_VIDEO_MODEL,
     analyze_image_for_hook,
 )
@@ -36,7 +37,10 @@ from models import (
     BrandProfileCreateRequest, BrandProfileUpdateRequest,
     GenerateRemixScriptRequest, RemixChatMessageRequest,
     CreateHookTemplateRequest, UpdateHookTemplateRequest,
+    CreateTemplateRequest, UpdateTemplateRequest,
+    CreateContentAngleRequest, UpdateContentAngleRequest,
     APP_PROFILE_LIST_FIELDS, APP_PROFILE_EDITABLE_FIELDS,
+    TEMPLATE_STRUCTURED_FIELDS, TEMPLATE_TEXT_FIELDS, TEMPLATE_EDITABLE_FIELDS,
     now_iso, row_to_dict,
 )
 from niches_config import NICHES, NICHE_MAP
@@ -470,11 +474,18 @@ async def init_db():
                 created_at TEXT
             );
 
-            -- Saved hook templates. Each row is a full snapshot of a proven
-            -- hook: the AI analysis, the ready-to-submit video prompt, and a
-            -- local copy of the source clip for V2V motion transfer. Reusing a
-            -- template costs zero AI calls -- no re-analysis, no prompt
-            -- regeneration, no re-download of the source video.
+            -- Hook Template Library. Rows are ABSTRACT creative structures
+            -- (opening mechanic, continuation shape, CTA pattern, required
+            -- assets) that drive generation without any source video.
+            --
+            -- The legacy columns below (source_*, prompt_template,
+            -- reference_video_path, facial_expressions, ...) belong to the
+            -- older exact-match bookmark flow and are retained so existing
+            -- saved templates and Face Swap keep working. Library templates
+            -- leave them NULL and are driven by the structured_* columns.
+            --
+            -- Deliberately no `proven` flag: no template has internal
+            -- performance data until the app's own history supplies it.
             CREATE TABLE IF NOT EXISTS hook_templates (
                 id TEXT PRIMARY KEY,
                 name TEXT,
@@ -504,7 +515,61 @@ async def init_db():
                 times_used INTEGER DEFAULT 0,
                 last_used_at TEXT,
                 created_at TEXT,
-                updated_at TEXT
+                updated_at TEXT,
+                -- Template Library fields (template-studio workflow).
+                app_categories TEXT,
+                audiences TEXT,
+                objective TEXT,
+                opening_structure TEXT,
+                hook_seconds INTEGER,
+                continuation_structure TEXT,
+                cta_pattern TEXT,
+                visual_style TEXT,
+                camera_pacing TEXT,
+                required_assets TEXT,
+                default_duration INTEGER,
+                content_slots TEXT,
+                version INTEGER DEFAULT 1,
+                archived INTEGER DEFAULT 0,
+                is_favorite INTEGER DEFAULT 0,
+                evidence_note TEXT,
+                origin TEXT DEFAULT 'bookmark',
+                review_status TEXT DEFAULT 'approved'
+            );
+
+            -- Content angles for one App Profile. Generated per app from the
+            -- approved profile, each carrying the seven planning fields the
+            -- studio needs: audience, problem, hook promise, feature, emotion,
+            -- CTA, and the claims/limitations to respect.
+            CREATE TABLE IF NOT EXISTS content_angles (
+                id TEXT PRIMARY KEY,
+                brand_profile_id TEXT,
+                kind TEXT,
+                label TEXT,
+                target_audience TEXT,
+                user_problem TEXT,
+                hook_promise TEXT,
+                app_feature TEXT,
+                desired_emotion TEXT,
+                recommended_cta TEXT,
+                claims_to_respect TEXT,
+                evidence TEXT,
+                rank INTEGER DEFAULT 0,
+                created_at TEXT,
+                user_id TEXT DEFAULT 'anonymous'
+            );
+            CREATE INDEX IF NOT EXISTS idx_content_angles_profile
+                ON content_angles (brand_profile_id, rank);
+
+            -- Per-user favorites for shared library templates. Curated
+            -- templates are team-wide (user_id='system'), so a favorite flag
+            -- on the template row would leak one operator's preference to
+            -- everyone. This table keeps it per user.
+            CREATE TABLE IF NOT EXISTS template_favorites (
+                template_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                created_at TEXT,
+                PRIMARY KEY (template_id, user_id)
             );
 
             -- Persistent video storage registry. Each row tracks a generated
@@ -560,6 +625,37 @@ async def init_db():
                 await conn.execute(f"ALTER TABLE brand_profiles ADD COLUMN {col} TEXT{default}")
         if "version" not in existing_cols:
             await conn.execute("ALTER TABLE brand_profiles ADD COLUMN version INTEGER DEFAULT 1")
+        await conn.commit()
+
+        # Migration: Template Library columns for hook_templates. TEXT first,
+        # then INTEGER/flag columns with safe defaults so pre-existing saved
+        # bookmarks keep working and simply gain NULL library fields.
+        cursor = await conn.execute("PRAGMA table_info(hook_templates)")
+        template_cols = {row[1] for row in await cursor.fetchall()}
+        for col in (
+            "app_categories", "audiences", "objective", "opening_structure",
+            "continuation_structure", "cta_pattern", "visual_style",
+            "camera_pacing", "required_assets", "content_slots", "evidence_note",
+            "origin", "review_status",
+        ):
+            if col not in template_cols:
+                await conn.execute(f"ALTER TABLE hook_templates ADD COLUMN {col} TEXT")
+        for col, decl in (
+            ("hook_seconds", "INTEGER"),
+            ("default_duration", "INTEGER"),
+            ("version", "INTEGER DEFAULT 1"),
+            ("archived", "INTEGER DEFAULT 0"),
+            ("is_favorite", "INTEGER DEFAULT 0"),
+        ):
+            if col not in template_cols:
+                await conn.execute(f"ALTER TABLE hook_templates ADD COLUMN {col} {decl}")
+        # Saved bookmarks predate the library, so they are 'bookmark' origin
+        # and stay approved; they are NOT library templates and remain
+        # reachable only through the legacy /api/bookmarks routes.
+        await conn.execute(
+            "UPDATE hook_templates SET origin = 'bookmark' "
+            "WHERE origin IS NULL OR origin = ''"
+        )
         await conn.commit()
 
         # Migration: drop and recreate cache tables if they're missing new columns
@@ -721,6 +817,44 @@ async def init_db():
                 await conn.execute(
                     f"ALTER TABLE {table} ADD COLUMN user_id TEXT DEFAULT 'anonymous'"
                 )
+        await conn.commit()
+
+        # Seed the curated template library once. Runs AFTER the user_id
+        # migration above because seeded rows set user_id='system' to mark
+        # them shared. Idempotent: matches on (name, origin='curated') so
+        # re-running init_db never duplicates.
+        cursor = await conn.execute("SELECT name FROM hook_templates WHERE origin = 'curated'")
+        seeded_names = {(r[0] or "").strip().lower() for r in await cursor.fetchall()}
+        seeded = 0
+        for tpl in template_library.curated_template_rows():
+            if tpl["name"].strip().lower() in seeded_names:
+                continue
+            now = now_iso()
+            await conn.execute(
+                """INSERT INTO hook_templates
+                   (id, name, category, notes, app_categories, audiences, objective,
+                    opening_structure, hook_seconds, continuation_structure, cta_pattern,
+                    visual_style, camera_pacing, required_assets, default_duration,
+                    content_slots, evidence_note, version, archived, is_favorite,
+                    origin, review_status, times_used, created_at, updated_at, user_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    str(uuid.uuid4()), tpl["name"],
+                    template_library.normalize_category(tpl["category"]), "",
+                    json.dumps(tpl.get("app_categories") or []),
+                    json.dumps(tpl.get("audiences") or []),
+                    template_library.normalize_objective(tpl.get("objective")),
+                    tpl["opening_structure"], int(tpl["hook_seconds"] or 3),
+                    tpl["continuation_structure"], tpl["cta_pattern"], tpl["visual_style"],
+                    tpl["camera_pacing"], json.dumps(tpl.get("required_assets") or []),
+                    int(tpl["default_duration"] or 20),
+                    json.dumps(tpl.get("content_slots") or {}), tpl.get("evidence_note") or "",
+                    1, 0, 0, "curated", "approved", 0, now, now, "system",
+                ),
+            )
+            seeded += 1
+        if seeded:
+            logger.info("Seeded %d curated hook template(s)", seeded)
         await conn.commit()
 
         # Best-effort backfill for analyses whose local extracted frames still
@@ -5059,6 +5193,754 @@ async def refresh_app_profile(profile_id: str, user_id: str = Depends(get_curren
     return await _fetch_one(
         "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
     )
+
+
+# ---------------------------------------------------------------------------
+# Content angles (per App Profile)
+# ---------------------------------------------------------------------------
+CONTENT_ANGLE_TEXT_FIELDS = (
+    "label", "target_audience", "user_problem", "hook_promise",
+    "app_feature", "desired_emotion", "recommended_cta",
+)
+
+
+def _serialize_angle_row(row: dict) -> dict:
+    """Shape a content_angles row for the API (kind is already normalized)."""
+    return {
+        "id": row.get("id"),
+        "brand_profile_id": row.get("brand_profile_id"),
+        "kind": row.get("kind"),
+        "label": row.get("label") or "",
+        "target_audience": row.get("target_audience") or "",
+        "user_problem": row.get("user_problem") or "",
+        "hook_promise": row.get("hook_promise") or "",
+        "app_feature": row.get("app_feature") or "",
+        "desired_emotion": row.get("desired_emotion") or "",
+        "recommended_cta": row.get("recommended_cta") or "",
+        "claims_to_respect": row.get("claims_to_respect") or [],
+        "rank": row.get("rank") or 0,
+        "created_at": row.get("created_at"),
+    }
+
+
+@api_router.get("/app-profiles/{profile_id}/content-angles")
+async def list_content_angles(profile_id: str, user_id: str = Depends(get_current_user_id)):
+    profile = await _fetch_one(
+        "SELECT id FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="App Profile not found")
+    rows = await _fetch_all(
+        "SELECT * FROM content_angles WHERE brand_profile_id = ? AND user_id = ? "
+        "ORDER BY rank ASC, created_at ASC",
+        (profile_id, user_id),
+    )
+    return {"angles": [_serialize_angle_row(r) for r in rows]}
+
+
+@api_router.post("/app-profiles/{profile_id}/content-angles", status_code=201)
+async def generate_profile_content_angles(profile_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Generate content angles from an APPROVED App Profile.
+
+    Requires approval deliberately: angles are derived from the profile's
+    verified facts, so generating them from an unreviewed draft would let
+    unverified research steer the video plan. Regenerating replaces the
+    existing set (they are derived data, not founder-authored content).
+    """
+    require_ai_configured()
+    profile = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="App Profile not found")
+    if profile.get("status") != "approved":
+        raise HTTPException(
+            status_code=409,
+            detail="Review and approve this App Profile before generating content angles.",
+        )
+
+    try:
+        angles = await generate_content_angles(profile)
+    except Exception as e:
+        logger.error(f"Content angle generation failed for profile {profile_id}: {e}")
+        raise HTTPException(status_code=502, detail=f"AI content angle generation failed. Please try again. ({str(e)[:150]})")
+
+    await _execute("DELETE FROM content_angles WHERE brand_profile_id = ?", (profile_id,))
+    now = now_iso()
+    saved = []
+    for rank, angle in enumerate(angles):
+        angle_id = str(uuid.uuid4())
+        await _execute(
+            """INSERT INTO content_angles
+               (id, brand_profile_id, kind, label, target_audience, user_problem,
+                hook_promise, app_feature, desired_emotion, recommended_cta,
+                claims_to_respect, rank, created_at, user_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (angle_id, profile_id, angle["kind"], angle["label"],
+             angle["target_audience"], angle["user_problem"], angle["hook_promise"],
+             angle["app_feature"], angle["desired_emotion"], angle["recommended_cta"],
+             json.dumps(angle["claims_to_respect"]), rank, now, user_id),
+        )
+        saved.append({**angle, "id": angle_id, "rank": rank})
+    logger.info(f"Generated %d content angle(s) for profile {profile_id}", len(saved))
+    return {"angles": saved}
+
+
+@api_router.post("/app-profiles/{profile_id}/content-angles/manual", status_code=201)
+async def create_manual_content_angle(
+    profile_id: str, payload: CreateContentAngleRequest, user_id: str = Depends(get_current_user_id)
+):
+    """Add one hand-written content angle. Founder-authored, never overwritten
+    by a regeneration pass (regeneration only replaces AI-generated rows)."""
+    profile = await _fetch_one(
+        "SELECT id FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="App Profile not found")
+    label = (payload.label or "").strip()
+    if not label:
+        raise HTTPException(status_code=400, detail="A short label is required for a content angle.")
+    if not (payload.target_audience or "").strip() or not (payload.user_problem or "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail="A content angle needs both a target audience and a user problem.",
+        )
+
+    cursor = await _fetch_one(
+        "SELECT COALESCE(MAX(rank), -1) AS max_rank FROM content_angles WHERE brand_profile_id = ?",
+        (profile_id,),
+    )
+    rank = int((cursor or {}).get("max_rank") or -1) + 1
+    angle_id = str(uuid.uuid4())
+    now = now_iso()
+    claims = _normalize_str_list(payload.claims_to_respect)
+    await _execute(
+        """INSERT INTO content_angles
+           (id, brand_profile_id, kind, label, target_audience, user_problem,
+            hook_promise, app_feature, desired_emotion, recommended_cta,
+            claims_to_respect, rank, created_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (angle_id, profile_id, template_library.normalize_angle_kind(payload.kind), label,
+         (payload.target_audience or "").strip(), (payload.user_problem or "").strip(),
+         (payload.hook_promise or "").strip(), (payload.app_feature or "").strip(),
+         (payload.desired_emotion or "").strip(), (payload.recommended_cta or "").strip(),
+         json.dumps(claims), rank, now, user_id),
+    )
+    row = await _fetch_one("SELECT * FROM content_angles WHERE id = ?", (angle_id,))
+    return _serialize_angle_row(row)
+
+
+@api_router.patch("/app-profiles/{profile_id}/content-angles/{angle_id}")
+async def update_content_angle(
+    profile_id: str, angle_id: str, payload: UpdateContentAngleRequest, user_id: str = Depends(get_current_user_id)
+):
+    row = await _fetch_one(
+        "SELECT * FROM content_angles WHERE id = ? AND brand_profile_id = ? AND user_id = ?",
+        (angle_id, profile_id, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Content angle not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+    set_clauses, values = [], []
+    if "kind" in updates:
+        set_clauses.append("kind = ?")
+        values.append(template_library.normalize_angle_kind(updates["kind"]))
+    for key in CONTENT_ANGLE_TEXT_FIELDS:
+        if key in updates:
+            set_clauses.append(f"{key} = ?")
+            values.append((updates[key] or "").strip())
+    if "claims_to_respect" in updates:
+        set_clauses.append("claims_to_respect = ?")
+        values.append(json.dumps(_normalize_str_list(updates["claims_to_respect"])))
+    if not set_clauses:
+        return _serialize_angle_row(row)
+
+    values.extend([angle_id, profile_id, user_id])
+    await _execute(
+        f"UPDATE content_angles SET {', '.join(set_clauses)} WHERE id = ? AND brand_profile_id = ? AND user_id = ?",
+        tuple(values),
+    )
+    return _serialize_angle_row(
+        await _fetch_one("SELECT * FROM content_angles WHERE id = ?", (angle_id,))
+    )
+
+
+@api_router.delete("/app-profiles/{profile_id}/content-angles/{angle_id}")
+async def delete_content_angle(profile_id: str, angle_id: str, user_id: str = Depends(get_current_user_id)):
+    row = await _fetch_one(
+        "SELECT id FROM content_angles WHERE id = ? AND brand_profile_id = ? AND user_id = ?",
+        (angle_id, profile_id, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Content angle not found")
+    await _execute(
+        "DELETE FROM content_angles WHERE id = ? AND brand_profile_id = ? AND user_id = ?",
+        (angle_id, profile_id, user_id),
+    )
+    return {"deleted": angle_id}
+
+
+# ---------------------------------------------------------------------------
+# Hook Template Library
+# ---------------------------------------------------------------------------
+def _public_library_template(template: dict) -> dict:
+    """Serialize a library template: no storage bytes, structure fields parsed."""
+    public = _public_template(template)
+    public["archived"] = bool(public.get("archived"))
+    public["is_favorite"] = bool(public.get("is_favorite"))
+    public["app_categories"] = public.get("app_categories") or []
+    public["audiences"] = public.get("audiences") or []
+    public["required_assets"] = public.get("required_assets") or []
+    public["content_slots"] = public.get("content_slots") or {}
+    # A library template is usable only once reviewed. Curated rows ship
+    # approved; research drafts must be published by an operator.
+    public["is_library_template"] = bool(public.get("opening_structure"))
+    public["is_usable"] = (
+        public["is_library_template"]
+        and public.get("review_status") == "approved"
+        and not public["archived"]
+    )
+    return public
+
+
+@api_router.get("/templates")
+async def list_templates(
+    q: str = "",
+    category: str = "",
+    objective: str = "",
+    app_category: str = "",
+    origin: str = "",
+    favorites_only: bool = False,
+    include_archived: bool = False,
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    Browse the Hook Template Library.
+
+    Curated templates are shared (user_id='system'); an operator's own custom
+    and research-draft templates are scoped to them. `q` matches name and
+    opening structure. Filters are ANDed.
+    """
+    clauses = ["(user_id = ? OR user_id = 'system')"]
+    params: list = [user_id]
+    if not include_archived:
+        clauses.append("archived = 0")
+    if q.strip():
+        clauses.append("(LOWER(name) LIKE ? OR LOWER(COALESCE(opening_structure, '')) LIKE ?)")
+        needle = f"%{q.strip().lower()}%"
+        params.extend([needle, needle])
+    if category.strip():
+        clauses.append("category = ?")
+        params.append(template_library.normalize_category(category))
+    if objective.strip():
+        norm_obj = template_library.normalize_objective(objective)
+        if norm_obj:
+            clauses.append("objective = ?")
+            params.append(norm_obj)
+    if app_category.strip():
+        # app_categories is a JSON array; match the needle inside the text.
+        clauses.append("LOWER(COALESCE(app_categories, '')) LIKE ?")
+        params.append(f"%{app_category.strip().lower()}%")
+    if origin.strip():
+        clauses.append("origin = ?")
+        params.append(origin.strip().lower())
+    if favorites_only:
+        clauses.append(
+            "id IN (SELECT template_id FROM template_favorites WHERE user_id = ?)"
+        )
+        params.append(user_id)
+
+    rows = await _fetch_all(
+        f"""SELECT * FROM hook_templates WHERE {' AND '.join(clauses)}
+            ORDER BY name ASC LIMIT 300""",
+        tuple(params),
+    )
+    return {"templates": await _with_favorites(rows, user_id)}
+
+
+async def _generations_table_exists() -> bool:
+    """Whether the Phase 7 `generations` table has been created yet.
+
+    Lets usage history degrade to an empty list before that phase lands
+    instead of erroring on every template detail request.
+    """
+    row = await _fetch_one(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'generations'"
+    )
+    return row is not None
+
+
+async def _with_favorites(rows: list, user_id: str) -> list:
+    """Overlay this user's favorite state onto template rows.
+
+    The stored is_favorite column is only meaningful for an operator's own
+    template; shared curated rows are favorited via template_favorites.
+    """
+    ids = [r["id"] for r in rows if r.get("id")]
+    favorited = set()
+    if ids:
+        placeholders = ",".join("?" for _ in ids)
+        favs = await _fetch_all(
+            f"SELECT template_id FROM template_favorites WHERE user_id = ? AND template_id IN ({placeholders})",
+            tuple([user_id] + ids),
+        )
+        favorited = {f["template_id"] for f in favs}
+    out = []
+    for row in rows:
+        public = _public_library_template(row)
+        is_own = row.get("user_id") == user_id
+        public["is_favorite"] = bool(
+            row["id"] in favorited or (is_own and row.get("is_favorite"))
+        )
+        out.append(public)
+    return out
+
+
+@api_router.get("/templates/facets")
+async def template_facets(user_id: str = Depends(get_current_user_id)):
+    """Controlled vocabularies + observed categories, for building filter UI."""
+    rows = await _fetch_all(
+        "SELECT DISTINCT category FROM hook_templates "
+        "WHERE (user_id = ? OR user_id = 'system') AND archived = 0",
+        (user_id,),
+    )
+    return {
+        "hook_categories": template_library.HOOK_CATEGORIES,
+        "objectives": template_library.VIDEO_OBJECTIVES,
+        "content_angle_kinds": template_library.CONTENT_ANGLE_KINDS,
+        "asset_kinds": template_library.ASSET_KINDS,
+        "supported_durations": template_library.SUPPORTED_DURATIONS,
+        "origins": template_library.TEMPLATE_ORIGINS,
+        "categories_in_use": sorted({r["category"] for r in rows if r.get("category")}),
+    }
+
+
+@api_router.get("/templates/{template_id}")
+async def get_template(template_id: str, user_id: str = Depends(get_current_user_id)):
+    row = await _fetch_one(
+        "SELECT * FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",
+        (template_id, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Template not found")
+    with_favs = await _with_favorites([row], user_id)
+    template = with_favs[0]
+    template["usage_history"] = await _fetch_all(
+        """SELECT g.id, g.status, g.created_at, g.duration, g.model, p.brand_name
+           FROM generations g
+           LEFT JOIN brand_profiles p ON p.id = g.brand_profile_id
+           WHERE g.template_id = ?
+           ORDER BY g.created_at DESC LIMIT 20""",
+        (template_id,),
+    ) if await _generations_table_exists() else []
+    return template
+
+
+def _template_row_values(payload: dict) -> dict:
+    """Map a template payload onto DB-ready column values."""
+    out = {}
+    for key in TEMPLATE_STRUCTURED_FIELDS:
+        if key in payload:
+            out[key] = json.dumps(_normalize_str_list(payload[key]))
+    if "content_slots" in payload and payload["content_slots"] is not None:
+        slots = payload["content_slots"]
+        out["content_slots"] = json.dumps(slots if isinstance(slots, dict) else {})
+    for key in TEMPLATE_TEXT_FIELDS:
+        if key in payload:
+            out[key] = (payload[key] or "").strip()
+    if "name" in payload:
+        out["name"] = (payload["name"] or "").strip()[:template_library.TEMPLATE_NAME_MAX]
+    if "category" in payload:
+        out["category"] = template_library.normalize_category(payload["category"])
+    if "objective" in payload:
+        out["objective"] = template_library.normalize_objective(payload["objective"])
+    if "hook_seconds" in payload and payload["hook_seconds"] is not None:
+        out["hook_seconds"] = max(1, int(payload["hook_seconds"]))
+    if "default_duration" in payload and payload["default_duration"] is not None:
+        out["default_duration"] = int(payload["default_duration"])
+    return out
+
+
+@api_router.post("/templates", status_code=201)
+async def create_template(payload: CreateTemplateRequest, user_id: str = Depends(get_current_user_id)):
+    """Create an internal library template by hand. No AI calls."""
+    name = (payload.name or "").strip()[:template_library.TEMPLATE_NAME_MAX]
+    if not name:
+        raise HTTPException(status_code=400, detail="Template name is required.")
+    if not (payload.opening_structure or "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail="A library template needs an opening structure — that is what makes it reusable.",
+        )
+
+    values = _template_row_values(payload.model_dump(exclude_unset=False))
+    template_id = str(uuid.uuid4())
+    now = now_iso()
+    await _execute(
+        """INSERT INTO hook_templates
+           (id, name, category, app_categories, audiences, objective, opening_structure,
+            hook_seconds, continuation_structure, cta_pattern, visual_style, camera_pacing,
+            required_assets, default_duration, content_slots, evidence_note, notes,
+            version, archived, is_favorite, origin, review_status, times_used,
+            created_at, updated_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (template_id, values.get("name"), values.get("category", "other"),
+         values.get("app_categories", "[]"), values.get("audiences", "[]"),
+         values.get("objective", ""), values["opening_structure"],
+         values.get("hook_seconds", 3), values.get("continuation_structure", ""),
+         values.get("cta_pattern", ""), values.get("visual_style", ""),
+         values.get("camera_pacing", ""), values.get("required_assets", "[]"),
+         values.get("default_duration", template_library.DEFAULT_DURATION),
+         values.get("content_slots", "{}"), values.get("evidence_note", ""),
+         values.get("notes", ""), 1, 0, 0, "custom", "approved", 0, now, now, user_id),
+    )
+    logger.info(f"Created library template {template_id} ('{name}')")
+    return _public_library_template(
+        await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
+    )
+
+
+@api_router.patch("/templates/{template_id}")
+async def update_template(template_id: str, payload: UpdateTemplateRequest, user_id: str = Depends(get_current_user_id)):
+    """
+    Edit a library template. Curated templates are shared across the team, so
+    editing one bumps its version rather than mutating history silently.
+    """
+    row = await _fetch_one(
+        "SELECT * FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",
+        (template_id, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        return _public_library_template(row)
+    if "name" in updates and not (updates["name"] or "").strip():
+        raise HTTPException(status_code=400, detail="Template name cannot be empty.")
+
+    values = _template_row_values(updates)
+    if not values:
+        return _public_library_template(row)
+
+    set_clauses = [f"{k} = ?" for k in values]
+    vals = list(values.values())
+    set_clauses.append("version = ?")
+    vals.append(int(row.get("version") or 1) + 1)
+    set_clauses.append("updated_at = ?")
+    vals.append(now_iso())
+    vals.extend([template_id, user_id])
+    await _execute(
+        f"UPDATE hook_templates SET {', '.join(set_clauses)} "
+        "WHERE id = ? AND (user_id = ? OR user_id = 'system')",
+        tuple(vals),
+    )
+    return _public_library_template(
+        await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
+    )
+
+
+@api_router.post("/templates/{template_id}/favorite")
+async def toggle_template_favorite(template_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Toggle favorite for the current user.
+
+    Favorites live in their own table rather than the shared is_favorite column
+    because curated templates are team-wide (user_id='system') — one operator's
+    favorite must not mark it for everyone.
+    """
+    row = await _fetch_one(
+        "SELECT id FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",
+        (template_id, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    existing = await _fetch_one(
+        "SELECT 1 AS f FROM template_favorites WHERE template_id = ? AND user_id = ?",
+        (template_id, user_id),
+    )
+    if existing:
+        await _execute(
+            "DELETE FROM template_favorites WHERE template_id = ? AND user_id = ?",
+            (template_id, user_id),
+        )
+        return {"template_id": template_id, "is_favorite": False}
+
+    await _execute(
+        "INSERT INTO template_favorites (template_id, user_id, created_at) VALUES (?, ?, ?)",
+        (template_id, user_id, now_iso()),
+    )
+    return {"template_id": template_id, "is_favorite": True}
+
+
+@api_router.post("/templates/{template_id}/duplicate", status_code=201)
+async def duplicate_template(template_id: str, user_id: str = Depends(get_current_user_id)):
+    """Copy a template (curated or otherwise) into an editable custom one."""
+    source = await _fetch_one(
+        "SELECT * FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",
+        (template_id, user_id),
+    )
+    if not source:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    new_id = str(uuid.uuid4())
+    now = now_iso()
+    name = f"{source.get('name') or 'Template'} (copy)"[:template_library.TEMPLATE_NAME_MAX]
+    # row_to_dict already parsed the JSON columns into Python values, so
+    # re-serialize before binding — sqlite3 cannot bind a list.
+    await _execute(
+        """INSERT INTO hook_templates
+           (id, name, category, app_categories, audiences, objective, opening_structure,
+            hook_seconds, continuation_structure, cta_pattern, visual_style, camera_pacing,
+            required_assets, default_duration, content_slots, evidence_note, notes,
+            version, archived, is_favorite, origin, review_status, times_used,
+            created_at, updated_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (new_id, name, source.get("category"),
+         json.dumps(_normalize_str_list(source.get("app_categories"))),
+         json.dumps(_normalize_str_list(source.get("audiences"))),
+         source.get("objective") or "", source.get("opening_structure"),
+         source.get("hook_seconds"), source.get("continuation_structure"),
+         source.get("cta_pattern"), source.get("visual_style"), source.get("camera_pacing"),
+         json.dumps(_normalize_str_list(source.get("required_assets"))),
+         source.get("default_duration"),
+         json.dumps(source.get("content_slots") or {}),
+         source.get("evidence_note") or "",
+         source.get("notes") or "", 1, 0, 0, "custom", "approved", 0, now, now, user_id),
+    )
+    logger.info(f"Duplicated template {template_id} -> {new_id}")
+    return _public_library_template(
+        await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (new_id,))
+    )
+
+
+@api_router.post("/templates/{template_id}/archive")
+async def archive_template(template_id: str, archived: bool = True, user_id: str = Depends(get_current_user_id)):
+    """
+    Archive or restore a library template.
+
+    Curated templates are shared, so archiving one hides it for the whole
+    team — which is the intent for retiring a structure that isn't working.
+    """
+    row = await _fetch_one(
+        "SELECT id FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",
+        (template_id, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Template not found")
+    await _execute(
+        "UPDATE hook_templates SET archived = ?, updated_at = ? WHERE id = ?",
+        (1 if archived else 0, now_iso(), template_id),
+    )
+    return _public_library_template(
+        await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
+    )
+
+
+@api_router.post("/templates/{template_id}/publish")
+async def publish_template(template_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Publish a research draft into the usable library.
+
+    Trend Research produces drafts; they stay unusable until an operator
+    reviews and publishes them. This is the only path that flips
+    review_status to approved.
+    """
+    row = await _fetch_one(
+        "SELECT * FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",
+        (template_id, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Template not found")
+    if not row.get("opening_structure"):
+        raise HTTPException(
+            status_code=400,
+            detail="This template has no opening structure, so it cannot be published as a library template.",
+        )
+    await _execute(
+        "UPDATE hook_templates SET review_status = 'approved', archived = 0, updated_at = ? WHERE id = ?",
+        (now_iso(), template_id),
+    )
+    logger.info(f"Published template {template_id}")
+    return _public_library_template(
+        await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
+    )
+
+
+# ---------------------------------------------------------------------------
+# Template recommendation
+# ---------------------------------------------------------------------------
+def _score_template_for_angle(template: dict, profile: dict, angle: Optional[dict], objective: str) -> dict:
+    """
+    Score one template against an App Profile + angle + objective.
+
+    Deliberately transparent and deterministic rather than an LLM call: the
+    founder sees WHY a template was picked, and a recommendation can be
+    re-derived and audited. Scoring is a weighted sum of explicit signals,
+    each contributing a human-readable reason.
+    """
+    score = 0.0
+    reasons: list = []
+    limitations: list = []
+
+    tpl_objective = (template.get("objective") or "").strip()
+    tpl_categories = [str(c).lower() for c in (template.get("app_categories") or [])]
+    tpl_audiences = [str(a).lower() for a in (template.get("audiences") or [])]
+    required_assets = [str(a).lower() for a in (template.get("required_assets") or [])]
+
+    if objective and tpl_objective:
+        if tpl_objective == objective:
+            score += 3.0
+            reasons.append(f"Built for the '{objective.replace('_', ' ')}' objective.")
+        else:
+            score += 0.5
+            reasons.append(
+                f"Designed for '{tpl_objective.replace('_', ' ')}', close to your '{objective.replace('_', ' ')}' goal."
+            )
+
+    profile_category = (profile.get("app_category") or profile.get("niche") or "").strip().lower()
+    if profile_category and tpl_categories:
+        if any(profile_category in c or c in profile_category for c in tpl_categories):
+            score += 2.5
+            reasons.append(f"Suited to the '{profile.get('app_category') or profile.get('niche')}' category.")
+        else:
+            score += 0.0
+            limitations.append(
+                f"Curated for {', '.join(tpl_categories)} rather than {profile.get('app_category') or profile.get('niche')}; expect to adapt the framing."
+            )
+
+    if angle:
+        angle_kind = (angle.get("kind") or "").strip()
+        audience = (angle.get("target_audience") or "").strip().lower()
+        feature = (angle.get("app_feature") or "").strip().lower()
+
+        # Category <-> angle affinity: demo-ish templates suit demonstration
+        # angles, story templates suit founder-story, and so on.
+        demo_categories = {"demo", "tutorial", "reveal"}
+        story_categories = {"story", "pov", "before-after"}
+        if angle_kind in ("feature_demonstration", "fast_tutorial") and template.get("category") in demo_categories:
+            score += 2.0
+            reasons.append("Demonstrates a feature on screen, which is what this angle needs.")
+        elif angle_kind in ("founder_story", "daily_life_use_case") and template.get("category") in story_categories:
+            score += 2.0
+            reasons.append("Narrative structure suits a story-led angle.")
+        elif angle_kind in ("problem_solution", "common_mistake") and template.get("category") in (
+            "pain-point-question", "contrarian", "listicle", "pattern-interrupt"
+        ):
+            score += 2.0
+            reasons.append("Direct-problem structure matches this angle.")
+        elif angle_kind in ("competitor_alternative", "product_comparison") and template.get("category") == "social-proof":
+            score += 2.0
+            reasons.append("Comparison structure fits a side-by-side angle.")
+        elif angle_kind in ("objection_handling", "privacy_pricing_differentiation") and template.get("category") in (
+            "contrarian", "social-proof", "curiosity-gap"
+        ):
+            score += 1.5
+            reasons.append("Works well for answering an objection head-on.")
+        else:
+            score += 0.5
+
+        if audience and tpl_audiences:
+            for tpl_aud in tpl_audiences:
+                if tpl_aud and (tpl_aud in audience or audience in tpl_aud):
+                    score += 1.0
+                    reasons.append("Audience framing matches the selected segment.")
+                    break
+
+        if feature:
+            feature_tokens = {t for t in feature.replace(",", " ").split() if len(t) > 3}
+            slot_blob = " ".join(
+                str(v) for v in (template.get("content_slots") or {}).values()
+            ).lower()
+            if feature_tokens and any(tok in slot_blob for tok in feature_tokens):
+                score += 1.0
+                reasons.append("Has a content slot that fits the feature being demonstrated.")
+
+        if angle.get("claims_to_respect"):
+            limitations.append(
+                "Bounded by: " + "; ".join(str(c) for c in angle["claims_to_respect"][:3])
+            )
+
+    if not tpl_categories:
+        score += 1.0
+        reasons.append("Category-agnostic, so it adapts to any app.")
+
+    if required_assets:
+        limitations.append(
+            "Needs " + ", ".join(a.replace("_", " ") for a in required_assets) + "."
+        )
+    if not template.get("continuation_structure"):
+        limitations.append("No continuation structure recorded; the studio will infer one.")
+    if (template.get("review_status") or "approved") != "approved":
+        limitations.append("Unpublished research draft — review before using.")
+
+    return {"score": round(score, 2), "reasons": reasons, "limitations": limitations}
+
+
+@api_router.get("/app-profiles/{profile_id}/template-recommendations")
+async def recommend_templates(
+    profile_id: str,
+    angle_id: str = "",
+    objective: str = "",
+    limit: int = 8,
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    Recommend library templates for an App Profile, optionally narrowed to one
+    content angle and objective.
+
+    The founder can always ignore this and pick any compatible template
+    manually — recommendations are a starting point, not a gate. Only usable
+    (approved, non-archived) library templates are returned.
+    """
+    profile = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="App Profile not found")
+
+    angle = None
+    if angle_id.strip():
+        angle = await _fetch_one(
+            "SELECT * FROM content_angles WHERE id = ? AND brand_profile_id = ? AND user_id = ?",
+            (angle_id.strip(), profile_id, user_id),
+        )
+        if not angle:
+            raise HTTPException(status_code=404, detail="Content angle not found for this App Profile")
+
+    norm_objective = template_library.normalize_objective(objective) if objective else ""
+    templates = await _fetch_all(
+        """SELECT * FROM hook_templates
+           WHERE (user_id = ? OR user_id = 'system')
+             AND archived = 0 AND review_status = 'approved'
+             AND opening_structure IS NOT NULL AND opening_structure != ''""",
+        (user_id,),
+    )
+    if not templates:
+        return {"recommendations": [], "angle": _serialize_angle_row(angle) if angle else None}
+
+    scored = []
+    for tpl in templates:
+        result = _score_template_for_angle(tpl, profile, angle, norm_objective)
+        scored.append({
+            "template": _public_library_template(tpl),
+            "score": result["score"],
+            "why_it_fits": result["reasons"],
+            "target_audience": (angle or {}).get("target_audience") or profile.get("target_audience") or "",
+            "app_feature": (angle or {}).get("app_feature") or "",
+            "required_assets": tpl.get("required_assets") or [],
+            "suggested_duration": tpl.get("default_duration") or template_library.DEFAULT_DURATION,
+            "limitations": result["limitations"],
+        })
+    scored.sort(key=lambda r: (-r["score"], r["template"]["name"]))
+    return {
+        "recommendations": scored[: max(1, min(int(limit or 8), 30))],
+        "angle": _serialize_angle_row(angle) if angle else None,
+        "objective": norm_objective,
+    }
 
 
 # ---------------------------------------------------------------------------

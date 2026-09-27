@@ -18,6 +18,10 @@ import History from "./pages/History";
 import BrandSetup from "./pages/BrandSetup";
 import FaceSwap from "./pages/FaceSwap";
 import HookTemplates from "./pages/HookTemplates";
+import AppProfiles from "./pages/AppProfiles";
+import AppProfileDetail from "./pages/AppProfileDetail";
+import Templates from "./pages/Templates";
+import TemplateDetail from "./pages/TemplateDetail";
 import { OnboardingProvider } from "./components/onboarding/OnboardingProvider";
 
 // Redirect old /customize/:videoId to /face-swap
@@ -50,14 +54,23 @@ function App() {
                   <AppShell>
                     <PageTransition>
                       <Routes>
+                        {/* Primary workflow: profiles -> templates -> studio (Phase 4) */}
+                        <Route path="/app-profiles" element={<AppProfiles />} />
+                        <Route path="/app-profiles/:profileId" element={<AppProfileDetail />} />
+                        <Route path="/templates" element={<Templates />} />
+                        <Route path="/templates/:templateId" element={<TemplateDetail />} />
+                        <Route path="/brand" element={<BrandSetup />} />
+                        <Route path="/history" element={<History />} />
+
+                        {/* Legacy exact-match recreation. Routes and code are kept
+                            working for Trend Research, but demoted out of the
+                            primary navigation in favour of the template workflow. */}
                         <Route path="/discover" element={<NicheFeed />} />
                         <Route path="/face-swap" element={<FaceSwap />} />
                         <Route path="/analysis/:videoId" element={<AnalysisDetail />} />
                         <Route path="/customize/:videoId" element={<CustomizeRedirect />} />
                         <Route path="/generate-video/:customizationId" element={<GenerateVideo />} />
                         <Route path="/bookmarks" element={<HookTemplates />} />
-                        <Route path="/history" element={<History />} />
-                        <Route path="/brand" element={<BrandSetup />} />
                       </Routes>
                     </PageTransition>
                   </AppShell>
