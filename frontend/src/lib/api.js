@@ -230,6 +230,18 @@ export const api = {
   updateStudioProject: (id, payload) => client.patch(`/studio/projects/${id}`, payload).then((r) => r.data),
   generatePlan: (id, payload = {}) => client.post(`/studio/projects/${id}/plan`, payload).then((r) => r.data),
   markProjectReady: (id) => client.post(`/studio/projects/${id}/ready`).then((r) => r.data),
+
+  // Video generation (single-pass)
+  getStudioVideoModels: () => client.get("/studio/video-models").then((r) => r.data),
+  generateVideo: (projectId, payload = {}) =>
+    client.post(`/studio/projects/${projectId}/generate`, payload).then((r) => r.data),
+  getGenerations: (params = {}) => client.get("/generations", { params }).then((r) => r.data),
+  getGeneration: (id) => client.get(`/generations/${id}`).then((r) => r.data),
+  pollGeneration: (id) => client.post(`/generations/${id}/poll`).then((r) => r.data),
+  retryGeneration: (id) => client.post(`/generations/${id}/retry`).then((r) => r.data),
+  extendGeneration: (id, payload = {}) =>
+    client.post(`/generations/${id}/extend`, payload).then((r) => r.data),
+  archiveGeneration: (id) => client.post(`/generations/${id}/archive`).then((r) => r.data),
 };
 
 export const getErrorMessage = (err) => {

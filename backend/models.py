@@ -356,3 +356,23 @@ class GeneratePlanRequest(BaseModel):
     duration_seconds: Optional[int] = None
     tone: Optional[str] = None
     audience: Optional[str] = None
+
+
+class StudioGenerationRequest(BaseModel):
+    """
+    Submit or extend a studio video generation.
+
+    Distinct from the legacy GenerateVideoRequest, which carries face-swap
+    image ids and an edited prompt for the exact-match flow.
+
+    model: optional provider key. When omitted the configured default is
+        used. Unknown, disallowed, or editor-only models fall back with a
+        stated reason rather than being honoured.
+    duration_seconds: target length. A value beyond the provider's
+        single-pass limit is reported as needing an extension, never silently
+        shortened.
+    generate_audio: request native audio where the provider supports it.
+    """
+    model: Optional[str] = None
+    duration_seconds: Optional[int] = None
+    generate_audio: Optional[bool] = None

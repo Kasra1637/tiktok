@@ -8,6 +8,7 @@ import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import EmptyState from "../components/EmptyState";
 import SafetyPanel from "../components/SafetyPanel";
+import GenerationPanel from "../components/GenerationPanel";
 import { api, getErrorMessage } from "../lib/api";
 import {
   Clapperboard, Loader2, AlertTriangle, Briefcase, Target, LayoutTemplate,
@@ -659,6 +660,11 @@ export default function CreateVideo() {
             {hasEdits && (
               <p className="text-xs text-muted-foreground">Save your edits before marking ready.</p>
             )}
+
+            <GenerationPanel
+              project={project}
+              onGenerationChange={() => {}}
+            />
           </div>
         )}
       </StepShell>

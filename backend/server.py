@@ -25,6 +25,8 @@ import viral_detection
 import storage_service
 import template_library
 import claim_safety
+import video_providers
+import generation_planning
 from ai_service import (
     analyze_hook, generate_customized_preview, generate_face_swap, generate_video_prompt,
     generate_video, poll_video_job, analyze_brand_from_text, analyze_app_profile,
@@ -41,6 +43,7 @@ from models import (
     CreateTemplateRequest, UpdateTemplateRequest,
     CreateContentAngleRequest, UpdateContentAngleRequest,
     CreateStudioProjectRequest, UpdateStudioProjectRequest, GeneratePlanRequest,
+    StudioGenerationRequest,
     APP_PROFILE_LIST_FIELDS, APP_PROFILE_EDITABLE_FIELDS,
     TEMPLATE_STRUCTURED_FIELDS, TEMPLATE_TEXT_FIELDS, TEMPLATE_EDITABLE_FIELDS,
     STUDIO_EDITABLE_FIELDS,
@@ -613,6 +616,60 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_studio_projects_user
                 ON studio_projects (user_id, updated_at);
 
+            -- One row per submitted video generation.
+            --
+            -- The normal case is a SINGLE row per video: the hook and its
+            -- continuation are produced by one model call so the clip is
+            -- coherent. Additional rows only exist for a genuine second pass
+            -- (duration beyond the provider's single-pass limit, an explicit
+            -- extension, or a segment replacement after a recoverable
+            -- failure), recorded via segment_role + parent_generation_id.
+            --
+            -- status ladder: submitted -> generating -> completed | failed,
+            -- plus 'archived'. draft/ready_for_generation live on the studio
+            -- project, not here, because no money is spent before submission.
+            CREATE TABLE IF NOT EXISTS generations (
+                id TEXT PRIMARY KEY,
+                studio_project_id TEXT,
+                brand_profile_id TEXT,
+                template_id TEXT,
+                -- Provenance: which exact inputs produced this video.
+                template_version INTEGER,
+                script_version INTEGER,
+                model TEXT,
+                model_id TEXT,
+                requested_duration INTEGER,
+                duration INTEGER,
+                status TEXT DEFAULT 'submitted',
+                segment_role TEXT DEFAULT 'primary',
+                attempt INTEGER DEFAULT 1,
+                parent_generation_id TEXT,
+                variation_kind TEXT,
+                variation_params TEXT,
+                openrouter_job_id TEXT,
+                polling_url TEXT,
+                video_url TEXT,
+                r2_url TEXT,
+                cost_usd REAL,
+                cost_source TEXT,
+                prompt_used TEXT,
+                adjustments TEXT,
+                error TEXT,
+                retryable INTEGER DEFAULT 1,
+                requested_at TEXT,
+                started_at TEXT,
+                completed_at TEXT,
+                created_at TEXT,
+                updated_at TEXT,
+                user_id TEXT DEFAULT 'anonymous'
+            );
+            CREATE INDEX IF NOT EXISTS idx_generations_user
+                ON generations (user_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_generations_project
+                ON generations (studio_project_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_generations_parent
+                ON generations (parent_generation_id);
+
             -- Persistent video storage registry. Each row tracks a generated
             -- video uploaded to Cloudflare R2 so it survives container redeploys
             -- and remains accessible in the user's history until they delete it.
@@ -849,7 +906,7 @@ async def init_db():
             "videos", "analyses", "customizations", "video_jobs",
             "brand_profiles", "remix_chats", "face_swap_jobs",
             "face_swap_video_jobs", "hook_templates",
-            "studio_projects", "content_angles",
+            "studio_projects", "content_angles", "generations",
         ]
         for table in user_id_tables:
             cursor = await conn.execute(f"PRAGMA table_info({table})")
@@ -6316,6 +6373,509 @@ async def mark_project_ready(project_id: str, user_id: str = Depends(get_current
     )
     return _public_project(
         await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,))
+    )
+
+
+# ---------------------------------------------------------------------------
+# Generations (single-pass video production)
+# ---------------------------------------------------------------------------
+def _public_generation(row: dict) -> dict:
+    """Serialize a generation row, hiding the stored prompt by default.
+
+    The prompt is long and only useful when debugging a specific result, so
+    it is returned by the detail endpoint but trimmed from list responses.
+    """
+    out = dict(row)
+    out["adjustments"] = out.get("adjustments") or []
+    out["variation_params"] = out.get("variation_params") or {}
+    out["retryable"] = bool(out.get("retryable"))
+    out.pop("prompt_used", None)
+    return out
+
+
+def _public_generation_detail(row: dict) -> dict:
+    out = _public_generation(row)
+    out["prompt_used"] = row.get("prompt_used") or ""
+    return out
+
+
+async def _record_cost(generation_id: str, response: dict) -> None:
+    """Store the reported cost, or an explicit marker when none is reported."""
+    cost, source = generation_planning.extract_cost(response)
+    await _execute(
+        "UPDATE generations SET cost_usd = ?, cost_source = ? WHERE id = ?",
+        (cost, source, generation_id),
+    )
+
+
+async def _submit_generation(
+    project: dict,
+    profile: dict,
+    template: dict,
+    user_id: str,
+    model: str = "",
+    duration: Optional[int] = None,
+    segment_role: str = "primary",
+    parent_generation_id: str = "",
+    is_extension: bool = False,
+    attempt: int = 1,
+    variation_kind: str = "",
+    variation_params: Optional[dict] = None,
+    generate_audio: Optional[bool] = None,
+) -> dict:
+    """
+    Submit ONE video generation job for the whole video.
+
+    A second job is created only when the caller passes segment_role
+    'extension', which the endpoints below do exclusively for the three
+    justified reasons: the duration exceeds the provider's single-pass limit,
+    the founder explicitly asked to extend, or a segment is being replaced
+    after a recoverable failure.
+    """
+    requested = duration or project.get("duration_seconds") or 20
+    plan = video_providers.plan_duration(model, requested)
+    model_key = plan["model"]
+    cap = video_providers.capability(model_key)
+    seconds = plan["primary_seconds"] if not is_extension else min(
+        plan["primary_seconds"], max(1, requested)
+    )
+
+    prompt = generation_planning.build_single_pass_prompt(
+        plan=project,
+        profile=profile,
+        template=template,
+        duration=seconds,
+        segment=segment_role,
+        asset_notes=generation_planning.asset_notes(project.get("assets") or []),
+        is_extension=is_extension,
+    )
+
+    generation_id = str(uuid.uuid4())
+    now = now_iso()
+    await _execute(
+        """INSERT INTO generations
+           (id, studio_project_id, brand_profile_id, template_id, template_version,
+            script_version, model, model_id, requested_duration, duration, status,
+            segment_role, attempt, parent_generation_id, variation_kind, variation_params,
+            cost_source, prompt_used, adjustments, retryable, requested_at, created_at,
+            updated_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)""",
+        (generation_id, project["id"], project.get("brand_profile_id"),
+         project.get("template_id"), project.get("template_version"),
+         project.get("script_version"), model_key, cap["id"],
+         requested, seconds, segment_role, attempt, parent_generation_id or None,
+         variation_kind or None, json.dumps(variation_params or {}),
+         "pending", prompt, json.dumps(plan["adjustments"]), now, now, now, user_id),
+    )
+
+    try:
+        submitted = await generate_video(
+            prompt=prompt,
+            duration=seconds,
+            model=model_key,
+            # Default to native audio when the provider offers it; the plan's
+            # sound direction is already written into the prompt.
+            generate_audio=(
+                bool(cap.get("supports_native_audio"))
+                if generate_audio is None
+                else bool(generate_audio)
+            ),
+        )
+    except Exception as e:
+        message = str(e)
+        await _execute(
+            "UPDATE generations SET status = 'failed', error = ?, retryable = ?, completed_at = ? WHERE id = ?",
+            (message[:1000], 1 if generation_planning.is_recoverable_error(message) else 0,
+             now_iso(), generation_id),
+        )
+        logger.error(f"Generation {generation_id} submission failed: {message}")
+        raise HTTPException(status_code=502, detail=f"Video generation failed to submit: {message[:200]}")
+
+    job_id = submitted.get("id") or ""
+    await _execute(
+        "UPDATE generations SET openrouter_job_id = ?, polling_url = ?, status = 'generating', updated_at = ? WHERE id = ?",
+        (job_id, submitted.get("polling_url") or "", now_iso(), generation_id),
+    )
+    await _record_cost(generation_id, submitted)
+
+    # Register with the persistent video store so a completed clip survives a
+    # redeploy, exactly like the legacy face-swap path does.
+    await _execute(
+        """INSERT OR REPLACE INTO video_assets
+           (job_id, user_id, r2_url, phase, source_video_id, source_hook_template_id, duration, created_at)
+           VALUES (?, ?, '', ?, NULL, ?, ?, ?)""",
+        (generation_id, user_id, segment_role, project.get("template_id"), seconds, now),
+    )
+
+    logger.info(
+        f"Submitted generation {generation_id} ({segment_role}, attempt {attempt}) "
+        f"model={model_key} duration={seconds}s cost={submitted.get('usage', {}).get('cost') if isinstance(submitted.get('usage'), dict) else 'n/a'}"
+    )
+    return _public_generation_detail(
+        await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
+    )
+
+
+@api_router.get("/studio/video-models")
+async def list_studio_video_models():
+    """
+    Provider capabilities for the studio.
+
+    Distinct from the legacy /api/video-models used by the exact-match flow:
+    this one reports what the template workflow can actually drive, including
+    single-pass duration limits that decide whether a second job is needed.
+    """
+    default_key = video_providers.default_model_key()
+    return {
+        "default": default_key,
+        "models": video_providers.list_capabilities(),
+        "ineligible": [
+            c for c in video_providers.list_capabilities(include_ineligible=True)
+            if not c.get("studio_eligible")
+        ],
+    }
+
+
+@api_router.get("/generations")
+async def list_generations(
+    studio_project_id: str = "",
+    brand_profile_id: str = "",
+    status: str = "",
+    limit: int = 50,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Generation history, newest first. Filters compose."""
+    clauses = ["user_id = ?"]
+    params: list = [user_id]
+    if studio_project_id.strip():
+        clauses.append("studio_project_id = ?")
+        params.append(studio_project_id.strip())
+    if brand_profile_id.strip():
+        clauses.append("brand_profile_id = ?")
+        params.append(brand_profile_id.strip())
+    if status.strip():
+        clauses.append("status = ?")
+        params.append(status.strip().lower())
+    rows = await _fetch_all(
+        f"""SELECT * FROM generations WHERE {' AND '.join(clauses)}
+            ORDER BY created_at DESC LIMIT ?""",
+        tuple(params) + (max(1, min(int(limit or 50), 200)),),
+    )
+    return {"generations": [_public_generation(r) for r in rows]}
+
+
+@api_router.get("/generations/{generation_id}")
+async def get_generation(generation_id: str, user_id: str = Depends(get_current_user_id)):
+    row = await _fetch_one(
+        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Generation not found")
+    return _public_generation_detail(row)
+
+
+@api_router.post("/studio/projects/{project_id}/generate", status_code=202)
+async def submit_project_generation(
+    project_id: str, payload: StudioGenerationRequest, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Generate the complete video as ONE job.
+
+    Refuses unless the project is reviewed and ready, and unless the claim
+    check passes, so a prohibited claim cannot reach a paid generation.
+    A duration beyond the provider's single-pass limit is accepted but the
+    response reports that an extension is needed; it is never silently
+    truncated to a shorter video.
+    """
+    require_ai_configured()
+    project = await _fetch_one(
+        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?", (project_id, user_id)
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Studio project not found")
+    if project.get("status") != "ready_for_generation":
+        raise HTTPException(
+            status_code=409,
+            detail="Review the plan and mark this project ready for generation first.",
+        )
+    if not (project.get("script") or "").strip():
+        raise HTTPException(status_code=400, detail="This project has no script to generate.")
+
+    report = project.get("safety_report") or {}
+    if isinstance(report, str):
+        try:
+            report = json.loads(report)
+        except (json.JSONDecodeError, TypeError):
+            report = {}
+    if report and not report.get("passed", True):
+        blocking = [b.get("claim") for b in report.get("blocking", []) if b.get("claim")]
+        raise HTTPException(
+            status_code=409,
+            detail="Fix prohibited claims before generating: " + ", ".join(blocking[:3]),
+        )
+
+    profile = await _require_profile_for_studio(project.get("brand_profile_id"), user_id)
+    template = await _fetch_one(
+        "SELECT * FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",
+        (project.get("template_id"), user_id),
+    )
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    requested = payload.duration_seconds or project.get("duration_seconds") or 20
+    model_key, reason = video_providers.resolve(payload.model or None)
+    plan = video_providers.plan_duration(model_key, requested)
+
+    generation = await _submit_generation(
+        project=project,
+        profile=profile,
+        template=template,
+        user_id=user_id,
+        model=model_key,
+        duration=requested,
+        generate_audio=payload.generate_audio,
+    )
+    generation["duration_plan"] = plan
+    generation["provider_reason"] = reason
+    if plan["needs_extension"]:
+        logger.info(
+            f"Project {project_id}: {requested}s exceeds one pass on {model_key}; "
+            f"primary {plan['primary_seconds']}s + extension {plan['extension_seconds']}s"
+        )
+    return generation
+
+
+@api_router.post("/generations/{generation_id}/poll")
+async def poll_generation(generation_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Refresh a generation's status and persist cost when the provider reports it.
+
+    Poll is the only place a completed clip is resolved to a URL and handed to
+    persistent storage, so a completed generation always has a durable copy
+    even if the provider's links later expire.
+    """
+    row = await _fetch_one(
+        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Generation not found")
+    if row.get("status") in ("completed", "archived"):
+        return _public_generation_detail(row)
+
+    job_id = row.get("openrouter_job_id")
+    if not job_id:
+        raise HTTPException(
+            status_code=409,
+            detail="This generation was never submitted to the provider.",
+        )
+
+    try:
+        response = await poll_video_job(job_id)
+    except Exception as e:
+        message = str(e)
+        await _execute(
+            "UPDATE generations SET error = ?, retryable = ?, updated_at = ? WHERE id = ?",
+            (message[:1000], 1 if generation_planning.is_recoverable_error(message) else 0,
+             now_iso(), generation_id),
+        )
+        raise HTTPException(status_code=502, detail=f"Could not check generation status: {message[:200]}")
+
+    status = str(response.get("status") or "").lower()
+    urls = response.get("unsigned_urls") or response.get("urls") or []
+    video_url = urls[0] if isinstance(urls, list) and urls else response.get("video_url") or ""
+    now = now_iso()
+
+    if status in ("completed", "succeeded", "success") and video_url:
+        stored_url = None
+        # Persist locally first so the clip survives even if R2 is unconfigured.
+        try:
+            local_path = await _download_generation_video(video_url, generation_id)
+            if local_path:
+                stored_url = storage_service.upload_video(user_id, generation_id, Path(local_path))
+        except Exception as e:
+            logger.warning(f"Generation {generation_id}: storage step failed: {e}")
+
+        await _execute(
+            "UPDATE generations SET status = 'completed', video_url = ?, r2_url = ?, "
+            "error = NULL, completed_at = ?, updated_at = ? WHERE id = ?",
+            (video_url, stored_url or "", now, now, generation_id),
+        )
+        if stored_url:
+            await _execute(
+                "UPDATE video_assets SET r2_url = ? WHERE job_id = ?", (stored_url, generation_id)
+            )
+    elif status in ("failed", "error", "cancelled", "canceled"):
+        message = str(response.get("error") or response.get("message") or "Generation failed.")
+        await _execute(
+            "UPDATE generations SET status = 'failed', error = ?, retryable = ?, completed_at = ?, "
+            "updated_at = ? WHERE id = ?",
+            (message[:1000], 1 if generation_planning.is_recoverable_error(message) else 0,
+             now, now, generation_id),
+        )
+    else:
+        await _execute(
+            "UPDATE generations SET status = 'generating', updated_at = ? WHERE id = ?",
+            (now, generation_id),
+        )
+
+    await _record_cost(generation_id, response)
+    return _public_generation_detail(
+        await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
+    )
+
+
+async def _download_generation_video(video_url: str, generation_id: str) -> Optional[Path]:
+    """Download a finished clip into storage/videos for reuse and R2 upload."""
+    target = pipeline.VIDEOS_DIR / f"{generation_id}.mp4"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        async with httpx.AsyncClient(timeout=180, follow_redirects=True) as client:
+            async with client.stream("GET", video_url) as resp:
+                resp.raise_for_status()
+                with open(target, "wb") as fh:
+                    async for chunk in resp.aiter_bytes():
+                        fh.write(chunk)
+    except Exception as e:
+        logger.warning(f"Could not download generation video {generation_id}: {e}")
+        if target.exists():
+            try:
+                target.unlink()
+            except OSError:
+                pass
+        return None
+    return target if target.exists() else None
+
+
+@api_router.post("/generations/{generation_id}/retry", status_code=202)
+async def retry_generation(generation_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Replace a failed segment.
+
+    The new attempt is recorded as a child of the failed generation rather
+    than overwriting it, so the failure and its cost stay in history — a
+    failed generation that is silently replaced makes cost reporting lie.
+    """
+    row = await _fetch_one(
+        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Generation not found")
+    if row.get("status") != "failed":
+        raise HTTPException(
+            status_code=409,
+            detail="Only a failed generation can be retried. This one is "
+                   f"'{row.get('status')}'.",
+        )
+    if not row.get("retryable"):
+        raise HTTPException(
+            status_code=409,
+            detail="This failure is not retryable: " + str(row.get("error") or "")[:200],
+        )
+
+    project = await _fetch_one(
+        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?",
+        (row.get("studio_project_id"), user_id),
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="The studio project for this generation is gone")
+    profile = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ?", (project.get("brand_profile_id"),)
+    )
+    template = await _fetch_one(
+        "SELECT * FROM hook_templates WHERE id = ?", (project.get("template_id"),)
+    )
+    if not profile or not template:
+        raise HTTPException(status_code=409, detail="Cannot retry: profile or template is missing")
+
+    return await _submit_generation(
+        project=project,
+        profile=profile,
+        template=template,
+        user_id=user_id,
+        model=row.get("model") or "",
+        duration=row.get("duration"),
+        segment_role=row.get("segment_role") or "primary",
+        parent_generation_id=generation_id,
+        attempt=int(row.get("attempt") or 1) + 1,
+    )
+
+
+@api_router.post("/generations/{generation_id}/extend", status_code=202)
+async def extend_generation(
+    generation_id: str, payload: StudioGenerationRequest, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Continue a completed video beyond its current length.
+
+    This is one of only three situations that justify a second model call,
+    the other two being a duration over the provider's single-pass limit and
+    a failed-segment replacement.
+    """
+    require_ai_configured()
+    row = await _fetch_one(
+        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Generation not found")
+    if row.get("status") != "completed":
+        raise HTTPException(
+            status_code=409, detail="Only a completed video can be extended."
+        )
+
+    extra = payload.duration_seconds or 10
+    model_key, _ = video_providers.resolve(row.get("model") or None)
+    cap = video_providers.capability(model_key)
+    if extra > cap["max_duration"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{cap['name']} can add at most {cap['max_duration']}s in one pass.",
+        )
+
+    project = await _fetch_one(
+        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?",
+        (row.get("studio_project_id"), user_id),
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="The studio project for this generation is gone")
+    profile = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ?", (project.get("brand_profile_id"),)
+    )
+    template = await _fetch_one(
+        "SELECT * FROM hook_templates WHERE id = ?", (project.get("template_id"),)
+    )
+    if not profile or not template:
+        raise HTTPException(status_code=409, detail="Cannot extend: profile or template is missing")
+
+    extension = await _submit_generation(
+        project=project,
+        profile=profile,
+        template=template,
+        user_id=user_id,
+        model=model_key,
+        duration=extra,
+        segment_role="extension",
+        parent_generation_id=generation_id,
+        is_extension=True,
+        variation_kind="extension",
+        variation_params={"extra_seconds": extra, "source_model": row.get("model")},
+    )
+    extension["extension_of"] = generation_id
+    return extension
+
+
+@api_router.post("/generations/{generation_id}/archive")
+async def archive_generation(generation_id: str, user_id: str = Depends(get_current_user_id)):
+    row = await _fetch_one(
+        "SELECT id FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Generation not found")
+    await _execute(
+        "UPDATE generations SET status = 'archived', updated_at = ? WHERE id = ?",
+        (now_iso(), generation_id),
+    )
+    return _public_generation_detail(
+        await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
     )
 
 
