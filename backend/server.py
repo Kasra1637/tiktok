@@ -25,15 +25,18 @@ import viral_detection
 import storage_service
 from ai_service import (
     analyze_hook, generate_customized_preview, generate_face_swap, generate_video_prompt,
-    generate_video, poll_video_job, analyze_brand_from_text, generate_remix_script,
+    generate_video, poll_video_job, analyze_brand_from_text, analyze_app_profile,
+    generate_remix_script,
     strip_html_to_text, remix_chat_turn, empty_remix_brief, VIDEO_MODELS, DEFAULT_VIDEO_MODEL,
     analyze_image_for_hook,
 )
 from models import (
     IngestVideoRequest, BrandContextRequest, GenerateVideoRequest,
-    AnalyzeBrandUrlRequest, BrandProfileCreateRequest, BrandProfileUpdateRequest,
+    AnalyzeBrandUrlRequest, AppProfileResearchRequest, ApproveAppProfileRequest,
+    BrandProfileCreateRequest, BrandProfileUpdateRequest,
     GenerateRemixScriptRequest, RemixChatMessageRequest,
     CreateHookTemplateRequest, UpdateHookTemplateRequest,
+    APP_PROFILE_LIST_FIELDS, APP_PROFILE_EDITABLE_FIELDS,
     now_iso, row_to_dict,
 )
 from niches_config import NICHES, NICHE_MAP
@@ -373,7 +376,35 @@ async def init_db():
                 tone_voice TEXT,
                 raw_extracted_text TEXT,
                 created_at TEXT,
-                updated_at TEXT
+                updated_at TEXT,
+                -- App Profile extensions (template-studio workflow). Added to the
+                -- fresh-install schema here; pre-existing DBs get them via the
+                -- ADD COLUMN migration below.
+                appstore_url TEXT,
+                play_url TEXT,
+                support_urls TEXT,
+                notes TEXT,
+                app_category TEXT,
+                platforms TEXT,
+                pricing_trial TEXT,
+                core_features TEXT,
+                primary_use_cases TEXT,
+                problems_solved TEXT,
+                icp_segments TEXT,
+                desired_outcomes TEXT,
+                competitors TEXT,
+                known_limitations TEXT,
+                claims_approved TEXT,
+                claims_review TEXT,
+                claims_banned TEXT,
+                ctas TEXT,
+                video_themes TEXT,
+                status TEXT DEFAULT 'draft',
+                version INTEGER DEFAULT 1,
+                approved_at TEXT,
+                last_research_at TEXT,
+                research_sources TEXT,
+                pending_research TEXT
             );
 
             CREATE TABLE IF NOT EXISTS remix_chats (
@@ -513,6 +544,22 @@ async def init_db():
         for col in ("ideal_customer_profile", "differentiation"):
             if col not in existing_cols:
                 await conn.execute(f"ALTER TABLE brand_profiles ADD COLUMN {col} TEXT")
+        # App Profile extensions for the template-studio workflow. TEXT columns
+        # first, then the version/status bookkeeping with safe defaults.
+        for col in (
+            "appstore_url", "play_url", "support_urls", "notes", "app_category",
+            "platforms", "pricing_trial", "core_features", "primary_use_cases",
+            "problems_solved", "icp_segments", "desired_outcomes", "competitors",
+            "known_limitations", "claims_approved", "claims_review",
+            "claims_banned", "ctas", "video_themes", "status",
+            "approved_at", "last_research_at", "research_sources",
+            "pending_research",
+        ):
+            if col not in existing_cols:
+                default = " DEFAULT 'draft'" if col == "status" else ""
+                await conn.execute(f"ALTER TABLE brand_profiles ADD COLUMN {col} TEXT{default}")
+        if "version" not in existing_cols:
+            await conn.execute("ALTER TABLE brand_profiles ADD COLUMN version INTEGER DEFAULT 1")
         await conn.commit()
 
         # Migration: drop and recreate cache tables if they're missing new columns
@@ -1378,6 +1425,72 @@ async def get_active_brand_or_404(user_id: str) -> dict:
             detail="No brand profile yet. Analyze your website URL first.",
         )
     return brand
+
+
+# ---------------------------------------------------------------------------
+# App Profile helpers (template-studio workflow)
+# ---------------------------------------------------------------------------
+def _normalize_url(value: str) -> Optional[str]:
+    """Trim a URL and ensure it has a scheme. Returns None when empty."""
+    v = (value or "").strip()
+    if not v:
+        return None
+    if not v.lower().startswith(("http://", "https://")):
+        v = f"https://{v}"
+    return v
+
+
+def _normalize_str_list(value) -> list:
+    """Accept a list or comma-separated string; always return clean strings."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [s.strip() for s in value.split(",") if s.strip()]
+    if isinstance(value, list):
+        out = []
+        for v in value:
+            if isinstance(v, dict):
+                v = v.get("label") or v.get("name") or ""
+            s = str(v).strip()
+            if s:
+                out.append(s)
+        return out
+    return []
+
+
+def _brand_update_parts(updates: dict) -> tuple:
+    """Split a profile update dict into (SET clauses, values), JSON-encoding lists."""
+    set_clauses = []
+    values = []
+    for key, value in updates.items():
+        if key in APP_PROFILE_LIST_FIELDS:
+            value = json.dumps(_normalize_str_list(value))
+        set_clauses.append(f"{key} = ?")
+        values.append(value)
+    return set_clauses, values
+
+
+async def _fetch_url_text(url: str, max_chars: int) -> str:
+    """Fetch a public page and return cleaned text, capped at max_chars.
+
+    Returns an empty string when the page cannot be fetched or yields no
+    readable text — research across multiple sources must tolerate individual
+    failures rather than aborting the whole run.
+    """
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        )
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers=headers) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            return strip_html_to_text(resp.text)[:max_chars]
+    except Exception as e:
+        logger.warning(f"App research: could not fetch {url}: {e}")
+        return ""
 
 
 def public_media_url(local_path) -> Optional[str]:
@@ -4552,13 +4665,38 @@ async def create_brand(payload: BrandProfileCreateRequest, user_id: str = Depend
         """INSERT INTO brand_profiles
            (id, website_url, brand_name, brand_description, niche, products_services,
             target_audience, ideal_customer_profile, differentiation, tone_voice,
-            raw_extracted_text, created_at, updated_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            raw_extracted_text, created_at, updated_at, user_id,
+            appstore_url, play_url, support_urls, notes, app_category, platforms,
+            pricing_trial, core_features, primary_use_cases, problems_solved,
+            icp_segments, desired_outcomes, competitors, known_limitations,
+            claims_approved, claims_review, claims_banned, ctas, video_themes,
+            status, version)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (brand_id, website or None, name, payload.brand_description or "",
-         payload.niche or "", json.dumps(payload.products_services or []),
+         payload.niche or "", json.dumps(_normalize_str_list(payload.products_services)),
          payload.target_audience or "", payload.ideal_customer_profile or "",
          payload.differentiation or "", payload.tone_voice or "", None,
-         created_at, created_at, user_id),
+         created_at, created_at, user_id,
+         _normalize_url(payload.appstore_url or ""),
+         _normalize_url(payload.play_url or ""),
+         json.dumps(_normalize_str_list(payload.support_urls)),
+         payload.notes or "", payload.app_category or "",
+         json.dumps(_normalize_str_list(payload.platforms)),
+         payload.pricing_trial or "",
+         json.dumps(_normalize_str_list(payload.core_features)),
+         json.dumps(_normalize_str_list(payload.primary_use_cases)),
+         json.dumps(_normalize_str_list(payload.problems_solved)),
+         json.dumps(_normalize_str_list(payload.icp_segments)),
+         json.dumps(_normalize_str_list(payload.desired_outcomes)),
+         json.dumps(_normalize_str_list(payload.competitors)),
+         payload.known_limitations or "",
+         json.dumps(_normalize_str_list(payload.claims_approved)),
+         json.dumps(_normalize_str_list(payload.claims_review)),
+         json.dumps(_normalize_str_list(payload.claims_banned)),
+         json.dumps(_normalize_str_list(payload.ctas)),
+         json.dumps(_normalize_str_list(payload.video_themes)),
+         "draft", 1),
     )
     logger.info(f"Created brand profile {brand_id} ('{name}') from manual entry")
     return await _fetch_one("SELECT * FROM brand_profiles WHERE id = ?", (brand_id,))
@@ -4615,13 +4753,14 @@ async def update_brand(brand_id: str, payload: BrandProfileUpdateRequest, user_i
     if not updates:
         return existing
 
-    set_clauses = []
-    values = []
-    for key, value in updates.items():
-        if key == "products_services":
-            value = json.dumps(value if isinstance(value, list) else [value] if value else [])
-        set_clauses.append(f"{key} = ?")
-        values.append(value)
+    # Drop unknown keys defensively so a client sending a newer schema never
+    # breaks the UPDATE against an older database missing those columns.
+    # raw_extracted_text stays writable here for the legacy analyze-url flow.
+    updates = {k: v for k, v in updates.items() if k in APP_PROFILE_EDITABLE_FIELDS + ("raw_extracted_text",)}
+    if not updates:
+        return existing
+
+    set_clauses, values = _brand_update_parts(updates)
     set_clauses.append("updated_at = ?")
     values.append(now_iso())
     values.append(brand_id)
@@ -4631,6 +4770,295 @@ async def update_brand(brand_id: str, payload: BrandProfileUpdateRequest, user_i
         tuple(values),
     )
     return await _fetch_one("SELECT * FROM brand_profiles WHERE id = ?", (brand_id,))
+
+
+# ---------------------------------------------------------------------------
+# App Profiles (template-studio workflow: research -> review/approve -> refresh)
+# ---------------------------------------------------------------------------
+# Per-source page-text caps for multi-URL research. Store listings are dense
+# with reviews; support pages are supplementary — keep them small so the
+# combined prompt stays well within the text model's context.
+APP_RESEARCH_CAPS = {
+    "website": 6000,
+    "app_store": 6000,
+    "google_play": 6000,
+    "support": 2000,
+}
+APP_RESEARCH_MAX_SUPPORT_URLS = 5
+
+
+@api_router.post("/app-profiles/research", status_code=201)
+async def research_app_profile(payload: AppProfileResearchRequest, user_id: str = Depends(get_current_user_id)):
+    """Research a mobile app from its public pages and draft an App Profile.
+
+    Fetches the website, App Store and Google Play pages plus up to 5 support
+    URLs, then asks OpenRouter to draft the full profile. The result is stored
+    as status='draft' — the founder must review and approve it (POST
+    /app-profiles/{id}/approve) before it drives video generation.
+    """
+    require_ai_configured()
+    website = _normalize_url(payload.website_url or "")
+    appstore = _normalize_url(payload.appstore_url or "")
+    play = _normalize_url(payload.play_url or "")
+    support: list = []
+    for u in payload.support_urls or []:
+        n = _normalize_url(u)
+        if n and n not in support:
+            support.append(n)
+    support = support[:APP_RESEARCH_MAX_SUPPORT_URLS]
+    if not (website or appstore or play or support):
+        raise HTTPException(
+            status_code=400,
+            detail="Provide at least one URL: website, App Store, Google Play, or a support URL.",
+        )
+
+    sources: dict = {}
+    if website:
+        sources["website"] = await _fetch_url_text(website, APP_RESEARCH_CAPS["website"])
+    if appstore:
+        sources["app_store"] = await _fetch_url_text(appstore, APP_RESEARCH_CAPS["app_store"])
+    if play:
+        sources["google_play"] = await _fetch_url_text(play, APP_RESEARCH_CAPS["google_play"])
+    for i, u in enumerate(support):
+        sources[f"support_{i + 1} ({u})"] = await _fetch_url_text(u, APP_RESEARCH_CAPS["support"])
+    if not any((v or "").strip() for v in sources.values()):
+        raise HTTPException(
+            status_code=400,
+            detail="Could not extract readable text from any URL. Check the links and try again, "
+                   "or create the profile manually.",
+        )
+
+    try:
+        profile = await analyze_app_profile(sources, payload.notes or "")
+    except Exception as e:
+        logger.error(f"App research failed: {e}")
+        raise HTTPException(status_code=502, detail=f"AI app research failed. Please try again. ({str(e)[:150]})")
+
+    now = now_iso()
+    brand_id = str(uuid.uuid4())
+    combined_raw = "\n\n".join(
+        f"[{label}]\n{(text or '')[:2000]}" for label, text in sources.items() if (text or "").strip()
+    )[:BRAND_URL_TEXT_MAX_CHARS]
+    await _execute(
+        """INSERT INTO brand_profiles
+           (id, website_url, brand_name, brand_description, niche, products_services,
+            target_audience, ideal_customer_profile, differentiation, tone_voice,
+            raw_extracted_text, created_at, updated_at, user_id,
+            appstore_url, play_url, support_urls, notes, app_category, platforms,
+            pricing_trial, core_features, primary_use_cases, problems_solved,
+            icp_segments, desired_outcomes, competitors, known_limitations,
+            claims_approved, claims_review, claims_banned, ctas, video_themes,
+            status, version, last_research_at, research_sources)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (brand_id, website, profile.get("brand_name") or "Untitled app",
+         profile.get("brand_description") or "", profile.get("niche") or "",
+         json.dumps(profile.get("products_or_services") or []),
+         profile.get("target_audience") or "",
+         profile.get("ideal_customer_profile") or "",
+         profile.get("differentiation") or "", profile.get("tone_voice") or "",
+         combined_raw, now, now, user_id,
+         appstore, play, json.dumps(support), payload.notes or "",
+         profile.get("app_category") or "",
+         json.dumps(profile.get("platforms") or []),
+         profile.get("pricing_trial") or "",
+         json.dumps(profile.get("core_features") or []),
+         json.dumps(profile.get("primary_use_cases") or []),
+         json.dumps(profile.get("problems_solved") or []),
+         json.dumps(profile.get("icp_segments") or []),
+         json.dumps(profile.get("desired_outcomes") or []),
+         json.dumps(profile.get("competitors") or []),
+         profile.get("known_limitations") or "",
+         json.dumps(profile.get("claims_approved") or []),
+         json.dumps(profile.get("claims_review") or []),
+         json.dumps(profile.get("claims_banned") or []),
+         json.dumps(profile.get("ctas") or []),
+         json.dumps(profile.get("video_themes") or []),
+         "draft", 1, now, json.dumps(sorted(sources.keys()))),
+    )
+    logger.info(f"Researched app profile {brand_id} from {len(sources)} source(s)")
+    return await _fetch_one("SELECT * FROM brand_profiles WHERE id = ?", (brand_id,))
+
+
+@api_router.get("/app-profiles")
+async def list_app_profiles(user_id: str = Depends(get_current_user_id)):
+    """All App Profiles for this user, most recently active first.
+
+    Trimmed projection for pickers — excludes raw page text and the pending
+    refresh proposal, which live on the detail endpoint.
+    """
+    rows = await _fetch_all(
+        "SELECT id, brand_name, website_url, appstore_url, play_url, niche, "
+        "app_category, status, version, approved_at, updated_at, created_at "
+        "FROM brand_profiles WHERE user_id = ? "
+        "ORDER BY updated_at DESC, created_at DESC",
+        (user_id,),
+    )
+    return {"profiles": rows or []}
+
+
+@api_router.get("/app-profiles/{profile_id}")
+async def get_app_profile(profile_id: str, user_id: str = Depends(get_current_user_id)):
+    profile = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="App Profile not found")
+    return profile
+
+
+@api_router.patch("/app-profiles/{profile_id}")
+async def update_app_profile(
+    profile_id: str, payload: BrandProfileUpdateRequest, user_id: str = Depends(get_current_user_id)
+):
+    """Edit any App Profile field. Editing never changes approval status — a
+    founder re-approves explicitly via the approve endpoint."""
+    existing = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="App Profile not found")
+
+    updates = {k: v for k, v in payload.model_dump(exclude_unset=True).items()
+               if k in APP_PROFILE_EDITABLE_FIELDS}
+    if not updates:
+        return existing
+
+    set_clauses, values = _brand_update_parts(updates)
+    set_clauses.append("updated_at = ?")
+    values.append(now_iso())
+    values.append(profile_id)
+    await _execute(
+        f"UPDATE brand_profiles SET {', '.join(set_clauses)} WHERE id = ? AND user_id = ?",
+        tuple(values) + (user_id,),
+    )
+    return await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+
+
+@api_router.post("/app-profiles/{profile_id}/approve")
+async def approve_app_profile(
+    profile_id: str, payload: ApproveAppProfileRequest, user_id: str = Depends(get_current_user_id)
+):
+    """Mark an App Profile reviewed and approved.
+
+    When a refresh proposal is pending it is applied to the live fields by
+    default and the version bumps — approval is the only path that mutates
+    approved data, so refreshes can never silently overwrite it.
+    """
+    existing = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="App Profile not found")
+
+    pending = existing.get("pending_research")
+    if isinstance(pending, str):
+        try:
+            pending = json.loads(pending)
+        except (json.JSONDecodeError, TypeError):
+            pending = None
+
+    now = now_iso()
+    if pending and isinstance(pending, dict) and payload.apply_pending is not False:
+        apply = {}
+        for key in APP_PROFILE_EDITABLE_FIELDS:
+            if key in pending and pending[key] not in (None, "", []):
+                apply[key] = pending[key]
+        # The AI schema uses products_or_services; the column is products_services.
+        if "products_or_services" in pending and "products_services" not in apply:
+            apply["products_services"] = pending["products_or_services"]
+        if apply:
+            set_clauses, values = _brand_update_parts(apply)
+            set_clauses.append("pending_research = NULL")
+            set_clauses.append("version = ?")
+            values.append((existing.get("version") or 1) + 1)
+            set_clauses.append("status = 'approved'")
+            set_clauses.append("approved_at = ?")
+            values.append(now)
+            set_clauses.append("updated_at = ?")
+            values.append(now)
+            values.append(profile_id)
+            await _execute(
+                f"UPDATE brand_profiles SET {', '.join(set_clauses)} WHERE id = ? AND user_id = ?",
+                tuple(values) + (user_id,),
+            )
+            logger.info(f"Approved app profile {profile_id} with pending refresh applied")
+            return await _fetch_one(
+                "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+            )
+
+    await _execute(
+        "UPDATE brand_profiles SET status = 'approved', approved_at = ?, updated_at = ? "
+        "WHERE id = ? AND user_id = ?",
+        (now, now, profile_id, user_id),
+    )
+    logger.info(f"Approved app profile {profile_id}")
+    return await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+
+
+@api_router.post("/app-profiles/{profile_id}/refresh")
+async def refresh_app_profile(profile_id: str, user_id: str = Depends(get_current_user_id)):
+    """Re-research an App Profile from its stored URLs without touching live fields.
+
+    The fresh analysis is stored as pending_research for founder review — the
+    approved profile stays exactly as it was until approve applies it.
+    """
+    require_ai_configured()
+    existing = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="App Profile not found")
+
+    urls: dict = {}
+    if existing.get("website_url"):
+        urls["website"] = (existing["website_url"], APP_RESEARCH_CAPS["website"])
+    if existing.get("appstore_url"):
+        urls["app_store"] = (existing["appstore_url"], APP_RESEARCH_CAPS["app_store"])
+    if existing.get("play_url"):
+        urls["google_play"] = (existing["play_url"], APP_RESEARCH_CAPS["google_play"])
+    stored_support = existing.get("support_urls") or []
+    if isinstance(stored_support, str):
+        try:
+            stored_support = json.loads(stored_support)
+        except (json.JSONDecodeError, TypeError):
+            stored_support = []
+    for i, u in enumerate((stored_support or [])[:APP_RESEARCH_MAX_SUPPORT_URLS]):
+        urls[f"support_{i + 1} ({u})"] = (u, APP_RESEARCH_CAPS["support"])
+    if not urls:
+        raise HTTPException(
+            status_code=400,
+            detail="This profile has no source URLs to refresh from. Add a website, App Store, "
+                   "or Google Play URL first.",
+        )
+
+    sources = {label: await _fetch_url_text(url, cap) for label, (url, cap) in urls.items()}
+    if not any((v or "").strip() for v in sources.values()):
+        raise HTTPException(
+            status_code=400,
+            detail="Could not extract readable text from any stored URL. The live profile is unchanged.",
+        )
+
+    try:
+        proposal = await analyze_app_profile(sources, existing.get("notes") or "")
+    except Exception as e:
+        logger.error(f"App refresh failed for {profile_id}: {e}")
+        raise HTTPException(status_code=502, detail=f"AI app research failed. Please try again. ({str(e)[:150]})")
+
+    now = now_iso()
+    await _execute(
+        "UPDATE brand_profiles SET pending_research = ?, last_research_at = ?, updated_at = ? "
+        "WHERE id = ? AND user_id = ?",
+        (json.dumps(proposal), now, now, profile_id, user_id),
+    )
+    logger.info(f"Refreshed app profile {profile_id} into pending review")
+    return await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
 
 
 # ---------------------------------------------------------------------------

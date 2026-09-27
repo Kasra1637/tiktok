@@ -7,18 +7,33 @@ import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import PageHeader from "../components/PageHeader";
 import { api, getErrorMessage } from "../lib/api";
-import { Globe, Sparkles, Briefcase, Loader2, Save, CheckCircle2, AlertTriangle, ArrowRight, Wand2 } from "lucide-react";
+import { Globe, Sparkles, Briefcase, Loader2, Save, CheckCircle2, AlertTriangle, ArrowRight, Wand2, Smartphone, RefreshCw, BadgeCheck } from "lucide-react";
 import { toast } from "sonner";
 
 const EMPTY_FORM = {
   brand_name: "",
   brand_description: "",
   niche: "",
+  app_category: "",
+  platforms: "",
+  pricing_trial: "",
   products_services: "",
+  core_features: "",
+  primary_use_cases: "",
+  problems_solved: "",
+  desired_outcomes: "",
+  competitors: "",
+  known_limitations: "",
   target_audience: "",
   ideal_customer_profile: "",
+  icp_segments: "",
   differentiation: "",
   tone_voice: "",
+  claims_approved: "",
+  claims_review: "",
+  claims_banned: "",
+  ctas: "",
+  video_themes: "",
 };
 
 function productsToText(products) {
@@ -27,10 +42,52 @@ function productsToText(products) {
 }
 
 function textToProducts(text) {
-  return text
+  return (text || "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+/** One list item per line — for entries that themselves contain commas. */
+function linesToText(items) {
+  if (Array.isArray(items)) return items.join("\n");
+  return items || "";
+}
+
+function textToLines(text) {
+  return (text || "")
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** Read a profile row (lists arrive parsed) into the text-based form state. */
+function profileToForm(data) {
+  return {
+    brand_name: data.brand_name || "",
+    brand_description: data.brand_description || "",
+    niche: data.niche || "",
+    app_category: data.app_category || "",
+    platforms: productsToText(data.platforms),
+    pricing_trial: data.pricing_trial || "",
+    products_services: productsToText(data.products_services),
+    core_features: productsToText(data.core_features),
+    primary_use_cases: productsToText(data.primary_use_cases),
+    problems_solved: productsToText(data.problems_solved),
+    desired_outcomes: productsToText(data.desired_outcomes),
+    competitors: productsToText(data.competitors),
+    known_limitations: data.known_limitations || "",
+    target_audience: data.target_audience || "",
+    ideal_customer_profile: data.ideal_customer_profile || "",
+    icp_segments: linesToText(data.icp_segments),
+    differentiation: data.differentiation || "",
+    tone_voice: data.tone_voice || "",
+    claims_approved: productsToText(data.claims_approved),
+    claims_review: productsToText(data.claims_review),
+    claims_banned: productsToText(data.claims_banned),
+    ctas: productsToText(data.ctas),
+    video_themes: productsToText(data.video_themes),
+  };
 }
 
 /** Labelled form field wrapper — keeps every input in this page aligned. */
@@ -48,37 +105,63 @@ export default function BrandSetup() {
   const navigate = useNavigate();
 
   const [websiteUrl, setWebsiteUrl] = useState("");
+  const [appstoreUrl, setAppstoreUrl] = useState("");
+  const [playUrl, setPlayUrl] = useState("");
+  const [supportUrls, setSupportUrls] = useState("");
+  const [notes, setNotes] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
+  const [researching, setResearching] = useState(false);
   const [analyzeError, setAnalyzeError] = useState(null);
 
   const [brand, setBrand] = useState(null);
+  const [profiles, setProfiles] = useState([]);
   const [loadingActive, setLoadingActive] = useState(true);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const applyProfile = (data) => {
+    setBrand(data);
+    setForm(profileToForm(data));
+    setWebsiteUrl(data.website_url || "");
+    setAppstoreUrl(data.appstore_url || "");
+    setPlayUrl(data.play_url || "");
+    setSupportUrls(productsToText(data.support_urls));
+    setNotes(data.notes || "");
+  };
+
+  const refreshProfilesList = () => {
+    api
+      .getAppProfiles()
+      .then((data) => setProfiles(data.profiles || []))
+      .catch(() => setProfiles([]));
+  };
 
   useEffect(() => {
     api
       .getActiveBrand()
       .then((data) => {
-        setBrand(data);
-        setForm({
-          brand_name: data.brand_name || "",
-          brand_description: data.brand_description || "",
-          niche: data.niche || "",
-          products_services: productsToText(data.products_services),
-          target_audience: data.target_audience || "",
-          ideal_customer_profile: data.ideal_customer_profile || "",
-          differentiation: data.differentiation || "",
-          tone_voice: data.tone_voice || "",
-        });
-        setWebsiteUrl(data.website_url || "");
+        applyProfile(data);
       })
       .catch(() => {
         // No brand profile yet — that's fine, form stays empty.
         setBrand(null);
       })
       .finally(() => setLoadingActive(false));
+    refreshProfilesList();
   }, []);
+
+  const handleSelectProfile = (id) => {
+    if (!id) return;
+    api
+      .getAppProfile(id)
+      .then((data) => {
+        applyProfile(data);
+        refreshProfilesList();
+      })
+      .catch((err) => toast.error(getErrorMessage(err)));
+  };
 
   const handleAnalyzeUrl = async (e) => {
     e.preventDefault();
@@ -90,22 +173,39 @@ export default function BrandSetup() {
     setAnalyzeError(null);
     try {
       const data = await api.analyzeBrandUrl(websiteUrl.trim());
-      setBrand(data);
-      setForm({
-        brand_name: data.brand_name || "",
-        brand_description: data.brand_description || "",
-        niche: data.niche || "",
-        products_services: productsToText(data.products_services),
-        target_audience: data.target_audience || "",
-        ideal_customer_profile: data.ideal_customer_profile || "",
-        differentiation: data.differentiation || "",
-        tone_voice: data.tone_voice || "",
-      });
+      applyProfile(data);
+      refreshProfilesList();
       toast.success("We analyzed your website and pre-filled your brand profile below!");
     } catch (err) {
       setAnalyzeError(getErrorMessage(err));
     } finally {
       setAnalyzing(false);
+    }
+  };
+
+  const handleResearchApp = async (e) => {
+    e.preventDefault();
+    if (!websiteUrl.trim() && !appstoreUrl.trim() && !playUrl.trim() && !supportUrls.trim()) {
+      toast.error("Enter at least one URL: website, App Store, Google Play, or a support page.");
+      return;
+    }
+    setResearching(true);
+    setAnalyzeError(null);
+    try {
+      const data = await api.researchAppProfile({
+        website_url: websiteUrl.trim() || undefined,
+        appstore_url: appstoreUrl.trim() || undefined,
+        play_url: playUrl.trim() || undefined,
+        support_urls: textToProducts(supportUrls),
+        notes: notes.trim() || undefined,
+      });
+      applyProfile(data);
+      refreshProfilesList();
+      toast.success("App research complete — review the draft profile, then approve it.");
+    } catch (err) {
+      setAnalyzeError(getErrorMessage(err));
+    } finally {
+      setResearching(false);
     }
   };
 
@@ -124,22 +224,42 @@ export default function BrandSetup() {
     try {
       const payload = {
         website_url: websiteUrl.trim() || undefined,
+        appstore_url: appstoreUrl.trim() || undefined,
+        play_url: playUrl.trim() || undefined,
+        support_urls: textToProducts(supportUrls),
+        notes: notes.trim(),
         brand_name: form.brand_name,
         brand_description: form.brand_description,
         niche: form.niche,
+        app_category: form.app_category,
+        platforms: textToProducts(form.platforms),
+        pricing_trial: form.pricing_trial,
         products_services: textToProducts(form.products_services),
+        core_features: textToProducts(form.core_features),
+        primary_use_cases: textToProducts(form.primary_use_cases),
+        problems_solved: textToProducts(form.problems_solved),
+        desired_outcomes: textToProducts(form.desired_outcomes),
+        competitors: textToProducts(form.competitors),
+        known_limitations: form.known_limitations,
         target_audience: form.target_audience,
         ideal_customer_profile: form.ideal_customer_profile,
+        icp_segments: textToLines(form.icp_segments),
         differentiation: form.differentiation,
         tone_voice: form.tone_voice,
+        claims_approved: textToProducts(form.claims_approved),
+        claims_review: textToProducts(form.claims_review),
+        claims_banned: textToProducts(form.claims_banned),
+        ctas: textToProducts(form.ctas),
+        video_themes: textToProducts(form.video_themes),
       };
       // Update in place when a profile already exists, otherwise create one from
-      // the manual fields — analysing a website is optional, not a prerequisite.
+      // the manual fields — research is optional, not a prerequisite.
       const saved = brand?.id
-        ? await api.updateBrand(brand.id, payload)
+        ? await api.updateAppProfile(brand.id, payload)
         : await api.createBrand(payload);
-      setBrand(saved);
-      toast.success("Brand profile saved!");
+      applyProfile(saved);
+      refreshProfilesList();
+      toast.success("App Profile saved!");
     } catch (err) {
       toast.error(getErrorMessage(err));
     } finally {
@@ -147,18 +267,71 @@ export default function BrandSetup() {
     }
   };
 
+  const handleApprove = async (applyPending = true) => {
+    if (!brand?.id) return;
+    setApproving(true);
+    try {
+      const saved = await api.approveAppProfile(brand.id, applyPending);
+      applyProfile(saved);
+      refreshProfilesList();
+      toast.success("App Profile approved — ready for video generation.");
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (!brand?.id) return;
+    setRefreshing(true);
+    try {
+      const saved = await api.refreshAppProfile(brand.id);
+      applyProfile(saved);
+      toast.success("Re-research complete — review the proposal, then approve to apply it.");
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const status = brand?.status || "draft";
+  const pendingProposal = brand?.pending_research;
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <PageHeader
         icon={Briefcase}
-        title="Your Brand"
-        description="This profile powers brand-adapted scripts across the Content Remixer."
+        title="App Profiles"
+        description="Research a mobile app, review the draft profile, then approve it — approved profiles power video scripts."
         actions={
-          brand?.id ? (
-            <Badge variant="indigo" className="px-3 py-1">
-              <CheckCircle2 className="h-3 w-3" /> Profile active
-            </Badge>
-          ) : null
+          <div className="flex flex-wrap items-center gap-2">
+            {profiles.length > 1 && (
+              <select
+                value={brand?.id || ""}
+                onChange={(e) => handleSelectProfile(e.target.value)}
+                className="rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3 py-1.5 text-xs font-medium"
+                data-testid="app-profile-picker"
+                aria-label="Select App Profile"
+              >
+                {profiles.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.brand_name || "Untitled app"} ({p.status || "draft"})
+                  </option>
+                ))}
+              </select>
+            )}
+            {brand?.id ? (
+              <Badge variant={status === "approved" ? "indigo" : "secondary"} className="px-3 py-1">
+                {status === "approved" ? (
+                  <><BadgeCheck className="h-3 w-3" /> Approved{brand.version > 1 ? ` · v${brand.version}` : ""}</>
+                ) : (
+                  <><AlertTriangle className="h-3 w-3" /> Draft — needs review</>
+                )}
+              </Badge>
+            ) : null}
+          </div>
         }
       />
 
@@ -211,6 +384,93 @@ export default function BrandSetup() {
         </div>
       </div>
 
+      {/* ---------- App research (website + store listings) ---------- */}
+      <div className="border-gradient relative rounded-2xl p-[1px]">
+        <div className="surface-solid relative overflow-hidden rounded-2xl p-5">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background: "radial-gradient(500px circle at 0% 0%, rgba(99,102,241,0.10), transparent 60%)",
+            }}
+          />
+          <form onSubmit={handleResearchApp} className="relative space-y-3" data-testid="app-research-card">
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
+                <Smartphone className="h-[18px] w-[18px]" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="font-display text-base font-semibold">Research a mobile app</h2>
+                <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">
+                  AI reads the website plus the App Store and Google Play listings and drafts a full
+                  App Profile — features, audiences, claims, and video themes. Review it below, then approve.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <Input
+                value={appstoreUrl}
+                onChange={(e) => setAppstoreUrl(e.target.value)}
+                placeholder="Apple App Store URL"
+                data-testid="appstore-url-input"
+              />
+              <Input
+                value={playUrl}
+                onChange={(e) => setPlayUrl(e.target.value)}
+                placeholder="Google Play URL"
+                data-testid="play-url-input"
+              />
+            </div>
+            <Input
+              value={supportUrls}
+              onChange={(e) => setSupportUrls(e.target.value)}
+              placeholder="Supporting URLs, comma-separated (optional)"
+              data-testid="support-urls-input"
+            />
+            <Textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Founder notes: positioning, pricing, constraints (optional)"
+              className="min-h-[60px]"
+              data-testid="app-notes-input"
+            />
+            <Button
+              type="submit"
+              disabled={researching}
+              variant="brand"
+              className="w-full sm:w-auto"
+              data-testid="research-app-button"
+            >
+              {researching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {researching ? "Researching..." : brand?.id ? "Research into a new draft" : "Research app"}
+            </Button>
+          </form>
+        </div>
+      </div>
+
+      {brand?.id && pendingProposal && (
+        <Alert data-testid="pending-refresh-alert">
+          <RefreshCw className="h-4 w-4 text-[color:var(--brand-indigo)]" />
+          <AlertTitle>A refreshed proposal is waiting</AlertTitle>
+          <AlertDescription className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+            <span className="text-muted-foreground">
+              Re-research found updates. Your approved profile is unchanged — approving applies the proposal.
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="shrink-0 gap-1.5"
+              onClick={() => handleApprove(true)}
+              disabled={approving}
+              data-testid="approve-pending-button"
+            >
+              {approving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BadgeCheck className="h-3.5 w-3.5" />}
+              Review &amp; approve
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {analyzeError && (
         <Alert variant="destructive" data-testid="brand-analyze-error-alert">
           <AlertTriangle className="h-4 w-4" />
@@ -224,7 +484,7 @@ export default function BrandSetup() {
         <div className="flex items-center justify-between gap-3">
           <div>
             <span className="eyebrow block">Profile</span>
-            <h2 className="font-display text-base font-semibold">Brand Details</h2>
+            <h2 className="font-display text-base font-semibold">App Profile Details</h2>
           </div>
           {brand?.id && (
             <Badge variant="secondary" className="shrink-0 text-xs">
@@ -242,16 +502,16 @@ export default function BrandSetup() {
             {!brand && (
               <Alert data-testid="no-brand-profile-alert">
                 <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-                <AlertTitle>No brand profile yet</AlertTitle>
+                <AlertTitle>No App Profile yet</AlertTitle>
                 <AlertDescription>
-                  Analyze your website above to fill this in automatically, or just type your
-                  details in below and hit Save — a website isn&apos;t required.
+                  Research an app above to fill this in automatically, or just type the
+                  details in below and hit Save — no URLs required.
                 </AlertDescription>
               </Alert>
             )}
 
             <div className="space-y-5">
-              <Field label="Brand name">
+              <Field label="App name">
                 <Input
                   value={form.brand_name}
                   onChange={handleFieldChange("brand_name")}
@@ -264,19 +524,93 @@ export default function BrandSetup() {
                 <Textarea
                   value={form.brand_description}
                   onChange={handleFieldChange("brand_description")}
-                  placeholder="What do you create or offer?"
+                  placeholder="What does the app do?"
                   className="min-h-[90px]"
                   data-testid="brand-description-field"
                 />
               </Field>
 
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <Field label="App category">
+                  <Input
+                    value={form.app_category}
+                    onChange={handleFieldChange("app_category")}
+                    placeholder="e.g. Health & Fitness"
+                    data-testid="app-category-field"
+                  />
+                </Field>
                 <Field label="Niche">
                   <Input
                     value={form.niche}
                     onChange={handleFieldChange("niche")}
                     placeholder="e.g. Fitness supplements"
                     data-testid="brand-niche-field"
+                  />
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <Field label="Platforms" hint="Comma-separated.">
+                  <Input
+                    value={form.platforms}
+                    onChange={handleFieldChange("platforms")}
+                    placeholder="e.g. iOS, Android"
+                    data-testid="app-platforms-field"
+                  />
+                </Field>
+                <Field label="Pricing & trial">
+                  <Input
+                    value={form.pricing_trial}
+                    onChange={handleFieldChange("pricing_trial")}
+                    placeholder="e.g. Free, Pro $79.99/yr · 3-day trial"
+                    data-testid="app-pricing-field"
+                  />
+                </Field>
+              </div>
+
+              <Field label="Core features" hint="Comma-separated — only features the app really has.">
+                <Input
+                  value={form.core_features}
+                  onChange={handleFieldChange("core_features")}
+                  placeholder="Comma-separated, e.g. Voice journaling, Reminders"
+                  data-testid="app-features-field"
+                />
+              </Field>
+
+              <Field label="Primary use cases" hint="Comma-separated.">
+                <Input
+                  value={form.primary_use_cases}
+                  onChange={handleFieldChange("primary_use_cases")}
+                  placeholder="Comma-separated, e.g. Evening reflection, Habit tracking"
+                  data-testid="app-usecases-field"
+                />
+              </Field>
+
+              <Field label="Problems solved" hint="Comma-separated.">
+                <Input
+                  value={form.problems_solved}
+                  onChange={handleFieldChange("problems_solved")}
+                  placeholder="Comma-separated, e.g. Forgetting to journal, Blank-page friction"
+                  data-testid="app-problems-field"
+                />
+              </Field>
+
+              <Field label="Desired outcomes" hint="Comma-separated.">
+                <Input
+                  value={form.desired_outcomes}
+                  onChange={handleFieldChange("desired_outcomes")}
+                  placeholder="Comma-separated, e.g. Consistent journaling habit"
+                  data-testid="app-outcomes-field"
+                />
+              </Field>
+
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <Field label="Competitor apps" hint="Comma-separated.">
+                  <Input
+                    value={form.competitors}
+                    onChange={handleFieldChange("competitors")}
+                    placeholder="e.g. Day One, Journey"
+                    data-testid="app-competitors-field"
                   />
                 </Field>
                 <Field label="Target audience">
@@ -289,11 +623,21 @@ export default function BrandSetup() {
                 </Field>
               </div>
 
+              <Field label="Known limitations" hint="Must never be contradicted by promos.">
+                <Textarea
+                  value={form.known_limitations}
+                  onChange={handleFieldChange("known_limitations")}
+                  placeholder="e.g. iOS only, trial requires subscription selection..."
+                  className="min-h-[60px]"
+                  data-testid="app-limitations-field"
+                />
+              </Field>
+
               <Field label="Products / services" hint="Comma-separated — each becomes a separate entry.">
                 <Input
                   value={form.products_services}
                   onChange={handleFieldChange("products_services")}
-                  placeholder="Comma-separated, e.g. Protein powder, pre-workout"
+                  placeholder="Comma-separated, e.g. Free, Pro yearly"
                   data-testid="brand-products-field"
                 />
               </Field>
@@ -305,6 +649,16 @@ export default function BrandSetup() {
                   placeholder="Demographics, interests, pain points..."
                   className="min-h-[80px]"
                   data-testid="brand-ideal-customer-field"
+                />
+              </Field>
+
+              <Field label="Audience segments" hint="One segment per line.">
+                <Textarea
+                  value={form.icp_segments}
+                  onChange={handleFieldChange("icp_segments")}
+                  placeholder={"One per line, e.g.\nBusy parents — 2-minute evening check-ins"}
+                  className="min-h-[80px]"
+                  data-testid="app-icp-segments-field"
                 />
               </Field>
 
@@ -326,6 +680,51 @@ export default function BrandSetup() {
                   data-testid="brand-tone-field"
                 />
               </Field>
+
+              <Field label="Approved claims" hint="Comma-separated — factual claims safe for promos.">
+                <Input
+                  value={form.claims_approved}
+                  onChange={handleFieldChange("claims_approved")}
+                  placeholder="Comma-separated"
+                  data-testid="app-claims-approved-field"
+                />
+              </Field>
+
+              <Field label="Claims needing review" hint="Comma-separated — verify before use.">
+                <Input
+                  value={form.claims_review}
+                  onChange={handleFieldChange("claims_review")}
+                  placeholder="Comma-separated"
+                  data-testid="app-claims-review-field"
+                />
+              </Field>
+
+              <Field label="Banned claims" hint="Comma-separated — promos must never make these.">
+                <Input
+                  value={form.claims_banned}
+                  onChange={handleFieldChange("claims_banned")}
+                  placeholder="Comma-separated, e.g. Guaranteed results, Fake reviews"
+                  data-testid="app-claims-banned-field"
+                />
+              </Field>
+
+              <Field label="Calls to action" hint="Comma-separated.">
+                <Input
+                  value={form.ctas}
+                  onChange={handleFieldChange("ctas")}
+                  placeholder="e.g. Try it free, Get it on the App Store"
+                  data-testid="app-ctas-field"
+                />
+              </Field>
+
+              <Field label="Suggested video themes" hint="Comma-separated.">
+                <Input
+                  value={form.video_themes}
+                  onChange={handleFieldChange("video_themes")}
+                  placeholder="e.g. Before/after, 3-tap tutorial"
+                  data-testid="app-themes-field"
+                />
+              </Field>
             </div>
 
             <Button
@@ -337,8 +736,36 @@ export default function BrandSetup() {
               data-testid="save-brand-button"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {saving ? "Saving..." : brand?.id ? "Save Brand Profile" : "Create Brand Profile"}
+              {saving ? "Saving..." : brand?.id ? "Save App Profile" : "Create App Profile"}
             </Button>
+
+            {brand?.id && status !== "approved" && (
+              <Button
+                onClick={() => handleApprove(true)}
+                disabled={approving}
+                variant="brand"
+                size="lg"
+                className="w-full"
+                data-testid="approve-profile-button"
+              >
+                {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
+                {approving ? "Approving..." : "Review complete — approve profile"}
+              </Button>
+            )}
+
+            {brand?.id && status === "approved" && (
+              <Button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                variant="secondary"
+                size="lg"
+                className="w-full gap-1.5"
+                data-testid="refresh-profile-button"
+              >
+                {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                {refreshing ? "Re-researching..." : "Refresh from sources (needs re-approval)"}
+              </Button>
+            )}
 
             {brand?.id && (
               <Alert className="border-[color:var(--indigo-15)] bg-[color:var(--indigo-6)]">

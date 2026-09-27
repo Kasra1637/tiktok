@@ -101,6 +101,24 @@ REQUIRED_BRAND_ANALYSIS_KEYS = {
     "target_audience", "ideal_customer_profile", "differentiation", "tone_voice",
 }
 
+# Full App Profile schema produced by analyze_app_profile(). List fields come
+# back as JSON arrays of short strings; icp_segments entries are "Segment
+# label — needs / hook promise" one-liners so they stay editable text.
+REQUIRED_APP_PROFILE_KEYS = {
+    "brand_name", "brand_description", "app_category", "niche", "platforms",
+    "pricing_trial", "core_features", "primary_use_cases", "problems_solved",
+    "products_or_services", "target_audience", "ideal_customer_profile",
+    "icp_segments", "desired_outcomes", "differentiation", "competitors",
+    "known_limitations", "tone_voice", "claims_approved", "claims_review",
+    "claims_banned", "ctas", "video_themes",
+}
+
+APP_PROFILE_LIST_KEYS = (
+    "platforms", "core_features", "primary_use_cases", "problems_solved",
+    "products_or_services", "icp_segments", "desired_outcomes", "competitors",
+    "claims_approved", "claims_review", "claims_banned", "ctas", "video_themes",
+)
+
 
 def _build_face_swap_prompt(customization_prompt: str = "") -> str:
     """Build the shared target-performance-first contract for image face swaps."""
@@ -1117,6 +1135,108 @@ async def analyze_brand_from_text(url: str, page_text: str) -> dict:
     if not isinstance(result.get("products_or_services"), list):
         raw = result.get("products_or_services")
         result["products_or_services"] = [raw] if raw else []
+
+    return result
+
+
+async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
+    """Research a mobile app from its public pages and draft an App Profile.
+
+    Args:
+        sources: mapping of source label -> extracted page text, e.g.
+            {"website": "...", "app_store": "...", "google_play": "..."}.
+            Labels are free-form; each is capped by the caller.
+        notes: founder-supplied context (positioning, pricing, constraints).
+
+    Returns a dict matching REQUIRED_APP_PROFILE_KEYS. List values are always
+    normalized to lists of non-empty strings. Never invents store ratings,
+    download counts, or pricing — uncertain claims go in claims_review.
+    """
+    system_message = (
+        "You are a mobile-app strategist and short-form video creative director. "
+        "You read public app pages (website, App Store, Google Play) plus founder "
+        "notes and draft an App Profile used to brief promotional video scripts. "
+        "Describe functional needs and use cases — never infer sensitive personal "
+        "traits about viewers, and for health-adjacent apps describe product "
+        "functionality (e.g. low-friction journaling with prompts and reminders), "
+        "never viewer diagnoses. Respond with STRICT JSON only, no markdown "
+        "fences, no extra commentary."
+    )
+
+    parts = []
+    for label, text in (sources or {}).items():
+        text = (text or "").strip()
+        if text:
+            parts.append(f"--- {label} ---\n{text}")
+    sources_block = "\n\n".join(parts) or "(no page text could be extracted)"
+    founder_block = (notes or "").strip() or "(no founder notes provided)"
+
+    prompt = (
+        "Public page extracts for one mobile app:\n\n"
+        f'"""\n{sources_block}\n"""\n\n'
+        f"Founder notes:\n{founder_block}\n\n"
+        "Draft the App Profile. Return ONLY a JSON object with this exact schema:\n"
+        "{\n"
+        '  "brand_name": "app name",\n'
+        '  "brand_description": "1-3 sentence description of what the app does",\n'
+        '  "app_category": "app category (e.g. Health & Fitness, Productivity)",\n'
+        '  "niche": "same as app_category unless the positioning is narrower",\n'
+        '  "platforms": ["iOS", "Android"] (only platforms evidenced by the sources),\n'
+        '  "pricing_trial": "pricing and trial info exactly as stated, or empty string if unstated",\n'
+        '  "core_features": ["concrete features evidenced by the sources"],\n'
+        '  "primary_use_cases": ["top jobs the app helps users do"],\n'
+        '  "problems_solved": ["user problems the app removes"],\n'
+        '  "products_or_services": ["tiers or offerings, e.g. Free, Pro yearly"],\n'
+        '  "target_audience": "short label for the primary audience",\n'
+        '  "ideal_customer_profile": "2-4 sentences: who they are, what they struggle with, where they spend time online",\n'
+        '  "icp_segments": ["2-4 segments as one-liners: label, functional need, hook promise"],\n'
+        '  "desired_outcomes": ["outcomes users want from the app"],\n'
+        '  "differentiation": "2-4 sentences on what sets this app apart",\n'
+        '  "competitors": ["named competitor apps if inferable, else empty"],\n'
+        '  "known_limitations": "material limitations a promo must not contradict (platforms, trial terms, feature gaps)",\n'
+        '  "tone_voice": "short description of the brand voice",\n'
+        '  "claims_approved": ["factual claims safe to use in promos"],\n'
+        '  "claims_review": ["claims that need verification before use (ratings, counts, pricing, results)"],\n'
+        '  "claims_banned": ["claims promos must never make (guaranteed outcomes, fake reviews, medical/financial promises)"],\n'
+        '  "ctas": ["suitable calls to action, e.g. Try it free, Get it on the App Store"],\n'
+        '  "video_themes": ["4-8 suggested short-form video themes for this app"]\n'
+        "}\n"
+        "Rules: use ONLY functionality evidenced by the sources or notes; never invent "
+        "ratings, download counts, prices, or features. Put anything uncertain in "
+        "claims_review, never in claims_approved. Keep every list to 8 items max. "
+        "Return ONLY valid JSON."
+    )
+
+    payload = {
+        "model": TEXT_MODEL,
+        "messages": [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.3,
+        "max_tokens": 3000,
+    }
+
+    async with httpx.AsyncClient(timeout=90) as client:
+        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+
+    full_text = data["choices"][0]["message"]["content"]
+    result = _parse_json_response(full_text, "App profile")
+
+    missing = REQUIRED_APP_PROFILE_KEYS - set(result.keys())
+    if missing:
+        logger.error(f"App profile missing fields {missing}. Raw text: {full_text[:1500]!r}")
+        raise RuntimeError(f"App profile missing required fields: {missing}")
+
+    for key in APP_PROFILE_LIST_KEYS:
+        val = result.get(key)
+        if isinstance(val, str):
+            val = [val] if val.strip() else []
+        if not isinstance(val, list):
+            val = []
+        result[key] = [str(v).strip() for v in val if str(v).strip()][:8]
 
     return result
 

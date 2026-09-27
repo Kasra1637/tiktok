@@ -185,6 +185,15 @@ export const api = {
   updateBrand: (id, payload) => client.patch(`/brand/${id}`, payload).then((r) => r.data),
   generateRemixScript: (customizationId, payload) =>
     client.post(`/customizations/${customizationId}/generate-remix-script`, payload).then((r) => r.data),
+
+  // App Profiles (template-studio workflow: research -> review/approve -> refresh)
+  researchAppProfile: (payload) => client.post("/app-profiles/research", payload).then((r) => r.data),
+  getAppProfiles: () => client.get("/app-profiles").then((r) => r.data),
+  getAppProfile: (id) => client.get(`/app-profiles/${id}`).then((r) => r.data),
+  updateAppProfile: (id, payload) => client.patch(`/app-profiles/${id}`, payload).then((r) => r.data),
+  approveAppProfile: (id, applyPending = true) =>
+    client.post(`/app-profiles/${id}/approve`, { apply_pending: applyPending }).then((r) => r.data),
+  refreshAppProfile: (id) => client.post(`/app-profiles/${id}/refresh`).then((r) => r.data),
 };
 
 export const getErrorMessage = (err) => {
