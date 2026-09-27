@@ -22,6 +22,7 @@ import AppProfiles from "./pages/AppProfiles";
 import AppProfileDetail from "./pages/AppProfileDetail";
 import Templates from "./pages/Templates";
 import TemplateDetail from "./pages/TemplateDetail";
+import CreateVideo from "./pages/CreateVideo";
 import { OnboardingProvider } from "./components/onboarding/OnboardingProvider";
 
 // Redirect old /customize/:videoId to /face-swap
@@ -59,6 +60,7 @@ function App() {
                         <Route path="/app-profiles/:profileId" element={<AppProfileDetail />} />
                         <Route path="/templates" element={<Templates />} />
                         <Route path="/templates/:templateId" element={<TemplateDetail />} />
+                        <Route path="/create" element={<CreateVideo />} />
                         <Route path="/brand" element={<BrandSetup />} />
                         <Route path="/history" element={<History />} />
 

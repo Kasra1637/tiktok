@@ -1,0 +1,760 @@
+import { useCallback, useEffect, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Textarea } from "../components/ui/textarea";
+import { Badge } from "../components/ui/badge";
+import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
+import PageHeader from "../components/PageHeader";
+import EmptyState from "../components/EmptyState";
+import SafetyPanel from "../components/SafetyPanel";
+import { api, getErrorMessage } from "../lib/api";
+import {
+  Clapperboard, Loader2, AlertTriangle, Briefcase, Target, LayoutTemplate,
+  Image as ImageIcon, FileText, Check, ChevronLeft, ChevronRight, Sparkles,
+  Save, CheckCircle2, Star,
+} from "lucide-react";
+
+const STEPS = [
+  { key: "profile", label: "App Profile", icon: Briefcase },
+  { key: "angle", label: "Audience & goal", icon: Target },
+  { key: "template", label: "Hook template", icon: LayoutTemplate },
+  { key: "assets", label: "Assets", icon: ImageIcon },
+  { key: "plan", label: "Creative plan", icon: FileText },
+  { key: "review", label: "Review", icon: CheckCircle2 },
+];
+
+function humanize(value) {
+  return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function StepShell({ icon: Icon, title, description, children }) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
+          <Icon className="h-[18px] w-[18px]" />
+        </span>
+        <div>
+          <h2 className="font-display text-base font-semibold">{title}</h2>
+          {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+export default function CreateVideo() {
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+
+  const [step, setStep] = useState(0);
+  const [profiles, setProfiles] = useState([]);
+  const [angles, setAngles] = useState([]);
+  const [facets, setFacets] = useState(null);
+  const [recommendations, setRecommendations] = useState([]);
+  const [templates, setTemplates] = useState([]);
+  const [project, setProject] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  const [angleId, setAngleId] = useState(params.get("angle") || "");
+  const [templateId, setTemplateId] = useState(params.get("template") || "");
+  const [objective, setObjective] = useState("");
+  const [duration, setDuration] = useState(20);
+  const [tone, setTone] = useState("");
+  const [manualTemplate, setManualTemplate] = useState(false);
+  const [edits, setEdits] = useState({});
+
+  const profileId = project?.brand_profile_id || params.get("profile") || "";
+  const profile = profiles.find((p) => p.id === profileId) || null;
+  const angle = angles.find((a) => a.id === angleId) || null;
+  const template = templates.find((t) => t.id === templateId) || null;
+
+  useEffect(() => {
+    api.getTemplateFacets().then(setFacets).catch(() => setFacets(null));
+    api
+      .getAppProfiles()
+      .then((data) => {
+        const list = data.profiles || [];
+        setProfiles(list);
+        // Only approved profiles may enter the studio.
+        const approved = list.filter((p) => p.status === "approved");
+        const preselected = params.get("profile");
+        const chosen =
+          approved.find((p) => p.id === preselected) || approved[0] || null;
+        if (chosen) {
+          setStep(1);
+          api.getContentAngles(chosen.id).then((d) => setAngles(d.angles || [])).catch(() => setAngles([]));
+        }
+      })
+      .catch((err) => setError(getErrorMessage(err)))
+      .finally(() => setLoading(false));
+  }, [params]);
+
+  useEffect(() => {
+    api
+      .getTemplates()
+      .then((d) => setTemplates((d.templates || []).filter((t) => t.is_usable)))
+      .catch(() => setTemplates([]));
+  }, []);
+
+  const loadRecommendations = useCallback(
+    async (pid, aid) => {
+      if (!pid) return;
+      try {
+        const rec = await api.getTemplateRecommendations(pid, {
+          angle_id: aid || undefined,
+          objective: objective || undefined,
+          limit: 6,
+        });
+        setRecommendations(rec.recommendations || []);
+      } catch {
+        setRecommendations([]);
+      }
+    },
+    [objective]
+  );
+
+  useEffect(() => {
+    loadRecommendations(profileId, angleId);
+  }, [profileId, angleId, loadRecommendations]);
+
+  const selectProfile = async (id) => {
+    setAngles([]);
+    setAngleId("");
+    setRecommendations([]);
+    setEdits({});
+    setProject(null);
+    try {
+      const d = await api.getContentAngles(id);
+      setAngles(d.angles || []);
+    } catch {
+      setAngles([]);
+    }
+    setStep(1);
+  };
+
+  const createProject = async (overrides = {}) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const created = project?.id
+        ? await api.updateStudioProject(project.id, {
+            content_angle_id: angleId || "",
+            template_id: templateId || "",
+            objective,
+            duration_seconds: duration,
+            tone,
+            ...overrides,
+          })
+        : await api.createStudioProject({
+            brand_profile_id: profileId,
+            content_angle_id: angleId || "",
+            template_id: templateId || "",
+            objective,
+            duration_seconds: duration,
+            tone,
+          });
+      setProject(created);
+      return created;
+    } catch (err) {
+      setError(getErrorMessage(err));
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleGeneratePlan = async () => {
+    const ready = await createProject();
+    if (!ready) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await api.generatePlan(ready.id, {
+        objective,
+        duration_seconds: duration,
+        tone,
+      });
+      setProject(updated);
+      setEdits({});
+      setStep(5);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSaveEdits = async () => {
+    if (!project) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await api.updateStudioProject(project.id, edits);
+      setProject(updated);
+      setEdits({});
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleMarkReady = async () => {
+    if (!project) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await api.markProjectReady(project.id);
+      setProject(updated);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const canGenerate = Boolean(profileId && templateId);
+  const editValue = (key, fallback) =>
+    edits[key] !== undefined ? edits[key] : project?.[key] ?? fallback;
+  const hasEdits = Object.keys(edits).length > 0;
+
+  const stepContent = renderStep();
+
+  function renderStep() {
+    if (step === 0) {
+      const approved = profiles.filter((p) => p.status === "approved");
+      return (
+        <StepShell
+          icon={Briefcase}
+          title="Which app are you promoting?"
+          description="Only approved profiles can be used, so scripts only ever build on facts you have reviewed."
+        >
+          {approved.length === 0 ? (
+            <EmptyState
+              icon={Briefcase}
+              title="No approved App Profile"
+              description="Research an app and approve the profile before creating a video."
+              action={
+                <Button variant="brand" asChild>
+                  <Link to="/app-profiles">Go to App Profiles</Link>
+                </Button>
+              }
+            />
+          ) : (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {approved.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => selectProfile(p.id)}
+                  className={`rounded-2xl border p-4 text-left transition-colors ${
+                    profileId === p.id
+                      ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
+                      : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-display text-sm font-semibold">{p.brand_name}</span>
+                    {profileId === p.id && <Check className="h-4 w-4 text-[color:var(--brand-indigo)]" />}
+                  </div>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {p.app_category || p.niche || "Category not set"}
+                  </p>
+                </button>
+              ))}
+            </div>
+          )}
+        </StepShell>
+      );
+    }
+
+    if (step === 1) {
+      return (
+        <StepShell
+          icon={Target}
+          title="Audience and goal"
+          description="Pick the audience segment and what this video is meant to achieve."
+        >
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Content angle</label>
+              {angles.length === 0 ? (
+                <Alert>
+                  <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
+                  <AlertDescription>
+                    No content angles yet. Generate them on the profile page first.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <div className="space-y-2">
+                  {angles.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => setAngleId(a.id)}
+                      className={`w-full rounded-xl border p-3 text-left transition-colors ${
+                        angleId === a.id
+                          ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
+                          : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium">{a.label}</span>
+                        <Badge variant="secondary" className="text-[11px]">
+                          {humanize(a.kind)}
+                        </Badge>
+                      </div>
+                      {a.user_problem && (
+                        <p className="mt-1 text-xs text-muted-foreground">{a.user_problem}</p>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <label htmlFor="objective" className="text-sm font-medium">Objective</label>
+                <select
+                  id="objective"
+                  value={objective}
+                  onChange={(e) => setObjective(e.target.value)}
+                  className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
+                >
+                  <option value="">Choose an objective</option>
+                  {(facets?.objectives || []).map((o) => (
+                    <option key={o} value={o}>{humanize(o)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="duration" className="text-sm font-medium">Duration</label>
+                <select
+                  id="duration"
+                  value={duration}
+                  onChange={(e) => setDuration(Number(e.target.value))}
+                  className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
+                >
+                  {(facets?.supported_durations || [10, 15, 20, 30]).map((d) => (
+                    <option key={d} value={d}>{d} seconds</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="tone" className="text-sm font-medium">Tone (optional)</label>
+              <Input
+                id="tone"
+                value={tone}
+                onChange={(e) => setTone(e.target.value)}
+                placeholder="e.g. calm and direct"
+              />
+            </div>
+          </div>
+        </StepShell>
+      );
+    }
+
+    if (step === 2) {
+      return (
+        <StepShell
+          icon={LayoutTemplate}
+          title="Choose a hook template"
+          description="Recommendations are a starting point — any compatible template works."
+        >
+          <div className="space-y-4">
+            <Button
+              variant={manualTemplate ? "secondary" : "brand"}
+              size="sm"
+              onClick={() => setManualTemplate((v) => !v)}
+            >
+              {manualTemplate ? "Showing all templates" : "Browse all templates instead"}
+            </Button>
+
+            {recommendations.length > 0 && (
+              <div className="space-y-2">
+                <span className="eyebrow block">Recommended</span>
+                {recommendations.map((r) => (
+                  <button
+                    key={r.template.id}
+                    type="button"
+                    onClick={() => setTemplateId(r.template.id)}
+                    className={`w-full rounded-xl border p-3 text-left transition-colors ${
+                      templateId === r.template.id
+                        ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
+                        : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium">{r.template.name}</span>
+                      <span className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-[11px]">
+                          {r.suggested_duration}s
+                        </Badge>
+                        {templateId === r.template.id && (
+                          <Check className="h-4 w-4 text-[color:var(--brand-indigo)]" />
+                        )}
+                      </span>
+                    </div>
+                    {r.why_it_fits?.[0] && (
+                      <p className="mt-1 text-xs text-muted-foreground">{r.why_it_fits[0]}</p>
+                    )}
+                    {r.limitations?.[0] && (
+                      <p className="mt-0.5 text-[11px] text-muted-foreground/80">
+                        {r.limitations[0]}
+                      </p>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {manualTemplate && (
+              <div className="space-y-2">
+                <span className="eyebrow block">All templates ({templates.length})</span>
+                <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+                  {templates.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setTemplateId(t.id)}
+                      className={`w-full rounded-xl border p-3 text-left transition-colors ${
+                        templateId === t.id
+                          ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
+                          : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium">{t.name}</span>
+                        <Badge variant="secondary" className="text-[11px]">{t.default_duration}s</Badge>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                        {t.opening_structure}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {template && (
+              <div className="rounded-xl border border-[color:var(--hairline)] p-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{template.name}</span>
+                  <Badge variant="secondary" className="text-[11px]">
+                    {humanize(template.category)}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">{template.opening_structure}</p>
+                {template.required_assets?.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {template.required_assets.map((a) => (
+                      <Badge key={a} variant="outline" className="text-[11px]">{humanize(a)}</Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </StepShell>
+      );
+    }
+
+    if (step === 3) {
+      return (
+        <StepShell
+          icon={ImageIcon}
+          title="Assets"
+          description="Which real app visuals will you supply? Interfaces and text are composited from these, never generated."
+        >
+          <div className="space-y-3">
+            {template?.required_assets?.length ? (
+              <div className="rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-4">
+                <span className="eyebrow block">This template needs</span>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {template.required_assets.map((a) => (
+                    <Badge key={a} variant="secondary" className="text-[11px]">{humanize(a)}</Badge>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                This template works without specific assets.
+              </p>
+            )}
+            <p className="text-sm text-muted-foreground">
+              Uploading and managing assets is the next step. You can generate a plan now and
+              attach assets before producing the video.
+            </p>
+          </div>
+        </StepShell>
+      );
+    }
+
+    if (step === 4) {
+      return (
+        <StepShell
+          icon={FileText}
+          title="Generate the creative plan"
+          description="This writes your hook, script, shot timeline, overlays, and CTA. It costs no video generation."
+        >
+          <div className="space-y-3">
+            <Button
+              variant="brand"
+              onClick={handleGeneratePlan}
+              disabled={busy || !canGenerate}
+            >
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {project?.script_version ? "Regenerate plan" : "Generate plan"}
+            </Button>
+            {!templateId && (
+              <p className="text-sm text-muted-foreground">Choose a template first.</p>
+            )}
+            {project?.script_version > 0 && (
+              <p className="text-sm text-muted-foreground">
+                Current plan is version {project.script_version}. Regenerating replaces it.
+              </p>
+            )}
+          </div>
+        </StepShell>
+      );
+    }
+
+    // Review step
+    return (
+      <StepShell
+        icon={CheckCircle2}
+        title="Review and edit"
+        description="Everything is editable. The claim check re-runs on every edit."
+      >
+        {!project?.script_version ? (
+          <EmptyState
+            icon={FileText}
+            title="No plan yet"
+            description="Generate a creative plan to review it here."
+            action={
+              <Button variant="brand" onClick={() => setStep(4)}>
+                Go to plan step
+              </Button>
+            }
+          />
+        ) : (
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Hook line</label>
+              <Input
+                value={editValue("hook_line", "")}
+                onChange={(e) => setEdits({ ...edits, hook_line: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Script</label>
+              <Textarea
+                value={editValue("script", "")}
+                onChange={(e) => setEdits({ ...edits, script: e.target.value })}
+                className="min-h-[160px]"
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">CTA</label>
+                <Input
+                  value={editValue("cta", "")}
+                  onChange={(e) => setEdits({ ...edits, cta: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Feature emphasis</label>
+                <Input
+                  value={editValue("feature_emphasis", "")}
+                  onChange={(e) => setEdits({ ...edits, feature_emphasis: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Visual direction</label>
+              <Textarea
+                value={editValue("visual_direction", "")}
+                onChange={(e) => setEdits({ ...edits, visual_direction: e.target.value })}
+                className="min-h-[90px]"
+              />
+            </div>
+
+            {editValue("beat_timeline", []).length > 0 && (
+              <div className="rounded-xl border border-[color:var(--hairline)] p-4">
+                <span className="eyebrow block">Shot timeline</span>
+                <div className="mt-2 space-y-1.5 text-sm">
+                  {editValue("beat_timeline", []).map((b, i) => (
+                    <div key={i} className="flex gap-2">
+                      <Badge variant="secondary" className="shrink-0 text-[11px]">
+                        {b.start}&ndash;{b.end}s
+                      </Badge>
+                      <span className="text-muted-foreground">{b.label}: {b.text}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {editValue("overlays", []).length > 0 && (
+              <div className="rounded-xl border border-[color:var(--hairline)] p-4">
+                <span className="eyebrow block">On-screen text</span>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {editValue("overlays", []).map((o, i) => (
+                    <Badge key={i} variant="outline" className="text-[11px]">
+                      {o.start}&ndash;{o.end}s: {o.text}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Voice direction</label>
+                <Textarea
+                  value={editValue("voice_direction", "")}
+                  onChange={(e) => setEdits({ ...edits, voice_direction: e.target.value })}
+                  className="min-h-[70px]"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Sound direction</label>
+                <Textarea
+                  value={editValue("sound_direction", "")}
+                  onChange={(e) => setEdits({ ...edits, sound_direction: e.target.value })}
+                  className="min-h-[70px]"
+                />
+              </div>
+            </div>
+
+            <SafetyPanel
+              report={project.safety_report}
+              summary={project.safety_summary}
+            />
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="brand" onClick={handleSaveEdits} disabled={busy || !hasEdits}>
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Save edits
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={handleMarkReady}
+                disabled={busy || hasEdits || project?.status === "ready_for_generation"}
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                {project?.status === "ready_for_generation"
+                  ? "Ready for generation"
+                  : "Mark ready for generation"}
+              </Button>
+            </div>
+            {hasEdits && (
+              <p className="text-xs text-muted-foreground">Save your edits before marking ready.</p>
+            )}
+          </div>
+        )}
+      </StepShell>
+    );
+  }
+
+  if (loading) {
+    return (
+      <p className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading studio...
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        icon={Clapperboard}
+        title="Create Video"
+        description="Build a short-form promo from an approved App Profile and a hook template. Nothing is published — you download the MP4 and post it yourself."
+        actions={
+          project ? (
+            <Badge variant="secondary" className="text-xs">
+              Draft v{project.script_version}
+            </Badge>
+          ) : null
+        }
+      />
+
+      <nav aria-label="Progress" className="flex flex-wrap items-center gap-1.5">
+        {STEPS.map((s, i) => {
+          const active = i === step;
+          const done = i < step;
+          return (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => setStep(i)}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                active
+                  ? "bg-primary/15 text-[color:var(--brand-indigo)]"
+                  : done
+                    ? "text-muted-foreground hover:text-foreground"
+                    : "text-muted-foreground/60"
+              }`}
+              aria-current={active ? "step" : undefined}
+            >
+              {done ? <Check className="h-3 w-3" /> : <s.icon className="h-3 w-3" />}
+              {s.label}
+            </button>
+          );
+        })}
+      </nav>
+
+      {error && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Something went wrong</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      <div className="surface rounded-2xl p-5 md:p-6">
+        {stepContent}
+      </div>
+
+      <div className="flex items-center justify-between">
+        <Button
+          variant="ghost"
+          onClick={() => setStep((s) => Math.max(0, s - 1))}
+          disabled={step === 0}
+        >
+          <ChevronLeft className="h-4 w-4" /> Back
+        </Button>
+        {step < STEPS.length - 1 && (
+          <Button
+            variant="secondary"
+            onClick={() => setStep((s) => Math.min(STEPS.length - 1, s + 1))}
+            disabled={step === 0 && !profileId}
+          >
+            Next <ChevronRight className="h-4 w-4" />
+          </Button>
+        )}
+        {step === STEPS.length - 1 && project && (
+          <Button variant="ghost" onClick={() => navigate("/app-profiles")}>
+            Back to profiles
+          </Button>
+        )}
+      </div>
+
+      {template && (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Star className="h-3 w-3" />
+          Templates are curated structures, not proven performers.
+        </p>
+      )}
+    </div>
+  );
+}

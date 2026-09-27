@@ -8,6 +8,7 @@ import {
   Bookmark,
   Briefcase,
   LayoutTemplate,
+  Clapperboard,
   Wrench,
   History as HistoryIcon,
   PanelLeftClose,
@@ -35,6 +36,7 @@ export const NAV_GROUPS = [
   {
     label: "Create",
     items: [
+      { to: "/create", label: "Create Video", icon: Clapperboard, testId: "create-nav-link", hint: "Guided wizard" },
       { to: "/app-profiles", label: "App Profiles", icon: Briefcase, testId: "app-profiles-nav-link", hint: "Your apps" },
       { to: "/templates", label: "Hook Templates", icon: LayoutTemplate, testId: "templates-nav-link", hint: "Reusable structures" },
       { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Everything you made" },

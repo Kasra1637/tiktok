@@ -23,6 +23,8 @@ def row_to_dict(row, columns: list) -> dict:
         # Hook Template Library (hook_templates) structured fields
         "app_categories", "audiences", "required_assets", "content_slots",
         "claims_to_respect", "evidence",
+        # Studio projects (structured plan fields)
+        "beat_timeline", "overlays", "assets", "safety_report",
     }
     d = {}
     for i, col in enumerate(columns):
@@ -291,3 +293,66 @@ class UpdateContentAngleRequest(BaseModel):
     desired_emotion: Optional[str] = None
     recommended_cta: Optional[str] = None
     claims_to_respect: Optional[List[str]] = None
+
+
+# ---------------------------------------------------------------------------
+# Studio projects (the guided creation workflow)
+# ---------------------------------------------------------------------------
+STUDIO_TEXT_FIELDS = (
+    "audience", "tone", "hook_line", "script", "visual_direction",
+    "feature_emphasis", "voice_direction", "sound_direction", "cta",
+)
+
+STUDIO_EDITABLE_FIELDS = STUDIO_TEXT_FIELDS + (
+    "content_angle_id", "template_id", "objective", "duration_seconds",
+    "beat_timeline", "overlays", "assets",
+)
+
+
+class CreateStudioProjectRequest(BaseModel):
+    """
+    Start a creation draft.
+
+    Only brand_profile_id is required: the founder can pick an angle, objective,
+    and template later, and the plan step will refuse to run without them.
+    """
+    brand_profile_id: str
+    content_angle_id: Optional[str] = ""
+    template_id: Optional[str] = ""
+    objective: Optional[str] = ""
+    duration_seconds: Optional[int] = None
+    tone: Optional[str] = ""
+    audience: Optional[str] = ""
+
+
+class UpdateStudioProjectRequest(BaseModel):
+    """Edit any draft field. Every field optional; only set fields change."""
+    content_angle_id: Optional[str] = None
+    template_id: Optional[str] = None
+    objective: Optional[str] = None
+    duration_seconds: Optional[int] = None
+    tone: Optional[str] = None
+    audience: Optional[str] = None
+    hook_line: Optional[str] = None
+    script: Optional[str] = None
+    beat_timeline: Optional[List[dict]] = None
+    visual_direction: Optional[str] = None
+    feature_emphasis: Optional[str] = None
+    overlays: Optional[List[dict]] = None
+    voice_direction: Optional[str] = None
+    sound_direction: Optional[str] = None
+    cta: Optional[str] = None
+    assets: Optional[List[dict]] = None
+
+
+class GeneratePlanRequest(BaseModel):
+    """
+    Optional overrides for a plan regeneration.
+
+    Empty means "reuse what the project already has", which is what a
+    regenerate-after-review flow wants.
+    """
+    objective: Optional[str] = None
+    duration_seconds: Optional[int] = None
+    tone: Optional[str] = None
+    audience: Optional[str] = None

@@ -1385,6 +1385,236 @@ async def generate_content_angles(profile: dict, max_angles: int = 8) -> list:
     return angles
 
 
+REQUIRED_PLAN_KEYS = {
+    "hook_line", "script", "beat_timeline", "visual_direction",
+    "feature_emphasis", "overlays", "voice_direction", "sound_direction", "cta",
+}
+
+
+async def generate_creative_plan(
+    profile: dict,
+    template: dict,
+    angle: Optional[dict] = None,
+    objective: str = "",
+    duration_seconds: int = 20,
+    tone: str = "",
+    brand_voice: str = "",
+) -> dict:
+    """
+    Generate an editable creative plan from an approved App Profile + template.
+
+    The plan is what the founder reviews and edits BEFORE any video generation
+    is submitted, so nothing here costs a video call.
+
+    Timeline shape follows the product spec: 0-3s hook, 3-8s problem or
+    transition, 8-20s demonstration or payoff, final seconds CTA. Beats are
+    scaled to the requested duration rather than hardcoded.
+
+    The prompt forbids rendering UI, text, pricing, and logos in the generated
+    footage: those are composited deterministically afterwards from real app
+    assets, so the model must leave clean space for them instead of inventing
+    a fake interface.
+
+    Returns a dict matching REQUIRED_PLAN_KEYS plus `claims_used` (the model's
+    own account of which approved claims it used, reconciled by claim_safety).
+    """
+    def _list(name):
+        val = profile.get(name)
+        if isinstance(val, list):
+            return [str(v) for v in val if str(v).strip()]
+        if val:
+            return [str(val)]
+        return []
+
+    facts = {
+        "app_name": profile.get("brand_name") or "(unnamed app)",
+        "category": profile.get("app_category") or profile.get("niche") or "(unstated)",
+        "description": profile.get("brand_description") or "(unstated)",
+        "platforms": _list("platforms"),
+        "pricing_trial": profile.get("pricing_trial") or "(unstated)",
+        "features": _list("core_features"),
+        "use_cases": _list("primary_use_cases"),
+        "problems": _list("problems_solved"),
+        "desired_outcomes": _list("desired_outcomes"),
+        "differentiators": profile.get("differentiation") or "(unstated)",
+        "known_limitations": profile.get("known_limitations") or "(none recorded)",
+    }
+
+    structure = {
+        "template_name": template.get("name") or "(no template)",
+        "hook_category": template.get("category") or "(unstated)",
+        "opening_structure": template.get("opening_structure") or "(unstated)",
+        "hook_seconds": template.get("hook_seconds") or 3,
+        "continuation_structure": template.get("continuation_structure") or "(unstated)",
+        "cta_pattern": template.get("cta_pattern") or "(unstated)",
+        "visual_style": template.get("visual_style") or "(unstated)",
+        "camera_pacing": template.get("camera_pacing") or "(unstated)",
+        "content_slots": template.get("content_slots") or {},
+        "required_assets": template.get("required_assets") or [],
+    }
+
+    brief = {
+        "objective": objective or "(unstated)",
+        "audience": (angle or {}).get("target_audience") or profile.get("target_audience") or "(unstated)",
+        "content_angle": (angle or {}).get("kind") or "(none)",
+        "angle_hook_promise": (angle or {}).get("hook_promise") or "",
+        "angle_feature": (angle or {}).get("app_feature") or "",
+        "angle_emotion": (angle or {}).get("desired_emotion") or "",
+        "angle_cta": (angle or {}).get("recommended_cta") or "",
+        "duration_seconds": duration_seconds,
+        "tone": tone or "(unstated)",
+    }
+
+    claims = {
+        "approved": _list("claims_approved"),
+        "needs_review": _list("claims_review"),
+        "never_use": _list("claims_banned"),
+        "brand_voice": brand_voice or profile.get("tone_voice") or "(unstated)",
+    }
+
+    system_message = (
+        "You are a short-form video creative director for mobile app promotions. "
+        "You write concrete, filmable plans grounded ONLY in verified product facts. "
+        "Describe viewers by functional need, never by sensitive traits or diagnoses. "
+        "Respond with STRICT JSON only, no markdown fences."
+    )
+
+    prompt = (
+        f"VERIFIED APP FACTS:\n{json.dumps(facts, indent=2)}\n\n"
+        f"TEMPLATE STRUCTURE:\n{json.dumps(structure, indent=2)}\n\n"
+        f"CREATIVE BRIEF:\n{json.dumps(brief, indent=2)}\n\n"
+        f"CLAIM RULES:\n{json.dumps(claims, indent=2)}\n\n"
+        "Return ONLY a JSON object with this exact schema:\n"
+        "{\n"
+        '  "hook_line": "the single spoken/typed hook line, max 12 words",\n'
+        '  "script": "the full spoken script, plain text, no stage directions",\n'
+        '  "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "what happens and what is said"}],\n'
+        '  "visual_direction": "what the camera shows, as one paragraph",\n'
+        '  "feature_emphasis": "the single app feature this video demonstrates and where it appears",\n'
+        '  "overlays": [{"start": 0, "end": 3, "text": "on-screen text, max 6 words"}],\n'
+        '  "voice_direction": "delivery direction for the voiceover or on-camera talent",\n'
+        '  "sound_direction": "sound and music direction, rights-safe (no named commercial tracks)",\n'
+        '  "cta": "the single call to action",\n'
+        '  "claims_used": ["exact strings from claims.approved that appear in the script"]\n'
+        "}\n"
+        "Rules:\n"
+        f"- beat_timeline MUST follow 0-3s hook, 3-8s problem/transition, 8-{max(8, duration_seconds - 3)}s "
+        "demonstration or payoff, and the final seconds CTA. Scale the beats to "
+        f"{duration_seconds} seconds total; the hook stays under 3 seconds.\n"
+        "- Fill every content_slot in the template with a concrete value for THIS app.\n"
+        "- CRITICAL: do NOT write app interface text, button labels, prices, ratings, or logos "
+        "into visual_direction, script, or overlays as if the model would render them. Real "
+        "screenshots and overlays are composited afterwards. Describe clean space where they "
+        "will be placed, and keep overlay text to short phrases.\n"
+        "- Use ONLY features, pricing, and claims present above. Never invent a feature, a "
+        "price, a rating, a review, a download count, or a user testimonial.\n"
+        "- Never use anything in claims.never_use. If a claims.needs_review item would help, "
+        "leave it out rather than using it.\n"
+        "- Never promise a guaranteed outcome and never describe the viewer as having a "
+        "condition. Describe what the app does instead.\n"
+        "Return ONLY valid JSON."
+    )
+
+    payload = {
+        "model": TEXT_MODEL,
+        "messages": [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.5,
+        "max_tokens": 3500,
+    }
+
+    async with httpx.AsyncClient(timeout=120) as client:
+        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+
+    full_text = data["choices"][0]["message"]["content"]
+    result = _parse_json_response(full_text, "Creative plan")
+
+    missing = REQUIRED_PLAN_KEYS - set(result.keys())
+    if missing:
+        logger.error(f"Creative plan missing fields {missing}. Raw: {full_text[:1500]!r}")
+        raise RuntimeError(f"Creative plan missing required fields: {missing}")
+
+    result["hook_line"] = (result.get("hook_line") or "").strip()[:200]
+    result["script"] = (result.get("script") or "").strip()[:6000]
+    for key in (
+        "visual_direction", "feature_emphasis", "voice_direction",
+        "sound_direction", "cta",
+    ):
+        result[key] = (result.get(key) or "").strip()[:1200]
+
+    result["beat_timeline"] = _normalize_beats(result.get("beat_timeline"), duration_seconds)
+    result["overlays"] = _normalize_overlays(result.get("overlays"), duration_seconds)
+    result["claims_used"] = [str(c).strip() for c in (result.get("claims_used") or []) if str(c).strip()][:8]
+    result["duration_seconds"] = duration_seconds
+    return result
+
+
+def _normalize_beats(beats, duration: int) -> list:
+    """
+    Coerce the beat list into ordered {start, end, label, text} dicts.
+
+    The timeline shape is a product requirement, so out-of-order or malformed
+    beats are repaired by clamping to the requested duration rather than
+    trusted straight through.
+    """
+    if not isinstance(beats, list):
+        return []
+    out = []
+    for i, beat in enumerate(beats[:12]):
+        if not isinstance(beat, dict):
+            continue
+        try:
+            start = max(0.0, float(beat.get("start", 0)))
+            end = float(beat.get("end", start + 1))
+        except (TypeError, ValueError):
+            continue
+        if end <= start:
+            end = start + 1
+        start = min(start, duration)
+        end = min(end, duration)
+        label = str(beat.get("label") or f"beat-{i + 1}").strip()[:40]
+        text = str(beat.get("text") or "").strip()[:400]
+        if not text:
+            continue
+        out.append({"start": start, "end": end, "label": label, "text": text})
+    out.sort(key=lambda b: b["start"])
+    return out
+
+
+def _normalize_overlays(overlays, duration: int) -> list:
+    """Coerce overlays into {start, end, text} dicts bounded by the duration."""
+    if not isinstance(overlays, list):
+        return []
+    out = []
+    for item in overlays[:12]:
+        if isinstance(item, str):
+            text = item.strip()[:60]
+            out.append({"start": 0, "end": duration, "text": text} if text else None)
+            continue
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("text") or "").strip()[:60]
+        if not text:
+            continue
+        try:
+            start = max(0.0, float(item.get("start", 0)))
+            end = float(item.get("end", duration))
+        except (TypeError, ValueError):
+            start, end = 0.0, float(duration)
+        if end <= start:
+            end = start + 1
+        out.append({
+            "start": min(start, duration),
+            "end": min(end, duration),
+            "text": text,
+        })
+    return [o for o in out if o]
+
+
 async def generate_remix_script(analysis: dict, brand_profile: dict, target_duration: int, session_id: str, music_context: dict = None, transcript_text: str = "", hashtags: list = None, use_original_sound: bool = False) -> dict:
     """
     Auto-generate a production-ready video prompt ("Content Remixer") from hook analysis +

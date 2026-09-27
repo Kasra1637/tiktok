@@ -222,6 +222,14 @@ export const api = {
   // Template recommendations
   getTemplateRecommendations: (profileId, params = {}) =>
     client.get(`/app-profiles/${profileId}/template-recommendations`, { params }).then((r) => r.data),
+
+  // Studio projects (guided creation)
+  getStudioProjects: (params = {}) => client.get("/studio/projects", { params }).then((r) => r.data),
+  getStudioProject: (id) => client.get(`/studio/projects/${id}`).then((r) => r.data),
+  createStudioProject: (payload) => client.post("/studio/projects", payload).then((r) => r.data),
+  updateStudioProject: (id, payload) => client.patch(`/studio/projects/${id}`, payload).then((r) => r.data),
+  generatePlan: (id, payload = {}) => client.post(`/studio/projects/${id}/plan`, payload).then((r) => r.data),
+  markProjectReady: (id) => client.post(`/studio/projects/${id}/ready`).then((r) => r.data),
 };
 
 export const getErrorMessage = (err) => {

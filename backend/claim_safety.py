@@ -1,0 +1,306 @@
+"""
+Deterministic claim-safety checking for generated scripts.
+
+Why this is separate from the AI layer: a model asked to police its own
+output is not a safety net. It is asked to produce a plan, then this module
+independently reads the resulting text and decides whether a promo would
+break the rules. The model's self-declared `claims_used` is treated as an
+unverified hint and reconciled against what actually appears in the text.
+
+Everything here is pure string logic — no network, no model calls — so it is
+unit-testable and cannot be talked out of a verdict by prompt drift.
+"""
+import re
+from typing import Iterable, Optional
+
+# ---------------------------------------------------------------------------
+# Risk vocabularies
+# ---------------------------------------------------------------------------
+
+# Outcomes that no app promo may promise. Matched as phrases so "guaranteed
+# results" is caught without flagging "guarantee" inside unrelated prose.
+GUARANTEE_PATTERNS = [
+    r"\bguarantee[ds]?\b",
+    r"\b100%\s+(?:effective|success|guaranteed)",
+    r"\b(no|zero)\s+(?:side effects|risks?|downside)",
+    r"\bwill\s+(?:definitely|certainly)\b",
+    r"\bnever\s+(?:fail|hurt|break)\b",
+    r"\bproven\s+to\s+work\b",
+    r"\bmiracle\b",
+]
+
+# Medical / legal / financial claims need substantiation the profile almost
+# never carries, so their presence is a warning rather than an auto-pass.
+REGULATED_PATTERNS = [
+    (r"\b(cure[sd]?|cures|treats?|heals?|diagnos(?:e|is|ed))\b", "medical claim"),
+    (r"\b(depress(?:ion|ed)|anxiety|anxious|bipolar|adhd|ptsd)\b", "mental-health framing"),
+    (r"\b(therapy|therapeutic|medication|prescription|clinical(?:ly)? proven)\b", "clinical claim"),
+    (r"\b(guaranteed (?:income|profit|roi)|make money|financial freedom|invest(?:s|ing)? returns?)\b", "financial claim"),
+    (r"\b(legally|legal guarantee|law[- ]compliant|gdpr[- ]compliant by design)\b", "legal claim"),
+]
+
+# Testimonial / review fabrication. A promo may quote a real, supplied
+# testimonial but must never imply social proof the app has not earned.
+#
+# Digit runs tolerate internal spaces because normalize() strips the thousands
+# separator, turning "500,000" into "500 000" before these patterns run.
+TESTIMONIAL_PATTERNS = [
+    r"\b\d+[\d\s]*\+?\s*(?:five[- ]star|5[- ]star)\s+reviews?\b",
+    r"\b(love[d]? by|trusted by)\s+\d+[\d\s]*[km]?\+?\s*(?:users|people|downloads)\b",
+    r"\bone user said\b",
+    r"\bour users (?:say|love|report)\b",
+    r"\bjoin \d+[\d\s]*[km]?\+?\s*(?:happy )?users\b",
+    r"\b#1 (?:app|download)\b",
+]
+
+# Disclosure words that, when present, soften a regulated claim.
+DISCLOSURE_MARKERS = (
+    "not medical advice",
+    "not a substitute",
+    "consult a",
+    "consult your",
+    "results vary",
+    "individual results",
+    "disclaimer",
+)
+
+_WHITESPACE = re.compile(r"\s+")
+_PUNCT = re.compile(r"[^\w\s%$]")
+
+# Money amounts are matched on RAW text with a precise regex, never on the
+# punctuation-stripped blob. Stripping punctuation would turn "$4.99" into
+# "$4" and make "$4.99" indistinguishable from a profile price of "$4.50".
+_MONEY = re.compile(r"\$\s?\d+(?:\.\d{1,2})?")
+
+
+def normalize(text: str) -> str:
+    """Lowercase, strip punctuation, and collapse whitespace for matching."""
+    if not text:
+        return ""
+    return _WHITESPACE.sub(" ", _PUNCT.sub(" ", str(text).lower())).strip()
+
+
+def _plan_fields(plan: dict):
+    """Yield every human-readable leaf value of a creative plan.
+
+    Claim checking must cover what is actually SAID and SHOWN, so this
+    includes overlays, beats, and CTA — not just the spoken script body.
+    """
+    def walk(value):
+        if isinstance(value, str):
+            yield value
+        elif isinstance(value, dict):
+            for v in value.values():
+                yield from walk(v)
+        elif isinstance(value, (list, tuple)):
+            for v in value:
+                yield from walk(v)
+
+    for key in (
+        "hook_line", "script", "cta", "visual_direction",
+        "voice_direction", "sound_direction", "feature_emphasis",
+        "beat_timeline", "overlays",
+    ):
+        yield from walk(plan.get(key))
+
+
+def script_text(plan: dict) -> str:
+    """Flattened, normalized plan text used for phrase matching."""
+    return normalize(" \n ".join(_plan_fields(plan or {})))
+
+
+def script_money_text(plan: dict) -> str:
+    """Flattened plan text with money left intact, for price checks."""
+    return " \n ".join(_plan_fields(plan or {}))
+
+
+def _contains(haystack: str, needle: str) -> bool:
+    n = normalize(needle)
+    return bool(n) and n in haystack
+
+
+def find_banned_violations(text: str, banned_claims: Iterable[str]) -> list:
+    """
+    Banned claims present verbatim in the script.
+
+    These are hard failures: the founder explicitly listed them as unusable,
+    so the generator ignoring them is a bug, not a nuance.
+    """
+    hits = []
+    for claim in banned_claims or []:
+        if _contains(text, claim):
+            hits.append({"claim": str(claim), "reason": "listed as never-use"})
+    return hits
+
+
+def find_used_claims(text: str, approved_claims: Iterable[str]) -> list:
+    """Approved claims that actually appear — the verified claim set."""
+    return [str(c) for c in (approved_claims or []) if _contains(text, c)]
+
+
+def find_unverified_claims(text: str, review_claims: Iterable[str]) -> list:
+    """
+    Claims that require review but leaked into the script.
+
+    Not a hard failure — the founder may have verified them since. They are
+    surfaced so the reviewer decides, which is the point of the claims_review
+    tier.
+    """
+    return [
+        {"claim": str(c), "reason": "needs verification before use"}
+        for c in (review_claims or [])
+        if _contains(text, c)
+    ]
+
+
+def find_pricing_claims(money_text: str, known_pricing: str) -> list:
+    """
+    Money amounts in the script that do not appear in the profile.
+
+    Guards against invented pricing, which is one of the most damaging ways
+    an app promo can be wrong. Only fires when the script states a price the
+    profile never had. Expects money-normalized text so "$4.99" and "$4.50"
+    stay distinguishable.
+    """
+    amounts = set(_MONEY.findall(money_text))
+    if not amounts:
+        return []
+    known_amounts = {a.replace(" ", "") for a in _MONEY.findall(known_pricing or "")}
+    out = []
+    for amount in sorted(amounts):
+        if amount.replace(" ", "") in known_amounts:
+            continue
+        out.append({
+            "claim": amount.strip(),
+            "reason": "price not found in the App Profile",
+        })
+    return out
+
+
+def find_risk_patterns(text: str) -> list:
+    """
+    Regulated, guaranteed, or fabricated-proof language anywhere in the plan.
+    """
+    blob = normalize(text)
+    warnings: list = []
+
+    for pattern in GUARANTEE_PATTERNS:
+        if re.search(pattern, blob):
+            warnings.append({
+                "claim": re.search(pattern, blob).group(0),
+                "reason": "promises a guaranteed outcome",
+            })
+
+    for pattern, label in REGULATED_PATTERNS:
+        match = re.search(pattern, blob)
+        if not match:
+            continue
+        entry = {"claim": match.group(0), "reason": f"{label} needs substantiation"}
+        if not any(marker in blob for marker in DISCLOSURE_MARKERS):
+            entry["disclosure_missing"] = True
+        warnings.append(entry)
+
+    for pattern in TESTIMONIAL_PATTERNS:
+        match = re.search(pattern, blob)
+        if match:
+            warnings.append({
+                "claim": match.group(0),
+                "reason": "implies social proof the app may not have",
+            })
+
+    return warnings
+
+
+def detect_sensitive_targeting(text: str) -> list:
+    """
+    Copy that diagnoses or labels the viewer rather than describing the app.
+
+    The product rule is functional framing: describe what the app does, not
+    what condition the viewer is assumed to have. This is a warning, not a
+    hard block, because legitimate copy can mention a category name.
+    """
+    blob = normalize(text)
+    out = []
+    for pattern, label in REGULATED_PATTERNS:
+        if label != "mental-health framing":
+            continue
+        if re.search(pattern, blob):
+            out.append({
+                "claim": re.search(pattern, blob).group(0),
+                "reason": "describes the viewer instead of the app's functionality",
+            })
+    return out
+
+
+def build_safety_report(plan: dict, profile: dict) -> dict:
+    """
+    Full safety verdict for a generated plan.
+
+    Returns:
+        {
+          "passed": bool,            # False blocks generation
+          "blocking": [...],         # banned claims / hard failures
+          "claims_used": [...],      # verified against claims_approved
+          "unverified": [...],       # from claims_review
+          "risk_warnings": [...],    # regulated / guaranteed / testimonial
+          "pricing_mismatches": [...],
+          "sources_used": [...],     # which profile fields fed the plan
+          "self_declared_claims": [...],  # what the model said it used
+        }
+
+    `passed` is False only for hard failures. Warnings are returned but do
+    not block, so the founder keeps editorial control over tone while
+    prohibited claims can never reach a video.
+    """
+    text = script_text(plan)
+    money_text = script_money_text(plan)
+    self_declared = [
+        str(c) for c in ((plan or {}).get("claims_used") or []) if str(c).strip()
+    ]
+
+    blocking = find_banned_violations(text, profile.get("claims_banned"))
+    pricing_mismatches = find_pricing_claims(money_text, profile.get("pricing_trial"))
+    risk_warnings = find_risk_patterns(text) + detect_sensitive_targeting(text)
+
+    used = find_used_claims(text, profile.get("claims_approved"))
+    unverified = find_unverified_claims(text, profile.get("claims_review"))
+
+    sources = []
+    for field in (
+        "brand_name", "app_category", "core_features", "primary_use_cases",
+        "problems_solved", "pricing_trial", "known_limitations",
+    ):
+        value = profile.get(field)
+        if value and (isinstance(value, list) and value or isinstance(value, str) and value.strip()):
+            sources.append(field)
+
+    return {
+        "passed": not blocking,
+        "blocking": blocking,
+        "claims_used": used,
+        "unverified": unverified,
+        "risk_warnings": risk_warnings,
+        "pricing_mismatches": pricing_mismatches,
+        "sources_used": sources,
+        "self_declared_claims": self_declared,
+        "unverified_self_claims": sorted(set(self_declared) - set(used)),
+    }
+
+
+def summarize(report: dict) -> str:
+    """One-line reviewer-facing summary. Never claims safety it did not find."""
+    if report.get("passed") and not (
+        report.get("risk_warnings") or report.get("unverified")
+        or report.get("pricing_mismatches")
+    ):
+        return "Clean: no banned claims, risky language, or invented pricing detected."
+    bits = []
+    if report.get("blocking"):
+        bits.append(f"{len(report['blocking'])} prohibited claim(s)")
+    if report.get("pricing_mismatches"):
+        bits.append(f"{len(report['pricing_mismatches'])} unverified price(s)")
+    if report.get("unverified"):
+        bits.append(f"{len(report['unverified'])} claim(s) needing review")
+    if report.get("risk_warnings"):
+        bits.append(f"{len(report['risk_warnings'])} risk warning(s)")
+    return "Needs review: " + ", ".join(bits) + "."

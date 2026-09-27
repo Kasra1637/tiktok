@@ -24,10 +24,11 @@ import pipeline
 import viral_detection
 import storage_service
 import template_library
+import claim_safety
 from ai_service import (
     analyze_hook, generate_customized_preview, generate_face_swap, generate_video_prompt,
     generate_video, poll_video_job, analyze_brand_from_text, analyze_app_profile,
-    generate_content_angles, generate_remix_script,
+    generate_content_angles, generate_creative_plan, generate_remix_script,
     strip_html_to_text, remix_chat_turn, empty_remix_brief, VIDEO_MODELS, DEFAULT_VIDEO_MODEL,
     analyze_image_for_hook,
 )
@@ -39,8 +40,10 @@ from models import (
     CreateHookTemplateRequest, UpdateHookTemplateRequest,
     CreateTemplateRequest, UpdateTemplateRequest,
     CreateContentAngleRequest, UpdateContentAngleRequest,
+    CreateStudioProjectRequest, UpdateStudioProjectRequest, GeneratePlanRequest,
     APP_PROFILE_LIST_FIELDS, APP_PROFILE_EDITABLE_FIELDS,
     TEMPLATE_STRUCTURED_FIELDS, TEMPLATE_TEXT_FIELDS, TEMPLATE_EDITABLE_FIELDS,
+    STUDIO_EDITABLE_FIELDS,
     now_iso, row_to_dict,
 )
 from niches_config import NICHES, NICHE_MAP
@@ -572,6 +575,44 @@ async def init_db():
                 PRIMARY KEY (template_id, user_id)
             );
 
+            -- A studio project is one founder's in-progress video: the chosen
+            -- App Profile, angle, objective, template (pinned to a version),
+            -- assets, and the editable creative plan. The plan is separate from
+            -- any generation so a founder can iterate on the script for free
+            -- before spending a video generation.
+            CREATE TABLE IF NOT EXISTS studio_projects (
+                id TEXT PRIMARY KEY,
+                brand_profile_id TEXT,
+                content_angle_id TEXT,
+                template_id TEXT,
+                -- Pinned so a later library edit cannot silently change what
+                -- this project was built against.
+                template_version INTEGER,
+                objective TEXT,
+                audience TEXT,
+                duration_seconds INTEGER,
+                tone TEXT,
+                hook_line TEXT,
+                script TEXT,
+                beat_timeline TEXT,
+                visual_direction TEXT,
+                feature_emphasis TEXT,
+                overlays TEXT,
+                voice_direction TEXT,
+                sound_direction TEXT,
+                cta TEXT,
+                assets TEXT,
+                safety_report TEXT,
+                safety_summary TEXT,
+                script_version INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'draft',
+                created_at TEXT,
+                updated_at TEXT,
+                user_id TEXT DEFAULT 'anonymous'
+            );
+            CREATE INDEX IF NOT EXISTS idx_studio_projects_user
+                ON studio_projects (user_id, updated_at);
+
             -- Persistent video storage registry. Each row tracks a generated
             -- video uploaded to Cloudflare R2 so it survives container redeploys
             -- and remains accessible in the user's history until they delete it.
@@ -808,6 +849,7 @@ async def init_db():
             "videos", "analyses", "customizations", "video_jobs",
             "brand_profiles", "remix_chats", "face_swap_jobs",
             "face_swap_video_jobs", "hook_templates",
+            "studio_projects", "content_angles",
         ]
         for table in user_id_tables:
             cursor = await conn.execute(f"PRAGMA table_info({table})")
@@ -5941,6 +5983,340 @@ async def recommend_templates(
         "angle": _serialize_angle_row(angle) if angle else None,
         "objective": norm_objective,
     }
+
+
+# ---------------------------------------------------------------------------
+# Studio projects (guided creation workflow)
+# ---------------------------------------------------------------------------
+def _public_project(row: dict) -> dict:
+    """Serialize a studio project with its structured fields parsed."""
+    out = dict(row)
+    out["beat_timeline"] = out.get("beat_timeline") or []
+    out["overlays"] = out.get("overlays") or []
+    out["assets"] = out.get("assets") or []
+    out["safety_report"] = out.get("safety_report") or None
+    out["duration_seconds"] = out.get("duration_seconds") or 0
+    out["script_version"] = out.get("script_version") or 0
+    return out
+
+
+async def _require_profile_for_studio(profile_id: str, user_id: str) -> dict:
+    """
+    Load a profile and enforce that it is APPROVED.
+
+    Every studio step funnels through here. Generating a script from an
+    unreviewed profile would let unverified AI research invent features and
+    claims, which is exactly what the approval gate exists to prevent.
+    """
+    profile = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="App Profile not found")
+    if profile.get("status") != "approved":
+        raise HTTPException(
+            status_code=409,
+            detail="Review and approve this App Profile before creating a video plan.",
+        )
+    return profile
+
+
+@api_router.get("/studio/projects")
+async def list_studio_projects(
+    brand_profile_id: str = "", limit: int = 50, user_id: str = Depends(get_current_user_id)
+):
+    """Creation drafts for this user, most recently updated first."""
+    clauses = ["user_id = ?"]
+    params: list = [user_id]
+    if brand_profile_id.strip():
+        clauses.append("brand_profile_id = ?")
+        params.append(brand_profile_id.strip())
+    rows = await _fetch_all(
+        f"""SELECT * FROM studio_projects WHERE {' AND '.join(clauses)}
+            ORDER BY updated_at DESC LIMIT ?""",
+        tuple(params) + (max(1, min(int(limit or 50), 200)),),
+    )
+    return {"projects": [_public_project(r) for r in rows]}
+
+
+@api_router.post("/studio/projects", status_code=201)
+async def create_studio_project(
+    payload: CreateStudioProjectRequest, user_id: str = Depends(get_current_user_id)
+):
+    """Create a creation draft against an APPROVED App Profile."""
+    profile = await _require_profile_for_studio(payload.brand_profile_id, user_id)
+
+    template_id = (payload.template_id or "").strip()
+    template_version = None
+    duration = payload.duration_seconds
+    if template_id:
+        template = await _fetch_one(
+            "SELECT * FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",
+            (template_id, user_id),
+        )
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+        if not template.get("is_usable", True) and template.get("review_status") != "approved":
+            raise HTTPException(
+                status_code=409,
+                detail="This template is an unpublished draft. Publish it before using it.",
+            )
+        # Pin the version now so later library edits cannot change this project.
+        template_version = template.get("version")
+        if not duration:
+            duration = template.get("default_duration")
+
+    duration = template_library.clamp_duration(duration or template_library.DEFAULT_DURATION)
+
+    project_id = str(uuid.uuid4())
+    now = now_iso()
+    await _execute(
+        """INSERT INTO studio_projects
+           (id, brand_profile_id, content_angle_id, template_id, template_version,
+            objective, audience, duration_seconds, tone, assets, script_version,
+            status, created_at, updated_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (project_id, profile["id"], (payload.content_angle_id or "").strip() or None,
+         template_id or None, template_version,
+         template_library.normalize_objective(payload.objective),
+         (payload.audience or profile.get("target_audience") or "").strip() or None,
+         duration, (payload.tone or "").strip() or None,
+         json.dumps([]), 0, "draft", now, now, user_id),
+    )
+    logger.info(f"Created studio project {project_id} for profile {profile['id']}")
+    return _public_project(
+        await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,))
+    )
+
+
+@api_router.get("/studio/projects/{project_id}")
+async def get_studio_project(project_id: str, user_id: str = Depends(get_current_user_id)):
+    row = await _fetch_one(
+        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?", (project_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Studio project not found")
+    return _public_project(row)
+
+
+@api_router.patch("/studio/projects/{project_id}")
+async def update_studio_project(
+    project_id: str, payload: UpdateStudioProjectRequest, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Edit a draft. This is the founder's review step, so every generated field
+    is editable and editing bumps script_version so a later generation can be
+    traced to the exact text that was approved.
+
+    Re-running claim safety on every edit is deliberate: a founder could
+    otherwise paste a prohibited claim into the script field and generate.
+    """
+    row = await _fetch_one(
+        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?", (project_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Studio project not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        return _public_project(row)
+    updates = {k: v for k, v in updates.items() if k in STUDIO_EDITABLE_FIELDS}
+    if not updates:
+        return _public_project(row)
+
+    set_clauses, values = [], []
+    for key, value in updates.items():
+        if key in ("beat_timeline", "overlays", "assets"):
+            value = json.dumps(value if isinstance(value, list) else [])
+        elif key in ("template_id", "content_angle_id"):
+            value = (value or "").strip() or None
+        elif key == "objective":
+            value = template_library.normalize_objective(value)
+        elif key == "duration_seconds":
+            value = template_library.clamp_duration(value)
+        elif value is not None:
+            value = str(value).strip()
+        set_clauses.append(f"{key} = ?")
+        values.append(value)
+
+    if "template_id" in updates and updates["template_id"]:
+        tpl = await _fetch_one(
+            "SELECT version FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",
+            (updates["template_id"], user_id),
+        )
+        if not tpl:
+            raise HTTPException(status_code=404, detail="Template not found")
+        set_clauses.append("template_version = ?")
+        values.append(tpl.get("version"))
+
+    # Re-check claims against the profile after any edit.
+    profile = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ?", (row.get("brand_profile_id"),)
+    )
+    if profile:
+        merged = dict(row)
+        for key, value in updates.items():
+            if key in ("beat_timeline", "overlays", "assets"):
+                merged[key] = value if isinstance(value, list) else []
+            else:
+                merged[key] = value
+        report = claim_safety.build_safety_report(merged, profile)
+        set_clauses.append("safety_report = ?")
+        values.append(json.dumps(report))
+        set_clauses.append("safety_summary = ?")
+        values.append(claim_safety.summarize(report))
+
+    set_clauses.append("script_version = ?")
+    values.append(int(row.get("script_version") or 0) + 1)
+    set_clauses.append("updated_at = ?")
+    values.append(now_iso())
+    values.extend([project_id, user_id])
+    await _execute(
+        f"UPDATE studio_projects SET {', '.join(set_clauses)} "
+        "WHERE id = ? AND user_id = ?",
+        tuple(values),
+    )
+    return _public_project(
+        await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,))
+    )
+
+
+@api_router.post("/studio/projects/{project_id}/plan")
+async def generate_plan(
+    project_id: str, payload: GeneratePlanRequest, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Generate (or regenerate) the creative plan for a project.
+
+    Gated twice on purpose:
+      1. The App Profile must be approved.
+      2. A template must be chosen, since the template supplies the creative
+         structure the plan adapts.
+
+    The claim-safety report is computed here and stored. A plan that trips a
+    banned claim is still RETURNED — the founder can see and fix it — but the
+    report marks it failed so Phase 5 generation refuses to run it.
+    """
+    require_ai_configured()
+    row = await _fetch_one(
+        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?", (project_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Studio project not found")
+
+    profile = await _require_profile_for_studio(row.get("brand_profile_id"), user_id)
+
+    if not row.get("template_id"):
+        raise HTTPException(
+            status_code=400,
+            detail="Choose a hook template before generating a plan.",
+        )
+    template = await _fetch_one(
+        "SELECT * FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",
+        (row["template_id"], user_id),
+    )
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    angle = None
+    if row.get("content_angle_id"):
+        angle = await _fetch_one(
+            "SELECT * FROM content_angles WHERE id = ? AND brand_profile_id = ? AND user_id = ?",
+            (row["content_angle_id"], row.get("brand_profile_id"), user_id),
+        )
+        if not angle:
+            raise HTTPException(
+                status_code=404, detail="Content angle not found for this App Profile"
+            )
+
+    objective = template_library.normalize_objective(
+        payload.objective or row.get("objective") or ""
+    )
+    duration = template_library.clamp_duration(
+        payload.duration_seconds or row.get("duration_seconds")
+    )
+    tone = (payload.tone or row.get("tone") or "").strip()
+
+    try:
+        plan = await generate_creative_plan(
+            profile=profile,
+            template=template,
+            angle=angle,
+            objective=objective,
+            duration_seconds=duration,
+            tone=tone,
+        )
+    except Exception as e:
+        logger.error(f"Creative plan generation failed for project {project_id}: {e}")
+        raise HTTPException(status_code=502, detail=f"AI plan generation failed. Please try again. ({str(e)[:150]})")
+
+    report = claim_safety.build_safety_report(plan, profile)
+    summary = claim_safety.summarize(report)
+
+    now = now_iso()
+    await _execute(
+        """UPDATE studio_projects SET
+             hook_line = ?, script = ?, beat_timeline = ?, visual_direction = ?,
+             feature_emphasis = ?, overlays = ?, voice_direction = ?, sound_direction = ?,
+             cta = ?, safety_report = ?, safety_summary = ?, objective = ?,
+             duration_seconds = ?, tone = ?, script_version = script_version + 1,
+             status = 'draft', updated_at = ?
+           WHERE id = ? AND user_id = ?""",
+        (plan["hook_line"], plan["script"], json.dumps(plan["beat_timeline"]),
+         plan["visual_direction"], plan["feature_emphasis"], json.dumps(plan["overlays"]),
+         plan["voice_direction"], plan["sound_direction"], plan["cta"],
+         json.dumps(report), summary, objective, duration, tone or None, now,
+         project_id, user_id),
+    )
+    logger.info(
+        f"Generated plan for project {project_id} (script v{int(row.get('script_version') or 0) + 1}) — {summary}"
+    )
+    return _public_project(
+        await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,))
+    )
+
+
+@api_router.post("/studio/projects/{project_id}/ready")
+async def mark_project_ready(project_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Mark a reviewed project ready for video generation.
+
+    Refuses while the claim-safety report is failing, so a prohibited claim
+    cannot be waved through. This is the last gate before Phase 5 spends money.
+    """
+    row = await _fetch_one(
+        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?", (project_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Studio project not found")
+    if not (row.get("script") or "").strip():
+        raise HTTPException(
+            status_code=400, detail="Generate or write a script before marking this ready."
+        )
+    if not row.get("template_id"):
+        raise HTTPException(status_code=400, detail="Choose a hook template first.")
+
+    report = row.get("safety_report") or {}
+    if isinstance(report, str):
+        try:
+            report = json.loads(report)
+        except (json.JSONDecodeError, TypeError):
+            report = {}
+    if report and not report.get("passed", True):
+        blocking = [b.get("claim") for b in report.get("blocking", []) if b.get("claim")]
+        raise HTTPException(
+            status_code=409,
+            detail="Fix prohibited claims before generating: " + ", ".join(blocking[:3]),
+        )
+
+    await _execute(
+        "UPDATE studio_projects SET status = 'ready_for_generation', updated_at = ? "
+        "WHERE id = ? AND user_id = ?",
+        (now_iso(), project_id, user_id),
+    )
+    return _public_project(
+        await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,))
+    )
 
 
 # ---------------------------------------------------------------------------
