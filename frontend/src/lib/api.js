@@ -280,6 +280,18 @@ export const api = {
   getPerformance: (id) => client.get(`/generations/${id}/performance`).then((r) => r.data),
   recordPerformance: (id, payload) =>
     client.post(`/generations/${id}/performance`, payload).then((r) => r.data),
+
+  // Trend research, feedback, analytics, operations
+  runResearchScan: (payload) => client.post("/research/scan", payload).then((r) => r.data),
+  getResearchRuns: (params = {}) => client.get("/research/runs", { params }).then((r) => r.data),
+  getResearchRun: (id) => client.get(`/research/runs/${id}`).then((r) => r.data),
+  getFeedbackCatalog: () => client.get("/feedback/catalog").then((r) => r.data),
+  recordFeedback: (payload) => client.post("/feedback", payload).then((r) => r.data),
+  getFeedback: (params = {}) => client.get("/feedback", { params }).then((r) => r.data),
+  getAnalytics: (params = {}) => client.get("/analytics", { params }).then((r) => r.data),
+  getOperations: () => client.get("/operations").then((r) => r.data),
+  getDashboard: () => client.get("/dashboard").then((r) => r.data),
+  getSettings: () => client.get("/settings").then((r) => r.data),
 };
 
 export const getErrorMessage = (err) => {

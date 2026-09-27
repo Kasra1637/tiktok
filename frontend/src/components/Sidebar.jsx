@@ -10,6 +10,10 @@ import {
   LayoutTemplate,
   Clapperboard,
   Images,
+  LayoutDashboard,
+  Radar,
+  BarChart3,
+  Settings2,
   Wrench,
   History as HistoryIcon,
   PanelLeftClose,
@@ -37,6 +41,7 @@ export const NAV_GROUPS = [
   {
     label: "Create",
     items: [
+      { to: "/", label: "Dashboard", icon: LayoutDashboard, testId: "dashboard-nav-link", hint: "Where things stand" },
       { to: "/create", label: "Create Video", icon: Clapperboard, testId: "create-nav-link", hint: "Guided wizard" },
       { to: "/app-profiles", label: "App Profiles", icon: Briefcase, testId: "app-profiles-nav-link", hint: "Your apps" },
       { to: "/templates", label: "Hook Templates", icon: LayoutTemplate, testId: "templates-nav-link", hint: "Reusable structures" },
@@ -45,16 +50,29 @@ export const NAV_GROUPS = [
     ],
   },
   {
-    label: "Research",
+    label: "Insight",
     items: [
-      { to: "/discover", label: "Discover", icon: Compass, testId: "discover-nav-link", hint: "Trending hooks" },
-      { to: "/bookmarks", label: "Saved Hooks", icon: Bookmark, testId: "bookmarks-nav-link", hint: "Saved analyses" },
+      { to: "/research", label: "Trend Research", icon: Radar, testId: "research-nav-link", hint: "Find new mechanics" },
+      { to: "/analytics", label: "Analytics", icon: BarChart3, testId: "analytics-nav-link", hint: "Internal metrics" },
+      { to: "/operations", label: "Operations", icon: Settings2, testId: "operations-nav-link", hint: "Jobs and costs" },
     ],
   },
   {
     label: "Setup",
     items: [
+      { to: "/settings", label: "Settings", icon: Wrench, testId: "settings-nav-link", hint: "Configuration" },
       { to: "/brand", label: "Profile Editor", icon: Wrench, testId: "brand-nav-link", hint: "Research and edit" },
+    ],
+  },
+  {
+    // The exact-match recreation flow. Demoted out of the main navigation but
+    // kept reachable: it still works, and Trend Research is built on the same
+    // discovery data.
+    label: "Legacy",
+    items: [
+      { to: "/discover", label: "Discover", icon: Compass, testId: "discover-nav-link", hint: "Trending hooks" },
+      { to: "/bookmarks", label: "Saved Hooks", icon: Bookmark, testId: "bookmarks-nav-link", hint: "Saved analyses" },
+      { to: "/legacy-history", label: "Legacy History", icon: Compass, testId: "legacy-history-nav-link", hint: "Old generations" },
     ],
   },
 ];

@@ -29,10 +29,14 @@ import video_providers
 import generation_planning
 import overlays
 import variations
+import analytics
+import feedback as feedback_mod
+import research_abstraction
 from ai_service import (
     analyze_hook, generate_customized_preview, generate_face_swap, generate_video_prompt,
     generate_video, poll_video_job, analyze_brand_from_text, analyze_app_profile,
     generate_content_angles, generate_creative_plan, generate_remix_script,
+    abstract_template_drafts,
     strip_html_to_text, remix_chat_turn, empty_remix_brief, VIDEO_MODELS, DEFAULT_VIDEO_MODEL,
     analyze_image_for_hook,
 )
@@ -47,6 +51,7 @@ from models import (
     CreateStudioProjectRequest, UpdateStudioProjectRequest, GeneratePlanRequest,
     StudioGenerationRequest,     UpdateAssetRequest, AttachAssetRequest,
     OverlayCompositionRequest, CreateVariationRequest, PerformanceEntryRequest,
+    ResearchScanRequest, FeedbackRequest,
     APP_PROFILE_LIST_FIELDS, APP_PROFILE_EDITABLE_FIELDS,
     TEMPLATE_STRUCTURED_FIELDS, TEMPLATE_TEXT_FIELDS, TEMPLATE_EDITABLE_FIELDS,
     STUDIO_EDITABLE_FIELDS,
@@ -750,6 +755,48 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_performance_generation
                 ON performance_entries (generation_id);
 
+            -- Structured feedback, captured at the moment something happened so
+            -- it can steer later recommendations and prompts for that app.
+            --
+            -- Deliberately a fixed vocabulary of reasons: free text cannot be
+            -- aggregated, and this data is only useful if "hook too weak" and
+            -- "CTA unclear" are distinguishable.
+            CREATE TABLE IF NOT EXISTS feedback_events (
+                id TEXT PRIMARY KEY,
+                brand_profile_id TEXT,
+                studio_project_id TEXT,
+                generation_id TEXT,
+                template_id TEXT,
+                event TEXT,
+                reason TEXT,
+                detail TEXT,
+                created_at TEXT,
+                user_id TEXT DEFAULT 'anonymous'
+            );
+            CREATE INDEX IF NOT EXISTS idx_feedback_app
+                ON feedback_events (brand_profile_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_feedback_event
+                ON feedback_events (event, reason);
+
+            -- Trend Research runs. A run records what was discovered and what
+            -- was proposed, so template drafts can be traced back to the public
+            -- data that suggested them. No source video is stored for reuse in
+            -- generation: only the abstracted structure is.
+            CREATE TABLE IF NOT EXISTS research_runs (
+                id TEXT PRIMARY KEY,
+                kind TEXT,
+                query TEXT,
+                niche TEXT,
+                sources_found INTEGER DEFAULT 0,
+                findings TEXT,
+                drafts TEXT,
+                status TEXT DEFAULT 'pending',
+                error TEXT,
+                created_at TEXT,
+                completed_at TEXT,
+                user_id TEXT DEFAULT 'anonymous'
+            );
+
             -- Persistent video storage registry. Each row tracks a generated
             -- video uploaded to Cloudflare R2 so it survives container redeploys
             -- and remains accessible in the user's history until they delete it.
@@ -988,6 +1035,7 @@ async def init_db():
             "face_swap_video_jobs", "hook_templates",
             "studio_projects", "content_angles", "generations",
             "assets", "overlay_compositions", "performance_entries",
+            "feedback_events", "research_runs",
         ]
         for table in user_id_tables:
             cursor = await conn.execute(f"PRAGMA table_info({table})")
@@ -6194,10 +6242,14 @@ async def create_studio_project(
         )
         if not template:
             raise HTTPException(status_code=404, detail="Template not found")
-        if not template.get("is_usable", True) and template.get("review_status") != "approved":
+        # Check review_status directly: `is_usable` is a computed field that
+        # only exists on a serialized template, so testing it against a raw
+        # row silently passed and let unpublished drafts through.
+        if (template.get("review_status") or "approved") != "approved":
             raise HTTPException(
                 status_code=409,
-                detail="This template is an unpublished draft. Publish it before using it.",
+                detail="This template is an unpublished research draft. Review and "
+                       "publish it before using it.",
             )
         # Pin the version now so later library edits cannot change this project.
         template_version = template.get("version")
@@ -7755,6 +7807,453 @@ async def record_performance(
     created["source"] = "manual"
     created["verified"] = False
     return created
+
+
+# ---------------------------------------------------------------------------
+# Trend Research (public trend data -> review-gated template drafts)
+# ---------------------------------------------------------------------------
+@api_router.get("/research/runs")
+async def list_research_runs(
+    limit: int = 30, user_id: str = Depends(get_current_user_id)
+):
+    """Previous research runs and how many template drafts each produced."""
+    rows = await _fetch_all(
+        "SELECT id, kind, query, niche, sources_found, status, error, created_at, "
+        "completed_at FROM research_runs WHERE user_id = ? "
+        "ORDER BY created_at DESC LIMIT ?",
+        (user_id, max(1, min(int(limit or 30), 100))),
+    )
+    return {"runs": rows}
+
+
+@api_router.get("/research/runs/{run_id}")
+async def get_research_run(run_id: str, user_id: str = Depends(get_current_user_id)):
+    row = await _fetch_one(
+        "SELECT * FROM research_runs WHERE id = ? AND user_id = ?", (run_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Research run not found")
+    return row
+
+
+@api_router.post("/research/scan", status_code=201)
+async def run_trend_research(
+    payload: ResearchScanRequest, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Scan public trend data and propose reusable template drafts.
+
+    Reads only public metadata through the existing Apify integration. The
+    output is an ABSTRACT mechanic, and every draft lands as an UNPUBLISHED
+    research draft that an operator must review and publish before it can be
+    used. No source video, creator identity, gesture, or audio is retained or
+    required.
+    """
+    require_ai_configured()
+    kind = (payload.kind or "keyword").strip().lower()
+    query = (payload.query or "").strip()
+    niche = (payload.niche or "").strip()
+    if kind not in ("keyword", "hashtag", "niche"):
+        raise HTTPException(
+            status_code=400, detail="kind must be keyword, hashtag, or niche."
+        )
+    if not query and not niche:
+        raise HTTPException(
+            status_code=400, detail="Provide a keyword, hashtag, or niche to research."
+        )
+
+    run_id = str(uuid.uuid4())
+    now = now_iso()
+    await _execute(
+        """INSERT INTO research_runs (id, kind, query, niche, status, created_at, user_id)
+           VALUES (?, ?, ?, ?, 'pending', ?, ?)""",
+        (run_id, kind, query, niche, now, user_id),
+    )
+
+    limit = max(3, min(int(payload.limit or 15), 30))
+    try:
+        import apify_tiktok
+        if kind == "keyword" and apify_tiktok.is_configured():
+            videos = await apify_tiktok.fetch_keyword_videos(query, limit=limit)
+        elif kind == "hashtag" and apify_tiktok.is_configured():
+            videos = await apify_tiktok.fetch_hashtag_videos(query, limit=limit)
+        elif niche and apify_tiktok.is_configured():
+            videos = await apify_tiktok.fetch_hashtag_videos(niche, limit=limit)
+        else:
+            # Without Apify the scan is honest about having no data rather
+            # than falling back to a creator feed, which is not trend data.
+            await _execute(
+                "UPDATE research_runs SET status = 'failed', error = ?, completed_at = ? WHERE id = ?",
+                ("APIFY_API_TOKEN is not set, so no public trend data could be read.", now_iso(), run_id),
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Trend research needs APIFY_API_TOKEN. No public trend data was read.",
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        await _execute(
+            "UPDATE research_runs SET status = 'failed', error = ?, completed_at = ? WHERE id = ?",
+            (str(e)[:400], now_iso(), run_id),
+        )
+        raise HTTPException(status_code=502, detail=f"Trend research failed: {str(e)[:150]}")
+
+    videos = viral_detection.rank_videos(videos or [])
+    observations = research_abstraction.summarize_observations(videos)
+
+    try:
+        raw_drafts = await abstract_template_drafts(
+            observations, app_context=(payload.app_context or "")[:400])
+    except Exception as e:
+        await _execute(
+            "UPDATE research_runs SET status = 'failed', error = ?, completed_at = ? WHERE id = ?",
+            (f"Draft abstraction failed: {str(e)[:300]}", now_iso(), run_id),
+        )
+        raise HTTPException(status_code=502, detail=f"Could not abstract drafts: {str(e)[:150]}")
+
+    drafts, rejected = research_abstraction.parse_drafts(raw_drafts)
+
+    created = []
+    for draft in drafts:
+        template_id = str(uuid.uuid4())
+        await _execute(
+            """INSERT INTO hook_templates
+               (id, name, category, app_categories, objective, opening_structure,
+                hook_seconds, continuation_structure, cta_pattern, visual_style,
+                camera_pacing, required_assets, default_duration, content_slots,
+                evidence_note, version, archived, is_favorite, origin,
+                review_status, times_used, created_at, updated_at, user_id)
+               VALUES (?, ?, ?, ?, '', ?, 3, ?, ?, ?, ?, '[]', 20, ?, ?, 1, 0, 0,
+                       'research_draft', 'draft', 0, ?, ?, ?)""",
+            (template_id, draft["name"][:80], draft["category"],
+             json.dumps(draft.get("suits") or []), draft["opening_structure"],
+             draft["continuation_structure"], draft["cta_pattern"],
+             "abstracted", draft.get("pacing_note", ""), draft.get("hook_mechanic", ""),
+             draft["evidence_note"], now_iso(), now_iso(), user_id),
+        )
+        created.append({"id": template_id, "name": draft["name"], "category": draft["category"]})
+
+    await _execute(
+        "UPDATE research_runs SET sources_found = ?, findings = ?, drafts = ?, "
+        "status = 'completed', completed_at = ? WHERE id = ?",
+        (len(videos),
+         json.dumps(observations[:10]),
+         json.dumps({"created": created, "rejected": rejected}),
+         now_iso(), run_id),
+    )
+    logger.info(
+        f"Research run {run_id}: {len(videos)} sources, {len(created)} drafts, "
+        f"{len(rejected)} rejected"
+    )
+    return {
+        "run_id": run_id,
+        "sources_found": len(videos),
+        "drafts": created,
+        "rejected": rejected,
+        "note": "Drafts are unpublished. Review each one and publish it to use it in a video.",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Feedback
+# ---------------------------------------------------------------------------
+@api_router.get("/feedback/catalog")
+async def feedback_catalog():
+    """Events and their permitted reasons, for building the feedback UI."""
+    return feedback_mod.catalog()
+
+
+@api_router.post("/feedback", status_code=201)
+async def record_feedback(payload: FeedbackRequest, user_id: str = Depends(get_current_user_id)):
+    """
+    Record structured feedback at the moment it happens.
+
+    The reason must belong to the event. An unrecognised pair is refused so
+    the table never accumulates codes that analytics cannot aggregate.
+    """
+    event = feedback_mod.normalize_event(payload.event)
+    if not event:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown event '{payload.event}'. Known: {', '.join(feedback_mod.EVENTS)}.",
+        )
+    reason = feedback_mod.normalize_reason(event, payload.reason)
+    if not reason:
+        allowed = [r["key"] for r in feedback_mod.allowed_reasons(event)]
+        raise HTTPException(
+            status_code=400,
+            detail=f"Reason '{payload.reason}' is not valid for {event}. "
+                   f"Allowed: {', '.join(allowed) or 'none'}.",
+        )
+
+    event_id = str(uuid.uuid4())
+    await _execute(
+        """INSERT INTO feedback_events
+           (id, brand_profile_id, studio_project_id, generation_id, template_id,
+            event, reason, detail, created_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (event_id, (payload.brand_profile_id or "").strip() or None,
+         (payload.studio_project_id or "").strip() or None,
+         (payload.generation_id or "").strip() or None,
+         (payload.template_id or "").strip() or None,
+         event, reason, (payload.detail or "")[:500], now_iso(), user_id),
+    )
+    return {"id": event_id, "event": event, "reason": reason}
+
+
+@api_router.get("/feedback")
+async def list_feedback(
+    brand_profile_id: str = "", limit: int = 100, user_id: str = Depends(get_current_user_id)
+):
+    clauses = ["user_id = ?"]
+    params: list = [user_id]
+    if brand_profile_id.strip():
+        clauses.append("brand_profile_id = ?")
+        params.append(brand_profile_id.strip())
+    rows = await _fetch_all(
+        f"SELECT * FROM feedback_events WHERE {' AND '.join(clauses)} "
+        "ORDER BY created_at DESC LIMIT ?",
+        tuple(params) + (max(1, min(int(limit or 100), 500)),),
+    )
+    return {"feedback": rows, "summary": analytics.feedback_summary(rows)}
+
+
+# ---------------------------------------------------------------------------
+# Analytics
+# ---------------------------------------------------------------------------
+@api_router.get("/analytics")
+async def analytics_report(
+    brand_profile_id: str = "", user_id: str = Depends(get_current_user_id)
+):
+    """
+    Internal analytics for this operator.
+
+    Cost is reported as known spend plus a count of unpriced runs, so a missing
+    provider cost never quietly lowers the average. TikTok performance is
+    operator-entered and always labelled unverified.
+    """
+    clauses = ["g.user_id = ?"]
+    params: list = [user_id]
+    if brand_profile_id.strip():
+        clauses.append("g.brand_profile_id = ?")
+        params.append(brand_profile_id.strip())
+    generations = await _fetch_all(
+        f"SELECT * FROM generations g WHERE {' AND '.join(clauses)} ORDER BY created_at DESC",
+        tuple(params),
+    )
+    templates = await _fetch_all(
+        "SELECT id, name, category, origin FROM hook_templates "
+        "WHERE (user_id = ? OR user_id = 'system')",
+        (user_id,),
+    )
+    perf_clauses = ["user_id = ?"]
+    perf_params: list = [user_id]
+    if brand_profile_id.strip():
+        perf_clauses.append("brand_profile_id = ?")
+        perf_params.append(brand_profile_id.strip())
+    performance = await _fetch_all(
+        f"SELECT * FROM performance_entries WHERE {' AND '.join(perf_clauses)}",
+        tuple(perf_params),
+    )
+    feedback_rows = await _fetch_all(
+        "SELECT * FROM feedback_events WHERE user_id = ?", (user_id,)
+    )
+    profiles = await _fetch_all(
+        "SELECT id, brand_name FROM brand_profiles WHERE user_id = ?", (user_id,)
+    )
+    project_ids = {g.get("studio_project_id") for g in generations if g.get("studio_project_id")}
+    projects = await _fetch_all(
+        "SELECT id, objective, audience, content_angle_id FROM studio_projects "
+        "WHERE user_id = ?", (user_id,)
+    )
+    project_lookup = {p["id"]: p for p in projects if p["id"] in project_ids}
+
+    report = analytics.build_report(
+        generations=generations,
+        templates=templates,
+        performance=performance,
+        feedback=feedback_rows,
+        profiles=profiles,
+        project_lookup=project_lookup,
+    )
+    report["scope"] = "internal"
+    report["publishing"] = "manual"
+    return report
+
+
+# ---------------------------------------------------------------------------
+# Operations
+# ---------------------------------------------------------------------------
+@api_router.get("/operations")
+async def operations_overview(user_id: str = Depends(get_current_user_id)):
+    """
+    Internal operations: what is running, what failed, what it cost, and what
+    the providers currently offer. Errors are surfaced with their retry
+    classification so an operator can act without reading logs.
+    """
+    jobs = await _fetch_all(
+        "SELECT * FROM generations WHERE user_id = ? ORDER BY created_at DESC LIMIT 500",
+        (user_id,),
+    )
+    compositions = await _fetch_all(
+        "SELECT id, generation_id, status, error, created_at FROM overlay_compositions "
+        "WHERE user_id = ? ORDER BY created_at DESC LIMIT 100",
+        (user_id,),
+    )
+
+    by_status: dict = {}
+    for row in jobs:
+        by_status.setdefault(row.get("status") or "unknown", []).append(row)
+
+    failures = [
+        {
+            "id": r.get("id"),
+            "status": r.get("status"),
+            "error": r.get("error"),
+            "retryable": bool(r.get("retryable")),
+            "model": r.get("model"),
+            "cost_usd": r.get("cost_usd"),
+            "created_at": r.get("created_at"),
+        }
+        for r in jobs
+        if r.get("status") in ("failed",)
+    ]
+
+    storage_failures = [
+        c for c in compositions if c.get("status") == "failed" and c.get("error")
+    ]
+
+    # Provider availability is a configuration view, not a live health check:
+    # it reports what the app is allowed to use and what it can currently do.
+    default_key = video_providers.default_model_key()
+    providers = []
+    for cap in video_providers.list_capabilities(include_ineligible=True):
+        providers.append({
+            "key": cap["key"],
+            "name": cap["name"],
+            "studio_eligible": cap.get("studio_eligible", False),
+            "allowed": video_providers.is_allowed(cap["key"]),
+            "max_single_pass_seconds": cap["max_duration"],
+            "supports_native_audio": cap["supports_native_audio"],
+            "is_default": cap["key"] == default_key,
+        })
+
+    return {
+        "jobs": {
+            "total": len(jobs),
+            "in_flight": len(by_status.get("generating", []) + by_status.get("submitted", [])),
+            "completed": len(by_status.get("completed", [])),
+            "failed": len(by_status.get("failed", [])),
+            "archived": len(by_status.get("archived", [])),
+        },
+        "failures": failures[:50],
+        "overlay_jobs": {
+            "total": len(compositions),
+            "failed": len(storage_failures),
+            "errors": [c.get("error") for c in storage_failures[:20] if c.get("error")],
+        },
+        "cost": analytics.generation_metrics(jobs),
+        "providers": providers,
+        "config": {
+            "ai_configured": bool(os.environ.get("OPENROUTER_API_KEY")),
+            "apify_configured": _apify_configured(),
+            "r2_configured": storage_service.is_configured(),
+            "turso_configured": bool(os.environ.get("TURSO_DATABASE_URL")),
+            "modal_configured": bool(os.environ.get("MODAL_FRAME_EXTRACTOR_URL")),
+            "overlay_font": overlays.resolve_font() or "",
+            "public_base_url": bool(PUBLIC_BASE_URL),
+        },
+        "manual_publishing": (
+            "This app never posts to TikTok or any platform. Videos are downloaded "
+            "and published by hand."
+        ),
+    }
+
+
+def _apify_configured() -> bool:
+    import apify_tiktok
+    return apify_tiktok.is_configured()
+
+
+@api_router.get("/dashboard")
+async def dashboard(user_id: str = Depends(get_current_user_id)):
+    """
+    Landing view: what needs attention, and the path to the next action.
+    Deliberately thin — the detail lives in analytics and operations.
+    """
+    profiles = await _fetch_all(
+        "SELECT id, brand_name, status, version, updated_at FROM brand_profiles "
+        "WHERE user_id = ? ORDER BY updated_at DESC",
+        (user_id,),
+    )
+    pending_drafts = await _fetch_all(
+        "SELECT id, name, category, created_at FROM hook_templates "
+        "WHERE user_id = ? AND origin = 'research_draft' AND review_status = 'draft' "
+        "ORDER BY created_at DESC LIMIT 20",
+        (user_id,),
+    )
+    recent = await _fetch_all(
+        "SELECT id, status, model, duration, cost_usd, created_at FROM generations "
+        "WHERE user_id = ? ORDER BY created_at DESC LIMIT 8",
+        (user_id,),
+    )
+    failed = await _fetch_all(
+        "SELECT id, error, retryable, created_at FROM generations "
+        "WHERE user_id = ? AND status = 'failed' ORDER BY created_at DESC LIMIT 8",
+        (user_id,),
+    )
+    # generation_metrics is pure and synchronous, so it is called directly.
+    totals = analytics.generation_metrics(
+        await _fetch_all("SELECT * FROM generations WHERE user_id = ?", (user_id,))
+    )
+    return {
+        "totals": totals,
+        "profiles": profiles,
+        "profiles_awaiting_approval": [
+            p for p in profiles if p.get("status") != "approved"
+        ],
+        "pending_template_drafts": pending_drafts,
+        "recent_generations": recent,
+        "recent_failures": failed,
+    }
+
+
+@api_router.get("/settings")
+async def settings_overview(user_id: str = Depends(get_current_user_id)):
+    """
+    Configuration and capability view. Reports what is configured and what is
+    NOT, rather than silently degrading.
+    """
+    default_key = video_providers.default_model_key()
+    plan = video_providers.plan_duration(default_key, 30)
+    return {
+        "providers": {
+            "default": default_key,
+            "allowlist": [c["key"] for c in video_providers.list_capabilities()],
+            "max_single_pass_seconds": video_providers.capability(default_key)["max_duration"],
+            "thirty_second_request": plan,
+        },
+        "integrations": {
+            "openrouter": bool(os.environ.get("OPENROUTER_API_KEY")),
+            "apify": _apify_configured(),
+            "cloudflare_r2": storage_service.is_configured(),
+            "turso": bool(os.environ.get("TURSO_DATABASE_URL")),
+            "modal": bool(os.environ.get("MODAL_FRAME_EXTRACTOR_URL")),
+        },
+        "overlays": {
+            "ffmpeg_available": bool(shutil.which("ffmpeg")),
+            "font": overlays.resolve_font() or "",
+        },
+        "publishing": "manual",
+        "notes": [
+            "Videos are generated here and published by hand. This app never posts "
+            "to TikTok or any platform.",
+            "TikTok performance figures are entered by hand and are never verified.",
+            "Templates are curated structures, not proven performers, until this "
+            "app's own history says otherwise.",
+        ],
+    }
 
 
 # ---------------------------------------------------------------------------

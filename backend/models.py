@@ -445,3 +445,33 @@ class PerformanceEntryRequest(BaseModel):
     saves: Optional[int] = None
     notes: Optional[str] = ""
     outcome: Optional[str] = None  # successful | unsuccessful | ""
+
+
+class ResearchScanRequest(BaseModel):
+    """
+    Scan public trend data for reusable mechanics.
+
+    Reads public metadata only. app_context is an optional hint about the app
+    being promoted so drafts can be biased toward its category.
+    """
+    kind: Optional[str] = "keyword"  # keyword | hashtag | niche
+    query: Optional[str] = ""
+    niche: Optional[str] = ""
+    limit: Optional[int] = 15
+    app_context: Optional[str] = ""
+
+
+class FeedbackRequest(BaseModel):
+    """
+    Structured feedback captured at the moment something happened.
+
+    reason must be one of the codes permitted for event; the API refuses
+    anything else so the table stays aggregable.
+    """
+    event: str
+    reason: Optional[str] = ""
+    detail: Optional[str] = ""
+    brand_profile_id: Optional[str] = ""
+    studio_project_id: Optional[str] = ""
+    generation_id: Optional[str] = ""
+    template_id: Optional[str] = ""
