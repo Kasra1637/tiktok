@@ -83,6 +83,45 @@ def _generation(api, profile, status="completed", cost=0.25, **overrides):
     return _run(api.get_generation(gen_id, ANON))
 
 
+class TestDeleteAppProfile:
+    def test_delete_cascades_and_removes_profile(self, api):
+        profile = _profile(api, "Cascade Target")
+        _generation(api, profile, status="completed")
+        from models import now_iso
+        _run(api._execute(
+            "INSERT INTO feedback_events (id, brand_profile_id, event, created_at, user_id)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), profile["id"], "video_approved", now_iso(), ANON)))
+
+        result = _run(api.delete_app_profile(profile["id"], user_id=ANON))
+        assert result["deleted"] is True
+        assert result["generations_removed"] == 1
+
+        with pytest.raises(HTTPException) as err:
+            _run(api.get_app_profile(profile["id"], user_id=ANON))
+        assert err.value.status_code == 404
+
+        for table in ("content_angles", "studio_projects", "generations",
+                      "assets", "overlay_compositions", "performance_entries",
+                      "feedback_events", "asset_events"):
+            rows = _run(api._fetch_all(
+                f"SELECT id FROM {table} WHERE brand_profile_id = ?",
+                (profile["id"],)))
+            assert rows == [], table
+
+    def test_delete_is_404_for_unknown_profile(self, api):
+        with pytest.raises(HTTPException) as err:
+            _run(api.delete_app_profile(str(uuid.uuid4()), user_id=ANON))
+        assert err.value.status_code == 404
+
+    def test_delete_refused_while_generation_in_flight(self, api):
+        profile = _profile(api, "In Flight")
+        _generation(api, profile, status="generating")
+        with pytest.raises(HTTPException) as err:
+            _run(api.delete_app_profile(profile["id"], user_id=ANON))
+        assert err.value.status_code == 409
+
+
 class TestFeedbackCatalog:
     def test_catalog_lists_events_with_reasons(self, api):
         catalog = _run(api.feedback_catalog())

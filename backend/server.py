@@ -5662,6 +5662,76 @@ async def list_content_angles(profile_id: str, user_id: str = Depends(get_curren
     return {"angles": [_serialize_angle_row(r) for r in rows]}
 
 
+@api_router.delete("/app-profiles/{profile_id}")
+async def delete_app_profile(profile_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Delete an App Profile and everything scoped to it.
+
+    Cascades to the profile's content angles, studio projects, generations,
+    assets, overlay compositions, performance entries, feedback events, and
+    asset event logs. The model_requests ledger is deliberately kept: it is
+    the audit trail of what was spent, and its orphaned rows are harmless.
+
+    Deletion is refused while a generation is still in flight — finishing or
+    failing on its own keeps the spend attributable.
+
+    Files are removed best-effort: the profile's asset folder and any locally
+    cached generation videos. R2 copies are left in place; they are
+    content-addressed orphans that harm nothing.
+    """
+    row = await _fetch_one(
+        "SELECT id FROM brand_profiles WHERE id = ? AND user_id = ?",
+        (profile_id, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="App Profile not found")
+
+    in_flight = await _fetch_one(
+        """SELECT id FROM generations
+           WHERE brand_profile_id = ? AND status IN ('submitted', 'generating')
+           LIMIT 1""",
+        (profile_id,),
+    )
+    if in_flight:
+        raise HTTPException(
+            status_code=409,
+            detail="This profile has a generation still running. Wait for it to finish, then delete.",
+        )
+
+    gen_ids = [
+        r["id"]
+        for r in await _fetch_all(
+            "SELECT id FROM generations WHERE brand_profile_id = ?", (profile_id,)
+        )
+    ]
+
+    for table in (
+        "content_angles",
+        "studio_projects",
+        "generations",
+        "assets",
+        "overlay_compositions",
+        "performance_entries",
+        "feedback_events",
+        "asset_events",
+    ):
+        await _execute(f"DELETE FROM {table} WHERE brand_profile_id = ?", (profile_id,))
+    await _execute(
+        "DELETE FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+
+    # Best-effort file cleanup. A leaked file must never fail the delete.
+    shutil.rmtree(_asset_dir(profile_id), ignore_errors=True)
+    for gen_id in gen_ids:
+        try:
+            (pipeline.STORAGE_DIR / "videos" / f"{gen_id}.mp4").unlink(missing_ok=True)
+        except OSError as e:
+            logger.warning(f"Could not remove cached video for generation {gen_id}: {e}")
+
+    logger.info(f"Deleted App Profile {profile_id} ({len(gen_ids)} generation(s) removed)")
+    return {"deleted": True, "id": profile_id, "generations_removed": len(gen_ids)}
+
+
 @api_router.post("/app-profiles/{profile_id}/content-angles", status_code=201)
 async def generate_profile_content_angles(profile_id: str, user_id: str = Depends(get_current_user_id)):
     """

@@ -82,6 +82,7 @@ export const api = {
   researchAppProfile: (payload) => client.post("/app-profiles/research", payload).then((r) => r.data),
   getAppProfiles: () => client.get("/app-profiles").then((r) => r.data),
   getAppProfile: (id) => client.get(`/app-profiles/${id}`).then((r) => r.data),
+  deleteAppProfile: (id) => client.delete(`/app-profiles/${id}`).then((r) => r.data),
   updateAppProfile: (id, payload) => client.patch(`/app-profiles/${id}`, payload).then((r) => r.data),
   approveAppProfile: (id, applyPending = true) =>
     client.post(`/app-profiles/${id}/approve`, { apply_pending: applyPending }).then((r) => r.data),

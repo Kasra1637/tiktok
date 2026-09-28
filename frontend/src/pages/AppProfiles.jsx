@@ -6,7 +6,7 @@ import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import EmptyState from "../components/EmptyState";
 import { api, getErrorMessage } from "../lib/api";
-import { Briefcase, Loader2, AlertTriangle, ExternalLink, Plus, ArrowRight } from "lucide-react";
+import { Briefcase, Loader2, AlertTriangle, ExternalLink, Plus, ArrowRight, Trash2 } from "lucide-react";
 
 function StatusBadge({ status }) {
   if (status === "approved") {
@@ -23,14 +23,14 @@ function PlatformChips({ row }) {
   ].filter(Boolean);
   if (!stores.length) return null;
   return (
-    <div className="flex flex-wrap gap-1.5">
+    /* z-10 keeps the store links clickable above the stretched card link. */
+    <div className="relative z-10 flex flex-wrap gap-1.5">
       {stores.map((s) => (
         <a
           key={s.label}
           href={s.href}
           target="_blank"
           rel="noreferrer"
-          onClick={(e) => e.stopPropagation()}
           className="inline-flex items-center gap-1 rounded-full border border-[color:var(--hairline)] px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-[color:var(--indigo-35)] hover:text-[color:var(--brand-indigo)]"
         >
           {s.label}
@@ -45,6 +45,7 @@ export default function AppProfiles() {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
   useEffect(() => {
     api
@@ -53,6 +54,27 @@ export default function AppProfiles() {
       .catch((err) => setError(getErrorMessage(err)))
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleDelete(profile) {
+    const name = profile.brand_name || "Untitled app";
+    if (
+      !window.confirm(
+        `Delete "${name}"? This permanently removes the profile, its assets, projects, generations, and history. This can't be undone.`,
+      )
+    ) {
+      return;
+    }
+    setDeletingId(profile.id);
+    setError(null);
+    try {
+      await api.deleteAppProfile(profile.id);
+      setProfiles((prev) => prev.filter((row) => row.id !== profile.id));
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   const approved = profiles.filter((p) => p.status === "approved").length;
 
@@ -80,7 +102,7 @@ export default function AppProfiles() {
       {error && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Could not load profiles</AlertTitle>
+          <AlertTitle>Something went wrong</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
@@ -104,35 +126,63 @@ export default function AppProfiles() {
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {profiles.map((p) => (
-            <Link
-              key={p.id}
-              to={`/app-profiles/${p.id}`}
-              className="surface group flex flex-col gap-3 rounded-2xl p-5 transition-colors hover:border-[color:var(--indigo-35)]"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 className="font-display truncate text-base font-semibold">
-                    {p.brand_name || "Untitled app"}
-                  </h3>
-                  <p className="mt-0.5 text-sm text-muted-foreground">
-                    {p.app_category || p.niche || "Category not set"}
-                  </p>
+          {profiles.map((p) => {
+            const name = p.brand_name || "Untitled app";
+            const deleting = deletingId === p.id;
+            return (
+              /* Stretched-link card: the Link overlays the whole card so any
+                 click navigates, while interactive children (store chips,
+                 Delete) sit above it with z-10. Keeps the DOM valid — no
+                 button nested inside an anchor. */
+              <div
+                key={p.id}
+                className="surface group relative flex flex-col gap-3 rounded-2xl p-5 transition-colors hover:border-[color:var(--indigo-35)]"
+              >
+                <Link
+                  to={`/app-profiles/${p.id}`}
+                  className="absolute inset-0 rounded-2xl"
+                  aria-label={`Open ${name}`}
+                />
+
+                <div className="pointer-events-none relative z-10 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="font-display truncate text-base font-semibold">{name}</h3>
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                      {p.app_category || p.niche || "Category not set"}
+                    </p>
+                  </div>
+                  <StatusBadge status={p.status} />
                 </div>
-                <StatusBadge status={p.status} />
-              </div>
 
-              <PlatformChips row={p} />
+                <PlatformChips row={p} />
 
-              <div className="flex items-center justify-between pt-1 text-xs text-muted-foreground">
-                <span>
-                  {p.version > 1 ? `Version ${p.version}` : "Version 1"}
-                  {p.approved_at ? " · approved" : ""}
-                </span>
-                <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                <div className="pointer-events-none relative z-10 flex items-center justify-between pt-1 text-xs text-muted-foreground">
+                  <span>
+                    {p.version > 1 ? `Version ${p.version}` : "Version 1"}
+                    {p.approved_at ? " · approved" : ""}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={deleting}
+                      onClick={() => handleDelete(p)}
+                      data-testid={`delete-profile-${p.id}`}
+                      className="pointer-events-auto h-7 gap-1.5 rounded-lg px-2 text-xs text-muted-foreground hover:text-destructive"
+                    >
+                      {deleting ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
+                      Delete
+                    </Button>
+                    <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                  </div>
+                </div>
               </div>
-            </Link>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
