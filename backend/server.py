@@ -7103,6 +7103,70 @@ def _public_asset(row: dict) -> dict:
     return out
 
 
+async def _asset_usage_index(profile_id: str) -> dict:
+    """
+    Map each asset id to the studio projects that reference it.
+
+    Resolved in Python rather than SQL. The attachment list lives in a JSON
+    column on studio_projects, so SQLite would need json_each to join against
+    it. At this tool's volumes -- a founder's own handful of projects per app --
+    one query and a dict build is simpler, and far easier to read than a
+    correlated subquery, which matters because "which videos used this asset"
+    is the kind of question that gets audited.
+
+    Attachments are snapshots, not foreign keys: detaching an asset leaves the
+    history intact, which is the point. A project whose asset file has since
+    been deleted still counts as a use.
+    """
+    index: dict = {}
+    if not profile_id:
+        return index
+    rows = await _fetch_all(
+        "SELECT id, hook_line, status, script_version, assets FROM studio_projects "
+        "WHERE brand_profile_id = ?",
+        (profile_id,),
+    )
+    for row in rows:
+        # The connection's row factory already decodes JSON columns, but a
+        # hand-written or older row can still arrive as a string, and junk in
+        # the column must not break the listing for every other asset.
+        attached = row.get("assets")
+        if isinstance(attached, str):
+            try:
+                attached = json.loads(attached or "[]")
+            except ValueError:
+                continue
+        if not isinstance(attached, list):
+            continue
+        for item in attached:
+            if not isinstance(item, dict):
+                continue
+            asset_id = str(item.get("asset_id") or "").strip()
+            if not asset_id:
+                continue
+            # A project has no name of its own, so the hook line stands in. A
+            # draft that has not been planned yet has no hook, and is labelled
+            # by its stage instead of pretending to have a title.
+            label = (row.get("hook_line") or "").strip()
+            if not label:
+                label = "Planned project" if row.get("script_version") else "Unplanned draft"
+            index.setdefault(asset_id, []).append({
+                "studio_project_id": row["id"],
+                "name": label,
+                "status": row.get("status") or "draft",
+            })
+    return index
+
+
+def _attach_usage(asset: dict, index: dict) -> dict:
+    """Add usage history to one asset, newest project first."""
+    uses = index.get(asset.get("id"), [])
+    out = dict(asset)
+    out["usage_count"] = len(uses)
+    out["used_in"] = uses
+    return out
+
+
 def _asset_dir(profile_id: str) -> Path:
     """Per-App-Profile asset folder, resolved safely from a known UUID."""
     safe = profile_id if GENERATED_ID_RE.match(profile_id or "") else "unscoped"
@@ -7135,7 +7199,41 @@ async def list_assets(
         f"SELECT * FROM assets WHERE {' AND '.join(clauses)} ORDER BY created_at DESC LIMIT 300",
         tuple(params),
     )
-    return {"assets": [_public_asset(r) for r in rows]}
+    # One index for the whole page rather than a lookup per asset.
+    index = await _asset_usage_index(profile_id)
+    return {
+        "assets": [_attach_usage(_public_asset(r), index) for r in rows]
+    }
+
+
+@api_router.get("/assets/{asset_id}/usage")
+async def get_asset_usage(asset_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Which projects have used this asset, and which videos came out of them.
+
+    Scoped to the asset's own App Profile, so a user cannot read another
+    profile's project names by guessing an asset id.
+    """
+    asset = await _fetch_one(
+        "SELECT * FROM assets WHERE id = ? AND user_id = ?", (asset_id, user_id)
+    )
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    index = await _asset_usage_index(asset.get("brand_profile_id"))
+    uses = index.get(asset_id, [])
+    for use in uses:
+        gens = await _fetch_all(
+            "SELECT id, status, video_url, r2_url, created_at FROM generations "
+            "WHERE studio_project_id = ? ORDER BY created_at DESC LIMIT 20",
+            (use["studio_project_id"],),
+        )
+        use["generations"] = gens
+    return {
+        "asset": _attach_usage(_public_asset(asset), index),
+        "usage_count": len(uses),
+        "used_in": uses,
+    }
 
 
 @api_router.post("/app-profiles/{profile_id}/assets", status_code=201)
@@ -7246,6 +7344,11 @@ async def delete_asset(asset_id: str, user_id: str = Depends(get_current_user_id
     )
     if not row:
         raise HTTPException(status_code=404, detail="Asset not found")
+    # Deleting the file does not rewrite the projects that referenced it, so
+    # their usage history survives as a record of what happened. Surfacing the
+    # count lets the caller warn instead of silently orphaning them.
+    index = await _asset_usage_index(row.get("brand_profile_id"))
+    still_used = index.get(asset_id, [])
     await _execute("DELETE FROM assets WHERE id = ? AND user_id = ?", (asset_id, user_id))
     path = Path(row.get("file_path") or "")
     try:
@@ -7253,7 +7356,15 @@ async def delete_asset(asset_id: str, user_id: str = Depends(get_current_user_id
             path.unlink()
     except OSError as e:
         logger.warning(f"Could not remove asset file {path}: {e}")
-    return {"deleted": asset_id}
+    return {
+        "deleted": asset_id,
+        "usage_count": len(still_used),
+        "note": (
+            f"{len(still_used)} project(s) still reference this asset and will fail to "
+            "compose overlays."
+            if still_used else None
+        ),
+    }
 
 
 @api_router.post("/studio/projects/{project_id}/assets", status_code=201)

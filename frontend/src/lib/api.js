@@ -255,6 +255,7 @@ export const api = {
       .then((r) => r.data),
   updateAsset: (id, payload) => client.patch(`/assets/${id}`, payload).then((r) => r.data),
   deleteAsset: (id) => client.delete(`/assets/${id}`).then((r) => r.data),
+  getAssetUsage: (id) => client.get(`/assets/${id}/usage`).then((r) => r.data),
   attachAsset: (projectId, payload) =>
     client.post(`/studio/projects/${projectId}/assets`, payload).then((r) => r.data),
   detachAsset: (projectId, assetId) =>

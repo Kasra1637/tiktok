@@ -229,6 +229,156 @@ class TestAssetLibrary:
             _run(api.list_assets(profile_id=profile["id"], user_id=OTHER_USER))
         assert err.value.status_code == 404
 
+
+class TestAssetUsageHistory:
+    """
+    The spec asks for asset usage history. An attachment is a snapshot stored
+    on the project, not a foreign key, so detaching leaves the history intact —
+    which is the behaviour worth pinning.
+    """
+
+    def _attach(self, api, profile, asset):
+        from models import AttachAssetRequest
+        project = _project(api, profile)
+        _run(api.attach_asset_to_project(
+            project_id=project["id"],
+            payload=AttachAssetRequest(asset_id=asset["id"], start=0, end=5),
+            user_id=ANON,
+        ))
+        return _run(api.get_studio_project(project["id"], ANON))
+
+    def test_unused_asset_reports_zero(self, api, tmp_root):
+        profile = _profile(api, "Unused Asset")
+        shot = _make_image(tmp_root / "unused.png")
+        asset = _insert_asset(api, profile["id"], "screenshot", shot)
+        listed = _run(api.list_assets(profile_id=profile["id"], user_id=ANON))
+        found = next(a for a in listed["assets"] if a["id"] == asset["id"])
+        assert found["usage_count"] == 0
+        assert found["used_in"] == []
+
+    def test_attaching_records_the_project(self, api, tmp_root):
+        profile = _profile(api, "Used Asset")
+        shot = _make_image(tmp_root / "used.png")
+        asset = _insert_asset(api, profile["id"], "screenshot", shot)
+        self._attach(api, profile, asset)
+        usage = _run(api.get_asset_usage(asset["id"], ANON))
+        assert usage["usage_count"] == 1
+        assert usage["used_in"][0]["status"] == "draft"
+
+    def test_the_listing_carries_usage_too(self, api, tmp_root):
+        """One index serves the whole page, so no per-asset lookup is needed."""
+        profile = _profile(api, "List Usage")
+        shot = _make_image(tmp_root / "listed.png")
+        asset = _insert_asset(api, profile["id"], "screenshot", shot)
+        self._attach(api, profile, asset)
+        listed = _run(api.list_assets(profile_id=profile["id"], user_id=ANON))
+        found = next(a for a in listed["assets"] if a["id"] == asset["id"])
+        assert found["usage_count"] == 1
+
+    def test_detaching_clears_current_usage(self, api, tmp_root):
+        """
+        Detach is a forward-looking edit: the founder is saying "stop using
+        this here", so it must remove the project from the asset's usage. The
+        record that must survive is deletion, not detachment.
+        """
+        profile = _profile(api, "Detach Clears")
+        shot = _make_image(tmp_root / "detach.png")
+        asset = _insert_asset(api, profile["id"], "screenshot", shot)
+        project = self._attach(api, profile, asset)
+        _run(api.detach_asset_from_project(
+            project_id=project["id"], asset_id=asset["id"], user_id=ANON))
+        assert _run(api.get_asset_usage(asset["id"], ANON))["usage_count"] == 0
+
+    def test_the_project_keeps_its_record_after_the_asset_is_deleted(self, api, tmp_root):
+        """
+        Deleting the asset row does not rewrite the project, so a video that
+        already shipped still shows what it was built from. This is the record
+        that makes usage a history rather than a live join.
+        """
+        profile = _profile(api, "Delete Keeps Record")
+        shot = _make_image(tmp_root / "keep.png")
+        asset = _insert_asset(api, profile["id"], "screenshot", shot)
+        project = self._attach(api, profile, asset)
+        _run(api.delete_asset(asset["id"], ANON))
+        after = _run(api.get_studio_project(project["id"], ANON))
+        assert [a["asset_id"] for a in after["assets"]] == [asset["id"]]
+
+    def test_usage_never_crosses_profiles(self, api, tmp_root):
+        """
+        The index is built per App Profile, so one app's project cannot show up
+        in another app's asset history.
+        """
+        p1 = _profile(api, "Usage App One")
+        p2 = _profile(api, "Usage App Two")
+        shot = _make_image(tmp_root / "scoped.png")
+        asset_one = _insert_asset(api, p1["id"], "screenshot", shot)
+        self._attach(api, p2, _insert_asset(api, p2["id"], "screenshot", shot))
+        assert _run(api.get_asset_usage(asset_one["id"], ANON))["usage_count"] == 0
+
+    def test_another_users_asset_is_404(self, api, tmp_root):
+        profile = _profile(api, "Private Usage")
+        shot = _make_image(tmp_root / "private.png")
+        asset = _insert_asset(api, profile["id"], "screenshot", shot)
+        with pytest.raises(HTTPException) as err:
+            _run(api.get_asset_usage(asset["id"], OTHER_USER))
+        assert err.value.status_code == 404
+
+    def test_deleting_a_used_asset_reports_the_orphaned_projects(self, api, tmp_root):
+        """
+        Deleting the file does not rewrite history, so the response has to say
+        what is now broken rather than deleting quietly.
+        """
+        profile = _profile(api, "Delete Used")
+        shot = _make_image(tmp_root / "del.png")
+        asset = _insert_asset(api, profile["id"], "screenshot", shot)
+        self._attach(api, profile, asset)
+        result = _run(api.delete_asset(asset["id"], ANON))
+        assert result["usage_count"] == 1
+        assert "1 project" in result["note"]
+
+    def test_deleting_an_unused_asset_warns_about_nothing(self, api, tmp_root):
+        profile = _profile(api, "Delete Free")
+        shot = _make_image(tmp_root / "free.png")
+        asset = _insert_asset(api, profile["id"], "screenshot", shot)
+        result = _run(api.delete_asset(asset["id"], ANON))
+        assert result["usage_count"] == 0
+        assert result["note"] is None
+
+    def test_malformed_attachment_json_is_skipped(self, api, tmp_root):
+        """
+        A project whose assets column holds junk must not break the listing for
+        every other asset in the profile.
+        """
+        from models import now_iso
+        profile = _profile(api, "Bad JSON")
+        shot = _make_image(tmp_root / "bad.png")
+        asset = _insert_asset(api, profile["id"], "screenshot", shot)
+        now = now_iso()
+        project_id = str(uuid.uuid4())
+        _run(api._execute(
+            """INSERT INTO studio_projects
+               (id, brand_profile_id, template_id, status, assets, script_version,
+                duration_seconds, created_at, updated_at, user_id)
+               VALUES (?, ?, ?, 'draft', ?, 0, 15, ?, ?, ?)""",
+            (project_id, profile["id"], "tpl-bad", "not json", now, now, ANON)))
+        listed = _run(api.list_assets(profile_id=profile["id"], user_id=ANON))
+        found = next(a for a in listed["assets"] if a["id"] == asset["id"])
+        assert found["usage_count"] == 0
+
+    def test_an_attachment_entry_without_an_id_is_ignored(self, api, tmp_root):
+        """A snapshot written before ids were recorded should not crash the index."""
+        from models import UpdateStudioProjectRequest
+        profile = _profile(api, "No Asset Id")
+        shot = _make_image(tmp_root / "noid.png")
+        asset = _insert_asset(api, profile["id"], "screenshot", shot)
+        project = _project(api, profile)
+        _run(api.update_studio_project(
+            project_id=project["id"],
+            payload=UpdateStudioProjectRequest(assets=[{"kind": "screenshot", "file_path": "x"}]),
+            user_id=ANON,
+        ))
+        assert _run(api.get_asset_usage(asset["id"], ANON))["usage_count"] == 0
+
     def test_archive_hides_from_default_listing(self, api, tmp_root):
         from models import UpdateAssetRequest
         profile = _profile(api, "Archive Asset")

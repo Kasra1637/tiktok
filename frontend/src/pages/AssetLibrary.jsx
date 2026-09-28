@@ -28,6 +28,7 @@ function humanize(value) {
 
 function AssetRow({ asset, onDelete, onArchive, busy }) {
   const isVideo = asset.kind === "screen_recording" || asset.kind === "background_video";
+  const uses = asset.used_in || [];
   return (
     <div className="flex items-center gap-3 rounded-xl border border-[color:var(--hairline)] p-3">
       <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-secondary/40">
@@ -57,6 +58,7 @@ function AssetRow({ asset, onDelete, onArchive, busy }) {
           )}
         </div>
         {asset.notes && <p className="mt-0.5 text-xs text-muted-foreground">{asset.notes}</p>}
+        <UsageHistory uses={uses} />
       </div>
       <div className="flex shrink-0 gap-1">
         <Button
@@ -82,6 +84,31 @@ function AssetRow({ asset, onDelete, onArchive, busy }) {
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </div>
+    </div>
+  );
+}
+
+function UsageHistory({ uses }) {
+  if (!uses.length) {
+    return (
+      <p className="mt-0.5 text-xs text-muted-foreground">Not used in any project yet</p>
+    );
+  }
+  return (
+    <div className="mt-1">
+      <p className="text-xs text-muted-foreground">
+        Used in {uses.length} project{uses.length === 1 ? "" : "s"}:
+      </p>
+      <ul className="mt-0.5 space-y-0.5">
+        {uses.map((use) => (
+          <li key={use.studio_project_id} className="flex items-center gap-1.5 text-xs">
+            <span className="truncate text-muted-foreground">{use.name}</span>
+            <Badge variant="outline" className="shrink-0 text-[10px]">
+              {humanize(use.status)}
+            </Badge>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -147,9 +174,24 @@ export default function AssetLibrary({ profileId, onChanged }) {
   };
 
   const handleDelete = async (asset) => {
+    // Deleting the file does not rewrite the projects that referenced it, so
+    // the founder is warned first: those projects will fail to compose
+    // overlays until the asset is re-uploaded.
+    const uses = asset.used_in || [];
+    if (
+      uses.length &&
+      !window.confirm(
+        `This asset is used in ${uses.length} project${uses.length === 1 ? "" : "s"} ` +
+          `(${uses.map((u) => u.name).join(", ")}). Deleting it will break overlay ` +
+          `composition for those projects. Delete anyway?`
+      )
+    ) {
+      return;
+    }
     setBusy(true);
     try {
-      await api.deleteAsset(asset.id);
+      const result = await api.deleteAsset(asset.id);
+      if (result?.note) setNotice(result.note);
       load();
       onChanged?.();
     } catch (err) {
