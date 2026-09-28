@@ -20,6 +20,32 @@ code, .font-mono {
     font-family: "IBM Plex Mono", source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
 }
 
+/* ---- Native form controls: keep the OS-owned dropdown list readable on the
+   dark theme. `select` inherits the dark surface, `color-scheme: dark` tells
+   the browser to paint scrollbars, the button affordance, and any part of
+   the popup it insists on drawing itself in dark colors. `option` gets an
+   explicit opaque background because browsers paint the closed <select>
+   with the page theme but the OPEN popup list with their own (white)
+   defaults — that mismatch is why the list used to flash white. Plain
+   `background` (not background-color) plus !important survive the UA
+   stylesheet; text stays white everywhere including selected rows. */
+select {
+    color-scheme: dark;
+    background: hsl(228 14% 10%);
+    color: #fff;
+}
+
+select option {
+    background: hsl(228 14% 10%) !important;
+    color: #fff;
+}
+
+select option:checked,
+select option:hover {
+    background: hsl(244 60% 32%) !important;
+    color: #fff;
+}
+
 @layer base {
     :root {
         --background: 228 14% 7%;
