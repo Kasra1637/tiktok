@@ -169,8 +169,8 @@ worst bugs in that path (an orphaned filter chain, a 600-second output) exited
 
 | Model | Single pass | Notes |
 |---|---|---|
-| `minimax-h3` *(default)* | 5–15s | 2K, native audio. **Cannot** combine `frame_images` with `input_references`. 20s and 30s need a second generation. |
-| `seedance-2.5` | 4–30s | 720p, native audio, up to 50 multimodal references, first-frame guidance. The longest single pass available. |
+| `minimax-h3` | 5–15s | 2K, native audio. **Cannot** combine `frame_images` with `input_references`. 20s and 30s need a second generation. |
+| `seedance-2.5` *(default)* | 4–30s | 720p, native audio, up to 50 multimodal references, first-frame guidance. The longest single pass available. |
 | `runway/aleph-2` | — | **Editor, not a generator.** Refused by this workflow: it edits an existing clip and cannot generate from a prompt. Legacy flow only. |
 
 Other constraints:

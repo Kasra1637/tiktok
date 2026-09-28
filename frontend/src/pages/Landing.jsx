@@ -16,111 +16,125 @@ import { Button } from "../components/ui/button";
 
 const FEATURES = [
   {
-    icon: Search,
-    title: "10-Niche Discovery",
-    description:
-      "Browse trending TikTok videos across 10 niches, ranked by a live virality score. Search any keyword or hashtag.",
-  },
-  {
-    icon: TrendingUp,
-    title: "AI Hook Analysis",
-    description:
-      "AI dissects the first 3 seconds of any video \u2014 expressions, gestures, pacing, overlays. Scored 1\u201310.",
-  },
-  {
-    icon: FileText,
-    title: "Transcript-Grounded",
-    description:
-      "When captions exist, hook analysis is grounded in real spoken words \u2014 not just guesswork from the visuals.",
-  },
-  {
-    icon: Music2,
-    title: "Sound Intelligence",
-    description:
-      "See public sound metadata on research videos \u2014 title, artist, duration. Use only audio you have the right to use.",
-  },
-  {
-    icon: BadgeAlert,
-    title: "Ad Filtering",
-    description:
-      "Sponsored posts are auto-flagged and hideable with one toggle. Focus only on organic hooks worth abstracting.",
-  },
-  {
-    icon: LayoutTemplate,
-    title: "Template Studio",
-    description:
-      "Build videos from reusable hook structures, not specific creators. No source video is required for generation.",
-  },
-  {
     icon: Briefcase,
     title: "App Profiles",
     description:
-      "Research a website and store listings into an approved profile with features, audiences, claims, and CTAs.",
+      "Submit a website, App Store, or Play Store URL. AI researches it into an editable profile \u2014 features, audiences, pricing, brand voice, and claims. Nothing generates until you approve it.",
   },
   {
-    icon: Bookmark,
-    title: "Saved Research",
+    icon: Target,
+    title: "Audiences & Angles",
     description:
-      "Save hook analyses and reusable mechanics. Reuse the research without repeating the AI analysis.",
+      "Ideal customer segments and content angles, each with the user problem, hook promise, app feature, emotion, CTA, and the claims to respect.",
+  },
+  {
+    icon: LayoutTemplate,
+    title: "Hook Template Library",
+    description:
+      "Curated, versioned hook structures you can search, filter, favorite, preview, duplicate, and customize. Drafts need review before they go live.",
+  },
+  {
+    icon: Wand2,
+    title: "Template Recommendations",
+    description:
+      "Templates ranked for your app, audience, angle, and objective \u2014 with why each fits, the assets it needs, and its limits. Any compatible template can still be picked by hand.",
+  },
+  {
+    icon: FileText,
+    title: "Editable Creative Plan",
+    description:
+      "Hook line, full script, shot and beat timeline, on-screen text, voice, sound, and CTA \u2014 generated as a plan you can rewrite before anything renders.",
+  },
+  {
+    icon: Clapperboard,
+    title: "One Coherent Video",
+    description:
+      "Hook and continuation arrive from a single generation, 10 to 30 seconds where the model supports it. The video model stays a setting, not a dependency.",
   },
   {
     icon: Film,
     title: "Real App Visuals",
     description:
-      "Screenshots, recordings, logos, text, and authorized audio are composited deterministically, so interfaces stay accurate.",
+      "Your actual screenshots, recordings, logos, and captions are composited on afterwards with ffmpeg, so interfaces, pricing, and app names stay correct.",
   },
   {
     icon: ShieldCheck,
     title: "Claim Safety",
     description:
-      "Approved and prohibited claims are checked on every edit. Reviewers see claims, sources, unverified copy, and risks.",
+      "Approved, review-required, and banned claims are re-checked on every edit. Reviewers see the claims used, their sources, unverified lines, and risks.",
+  },
+  {
+    icon: Layers,
+    title: "Asset Library",
+    description:
+      "Screenshots, recordings, logos, character references, and backgrounds filed per app, with usage history and a guard that refuses another app's assets.",
+  },
+  {
+    icon: Music2,
+    title: "Authorized Audio",
+    description:
+      "Voiceover and background audio become usable only after you confirm the rights, then mix deterministically under the generated clip.",
   },
   {
     icon: RotateCcw,
-    title: "Re-roll Takes",
+    title: "Controlled Variations",
     description:
-      "Not happy with a take? Regenerate, vary one axis, or duplicate the setup. Paid renders stay explicit.",
+      "Change one axis at a time \u2014 hook, CTA, tone, audience, pacing, or length. Every variation stays linked to its parent generation, script, and model.",
   },
   {
-    icon: Target,
-    title: "Feedback Loop",
+    icon: TrendingUp,
+    title: "Analytics & Feedback",
     description:
-      "Approvals, rejections, edits, and results inform future recommendations and prompts for the same app.",
+      "Success rates, spend by app and template, and regeneration reasons, while rejections and heavy edits feed the next recommendations. Manual performance notes stay marked unverified.",
+  },
+  {
+    icon: BadgeAlert,
+    title: "History & Operations",
+    description:
+      "Status, cost, model, and error for every job. Failed generations, storage faults, and video-processing errors stay visible and retryable.",
+  },
+  {
+    icon: Search,
+    title: "Optional Trend Research",
+    description:
+      "Public TikTok data abstracted into reusable mechanics that become reviewed template drafts. Creating a video never requires a source video.",
   },
   {
     icon: Download,
     title: "Manual Publishing",
     description:
-      "Download the finished MP4 and post it yourself. Nothing is published, scheduled, or automated.",
+      "Download the finished MP4 and post it yourself. There is no posting, scheduling, engagement automation, or platform credential storage anywhere.",
   },
 ];
+
 
 const FLOW_STEPS = [
   {
     step: "1",
-    label: "Discover",
-    icon: Search,
-    detail: "Browse trending TikToks in your niche. Filter by virality, views, or recency.",
+    label: "Profile",
+    icon: Briefcase,
+    detail: "Paste your app's website and store links. AI researches them into an App Profile you review and approve before anything generates.",
   },
   {
     step: "2",
-    label: "Analyze",
-    icon: TrendingUp,
-    detail: "AI dissects the hook \u2014 expressions, pacing, overlays. Save the reusable mechanic as research.",
+    label: "Brief",
+    icon: Target,
+    detail: "Choose the audience, objective, and content angle. Hook templates are recommended with the reason each one fits.",
   },
   {
     step: "3",
-    label: "Template",
-    icon: LayoutTemplate,
-    detail: "Choose an approved app, audience, template, and real assets. Generate an editable script and shot plan.",
+    label: "Plan",
+    icon: FileText,
+    detail: "Select real assets, generate the script and shot plan, then edit the hook, on-screen text, CTA, tone, and length.",
   },
   {
     step: "4",
-    label: "Generate",
-    icon: Clapperboard,
-    detail: "Generate one coherent video, composite real app visuals and authorized audio, then download and publish manually.",
+    label: "Deliver",
+    icon: Download,
+    detail: "Generate one coherent vertical video, composite the real app visuals, download the MP4, and publish it yourself.",
   },
 ];
+
 
 const NAV_LINKS = [
   { href: "#how-it-works", label: "How it works" },
@@ -168,14 +182,15 @@ function Aurora() {
 
 const PIPELINE_BLOCKS = [
   {
-    icon: Film,
+    icon: Globe,
     tone: "indigo",
-    kicker: "Research",
-    title: "Reusable Mechanics",
+    kicker: "Intelligence",
+    title: "Researched, Then Approved",
     body: (
       <>
-        Trend research is abstracted into reusable hook structures. No creator identity,
-        performance, gesture sequence, voice, or copyrighted audio is copied into the library.
+        Website and store pages become an App Profile: features, use cases, competitors, pricing,
+        brand voice, and claims sorted into approved, needs-review, and banned. You approve it
+        before generation, and a refresh never silently overwrites what you approved.
       </>
     ),
   },
@@ -186,56 +201,49 @@ const PIPELINE_BLOCKS = [
     title: "One Coherent Video",
     body: (
       <>
-        The studio generates the hook and continuation as one coherent vertical video.
-        Real screenshots, recordings, text, and authorized audio are composited afterward.
-        Download the result and publish it manually.
+        The studio generates the hook and the continuation as a single vertical clip, with native
+        audio where the model supports it. A second pass only happens to extend past the model's
+        limit or to replace a failed segment.
       </>
     ),
   },
   {
-    icon: Bookmark,
+    icon: Film,
     tone: "indigo",
-    kicker: "Reuse",
-    title: "Bookmarks",
+    kicker: "Compositing",
+    title: "Real Visuals, Deterministically",
     body: (
       <>
-        Save useful analyses and mechanics. Reusing saved research
-        later skips repeated AI analysis &mdash; you only pay for renders you explicitly request.
+        The model is asked for people, scenes, and movement \u2014 never your interface. Real
+        screenshots, screen recordings, captions, logos, and authorized audio are overlaid afterwards
+        with ffmpeg, so UI, pricing, and app names cannot drift.
       </>
     ),
   },
   {
-    icon: FileText,
+    icon: Search,
     tone: "indigo",
-    kicker: "Signal",
-    title: "Transcript & Ad Detection",
+    kicker: "Research",
+    title: "Mechanics, Not Imitation",
     body: (
       <>
-        Transcripts ground the analysis in real spoken words. Ads are auto-flagged and hideable
-        with one toggle so you focus on organic hooks.
-      </>
-    ),
-  },
-  {
-    icon: Globe,
-    tone: "indigo",
-    kicker: "Brand",
-    title: "Brand Integration",
-    body: (
-      <>
-        Paste your URL &mdash; AI extracts your brand name, products, audience, and tone. This profile
-        powers template recommendations and creative plans for your product.
+        Optional trend research abstracts recurring hook structures from public videos into template
+        drafts that need review. No creator identity, performance, gesture sequence, voice, or
+        copyrighted audio is copied into the library.
       </>
     ),
   },
 ];
 
+
 const MODELS = [
-  { label: "Hook Analysis", value: "Gemini 2.5 Flash (vision) \u2014 frame reading, structured JSON output" },
-  { label: "Research and Scripts", value: "Gemini 2.5 Flash \u2014 app research, angles, creative plans, template abstraction" },
-  { label: "Video", value: "Configurable studio model \u2014 one coherent vertical generation with native audio where supported" },
-  { label: "Data", value: "Apify TikTok Scraper + yt-dlp \u2014 profiles, hashtags, keyword search, music" },
+  { label: "Text & vision", value: "Gemini 2.5 Flash via OpenRouter \u2014 app research, profiles, angles, creative plans, template abstraction" },
+  { label: "Video (default)", value: "bytedance/seedance-2.5 \u2014 4\u201330s in one pass, native audio, first-frame guidance, up to 720p" },
+  { label: "Video (alternate)", value: "minimax-h3 \u2014 5\u201315s per pass at 2K; 20s and 30s need a second pass" },
+  { label: "Model control", value: "VIDEO_MODEL_DEFAULT and VIDEO_MODEL_ALLOWLIST \u2014 the studio refuses any editor model that cannot generate from a prompt" },
+  { label: "Research data", value: "Apify TikTok scraper (public data only) \u2014 feeds the optional trend-research workflow" },
 ];
+
 
 function SectionHeading({ eyebrow, title, lede, id }) {
   return (
@@ -299,7 +307,7 @@ export default function Landing() {
               </SignUpTrigger>
             </UnauthedOnly>
             <AuthedOnly>
-              <Link to="/discover">
+              <Link to="/">
                 <Button
                   className="gap-2 rounded-xl bg-[color:var(--brand-indigo)] px-4 text-sm font-semibold text-white shadow-[var(--glow-indigo)] hover:bg-[color:var(--brand-indigo-dark)]"
                   data-testid="landing-enter-app-button"
@@ -323,7 +331,7 @@ export default function Landing() {
               <span className="absolute inset-0 animate-pulse-ring rounded-full bg-[color:var(--brand-indigo)]" />
               <span className="relative h-1.5 w-1.5 rounded-full bg-[color:var(--brand-indigo)]" />
             </span>
-            Viral hooks &rarr; Reusable templates &rarr; Manual publishing
+            App profile &rarr; Hook template &rarr; One coherent video &rarr; Manual publishing
           </div>
 
           <h1
@@ -341,9 +349,9 @@ export default function Landing() {
             className="animate-fade-up mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl"
             style={{ animationDelay: "120ms" }}
           >
-            Research a reusable hook mechanic, build it into a template-based app video with
-            real visuals and authorized audio, then download and publish it yourself. Exact-match
-            recreation is disabled.
+            HookForge researches your app's website and store listings into a profile you approve,
+            recommends a curated hook template, and generates one coherent vertical video with your
+            real screenshots, recordings, and logo. Download the MP4 and publish it yourself.
           </p>
 
           <div
@@ -356,7 +364,7 @@ export default function Landing() {
                   size="lg"
                   className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-white shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
                 >
-                  <Sparkles className="h-5 w-5" /> Start Free
+                  <Sparkles className="h-5 w-5" /> Get Started
                 </Button>
               </SignUpTrigger>
               <SignInTrigger>
@@ -415,9 +423,9 @@ export default function Landing() {
       <section className="relative z-10 mx-auto max-w-6xl px-5 py-24" data-testid="landing-how-it-works">
         <SectionHeading
           id="how-it-works"
-          eyebrow="The loop"
+          eyebrow="The workflow"
           title="How It Works"
-          lede="Research, template, generate, and publish manually. Saved research makes the next video faster."
+          lede="From app URL to a downloadable MP4. No source video, no automatic publishing."
         />
 
         <div className="relative">
@@ -450,7 +458,7 @@ export default function Landing() {
           id="features"
           eyebrow="Capabilities"
           title="What You Get"
-          lede="Every tool in the workflow, from discovery to manual download."
+          lede="Everything between an app URL and a downloadable MP4."
         />
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -476,7 +484,7 @@ export default function Landing() {
           id="pipeline"
           eyebrow="Under the hood"
           title="The Pipeline"
-          lede="What happens between picking a hook and downloading your video."
+          lede="What happens between an approved App Profile and a downloadable video."
         />
 
         <div className="space-y-4">
@@ -549,14 +557,15 @@ export default function Landing() {
             <div className="spotlight-indigo absolute inset-0" aria-hidden="true" />
             <div className="relative">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-[color:var(--brand-indigo)]">
-                <Zap className="h-3 w-3" /> Under 2 minutes
+                <Zap className="h-3 w-3" /> No source video required
               </span>
               <h2 className="font-display mt-5 text-3xl font-bold tracking-tight sm:text-4xl">
-                Start making content that converts.
+                Turn your app listing into a video.
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">
-                Find a reusable hook mechanic, build a template-based app video, then download and
-                publish it yourself. Exact-match recreation is disabled.
+                Paste an app URL, approve the profile, pick a template, and generate one coherent
+                video with your real app visuals. Download it and post it yourself &mdash; nothing
+                is ever published automatically.
               </p>
               <div className="mt-9 flex flex-col items-center justify-center gap-3.5 sm:flex-row">
                 <UnauthedOnly>
@@ -565,7 +574,7 @@ export default function Landing() {
                       size="lg"
                       className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-white shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
                     >
-                      <Sparkles className="h-5 w-5" /> Get Started Free
+                      <Sparkles className="h-5 w-5" /> Get Started
                     </Button>
                   </SignUpTrigger>
                   <SignInTrigger>
@@ -593,7 +602,7 @@ export default function Landing() {
                       variant="outline"
                       className="w-full gap-2.5 rounded-xl border-[color:var(--hairline-strong)] bg-[color:var(--indigo-4)] px-8 py-6 text-base font-semibold hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] sm:w-auto"
                     >
-                      <Globe className="h-5 w-5" /> Set Up Your Brand
+                      <Globe className="h-5 w-5" /> Set Up an App Profile
                     </Button>
                   </Link>
                 </AuthedOnly>
@@ -629,7 +638,7 @@ export default function Landing() {
                   <Link to="/templates" className="transition-colors hover:text-foreground">Hook Templates</Link>
                 </li>
                 <li>
-                  <Link to="/bookmarks" className="transition-colors hover:text-foreground">Bookmarks</Link>
+                  <Link to="/history" className="transition-colors hover:text-foreground">Generation History</Link>
                 </li>
                 <li>
                   <Link to="/app-profiles" className="transition-colors hover:text-foreground">App Profiles</Link>
@@ -652,7 +661,7 @@ export default function Landing() {
 
           <div className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-border/50 pt-6 sm:flex-row">
             <p className="text-xs text-muted-foreground">
-              &copy; {new Date().getFullYear()} HookForge. Built for creators.
+              &copy; {new Date().getFullYear()} HookForge. Built for mobile app founders.
             </p>
               <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
               <Wand2 className="h-3 w-3 text-[color:var(--brand-indigo)]" /> Template studio with manual publishing
