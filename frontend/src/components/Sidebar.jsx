@@ -13,14 +13,15 @@ import {
   LayoutDashboard,
   Radar,
   BarChart3,
-  Settings2,
-  Wrench,
+  Settings,
+  PenLine,
   History as HistoryIcon,
   PanelLeftClose,
   PanelLeftOpen,
   X,
-  ArrowUpRight,
   HelpCircle,
+  Activity,
+  Archive,
 } from "lucide-react";
 
 /**
@@ -54,14 +55,14 @@ export const NAV_GROUPS = [
     items: [
       { to: "/research", label: "Trend Research", icon: Radar, testId: "research-nav-link", hint: "Find new mechanics" },
       { to: "/analytics", label: "Analytics", icon: BarChart3, testId: "analytics-nav-link", hint: "Internal metrics" },
-      { to: "/operations", label: "Operations", icon: Settings2, testId: "operations-nav-link", hint: "Jobs and costs" },
+      { to: "/operations", label: "Operations", icon: Activity, testId: "operations-nav-link", hint: "Jobs and costs" },
     ],
   },
   {
     label: "Setup",
     items: [
-      { to: "/settings", label: "Settings", icon: Wrench, testId: "settings-nav-link", hint: "Configuration" },
-      { to: "/brand", label: "Profile Editor", icon: Wrench, testId: "brand-nav-link", hint: "Research and edit" },
+      { to: "/settings", label: "Settings", icon: Settings, testId: "settings-nav-link", hint: "Configuration" },
+      { to: "/brand", label: "Profile Editor", icon: PenLine, testId: "brand-nav-link", hint: "Research and edit" },
     ],
   },
   {
@@ -71,7 +72,7 @@ export const NAV_GROUPS = [
     items: [
       { to: "/discover", label: "Discover", icon: Compass, testId: "discover-nav-link", hint: "Trending hooks" },
       { to: "/bookmarks", label: "Saved Hooks", icon: Bookmark, testId: "bookmarks-nav-link", hint: "Saved analyses" },
-      { to: "/legacy-history", label: "Research Archive", icon: Compass, testId: "legacy-history-nav-link", hint: "Old records" },
+      { to: "/legacy-history", label: "Research Archive", icon: Archive, testId: "legacy-history-nav-link", hint: "Old records" },
     ],
   },
 ];
