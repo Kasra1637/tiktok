@@ -335,6 +335,133 @@ class TestClaimSafetyOnEdit:
         assert result["status"] == "draft"
 
 
+class TestOverlayNormalization:
+    """
+    On-screen text is hand-editable in the review step, so it arrives with the
+    mistakes a text box invites. Storing them unfiltered would make a saved
+    plan list text the video never shows.
+    """
+
+    def test_blank_overlays_are_dropped(self, api):
+        from models import UpdateStudioProjectRequest
+        profile = _approved_profile(api, "Overlay Blank")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        edited = _run(api.update_studio_project(
+            project_id=project["id"],
+            payload=UpdateStudioProjectRequest(overlays=[
+                {"start": 0, "end": 2, "text": "Real text"},
+                {"start": 2, "end": 4, "text": "   "},
+                {"start": 4, "end": 6},
+            ]),
+            user_id=ANON,
+        ))
+        assert [o["text"] for o in edited["overlays"]] == ["Real text"]
+
+    def test_an_inverted_window_is_given_a_minimum_length(self, api):
+        """
+        end <= start means the caption's enable window is never true, so it
+        would be stored but never rendered.
+        """
+        from models import UpdateStudioProjectRequest
+        profile = _approved_profile(api, "Overlay Inverted")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        edited = _run(api.update_studio_project(
+            project_id=project["id"],
+            payload=UpdateStudioProjectRequest(overlays=[
+                {"start": 5, "end": 5, "text": "Backwards"},
+                {"start": 6, "end": 2, "text": "Also backwards"},
+            ]),
+            user_id=ANON,
+        ))
+        for overlay in edited["overlays"]:
+            assert overlay["end"] > overlay["start"], overlay
+
+    def test_a_negative_start_is_clamped(self, api):
+        from models import UpdateStudioProjectRequest
+        profile = _approved_profile(api, "Overlay Negative")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        edited = _run(api.update_studio_project(
+            project_id=project["id"],
+            payload=UpdateStudioProjectRequest(overlays=[
+                {"start": -3, "end": 2, "text": "Hi"},
+            ]),
+            user_id=ANON,
+        ))
+        assert edited["overlays"][0]["start"] == 0
+
+    def test_clearing_every_overlay_is_allowed(self, api):
+        """
+        A founder may decide a video needs no on-screen text, so an empty list
+        is a real edit rather than something to reject.
+        """
+        from models import UpdateStudioProjectRequest
+        profile = _approved_profile(api, "Overlay Cleared")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        edited = _run(api.update_studio_project(
+            project_id=project["id"],
+            payload=UpdateStudioProjectRequest(overlays=[]),
+            user_id=ANON,
+        ))
+        assert edited["overlays"] == []
+
+    def test_normalize_matches_the_renderers_cap(self, api):
+        """
+        What is stored is what gets sent to the model and to ffmpeg, so the
+        12-item cap has to agree across all three.
+        """
+        from models import UpdateStudioProjectRequest
+        profile = _approved_profile(api, "Overlay Cap")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        edited = _run(api.update_studio_project(
+            project_id=project["id"],
+            payload=UpdateStudioProjectRequest(overlays=[
+                {"start": i, "end": i + 1, "text": f"Line {i}"} for i in range(20)
+            ]),
+            user_id=ANON,
+        ))
+        assert len(edited["overlays"]) == 12
+        assert edited["overlays"][-1]["text"] == "Line 11"
+
+    def test_tone_and_duration_are_editable(self, api):
+        """
+        Both are generated fields the review step is expected to expose, and
+        both seed the plan in the previous step.
+        """
+        from models import UpdateStudioProjectRequest
+        profile = _approved_profile(api, "Tone Duration")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        edited = _run(api.update_studio_project(
+            project_id=project["id"],
+            payload=UpdateStudioProjectRequest(tone="calm and direct", duration_seconds=30),
+            user_id=ANON,
+        ))
+        assert edited["tone"] == "calm and direct"
+        assert edited["duration_seconds"] == 30
+
+    def test_duration_is_clamped_not_rejected(self, api):
+        """
+        An out-of-range duration is corrected rather than refused, because the
+        founder picked it from a fixed list and the only way to get here is a
+        stale value or a hand-written request.
+        """
+        from models import UpdateStudioProjectRequest
+        profile = _approved_profile(api, "Duration Clamp")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        edited = _run(api.update_studio_project(
+            project_id=project["id"],
+            payload=UpdateStudioProjectRequest(duration_seconds=9999),
+            user_id=ANON,
+        ))
+        assert 5 <= edited["duration_seconds"] <= 60
+
+
 class TestReadyGate:
     def _with_plan(self, api, monkeypatch, plan, name):
         _patch_plan(monkeypatch, api, plan)

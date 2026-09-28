@@ -15,7 +15,7 @@ import { recordSignal, classifyScriptEdit } from "../lib/feedback";
 import {
   Clapperboard, Loader2, AlertTriangle, Briefcase, Target, LayoutTemplate,
   Image as ImageIcon, FileText, Check, ChevronLeft, ChevronRight, Sparkles,
-  Save, CheckCircle2, Star,
+  Save, CheckCircle2, Star, Plus, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -249,6 +249,39 @@ export default function CreateVideo() {
   const editValue = (key, fallback) =>
     edits[key] !== undefined ? edits[key] : project?.[key] ?? fallback;
   const hasEdits = Object.keys(edits).length > 0;
+
+  // Duration and tone are edited in the review step but also seed the plan in
+  // the previous step, so a change here has to move both or going back and
+  // regenerating would silently reinstate the old value.
+  const editDuration = (seconds) => {
+    setDuration(seconds);
+    setEdits((prev) => ({ ...prev, duration_seconds: seconds }));
+  };
+  const editTone = (value) => {
+    setTone(value);
+    setEdits((prev) => ({ ...prev, tone: value }));
+  };
+
+  const setOverlay = (index, patch) => {
+    setEdits((prev) => ({
+      ...prev,
+      overlays: (prev.overlays ?? project?.overlays ?? []).map((o, i) =>
+        i === index ? { ...o, ...patch } : o,
+      ),
+    }));
+  };
+  const addOverlay = () => {
+    setEdits((prev) => ({
+      ...prev,
+      overlays: [...(prev.overlays ?? project?.overlays ?? []), { start: 0, end: 3, text: "" }],
+    }));
+  };
+  const removeOverlay = (index) => {
+    setEdits((prev) => ({
+      ...prev,
+      overlays: (prev.overlays ?? project?.overlays ?? []).filter((_, i) => i !== index),
+    }));
+  };
 
   const stepContent = renderStep();
 
@@ -661,18 +694,35 @@ export default function CreateVideo() {
               </div>
             )}
 
-            {editValue("overlays", []).length > 0 && (
-              <div className="rounded-xl border border-[color:var(--hairline)] p-4">
-                <span className="eyebrow block">On-screen text</span>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {editValue("overlays", []).map((o, i) => (
-                    <Badge key={i} variant="outline" className="text-[11px]">
-                      {o.start}&ndash;{o.end}s: {o.text}
-                    </Badge>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <label htmlFor="review-duration" className="text-sm font-medium">Duration</label>
+                <select
+                  id="review-duration"
+                  value={editValue("duration_seconds", 20)}
+                  onChange={(e) => editDuration(Number(e.target.value))}
+                  className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
+                >
+                  {(facets?.supported_durations || [10, 15, 20, 30]).map((d) => (
+                    <option key={d} value={d}>{d} seconds</option>
                   ))}
-                </div>
+                </select>
+                {editValue("duration_seconds", 20) !== duration && (
+                  <p className="text-xs text-muted-foreground">
+                    Differs from the plan step. Regenerating the plan will use {duration}s.
+                  </p>
+                )}
               </div>
-            )}
+              <div className="space-y-1.5">
+                <label htmlFor="review-tone" className="text-sm font-medium">Tone</label>
+                <Input
+                  id="review-tone"
+                  value={editValue("tone", "")}
+                  onChange={(e) => editTone(e.target.value)}
+                  placeholder="e.g. calm and direct"
+                />
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -691,6 +741,66 @@ export default function CreateVideo() {
                   className="min-h-[70px]"
                 />
               </div>
+            </div>
+
+            <div className="rounded-xl border border-[color:var(--hairline)] p-4">
+              <div className="flex items-center justify-between gap-2">
+                <span className="eyebrow">On-screen text</span>
+                <Button variant="ghost" size="sm" onClick={addOverlay}>
+                  <Plus className="h-3.5 w-3.5" /> Add text
+                </Button>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Composited onto the real app footage after generation. Without text overlays a
+                video is still made of the generated video and your assets.
+              </p>
+              {editValue("overlays", []).length === 0 ? (
+                <p className="mt-2 text-sm text-muted-foreground">No on-screen text.</p>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  {editValue("overlays", []).map((o, i) => (
+                    <div key={i} className="flex items-end gap-2">
+                      <label className="w-20 shrink-0 space-y-1">
+                        <span className="text-[11px] text-muted-foreground">Start (s)</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={o.start}
+                          onChange={(e) => setOverlay(i, { start: Number(e.target.value) })}
+                          aria-label={`Overlay ${i + 1} start`}
+                        />
+                      </label>
+                      <label className="w-20 shrink-0 space-y-1">
+                        <span className="text-[11px] text-muted-foreground">End (s)</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={o.end}
+                          onChange={(e) => setOverlay(i, { end: Number(e.target.value) })}
+                          aria-label={`Overlay ${i + 1} end`}
+                        />
+                      </label>
+                      <label className="min-w-0 flex-1 space-y-1">
+                        <span className="text-[11px] text-muted-foreground">Text</span>
+                        <Input
+                          value={o.text}
+                          onChange={(e) => setOverlay(i, { text: e.target.value })}
+                          placeholder="e.g. Try it free for 3 days"
+                          aria-label={`Overlay ${i + 1} text`}
+                        />
+                      </label>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeOverlay(i)}
+                        aria-label={`Remove overlay ${i + 1}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <SafetyPanel

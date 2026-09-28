@@ -6311,6 +6311,45 @@ async def get_studio_project(project_id: str, user_id: str = Depends(get_current
     return _public_project(row)
 
 
+def _normalize_overlays(overlays) -> list:
+    """
+    Clean founder-edited on-screen text before storing it.
+
+    Overlays are hand-editable in the review step, so they arrive with the
+    mistakes a text box invites: a blank line left behind after clearing a
+    field, or an end time dragged before its start. The renderer already skips
+    both silently, which is fine at render time but wrong for storage — a
+    saved plan that lists text the video will never show is a plan the founder
+    cannot trust.
+
+    So blank entries are dropped and inverted windows are given a minimum
+    length here, where the founder can see the result. The 12-item cap matches
+    the renderer and the prompt builder, so what is stored is what will be
+    sent to the model.
+    """
+    cleaned = []
+    for item in (overlays or [])[:12]:
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("text") or "").strip()[:60]
+        if not text:
+            continue
+        try:
+            start = max(0.0, float(item.get("start", 0) or 0))
+            end = float(item.get("end", 0) or 0)
+        except (TypeError, ValueError):
+            start, end = 0.0, 0.0
+        # An empty or inverted window would enable never, so the text would be
+        # stored but never shown. One second is the shortest readable caption.
+        if end <= start:
+            end = start + 1.0
+        entry = {"start": start, "end": end, "text": text}
+        if item.get("position"):
+            entry["position"] = str(item["position"])
+        cleaned.append(entry)
+    return cleaned
+
+
 @api_router.patch("/studio/projects/{project_id}")
 async def update_studio_project(
     project_id: str, payload: UpdateStudioProjectRequest, user_id: str = Depends(get_current_user_id)
@@ -6338,8 +6377,10 @@ async def update_studio_project(
 
     set_clauses, values = [], []
     for key, value in updates.items():
-        if key in ("beat_timeline", "overlays", "assets"):
+        if key in ("beat_timeline", "assets"):
             value = json.dumps(value if isinstance(value, list) else [])
+        elif key == "overlays":
+            value = json.dumps(_normalize_overlays(value))
         elif key in ("template_id", "content_angle_id"):
             value = (value or "").strip() or None
         elif key == "objective":
