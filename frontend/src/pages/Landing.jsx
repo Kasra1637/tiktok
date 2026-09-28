@@ -19,99 +19,100 @@ const FEATURES = [
     icon: Briefcase,
     title: "App Profiles",
     description:
-      "Skip the research grind. Paste your links and walk away with a pitch-ready profile you fully control.",
+      "Skip the research grind. Paste your links and walk away with a pitch-perfect profile you control.",
   },
   {
     icon: Target,
     title: "Audiences & Angles",
     description:
-      "Know who to talk to and what to promise them \u2014 every angle hands you the problem, promise, and CTA.",
+      "Know exactly who to talk to and what to promise — every angle hands you the hook, promise, and close.",
   },
   {
     icon: LayoutTemplate,
     title: "Hook Template Library",
     description:
-      "Never start from a blank page. Browse proven hooks, favorite your winners, and make any of them yours.",
+      "Never stare at a blank page. Browse proven hooks, favorite your winners, and make any of them yours.",
   },
   {
     icon: Wand2,
     title: "Smart Template Picks",
     description:
-      "Spend minutes, not evenings, choosing. Every pick arrives with its reason \u2014 and the final call stays yours.",
+      "Choose in minutes, not evenings. Every pick arrives with its reason — the final call stays yours.",
   },
   {
     icon: FileText,
     title: "Script First, Video Second",
     description:
-      "Approve words before money is spent. The full script and shot plan land first, yours to rewrite freely.",
+      "Approve every word before a cent is spent. The full script and shot plan land first, yours to rewrite.",
   },
   {
     icon: Clapperboard,
     title: "One Smooth Video",
     description:
-      "Post a polished 10 to 30 second promo in one take \u2014 no stitching, no awkward cuts, no editing skills.",
+      "Post a polished 10 to 30 second promo in one take — no stitching, no janky cuts, no editing skills.",
   },
   {
     icon: Film,
     title: "Your App, Pixel-Perfect",
     description:
-      "Show screens, prices, and names exactly as they are \u2014 no invented UI, no uncanny AI-made interfaces.",
+      "Your app looks exactly like your app — no invented UI, no uncanny fake screens, no wrong prices.",
   },
   {
     icon: ShieldCheck,
     title: "Claims, Checked",
     description:
-      "Stay off the store's bad side. Banned phrases get blocked and risky ones get flagged before you post.",
+      "Stay out of trouble. Banned phrases get blocked and risky ones get flagged before you ever post.",
   },
   {
     icon: Layers,
     title: "Asset Library",
     description:
-      "Find any screenshot or logo in seconds \u2014 filed per app, and never mixed with another app's assets.",
+      "Grab any screenshot or logo in seconds — filed per app and never mixed with another app's assets.",
   },
   {
     icon: Music2,
     title: "Sound You're Allowed to Use",
     description:
-      "Sound confident, stay safe. Music and voiceover only mix in after you confirm the rights are yours.",
+      "Sound pro, stay safe. Music and voiceover mix in only after you confirm the rights are truly yours.",
   },
   {
     icon: RotateCcw,
     title: "Remix, Don't Restart",
     description:
-      "Fix one thing and rerender, not the whole idea. Every version keeps its history so nothing is lost.",
+      "Tweak one thing and rerender, not the whole idea. Every version keeps its history — nothing lost.",
   },
   {
     icon: TrendingUp,
     title: "Know What Works",
     description:
-      "See win rates, spend, and why you keep regenerating \u2014 broken down by app, by template, all in one view.",
+      "See win rates, spend, and why you keep regenerating — by app, by template, all in one clear view.",
   },
   {
     icon: Check,
     title: "Feedback Loop",
     description:
-      "Every rejection teaches the app. Templates you keep rejecting slide down; the winners keep rising.",
+      "Every rejection teaches the app. Templates you reject slide down; your winners keep on climbing.",
   },
   {
     icon: BadgeAlert,
     title: "Every Job, Accounted For",
     description:
-      "No more silent failures. Every job's cost, status, and errors sit in one place \u2014 retry any hiccup.",
+      "No silent failures. Every job's cost, status, and errors in one place — retry any hiccup in a click.",
   },
   {
     icon: Search,
     title: "Fresh Ideas, On Demand",
     description:
-      "Never run dry. Trend patterns become reviewed template drafts \u2014 a source of ideas, never a copy.",
+      "Never run dry. Trend patterns become reviewed template drafts — a bottomless well of ideas, never a copy.",
   },
   {
     icon: Download,
     title: "You Post It",
     description:
-      "Full control stays with you. Download the video, post it anywhere \u2014 your accounts are never touched.",
+      "Full control, always. Download your video and post it anywhere — your accounts stay untouchable.",
   },
 ];
+
 
 
 
@@ -121,7 +122,7 @@ const FLOW_STEPS = [
     step: "1",
     label: "Profile",
     icon: Briefcase,
-    detail: "Paste your app's links. AI builds your profile \u2014 you review and hit approve.",
+    detail: "Paste your app's links. AI builds your profile — you review and hit approve.",
   },
   {
     step: "2",
@@ -199,7 +200,7 @@ const PIPELINE_BLOCKS = [
     body: (
       <>
         Your links become a profile: features, audiences, pricing, and what is safe to say. You sign
-        off before anything generates \u2014 refreshes never overwrite your approvals.
+        off before anything generates — refreshes never overwrite your approvals.
       </>
     ),
   },
@@ -222,7 +223,7 @@ const PIPELINE_BLOCKS = [
     title: "Your App, Pixel-Perfect",
     body: (
       <>
-        The AI handles people and scenes \u2014 never your interface. Your real screenshots,
+        The AI handles people and scenes — never your interface. Your real screenshots,
         recordings, and logo layer on afterwards, so names, prices, and screens cannot drift.
       </>
     ),
@@ -234,7 +235,7 @@ const PIPELINE_BLOCKS = [
     title: "Ideas, Not Copies",
     body: (
       <>
-        Popular patterns become template drafts that wait for your review \u2014 inspiration
+        Popular patterns become template drafts that wait for your review — inspiration
         without imitation. No creator's face, voice, or sound ever crosses into what you make.
       </>
     ),
@@ -245,11 +246,11 @@ const PIPELINE_BLOCKS = [
 
 
 const MODELS = [
-  { label: "Words & analysis", value: "Gemini 2.5 Flash \u2014 research, profiles, angles, scripts, and template ideas" },
-  { label: "Video (default)", value: "Seedance 2.5 \u2014 up to 30 seconds in one take, with sound, up to 720p" },
-  { label: "Video (alternate)", value: "MiniMax H3 \u2014 crisper 2K picture in shorter takes; longer cuts take two passes" },
+  { label: "Words & analysis", value: "Gemini 2.5 Flash — research, profiles, angles, scripts, and template ideas" },
+  { label: "Video (default)", value: "Seedance 2.5 — up to 30 seconds in one take, with sound, up to 720p" },
+  { label: "Video (alternate)", value: "MiniMax H3 — crisper 2K picture in shorter takes; longer cuts take two passes" },
   { label: "Finishing touches", value: "Captions, screenshots, logos, and audio layered on precisely" },
-  { label: "Trend spotting", value: "Public TikTok data \u2014 only feeds the optional research tab" },
+  { label: "Trend spotting", value: "Public TikTok data — only feeds the optional research tab" },
 ];
 
 
@@ -340,7 +341,7 @@ export default function Landing() {
               <span className="absolute inset-0 animate-pulse-ring rounded-full bg-[color:var(--brand-indigo)]" />
               <span className="relative h-1.5 w-1.5 rounded-full bg-[color:var(--brand-indigo)]" />
             </span>
-            Your app link &rarr; A hook that lands &rarr; A video you post yourself
+            Your app link → A hook that lands → A video you post yourself
           </div>
 
           <h1
@@ -358,9 +359,8 @@ export default function Landing() {
             className="animate-fade-up mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl"
             style={{ animationDelay: "120ms" }}
           >
-            Paste your app link. HookForge studies it, suggests a proven hook, and builds the
-            whole promo around your real screenshots and clips. Download it, post it anywhere
-            \u2014 your TikTok and accounts stay 100% yours.
+            Paste your link. Get a scroll-stopping promo built on your real screenshots.
+            Download it, post it, own it.
           </p>
 
           <div
@@ -434,7 +434,7 @@ export default function Landing() {
           id="how-it-works"
           eyebrow="Dead simple"
           title="App Link to Video in 4 Steps"
-          lede="No filming, no editing timeline, no source video. Just four steps."
+          lede="No filming. No editing. No source video. Just four steps."
         />
 
         <div className="relative">
@@ -467,7 +467,7 @@ export default function Landing() {
           id="features"
           eyebrow="Capabilities"
           title="Everything Handled"
-          lede="From studying your app to the final download \u2014 the whole toolbox."
+          lede="From app link to finished video, with every step handled for you."
         />
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -493,7 +493,7 @@ export default function Landing() {
           id="pipeline"
           eyebrow="Under the hood"
           title="How the Magic Happens"
-          lede="A peek under the hood \u2014 from your approval to your download."
+          lede="How your app link becomes a video you are proud to post."
         />
 
         <div className="space-y-4">
@@ -572,9 +572,8 @@ export default function Landing() {
                 Your next promo is one link away.
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">
-                Paste your app link, approve your profile, pick a hook, and get a finished video
-                with your real app in it. Download it and post it anywhere &mdash; your accounts
-                stay 100% yours.
+                Paste your link. Approve your profile. Pick a hook. Get a finished promo with
+                your real app in it, ready to post and unmistakably yours.
               </p>
               <div className="mt-9 flex flex-col items-center justify-center gap-3.5 sm:flex-row">
                 <UnauthedOnly>
@@ -633,7 +632,7 @@ export default function Landing() {
                 <span className="font-display text-base font-bold tracking-tight">HookForge</span>
               </div>
               <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted-foreground">
-                App promos for founders &mdash; paste a link, get a video, post it yourself.
+                App promos for founders — paste a link, get a video, post it yourself.
               </p>
             </div>
 
