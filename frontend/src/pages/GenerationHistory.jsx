@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
@@ -11,7 +12,7 @@ import { recordSignal, recordReason } from "../lib/feedback";
 import {
   History as HistoryIcon, Loader2, AlertTriangle, Download, Trash2, Archive,
   RotateCcw, GitBranch, RefreshCw, ChevronRight, Film, Star, TrendingUp,
-  Check, ThumbsDown,
+  Check, ThumbsDown, Info, Copy, X,
 } from "lucide-react";
 
 function humanize(value) {
@@ -135,7 +136,143 @@ function PerformanceForm({ generation, onSaved }) {
   );
 }
 
+function DetailRow({ label, children }) {
+  if (children === null || children === undefined || children === "") return null;
+  return (
+    <div className="space-y-0.5">
+      <span className="eyebrow block">{label}</span>
+      <div className="text-sm">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * Everything about one render that the history row deliberately leaves out.
+ *
+ * The list stays light on purpose, but "why does this video look like this"
+ * is answerable only from the prompt, the script it was built from, and the
+ * overlays that were composited afterwards. Those three together are the
+ * audit trail for a claim in a published video, so they belong one click away
+ * rather than only in the database.
+ */
+function GenerationDetails({ generationId, onClose }) {
+  const [detail, setDetail] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getGeneration(generationId)
+      .then((d) => { if (!cancelled) setDetail(d); })
+      .catch((err) => { if (!cancelled) setError(getErrorMessage(err)); });
+    return () => { cancelled = true; };
+  }, [generationId]);
+
+  const overlays = detail?.overlays || detail?.composition?.applied || [];
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Generation details"
+      onClick={onClose}
+    >
+      <div
+        className="surface my-8 w-full max-w-2xl space-y-4 rounded-2xl p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="font-display text-base font-semibold">Generation details</h2>
+          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close details">
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        {!detail && !error && (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading...
+          </p>
+        )}
+
+        {detail && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <DetailRow label="Model">{detail.model}</DetailRow>
+              <DetailRow label="Status">{humanize(detail.status)}</DetailRow>
+              <DetailRow label="Cost">{money(detail.cost_usd)}</DetailRow>
+              <DetailRow label="Script version">v{detail.script_version}</DetailRow>
+              <DetailRow label="Template version">v{detail.template_version}</DetailRow>
+              <DetailRow label="Attempt">{detail.attempt}</DetailRow>
+              <DetailRow label="Objective">
+                {detail.objective ? humanize(detail.objective) : null}
+              </DetailRow>
+              <DetailRow label="Variance">
+                {detail.variation_kind ? humanize(detail.variation_kind) : "None"}
+              </DetailRow>
+              <DetailRow label="Cost source">{humanize(detail.cost_source)}</DetailRow>
+            </div>
+
+            {detail.hook_line && (
+              <DetailRow label="Hook">{detail.hook_line}</DetailRow>
+            )}
+
+            {detail.script && (
+              <div className="space-y-0.5">
+                <span className="eyebrow block">Script as generated</span>
+                <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg bg-secondary/40 p-3 text-sm">
+                  {detail.script}
+                </pre>
+              </div>
+            )}
+
+            {detail.prompt_used && (
+              <div className="space-y-0.5">
+                <span className="eyebrow block">Exact prompt sent to the model</span>
+                <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg bg-secondary/40 p-3 text-xs">
+                  {detail.prompt_used}
+                </pre>
+              </div>
+            )}
+
+            {Array.isArray(overlays) && overlays.length > 0 && (
+              <div className="space-y-1.5">
+                <span className="eyebrow block">On-screen text composited</span>
+                <ul className="space-y-1 text-sm">
+                  {overlays.map((o, i) => (
+                    <li key={i} className="text-muted-foreground">
+                      {o.start ?? 0}&ndash;{o.end ?? 0}s: {o.text || o.label || JSON.stringify(o)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {detail.safety_report && (
+              <div className="space-y-1">
+                <span className="eyebrow block">Claim check at generation time</span>
+                <p className="text-sm text-muted-foreground">
+                  {detail.safety_report.passed ? "Passed" : "Failed"}
+                  {detail.safety_summary ? ` — ${detail.safety_summary}` : ""}
+                </p>
+              </div>
+            )}
+
+            {detail.error && (
+              <div className="space-y-1">
+                <span className="eyebrow block">Recorded error</span>
+                <p className="text-sm text-destructive">{detail.error}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function GenerationRow({ row, onChanged }) {
+  const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [showVariations, setShowVariations] = useState(false);
@@ -147,6 +284,7 @@ function GenerationRow({ row, onChanged }) {
   // Local only: the outcome is a judgment about this render, and reloading the
   // page should not invite them to answer twice.
   const [verdict, setVerdict] = useState("");
+  const [showDetails, setShowDetails] = useState(false);
 
   const downloadUrl = row.r2_url || row.video_url;
   const composedUrl = row.composition?.r2_url || row.composition?.output_url;
@@ -176,6 +314,32 @@ function GenerationRow({ row, onChanged }) {
     if (row.status !== "completed") return;
     api.getVariationKinds().then((d) => setVariationKinds(d.variations || [])).catch(() => {});
   }, [row.status]);
+
+  // Duplicating costs nothing and produces a draft, not a video, so it needs no
+  // confirmation. The returned draft is opened directly: telling the founder a
+  // draft exists without a path to it would leave the new project stranded in
+  // the database with no project list to find it from.
+  const handleDuplicate = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api.duplicateGeneration(row.id);
+      const draft = result?.project;
+      if (!draft?.id || !draft?.brand_profile_id) {
+        throw new Error("The duplicate response did not include a usable draft project.");
+      }
+      toast.success("Draft created. Opening the unchanged setup in the studio.");
+      onChanged?.();
+      navigate(
+        `/create?profile=${encodeURIComponent(draft.brand_profile_id)}` +
+        `&project=${encodeURIComponent(draft.id)}`
+      );
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const act = async (fn) => {
     setBusy(true);
@@ -336,6 +500,23 @@ function GenerationRow({ row, onChanged }) {
         <Button
           variant="ghost"
           size="sm"
+          disabled={busy}
+          onClick={() => setShowDetails(true)}
+        >
+          <Info className="h-3.5 w-3.5" /> Details
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          onClick={handleDuplicate}
+          title="Copy this setup unchanged into a new draft, for a fresh render of the same video"
+        >
+          <Copy className="h-3.5 w-3.5" /> Duplicate
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
           disabled={busy || row.status === "archived"}
           onClick={() => act(() => api.archiveGeneration(row.id))}
         >
@@ -350,6 +531,10 @@ function GenerationRow({ row, onChanged }) {
           <Trash2 className="h-3.5 w-3.5" /> Delete
         </Button>
       </div>
+
+      {showDetails && (
+        <GenerationDetails generationId={row.id} onClose={() => setShowDetails(false)} />
+      )}
 
       {showVariations && (
         <div className="space-y-3 border-t border-[color:var(--hairline)] pt-3">

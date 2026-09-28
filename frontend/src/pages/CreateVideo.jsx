@@ -78,14 +78,46 @@ export default function CreateVideo() {
   const template = templates.find((t) => t.id === templateId) || null;
 
   useEffect(() => {
+    let cancelled = false;
     api.getTemplateFacets().then(setFacets).catch(() => setFacets(null));
     api
       .getAppProfiles()
-      .then((data) => {
+      .then(async (data) => {
         const list = data.profiles || [];
+        if (cancelled) return;
         setProfiles(list);
         // Only approved profiles may enter the studio.
         const approved = list.filter((p) => p.status === "approved");
+        const requestedProjectId = params.get("project");
+        if (requestedProjectId) {
+          try {
+            const draft = await api.getStudioProject(requestedProjectId);
+            const draftProfile = approved.find((p) => p.id === draft.brand_profile_id);
+            if (!draftProfile) {
+              throw new Error("That draft project is unavailable or its App Profile is not approved.");
+            }
+            const angleData = await api
+              .getContentAngles(draftProfile.id)
+              .catch(() => ({ angles: [] }));
+            if (cancelled) return;
+            setProject(draft);
+            setAngles(angleData.angles || []);
+            setAngleId(draft.content_angle_id || "");
+            setTemplateId(draft.template_id || "");
+            setObjective(draft.objective || "");
+            setDuration(draft.duration_seconds || 20);
+            setTone(draft.tone || "");
+            setRecommendations([]);
+            setEdits({});
+            // A duplicate always arrives with its plan intact; an unplanned
+            // draft still needs assets before a plan can be generated.
+            setStep(draft.script_version > 0 ? 5 : 3);
+          } catch (err) {
+            if (cancelled) return;
+            setError(getErrorMessage(err));
+          }
+          return;
+        }
         const preselected = params.get("profile");
         const chosen =
           approved.find((p) => p.id === preselected) || approved[0] || null;
@@ -94,8 +126,15 @@ export default function CreateVideo() {
           api.getContentAngles(chosen.id).then((d) => setAngles(d.angles || [])).catch(() => setAngles([]));
         }
       })
-      .catch((err) => setError(getErrorMessage(err)))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (!cancelled) setError(getErrorMessage(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [params]);
 
   useEffect(() => {

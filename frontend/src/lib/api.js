@@ -273,6 +273,8 @@ export const api = {
     client.post(`/generations/${generationId}/variations`, payload).then((r) => r.data),
   getGenerationVariations: (generationId) =>
     client.get(`/generations/${generationId}/variations`).then((r) => r.data),
+  duplicateGeneration: (generationId) =>
+    client.post(`/generations/${generationId}/duplicate`).then((r) => r.data),
 
   // History + manual performance
   getGenerationHistory: (params = {}) =>

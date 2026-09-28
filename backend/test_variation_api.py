@@ -66,7 +66,7 @@ def _generation(api, profile, name, status="completed", with_plan=True):
         _run(api._execute(
             """UPDATE studio_projects SET hook_line = ?, script = ?, cta = ?,
                visual_direction = ?, feature_emphasis = ?, audience = ?, tone = ?,
-               status = 'ready_for_generation' WHERE id = ?""",
+               script_version = 1, status = 'ready_for_generation' WHERE id = ?""",
             ("Old hook", "Old spoken script.", "Old CTA", "Close on hands.",
              "The timer", "Busy parents", "calm", project["id"])))
     gen_id = str(uuid.uuid4())
@@ -180,7 +180,11 @@ class TestCreateVariation:
         result = _run(api.create_variation(
             gen["id"], CreateVariationRequest(kind="hook_line", value="New", note="test"), ANON))
         parent = _run(api.get_generation(gen["id"], ANON))
-        params = json.loads(parent["variation_params"])
+        # variation_params is a JSON column, so the row factory decodes it. It
+        # used to arrive as a string, which is why this used to need json.loads
+        # and why _public_generation's `or {}` fallback never fired.
+        params = parent["variation_params"]
+        assert isinstance(params, dict)
         assert parent["variation_kind"] == "hook_line"
         assert params["derived_project_id"] == result["project"]["id"]
         assert params["note"] == "test"
@@ -272,6 +276,126 @@ class TestVariationLineage:
         with pytest.raises(HTTPException) as err:
             _run(api.list_generation_variations(str(uuid.uuid4()), ANON))
         assert err.value.status_code == 404
+
+
+class TestDuplicate:
+    """
+    Duplicate is the third way to work from an existing video, and the only one
+    that changes nothing. Retry recovers a failure, a variation changes one axis
+    on purpose, and a duplicate re-rolls the identical setup.
+    """
+
+    def test_copies_the_setup_unchanged(self, api):
+        gen, project, _ = _generation(api, _profile(api, "Dup Copy"), "Dup Copy")
+        result = _run(api.duplicate_generation(gen["id"], ANON))
+        copy = result["project"]
+        assert copy["hook_line"] == project["hook_line"]
+        assert copy["script"] == project["script"]
+        assert copy["cta"] == project["cta"]
+        assert copy["template_id"] == project["template_id"]
+        assert copy["template_version"] == project["template_version"]
+        assert copy["duration_seconds"] == project["duration_seconds"]
+        assert copy["tone"] == project["tone"]
+        assert copy["audience"] == project["audience"]
+        assert copy["assets"] == project["assets"]
+
+    def test_the_plan_survives_so_no_text_call_is_needed(self, api):
+        """
+        Resetting script_version would force a fresh plan and quietly change the
+        thing being duplicated. The copy has to be ready to render as it stands.
+        """
+        gen, project, _ = _generation(api, _profile(api, "Dup Plan"), "Dup Plan")
+        result = _run(api.duplicate_generation(gen["id"], ANON))
+        assert result["project"]["script_version"] == project["script_version"]
+        assert result["project"]["script_version"] > 0
+
+    def test_the_copy_starts_as_a_draft(self, api):
+        """
+        A draft, never a video: producing it stays an explicit decision so a
+        duplicate cannot spend money on its own.
+        """
+        gen, _, _ = _generation(api, _profile(api, "Dup Draft"), "Dup Draft")
+        result = _run(api.duplicate_generation(gen["id"], ANON))
+        assert result["project"]["status"] == "draft"
+        assert result["note"]
+
+    def test_lineage_is_recorded_on_the_parent(self, api):
+        gen, _, _ = _generation(api, _profile(api, "Dup Lineage"), "Dup Lineage")
+        result = _run(api.duplicate_generation(gen["id"], ANON))
+        assert result["parent_generation_id"] == gen["id"]
+        after = _run(api.get_generation(gen["id"], ANON))
+        assert after["variation_params"]["derived_project_id"] == result["project"]["id"]
+
+    def test_a_variation_lineage_is_not_overwritten(self, api):
+        """
+        COALESCE on purpose: a generation can spawn several children, and the
+        first lineage note should survive a later duplicate.
+        """
+        from models import CreateVariationRequest
+        gen, _, _ = _generation(api, _profile(api, "Dup Keeps"), "Dup Keeps")
+        _run(api.create_variation(
+            gen["id"], CreateVariationRequest(kind="cta", value="New CTA"), ANON))
+        _run(api.duplicate_generation(gen["id"], ANON))
+        after = _run(api.get_generation(gen["id"], ANON))
+        assert after["variation_kind"] == "cta"
+
+    def test_the_copy_is_independent_of_its_parent(self, api):
+        """Editing the copy must not write back to the original."""
+        from models import UpdateStudioProjectRequest
+        gen, project, _ = _generation(api, _profile(api, "Dup Indep"), "Dup Indep")
+        result = _run(api.duplicate_generation(gen["id"], ANON))
+        _run(api.update_studio_project(
+            project_id=result["project"]["id"],
+            payload=UpdateStudioProjectRequest(hook_line="Changed"),
+            user_id=ANON,
+        ))
+        assert _run(api.get_studio_project(project["id"], ANON))["hook_line"] == "Old hook"
+
+    def test_unknown_generation_is_404(self, api):
+        with pytest.raises(HTTPException) as err:
+            _run(api.duplicate_generation(str(uuid.uuid4()), ANON))
+        assert err.value.status_code == 404
+
+    def test_another_users_generation_is_404(self, api):
+        gen, _, _ = _generation(api, _profile(api, "Dup Private"), "Dup Private")
+        with pytest.raises(HTTPException) as err:
+            _run(api.duplicate_generation(gen["id"], OTHER_USER))
+        assert err.value.status_code == 404
+
+    def test_missing_source_project_is_404(self, api):
+        gen, _, _ = _generation(api, _profile(api, "Dup No Project"), "Dup No Project")
+        _run(api._execute(
+            "UPDATE generations SET studio_project_id = ? WHERE id = ?",
+            (str(uuid.uuid4()), gen["id"]),
+        ))
+        with pytest.raises(HTTPException) as err:
+            _run(api.duplicate_generation(gen["id"], ANON))
+        assert err.value.status_code == 404
+
+    def test_missing_app_profile_is_409(self, api):
+        """
+        The project must still belong to a live App Profile. This pins the
+        awaited profile lookup: without it, the guard always passes.
+        """
+        gen, project, _ = _generation(api, _profile(api, "Dup No Profile"), "Dup No Profile")
+        _run(api._execute(
+            "UPDATE studio_projects SET brand_profile_id = ? WHERE id = ?",
+            (str(uuid.uuid4()), project["id"]),
+        ))
+        with pytest.raises(HTTPException) as err:
+            _run(api.duplicate_generation(gen["id"], ANON))
+        assert err.value.status_code == 409
+
+    def test_duplicate_is_distinct_from_a_variation(self, api):
+        """A variation changes one field; a duplicate changes none."""
+        from models import CreateVariationRequest
+        profile = _profile(api, "Dup Distinct")
+        gen, project, _ = _generation(api, profile, "Dup Distinct")
+        varied = _run(api.create_variation(
+            gen["id"], CreateVariationRequest(kind="cta", value="Totally different"), ANON))
+        copied = _run(api.duplicate_generation(gen["id"], ANON))
+        assert varied["project"]["cta"] != project["cta"]
+        assert copied["project"]["cta"] == project["cta"]
 
 
 class TestHistory:

@@ -25,6 +25,8 @@ def row_to_dict(row, columns: list) -> dict:
         "claims_to_respect", "evidence",
         # Studio projects (structured plan fields)
         "beat_timeline", "overlays", "assets", "safety_report",
+        # Generation lineage and refinement history
+        "variation_params", "adjustments",
         # Overlay compositions
         "spec", "applied",
     }

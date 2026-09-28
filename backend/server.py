@@ -7825,6 +7825,94 @@ async def create_variation(
     }
 
 
+@api_router.post("/generations/{generation_id}/duplicate", status_code=201)
+async def duplicate_generation(
+    generation_id: str, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Copy a generation's whole setup into a new draft project, changing nothing.
+
+    The third way to work from an existing video, and the one that keeps every
+    other word for it:
+
+    - retry re-runs a failure, and only a failure.
+    - a variation changes exactly one axis on purpose.
+    - a duplicate changes nothing at all. Same script, same template, same
+      assets, same plan version, so the only thing that differs is the render.
+      That is the re-roll: video models are non-deterministic, so an identical
+      prompt is a genuinely different video.
+
+    The plan is copied rather than regenerated on purpose. Resetting
+    script_version would force a fresh text call and quietly change the thing
+    being duplicated.
+
+    Returns a draft, never a video. Producing it stays an explicit decision, so
+    a duplicate cannot spend money on its own.
+    """
+    parent = await _fetch_one(
+        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
+    )
+    if not parent:
+        raise HTTPException(status_code=404, detail="Generation not found")
+
+    project = await _fetch_one(
+        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?",
+        (parent.get("studio_project_id"), user_id),
+    )
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail="The studio project behind this generation is gone, so it cannot be duplicated.",
+        )
+
+    if not await _fetch_one(
+        "SELECT id FROM brand_profiles WHERE id = ? AND user_id = ?",
+        (project.get("brand_profile_id"), user_id),
+    ):
+        raise HTTPException(status_code=409, detail="The App Profile for this project is gone.")
+
+    new_id = str(uuid.uuid4())
+    now = now_iso()
+    await _execute(
+        """INSERT INTO studio_projects
+           (id, brand_profile_id, content_angle_id, template_id, template_version,
+            objective, audience, duration_seconds, tone, hook_line, script,
+            beat_timeline, visual_direction, feature_emphasis, overlays,
+            voice_direction, sound_direction, cta, assets, safety_report,
+            safety_summary, script_version, status, created_at, updated_at, user_id)
+           SELECT ?, brand_profile_id, content_angle_id, template_id, template_version,
+                  objective, audience, duration_seconds, tone, hook_line, script,
+                  beat_timeline, visual_direction, feature_emphasis, overlays,
+                  voice_direction, sound_direction, cta, assets, safety_report,
+                  safety_summary, script_version, 'draft', ?, ?, ?
+           FROM studio_projects WHERE id = ?""",
+        (new_id, now, now, user_id, project["id"]),
+    )
+
+    # Lineage on the parent, the same channel variations use, so the duplicate
+    # is traceable from the video that spawned it.
+    await _execute(
+        "UPDATE generations SET variation_kind = COALESCE(variation_kind, 'duplicate'), "
+        "variation_params = ? WHERE id = ?",
+        (json.dumps({
+            "kind": "duplicate",
+            "derived_project_id": new_id,
+            "note": "Exact copy, nothing changed.",
+        }), parent["id"]),
+    )
+
+    logger.info(f"Duplicated generation {generation_id} into project {new_id}")
+    return {
+        "kind": "duplicate",
+        "label": "Duplicate",
+        "project": _public_project(
+            await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (new_id,))
+        ),
+        "parent_generation_id": generation_id,
+        "note": "Draft only. Nothing changed, so this is a fresh render of the same setup.",
+    }
+
+
 @api_router.get("/history/generations")
 async def generation_history(
     brand_profile_id: str = "",
