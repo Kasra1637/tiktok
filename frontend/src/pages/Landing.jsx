@@ -19,99 +19,100 @@ const FEATURES = [
     icon: Briefcase,
     title: "App Profiles",
     description:
-      "Paste your website and store links. AI studies them into a profile you can edit \u2014 then nothing generates until you approve it.",
+      "Skip the research grind. Paste your links and walk away with a pitch-ready profile you fully control.",
   },
   {
     icon: Target,
     title: "Audiences & Angles",
     description:
-      "Pick who the video is for and what it should do. Every angle hands you the problem, the promise, and the CTA.",
+      "Know who to talk to and what to promise them \u2014 every angle hands you the problem, promise, and CTA.",
   },
   {
     icon: LayoutTemplate,
     title: "Hook Template Library",
     description:
-      "Proven hook structures, browsable like a playlist. Preview, favorite, duplicate, and make any of them yours.",
+      "Never start from a blank page. Browse proven hooks, favorite your winners, and make any of them yours.",
   },
   {
     icon: Wand2,
     title: "Smart Template Picks",
     description:
-      "The app shortlists templates for your audience and goal \u2014 and tells you why each one fits. You always pick the winner.",
+      "Spend minutes, not evenings, choosing. Every pick arrives with its reason \u2014 and the final call stays yours.",
   },
   {
     icon: FileText,
     title: "Script First, Video Second",
     description:
-      "You get the full script and shot plan before a single frame is generated. Rewrite anything.",
+      "Approve words before money is spent. The full script and shot plan land first, yours to rewrite freely.",
   },
   {
     icon: Clapperboard,
     title: "One Smooth Video",
     description:
-      "Hook and ending in a single generation \u2014 10, 15, 20, or 30 seconds. No awkward stitching.",
+      "Post a polished 10 to 30 second promo in one take \u2014 no stitching, no awkward cuts, no editing skills.",
   },
   {
     icon: Film,
     title: "Your App, Pixel-Perfect",
     description:
-      "Your real screenshots and recordings get layered over the footage afterwards, so your app always looks exactly like your app.",
+      "Show screens, prices, and names exactly as they are \u2014 no invented UI, no uncanny AI-made interfaces.",
   },
   {
     icon: ShieldCheck,
     title: "Claims, Checked",
     description:
-      "Every script is scanned against your approved and banned claims. Banned lines get caught; risky ones get flagged for review.",
+      "Stay off the store's bad side. Banned phrases get blocked and risky ones get flagged before you post.",
   },
   {
     icon: Layers,
     title: "Asset Library",
     description:
-      "Your screenshots, logos, and clips live in one folder per app \u2014 and the app refuses to mix in another app's assets.",
+      "Find any screenshot or logo in seconds \u2014 filed per app, and never mixed with another app's assets.",
   },
   {
     icon: Music2,
     title: "Sound You're Allowed to Use",
     description:
-      "Voiceover and background music get mixed in for you \u2014 but only after you confirm you have the rights.",
+      "Sound confident, stay safe. Music and voiceover only mix in after you confirm the rights are yours.",
   },
   {
     icon: RotateCcw,
     title: "Remix, Don't Restart",
     description:
-      "Change one thing at a time \u2014 hook, CTA, tone, audience. Every version stays linked to its parent, so nothing gets lost.",
+      "Fix one thing and rerender, not the whole idea. Every version keeps its history so nothing is lost.",
   },
   {
     icon: TrendingUp,
     title: "Know What Works",
     description:
-      "Win rates, spend by app and template, and why you keep regenerating. Log real-world views too \u2014 kept as your own data.",
+      "See win rates, spend, and why you keep regenerating \u2014 broken down by app, by template, all in one view.",
   },
   {
     icon: Check,
     title: "Feedback Loop",
     description:
-      "Reject a template or rewrite a script and the app remembers \u2014 those templates slide down your future rankings.",
+      "Every rejection teaches the app. Templates you keep rejecting slide down; the winners keep rising.",
   },
   {
     icon: BadgeAlert,
     title: "Every Job, Accounted For",
     description:
-      "Every job's status, cost, and errors in one place. Failures stay visible \u2014 and retryable.",
+      "No more silent failures. Every job's cost, status, and errors sit in one place \u2014 retry any hiccup.",
   },
   {
     icon: Search,
     title: "Fresh Ideas, On Demand",
     description:
-      "Want inspiration? The app studies what's trending and turns patterns into template drafts for your review. Optional \u2014 creating never needs it.",
+      "Never run dry. Trend patterns become reviewed template drafts \u2014 a source of ideas, never a copy.",
   },
   {
     icon: Download,
     title: "You Post It",
     description:
-      "Download your video and post it wherever you want. HookForge never touches your accounts.",
+      "Full control stays with you. Download the video, post it anywhere \u2014 your accounts are never touched.",
   },
 ];
+
 
 
 
@@ -120,7 +121,7 @@ const FLOW_STEPS = [
     step: "1",
     label: "Profile",
     icon: Briefcase,
-    detail: "Paste your app's links. AI builds your profile \u2014 you review it and hit approve.",
+    detail: "Paste your app's links. AI builds your profile \u2014 you review and hit approve.",
   },
   {
     step: "2",
@@ -132,15 +133,16 @@ const FLOW_STEPS = [
     step: "3",
     label: "Plan",
     icon: FileText,
-    detail: "Bring your real screenshots and clips, get a script and shot plan, and edit every word.",
+    detail: "Add your real screenshots, get a script and shot plan, then edit every word.",
   },
   {
     step: "4",
     label: "Deliver",
     icon: Download,
-    detail: "Generate one smooth video, download it, and post it anywhere.",
+    detail: "Generate one smooth video, download it, and post it where fans are waiting.",
   },
 ];
+
 
 
 
@@ -196,9 +198,8 @@ const PIPELINE_BLOCKS = [
     title: "Studied, Then Approved",
     body: (
       <>
-        Your website and store pages become a profile: features, audiences, pricing, voice, and
-        what is safe to say. You sign off before a single frame is generated \u2014 and refreshes
-        never overwrite your approvals.
+        Your links become a profile: features, audiences, pricing, and what is safe to say. You sign
+        off before anything generates \u2014 refreshes never overwrite your approvals.
       </>
     ),
   },
@@ -209,8 +210,8 @@ const PIPELINE_BLOCKS = [
     title: "One Smooth Video",
     body: (
       <>
-        The hook and the rest arrive as a single clip, with sound baked in where the model
-        allows it. A second pass only kicks in to go longer or redo a failed segment.
+        Hook and ending arrive as a single vertical clip, with sound where the model allows it. A
+        second pass happens only to stretch the length or to replace a failed segment.
       </>
     ),
   },
@@ -222,7 +223,7 @@ const PIPELINE_BLOCKS = [
     body: (
       <>
         The AI handles people and scenes \u2014 never your interface. Your real screenshots,
-        recordings, and logo go on afterwards, so names, prices, and screens cannot drift.
+        recordings, and logo layer on afterwards, so names, prices, and screens cannot drift.
       </>
     ),
   },
@@ -233,12 +234,13 @@ const PIPELINE_BLOCKS = [
     title: "Ideas, Not Copies",
     body: (
       <>
-        Optional trend research turns popular patterns into template drafts for your review.
-        No creator is copied \u2014 no face, voice, or sound crosses over into your videos.
+        Popular patterns become template drafts that wait for your review \u2014 inspiration
+        without imitation. No creator's face, voice, or sound ever crosses into what you make.
       </>
     ),
   },
 ];
+
 
 
 
