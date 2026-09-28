@@ -27,9 +27,9 @@ import {
  * Sidebar navigation model.
  *
  * Ordering reflects the primary workflow: App Profiles -> Hook Templates ->
- * History. The legacy exact-match recreation flow (Discover, Bookmarks) is
- * demoted into a separate "Research" group — its routes and code still work
- * for template research, but it is no longer the main way to make a video.
+ * History. Discovery, saved analyses, and old records remain under Research
+ * for template research. Exact-match video creation is disabled, so those
+ * creation routes are intentionally absent.
  *
  * `testId` values are the canonical ones the rest of the app (and the
  * onboarding tour convention) expects — they must stay on the DESKTOP
@@ -65,14 +65,13 @@ export const NAV_GROUPS = [
     ],
   },
   {
-    // The exact-match recreation flow. Demoted out of the main navigation but
-    // kept reachable: it still works, and Trend Research is built on the same
-    // discovery data.
-    label: "Legacy",
+    // Research inputs and read-only records. Creation routes are absent on
+    // purpose: exact-match video creation is disabled.
+    label: "Research",
     items: [
       { to: "/discover", label: "Discover", icon: Compass, testId: "discover-nav-link", hint: "Trending hooks" },
       { to: "/bookmarks", label: "Saved Hooks", icon: Bookmark, testId: "bookmarks-nav-link", hint: "Saved analyses" },
-      { to: "/legacy-history", label: "Legacy History", icon: Compass, testId: "legacy-history-nav-link", hint: "Old generations" },
+      { to: "/legacy-history", label: "Research Archive", icon: Compass, testId: "legacy-history-nav-link", hint: "Old records" },
     ],
   },
 ];
@@ -254,10 +253,10 @@ export function Sidebar({ collapsed, onToggleCollapsed }) {
       {/* Brand + collapse control */}
       <div className={`flex h-[60px] shrink-0 items-center ${collapsed ? "justify-center px-3" : "gap-2.5 px-5"}`}>
         <Link
-          to="/discover"
+          to="/"
           className="flex min-w-0 items-center gap-2.5 outline-none"
           data-testid="logo-home-link"
-          title="HookForge — go to Discover"
+          title="HookForge — go to Dashboard"
         >
           <LogoMark />
           {!collapsed && (
@@ -334,7 +333,7 @@ export function MobileSidebar({ open, onClose }) {
       >
         <div className="flex h-[60px] shrink-0 items-center gap-2.5 px-5">
           <Link
-            to="/discover"
+            to="/"
             onClick={onClose}
             className="flex min-w-0 items-center gap-2.5"
             data-testid="mobile-logo-home-link"

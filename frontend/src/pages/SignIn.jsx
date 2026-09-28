@@ -4,9 +4,8 @@ import { Sparkles, ArrowLeft } from "lucide-react";
 import { isClerkConfigured } from "../lib/clerk";
 
 /**
- * Sign-in page. Clerk's <SignIn /> component handles the full OAuth / email
- * flow (including TikTok once you add it as a social provider in your Clerk
- * dashboard). We just wrap it with our brand chrome so it feels native.
+ * Sign-in page. Clerk's <SignIn /> component handles the full authentication
+ * flow. We just wrap it with our brand chrome so it feels native.
  */
 export default function SignIn() {
   return (
@@ -22,7 +21,7 @@ export default function SignIn() {
             </span>
             <span className="font-display text-xl font-bold tracking-tight">HookForge</span>
           </Link>
-          <p className="text-sm text-muted-foreground">Sign in to save your hooks, face swaps, and brand profile.</p>
+          <p className="text-sm text-muted-foreground">Sign in to save your research, templates, and app profiles.</p>
         </div>
 
         {!isClerkConfigured ? (
@@ -33,7 +32,7 @@ export default function SignIn() {
               enable sign in. Until then the app runs without accounts.
             </p>
             <Link
-              to="/discover"
+              to="/"
               className="mt-4 inline-flex text-xs font-semibold text-[color:var(--brand-indigo)] hover:underline"
             >
               Continue to the app

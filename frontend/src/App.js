@@ -1,5 +1,5 @@
 import "./App.css";
-import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "./components/ui/sonner";
 import AppShell from "./components/AppShell";
 import PageTransition from "./components/PageTransition";
@@ -13,11 +13,9 @@ import SignIn from "./pages/SignIn";
 import SignUp from "./pages/SignUp";
 import NicheFeed from "./pages/NicheFeed";
 import AnalysisDetail from "./pages/AnalysisDetail";
-import GenerateVideo from "./pages/GenerateVideo";
 import History from "./pages/History";
 import GenerationHistory from "./pages/GenerationHistory";
 import BrandSetup from "./pages/BrandSetup";
-import FaceSwap from "./pages/FaceSwap";
 import HookTemplates from "./pages/HookTemplates";
 import AppProfiles from "./pages/AppProfiles";
 import AppProfileDetail from "./pages/AppProfileDetail";
@@ -31,12 +29,6 @@ import Operations from "./pages/Operations";
 import TrendResearch from "./pages/TrendResearch";
 import Settings from "./pages/Settings";
 import { OnboardingProvider } from "./components/onboarding/OnboardingProvider";
-
-// Redirect old /customize/:videoId to /face-swap
-function CustomizeRedirect() {
-  const { videoId } = useParams();
-  return <Navigate to={`/face-swap?videoId=${videoId}`} replace />;
-}
 
 function App() {
   return (
@@ -82,14 +74,11 @@ function App() {
                         <Route path="/history" element={<GenerationHistory />} />
                         <Route path="/legacy-history" element={<History />} />
 
-                        {/* Legacy exact-match recreation. Routes and code are kept
-                            working for Trend Research, but demoted out of the
-                            primary navigation in favour of the template workflow. */}
+                        {/* Research archive: discovery, analysis, bookmarks, and
+                            legacy records remain readable, but exact-match
+                            video creation is disabled. */}
                         <Route path="/discover" element={<NicheFeed />} />
-                        <Route path="/face-swap" element={<FaceSwap />} />
                         <Route path="/analysis/:videoId" element={<AnalysisDetail />} />
-                        <Route path="/customize/:videoId" element={<CustomizeRedirect />} />
-                        <Route path="/generate-video/:customizationId" element={<GenerateVideo />} />
                         <Route path="/bookmarks" element={<HookTemplates />} />
                       </Routes>
                     </PageTransition>

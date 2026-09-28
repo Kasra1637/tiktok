@@ -32,7 +32,7 @@ export default function SignUp() {
               enable sign up. Until then the app runs without accounts.
             </p>
             <Link
-              to="/discover"
+              to="/"
               className="mt-4 inline-flex text-xs font-semibold text-[color:var(--brand-indigo)] hover:underline"
             >
               Continue to the app

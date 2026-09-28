@@ -9176,6 +9176,43 @@ async def proxy_thumbnail(url: str = ""):
         raise HTTPException(status_code=404, detail="Could not fetch thumbnail")
 
 
+# Exact-match creation is disabled at the router boundary. Research stays
+# reachable: discovery, ingestion, analysis, bookmarks, history, brand research,
+# and durable media remain registered below. The implementation functions are
+# retained for existing records and shared media helpers, but none of these
+# paths can create a face swap, customization, remix, or legacy video job.
+DISABLED_LEGACY_CREATION_ROUTES = frozenset({
+    "/face-swap",
+    "/face-swap/status/{job_id}",
+    "/face-swap/jobs",
+    "/face-swap/generate-hook-video",
+    "/face-swap/extend-video",
+    "/face-swap/generate-video",
+    "/face-swap/video-status/{job_id}",
+    "/face-swap/generate-branded-prompt",
+    "/videos/{video_id}/customize",
+    "/videos/{video_id}/hook-engine",
+    "/hook-motion-styles",
+    "/video-models",
+    "/customizations",
+    "/customizations/{customization_id}",
+    "/customizations/{customization_id}/remix-chat",
+    "/customizations/{customization_id}/generate-video-prompt",
+    "/customizations/{customization_id}/generate-remix-script",
+    "/customizations/{customization_id}/video-jobs",
+    "/video-jobs/{job_id}/generate-video",
+    "/video-jobs/{job_id}/submit-video",
+    "/video-jobs/{job_id}/poll",
+    "/video-jobs/{job_id}",
+})
+api_router.routes[:] = [
+    route for route in api_router.routes
+    if getattr(route, "path", "") not in {
+        f"/api{path}" for path in DISABLED_LEGACY_CREATION_ROUTES
+    }
+]
+
+
 app.include_router(api_router)
 
 

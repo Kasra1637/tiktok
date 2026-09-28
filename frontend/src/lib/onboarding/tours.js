@@ -27,19 +27,19 @@ export const TOURS = {
         target: null,
         title: "Welcome to HookForge \u{1F44B}",
         body:
-          "This 30-second tour shows how to turn any viral TikTok hook into your own branded video \u2014 discover, analyze, swap your face in, and generate, all in one pipeline.",
+          "This 30-second tour shows the internal template workflow — discover reusable hook mechanics, analyze them, save them as research, then generate template-based app videos.",
       },
       {
         target: '[data-testid="landing-stats"]',
         title: "The core loop",
         body:
-          "Discover a viral hook, swap in your face, and generate an AI video \u2014 powered by MiniMax H3 at 2K resolution, up to 15 seconds. Hooks are muted by default so you can add a trending sound on TikTok.",
+          "Discover a hook mechanic, analyze and bookmark it as research, then use the creation studio to generate a template-based video. Publishing stays manual.",
       },
       {
         target: '[data-testid="landing-how-it-works"]',
         title: "Four steps, one pipeline",
         body:
-          "Discover \u2192 Analyze & Save \u2192 Face Swap \u2192 Generate. Each step automatically feeds the next \u2014 you never re-enter the same information twice.",
+          "Discover \u2192 Analyze & Save \u2192 Template Studio \u2192 Generate. Each step automatically feeds the next \u2014 you never re-enter the same information twice.",
       },
       {
         target: '[data-testid="landing-features"]',
@@ -110,7 +110,7 @@ export const TOURS = {
         target: '[data-testid^="filmstrip-frame-button-"]',
         title: "The extracted frames",
         body:
-          "We pulled 8 frames from the first 3 seconds of this video. Click any frame to choose it as the target scene for your face swap \u2014 the default is the AI-picked peak hook moment.",
+          "We pulled 8 frames from the first 3 seconds of this video. Review the peak hook moment and bookmark the reusable mechanic for template research.",
       },
       {
         target: '[data-testid="effectiveness-score-badge"]',
@@ -123,73 +123,13 @@ export const TOURS = {
         target: '[data-testid="hook-section-facial_expressions"], [data-testid="hook-section-body_language_gestures"]',
         title: "What makes it work",
         body:
-          "Each card breaks down one mechanic \u2014 expression, gesture, pacing, text, or audio \u2014 so you know exactly what to preserve when you recreate it with your own face.",
-      },
-      {
-        target: '[data-testid="face-swap-hook-button"]',
-        title: "Put yourself in it",
-        body:
-          "Swap your face into this exact frame. Pose, lighting, outfit, and background all stay identical \u2014 only the identity changes.",
+          "Each card breaks down one mechanic \u2014 expression, gesture, pacing, text, or audio \u2014 so you know exactly what reusable structure to save for template research.",
       },
       {
         target: '[data-testid="bookmark-hook-button"]',
         title: "Save it for later \u2014 free",
         body:
           "Like this hook? Bookmark it. Next time you reuse it \u2014 for a different client or brand \u2014 there's zero AI analysis cost, just the video generation.",
-      },
-    ],
-  },
-
-  faceswap: {
-    id: "faceswap",
-    label: "Face swap tour",
-    steps: [
-      {
-        target: '[data-testid="face-swap-step-indicator"]',
-        title: "Three quick steps",
-        body:
-          "Target scene \u2192 your face \u2192 generate. Your face photo is saved locally so you only ever need to upload it once.",
-      },
-      {
-        target: '[data-testid="face-swap-no-target"], [data-testid="face-swap-step-indicator"]',
-        title: "Your target scene",
-        optional: true,
-        body:
-          "This is the pose, lighting, and background your face gets placed into. It always comes from a hook you've analyzed \u2014 pick one in Discover, or reuse a saved template.",
-      },
-      {
-        target: '[data-testid="source-dropzone"]',
-        title: "Add your face",
-        optional: true,
-        body:
-          "Upload a clear, front-facing photo. Hit \u201cSave\u201d afterward so this app remembers it for every future swap.",
-      },
-      {
-        target: '[data-testid="generate-swap-button"]',
-        title: "Generate the swap",
-        optional: true,
-        body:
-          "AI places your face into the exact scene \u2014 matching pose, outfit, lighting, and camera angle for a seamless result.",
-      },
-      {
-        target: '[data-testid="bookmark-picker"]',
-        title: "Reuse a saved hook \u2014 free",
-        optional: true,
-        body:
-          "Bookmarked hooks appear in your history, filterable by category."
-      },
-      {
-        target: '[data-testid="generate-hook-button"]',
-        title: "Bring it to life",
-        body:
-          "MiniMax H3 turns your swapped image into a short video with camera motion \u2014 2K resolution, generated in a single pass. Muted by default, since most creators add a trending sound or text-to-speech in TikTok's own editor. Toggle audio on above if you'd rather have H3 generate a track.",
-      },
-      {
-        target: '[data-testid="reroll-hook-button"], [data-testid="extend-video-button"]',
-        title: "Re-roll or extend",
-        optional: true,
-        body:
-          "Not quite right? Re-roll gives you another take with the exact same prompt \u2014 no extra analysis cost. Happy with it? Extend adds your brand message and a call-to-action.",
       },
     ],
   },
@@ -202,14 +142,14 @@ export const TOURS = {
         target: null,
         title: "Your hook library",
         body:
-          "Every hook you save here keeps its full analysis, generated prompt, and a copy of the source clip \u2014 so reusing it later costs nothing but the video generation itself.",
+          "Every hook you save here keeps its full analysis and reusable mechanic for template research.",
       },
       {
         target: '[data-testid="bookmarks-savings-summary"]',
         title: "Track your savings",
         optional: true,
         body:
-          "This tracks how many times you've reused a saved hook \u2014 each reuse is a fresh AI analysis and prompt rewrite you didn't have to pay for.",
+          "This tracks how many times you've reused a saved analysis \u2014 each reuse avoids paying for another fresh AI analysis.",
       },
       {
         target: '[data-testid="bookmarks-category-filter"]',
@@ -220,55 +160,9 @@ export const TOURS = {
       },
       {
         target: '[data-testid="view-analysis-button"]',
-        title: "One click to reuse",
+        title: "One click to research",
         body:
-          "Hit \u201cUse This Hook\u201d to jump straight into Face Swap with this template pre-selected \u2014 no re-analysis needed, ever.",
-      },
-    ],
-  },
-
-  generate: {
-    id: "generate",
-    label: "Content Remixer tour",
-    steps: [
-      {
-        target: '[data-testid="remix-chat-input"], [data-testid="remix-chat-empty-state"]',
-        title: "Chat your way to a brief",
-        body:
-          "Describe your brand in plain language. AI checks how well the original hook's audience matches yours and asks a couple of quick follow-up questions.",
-      },
-      {
-        target: '[data-testid="reference-images-row"]',
-        title: "Your face-swapped reference",
-        optional: true,
-        body:
-          "This is the image that becomes the first frame of your generated video \u2014 carried over automatically from Face Swap.",
-      },
-      {
-        target: '[data-testid="brand-name-input"]',
-        title: "Or fill in manually",
-        optional: true,
-        body:
-          "Prefer forms over chat? Fill in your brand name, goal, and details directly \u2014 these stay in sync with the chat either way.",
-      },
-      {
-        target: '[data-testid="remix-for-brand-button"], [data-testid="generate-prompt-button"]',
-        title: "Generate your script",
-        body:
-          "AI writes a full, second-by-second video prompt that adapts the viral hook's proven mechanics to your specific brand and offer.",
-      },
-      {
-        target: '[data-testid="full-prompt-textarea"]',
-        title: "Edit before you generate",
-        optional: true,
-        body:
-          "Tweak any part of the AI-written prompt \u2014 camera angle, pacing, brand narrative \u2014 before locking it in.",
-      },
-      {
-        target: '[data-testid="generate-video-button"]',
-        title: "Lock it in",
-        body:
-          "Save this as your video brief \u2014 the reference image, prompt, and target duration are bundled and ready for generation.",
+          "Open the saved analysis whenever you need the reusable mechanic \u2014 no re-analysis needed, ever.",
       },
     ],
   },
@@ -287,13 +181,13 @@ export const TOURS = {
         target: '[data-testid="brand-manual-card"]',
         title: "Refine anything",
         body:
-          "Every field AI fills in is fully editable. Sharpen your ideal customer profile or differentiation for noticeably better remix scripts.",
+          "Every field AI fills in is fully editable. Sharpen your ideal customer profile or differentiation for noticeably better template videos.",
       },
       {
         target: '[data-testid="save-brand-button"]',
         title: "Save once, reuse everywhere",
         body:
-          "Once saved, this profile auto-fills the Content Remixer on every video you generate \u2014 no need to re-describe your brand each time.",
+          "Once saved, this profile supports App Profiles and template videos \u2014 no need to re-describe your brand each time.",
       },
     ],
   },
@@ -304,23 +198,23 @@ export const TOURS = {
     steps: [
       {
         target: '[data-testid="history-list"]',
-        title: "Everything you've made",
+        title: "Research and older records",
         body:
-          "Every hook you've analyzed, face-swapped, or turned into a video brief lives here \u2014 nothing is lost between sessions.",
+          "Every hook you've analyzed and the older records retained for research live here \u2014 nothing needed for template research is lost between sessions.",
       },
       {
         target: '[data-testid="history-customization-thumb"]',
-        title: "Revisit a face swap",
+        title: "Revisit an archived result",
         optional: true,
         body:
-          "Click any thumbnail to see the full-resolution result and its underlying generation spec \u2014 handy for reusing a look later.",
+          "Click any thumbnail to see the archived result and its underlying generation spec. New exact-match results cannot be created.",
       },
       {
         target: '[data-testid="history-video-job-item"]',
-        title: "Review a video brief",
+        title: "Review an archived brief",
         optional: true,
         body:
-          "See the exact prompt and brand details saved for this generation \u2014 copy it, tweak it, or use it as a starting point for the next one.",
+          "See the exact prompt and brand details saved for this older record. New briefs are created in the template studio, not here.",
       },
     ],
   },
@@ -333,9 +227,7 @@ export function getTourIdForPath(pathname) {
   if (pathname === "/") return null; // Landing page — no onboarding tour
   if (pathname.startsWith("/discover")) return "discover";
   if (pathname.startsWith("/analysis/")) return "analysis";
-  if (pathname.startsWith("/face-swap")) return "faceswap";
   if (pathname.startsWith("/bookmarks")) return "templates";
-  if (pathname.startsWith("/generate-video/")) return "generate";
   if (pathname.startsWith("/brand")) return "brand";
   if (pathname.startsWith("/history")) return "history";
   return null;

@@ -113,7 +113,7 @@ export function TemplateForm({ facets, initial, submitLabel, busy, error, onCanc
 
   useEffect(() => {
     setForm(templateFormInitial(initial));
-  }, [initial?.id, initial?.updated_at]);
+  }, [initial]);
 
   const set = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
   const toggleAsset = (kind) => {

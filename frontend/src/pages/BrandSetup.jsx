@@ -770,19 +770,19 @@ export default function BrandSetup() {
             {brand?.id && (
               <Alert className="border-[color:var(--indigo-15)] bg-[color:var(--indigo-6)]">
                 <CheckCircle2 className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-                <AlertTitle>Ready for the Content Remixer</AlertTitle>
+                <AlertTitle>Ready for the template studio</AlertTitle>
                 <AlertDescription className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                   <span className="text-muted-foreground">
-                    This profile will auto-fill and inform brand-adapted scripts anywhere you generate a video.
+                    This profile can inform App Profiles and template-based scripts anywhere you generate a video.
                   </span>
                   <Button
                     variant="secondary"
                     size="sm"
                     className="shrink-0 gap-1.5"
-                    onClick={() => navigate("/discover")}
+                    onClick={() => navigate("/create")}
                     data-testid="find-video-to-remix-button"
                   >
-                    Find a video to remix <ArrowRight className="h-3.5 w-3.5" />
+                    Open the studio <ArrowRight className="h-3.5 w-3.5" />
                   </Button>
                 </AlertDescription>
               </Alert>

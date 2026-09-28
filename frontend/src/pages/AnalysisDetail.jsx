@@ -9,7 +9,7 @@ import HookBreakdown from "../components/HookBreakdown";
 import GenerationProgress from "../components/GenerationProgress";
 import SaveHookTemplateDialog from "../components/SaveHookTemplateDialog";
 import { api, getErrorMessage } from "../lib/api";
-import { ArrowLeft, Eye, Heart, MessageCircle, AlertTriangle, RotateCcw, ExternalLink, Repeat2, Music2, FileText, BadgeAlert, Bookmark, BookmarkCheck, Sparkles, ImageOff } from "lucide-react";
+import { ArrowLeft, Eye, Heart, MessageCircle, AlertTriangle, RotateCcw, ExternalLink, Music2, FileText, BadgeAlert, Bookmark, BookmarkCheck, Sparkles, ImageOff } from "lucide-react";
 
 const ANALYZE_STAGES = ["Downloading video", "Extracting first 3 seconds", "Analyzing hook mechanics with AI"];
 
@@ -305,22 +305,6 @@ export default function AnalysisDetail() {
           )}
 
           {analysis && <EffectivenessScore score={analysis.effectiveness_score} />}
-
-          {analysis && selectedFrame && (
-            <Button
-              onClick={() => {
-                const frame = analysis.frames.find((f) => f.index === selectedFrame);
-                if (frame) {
-                  navigate(`/face-swap?target=${encodeURIComponent(frame.media_url)}&videoId=${videoId}&frame=${selectedFrame}`);
-                }
-              }}
-              variant="brand"
-              className="w-full"
-              data-testid="face-swap-hook-button"
-            >
-              <Repeat2 className="h-4 w-4" /> Face Swap This Hook
-            </Button>
-          )}
 
           {analysis && (
             <>

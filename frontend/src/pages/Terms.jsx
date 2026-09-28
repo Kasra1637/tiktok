@@ -2,7 +2,7 @@ import LegalPage, { LegalSection, LegalList, LegalItem } from "../components/Leg
 
 export default function Terms() {
   return (
-    <LegalPage title="Terms of Service" updated="July 2026">
+    <LegalPage title="Terms of Service" updated="September 2026">
       <LegalSection number={1} title="Acceptance of Terms">
         <p>
           By accessing or using HookForge ("the app"), you agree to be bound by these Terms of Service. If you do not agree to these terms, do not use the app.
@@ -10,41 +10,44 @@ export default function Terms() {
       </LegalSection>
 
       <LegalSection number={2} title="Description of Service">
-        <p>HookForge is a content creation tool that provides the following services:</p>
+        <p>HookForge is an internal template-based video tool that provides the following services:</p>
         <LegalList>
           <LegalItem>Discovery of trending TikTok video content via the TikTok Content Discovery API</LegalItem>
-          <LegalItem>AI-powered analysis of video hooks (first 3 seconds)</LegalItem>
-          <LegalItem>AI face swap technology for inserting your likeness into video frames</LegalItem>
-          <LegalItem>AI video generation from face-swapped reference frames</LegalItem>
-          <LegalItem>Brand profile analysis and customized video prompt generation</LegalItem>
+          <LegalItem>AI-powered analysis of video hooks and abstraction of reusable mechanics</LegalItem>
+          <LegalItem>Mobile App Profiles, content angles, and hook-template recommendations</LegalItem>
+          <LegalItem>Template-based promotional video generation from approved profiles and authorized assets</LegalItem>
+          <LegalItem>Manual video download and performance-note tracking</LegalItem>
         </LegalList>
+        <p>Exact-match video recreation is disabled. The app does not automatically publish content.</p>
       </LegalSection>
 
       <LegalSection number={3} title="User Responsibilities">
         <p>You agree to:</p>
         <LegalList>
-          <LegalItem><strong>Only upload photos of yourself</strong> or photos you have explicit permission to use for face swap purposes</LegalItem>
-          <LegalItem><strong>Not create misleading content</strong> that could deceive others into thinking generated content is real footage of another person</LegalItem>
+          <LegalItem><strong>Only upload assets</strong> you own or have explicit permission to use for app promotion</LegalItem>
+          <LegalItem><strong>Use approved product facts</strong> and avoid fabricated features, pricing, reviews, testimonials, or guaranteed outcomes</LegalItem>
+          <LegalItem><strong>Not create misleading content</strong> that could deceive others about a product, person, or result</LegalItem>
           <LegalItem><strong>Not use the app for harassment,</strong> impersonation without consent, or creation of non-consensual intimate imagery</LegalItem>
-          <LegalItem><strong>Comply with all applicable laws</strong> regarding AI-generated content, deepfakes, and digital media in your jurisdiction</LegalItem>
-          <LegalItem><strong>Respect TikTok creators' content</strong> — the app is for inspiration and adaptation, not direct copying or plagiarism</LegalItem>
+          <LegalItem><strong>Comply with all applicable laws</strong> regarding AI-generated content and digital media in your jurisdiction</LegalItem>
+          <LegalItem><strong>Respect TikTok creators' content</strong> — the app is for inspiration and reusable mechanics, not direct copying or plagiarism</LegalItem>
           <LegalItem><strong>Not use generated content</strong> in ways that violate TikTok's, Instagram's, or any platform's community guidelines</LegalItem>
         </LegalList>
       </LegalSection>
 
       <LegalSection number={4} title="Content Ownership">
         <LegalList>
-          <LegalItem><strong>Your uploads:</strong> You retain ownership of photos you upload.</LegalItem>
-          <LegalItem><strong>Generated content:</strong> You own the AI-generated face-swapped images and videos created using your photos, subject to the underlying AI models' terms.</LegalItem>
+          <LegalItem><strong>Your uploads:</strong> You retain ownership of assets you upload.</LegalItem>
+          <LegalItem><strong>Generated content:</strong> You own the template-based promotional videos generated from your approved profiles and authorized assets, subject to the underlying AI models' terms.</LegalItem>
           <LegalItem><strong>TikTok content:</strong> Videos displayed from TikTok remain the property of their original creators. The app displays this content with proper attribution and linking.</LegalItem>
-          <LegalItem><strong>Brand profiles:</strong> Brand information you provide remains yours.</LegalItem>
+          <LegalItem><strong>App and brand profiles:</strong> Profile information you provide remains yours.</LegalItem>
         </LegalList>
       </LegalSection>
 
       <LegalSection number={5} title="Prohibited Uses">
         <p>You may NOT use HookForge to:</p>
         <LegalList>
-          <LegalItem>Create non-consensual face swaps of other people</LegalItem>
+          <LegalItem>Recreate another creator's exact identity, performance, gestures, voice, or copyrighted audio</LegalItem>
+          <LegalItem>Create non-consensual face swaps or impersonations of other people</LegalItem>
           <LegalItem>Generate sexually explicit or violent content</LegalItem>
           <LegalItem>Impersonate public figures or private individuals for deceptive purposes</LegalItem>
           <LegalItem>Create content intended to mislead, defraud, or manipulate</LegalItem>
@@ -56,7 +59,7 @@ export default function Terms() {
 
       <LegalSection number={6} title="Third-Party Services">
         <p>
-          The app relies on third-party AI services (OpenRouter, Google Gemini, ByteDance, Alibaba) and the TikTok Content Discovery API. These services have their own terms and may be subject to availability, rate limits, or content policies that affect the app's functionality.
+          The app relies on third-party AI services (OpenRouter and Google Gemini), configurable video-generation providers, and the TikTok Content Discovery API. These services have their own terms and may be subject to availability, rate limits, or content policies that affect the app's functionality.
         </p>
       </LegalSection>
 

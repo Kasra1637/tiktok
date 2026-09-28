@@ -659,6 +659,33 @@ class TestNoPlatformAutomation:
                     w in path for w in ("publish", "post", "share", "schedule")
                 ), path
 
+    def test_legacy_creation_routes_are_unregistered(self, api):
+        """
+        Exact-match creation is disabled at the router boundary. Research
+        discovery, analysis, bookmarks, and history remain; creation paths do
+        not, even though their implementation helpers may still exist for old
+        records and shared media code.
+        """
+        paths = {getattr(r, "path", "") for r in api.api_router.routes}
+        for disabled in api.DISABLED_LEGACY_CREATION_ROUTES:
+            assert f"/api{disabled}" not in paths, disabled
+        app_paths = {getattr(r, "path", "") for r in api.app.routes}
+        for disabled in api.DISABLED_LEGACY_CREATION_ROUTES:
+            assert f"/api{disabled}" not in app_paths, disabled
+
+    def test_research_routes_remain_registered(self, api):
+        paths = {getattr(r, "path", "") for r in api.api_router.routes}
+        for retained in (
+            "/api/niches",
+            "/api/videos/ingest",
+            "/api/videos/{video_id}/analyze-hook",
+            "/api/videos/{video_id}/analysis",
+            "/api/bookmarks",
+            "/api/history",
+            "/api/research/scan",
+        ):
+            assert retained in paths, retained
+
     def test_no_credential_capture_endpoints(self, api):
         paths = " ".join(getattr(r, "path", "") for r in api.app.routes)
         for forbidden in ("login", "cookie", "session-token", "credentials"):

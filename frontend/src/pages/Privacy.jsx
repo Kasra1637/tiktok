@@ -2,24 +2,23 @@ import LegalPage, { LegalSection, LegalSubheading, LegalList, LegalItem } from "
 
 export default function Privacy() {
   return (
-    <LegalPage title="Privacy Policy" updated="July 2026">
+    <LegalPage title="Privacy Policy" updated="September 2026">
       <LegalSection number={1} title="Overview">
         <p>
-          HookForge ("we," "our," or "the app") is a content creation tool that helps creators discover trending video hooks, perform AI-powered face swaps, and generate branded short-form video content. This Privacy Policy explains how we collect, use, and protect information when you use our application.
+          HookForge ("we," "our," or "the app") is an internal template-based tool that helps mobile app founders research reusable hook mechanics and generate short-form promotional videos from approved App Profiles. Exact-match video recreation is disabled. This Privacy Policy explains how we collect, use, and protect information when you use our application.
         </p>
       </LegalSection>
 
       <LegalSection number={2} title="Information We Collect">
         <LegalSubheading>Content You Provide:</LegalSubheading>
         <LegalList>
-          <LegalItem><strong>Face photos:</strong> Images you upload for face swap processing. These are stored temporarily on our servers for generation purposes.</LegalItem>
-          <LegalItem><strong>Brand information:</strong> Website URLs you submit for brand analysis, and any brand profile data extracted or manually entered.</LegalItem>
+          <LegalItem><strong>App assets:</strong> Screenshots, recordings, logos, images, background media, and audio you upload for a specific App Profile. Upload only assets you have the right to use.</LegalItem>
+          <LegalItem><strong>Brand information:</strong> Website, App Store, Google Play, and support URLs you submit for research, and any App Profile data extracted or manually entered.</LegalItem>
           <LegalItem><strong>TikTok video URLs:</strong> URLs you paste for hook analysis.</LegalItem>
         </LegalList>
         <LegalSubheading>Automatically Collected:</LegalSubheading>
         <LegalList>
           <LegalItem><strong>Usage data:</strong> Pages visited, features used, and generation requests made.</LegalItem>
-          <LegalItem><strong>Browser storage:</strong> Saved face data is stored in your browser's localStorage and never transmitted to our servers unless you initiate a face swap.</LegalItem>
         </LegalList>
         <LegalSubheading>Third-Party Content:</LegalSubheading>
         <LegalList>
@@ -29,9 +28,9 @@ export default function Privacy() {
 
       <LegalSection number={3} title="How We Use Your Information">
         <LegalList>
-          <LegalItem>To perform AI face swap generation using your uploaded photos</LegalItem>
-          <LegalItem>To analyze viral video hooks and provide structured insights</LegalItem>
-          <LegalItem>To generate branded video content based on your brand profile</LegalItem>
+          <LegalItem>To research mobile apps and draft reviewable App Profiles</LegalItem>
+          <LegalItem>To analyze video hooks and abstract reusable template mechanics</LegalItem>
+          <LegalItem>To generate template-based promotional videos from approved profiles and authorized assets</LegalItem>
           <LegalItem>To display trending TikTok content relevant to your selected niche</LegalItem>
           <LegalItem>To improve the app's functionality and user experience</LegalItem>
         </LegalList>
@@ -40,21 +39,20 @@ export default function Privacy() {
       <LegalSection number={4} title="Third-Party Services">
         <p>We use the following third-party services to provide our functionality:</p>
         <LegalList>
-          <LegalItem><strong>OpenRouter API:</strong> For AI image generation (face swap), video generation, and text analysis. Your images are sent to their API for processing.</LegalItem>
-          <LegalItem><strong>Google Gemini:</strong> For vision-based hook analysis and image generation (via OpenRouter).</LegalItem>
-          <LegalItem><strong>Runway Aleph 2.0:</strong> For in-context video editing that replaces facial identity on the original hook footage (via OpenRouter). Falls back to MiniMax H3 for customized or generated hooks.</LegalItem>
+          <LegalItem><strong>OpenRouter API:</strong> For text analysis, hook analysis, and video generation. App assets and prompts needed for those operations are sent to their API for processing.</LegalItem>
+          <LegalItem><strong>Google Gemini:</strong> For vision-based hook analysis and text generation (via OpenRouter).</LegalItem>
           <LegalItem><strong>TikTok Content Discovery API:</strong> For displaying publicly available trending videos within the app.</LegalItem>
+          <LegalItem><strong>Cloudflare R2 and Turso:</strong> For durable video and application storage where configured.</LegalItem>
         </LegalList>
         <p>Each third-party service has its own privacy policy governing how they handle data sent to them.</p>
       </LegalSection>
 
       <LegalSection number={5} title="Data Storage & Retention">
         <LegalList>
-          <LegalItem><strong>Uploaded photos:</strong> Stored on our servers for the duration needed to complete generation. May be retained for up to 30 days for caching purposes, then deleted.</LegalItem>
-          <LegalItem><strong>Generated content:</strong> Face-swapped images and videos are stored until you delete them or for up to 90 days.</LegalItem>
-          <LegalItem><strong>Brand profiles:</strong> Retained until you manually delete them.</LegalItem>
+          <LegalItem><strong>Uploaded assets:</strong> Retained until you archive or delete them.</LegalItem>
+          <LegalItem><strong>Generated content:</strong> Template-based videos are stored until you delete them or for up to 90 days.</LegalItem>
+          <LegalItem><strong>App and brand profiles:</strong> Retained until you manually delete them.</LegalItem>
           <LegalItem><strong>Analysis data:</strong> Hook analysis results are cached to avoid re-processing the same videos.</LegalItem>
-          <LegalItem><strong>Saved face (localStorage):</strong> Stored only in your browser. We never access this data unless you explicitly trigger a face swap.</LegalItem>
         </LegalList>
       </LegalSection>
 
@@ -67,9 +65,8 @@ export default function Privacy() {
       <LegalSection number={7} title="Your Rights">
         <p>You have the right to:</p>
         <LegalList>
-          <LegalItem>Delete your uploaded photos and generated content at any time</LegalItem>
-          <LegalItem>Clear your saved face from browser storage</LegalItem>
-          <LegalItem>Delete your brand profile</LegalItem>
+          <LegalItem>Delete your uploaded assets and generated content at any time</LegalItem>
+          <LegalItem>Delete your App Profile or brand profile</LegalItem>
           <LegalItem>Request deletion of all your data by contacting us</LegalItem>
         </LegalList>
       </LegalSection>
@@ -82,7 +79,7 @@ export default function Privacy() {
 
       <LegalSection number={9} title="Responsible Use">
         <p>
-          Our face swap technology is designed for creative, professional, and marketing purposes. Users must not use this tool to create non-consensual, misleading, or harmful content. We prohibit the creation of content that impersonates others without permission or that could be used to deceive or harass.
+          HookForge is designed for lawful app promotion using approved product facts and authorized assets. Users must not use this tool to create non-consensual, misleading, infringing, or harmful content. We prohibit impersonation, deceptive product claims, fake reviews or testimonials, fabricated app interfaces or pricing, and use of copyrighted audio or likenesses without permission.
         </p>
       </LegalSection>
 

@@ -30,7 +30,6 @@ import { api, mediaUrl, getErrorMessage } from "../lib/api";
 import { HOOK_TEMPLATE_CATEGORIES, categoryLabel } from "../lib/hookTemplateCategories";
 import {
   Bookmark,
-  Repeat2,
   Trash2,
   Pencil,
   Zap,
@@ -46,23 +45,6 @@ import { toast } from "sonner";
 function formatUsed(n) {
   if (!n) return "Never used";
   return n === 1 ? "Used once" : `Used ${n} times`;
-}
-
-/**
- * Whether a template can seed a face swap directly.
- *
- * Templates are one of only two permitted sources for a face-swap target (the
- * other is the discovery feed), but that depends on the template owning a
- * locally-stored frame. `thumbnail_url` falls back to the source video's
- * external TikTok CDN cover when the frame copy failed at save time, and the
- * backend allowlists only /api/media/frames and /api/media/templates — so
- * offering the button for a CDN URL would just produce a 400.
- */
-const SWAPPABLE_TARGET_PREFIXES = ["/api/media/templates/", "/api/media/frames/"];
-
-function canSeedFaceSwap(template) {
-  const url = template?.thumbnail_url || "";
-  return SWAPPABLE_TARGET_PREFIXES.some((prefix) => url.startsWith(prefix));
 }
 
 /**
@@ -386,42 +368,14 @@ export default function HookTemplates() {
 
                 {/* Actions */}
                 <div className="space-y-1.5">
-                  {canSeedFaceSwap(t) ? (
-                    <>
-                      <Button
-                        onClick={() =>
-                          navigate(
-                            `/face-swap?target=${encodeURIComponent(t.thumbnail_url)}` +
-                              `&templateId=${encodeURIComponent(t.id)}` +
-                              `&templateName=${encodeURIComponent(t.name || "")}`
-                          )
-                        }
-                        variant="brand"
-                        className="w-full"
-                        data-testid="face-swap-template-button"
-                      >
-                        <Repeat2 className="h-3.5 w-3.5" /> Face Swap This Hook
-                      </Button>
-                      <Button
-                        onClick={() => navigate(`/analysis/${t.source_video_id}`)}
-                        variant="outline"
-                        className="w-full"
-                        data-testid="use-template-button"
-                      >
-                        View Analysis
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      onClick={() => navigate(`/analysis/${t.source_video_id}`)}
-                      variant="brand"
-                      className="w-full"
-                      data-testid="use-template-button"
-                      title="This template has no stored frame — open the analysis and swap from there"
-                    >
-                      <Repeat2 className="h-3.5 w-3.5" /> View Analysis
-                    </Button>
-                  )}
+                  <Button
+                    onClick={() => navigate(`/analysis/${t.source_video_id}`)}
+                    variant="brand"
+                    className="w-full"
+                    data-testid="use-template-button"
+                  >
+                    View Analysis
+                  </Button>
                   <div className="flex gap-1.5">
                     <Button
                       variant="outline"

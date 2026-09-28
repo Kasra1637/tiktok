@@ -74,8 +74,8 @@ export default function History() {
       <div className="space-y-6">
         <PageHeader
           icon={HistoryIcon}
-          title="History"
-          description="Every hook you've analyzed, face-swapped, or turned into a video brief."
+          title="Research Archive"
+          description="Analyzed hooks, saved research, and older records. Exact-match video creation is disabled; new videos are made from the template studio."
         />
         <EmptyState
           icon={HistoryIcon}
@@ -88,11 +88,11 @@ export default function History() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        icon={HistoryIcon}
-        title="History"
-        description="Every hook you've analyzed, face-swapped, or turned into a video brief — nothing is lost between sessions."
-        actions={
+        <PageHeader
+          icon={HistoryIcon}
+          title="Research Archive"
+          description="Analyzed hooks, saved research, and older records. Exact-match video creation is disabled; new videos are made from the template studio."
+          actions={
           <Badge variant="secondary" className="px-3 py-1">
             {items.length} {items.length === 1 ? "video" : "videos"}
           </Badge>

@@ -7,10 +7,10 @@ import {
   AccountButton,
 } from "../components/auth/AuthControls";
 import {
-  Sparkles, Search, Repeat2, Clapperboard, Globe, Save, Film,
+  Sparkles, Search, Clapperboard, Globe, Film,
   TrendingUp, ArrowRight, Zap, Target, Layers, Music2,
   Bookmark, FileText, BadgeAlert,
-  RotateCcw, Check, Wand2,
+  RotateCcw, Check, Wand2, Briefcase, LayoutTemplate, ShieldCheck, Download,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 
@@ -37,55 +37,61 @@ const FEATURES = [
     icon: Music2,
     title: "Sound Intelligence",
     description:
-      "See the exact sound on every video \u2014 title, artist, duration. Script your remix around the trending audio.",
+      "See public sound metadata on research videos \u2014 title, artist, duration. Use only audio you have the right to use.",
   },
   {
     icon: BadgeAlert,
     title: "Ad Filtering",
     description:
-      "Sponsored posts are auto-flagged and hideable with one toggle. Focus only on organic hooks worth replicating.",
+      "Sponsored posts are auto-flagged and hideable with one toggle. Focus only on organic hooks worth abstracting.",
   },
   {
-    icon: Repeat2,
-    title: "Face Swap",
+    icon: LayoutTemplate,
+    title: "Template Studio",
     description:
-      "Pick any frame from a viral hook. AI places your face into the exact pose, lighting, and scene at 2K quality.",
+      "Build videos from reusable hook structures, not specific creators. No source video is required for generation.",
   },
   {
-    icon: Save,
-    title: "One-Time Face Upload",
+    icon: Briefcase,
+    title: "App Profiles",
     description:
-      "Upload your face once \u2014 it persists across sessions. Every future swap starts instantly, zero re-uploads.",
+      "Research a website and store listings into an approved profile with features, audiences, claims, and CTAs.",
   },
   {
     icon: Bookmark,
-    title: "Bookmarks",
+    title: "Saved Research",
     description:
-      "Save a proven hook once. The analysis, prompt, and motion reference are cached \u2014 reuse it free forever.",
+      "Save hook analyses and reusable mechanics. Reuse the research without repeating the AI analysis.",
   },
   {
-    icon: Clapperboard,
-    title: "AI Video Generation",
+    icon: Film,
+    title: "Real App Visuals",
     description:
-      "Edits the original hook video directly with your face \u2014 exact body movements, gestures, and camera preserved. 3s hook, then extend to a branded video.",
+      "Screenshots, recordings, logos, text, and authorized audio are composited deterministically, so interfaces stay accurate.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Claim Safety",
+    description:
+      "Approved and prohibited claims are checked on every edit. Reviewers see claims, sources, unverified copy, and risks.",
   },
   {
     icon: RotateCcw,
     title: "Re-roll Takes",
     description:
-      "Not happy with a take? Re-roll with the same prompt and references. No re-analysis, just a fresh render.",
-  },
-  {
-    icon: Globe,
-    title: "Brand Prompts",
-    description:
-      "Paste your website URL. AI extracts your brand identity and writes a video prompt tailored to your product.",
+      "Not happy with a take? Regenerate, vary one axis, or duplicate the setup. Paid renders stay explicit.",
   },
   {
     icon: Target,
-    title: "Content Remixer",
+    title: "Feedback Loop",
     description:
-      "Chat with AI about your remix goal. It checks audience fit, asks focused questions, then writes the script.",
+      "Approvals, rejections, edits, and results inform future recommendations and prompts for the same app.",
+  },
+  {
+    icon: Download,
+    title: "Manual Publishing",
+    description:
+      "Download the finished MP4 and post it yourself. Nothing is published, scheduled, or automated.",
   },
 ];
 
@@ -100,19 +106,19 @@ const FLOW_STEPS = [
     step: "2",
     label: "Analyze",
     icon: TrendingUp,
-    detail: "AI dissects the hook \u2014 expressions, pacing, overlays. Save it as a bookmark for quick reuse.",
+    detail: "AI dissects the hook \u2014 expressions, pacing, overlays. Save the reusable mechanic as research.",
   },
   {
     step: "3",
-    label: "Swap",
-    icon: Repeat2,
-    detail: "Your face drops into the creator\u2019s exact pose and scene. One click.",
+    label: "Template",
+    icon: LayoutTemplate,
+    detail: "Choose an approved app, audience, template, and real assets. Generate an editable script and shot plan.",
   },
   {
     step: "4",
     label: "Generate",
     icon: Clapperboard,
-    detail: "Runway Aleph 2.0 edits the hook video directly with your face \u2014 body movement, gestures, and camera stay pixel-for-pixel identical. Extend with your brand CTA.",
+    detail: "Generate one coherent video, composite real app visuals and authorized audio, then download and publish manually.",
   },
 ];
 
@@ -164,27 +170,25 @@ const PIPELINE_BLOCKS = [
   {
     icon: Film,
     tone: "indigo",
-    kicker: "Phase 1",
-    title: "Image (Face Swap)",
+    kicker: "Research",
+    title: "Reusable Mechanics",
     body: (
       <>
-        Grok Imagine places your face into the selected frame &mdash; matching pose, outfit,
-        background, lighting, and camera angle. Output: a 2K, 9:16 PNG ready for animation.
+        Trend research is abstracted into reusable hook structures. No creator identity,
+        performance, gesture sequence, voice, or copyrighted audio is copied into the library.
       </>
     ),
   },
   {
     icon: Clapperboard,
     tone: "coral",
-    kicker: "Phase 2",
-    title: "Video (Motion Replication)",
+    kicker: "Generation",
+    title: "One Coherent Video",
     body: (
       <>
-        The first 3 seconds of the original viral video are edited directly by Runway
-        Aleph 2.0 &mdash; not regenerated. Body movement, hand gestures, camera angle,
-        clothing, and background stay pixel-for-pixel identical to the source; only
-        your face changes. Output is muted by default (add a trending sound in TikTok).
-        Re-roll for another take, or extend into a longer branded video with your CTA.
+        The studio generates the hook and continuation as one coherent vertical video.
+        Real screenshots, recordings, text, and authorized audio are composited afterward.
+        Download the result and publish it manually.
       </>
     ),
   },
@@ -195,8 +199,8 @@ const PIPELINE_BLOCKS = [
     title: "Bookmarks",
     body: (
       <>
-        Save any hook that works. The analysis is cached. Reusing a bookmark
-        later skips all AI analysis &mdash; you only pay for the video render itself.
+        Save useful analyses and mechanics. Reusing saved research
+        later skips repeated AI analysis &mdash; you only pay for renders you explicitly request.
       </>
     ),
   },
@@ -220,8 +224,7 @@ const PIPELINE_BLOCKS = [
     body: (
       <>
         Paste your URL &mdash; AI extracts your brand name, products, audience, and tone. This profile
-        powers the Content Remixer to write prompts that promote your product while replicating the hook&apos;s
-        proven mechanics.
+        powers template recommendations and creative plans for your product.
       </>
     ),
   },
@@ -229,9 +232,8 @@ const PIPELINE_BLOCKS = [
 
 const MODELS = [
   { label: "Hook Analysis", value: "Gemini 2.5 Flash (vision) \u2014 frame reading, structured JSON output" },
-  { label: "Face Swap", value: "Grok Imagine \u2014 identity-preserving compositing, 2K" },
-  { label: "Video", value: "Runway Aleph 2.0 \u2014 in-context video editing that changes only the face on the original hook footage, 1080p, 2\u201330s (falls back to MiniMax H3 for customized hooks)" },
-  { label: "Brand & Remix", value: "Gemini 2.5 Flash \u2014 brand extraction, prompt writing, remix chat" },
+  { label: "Research and Scripts", value: "Gemini 2.5 Flash \u2014 app research, angles, creative plans, template abstraction" },
+  { label: "Video", value: "Configurable studio model \u2014 one coherent vertical generation with native audio where supported" },
   { label: "Data", value: "Apify TikTok Scraper + yt-dlp \u2014 profiles, hashtags, keyword search, music" },
 ];
 
@@ -321,27 +323,27 @@ export default function Landing() {
               <span className="absolute inset-0 animate-pulse-ring rounded-full bg-[color:var(--brand-indigo)]" />
               <span className="relative h-1.5 w-1.5 rounded-full bg-[color:var(--brand-indigo)]" />
             </span>
-            Viral hooks &rarr; Your face &rarr; Branded video
+            Viral hooks &rarr; Reusable templates &rarr; Manual publishing
           </div>
 
           <h1
             className="animate-fade-up font-display mt-8 text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-[4.5rem]"
             style={{ animationDelay: "60ms" }}
           >
-            <span className="text-shine">Your face.</span>
+            <span className="text-shine">Reusable hooks.</span>
             <br />
-            <span className="text-gradient-brand">Proven TikTok hooks.</span>
+            <span className="text-gradient-brand">Real app visuals.</span>
             <br />
-            <span className="text-shine">Infinite video.</span>
+            <span className="text-shine">Manual publishing.</span>
           </h1>
 
           <p
             className="animate-fade-up mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl"
             style={{ animationDelay: "120ms" }}
           >
-            Pick a trending hook, swap yourself into the key frame, and generate a video that
-            replicates the original&rsquo;s exact movements &mdash; in under two minutes. Bookmark any hook &mdash; every future
-            remix costs nothing.
+            Research a reusable hook mechanic, build it into a template-based app video with
+            real visuals and authorized audio, then download and publish it yourself. Exact-match
+            recreation is disabled.
           </p>
 
           <div
@@ -368,7 +370,7 @@ export default function Landing() {
               </SignInTrigger>
             </UnauthedOnly>
             <AuthedOnly>
-              <Link to="/discover" className="w-full sm:w-auto">
+              <Link to="/create" className="w-full sm:w-auto">
                 <Button
                   size="lg"
                   className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-white shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
@@ -376,16 +378,13 @@ export default function Landing() {
                   <Sparkles className="h-5 w-5" /> Go to App
                 </Button>
               </Link>
-              {/* Points at Bookmarks rather than /face-swap: a swap needs a
-                  target frame, which only Discover or a saved template can
-                  supply, so a direct Face Swap CTA would dead-end. */}
-              <Link to="/bookmarks" className="w-full sm:w-auto">
+              <Link to="/templates" className="w-full sm:w-auto">
                 <Button
                   size="lg"
                   variant="outline"
                   className="w-full gap-2.5 rounded-xl border-[color:var(--hairline-strong)] bg-[color:var(--indigo-4)] px-8 py-6 text-base font-semibold backdrop-blur-sm hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] sm:w-auto"
                 >
-                  <Bookmark className="h-5 w-5" /> Saved Hooks
+                  <Bookmark className="h-5 w-5" /> Browse Templates
                 </Button>
               </Link>
             </AuthedOnly>
@@ -396,13 +395,13 @@ export default function Landing() {
             style={{ animationDelay: "220ms" }}
           >
             <span className="inline-flex items-center gap-1.5">
-              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Upload your face once
+              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Approved app profiles
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> 2K vertical output
+              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Real app visuals
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Free bookmark reuse
+              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Manual publishing only
             </span>
           </div>
 
@@ -418,7 +417,7 @@ export default function Landing() {
           id="how-it-works"
           eyebrow="The loop"
           title="How It Works"
-          lede="Four steps. Under two minutes. Every saved hook makes the next one free."
+          lede="Research, template, generate, and publish manually. Saved research makes the next video faster."
         />
 
         <div className="relative">
@@ -451,7 +450,7 @@ export default function Landing() {
           id="features"
           eyebrow="Capabilities"
           title="What You Get"
-          lede="Every tool in the pipeline, from discovery to publish-ready video."
+          lede="Every tool in the workflow, from discovery to manual download."
         />
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -556,8 +555,8 @@ export default function Landing() {
                 Start making content that converts.
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">
-                Find a trending hook, swap your face in, generate a branded video &mdash; done.
-                Save the hook as a template and every future reuse is free.
+                Find a reusable hook mechanic, build a template-based app video, then download and
+                publish it yourself. Exact-match recreation is disabled.
               </p>
               <div className="mt-9 flex flex-col items-center justify-center gap-3.5 sm:flex-row">
                 <UnauthedOnly>
@@ -616,7 +615,7 @@ export default function Landing() {
                 <span className="font-display text-base font-bold tracking-tight">HookForge</span>
               </div>
               <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted-foreground">
-                Your face in proven viral hooks &mdash; discover, swap, generate, publish.
+                Template-based app promos &mdash; research, review, generate, publish manually.
               </p>
             </div>
 
@@ -624,17 +623,16 @@ export default function Landing() {
               <p className="eyebrow mb-3">Product</p>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li>
-                  <Link to="/discover" className="transition-colors hover:text-foreground">Discover Hooks</Link>
+                  <Link to="/create" className="transition-colors hover:text-foreground">Create Video</Link>
                 </li>
                 <li>
-                  {/* Face swaps start from a hook, so this points at Discover. */}
-                  <Link to="/discover" className="transition-colors hover:text-foreground">Face Swap</Link>
+                  <Link to="/templates" className="transition-colors hover:text-foreground">Hook Templates</Link>
                 </li>
                 <li>
                   <Link to="/bookmarks" className="transition-colors hover:text-foreground">Bookmarks</Link>
                 </li>
                 <li>
-                  <Link to="/brand" className="transition-colors hover:text-foreground">Your Brand</Link>
+                  <Link to="/app-profiles" className="transition-colors hover:text-foreground">App Profiles</Link>
                 </li>
               </ul>
             </div>
@@ -656,8 +654,8 @@ export default function Landing() {
             <p className="text-xs text-muted-foreground">
               &copy; {new Date().getFullYear()} HookForge. Built for creators.
             </p>
-            <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Wand2 className="h-3 w-3 text-[color:var(--brand-indigo)]" /> Powered by Runway Aleph 2.0 &amp; Gemini 2.5 Flash
+              <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Wand2 className="h-3 w-3 text-[color:var(--brand-indigo)]" /> Template studio with manual publishing
             </p>
           </div>
         </div>

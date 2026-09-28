@@ -51,118 +51,12 @@ export const api = {
   getVideo: (videoId) => client.get(`/videos/${videoId}`).then((r) => r.data),
   analyzeHook: (videoId) => client.post(`/videos/${videoId}/analyze-hook`).then((r) => r.data),
   getAnalysis: (videoId) => client.get(`/videos/${videoId}/analysis`).then((r) => r.data),
-  customize: (videoId, formData) =>
-    client
-      .post(`/videos/${videoId}/customize`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      })
-      .then((r) => r.data),
-  getCustomizations: () => client.get("/customizations").then((r) => r.data),
-  getCustomization: (id) => client.get(`/customizations/${id}`).then((r) => r.data),
-  getVideoInfo: (videoId) => client.get(`/videos/${videoId}`).then((r) => r.data),
-  // Structural availability of Aleph's exact-edit path for this video. Cheap
-  // and side-effect free; the caller ANDs it with its own style inputs.
-  getHookEngine: (videoId) =>
-    client.get(`/videos/${videoId}/hook-engine`).then((r) => r.data),
-  // Motion styles + the exact prompt text each one sends, so the UI can show
-  // the real instruction rather than a separately maintained paraphrase.
-  getHookMotionStyles: () =>
-    client.get("/hook-motion-styles").then((r) => r.data),
   getHistory: () => client.get("/history").then((r) => r.data),
   deleteVideo: (videoId) => client.delete(`/videos/${videoId}`).then((r) => r.data),
-  getRemixChat: (customizationId) =>
-    client.get(`/customizations/${customizationId}/remix-chat`).then((r) => r.data),
-  sendRemixChatMessage: (customizationId, message) =>
-    client.post(`/customizations/${customizationId}/remix-chat`, { message }).then((r) => r.data),
-  generateVideoPrompt: (customizationId, payload) =>
-    client.post(`/customizations/${customizationId}/generate-video-prompt`, payload).then((r) => r.data),
-  generateVideo: (jobId, payload) =>
-    client.post(`/video-jobs/${jobId}/generate-video`, payload).then((r) => r.data),
-  getVideoJob: (jobId) => client.get(`/video-jobs/${jobId}`).then((r) => r.data),
-
-  // Standalone face swap: submit quickly, then poll the app job while GPT renders.
-  faceSwap: (formData) =>
-    client
-      .post("/face-swap", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-        timeout: 60000,
-      })
-      .then((r) => r.data),
-  faceSwapStatus: (jobId) =>
-    client.get(`/face-swap/status/${jobId}`).then((r) => r.data),
-
-  // Face Swap → Video Generation (Phase 2)
-  faceSwapGenerateVideo: (imageId, prompt, duration, model) => {
-    const formData = new FormData();
-    formData.append("image_id", imageId);
-    formData.append("prompt", prompt || "");
-    formData.append("duration", String(duration || 10));
-    formData.append("model", model || "");
-    return client
-      .post("/face-swap/generate-video", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-        timeout: 60000,
-      })
-      .then((r) => r.data);
-  },
-  faceSwapGenerateHook: (imageId, motionStyle, model, videoId, templateId, includeAudio = false, hookCategory = "", hookCustomPrompt = "") => {
-    const formData = new FormData();
-    formData.append("image_id", imageId);
-    formData.append("motion_style", motionStyle || "lean-in");
-    formData.append("model", model || "");
-    formData.append("video_id", videoId || "");
-    formData.append("template_id", templateId || "");
-    formData.append("include_audio", includeAudio ? "true" : "false");
-    formData.append("hook_category", hookCategory || "");
-    formData.append("hook_custom_prompt", hookCustomPrompt || "");
-    return client
-      .post("/face-swap/generate-hook-video", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-        timeout: 60000,
-      })
-      .then((r) => r.data);
-  },
-  faceSwapExtendVideo: (imageId, hookJobId, brandUrl, duration, model, videoId, brandId) => {
-    const formData = new FormData();
-    formData.append("image_id", imageId);
-    formData.append("hook_job_id", hookJobId || "");
-    formData.append("brand_url", brandUrl || "");
-    // Explicitly chosen saved brand. Takes precedence over brand_url server-side
-    // so the creator picks the brand instead of re-entering a website.
-    formData.append("brand_id", brandId || "");
-    formData.append("duration", String(duration || 10));
-    formData.append("model", model || "");
-    formData.append("video_id", videoId || "");
-    return client
-      .post("/face-swap/extend-video", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-        timeout: 60000,
-      })
-      .then((r) => r.data);
-  },
-  faceSwapVideoStatus: (jobId) =>
-    client.get(`/face-swap/video-status/${jobId}`).then((r) => r.data),
-  getVideoModels: () => client.get("/video-models").then((r) => r.data),
 
   // Persisted video assets (R2 storage)
   getVideoAssets: () => client.get("/video-assets").then((r) => r.data),
   deleteVideoAsset: (jobId) => client.delete(`/video-assets/${jobId}`).then((r) => r.data),
-
-  // Face Swap → Branded Video (Content Remixer)
-  faceSwapBrandedPrompt: (imageId, brandUrl, videoId, duration, useOriginalSound = false) => {
-    const formData = new FormData();
-    formData.append("image_id", imageId);
-    formData.append("brand_url", brandUrl || "");
-    formData.append("video_id", videoId || "");
-    formData.append("duration", String(duration || 15));
-    formData.append("use_original_sound", useOriginalSound ? "true" : "false");
-    return client
-      .post("/face-swap/generate-branded-prompt", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-        timeout: 90000,
-      })
-      .then((r) => r.data);
-  },
 
   // Bookmarks — save a hook analysis for quick access from history
   getBookmarks: (params = {}) =>
@@ -183,8 +77,6 @@ export const api = {
   getBrand: (id) => client.get(`/brand/${id}`).then((r) => r.data),
   createBrand: (payload) => client.post("/brand", payload).then((r) => r.data),
   updateBrand: (id, payload) => client.patch(`/brand/${id}`, payload).then((r) => r.data),
-  generateRemixScript: (customizationId, payload) =>
-    client.post(`/customizations/${customizationId}/generate-remix-script`, payload).then((r) => r.data),
 
   // App Profiles (template-studio workflow: research -> review/approve -> refresh)
   researchAppProfile: (payload) => client.post("/app-profiles/research", payload).then((r) => r.data),
