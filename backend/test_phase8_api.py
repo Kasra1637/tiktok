@@ -38,6 +38,11 @@ def api():
     server = importlib.import_module("server")
     server.DB_PATH = Path(tmpdir) / "test.db"
     server.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    # Keep generated-file side effects inside the temp tree, not real storage.
+    server.pipeline.VIDEOS_DIR = Path(tmpdir) / "videos"
+    server.pipeline.ASSETS_DIR = Path(tmpdir) / "assets"
+    server.pipeline.VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
+    server.pipeline.ASSETS_DIR.mkdir(parents=True, exist_ok=True)
     asyncio.run(server.init_db())
     yield server
     sys.modules.pop("server", None)
@@ -382,6 +387,104 @@ class TestOperations:
         profile = _profile(api, "Ops Three")
         _generation(api, profile)
         assert _run(api.operations_overview(user_id=OTHER_USER))["jobs"]["total"] == 0
+
+
+class TestModelRequestLedger:
+    USER = "ops-model-user"
+
+    def test_success_and_failure_are_recorded(self, api):
+        async def succeed():
+            return {"usage": {"cost": 0.03}}
+
+        async def fail():
+            raise RuntimeError("provider unavailable")
+
+        result = _run(api._log_model_call(
+            "ops-text-check", "text", "text-model", succeed, self.USER,
+            brand_profile_id="profile-1",
+        ))
+        assert result["usage"]["cost"] == 0.03
+        with pytest.raises(RuntimeError):
+            _run(api._log_model_call(
+                "ops-vision-check", "vision", "vision-model", fail, self.USER,
+                brand_profile_id="profile-1",
+            ))
+        rows = _run(api._fetch_all(
+            "SELECT operation, status, cost_usd, error, latency_ms FROM model_requests "
+            "WHERE user_id = ? ORDER BY created_at",
+            (self.USER,),
+        ))
+        assert [(r["operation"], r["status"]) for r in rows] == [
+            ("ops-text-check", "completed"),
+            ("ops-vision-check", "failed"),
+        ]
+        assert rows[0]["cost_usd"] == pytest.approx(0.03)
+        assert "unavailable" in rows[1]["error"]
+        assert rows[0]["latency_ms"] >= 0
+
+    def test_operations_reports_requests_research_and_asset_events(self, api):
+        _run(api._record_asset_event(
+            "upload_rejected", "Uploaded file is empty.", self.USER,
+            brand_profile_id="profile-1", asset_kind="audio", filename="empty.mp3",
+        ))
+        _run(api._execute(
+            """INSERT INTO research_runs
+               (id, kind, query, status, created_at, user_id)
+               VALUES (?, 'keyword', 'journaling app', 'failed', ?, ?)""",
+            (str(uuid.uuid4()), "2026-01-01T00:00:00+00:00", self.USER),
+        ))
+        ops = _run(api.operations_overview(user_id=self.USER))
+        assert ops["model_requests"]["total"] >= 2
+        assert ops["model_requests"]["by_modality"]["text"]["completed"] >= 1
+        assert ops["failed_model_requests"]
+        assert any(e["kind"] == "upload_rejected" for e in ops["asset_events"])
+        assert any(r["status"] == "failed" for r in ops["research_runs"])
+
+    def test_completed_generation_storage_failure_is_visible_and_retryable(
+        self, api, monkeypatch
+    ):
+        profile = _profile(api, "Ops Storage")
+        gen = _generation(api, profile, "completed")
+        local_path = api.pipeline.VIDEOS_DIR / f"{gen['id']}.mp4"
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_bytes(b"fake-video")
+        _run(api._execute(
+            "UPDATE generations SET r2_url = '', storage_error = ? WHERE id = ?",
+            ("R2 upload failed", gen["id"]),
+        ))
+        ops = _run(api.operations_overview(user_id=ANON))
+        assert any(f["id"] == gen["id"] for f in ops["storage_failures"])
+
+        monkeypatch.setattr(api.storage_service, "is_configured", lambda: True)
+        monkeypatch.setattr(
+            api.storage_service, "upload_video",
+            lambda user_id, job_id, path: "https://example.invalid/video.mp4",
+        )
+        retried = _run(api.retry_generation_storage(gen["id"], ANON))
+        assert retried["r2_url"] == "https://example.invalid/video.mp4"
+        assert retried["storage_error"] is None
+        assert _run(api.get_generation(gen["id"], ANON))["storage_error"] is None
+
+    def test_storage_retry_reports_a_missing_local_copy(self, api):
+        profile = _profile(api, "Ops Missing Copy")
+        gen = _generation(api, profile, "completed")
+        local_path = api.pipeline.VIDEOS_DIR / f"{gen['id']}.mp4"
+        if local_path.exists():
+            local_path.unlink()
+        with pytest.raises(HTTPException) as err:
+            _run(api.retry_generation_storage(gen["id"], ANON))
+        assert err.value.status_code == 409
+
+    def test_storage_retry_requires_configured_remote_storage(self, api, monkeypatch):
+        profile = _profile(api, "Ops Unconfigured Storage")
+        gen = _generation(api, profile, "completed")
+        local_path = api.pipeline.VIDEOS_DIR / f"{gen['id']}.mp4"
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_bytes(b"fake-video")
+        monkeypatch.setattr(api.storage_service, "is_configured", lambda: False)
+        with pytest.raises(HTTPException) as err:
+            _run(api.retry_generation_storage(gen["id"], ANON))
+        assert err.value.status_code == 409
 
 
 class TestDashboard:

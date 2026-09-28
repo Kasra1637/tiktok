@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import shutil
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -38,7 +39,7 @@ from ai_service import (
     generate_content_angles, generate_creative_plan, generate_remix_script,
     abstract_template_drafts,
     strip_html_to_text, remix_chat_turn, empty_remix_brief, VIDEO_MODELS, DEFAULT_VIDEO_MODEL,
-    analyze_image_for_hook,
+    analyze_image_for_hook, TEXT_MODEL, VISION_MODEL,
 )
 from models import (
     IngestVideoRequest, BrandContextRequest, GenerateVideoRequest,
@@ -664,6 +665,7 @@ async def init_db():
                 prompt_used TEXT,
                 adjustments TEXT,
                 error TEXT,
+                storage_error TEXT,
                 retryable INTEGER DEFAULT 1,
                 requested_at TEXT,
                 started_at TEXT,
@@ -826,6 +828,52 @@ async def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_video_assets_user
                 ON video_assets (user_id, created_at);
+
+            -- Internal model-request ledger. Generations already carry video
+            -- cost and status, but text/vision calls otherwise leave no trace.
+            -- This table answers which model operation ran, whether it worked,
+            -- how long it took, and what it cost, without storing prompts or
+            -- generated copy.
+            CREATE TABLE IF NOT EXISTS model_requests (
+                id TEXT PRIMARY KEY,
+                operation TEXT NOT NULL,
+                modality TEXT NOT NULL,
+                model TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'completed',
+                latency_ms INTEGER,
+                cost_usd REAL,
+                error TEXT,
+                brand_profile_id TEXT,
+                studio_project_id TEXT,
+                generation_id TEXT,
+                template_id TEXT,
+                research_run_id TEXT,
+                created_at TEXT,
+                user_id TEXT DEFAULT 'anonymous'
+            );
+            CREATE INDEX IF NOT EXISTS idx_model_requests_user
+                ON model_requests (user_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_model_requests_operation
+                ON model_requests (operation, status);
+
+            -- Asset failures that would otherwise exist only as an HTTP error.
+            -- Successful uploads need no event; a failed validation, missing
+            -- file, rights refusal, or composition rejection does.
+            CREATE TABLE IF NOT EXISTS asset_events (
+                id TEXT PRIMARY KEY,
+                kind TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                brand_profile_id TEXT,
+                studio_project_id TEXT,
+                generation_id TEXT,
+                asset_id TEXT,
+                asset_kind TEXT,
+                filename TEXT,
+                created_at TEXT,
+                user_id TEXT DEFAULT 'anonymous'
+            );
+            CREATE INDEX IF NOT EXISTS idx_asset_events_user
+                ON asset_events (user_id, created_at);
         """)
         await conn.commit()
 
@@ -1118,6 +1166,15 @@ async def init_db():
             await conn.execute("ALTER TABLE assets ADD COLUMN duration_seconds REAL")
         await conn.commit()
 
+        # Migration: a generation can render successfully while its durable
+        # copy fails. That failure must be stored on the row rather than only
+        # logged, or operations cannot show or retry it.
+        cursor = await conn.execute("PRAGMA table_info(generations)")
+        if "storage_error" not in {row[1] for row in await cursor.fetchall()}:
+            logger.info("Migration: adding storage_error column to generations")
+            await conn.execute("ALTER TABLE generations ADD COLUMN storage_error TEXT")
+        await conn.commit()
+
         # Best-effort backfill for analyses whose local extracted frames still
         # exist at this deployment. Existing rows whose frames were already
         # lost cannot be reconstructed safely without re-downloading TikTok.
@@ -1308,6 +1365,96 @@ async def _execute(query: str, params: tuple = ()):
     async with get_db() as conn:
         await conn.execute(query, params)
         await conn.commit()
+
+
+async def _record_model_request(
+    operation: str,
+    modality: str,
+    model: str,
+    status: str,
+    latency_ms: int,
+    user_id: str,
+    cost_usd=None,
+    error: str = "",
+    brand_profile_id: str = "",
+    studio_project_id: str = "",
+    generation_id: str = "",
+    template_id: str = "",
+    research_run_id: str = "",
+):
+    """
+    Persist one provider interaction for operations visibility.
+
+    Prompts and generated copy are deliberately not stored. Operations needs to
+    know that a request happened, which model handled it, whether it worked,
+    and what it cost — not the creative material itself.
+    """
+    await _execute(
+        """INSERT INTO model_requests
+           (id, operation, modality, model, status, latency_ms, cost_usd, error,
+            brand_profile_id, studio_project_id, generation_id, template_id,
+            research_run_id, created_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (str(uuid.uuid4()), operation, modality, model, status, int(latency_ms),
+         cost_usd, (error or "")[:500],
+         brand_profile_id or None, studio_project_id or None,
+         generation_id or None, template_id or None, research_run_id or None,
+         now_iso(), user_id),
+    )
+
+
+async def _record_asset_event(
+    kind: str,
+    reason: str,
+    user_id: str,
+    brand_profile_id: str = "",
+    studio_project_id: str = "",
+    generation_id: str = "",
+    asset_id: str = "",
+    asset_kind: str = "",
+    filename: str = "",
+):
+    """Persist an asset failure that would otherwise exist only as an HTTP error."""
+    await _execute(
+        """INSERT INTO asset_events
+           (id, kind, reason, brand_profile_id, studio_project_id, generation_id,
+            asset_id, asset_kind, filename, created_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (str(uuid.uuid4()), kind, reason[:500],
+         brand_profile_id or None, studio_project_id or None,
+         generation_id or None, asset_id or None, asset_kind or None,
+         (filename or "")[:200], now_iso(), user_id),
+    )
+
+
+async def _log_model_call(operation, modality, model, call, user_id, **refs):
+    """
+    Run one retained provider call and ledger its outcome.
+
+    Centralizing this keeps operations honest: a failed research, plan, or
+    poll is recorded with its latency and provider-reported cost (when any)
+    before the route converts it into an HTTP error. Only metadata is stored;
+    prompts and generated copy are not.
+    """
+    started = time.perf_counter()
+    try:
+        result = await call()
+    except Exception as exc:
+        await _record_model_request(
+            operation, modality, model, "failed",
+            int((time.perf_counter() - started) * 1000), user_id,
+            error=str(exc), **refs,
+        )
+        raise
+    latency_ms = int((time.perf_counter() - started) * 1000)
+    cost = None
+    if isinstance(result, dict):
+        cost, _ = generation_planning.extract_cost(result)
+    await _record_model_request(
+        operation, modality, model, "completed", latency_ms, user_id,
+        cost_usd=cost, **refs,
+    )
+    return result
 
 
 # The face-swap target is never uploaded by the client. It must be a file this
@@ -2308,9 +2455,13 @@ async def analyze_video_hook(video_id: str, user_id: str = Depends(get_current_u
             transcript_text = apify_tiktok.parse_webvtt_to_text(raw_vtt)
 
     try:
-        analysis_result = await analyze_hook(
-            frame_paths, session_id=f"hook-{video_id}",
-            music_context=music_context, transcript_text=transcript_text,
+        analysis_result = await _log_model_call(
+            "hook_analysis", "vision", VISION_MODEL,
+            lambda: analyze_hook(
+                frame_paths, session_id=f"hook-{video_id}",
+                music_context=music_context, transcript_text=transcript_text,
+            ),
+            video.get("user_id") or "anonymous",
         )
     except Exception as e:
         logger.error(f"Hook analysis failed for {video_id}: {e}")
@@ -5227,7 +5378,11 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
         )
 
     try:
-        profile = await analyze_app_profile(sources, payload.notes or "")
+        profile = await _log_model_call(
+            "app_profile_research", "text", TEXT_MODEL,
+            lambda: analyze_app_profile(sources, payload.notes or ""),
+            user_id,
+        )
     except Exception as e:
         logger.error(f"App research failed: {e}")
         raise HTTPException(status_code=502, detail=f"AI app research failed. Please try again. ({str(e)[:150]})")
@@ -5442,7 +5597,12 @@ async def refresh_app_profile(profile_id: str, user_id: str = Depends(get_curren
         )
 
     try:
-        proposal = await analyze_app_profile(sources, existing.get("notes") or "")
+        proposal = await _log_model_call(
+            "app_profile_refresh", "text", TEXT_MODEL,
+            lambda: analyze_app_profile(sources, existing.get("notes") or ""),
+            user_id,
+            brand_profile_id=profile_id,
+        )
     except Exception as e:
         logger.error(f"App refresh failed for {profile_id}: {e}")
         raise HTTPException(status_code=502, detail=f"AI app research failed. Please try again. ({str(e)[:150]})")
@@ -5525,7 +5685,12 @@ async def generate_profile_content_angles(profile_id: str, user_id: str = Depend
         )
 
     try:
-        angles = await generate_content_angles(profile)
+        angles = await _log_model_call(
+            "content_angles", "text", TEXT_MODEL,
+            lambda: generate_content_angles(profile),
+            user_id,
+            brand_profile_id=profile_id,
+        )
     except Exception as e:
         logger.error(f"Content angle generation failed for profile {profile_id}: {e}")
         raise HTTPException(status_code=502, detail=f"AI content angle generation failed. Please try again. ({str(e)[:150]})")
@@ -6557,14 +6722,21 @@ async def generate_plan(
         template.get("id") or "",
     )
     try:
-        plan = await generate_creative_plan(
-            profile=profile,
-            template=template,
-            angle=angle,
-            objective=objective,
-            duration_seconds=duration,
-            tone=tone,
-            profile_feedback=profile_feedback,
+        plan = await _log_model_call(
+            "creative_plan", "text", TEXT_MODEL,
+            lambda: generate_creative_plan(
+                profile=profile,
+                template=template,
+                angle=angle,
+                objective=objective,
+                duration_seconds=duration,
+                tone=tone,
+                profile_feedback=profile_feedback,
+            ),
+            user_id,
+            brand_profile_id=row.get("brand_profile_id"),
+            studio_project_id=project_id,
+            template_id=template.get("id"),
         )
     except Exception as e:
         logger.error(f"Creative plan generation failed for project {project_id}: {e}")
@@ -6732,17 +6904,25 @@ async def _submit_generation(
     )
 
     try:
-        submitted = await generate_video(
-            prompt=prompt,
-            duration=seconds,
-            model=model_key,
-            # Default to native audio when the provider offers it; the plan's
-            # sound direction is already written into the prompt.
-            generate_audio=(
-                bool(cap.get("supports_native_audio"))
-                if generate_audio is None
-                else bool(generate_audio)
+        submitted = await _log_model_call(
+            "video_submit", "video", cap["id"],
+            lambda: generate_video(
+                prompt=prompt,
+                duration=seconds,
+                model=model_key,
+                # Default to native audio when the provider offers it; the plan's
+                # sound direction is already written into the prompt.
+                generate_audio=(
+                    bool(cap.get("supports_native_audio"))
+                    if generate_audio is None
+                    else bool(generate_audio)
+                ),
             ),
+            user_id,
+            brand_profile_id=project.get("brand_profile_id"),
+            studio_project_id=project["id"],
+            generation_id=generation_id,
+            template_id=project.get("template_id"),
         )
     except Exception as e:
         message = str(e)
@@ -6933,7 +7113,15 @@ async def poll_generation(generation_id: str, user_id: str = Depends(get_current
         )
 
     try:
-        response = await poll_video_job(job_id)
+        response = await _log_model_call(
+            "video_poll", "video", row.get("model") or "",
+            lambda: poll_video_job(job_id),
+            user_id,
+            brand_profile_id=row.get("brand_profile_id"),
+            studio_project_id=row.get("studio_project_id"),
+            generation_id=generation_id,
+            template_id=row.get("template_id"),
+        )
     except Exception as e:
         message = str(e)
         await _execute(
@@ -6950,18 +7138,22 @@ async def poll_generation(generation_id: str, user_id: str = Depends(get_current
 
     if status in ("completed", "succeeded", "success") and video_url:
         stored_url = None
+        storage_error = None
         # Persist locally first so the clip survives even if R2 is unconfigured.
         try:
             local_path = await _download_generation_video(video_url, generation_id)
             if local_path:
                 stored_url = storage_service.upload_video(user_id, generation_id, Path(local_path))
+            else:
+                storage_error = "The provider clip could not be downloaded for durable storage."
         except Exception as e:
+            storage_error = str(e)[:500]
             logger.warning(f"Generation {generation_id}: storage step failed: {e}")
 
         await _execute(
             "UPDATE generations SET status = 'completed', video_url = ?, r2_url = ?, "
-            "error = NULL, completed_at = ?, updated_at = ? WHERE id = ?",
-            (video_url, stored_url or "", now, now, generation_id),
+            "error = NULL, storage_error = ?, completed_at = ?, updated_at = ? WHERE id = ?",
+            (video_url, stored_url or "", storage_error, now, now, generation_id),
         )
         if stored_url:
             await _execute(
@@ -7007,6 +7199,53 @@ async def _download_generation_video(video_url: str, generation_id: str) -> Opti
                 pass
         return None
     return target if target.exists() else None
+
+
+@api_router.post("/generations/{generation_id}/storage/retry")
+async def retry_generation_storage(generation_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Retry durable storage for a completed generation.
+
+    This is separate from retrying a failed render: the video itself is done,
+    but its local/R2 copy failed. It succeeds only when the local clip still
+    exists and R2 accepts it; otherwise it reports exactly which half is
+    missing instead of pretending the retry worked.
+    """
+    row = await _fetch_one(
+        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Generation not found")
+    if row.get("status") != "completed":
+        raise HTTPException(
+            status_code=409,
+            detail="Storage can be retried only after the video has completed.",
+        )
+    local_path = pipeline.VIDEOS_DIR / f"{generation_id}.mp4"
+    if not local_path.is_file():
+        raise HTTPException(
+            status_code=409,
+            detail="The local clip is no longer available, so there is nothing to upload.",
+        )
+    if not storage_service.is_configured():
+        raise HTTPException(
+            status_code=409,
+            detail="R2 storage is not configured, so the retry has nowhere to upload.",
+        )
+    try:
+        stored_url = storage_service.upload_video(user_id, generation_id, local_path)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Storage retry failed: {str(e)[:200]}")
+    if not stored_url:
+        raise HTTPException(status_code=502, detail="Storage retry failed without a provider error.")
+    await _execute(
+        "UPDATE generations SET r2_url = ?, storage_error = NULL, updated_at = ? WHERE id = ?",
+        (stored_url, now_iso(), generation_id),
+    )
+    await _execute(
+        "UPDATE video_assets SET r2_url = ? WHERE job_id = ?", (stored_url, generation_id)
+    )
+    return {"id": generation_id, "r2_url": stored_url, "storage_error": None}
 
 
 @api_router.post("/generations/{generation_id}/retry", status_code=202)
@@ -7337,12 +7576,28 @@ async def upload_asset(
         or ASSET_AUDIO_TYPES.get(asset_kind)
     )
     if not expected_type:
+        await _record_asset_event(
+            "upload_rejected", f"Unsupported asset kind: {kind}", user_id,
+            brand_profile_id=profile_id, asset_kind=kind,
+            filename=file.filename or "",
+        )
         raise HTTPException(status_code=400, detail=f"Unsupported asset kind: {kind}")
 
     raw = await file.read()
     if not raw:
+        await _record_asset_event(
+            "upload_rejected", "Uploaded file is empty.", user_id,
+            brand_profile_id=profile_id, asset_kind=asset_kind,
+            filename=file.filename or "",
+        )
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
     if len(raw) > ASSET_MAX_BYTES:
+        await _record_asset_event(
+            "upload_rejected",
+            f"Asset is larger than {ASSET_MAX_BYTES // (1024 * 1024)} MB.",
+            user_id, brand_profile_id=profile_id, asset_kind=asset_kind,
+            filename=file.filename or "",
+        )
         raise HTTPException(
             status_code=400,
             detail=f"Asset is larger than {ASSET_MAX_BYTES // (1024 * 1024)} MB.",
@@ -7351,6 +7606,13 @@ async def upload_asset(
     ext = Path(file.filename or "").suffix.lower()
     allowed = ASSET_ALLOWED_EXT[expected_type]
     if ext not in allowed:
+        await _record_asset_event(
+            "upload_rejected",
+            f"A {asset_kind.replace('_', ' ')} must be one of: "
+            f"{', '.join(sorted(allowed))}",
+            user_id, brand_profile_id=profile_id, asset_kind=asset_kind,
+            filename=file.filename or "",
+        )
         raise HTTPException(
             status_code=400,
             detail=f"A {asset_kind.replace('_', ' ')} must be one of: "
@@ -7372,6 +7634,11 @@ async def upload_asset(
                 target.unlink()
             except OSError:
                 pass
+            await _record_asset_event(
+                "upload_rejected", "Audio file could not be read.", user_id,
+                brand_profile_id=profile_id, asset_kind=asset_kind,
+                filename=file.filename or "",
+            )
             raise HTTPException(
                 status_code=400,
                 detail="That audio file could not be read. Upload a playable audio file.",
@@ -7486,6 +7753,12 @@ async def attach_asset_to_project(
                    "their own App Profile's projects.",
         )
     if not asset.get("file_path") or not Path(asset["file_path"]).is_file():
+        await _record_asset_event(
+            "file_missing", "The asset file is missing on disk.", user_id,
+            brand_profile_id=project.get("brand_profile_id"),
+            studio_project_id=project_id, asset_id=asset["id"],
+            asset_kind=asset.get("kind"),
+        )
         raise HTTPException(status_code=409, detail="The asset file is missing on disk.")
 
     current = project.get("assets") or []
@@ -7694,6 +7967,13 @@ async def create_overlay_composition(
     )
 
     result = await _render_overlay_composition(composition_id, user_id)
+    for item in rejected:
+        await _record_asset_event(
+            "composition_rejected", item.get("reason") or "rejected", user_id,
+            brand_profile_id=generation.get("brand_profile_id"),
+            studio_project_id=project["id"], generation_id=generation_id,
+            asset_id=item.get("asset_id") or "",
+        )
     result["rejected_assets"] = rejected
     return result
 
@@ -8286,8 +8566,13 @@ async def run_trend_research(
     observations = research_abstraction.summarize_observations(videos)
 
     try:
-        raw_drafts = await abstract_template_drafts(
-            observations, app_context=(payload.app_context or "")[:400])
+        raw_drafts = await _log_model_call(
+            "template_abstraction", "text", TEXT_MODEL,
+            lambda: abstract_template_drafts(
+                observations, app_context=(payload.app_context or "")[:400]),
+            user_id,
+            research_run_id=run_id,
+        )
     except Exception as e:
         await _execute(
             "UPDATE research_runs SET status = 'failed', error = ?, completed_at = ? WHERE id = ?",
@@ -8511,6 +8796,25 @@ async def operations_overview(user_id: str = Depends(get_current_user_id)):
         "WHERE user_id = ? ORDER BY created_at DESC LIMIT 100",
         (user_id,),
     )
+    model_requests = await _fetch_all(
+        "SELECT id, operation, modality, model, status, latency_ms, cost_usd, error, "
+        "brand_profile_id, studio_project_id, generation_id, template_id, "
+        "research_run_id, created_at FROM model_requests "
+        "WHERE user_id = ? ORDER BY created_at DESC LIMIT 200",
+        (user_id,),
+    )
+    asset_events = await _fetch_all(
+        "SELECT id, kind, reason, brand_profile_id, studio_project_id, generation_id, "
+        "asset_id, asset_kind, filename, created_at FROM asset_events "
+        "WHERE user_id = ? ORDER BY created_at DESC LIMIT 100",
+        (user_id,),
+    )
+    research_runs = await _fetch_all(
+        "SELECT id, kind, query, niche, status, error, sources_found, created_at, "
+        "completed_at FROM research_runs "
+        "WHERE user_id = ? ORDER BY created_at DESC LIMIT 20",
+        (user_id,),
+    )
 
     by_status: dict = {}
     for row in jobs:
@@ -8533,6 +8837,22 @@ async def operations_overview(user_id: str = Depends(get_current_user_id)):
     storage_failures = [
         c for c in compositions if c.get("status") == "failed" and c.get("error")
     ]
+    generation_storage_failures = [
+        {
+            "id": r.get("id"),
+            "model": r.get("model"),
+            "video_url": r.get("video_url"),
+            "r2_url": r.get("r2_url"),
+            "storage_error": r.get("storage_error"),
+            "created_at": r.get("created_at"),
+        }
+        for r in jobs
+        if r.get("status") == "completed" and r.get("storage_error")
+    ]
+    model_summary = analytics.model_request_summary(model_requests)
+    failed_model_requests = [
+        r for r in model_requests if r.get("status") == "failed"
+    ][:20]
 
     # Provider availability is a configuration view, not a live health check:
     # it reports what the app is allowed to use and what it can currently do.
@@ -8558,6 +8878,11 @@ async def operations_overview(user_id: str = Depends(get_current_user_id)):
             "archived": len(by_status.get("archived", [])),
         },
         "failures": failures[:50],
+        "storage_failures": generation_storage_failures[:20],
+        "model_requests": model_summary,
+        "failed_model_requests": failed_model_requests,
+        "asset_events": asset_events,
+        "research_runs": research_runs,
         "overlay_jobs": {
             "total": len(compositions),
             "failed": len(storage_failures),

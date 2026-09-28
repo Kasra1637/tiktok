@@ -239,6 +239,7 @@ export const api = {
   getGeneration: (id) => client.get(`/generations/${id}`).then((r) => r.data),
   pollGeneration: (id) => client.post(`/generations/${id}/poll`).then((r) => r.data),
   retryGeneration: (id) => client.post(`/generations/${id}/retry`).then((r) => r.data),
+  retryGenerationStorage: (id) => client.post(`/generations/${id}/storage/retry`).then((r) => r.data),
   extendGeneration: (id, payload = {}) =>
     client.post(`/generations/${id}/extend`, payload).then((r) => r.data),
   archiveGeneration: (id) => client.post(`/generations/${id}/archive`).then((r) => r.data),

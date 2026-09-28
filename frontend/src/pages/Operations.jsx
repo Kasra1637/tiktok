@@ -71,6 +71,9 @@ export default function Operations() {
   const jobs = ops?.jobs || {};
   const config = ops?.config || {};
   const cost = ops?.cost || {};
+  const modelRequests = ops?.model_requests || {};
+  const modalityEntries = Object.entries(modelRequests.by_modality || {});
+  const modelEntries = Object.entries(modelRequests.by_model || {});
 
   return (
     <div className="space-y-6">
@@ -132,6 +135,142 @@ export default function Operations() {
           <IntegrationRow icon={Film} label="ffmpeg (overlays)" configured={!!config.overlay_font} detail={config.overlay_font} />
         </div>
       </div>
+
+      <div className="space-y-2">
+        <h2 className="font-display text-base font-semibold">Model requests</h2>
+        <div className="surface space-y-3 rounded-2xl p-4">
+          <p className="text-xs text-muted-foreground">
+            {modelRequests.total ?? 0} tracked · {modelRequests.completed ?? 0} completed ·{" "}
+            {modelRequests.failed ?? 0} failed ·{" "}
+            {modelRequests.total_usd != null ? `$${modelRequests.total_usd.toFixed(4)} reported` : "no reported cost"}
+            {modelRequests.unpriced_runs ? ` · ${modelRequests.unpriced_runs} unpriced` : ""}
+          </p>
+          {modalityEntries.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {modalityEntries.map(([modality, entry]) => (
+                <Badge key={modality} variant="secondary" className="text-[11px]">
+                  {modality}: {entry.completed}/{entry.total}
+                  {entry.failed ? ` · ${entry.failed} failed` : ""}
+                </Badge>
+              ))}
+            </div>
+          )}
+          {modelEntries.length > 0 && (
+            <div className="space-y-1.5">
+              {modelEntries.map(([model, entry]) => (
+                <div key={model} className="flex flex-wrap items-center gap-2 text-xs">
+                  <Cpu className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="font-medium">{model}</span>
+                  <span className="text-muted-foreground">
+                    {entry.completed}/{entry.total} completed
+                    {entry.failed ? ` · ${entry.failed} failed` : ""}
+                    {entry.priced_runs ? ` · $${entry.total_usd.toFixed(4)}` : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {(ops?.failed_model_requests || []).length > 0 && (
+            <div className="space-y-1.5">
+              {(ops.failed_model_requests || []).map((r) => (
+                <div key={r.id} className="flex flex-wrap items-center gap-2 text-xs">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                  <span className="font-medium">{r.operation}</span>
+                  <span className="text-muted-foreground">{r.modality} · {r.model}</span>
+                  <span className="min-w-0 flex-1 truncate text-destructive">{r.error || "Unknown error"}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {(ops?.research_runs || []).length > 0 && (
+        <div className="space-y-2">
+          <h2 className="font-display text-base font-semibold">Research jobs</h2>
+          <div className="surface space-y-2 rounded-2xl p-4">
+            {ops.research_runs.map((run) => (
+              <div key={run.id} className="flex flex-wrap items-center gap-2 text-xs">
+                <Badge variant="outline" className="text-[11px]">{run.status}</Badge>
+                <span className="font-medium">{run.kind}: {run.query || run.niche || "research"}</span>
+                {run.sources_found != null && (
+                  <span className="text-muted-foreground">{run.sources_found} source(s)</span>
+                )}
+                {run.error && (
+                  <span className="min-w-0 flex-1 truncate text-destructive">{run.error}</span>
+                )}
+                <span className="ml-auto text-muted-foreground">
+                  {new Date(run.created_at).toLocaleString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(ops?.asset_events || []).length > 0 && (
+        <div className="space-y-2">
+          <h2 className="font-display text-base font-semibold">Asset failures</h2>
+          <div className="surface space-y-2 rounded-2xl p-4">
+            {ops.asset_events.map((event) => (
+              <div key={event.id} className="flex flex-wrap items-center gap-2 text-xs">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                <span className="font-medium">{String(event.kind).replace(/_/g, " ")}</span>
+                {event.asset_kind && <span className="text-muted-foreground">{event.asset_kind}</span>}
+                <span className="min-w-0 flex-1 truncate text-destructive">{event.reason}</span>
+                <span className="ml-auto text-muted-foreground">
+                  {new Date(event.created_at).toLocaleString()}
+                </span>
+              </div>
+            ))}
+            <p className="text-xs text-muted-foreground">
+              Rejected uploads and composition assets stay visible here. Successful uploads need no event.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {(ops?.storage_failures || []).length > 0 && (
+        <div className="space-y-2">
+          <h2 className="font-display text-base font-semibold">Durable-storage failures</h2>
+          {ops.storage_failures.map((f) => (
+            <div
+              key={f.id}
+              className="flex flex-wrap items-center gap-2 rounded-xl border border-destructive/40 bg-destructive/5 p-3"
+            >
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+              <span className="min-w-0 flex-1 truncate text-xs">{f.storage_error || "Durable copy failed."}</span>
+              <Badge variant="outline" className="text-[11px]">{f.model}</Badge>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={retrying === `storage:${f.id}`}
+                onClick={async () => {
+                  setRetrying(`storage:${f.id}`);
+                  try {
+                    await api.retryGenerationStorage(f.id);
+                    load();
+                  } catch (err) {
+                    setError(getErrorMessage(err));
+                  } finally {
+                    setRetrying(null);
+                  }
+                }}
+              >
+                {retrying === `storage:${f.id}` ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-3.5 w-3.5" />
+                )}
+                Retry storage
+              </Button>
+            </div>
+          ))}
+          <p className="text-xs text-muted-foreground">
+            The rendered video is intact; only its durable R2/local copy failed.
+          </p>
+        </div>
+      )}
 
       {(ops?.failures || []).length > 0 && (
         <div className="space-y-2">

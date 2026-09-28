@@ -214,6 +214,23 @@ class TestBuildReport:
         assert report["feedback"]["top_reasons"][0]["reason"] == "pacing_too_slow"
 
 
+class TestModelRequestSummary:
+    def test_counts_modalities_models_and_cost_honestly(self):
+        summary = an.model_request_summary([
+            {"modality": "text", "model": "text-model", "status": "completed", "cost_usd": 0.02},
+            {"modality": "vision", "model": "vision-model", "status": "completed", "cost_usd": None},
+            {"modality": "video", "model": "video-model", "status": "failed", "cost_usd": 0.10},
+        ])
+        assert summary["total"] == 3
+        assert summary["completed"] == 2
+        assert summary["failed"] == 1
+        assert summary["total_usd"] == pytest.approx(0.12)
+        assert summary["priced_runs"] == 2
+        assert summary["unpriced_runs"] == 1
+        assert summary["by_modality"]["text"]["completed"] == 1
+        assert summary["by_model"]["video-model"]["failed"] == 1
+
+
 class TestResearchAbstraction:
     def test_identity_copy_is_detected(self):
         assert ra.looks_like_identity_copy("Do it like @somecreator") is True

@@ -106,6 +106,60 @@ def generation_metrics(generations: Iterable[dict]) -> dict:
     }
 
 
+def model_request_summary(requests: Iterable[dict]) -> dict:
+    """
+    Operations view over text, vision, image, and video provider calls.
+
+    Cost follows the same honesty rule as generation spend: only numeric
+    provider-reported values are summed. Unpriced calls are counted separately
+    rather than treated as free.
+    """
+    rows = list(requests or [])
+    by_modality: dict = {}
+    by_model: dict = {}
+    total_cost = 0.0
+    priced = 0
+    unpriced = 0
+    failed = 0
+
+    for row in rows:
+        modality = row.get("modality") or "unknown"
+        model = row.get("model") or "unknown"
+        status = row.get("status") or "unknown"
+        cost = row.get("cost_usd")
+        if isinstance(cost, (int, float)):
+            total_cost += float(cost)
+            priced += 1
+        else:
+            unpriced += 1
+        if status == "failed":
+            failed += 1
+        for bucket, key in ((by_modality, modality), (by_model, model)):
+            entry = bucket.setdefault(key, {
+                "total": 0, "completed": 0, "failed": 0,
+                "total_usd": 0.0, "priced_runs": 0,
+            })
+            entry["total"] += 1
+            if status == "completed":
+                entry["completed"] += 1
+            elif status == "failed":
+                entry["failed"] += 1
+            if isinstance(cost, (int, float)):
+                entry["total_usd"] = round(entry["total_usd"] + float(cost), 4)
+                entry["priced_runs"] += 1
+
+    return {
+        "total": len(rows),
+        "completed": sum(1 for r in rows if r.get("status") == "completed"),
+        "failed": failed,
+        "total_usd": round(total_cost, 4),
+        "priced_runs": priced,
+        "unpriced_runs": unpriced,
+        "by_modality": by_modality,
+        "by_model": by_model,
+    }
+
+
 def by_dimension(
     generations: Iterable[dict], field: str, label_map: Optional[dict] = None
 ) -> list:
