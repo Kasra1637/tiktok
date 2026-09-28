@@ -183,6 +183,7 @@ export default function CreateVideo() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
+  const [selectedProfileId, setSelectedProfileId] = useState(params.get("profile") || "");
   const [angleId, setAngleId] = useState(params.get("angle") || "");
   const [templateId, setTemplateId] = useState(params.get("template") || "");
   const [objective, setObjective] = useState("");
@@ -191,7 +192,7 @@ export default function CreateVideo() {
   const [manualTemplate, setManualTemplate] = useState(false);
   const [edits, setEdits] = useState({});
 
-  const profileId = project?.brand_profile_id || params.get("profile") || "";
+  const profileId = project?.brand_profile_id || selectedProfileId;
   const profile = profiles.find((p) => p.id === profileId) || null;
   const angle = angles.find((a) => a.id === angleId) || null;
   const template = templates.find((t) => t.id === templateId) || null;
@@ -241,6 +242,10 @@ export default function CreateVideo() {
         const chosen =
           approved.find((p) => p.id === preselected) || approved[0] || null;
         if (chosen) {
+          // The pick must live in state: profileId drives recommendations,
+          // canGenerate, and draft creation, and selectProfile is the only
+          // other writer. Reading it from URL params alone left it empty.
+          setSelectedProfileId(chosen.id);
           setStep(1);
           api.getContentAngles(chosen.id).then((d) => setAngles(d.angles || [])).catch(() => setAngles([]));
         }
@@ -285,6 +290,7 @@ export default function CreateVideo() {
   }, [profileId, angleId, loadRecommendations]);
 
   const selectProfile = async (id) => {
+    setSelectedProfileId(id);
     setAngles([]);
     setAngleId("");
     setRecommendations([]);
@@ -710,6 +716,11 @@ export default function CreateVideo() {
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
                 Create draft for these selections
               </Button>
+              {!canGenerate && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Pick an App Profile (step 1) and a hook template (step 3) first — those two unlock the draft.
+                </p>
+              )}
             </div>
           ) : (
             <AssetLibrary
