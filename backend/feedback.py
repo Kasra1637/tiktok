@@ -207,3 +207,212 @@ def catalog() -> dict:
             "min_chars": HEAVY_EDIT_MIN_CHARS,
         },
     }
+
+
+# Transparent feedback weights. These are deliberately small and capped: past
+# behavior should inform a recommendation, not permanently bury a template
+# because a founder rejected it twice while exploring the library.
+FEEDBACK_WEIGHTS = {
+    "explicit_template_rejection": -2.0,
+    "automatic_template_change": -1.0,
+    "generation_rejection": -1.0,
+    "marked_unsuccessful": -1.5,
+    "video_approved": 1.0,
+    "marked_successful": 2.0,
+}
+FEEDBACK_CAPS = {
+    "rejection": -6.0,
+    "approval": 4.0,
+}
+
+
+def summarize_profile_feedback(events, template_id: str = "") -> dict:
+    """
+    Aggregate one App Profile's feedback into recommendation- and prompt-ready
+    facts.
+
+    Only fixed event/signal/reason codes are counted. Free-text detail is
+    ignored here for the same reason it is ignored in analytics: it cannot be
+    applied consistently, and passing founder notes into a prompt would leak
+    unstructured judgments into generated copy.
+    """
+    summary = {
+        "total": 0,
+        "template_rejections": 0,
+        "generation_rejections": 0,
+        "approvals": 0,
+        "successful_marks": 0,
+        "unsuccessful_marks": 0,
+        "heavy_script_edits": 0,
+        "top_reasons": [],
+        "selected_template": {
+            "template_id": template_id or "",
+            "rejections": 0,
+            "approvals": 0,
+            "successful_marks": 0,
+            "unsuccessful_marks": 0,
+            "top_reasons": [],
+        },
+    }
+    reason_counts = {}
+    selected_reason_counts = {}
+    for row in events or []:
+        if not isinstance(row, dict):
+            continue
+        event = row.get("event") or ""
+        reason = row.get("reason") or ""
+        row_template_id = str(row.get("template_id") or "")
+        is_selected = bool(template_id) and row_template_id == template_id
+        summary["total"] += 1
+        if event == "template_rejected":
+            summary["template_rejections"] += 1
+        elif event in ("generation_rejected", "video_regenerated"):
+            # A regenerate is weaker evidence than an explicit rejection, but
+            # it is still rework attached to whatever was just rendered.
+            summary["generation_rejections"] += 1
+        elif event == "video_approved":
+            summary["approvals"] += 1
+        elif event == "marked_successful":
+            summary["successful_marks"] += 1
+        elif event == "marked_unsuccessful":
+            summary["unsuccessful_marks"] += 1
+        elif row.get("signal") == "script_edited_heavy":
+            summary["heavy_script_edits"] += 1
+        if reason:
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+            if is_selected:
+                selected_reason_counts[reason] = selected_reason_counts.get(reason, 0) + 1
+        if is_selected:
+            if event == "template_rejected":
+                summary["selected_template"]["rejections"] += 1
+            elif event in ("video_approved", "marked_successful"):
+                summary["selected_template"]["approvals"] += 1
+                if event == "marked_successful":
+                    summary["selected_template"]["successful_marks"] += 1
+            elif event in ("generation_rejected", "marked_unsuccessful"):
+                summary["selected_template"]["unsuccessful_marks"] += 1
+    summary["top_reasons"] = [
+        {"reason": reason, "count": count}
+        for reason, count in sorted(
+            reason_counts.items(), key=lambda item: (-item[1], item[0])
+        )[:5]
+    ]
+    summary["selected_template"]["top_reasons"] = [
+        {"reason": reason, "count": count}
+        for reason, count in sorted(
+            selected_reason_counts.items(), key=lambda item: (-item[1], item[0])
+        )[:5]
+    ]
+    return summary
+
+
+def template_feedback_adjustment(events, template_id: str) -> dict:
+    """
+    Convert feedback into a bounded recommendation adjustment.
+
+    The adjustment is returned alongside its factual basis so the UI can show
+    exactly why a score moved. Automatic triggers count less than explicit
+    judgments, and nothing here invents a reason the founder did not state.
+    """
+    facts = {
+        "template_id": template_id or "",
+        "explicit_rejections": 0,
+        "automatic_changes": 0,
+        "approvals": 0,
+        "successful_marks": 0,
+        "unsuccessful_marks": 0,
+        "top_reasons": [],
+    }
+    rejection_delta = 0.0
+    approval_delta = 0.0
+    # Only rows naming this template affect its score. Profile-level totals
+    # belong in prompts, not in one template's score.
+    for row in events or []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("template_id") or "") != (template_id or ""):
+            continue
+        event = row.get("event") or ""
+        reason = row.get("reason") or ""
+        signal = row.get("signal") or ""
+        if event == "template_rejected" and reason:
+            facts["explicit_rejections"] += 1
+            rejection_delta += FEEDBACK_WEIGHTS["explicit_template_rejection"]
+        elif event == "template_rejected":
+            facts["automatic_changes"] += 1
+            rejection_delta += FEEDBACK_WEIGHTS["automatic_template_change"]
+        elif event in ("generation_rejected", "marked_unsuccessful"):
+            facts["unsuccessful_marks"] += 1 if event == "marked_unsuccessful" else 0
+            rejection_delta += FEEDBACK_WEIGHTS[
+                "marked_unsuccessful" if event == "marked_unsuccessful" else "generation_rejection"
+            ]
+        elif event == "video_approved":
+            facts["approvals"] += 1
+            approval_delta += FEEDBACK_WEIGHTS["video_approved"]
+        elif event == "marked_successful":
+            facts["successful_marks"] += 1
+            approval_delta += FEEDBACK_WEIGHTS["marked_successful"]
+        if reason:
+            for entry in facts["top_reasons"]:
+                if entry["reason"] == reason:
+                    entry["count"] += 1
+                    break
+            else:
+                facts["top_reasons"].append({"reason": reason, "count": 1})
+    facts["top_reasons"].sort(key=lambda entry: (-entry["count"], entry["reason"]))
+    facts["top_reasons"] = facts["top_reasons"][:3]
+    delta = max(FEEDBACK_CAPS["rejection"], min(0.0, rejection_delta))
+    delta += max(0.0, min(FEEDBACK_CAPS["approval"], approval_delta))
+    facts["delta"] = round(delta, 2)
+    return facts
+
+
+def build_profile_feedback_section(summary: dict) -> str:
+    """
+    Render feedback as prompt context without leaking free text.
+
+    The model receives counts and fixed reason codes only. It is explicitly
+    told that automatic triggers do not explain themselves, so it can avoid
+    repeating a stated problem without inventing a causal story.
+    """
+    summary = summary or {}
+    lines = [
+        f"Recorded feedback events: {summary.get('total', 0)}.",
+        f"Template rejections: {summary.get('template_rejections', 0)}.",
+        f"Generation rejections or regenerations: {summary.get('generation_rejections', 0)}.",
+        f"Approvals: {summary.get('approvals', 0)}.",
+        f"Videos marked successful: {summary.get('successful_marks', 0)}.",
+        f"Videos marked unsuccessful: {summary.get('unsuccessful_marks', 0)}.",
+        f"Heavy script edits: {summary.get('heavy_script_edits', 0)}.",
+    ]
+    top_reasons = summary.get("top_reasons") or []
+    if top_reasons:
+        stated = ", ".join(
+            f"{item.get('reason', '').replace('_', ' ')} ({item.get('count', 0)})"
+            for item in top_reasons
+        )
+        lines.append(f"Founder-stated recurring issues: {stated}.")
+    else:
+        lines.append("No founder-stated reason has been supplied yet.")
+    selected = summary.get("selected_template") or {}
+    if selected.get("template_id"):
+        lines.append(
+            "Selected template history: "
+            f"{selected.get('rejections', 0)} rejections, "
+            f"{selected.get('approvals', 0)} approvals, "
+            f"{selected.get('successful_marks', 0)} successful marks, "
+            f"{selected.get('unsuccessful_marks', 0)} unsuccessful marks."
+        )
+        selected_reasons = selected.get("top_reasons") or []
+        if selected_reasons:
+            stated = ", ".join(
+                f"{item.get('reason', '').replace('_', ' ')} ({item.get('count', 0)})"
+                for item in selected_reasons
+            )
+            lines.append(f"Founder-stated issues for this template: {stated}.")
+    lines.append(
+        "Automatic triggers record that rework happened; only the stated "
+        "reasons above explain why. Avoid repeating a stated issue, but do not "
+        "invent additional causes."
+    )
+    return "\n".join(lines)

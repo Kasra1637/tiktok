@@ -455,6 +455,112 @@ class TestRecommendations:
         assert err.value.status_code == 404
 
 
+class TestFeedbackInfluence:
+    def _target(self, api, profile):
+        baseline = _run(api.recommend_templates(
+            profile_id=profile["id"], limit=30, user_id=ANON
+        ))
+        target = baseline["recommendations"][0]
+        return baseline, target["template"]["id"], target["score"]
+
+    def _record(self, api, profile, template_id, event, reason="", signal=""):
+        from models import FeedbackRequest
+        return _run(api.record_feedback(
+            FeedbackRequest(
+                event=event,
+                reason=reason,
+                signal=signal,
+                brand_profile_id=profile["id"],
+                template_id=template_id,
+            ),
+            ANON,
+        ))
+
+    def _after(self, api, profile, template_id):
+        after = _run(api.recommend_templates(
+            profile_id=profile["id"], limit=30, user_id=ANON
+        ))
+        return next(r for r in after["recommendations"] if r["template"]["id"] == template_id)
+
+    def test_repeated_template_rejection_lowers_score_and_names_it(self, api):
+        profile = _make_profile(api, ANON, name="Feedback Penalty")
+        _, template_id, before = self._target(api, profile)
+        self._record(api, profile, template_id, "template_rejected", reason="hook_too_weak")
+        self._record(api, profile, template_id, "template_rejected", reason="hook_too_weak")
+        updated = self._after(api, profile, template_id)
+        assert updated["score"] == pytest.approx(before - 4.0)
+        assert updated["limitations"][0] == "Rejected or replaced 2 time(s) for this app."
+        assert updated["feedback"]["explicit_rejections"] == 2
+        assert updated["feedback"]["delta"] == pytest.approx(-4.0)
+
+    def test_automatic_change_counts_less_than_an_explicit_rejection(self, api):
+        profile = _make_profile(api, ANON, name="Feedback Signal")
+        _, template_id, before = self._target(api, profile)
+        self._record(api, profile, template_id, "template_rejected", signal="template_changed")
+        updated = self._after(api, profile, template_id)
+        assert updated["score"] == pytest.approx(before - 1.0)
+        assert updated["feedback"]["automatic_changes"] == 1
+
+    def test_success_marks_raise_score_and_name_it(self, api):
+        profile = _make_profile(api, ANON, name="Feedback Success")
+        _, template_id, before = self._target(api, profile)
+        self._record(api, profile, template_id, "marked_successful", reason="good_performance")
+        updated = self._after(api, profile, template_id)
+        assert updated["score"] == pytest.approx(before + 2.0)
+        assert updated["why_it_fits"][0] == "Approved or marked successful 1 time(s) for this app."
+
+    def test_feedback_is_capped_and_template_scoped(self, api):
+        import feedback as feedback_mod
+        profile = _make_profile(api, ANON, name="Feedback Cap")
+        _, template_id, _ = self._target(api, profile)
+        rows = [
+            {
+                "event": "template_rejected",
+                "signal": "",
+                "reason": "hook_too_weak",
+                "template_id": template_id,
+            }
+            for _ in range(10)
+        ]
+        rows.append({
+            "event": "template_rejected",
+            "signal": "",
+            "reason": "hook_too_weak",
+            "template_id": "another-template",
+        })
+        facts = feedback_mod.template_feedback_adjustment(rows, template_id)
+        assert facts["explicit_rejections"] == 10
+        assert facts["delta"] == pytest.approx(-6.0)
+
+    def test_prompt_context_uses_counts_and_stated_reasons_only(self, api):
+        import feedback as feedback_mod
+        summary = feedback_mod.summarize_profile_feedback([
+            {
+                "event": "template_rejected",
+                "signal": "",
+                "reason": "hook_too_weak",
+                "template_id": "template-one",
+            },
+            {
+                "event": "video_regenerated",
+                "signal": "regenerated",
+                "reason": "",
+                "template_id": "template-one",
+            },
+            {
+                "event": "marked_successful",
+                "signal": "",
+                "reason": "good_performance",
+                "template_id": "template-one",
+            },
+        ], "template-one")
+        section = feedback_mod.build_profile_feedback_section(summary)
+        assert "Template rejections: 1." in section
+        assert "hook too weak (1)" in section
+        assert "good performance (1)" in section
+        assert "regenerated" not in section
+
+
 class TestCrossUserIsolation:
     def test_another_users_custom_template_is_hidden(self, api):
         from models import CreateTemplateRequest

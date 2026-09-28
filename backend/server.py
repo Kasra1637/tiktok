@@ -6023,7 +6023,13 @@ async def publish_template(template_id: str, user_id: str = Depends(get_current_
 # ---------------------------------------------------------------------------
 # Template recommendation
 # ---------------------------------------------------------------------------
-def _score_template_for_angle(template: dict, profile: dict, angle: Optional[dict], objective: str) -> dict:
+def _score_template_for_angle(
+    template: dict,
+    profile: dict,
+    angle: Optional[dict],
+    objective: str,
+    feedback_events=(),
+) -> dict:
     """
     Score one template against an App Profile + angle + objective.
 
@@ -6127,7 +6133,30 @@ def _score_template_for_angle(template: dict, profile: dict, angle: Optional[dic
     if (template.get("review_status") or "approved") != "approved":
         limitations.append("Unpublished research draft — review before using.")
 
-    return {"score": round(score, 2), "reasons": reasons, "limitations": limitations}
+    feedback = feedback_mod.template_feedback_adjustment(
+        feedback_events, template.get("id") or ""
+    )
+    if feedback["delta"]:
+        score += feedback["delta"]
+        if feedback["explicit_rejections"] or feedback["automatic_changes"]:
+            rejections = feedback["explicit_rejections"] + feedback["automatic_changes"]
+            limitations.insert(
+                0,
+                f"Rejected or replaced {rejections} time(s) for this app.",
+            )
+        if feedback["approvals"] or feedback["successful_marks"]:
+            approvals = feedback["approvals"] + feedback["successful_marks"]
+            reasons.insert(
+                0,
+                f"Approved or marked successful {approvals} time(s) for this app.",
+            )
+
+    return {
+        "score": round(score, 2),
+        "reasons": reasons,
+        "limitations": limitations,
+        "feedback": feedback,
+    }
 
 
 @api_router.get("/app-profiles/{profile_id}/template-recommendations")
@@ -6172,9 +6201,18 @@ async def recommend_templates(
     if not templates:
         return {"recommendations": [], "angle": _serialize_angle_row(angle) if angle else None}
 
+    # Past behavior informs the order, but it is bounded and explainable: the
+    # exact adjustment and its factual basis travel with each recommendation.
+    feedback_events = await _fetch_all(
+        "SELECT event, signal, reason, template_id FROM feedback_events "
+        "WHERE brand_profile_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 200",
+        (profile_id, user_id),
+    )
     scored = []
     for tpl in templates:
-        result = _score_template_for_angle(tpl, profile, angle, norm_objective)
+        result = _score_template_for_angle(
+            tpl, profile, angle, norm_objective, feedback_events
+        )
         scored.append({
             "template": _public_library_template(tpl),
             "score": result["score"],
@@ -6184,6 +6222,7 @@ async def recommend_templates(
             "required_assets": tpl.get("required_assets") or [],
             "suggested_duration": tpl.get("default_duration") or template_library.DEFAULT_DURATION,
             "limitations": result["limitations"],
+            "feedback": result["feedback"],
         })
     scored.sort(key=lambda r: (-r["score"], r["template"]["name"]))
     return {
@@ -6490,6 +6529,17 @@ async def generate_plan(
     )
     tone = (payload.tone or row.get("tone") or "").strip()
 
+    # The same explicit history that moves recommendations also constrains the
+    # next draft. Only counts and fixed reason codes travel into the prompt;
+    # free-text detail never does.
+    profile_feedback = feedback_mod.summarize_profile_feedback(
+        await _fetch_all(
+            "SELECT event, signal, reason, template_id FROM feedback_events "
+            "WHERE brand_profile_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 200",
+            (row.get("brand_profile_id"), user_id),
+        ),
+        template.get("id") or "",
+    )
     try:
         plan = await generate_creative_plan(
             profile=profile,
@@ -6498,6 +6548,7 @@ async def generate_plan(
             objective=objective,
             duration_seconds=duration,
             tone=tone,
+            profile_feedback=profile_feedback,
         )
     except Exception as e:
         logger.error(f"Creative plan generation failed for project {project_id}: {e}")

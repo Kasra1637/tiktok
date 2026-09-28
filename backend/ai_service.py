@@ -17,6 +17,7 @@ import httpx
 
 from face_crop import crop_face_from_path
 from template_library import CONTENT_ANGLE_KINDS, normalize_angle_kind
+import feedback
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
@@ -1399,6 +1400,7 @@ async def generate_creative_plan(
     duration_seconds: int = 20,
     tone: str = "",
     brand_voice: str = "",
+    profile_feedback: Optional[dict] = None,
 ) -> dict:
     """
     Generate an editable creative plan from an approved App Profile + template.
@@ -1471,6 +1473,12 @@ async def generate_creative_plan(
         "never_use": _list("claims_banned"),
         "brand_voice": brand_voice or profile.get("tone_voice") or "(unstated)",
     }
+    feedback_context = ""
+    if profile_feedback:
+        feedback_context = (
+            "\n\nPROFILE FEEDBACK:\n"
+            f"{feedback.build_profile_feedback_section(profile_feedback)}\n"
+        )
 
     system_message = (
         "You are a short-form video creative director for mobile app promotions. "
@@ -1483,7 +1491,8 @@ async def generate_creative_plan(
         f"VERIFIED APP FACTS:\n{json.dumps(facts, indent=2)}\n\n"
         f"TEMPLATE STRUCTURE:\n{json.dumps(structure, indent=2)}\n\n"
         f"CREATIVE BRIEF:\n{json.dumps(brief, indent=2)}\n\n"
-        f"CLAIM RULES:\n{json.dumps(claims, indent=2)}\n\n"
+        f"CLAIM RULES:\n{json.dumps(claims, indent=2)}\n"
+        f"{feedback_context}\n"
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
         '  "hook_line": "the single spoken/typed hook line, max 12 words",\n'
