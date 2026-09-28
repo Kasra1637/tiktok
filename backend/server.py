@@ -5537,17 +5537,23 @@ async def approve_app_profile(
                 f"UPDATE brand_profiles SET {', '.join(set_clauses)} WHERE id = ? AND user_id = ?",
                 tuple(values) + (user_id,),
             )
-            logger.info(f"Approved app profile {profile_id} with pending refresh applied")
+            logger.info(f"Approved App Profile {profile_id} (version {(existing.get('version') or 1) + 1})")
             return await _fetch_one(
                 "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
             )
 
+    # No pending proposal (or the founder skipped applying it): approving the
+    # draft as it stands is itself a legal UPDATE, so the status flip commits
+    # even when nothing else changed. Without this, approving a freshly
+    # researched or hand-created profile — both of which have no
+    # pending_research — silently does nothing, the profile stays a draft,
+    # and data appears to vanish on the next login.
     await _execute(
         "UPDATE brand_profiles SET status = 'approved', approved_at = ?, updated_at = ? "
         "WHERE id = ? AND user_id = ?",
         (now, now, profile_id, user_id),
     )
-    logger.info(f"Approved app profile {profile_id}")
+    logger.info(f"Approved App Profile {profile_id} (draft as-is, version {existing.get('version') or 1})")
     return await _fetch_one(
         "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
     )

@@ -122,6 +122,40 @@ class TestDeleteAppProfile:
         assert err.value.status_code == 409
 
 
+class TestApproveAppProfile:
+    def test_approve_commits_status_with_no_pending_proposal(self, api):
+        # A freshly researched profile carries no pending_research: the status
+        # flip must commit on its own, otherwise the approval looks successful
+        # while the row stays a draft — and data appears to vanish on relogin.
+        from models import BrandProfileCreateRequest, ApproveAppProfileRequest
+        profile = _run(api.create_brand(
+            payload=BrandProfileCreateRequest(brand_name="No Pending"), user_id=ANON))
+        assert profile["status"] == "draft"
+        approved = _run(api.approve_app_profile(
+            profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=ANON))
+        assert approved["status"] == "approved"
+        assert approved["approved_at"] is not None
+        reread = _run(api.get_app_profile(profile["id"], user_id=ANON))
+        assert reread["status"] == "approved"
+
+    def test_approve_without_applying_pending_still_approves(self, api):
+        from models import ApproveAppProfileRequest
+        profile = _profile(api, "Skip Pending")
+        approved = _run(api.approve_app_profile(
+            profile_id=profile["id"],
+            payload=ApproveAppProfileRequest(apply_pending=False),
+            user_id=ANON))
+        assert approved["status"] == "approved"
+
+    def test_approve_unknown_profile_is_404(self, api):
+        from models import ApproveAppProfileRequest
+        with pytest.raises(HTTPException) as err:
+            _run(api.approve_app_profile(
+                profile_id=str(uuid.uuid4()),
+                payload=ApproveAppProfileRequest(), user_id=ANON))
+        assert err.value.status_code == 404
+
+
 class TestFeedbackCatalog:
     def test_catalog_lists_events_with_reasons(self, api):
         catalog = _run(api.feedback_catalog())
