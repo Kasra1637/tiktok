@@ -83,9 +83,15 @@ const FEATURES = [
   },
   {
     icon: TrendingUp,
-    title: "Analytics & Feedback",
+    title: "Internal Analytics",
     description:
-      "Success rates, spend by app and template, and regeneration reasons, while rejections and heavy edits feed the next recommendations. Manual performance notes stay marked unverified.",
+      "Success and failure rates, generation time, spend by app and template, and regeneration reasons. Manual performance notes stay marked unverified.",
+  },
+  {
+    icon: Check,
+    title: "Feedback Loop",
+    description:
+      "Approvals, rejections, heavy script edits, and regenerations are recorded per app and template, and re-rank future template recommendations and shape the next creative plans.",
   },
   {
     icon: BadgeAlert,
