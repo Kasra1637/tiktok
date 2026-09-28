@@ -596,7 +596,7 @@ export default function Landing() {
                   </SignInTrigger>
                 </UnauthedOnly>
                 <AuthedOnly>
-                  <Link to="/discover" className="w-full sm:w-auto">
+                  <Link to="/" className="w-full sm:w-auto">
                     <Button
                       size="lg"
                       className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-white shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
