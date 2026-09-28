@@ -31,21 +31,17 @@ FACE_SWAP_MODEL = "google/gemini-3.1-flash-image"  # Gemini 3.1 Flash Image — 
 TEXT_MODEL = "google/gemini-2.5-flash"
 
 # Video generation models.
-# Seedance 2.5 is the default for hook replication (V2V motion transfer).
-# It supports up to 50 multimodal references (30 images, 10 videos, 10 audio),
-# allowing the motion reference (video) and identity reference (face image) to
-# coexist without the frame_images/input_references conflict that MiniMax H3 has.
-# Built by ByteDance (TikTok's parent), it's designed specifically for short-form
-# hook-style content with precise motion/gesture/camera replication from a source clip.
+# Seedance 2.5 is the template studio's default: it supports a 30-second
+# single pass with native audio and multimodal references. MiniMax H3 remains
+# available for shorter, higher-resolution renders.
 VIDEO_MODELS = {
     "aleph-2": {
         "id": "runway/aleph-2",
         "name": "Runway Aleph 2.0",
         "description": (
-            "In-context video EDITING (not generation) — edits the original hook video "
-            "directly, preserving body movement, gestures, camera, clothing, and framing "
-            "pixel-for-pixel, changing only the face. The closest thing to exact hook "
-            "replication available: it never regenerates the scene."
+            "In-context video EDITOR (not generation) — edits a supplied clip "
+            "directly rather than generating from a prompt. Retained only for "
+            "legacy records; not usable by the template studio."
         ),
         "max_duration": 30,
         "min_duration": 2,
@@ -80,10 +76,9 @@ VIDEO_MODELS = {
         "supports_combined_refs": False,  # Cannot combine frame_images with input_references
     },
 }
-# Generative fallback used when there's no source video to edit, or the user
-# customized the hook (style/prompt/template) — Aleph cannot text-generate,
-# it can only edit footage that already exists.
-DEFAULT_VIDEO_MODEL = "minimax-h3"
+# Default for new template-studio generations. The provider remains
+# configurable through VIDEO_MODEL_DEFAULT and VIDEO_MODEL_ALLOWLIST.
+DEFAULT_VIDEO_MODEL = "seedance-2.5"
 # Legacy fallback
 VIDEO_MODEL = VIDEO_MODELS[DEFAULT_VIDEO_MODEL]["id"]
 

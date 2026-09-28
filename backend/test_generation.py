@@ -14,7 +14,7 @@ import video_providers as vp
 
 class TestProviderResolution:
     def test_default_is_the_configured_app_default(self):
-        assert vp.default_model_key() == "minimax-h3"
+        assert vp.default_model_key() == "seedance-2.5"
 
     def test_env_override_changes_the_default(self, monkeypatch):
         monkeypatch.setenv("VIDEO_MODEL_DEFAULT", "seedance-2.5")
@@ -22,7 +22,7 @@ class TestProviderResolution:
 
     def test_bad_env_default_is_ignored(self, monkeypatch):
         monkeypatch.setenv("VIDEO_MODEL_DEFAULT", "not-a-model")
-        assert vp.default_model_key() == "minimax-h3"
+        assert vp.default_model_key() == "seedance-2.5"
 
     def test_allowlist_restricts_usage(self, monkeypatch):
         monkeypatch.setenv("VIDEO_MODEL_ALLOWLIST", "seedance-2.5")
