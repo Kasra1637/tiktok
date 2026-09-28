@@ -694,6 +694,7 @@ async def init_db():
                 file_path TEXT NOT NULL,
                 preview_path TEXT,
                 content_type TEXT,
+                duration_seconds REAL,
                 -- Rights are the operator's assertion, recorded so a reviewer
                 -- can see it was considered. Unconfirmed assets can be stored
                 -- but are refused for production use.
@@ -1105,6 +1106,15 @@ async def init_db():
         if "signal" not in {row[1] for row in await cursor.fetchall()}:
             logger.info("Migration: adding signal column to feedback_events")
             await conn.execute("ALTER TABLE feedback_events ADD COLUMN signal TEXT")
+        await conn.commit()
+
+        # Migration: assets gains an audio duration. Existing image/video rows
+        # keep NULL rather than a fabricated zero; audio duration is probed at
+        # upload time going forward.
+        cursor = await conn.execute("PRAGMA table_info(assets)")
+        if "duration_seconds" not in {row[1] for row in await cursor.fetchall()}:
+            logger.info("Migration: adding duration_seconds column to assets")
+            await conn.execute("ALTER TABLE assets ADD COLUMN duration_seconds REAL")
         await conn.commit()
 
         # Best-effort backfill for analyses whose local extracted frames still
@@ -7139,10 +7149,13 @@ ASSET_IMAGE_TYPES = {
     "background_image": "image",
 }
 ASSET_VIDEO_TYPES = {"screen_recording": "video", "background_video": "video"}
+ASSET_AUDIO_TYPES = {"audio": "audio"}
 ASSET_ALLOWED_EXT = {
     "image": {".png", ".jpg", ".jpeg", ".webp", ".gif"},
     "video": {".mp4", ".mov", ".webm", ".m4v"},
+    "audio": {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"},
 }
+ASSET_AUDIO_ROLES = ("background", "voiceover")
 GENERATED_ID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
@@ -7312,7 +7325,11 @@ async def upload_asset(
         raise HTTPException(status_code=404, detail="App Profile not found")
 
     asset_kind = template_library.normalize_asset_kind(kind)
-    expected_type = ASSET_IMAGE_TYPES.get(asset_kind) or ASSET_VIDEO_TYPES.get(asset_kind)
+    expected_type = (
+        ASSET_IMAGE_TYPES.get(asset_kind)
+        or ASSET_VIDEO_TYPES.get(asset_kind)
+        or ASSET_AUDIO_TYPES.get(asset_kind)
+    )
     if not expected_type:
         raise HTTPException(status_code=400, detail=f"Unsupported asset kind: {kind}")
 
@@ -7338,15 +7355,31 @@ async def upload_asset(
     target = _asset_dir(profile_id) / f"{asset_id}{ext}"
     target.write_bytes(raw)
 
+    # Audio must be a playable file, not merely an audio extension: an invalid
+    # payload would otherwise fail only at composition time. A rejected upload
+    # removes its temporary file so the library cannot accumulate junk.
+    duration_seconds = None
+    if expected_type == "audio":
+        duration_seconds = overlays.probe_duration(target)
+        if duration_seconds <= 0:
+            try:
+                target.unlink()
+            except OSError:
+                pass
+            raise HTTPException(
+                status_code=400,
+                detail="That audio file could not be read. Upload a playable audio file.",
+            )
+
     now = now_iso()
     await _execute(
         """INSERT INTO assets
            (id, brand_profile_id, kind, name, label, notes, file_path, content_type,
-            rights_confirmed, status, created_at, updated_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)""",
+            duration_seconds, rights_confirmed, status, created_at, updated_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)""",
         (asset_id, profile_id, asset_kind, (file.filename or "")[:200],
          (label or "")[:120], (notes or "")[:500], str(target), file.content_type,
-         1 if rights_confirmed else 0, now, now, user_id),
+         duration_seconds, 1 if rights_confirmed else 0, now, now, user_id),
     )
     logger.info(f"Uploaded {asset_kind} asset {asset_id} for profile {profile_id}")
     return _public_asset(await _fetch_one("SELECT * FROM assets WHERE id = ?", (asset_id,)))
@@ -7452,6 +7485,24 @@ async def attach_asset_to_project(
     current = project.get("assets") or []
     if not isinstance(current, list):
         current = []
+    is_audio = asset.get("kind") == "audio"
+    audio_role = (payload.audio_role or "background").strip().lower()
+    if audio_role not in ASSET_AUDIO_ROLES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"audio_role must be one of: {', '.join(ASSET_AUDIO_ROLES)}.",
+        )
+    if not is_audio and (payload.audio_role is not None or payload.audio_gain is not None):
+        raise HTTPException(
+            status_code=400,
+            detail="Audio role and gain apply only to audio assets.",
+        )
+    try:
+        audio_gain = float(payload.audio_gain) if payload.audio_gain is not None else None
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="audio_gain must be a number.")
+    if audio_gain is not None and not 0.0 <= audio_gain <= 2.0:
+        raise HTTPException(status_code=400, detail="audio_gain must be between 0 and 2.")
     entry = {
         "asset_id": asset["id"],
         "kind": asset["kind"],
@@ -7462,6 +7513,11 @@ async def attach_asset_to_project(
         value = getattr(payload, key, None)
         if value is not None:
             entry[key] = value
+    if is_audio:
+        entry["audio_role"] = audio_role
+        entry["audio_gain"] = audio_gain if audio_gain is not None else (
+            1.0 if audio_role == "voiceover" else 0.25
+        )
     current.append(entry)
 
     await _execute(
@@ -7516,6 +7572,11 @@ async def _resolve_composition_assets(
             continue
         if asset.get("status") != "active":
             rejected.append({"asset_id": asset_id, "reason": "archived"})
+            continue
+        # Storage is not permission: an unconfirmed file can be kept for review,
+        # but it must never reach a production composite.
+        if not asset.get("rights_confirmed"):
+            rejected.append({"asset_id": asset_id, "reason": "rights unconfirmed"})
             continue
         if not asset.get("file_path") or not Path(asset["file_path"]).is_file():
             rejected.append({"asset_id": asset_id, "reason": "file missing on disk"})
@@ -7598,6 +7659,8 @@ async def create_overlay_composition(
             "end": entry.get("end", generation.get("duration")),
             "position": entry.get("position"),
             "scale": entry.get("scale"),
+            "audio_role": entry.get("audio_role"),
+            "audio_gain": entry.get("audio_gain"),
         })
 
     spec = overlays.build_spec_from_plan(
@@ -7687,6 +7750,7 @@ async def _render_overlay_composition(composition_id: str, user_id: str) -> dict
         "captions": len(spec.get("captions") or []),
         "images": len(spec.get("images") or []),
         "videos": len(spec.get("videos") or []),
+        "audios": len(spec.get("audios") or []),
         "end_card": bool(spec.get("end_card")),
     }
     await _execute(

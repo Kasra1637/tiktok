@@ -65,6 +65,28 @@ def _make_base_clip(path: Path, seconds=12) -> Path:
     return path
 
 
+def _make_base_clip_with_audio(path: Path, seconds=6, frequency=220) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run([
+        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+        "-f", "lavfi", "-i", f"testsrc=size=720x1280:rate=30:duration={seconds}",
+        "-f", "lavfi", "-i", f"sine=frequency={frequency}:duration={seconds}",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-shortest", str(path),
+    ], check=True, capture_output=True)
+    return path
+
+
+def _make_tone(path: Path, seconds=3, frequency=440) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run([
+        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+        "-f", "lavfi", "-i", f"sine=frequency={frequency}:duration={seconds}",
+        "-c:a", "aac", str(path),
+    ], check=True, capture_output=True)
+    return path
+
+
 @pytest.fixture(scope="module")
 def api():
     tmpdir = tempfile.mkdtemp(prefix="tiktok-p6-")
@@ -196,6 +218,30 @@ class TestAssetLibrary:
         src = _make_clip(tmp_root / "ok.mp4", seconds=2)
         created = _upload(api, profile["id"], "screen_recording", "ok.mp4", src)
         assert created["kind"] == "screen_recording"
+
+    def test_upload_accepts_a_background_video(self, api, tmp_root):
+        profile = _profile(api, "Upload Background")
+        src = _make_clip(tmp_root / "background.mp4", seconds=2)
+        created = _upload(api, profile["id"], "background_video", "background.mp4", src)
+        assert created["kind"] == "background_video"
+
+    def test_upload_accepts_authorized_audio_and_records_duration(self, api, tmp_root):
+        profile = _profile(api, "Upload Audio")
+        src = _make_tone(tmp_root / "bed.m4a", seconds=3)
+        created = _upload(
+            api, profile["id"], "audio", "bed.m4a", src, rights_confirmed=True
+        )
+        assert created["kind"] == "audio"
+        assert created["rights_confirmed"] is True
+        assert created["duration_seconds"] == pytest.approx(3.0, abs=0.2)
+
+    def test_upload_rejects_an_unplayable_audio_file(self, api, tmp_root):
+        profile = _profile(api, "Bad Audio")
+        fake = tmp_root / "fake.mp3"
+        fake.write_bytes(b"not audio")
+        with pytest.raises(HTTPException) as err:
+            _upload(api, profile["id"], "audio", "fake.mp3", fake, rights_confirmed=True)
+        assert err.value.status_code == 400
 
     def test_unknown_kind_is_normalized(self, api, tmp_root):
         profile = _profile(api, "Kind Normalize")
@@ -539,6 +585,130 @@ class TestOverlayCompositionGuard:
         result = _run(api.create_overlay_composition(
             gen["id"], OverlayCompositionRequest(asset_ids=[str(uuid.uuid4())]), ANON))
         assert any(r["reason"] == "not found" for r in result["rejected_assets"])
+
+
+class TestAudioAssets:
+    def test_audio_options_are_rejected_for_images(self, api, tmp_root):
+        from models import AttachAssetRequest
+        profile = _profile(api, "Audio Image Guard")
+        shot = _make_image(tmp_root / "audio-guard.png")
+        asset = _insert_asset(api, profile["id"], "screenshot", shot)
+        project = _project(api, profile)
+        with pytest.raises(HTTPException) as err:
+            _run(api.attach_asset_to_project(
+                project_id=project["id"],
+                payload=AttachAssetRequest(asset_id=asset["id"], audio_role="background"),
+                user_id=ANON,
+            ))
+        assert err.value.status_code == 400
+
+    def test_audio_role_and_gain_are_validated(self, api, tmp_root):
+        from models import AttachAssetRequest
+        profile = _profile(api, "Audio Validation")
+        asset = _insert_asset(
+            api, profile["id"], "audio", _make_tone(tmp_root / "validate.m4a"))
+        project = _project(api, profile)
+        with pytest.raises(HTTPException) as err:
+            _run(api.attach_asset_to_project(
+                project_id=project["id"],
+                payload=AttachAssetRequest(asset_id=asset["id"], audio_role="theme"),
+                user_id=ANON,
+            ))
+        assert err.value.status_code == 400
+        with pytest.raises(HTTPException) as err:
+            _run(api.attach_asset_to_project(
+                project_id=project["id"],
+                payload=AttachAssetRequest(asset_id=asset["id"], audio_gain=99),
+                user_id=ANON,
+            ))
+        assert err.value.status_code == 400
+
+    def test_unconfirmed_audio_is_rejected_at_composition(self, api, tmp_root):
+        from models import AttachAssetRequest, OverlayCompositionRequest
+        profile = _profile(api, "Audio Rights")
+        gen, project = _completed_generation(
+            api, profile, _make_base_clip(tmp_root / "rights_base.mp4", seconds=6))
+        audio = _upload(
+            api, profile["id"], "audio", "rights.m4a",
+            _make_tone(tmp_root / "rights.m4a"), rights_confirmed=False)
+        _run(api.attach_asset_to_project(
+            project_id=project["id"],
+            payload=AttachAssetRequest(asset_id=audio["id"]),
+            user_id=ANON,
+        ))
+        result = _run(api.create_overlay_composition(
+            gen["id"], OverlayCompositionRequest(), ANON))
+        assert any(r["reason"] == "rights unconfirmed" for r in result["rejected_assets"])
+        assert result["applied"]["audios"] == 0
+
+    def test_background_audio_mixes_under_the_clip(self, api, tmp_root):
+        import overlays
+        from models import AttachAssetRequest, OverlayCompositionRequest
+        profile = _profile(api, "Audio Background")
+        gen, project = _completed_generation(
+            api, profile, _make_base_clip(tmp_root / "background_base.mp4", seconds=6))
+        audio = _insert_asset(
+            api, profile["id"], "audio", _make_tone(tmp_root / "bed-check.m4a"))
+        _run(api.attach_asset_to_project(
+            project_id=project["id"],
+            payload=AttachAssetRequest(
+                asset_id=audio["id"], start=1, end=5,
+                audio_role="background", audio_gain=0.25),
+            user_id=ANON,
+        ))
+        result = _run(api.create_overlay_composition(
+            gen["id"], OverlayCompositionRequest(), ANON))
+        assert result["status"] == "completed", result.get("error")
+        assert result["applied"]["audios"] == 1
+        out = Path(_run(api._fetch_one(
+            "SELECT output_path FROM overlay_compositions WHERE id = ?", (result["id"],))
+        )["output_path"])
+        assert abs(overlays.probe_duration(out) - 6.0) < 0.5
+        assert overlays.has_audio_stream(out) is True
+
+    def test_voiceover_renders_over_generated_audio(self, api, tmp_root):
+        import overlays
+        from models import AttachAssetRequest, OverlayCompositionRequest
+        profile = _profile(api, "Audio Voiceover")
+        gen, project = _completed_generation(
+            api, profile,
+            _make_base_clip_with_audio(tmp_root / "voice_base.mp4", seconds=6))
+        voice = _insert_asset(
+            api, profile["id"], "audio", _make_tone(tmp_root / "voice-check.m4a"))
+        _run(api.attach_asset_to_project(
+            project_id=project["id"],
+            payload=AttachAssetRequest(
+                asset_id=voice["id"], start=2, end=4,
+                audio_role="voiceover", audio_gain=1.0),
+            user_id=ANON,
+        ))
+        result = _run(api.create_overlay_composition(
+            gen["id"], OverlayCompositionRequest(), ANON))
+        assert result["status"] == "completed", result.get("error")
+        assert result["applied"]["audios"] == 1
+        out = Path(_run(api._fetch_one(
+            "SELECT output_path FROM overlay_compositions WHERE id = ?", (result["id"],))
+        )["output_path"])
+        assert abs(overlays.probe_duration(out) - 6.0) < 0.5
+        assert overlays.has_audio_stream(out) is True
+
+    def test_voiceover_mutes_generated_audio_in_its_window(self, api, tmp_root):
+        import overlays
+        voice = _make_tone(tmp_root / "voice.m4a", seconds=2)
+        inputs, graph, warnings, output = overlays.build_audio_filter(
+            {"audios": [{
+                "path": str(voice), "start": 2, "end": 4,
+                "role": "voiceover", "gain": 1.0,
+            }]},
+            duration=6,
+            first_audio_index=1,
+            base_has_audio=True,
+        )
+        assert warnings == []
+        assert output == "outa"
+        assert inputs == [str(voice)]
+        assert "volume=0:enable='between(t,2.0,4.0)'" in graph
+        assert "adelay=2000|2000" in graph
 
 
 @pytest.mark.skipif(not _ffmpeg_available(), reason="ffmpeg not installed")

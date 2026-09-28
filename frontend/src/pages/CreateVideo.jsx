@@ -49,6 +49,125 @@ function StepShell({ icon: Icon, title, description, children }) {
   );
 }
 
+function AttachmentRow({ project, attachment, duration, onChanged }) {
+  const isAudio = attachment.kind === "audio";
+  const [start, setStart] = useState(String(attachment.start ?? 0));
+  const [end, setEnd] = useState(attachment.end ?? duration ?? "");
+  const [role, setRole] = useState(attachment.audio_role || "background");
+  const [gain, setGain] = useState(String(attachment.audio_gain ?? (role === "voiceover" ? 1 : 0.25)));
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const fresh = await api.getStudioProject(project.id);
+      const next = (fresh.assets || []).map((a) => {
+        if (a.asset_id !== attachment.asset_id) return a;
+        const updated = {
+          ...a,
+          start: start === "" ? 0 : Number(start),
+          end: end === "" ? undefined : Number(end),
+        };
+        if (isAudio) {
+          updated.audio_role = role;
+          updated.audio_gain = gain === "" ? undefined : Number(gain);
+        } else {
+          delete updated.audio_role;
+          delete updated.audio_gain;
+        }
+        return updated;
+      });
+      const saved = await api.updateStudioProject(project.id, { assets: next });
+      onChanged(saved);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const detach = async () => {
+    try {
+      await api.detachAsset(project.id, attachment.asset_id);
+      const fresh = await api.getStudioProject(project.id);
+      onChanged(fresh);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+  };
+
+  return (
+    <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-3">
+      <div className="flex items-center gap-3">
+        <Badge variant="secondary" className="shrink-0 text-[11px]">
+          {humanize(attachment.kind)}
+        </Badge>
+        <span className="min-w-0 flex-1 truncate text-sm">
+          {attachment.label || attachment.asset_id.slice(0, 8)}
+        </span>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {attachment.start ?? 0}&ndash;{attachment.end ?? "end"}s
+          {isAudio ? ` · ${attachment.audio_role || "background"}` : ""}
+        </span>
+        <Button variant="ghost" size="sm" aria-label="Remove from project" onClick={detach}>
+          Remove
+        </Button>
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <label className="space-y-1">
+          <span className="text-[11px] text-muted-foreground">Start (s)</span>
+          <Input type="number" min="0" value={start} onChange={(e) => setStart(e.target.value)} />
+        </label>
+        <label className="space-y-1">
+          <span className="text-[11px] text-muted-foreground">End (s)</span>
+          <Input
+            type="number"
+            min="0"
+            value={end}
+            onChange={(e) => setEnd(e.target.value)}
+            placeholder={duration ? String(duration) : "End"}
+          />
+        </label>
+        {isAudio && (
+          <>
+            <label className="space-y-1">
+              <span className="text-[11px] text-muted-foreground">Use as</span>
+              <select
+                value={role}
+                onChange={(e) => {
+                  setRole(e.target.value);
+                  setGain(e.target.value === "voiceover" ? "1" : "0.25");
+                }}
+                className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-2 py-1.5 text-xs"
+              >
+                <option value="background">Background</option>
+                <option value="voiceover">Voiceover</option>
+              </select>
+            </label>
+            <label className="space-y-1">
+              <span className="text-[11px] text-muted-foreground">Gain</span>
+              <Input
+                type="number"
+                min="0"
+                max="2"
+                step="0.05"
+                value={gain}
+                onChange={(e) => setGain(e.target.value)}
+              />
+            </label>
+          </>
+        )}
+        <div className="flex items-end">
+          <Button variant="secondary" size="sm" disabled={saving} onClick={save}>
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+            Save timing
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CreateVideo() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -573,53 +692,63 @@ export default function CreateVideo() {
           title="Assets"
           description="Real app visuals get composited onto the video deterministically, so interfaces and text stay accurate."
         >
-          <AssetLibrary
-            profileId={profileId}
-            onChanged={() => {
-              // Re-read the project's attached assets so the picker updates.
-              api.getStudioProject(project.id).then(setProject).catch(() => {});
-            }}
-          />
+          {!project ? (
+            <div className="rounded-xl border border-[color:var(--hairline)] p-4">
+              <p className="text-sm text-muted-foreground">
+                Create a draft from the selected profile, angle, template, and settings before
+                attaching assets. The draft stays free; only a marked-ready generation can spend money.
+              </p>
+              <Button
+                variant="brand"
+                size="sm"
+                className="mt-3"
+                disabled={busy || !canGenerate}
+                onClick={async () => {
+                  await createProject();
+                }}
+              >
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
+                Create draft for these selections
+              </Button>
+            </div>
+          ) : (
+            <AssetLibrary
+              profileId={profileId}
+              projectId={project?.id}
+              projectAssets={project?.assets}
+              projectDuration={project?.duration_seconds || duration}
+              onProjectChanged={() => {
+                if (!project?.id) return;
+                api.getStudioProject(project.id).then(setProject).catch(() => {});
+              }}
+              onChanged={() => {
+                // Re-read the project's attached assets so the picker updates.
+                if (!project?.id) return;
+                api.getStudioProject(project.id).then(setProject).catch(() => {});
+              }}
+            />
+          )}
 
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-4">
             <span className="eyebrow block">Attached to this project</span>
-            {(project?.assets || []).length === 0 ? (
+            {!project ? (
+              <p className="text-sm text-muted-foreground">
+                Create a draft above before attaching assets.
+              </p>
+            ) : (project?.assets || []).length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 Nothing attached yet. Select assets above to place them on the timeline.
               </p>
             ) : (
               <div className="space-y-2">
                 {(project?.assets || []).map((a) => (
-                  <div
-                    key={a.asset_id}
-                    className="flex items-center gap-3 rounded-xl border border-[color:var(--hairline)] p-3"
-                  >
-                    <Badge variant="secondary" className="shrink-0 text-[11px]">
-                      {humanize(a.kind)}
-                    </Badge>
-                    <span className="min-w-0 flex-1 truncate text-sm">
-                      {a.label || a.asset_id.slice(0, 8)}
-                    </span>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {a.start ?? 0}&ndash;{a.end ?? "end"}s
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      aria-label="Remove from project"
-                      onClick={async () => {
-                        try {
-                          await api.detachAsset(project.id, a.asset_id);
-                          const fresh = await api.getStudioProject(project.id);
-                          setProject(fresh);
-                        } catch (err) {
-                          toast.error(getErrorMessage(err));
-                        }
-                      }}
-                    >
-                      Remove
-                    </Button>
-                  </div>
+                  <AttachmentRow
+                    key={`${a.asset_id}-${a.start ?? 0}-${a.end ?? "end"}-${a.audio_role || "none"}-${a.audio_gain ?? "default"}`}
+                    project={project}
+                    attachment={a}
+                    duration={project?.duration_seconds || duration}
+                    onChanged={setProject}
+                  />
                 ))}
               </div>
             )}

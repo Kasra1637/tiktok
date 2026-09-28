@@ -399,6 +399,8 @@ class AttachAssetRequest(BaseModel):
     end: Optional[float] = None
     position: Optional[str] = None
     scale: Optional[float] = None
+    audio_role: Optional[str] = None
+    audio_gain: Optional[float] = None
 
 
 class OverlayCompositionRequest(BaseModel):

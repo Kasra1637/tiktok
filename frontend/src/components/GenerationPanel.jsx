@@ -184,7 +184,8 @@ export function GenerationPanel({ project, onGenerationChange }) {
       if (result.status === "completed") {
         setNotice(
           `Composed ${result.applied?.captions || 0} caption(s), ` +
-          `${result.applied?.images || 0} image(s), ${result.applied?.videos || 0} video layer(s)` +
+          `${result.applied?.images || 0} image(s), ${result.applied?.videos || 0} video layer(s), ` +
+          `${result.applied?.audios || 0} audio track(s)` +
           `${result.applied?.end_card ? ", and a CTA end card" : ""}.`
         );
       } else {

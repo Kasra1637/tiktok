@@ -41,6 +41,11 @@ IMAGE_KINDS = (
     "screenshot", "logo", "product_image", "character_reference",
     "creator_photo", "background_image",
 )
+AUDIO_KINDS = ("audio",)
+AUDIO_ROLES = ("background", "voiceover")
+# A background bed stays underneath generated speech; a voiceover is meant to
+# be heard as the primary audio for its window.
+AUDIO_DEFAULT_GAINS = {"background": 0.25, "voiceover": 1.0}
 
 # Fonts that exist on a stock Windows install. Resolved once, at build time,
 # so a missing font fails loudly rather than producing blank text.
@@ -185,6 +190,128 @@ def _clamp_window(start, end, duration) -> tuple:
     if e <= s:
         e = s + 0.1
     return round(s, 3), round(e, 3)
+
+
+def has_audio_stream(path) -> bool:
+    """Whether a media file exposes an audio stream."""
+    try:
+        proc = subprocess.run(
+            [
+                "ffprobe", "-v", "error", "-select_streams", "a:0",
+                "-show_entries", "stream=index",
+                "-of", "csv=p=0", str(path),
+            ],
+            capture_output=True, text=True, timeout=30,
+        )
+    except Exception as e:
+        logger.warning("ffprobe audio check failed for %s: %s", path, e)
+        return False
+    return bool((proc.stdout or "").strip())
+
+
+def build_audio_filter(spec: dict, duration: float, first_audio_index: int, base_has_audio: bool) -> tuple:
+    """
+    Build deterministic audio mixing for authorized operator audio.
+
+    Args:
+        spec: {"audios": [{"path","start","end","role","gain"}]}.
+        duration: base clip length in seconds.
+        first_audio_index: ffmpeg input number of the first audio file.
+        base_has_audio: whether input 0 exposes an audio stream.
+
+    Returns:
+        (audio_inputs, audio_graph, warnings, output_label)
+
+    Semantics are intentionally narrow and rights-safe:
+
+    - background: the generated clip remains primary; operator audio is a bed.
+    - voiceover: generated audio is muted inside that track's window and the
+      operator file becomes primary there.
+    - every track is trimmed to its attached window, delayed into place, and
+      padded to the base duration so the output length cannot drift.
+    """
+    spec = spec or {}
+    duration = float(duration or 0)
+    warnings: list = []
+    inputs: list = []
+    segments: list = []
+    tracks = []
+
+    for item in (spec.get("audios") or []):
+        if not isinstance(item, dict):
+            continue
+        path = str(item.get("path") or "").strip()
+        if not path or not Path(path).is_file():
+            warnings.append(f"Audio track skipped, file not found: {path or '(no path)'}")
+            continue
+        role = str(item.get("role") or "background").lower()
+        if role not in AUDIO_ROLES:
+            warnings.append(f"Audio track skipped, unknown role: {role or '(none)'}")
+            continue
+        try:
+            gain = float(item.get("gain", AUDIO_DEFAULT_GAINS[role]))
+        except (TypeError, ValueError):
+            gain = AUDIO_DEFAULT_GAINS[role]
+        gain = min(max(gain, 0.0), 2.0)
+        start, end = _clamp_window(item.get("start", 0), item.get("end", duration), duration)
+        length = max(0.1, round(end - start, 3))
+        fade = round(min(0.1, length / 2), 3)
+        tracks.append({
+            "path": path,
+            "role": role,
+            "gain": gain,
+            "start": start,
+            "length": length,
+            "fade": fade,
+        })
+
+    if not tracks or duration <= 0:
+        return [], "", warnings, ""
+
+    for offset, track in enumerate(tracks):
+        stream = first_audio_index + offset
+        inputs.append(track["path"])
+        label = f"aud{offset}"
+        delay_ms = int(round(track["start"] * 1000))
+        segments.append(
+            f"[{stream}:a]atrim=0:{track['length']},asetpts=PTS-STARTPTS,"
+            f"afade=t=in:st=0:d={track['fade']},"
+            f"afade=t=out:st={round(track['length'] - track['fade'], 3)}:d={track['fade']},"
+            f"volume={track['gain']},adelay={delay_ms}|{delay_ms},"
+            f"apad=whole_dur={duration}[{label}]"
+        )
+
+    if base_has_audio:
+        segments.append("[0:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[basea]")
+        current = "basea"
+    else:
+        segments.append(
+            f"aevalsrc=0:d={duration}:s=44100[basea]"
+        )
+        current = "basea"
+
+    # Voiceover owns its window. Muting is chained one window at a time so
+    # overlapping or adjacent windows combine without leaving base audio
+    # audible underneath the authorized replacement.
+    for offset, track in enumerate(tracks):
+        if track["role"] != "voiceover":
+            continue
+        end = round(track["start"] + track["length"], 3)
+        segments.append(
+            f"[{current}]volume=0:enable='between(t,{track['start']},{end})'[basev{offset}]"
+        )
+        current = f"basev{offset}"
+
+    mix_inputs = "".join([f"[{current}]"] + [f"[aud{offset}]" for offset in range(len(tracks))])
+    segments.append(
+        f"{mix_inputs}amix=inputs={len(tracks) + 1}:duration=first:"
+        f"dropout_transition=0:normalize=0[mix]"
+    )
+    segments.append(
+        "[mix]aresample=44100,aformat=channel_layouts=stereo,"
+        f"apad=whole_dur={duration},atrim=0:{duration}[outa]"
+    )
+    return inputs, ";".join(segments), warnings, "outa"
 
 
 def build_filter_graph(spec: dict, duration: float, font_path: Optional[str] = None) -> tuple:
@@ -390,6 +517,12 @@ def build_ffmpeg_command(
     graph, inputs, warnings = build_filter_graph(spec, duration, font_path)
     if graph is None:
         raise ValueError("; ".join(warnings) or "Could not build an overlay filter graph.")
+    audio_inputs, audio_graph, audio_warnings, audio_output = build_audio_filter(
+        spec, duration, 1 + len(inputs), has_audio_stream(base_video)
+    )
+    warnings = list(warnings) + list(audio_warnings)
+    if audio_graph:
+        graph = f"{graph};{audio_graph}"
 
     image_count = len(spec.get("images") or [])
     argv = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error"]
@@ -401,6 +534,10 @@ def build_ffmpeg_command(
         if index < image_count:
             argv += ["-loop", "1", "-t", str(int(float(duration) + 1))]
         argv += ["-i", str(path)]
+    # Authorized audio inputs follow all visual overlay inputs, matching the
+    # absolute indexes used by build_audio_filter.
+    for path in audio_inputs:
+        argv += ["-i", str(path)]
     argv += ["-filter_complex", graph, "-map", "[outv]", "-c:v", "libx264"]
     argv += ["-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p"]
     # -t pins the output to the BASE clip's length. This is not optional: a
@@ -409,8 +546,14 @@ def build_ffmpeg_command(
     # out minutes long. -shortest is not a substitute, because it only
     # anchors when an audio stream exists to anchor to.
     argv += ["-t", str(float(duration))]
-    # Copy audio when the base clip has it; overlay layers are silent.
-    argv += ["-map", "0:a?", "-c:a", "aac", "-shortest", str(output_path)]
+    if audio_output:
+        # Operator audio is part of the deterministic mix. Copy audio when the
+        # base clip has it; overlay layers are silent.
+        argv += ["-map", f"[{audio_output}]"]
+    else:
+        # Copy audio when the base clip has it; overlay layers are silent.
+        argv += ["-map", "0:a?"]
+    argv += ["-c:a", "aac", "-shortest", str(output_path)]
     return argv, warnings
 
 
@@ -494,6 +637,7 @@ def build_spec_from_plan(
         "captions": [],
         "images": [],
         "videos": [],
+        "audios": [],
         "end_card": None,
     }
 
@@ -529,6 +673,20 @@ def build_spec_from_plan(
             entry.setdefault("scale", 0.85)
             entry["position"] = asset.get("position") or "center"
             spec["videos"].append(entry)
+        elif kind in AUDIO_KINDS:
+            role = str(asset.get("audio_role") or "background").lower()
+            try:
+                gain = float(asset.get("audio_gain", AUDIO_DEFAULT_GAINS.get(role, 0.25)))
+            except (TypeError, ValueError):
+                gain = AUDIO_DEFAULT_GAINS.get(role, 0.25)
+            spec["audios"].append({
+                "path": path,
+                "start": asset.get("start", 0),
+                "end": asset.get("end", duration),
+                "role": role if role in AUDIO_ROLES else "background",
+                "gain": min(max(gain, 0.0), 2.0),
+                "label": str(asset.get("label") or ""),
+            })
         else:
             if kind == "logo":
                 entry.setdefault("scale", 0.14)

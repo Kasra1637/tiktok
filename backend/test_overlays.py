@@ -296,6 +296,26 @@ class TestSpecFromPlan:
         assert len(spec["videos"]) == 1
         assert spec["images"] == []
 
+    def test_authorized_audio_goes_to_audio_with_role_and_gain(self):
+        spec = overlays.build_spec_from_plan(
+            PLAN,
+            [{
+                "kind": "audio",
+                "file_path": "bed.m4a",
+                "start": 1,
+                "end": 4,
+                "audio_role": "voiceover",
+                "audio_gain": 1.5,
+            }],
+            duration=12,
+        )
+        assert spec["images"] == []
+        assert spec["videos"] == []
+        assert spec["audios"][0]["role"] == "voiceover"
+        assert spec["audios"][0]["gain"] == 1.5
+        assert spec["audios"][0]["start"] == 1
+        assert spec["audios"][0]["end"] == 4
+
     def test_timing_is_carried_through(self):
         spec = overlays.build_spec_from_plan(
             PLAN, [{"kind": "screenshot", "file_path": "x.png", "start": 3, "end": 9}], duration=12)

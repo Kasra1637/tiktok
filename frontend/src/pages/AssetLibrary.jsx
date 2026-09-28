@@ -9,7 +9,7 @@ import EmptyState from "../components/EmptyState";
 import { api, getErrorMessage, mediaUrl } from "../lib/api";
 import {
   Images, Loader2, AlertTriangle, Upload, Trash2, Archive, ArchiveRestore,
-  Plus, ShieldCheck, Paperclip,
+  Plus, ShieldCheck, Paperclip, Music, Link2, Check,
 } from "lucide-react";
 
 const KINDS = [
@@ -20,70 +20,232 @@ const KINDS = [
   ["character_reference", "Character reference"],
   ["creator_photo", "Creator photo"],
   ["background_image", "Background image"],
+  ["background_video", "Background video"],
+  ["audio", "Audio"],
 ];
 
 function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function AssetRow({ asset, onDelete, onArchive, busy }) {
-  const isVideo = asset.kind === "screen_recording" || asset.kind === "background_video";
-  const uses = asset.used_in || [];
+function formatSeconds(value) {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds < 0) return "";
+  return `${seconds % 1 === 0 ? seconds : seconds.toFixed(1)}s`;
+}
+
+function AudioAttachControls({ asset, projectDuration, disabled, onAttach }) {
+  const [role, setRole] = useState("background");
+  const [gain, setGain] = useState("0.25");
+  const [start, setStart] = useState("0");
+  const [end, setEnd] = useState(String(projectDuration || ""));
+
+  const handleRoleChange = (next) => {
+    setRole(next);
+    // Keep the two supported mixes distinct by default: background stays under
+    // generated audio, while voiceover is meant to be heard as primary.
+    setGain(next === "voiceover" ? "1" : "0.25");
+  };
+
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-[color:var(--hairline)] p-3">
-      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-secondary/40">
-        {asset.media_url ? (
-          isVideo ? (
-            <video src={mediaUrl(asset.media_url)} className="h-full w-full object-cover" muted />
-          ) : (
-            <img
-              src={mediaUrl(asset.media_url)}
-              alt={asset.label || asset.name || asset.kind}
-              className="h-full w-full object-cover"
-            />
-          )
-        ) : null}
+    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
+      <label className="space-y-1">
+        <span className="text-[11px] text-muted-foreground">Use as</span>
+        <select
+          value={role}
+          onChange={(e) => handleRoleChange(e.target.value)}
+          className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-2 py-1.5 text-xs"
+          aria-label={`How to use ${asset.label || asset.name || "audio"}`}
+        >
+          <option value="background">Background</option>
+          <option value="voiceover">Voiceover</option>
+        </select>
+      </label>
+      <label className="space-y-1">
+        <span className="text-[11px] text-muted-foreground">Gain</span>
+        <Input
+          type="number"
+          min="0"
+          max="2"
+          step="0.05"
+          value={gain}
+          onChange={(e) => setGain(e.target.value)}
+          aria-label="Audio gain"
+        />
+      </label>
+      <label className="space-y-1">
+        <span className="text-[11px] text-muted-foreground">Start (s)</span>
+        <Input
+          type="number"
+          min="0"
+          value={start}
+          onChange={(e) => setStart(e.target.value)}
+          aria-label="Audio start"
+        />
+      </label>
+      <label className="space-y-1">
+        <span className="text-[11px] text-muted-foreground">End (s)</span>
+        <Input
+          type="number"
+          min="0"
+          value={end}
+          onChange={(e) => setEnd(e.target.value)}
+          placeholder={projectDuration ? String(projectDuration) : "End"}
+          aria-label="Audio end"
+        />
+      </label>
+      <div className="flex items-end">
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={disabled}
+          onClick={() =>
+            onAttach(asset, {
+              start: start === "" ? 0 : Number(start),
+              end: end === "" ? undefined : Number(end),
+              audio_role: role,
+              audio_gain: gain === "" ? undefined : Number(gain),
+            })
+          }
+        >
+          <Link2 className="h-3.5 w-3.5" /> Attach
+        </Button>
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="truncate text-sm font-medium">
-            {asset.label || asset.name || humanize(asset.kind)}
-          </span>
-          <Badge variant="secondary" className="text-[11px]">{humanize(asset.kind)}</Badge>
-          {asset.status === "archived" && (
-            <Badge variant="outline" className="text-[11px]">Archived</Badge>
-          )}
-          {!asset.rights_confirmed && (
-            <Badge variant="outline" className="text-[11px]">Rights unconfirmed</Badge>
-          )}
+    </div>
+  );
+}
+
+function AssetRow({
+  asset,
+  onDelete,
+  onArchive,
+  onAttach,
+  projectId,
+  attached,
+  attachDisabled,
+  attachBusy,
+  projectDuration,
+  busy,
+}) {
+  const isVideo = asset.kind === "screen_recording" || asset.kind === "background_video";
+  const isAudio = asset.kind === "audio";
+  const uses = asset.used_in || [];
+  const attachable = Boolean(projectId && onAttach);
+  const usable = attachable && asset.status === "active" && asset.rights_confirmed;
+  return (
+    <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-3">
+      <div className="flex items-center gap-3">
+        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-secondary/40">
+          {asset.media_url ? (
+            isVideo ? (
+              <video src={mediaUrl(asset.media_url)} className="h-full w-full object-cover" muted />
+            ) : isAudio ? (
+              <div className="flex h-full w-full items-center justify-center" aria-hidden="true">
+                <Music className="h-5 w-5 text-muted-foreground" />
+              </div>
+            ) : (
+              <img
+                src={mediaUrl(asset.media_url)}
+                alt={asset.label || asset.name || asset.kind}
+                className="h-full w-full object-cover"
+              />
+            )
+          ) : null}
         </div>
-        {asset.notes && <p className="mt-0.5 text-xs text-muted-foreground">{asset.notes}</p>}
-        <UsageHistory uses={uses} />
-      </div>
-      <div className="flex shrink-0 gap-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={busy}
-          onClick={() => onArchive(asset)}
-          aria-label={asset.status === "archived" ? "Restore asset" : "Archive asset"}
-        >
-          {asset.status === "archived" ? (
-            <ArchiveRestore className="h-3.5 w-3.5" />
-          ) : (
-            <Archive className="h-3.5 w-3.5" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="truncate text-sm font-medium">
+              {asset.label || asset.name || humanize(asset.kind)}
+            </span>
+            <Badge variant="secondary" className="text-[11px]">{humanize(asset.kind)}</Badge>
+            {asset.status === "archived" && (
+              <Badge variant="outline" className="text-[11px]">Archived</Badge>
+            )}
+            {!asset.rights_confirmed && (
+              <Badge variant="outline" className="text-[11px]">Rights unconfirmed</Badge>
+            )}
+            {attachable && attached && (
+              <Badge variant="outline" className="text-[11px]">
+                <Check className="mr-1 h-3 w-3" /> Attached
+              </Badge>
+            )}
+          </div>
+          {asset.notes && <p className="mt-0.5 text-xs text-muted-foreground">{asset.notes}</p>}
+          {(asset.created_at || asset.duration_seconds) && (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {asset.created_at ? `Uploaded ${new Date(asset.created_at).toLocaleDateString()}` : ""}
+              {asset.created_at && asset.duration_seconds ? " · " : ""}
+              {asset.duration_seconds ? `Duration ${formatSeconds(asset.duration_seconds)}` : ""}
+            </p>
           )}
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={busy}
-          onClick={() => onDelete(asset)}
-          aria-label="Delete asset"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
+          <UsageHistory uses={uses} />
+        </div>
+        <div className="flex shrink-0 gap-1">
+          {attachable && !isAudio && !attached && (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!usable || attachDisabled || attachBusy || busy}
+              title={
+                asset.status !== "active"
+                  ? "Restore this asset before attaching it."
+                  : !asset.rights_confirmed
+                    ? "Confirm rights before using this asset in a project."
+                    : "Attach this asset to the current project"
+              }
+              onClick={() => onAttach(asset, {})}
+            >
+              <Link2 className="h-3.5 w-3.5" /> Attach
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={() => onArchive(asset)}
+            aria-label={asset.status === "archived" ? "Restore asset" : "Archive asset"}
+          >
+            {asset.status === "archived" ? (
+              <ArchiveRestore className="h-3.5 w-3.5" />
+            ) : (
+              <Archive className="h-3.5 w-3.5" />
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={() => onDelete(asset)}
+            aria-label="Delete asset"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
+      {isAudio && asset.media_url && (
+        <audio
+          src={mediaUrl(asset.media_url)}
+          controls
+          preload="metadata"
+          className="h-9 w-full"
+          aria-label={`Preview ${asset.label || asset.name || "audio asset"}`}
+        />
+      )}
+      {attachable && isAudio && !attached && (
+        <AudioAttachControls
+          asset={asset}
+          projectDuration={projectDuration}
+          disabled={!usable || attachDisabled || attachBusy || busy}
+          onAttach={onAttach}
+        />
+      )}
+      {attachable && !usable && !attached && (
+        <p className="text-xs text-muted-foreground">
+          {asset.status !== "active"
+            ? "Restore this asset before attaching it."
+            : "Confirm rights before attaching this asset to a project."}
+        </p>
+      )}
     </div>
   );
 }
@@ -113,7 +275,14 @@ function UsageHistory({ uses }) {
   );
 }
 
-export default function AssetLibrary({ profileId, onChanged }) {
+export default function AssetLibrary({
+  profileId,
+  projectId,
+  projectAssets,
+  projectDuration,
+  onProjectChanged,
+  onChanged,
+}) {
   // Usable as a route (/app-profiles/:profileId/assets) or embedded in the
   // wizard, which already knows which profile it is working on.
   const params = useParams();
@@ -126,7 +295,11 @@ export default function AssetLibrary({ profileId, onChanged }) {
   const [kind, setKind] = useState("screenshot");
   const [label, setLabel] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
+  const [attachBusyId, setAttachBusyId] = useState("");
   const fileRef = useRef(null);
+  const attachedIds = new Set(
+    (projectAssets || []).map((a) => a?.asset_id).filter(Boolean)
+  );
 
   const load = useCallback(async () => {
     if (!activeProfileId) return;
@@ -147,8 +320,7 @@ export default function AssetLibrary({ profileId, onChanged }) {
     load();
   }, [load]);
 
-  const handleUpload = async (event) => {
-    const file = event.target.files?.[0];
+  const handleUpload = async (event) => {    const file = event.target.files?.[0];
     if (!file || !activeProfileId) return;
     setBusy(true);
     setError(null);
@@ -170,6 +342,30 @@ export default function AssetLibrary({ profileId, onChanged }) {
       setError(getErrorMessage(err));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleAttach = async (asset, options = {}) => {
+    if (!projectId) return;
+    setAttachBusyId(asset.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const payload = { asset_id: asset.id };
+      for (const key of ["start", "end", "audio_role", "audio_gain"]) {
+        if (options[key] !== undefined && options[key] !== "") {
+          payload[key] = options[key];
+        }
+      }
+      await api.attachAsset(projectId, payload);
+      setNotice(`Attached ${humanize(asset.kind)} "${asset.label || asset.name || asset.kind}".`);
+      await load();
+      onProjectChanged?.();
+      onChanged?.();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setAttachBusyId("");
     }
   };
 
@@ -284,7 +480,7 @@ export default function AssetLibrary({ profileId, onChanged }) {
           ref={fileRef}
           type="file"
           className="hidden"
-          accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/quicktime,video/webm"
+          accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/quicktime,video/webm,audio/mpeg,audio/wav,audio/x-m4a,audio/aac,audio/ogg,audio/flac"
           onChange={handleUpload}
           aria-label="Asset file"
         />
@@ -324,7 +520,19 @@ export default function AssetLibrary({ profileId, onChanged }) {
       ) : (
         <div className="space-y-2">
           {assets.map((a) => (
-            <AssetRow key={a.id} asset={a} onDelete={handleDelete} onArchive={handleArchive} busy={busy} />
+            <AssetRow
+              key={a.id}
+              asset={a}
+              onDelete={handleDelete}
+              onArchive={handleArchive}
+              onAttach={handleAttach}
+              projectId={projectId}
+              attached={attachedIds.has(a.id)}
+              attachDisabled={busy}
+              attachBusy={attachBusyId === a.id}
+              projectDuration={projectDuration}
+              busy={busy}
+            />
           ))}
         </div>
       )}
