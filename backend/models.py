@@ -224,6 +224,7 @@ TEMPLATE_STRUCTURED_FIELDS = (
 TEMPLATE_TEXT_FIELDS = (
     "notes", "objective", "opening_structure", "continuation_structure",
     "cta_pattern", "visual_style", "camera_pacing", "evidence_note",
+    "example_preview",
 )
 
 TEMPLATE_EDITABLE_FIELDS = TEMPLATE_STRUCTURED_FIELDS + TEMPLATE_TEXT_FIELDS + (
@@ -247,6 +248,7 @@ class CreateTemplateRequest(BaseModel):
     required_assets: Optional[List[str]] = None
     default_duration: Optional[int] = 20
     content_slots: Optional[dict] = None
+    example_preview: Optional[str] = ""
     evidence_note: Optional[str] = ""
     notes: Optional[str] = ""
 
@@ -267,6 +269,7 @@ class UpdateTemplateRequest(BaseModel):
     required_assets: Optional[List[str]] = None
     default_duration: Optional[int] = None
     content_slots: Optional[dict] = None
+    example_preview: Optional[str] = None
     evidence_note: Optional[str] = None
     notes: Optional[str] = None
 

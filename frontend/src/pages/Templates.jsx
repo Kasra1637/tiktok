@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { Textarea } from "../components/ui/textarea";
 import { Badge } from "../components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
@@ -9,7 +10,7 @@ import EmptyState from "../components/EmptyState";
 import { api, getErrorMessage } from "../lib/api";
 import {
   LayoutTemplate, Loader2, AlertTriangle, Search, Star, Clock, Layers,
-  ArrowRight, Archive,
+  ArrowRight, Archive, Plus, X,
 } from "lucide-react";
 
 function humanize(value) {
@@ -73,7 +74,314 @@ function TemplateCard({ template, onToggleFavorite }) {
   );
 }
 
+function splitList(value) {
+  return String(value || "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function slotRowsFromSlots(slots) {
+  const entries = Object.entries(slots || {});
+  return entries.length ? entries.map(([key, value]) => ({ key, value: String(value ?? "") })) : [{ key: "", value: "" }];
+}
+
+export function templateFormInitial(template = null) {
+  return {
+    name: template?.name || "",
+    category: template?.category || "",
+    app_categories: (template?.app_categories || []).join(", "),
+    audiences: (template?.audiences || []).join(", "),
+    objective: template?.objective || "",
+    opening_structure: template?.opening_structure || "",
+    hook_seconds: template?.hook_seconds ?? 3,
+    continuation_structure: template?.continuation_structure || "",
+    cta_pattern: template?.cta_pattern || "",
+    visual_style: template?.visual_style || "",
+    camera_pacing: template?.camera_pacing || "",
+    required_assets: template?.required_assets || [],
+    default_duration: template?.default_duration ?? 20,
+    slot_rows: slotRowsFromSlots(template?.content_slots),
+    example_preview: template?.example_preview || "",
+    evidence_note: template?.evidence_note || "",
+    notes: template?.notes || "",
+  };
+}
+
+export function TemplateForm({ facets, initial, submitLabel, busy, error, onCancel, onSubmit }) {
+  const [form, setForm] = useState(() => templateFormInitial(initial));
+
+  useEffect(() => {
+    setForm(templateFormInitial(initial));
+  }, [initial?.id, initial?.updated_at]);
+
+  const set = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+  const toggleAsset = (kind) => {
+    setForm((prev) => ({
+      ...prev,
+      required_assets: prev.required_assets.includes(kind)
+        ? prev.required_assets.filter((a) => a !== kind)
+        : [...prev.required_assets, kind],
+    }));
+  };
+  const setSlot = (index, patch) => {
+    setForm((prev) => ({
+      ...prev,
+      slot_rows: prev.slot_rows.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+    }));
+  };
+
+  const submit = (event) => {
+    event.preventDefault();
+    const slots = {};
+    form.slot_rows.forEach(({ key, value }) => {
+      const slot = key.trim();
+      if (slot) slots[slot] = value;
+    });
+    onSubmit({
+      name: form.name.trim(),
+      category: form.category || undefined,
+      app_categories: splitList(form.app_categories),
+      audiences: splitList(form.audiences),
+      objective: form.objective || undefined,
+      opening_structure: form.opening_structure,
+      hook_seconds: Number(form.hook_seconds) || 3,
+      continuation_structure: form.continuation_structure,
+      cta_pattern: form.cta_pattern,
+      visual_style: form.visual_style,
+      camera_pacing: form.camera_pacing,
+      required_assets: form.required_assets,
+      default_duration: Number(form.default_duration) || 20,
+      content_slots: slots,
+      example_preview: form.example_preview,
+      evidence_note: form.evidence_note,
+      notes: form.notes,
+    });
+  };
+
+  const assetKinds = facets?.asset_kinds || [];
+  const categories = [...new Set([...(facets?.hook_categories || []), ...(facets?.categories_in_use || [])])];
+  const durations = facets?.supported_durations?.length ? facets.supported_durations : [10, 15, 20, 30];
+
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="space-y-1 sm:col-span-2">
+          <span className="text-sm font-medium">Template name</span>
+          <Input value={form.name} onChange={(e) => set("name", e.target.value)} required />
+        </label>
+        <label className="space-y-1">
+          <span className="text-sm font-medium">Category</span>
+          <select
+            value={form.category}
+            onChange={(e) => set("category", e.target.value)}
+            className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
+          >
+            <option value="">Choose a category</option>
+            {categories.map((c) => (
+              <option key={c} value={c}>{humanize(c)}</option>
+            ))}
+          </select>
+        </label>
+        <label className="space-y-1">
+          <span className="text-sm font-medium">Objective</span>
+          <select
+            value={form.objective}
+            onChange={(e) => set("objective", e.target.value)}
+            className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
+          >
+            <option value="">Choose an objective</option>
+            {(facets?.objectives || []).map((o) => (
+              <option key={o} value={o}>{humanize(o)}</option>
+            ))}
+          </select>
+        </label>
+        <label className="space-y-1">
+          <span className="text-sm font-medium">Suitable app categories, comma-separated</span>
+          <Input
+            value={form.app_categories}
+            onChange={(e) => set("app_categories", e.target.value)}
+            placeholder="productivity, finance"
+          />
+        </label>
+        <label className="space-y-1">
+          <span className="text-sm font-medium">Suitable audiences, comma-separated</span>
+          <Input
+            value={form.audiences}
+            onChange={(e) => set("audiences", e.target.value)}
+            placeholder="busy parents, new users"
+          />
+        </label>
+        <label className="space-y-1">
+          <span className="text-sm font-medium">Hook seconds</span>
+          <Input
+            type="number"
+            min="1"
+            value={form.hook_seconds}
+            onChange={(e) => set("hook_seconds", e.target.value)}
+          />
+        </label>
+        <label className="space-y-1">
+          <span className="text-sm font-medium">Default duration</span>
+          <select
+            value={form.default_duration}
+            onChange={(e) => set("default_duration", e.target.value)}
+            className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
+          >
+            {durations.map((d) => (
+              <option key={d} value={d}>{d} seconds</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <label className="block space-y-1">
+        <span className="text-sm font-medium">Opening structure</span>
+        <Textarea
+          value={form.opening_structure}
+          onChange={(e) => set("opening_structure", e.target.value)}
+          className="min-h-[90px]"
+          required
+        />
+      </label>
+      <label className="block space-y-1">
+        <span className="text-sm font-medium">Continuation structure</span>
+        <Textarea
+          value={form.continuation_structure}
+          onChange={(e) => set("continuation_structure", e.target.value)}
+          className="min-h-[90px]"
+        />
+      </label>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="space-y-1">
+          <span className="text-sm font-medium">CTA pattern</span>
+          <Textarea
+            value={form.cta_pattern}
+            onChange={(e) => set("cta_pattern", e.target.value)}
+            className="min-h-[70px]"
+          />
+        </label>
+        <label className="space-y-1">
+          <span className="text-sm font-medium">Visual style</span>
+          <Textarea
+            value={form.visual_style}
+            onChange={(e) => set("visual_style", e.target.value)}
+            className="min-h-[70px]"
+          />
+        </label>
+      </div>
+      <label className="block space-y-1">
+        <span className="text-sm font-medium">Camera and pacing</span>
+        <Textarea
+          value={form.camera_pacing}
+          onChange={(e) => set("camera_pacing", e.target.value)}
+          className="min-h-[70px]"
+        />
+      </label>
+      <label className="block space-y-1">
+        <span className="text-sm font-medium">Example preview</span>
+        <Textarea
+          value={form.example_preview}
+          onChange={(e) => set("example_preview", e.target.value)}
+          className="min-h-[70px]"
+          placeholder="A concrete example instantiation of this abstract structure."
+        />
+      </label>
+
+      <div className="space-y-2">
+        <span className="text-sm font-medium">Required assets</span>
+        <div className="flex flex-wrap gap-1.5">
+          {assetKinds.map((kind) => {
+            const active = form.required_assets.includes(kind);
+            return (
+              <Button
+                key={kind}
+                type="button"
+                variant={active ? "brand" : "secondary"}
+                size="sm"
+                aria-pressed={active}
+                onClick={() => toggleAsset(kind)}
+              >
+                {humanize(kind)}
+              </Button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium">Content slots</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => set("slot_rows", [...form.slot_rows, { key: "", value: "" }])}
+          >
+            <Plus className="h-3.5 w-3.5" /> Add slot
+          </Button>
+        </div>
+        {form.slot_rows.map((row, index) => (
+          <div key={index} className="flex gap-2">
+            <Input
+              value={row.key}
+              onChange={(e) => setSlot(index, { key: e.target.value })}
+              placeholder="app_feature"
+              aria-label={`Content slot ${index + 1} name`}
+            />
+            <Input
+              value={row.value}
+              onChange={(e) => setSlot(index, { value: e.target.value })}
+              placeholder="What the plan fills in"
+              aria-label={`Content slot ${index + 1} description`}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label={`Remove content slot ${index + 1}`}
+              onClick={() => set("slot_rows", form.slot_rows.filter((_, i) => i !== index))}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="space-y-1">
+          <span className="text-sm font-medium">Evidence note</span>
+          <Textarea
+            value={form.evidence_note}
+            onChange={(e) => set("evidence_note", e.target.value)}
+            className="min-h-[70px]"
+          />
+        </label>
+        <label className="space-y-1">
+          <span className="text-sm font-medium">Internal notes</span>
+          <Textarea
+            value={form.notes}
+            onChange={(e) => set("notes", e.target.value)}
+            className="min-h-[70px]"
+          />
+        </label>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit" variant="brand" disabled={busy}>
+          {busy && <Loader2 className="h-4 w-4 animate-spin" />} {submitLabel}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 export default function Templates() {
+  const navigate = useNavigate();
   const [templates, setTemplates] = useState([]);
   const [facets, setFacets] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -83,6 +391,9 @@ export default function Templates() {
   const [objective, setObjective] = useState("");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [includeArchived, setIncludeArchived] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createError, setCreateError] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -124,6 +435,20 @@ export default function Templates() {
     }
   };
 
+  const handleCreate = async (payload) => {
+    setCreateBusy(true);
+    setCreateError(null);
+    try {
+      const created = await api.createTemplate(payload);
+      setShowCreate(false);
+      navigate(`/templates/${created.id}`);
+    } catch (err) {
+      setCreateError(getErrorMessage(err));
+    } finally {
+      setCreateBusy(false);
+    }
+  };
+
   const categoriesInUse = useMemo(() => {
     const fromFacets = facets?.categories_in_use || [];
     const fromData = [...new Set(templates.map((t) => t.category).filter(Boolean))];
@@ -138,6 +463,11 @@ export default function Templates() {
         icon={LayoutTemplate}
         title="Hook Templates"
         description="Reusable creative structures — an opening mechanic, a continuation shape, and a CTA pattern. No source video required, and no template is tied to a specific creator."
+        actions={
+          <Button variant="brand" size="sm" onClick={() => { setCreateError(null); setShowCreate(true); }}>
+            <Plus className="h-3.5 w-3.5" /> New template
+          </Button>
+        }
       />
 
       {error && (
@@ -263,6 +593,42 @@ export default function Templates() {
             described as proven without measured performance data.
           </p>
         </>
+      )}
+
+      {showCreate && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Create template"
+          onClick={() => setShowCreate(false)}
+        >
+          <div
+            className="surface my-8 w-full max-w-3xl space-y-4 rounded-2xl p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="font-display text-base font-semibold">Create an internal template</h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowCreate(false)}
+                aria-label="Close template creation"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <TemplateForm
+              facets={facets}
+              initial={null}
+              submitLabel="Create template"
+              busy={createBusy}
+              error={createError}
+              onCancel={() => setShowCreate(false)}
+              onSubmit={handleCreate}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

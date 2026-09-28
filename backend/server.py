@@ -543,6 +543,7 @@ async def init_db():
                 required_assets TEXT,
                 default_duration INTEGER,
                 content_slots TEXT,
+                example_preview TEXT,
                 version INTEGER DEFAULT 1,
                 archived INTEGER DEFAULT 0,
                 is_favorite INTEGER DEFAULT 0,
@@ -1171,6 +1172,9 @@ async def init_db():
         if "thumbnail_bytes" not in template_cols:
             logger.info("Migration: adding durable thumbnail_bytes backup to hook_templates")
             await conn.execute("ALTER TABLE hook_templates ADD COLUMN thumbnail_bytes BLOB")
+        if "example_preview" not in template_cols:
+            logger.info("Migration: adding example_preview column to hook_templates")
+            await conn.execute("ALTER TABLE hook_templates ADD COLUMN example_preview TEXT")
         await conn.commit()
 
         # Best-effort backfill for templates whose cache file still exists at
@@ -5842,10 +5846,10 @@ async def create_template(payload: CreateTemplateRequest, user_id: str = Depends
         """INSERT INTO hook_templates
            (id, name, category, app_categories, audiences, objective, opening_structure,
             hook_seconds, continuation_structure, cta_pattern, visual_style, camera_pacing,
-            required_assets, default_duration, content_slots, evidence_note, notes,
+            required_assets, default_duration, content_slots, example_preview, evidence_note, notes,
             version, archived, is_favorite, origin, review_status, times_used,
             created_at, updated_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (template_id, values.get("name"), values.get("category", "other"),
          values.get("app_categories", "[]"), values.get("audiences", "[]"),
          values.get("objective", ""), values["opening_structure"],
@@ -5853,8 +5857,9 @@ async def create_template(payload: CreateTemplateRequest, user_id: str = Depends
          values.get("cta_pattern", ""), values.get("visual_style", ""),
          values.get("camera_pacing", ""), values.get("required_assets", "[]"),
          values.get("default_duration", template_library.DEFAULT_DURATION),
-         values.get("content_slots", "{}"), values.get("evidence_note", ""),
-         values.get("notes", ""), 1, 0, 0, "custom", "approved", 0, now, now, user_id),
+         values.get("content_slots", "{}"), values.get("example_preview", ""),
+         values.get("evidence_note", ""), values.get("notes", ""),
+         1, 0, 0, "custom", "approved", 0, now, now, user_id),
     )
     logger.info(f"Created library template {template_id} ('{name}')")
     return _public_library_template(
@@ -5955,10 +5960,10 @@ async def duplicate_template(template_id: str, user_id: str = Depends(get_curren
         """INSERT INTO hook_templates
            (id, name, category, app_categories, audiences, objective, opening_structure,
             hook_seconds, continuation_structure, cta_pattern, visual_style, camera_pacing,
-            required_assets, default_duration, content_slots, evidence_note, notes,
+            required_assets, default_duration, content_slots, example_preview, evidence_note, notes,
             version, archived, is_favorite, origin, review_status, times_used,
             created_at, updated_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (new_id, name, source.get("category"),
          json.dumps(_normalize_str_list(source.get("app_categories"))),
          json.dumps(_normalize_str_list(source.get("audiences"))),
@@ -5968,6 +5973,7 @@ async def duplicate_template(template_id: str, user_id: str = Depends(get_curren
          json.dumps(_normalize_str_list(source.get("required_assets"))),
          source.get("default_duration"),
          json.dumps(source.get("content_slots") or {}),
+         source.get("example_preview") or "",
          source.get("evidence_note") or "",
          source.get("notes") or "", 1, 0, 0, "custom", "approved", 0, now, now, user_id),
     )

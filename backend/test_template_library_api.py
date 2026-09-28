@@ -200,14 +200,17 @@ class TestTemplateCrud:
             required_assets=["screenshot", "logo"],
             default_duration=15,
             content_slots={"app_feature": "the timer"},
+            example_preview="Open on the finished timer, then show two taps.",
         ), user_id=ANON))
         assert made["origin"] == "custom"
         assert made["is_usable"] is True
         assert made["required_assets"] == ["screenshot", "logo"]
         assert made["content_slots"] == {"app_feature": "the timer"}
+        assert made["example_preview"] == "Open on the finished timer, then show two taps."
 
         fetched = _run(api.get_template(template_id=made["id"], user_id=ANON))
         assert fetched["name"] == "Internal QA Template"
+        assert fetched["example_preview"] == made["example_preview"]
 
     def test_update_bumps_version(self, api):
         from models import CreateTemplateRequest, UpdateTemplateRequest
@@ -222,6 +225,45 @@ class TestTemplateCrud:
         assert updated["version"] == 2
         assert updated["continuation_structure"] == "B"
 
+    def test_update_supports_every_editable_field(self, api):
+        from models import CreateTemplateRequest, UpdateTemplateRequest
+        made = _run(api.create_template(payload=CreateTemplateRequest(
+            name="Editable Template", opening_structure="A"), user_id=ANON))
+        updated = _run(api.update_template(
+            template_id=made["id"],
+            payload=UpdateTemplateRequest(
+                name="Edited Template",
+                category="demo",
+                app_categories=["productivity"],
+                audiences=["busy parents"],
+                objective="demonstrate_feature",
+                opening_structure="Edited opening.",
+                hook_seconds=4,
+                continuation_structure="Edited continuation.",
+                cta_pattern="Edited CTA.",
+                visual_style="Edited visual.",
+                camera_pacing="Edited pacing.",
+                required_assets=["screenshot"],
+                default_duration=15,
+                content_slots={"app_feature": "timer"},
+                example_preview="Edited example.",
+                evidence_note="Edited evidence.",
+                notes="Edited notes.",
+            ),
+            user_id=ANON,
+        ))
+        assert updated["version"] == 2
+        assert updated["name"] == "Edited Template"
+        assert updated["category"] == "demo"
+        assert updated["app_categories"] == ["productivity"]
+        assert updated["audiences"] == ["busy parents"]
+        assert updated["objective"] == "demonstrate_feature"
+        assert updated["hook_seconds"] == 4
+        assert updated["required_assets"] == ["screenshot"]
+        assert updated["default_duration"] == 15
+        assert updated["content_slots"] == {"app_feature": "timer"}
+        assert updated["example_preview"] == "Edited example."
+
     def test_update_rejects_empty_name(self, api):
         from models import CreateTemplateRequest, UpdateTemplateRequest
         made = _run(api.create_template(payload=CreateTemplateRequest(
@@ -232,12 +274,20 @@ class TestTemplateCrud:
         assert err.value.status_code == 400
 
     def test_duplicate_copies_structure_and_becomes_custom(self, api):
-        source = _run(api.list_templates(q="Three Mistakes", user_id=ANON))["templates"][0]
+        from models import CreateTemplateRequest
+        source = _run(api.create_template(payload=CreateTemplateRequest(
+            name="Duplicated QA Template",
+            opening_structure="Open on the finished result.",
+            continuation_structure="Explain, then CTA.",
+            content_slots={"app_feature": "the timer"},
+            example_preview="Duplicated example.",
+        ), user_id=ANON))
         copy = _run(api.duplicate_template(template_id=source["id"], user_id=ANON))
         assert copy["origin"] == "custom"
         assert copy["opening_structure"] == source["opening_structure"]
         assert copy["continuation_structure"] == source["continuation_structure"]
         assert copy["content_slots"] == source["content_slots"]
+        assert copy["example_preview"] == "Duplicated example."
         assert copy["id"] != source["id"]
         assert copy["name"].endswith("(copy)")
 

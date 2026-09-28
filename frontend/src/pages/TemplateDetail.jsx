@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
-import { Textarea } from "../components/ui/textarea";
 import { Badge } from "../components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
+import { TemplateForm } from "./Templates";
 import { api, getErrorMessage } from "../lib/api";
 import {
   LayoutTemplate, Loader2, AlertTriangle, ArrowLeft, Star, Copy, Archive,
@@ -32,20 +32,21 @@ export default function TemplateDetail() {
   const { templateId } = useParams();
   const navigate = useNavigate();
   const [template, setTemplate] = useState(null);
+  const [facets, setFacets] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [saveError, setSaveError] = useState(null);
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState({ opening_structure: "", continuation_structure: "" });
 
   const load = useCallback(async () => {
     try {
-      const data = await api.getTemplate(templateId);
+      const [data, facetData] = await Promise.all([
+        api.getTemplate(templateId),
+        api.getTemplateFacets().catch(() => null),
+      ]);
       setTemplate(data);
-      setDraft({
-        opening_structure: data.opening_structure || "",
-        continuation_structure: data.continuation_structure || "",
-      });
+      setFacets(facetData);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -105,13 +106,14 @@ export default function TemplateDetail() {
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = async (payload) => {
     setBusy(true);
+    setSaveError(null);
     try {
-      setTemplate(await api.updateTemplate(templateId, draft));
+      setTemplate(await api.updateTemplate(templateId, payload));
       setEditing(false);
     } catch (err) {
-      setError(getErrorMessage(err));
+      setSaveError(getErrorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -212,52 +214,26 @@ export default function TemplateDetail() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="surface space-y-5 rounded-2xl p-5 lg:col-span-2">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="font-display text-base font-semibold">Structure</h3>
-            {editing ? (
-              <div className="flex gap-2">
-                <Button size="sm" variant="brand" onClick={handleSave} disabled={busy}>
-                  Save
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setEditing(false);
-                    setDraft({
-                      opening_structure: template.opening_structure || "",
-                      continuation_structure: template.continuation_structure || "",
-                    });
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            ) : (
-              <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
+            <h3 className="font-display text-base font-semibold">
+              {editing ? "Customize every field" : "Structure"}
+            </h3>
+            {!editing && (
+              <Button size="sm" variant="secondary" onClick={() => { setSaveError(null); setEditing(true); }}>
                 Edit
               </Button>
             )}
           </div>
 
           {editing ? (
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Opening structure</label>
-                <Textarea
-                  value={draft.opening_structure}
-                  onChange={(e) => setDraft({ ...draft, opening_structure: e.target.value })}
-                  className="min-h-[90px]"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Continuation structure</label>
-                <Textarea
-                  value={draft.continuation_structure}
-                  onChange={(e) => setDraft({ ...draft, continuation_structure: e.target.value })}
-                  className="min-h-[90px]"
-                />
-              </div>
-            </div>
+            <TemplateForm
+              facets={facets}
+              initial={template}
+              submitLabel="Save template"
+              busy={busy}
+              error={saveError}
+              onCancel={() => setEditing(false)}
+              onSubmit={handleSave}
+            />
           ) : (
             <div className="space-y-4">
               <Section icon={Film} label="Opening structure">
@@ -271,6 +247,9 @@ export default function TemplateDetail() {
               </Section>
               <Section icon={Type} label="CTA pattern">
                 {template.cta_pattern}
+              </Section>
+              <Section icon={Target} label="Example preview">
+                {template.example_preview}
               </Section>
             </div>
           )}
