@@ -146,6 +146,21 @@ def is_studio_eligible(key: str) -> bool:
     return not VIDEO_MODELS[key].get("is_video_editor", False)
 
 
+def accepts_identity_reference(key: str) -> bool:
+    """Whether the provider can take an identity image as input_references.
+
+    Seedance 2.5 accepts up to 30 reference images; MiniMax H3 up to 9. Both
+    coexist with no source video. Editors (Aleph) need a real clip to edit —
+    the template workflow has none — so they are refused here too.
+    """
+    if not is_known(key):
+        return False
+    cap = capability(key)
+    if cap.get("is_video_editor", False):
+        return False
+    return int(cap.get("max_reference_images", 0) or 0) > 0
+
+
 def capability(key: Optional[str] = None) -> dict:
     """
     Full capability record for a provider.

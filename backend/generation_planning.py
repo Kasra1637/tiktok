@@ -163,6 +163,10 @@ def build_single_pass_prompt(
     if asset_notes:
         sections.append(f"Real app assets that will be composited over this footage: {asset_notes}")
 
+    person_anchor = person_anchor_notes(plan.get("assets") or [])
+    if person_anchor:
+        sections.append(person_anchor)
+
     sections.append(
         "Keep one consistent person, hand, or subject for the entire clip. Vertical framing "
         "throughout. The result must look like a single real take, not an edit."
@@ -256,10 +260,37 @@ def is_recoverable_error(message: str) -> bool:
     return any(marker in text for marker in recoverable_markers)
 
 
+def person_anchor_notes(assets: list) -> str:
+    """
+    Return a prompt section locking the on-camera person to the project's
+    attached character reference, or "" when none is attached.
+
+    The reference image itself rides along as a model input (see server.py's
+    _submit_generation, which passes it as an input_references identity
+    guide). This text tells the model what that image IS: the exact person
+    who must appear on camera. First matching character_reference asset wins —
+    attach only one per project.
+    """
+    if not assets:
+        return ""
+    for asset in assets:
+        if not isinstance(asset, dict):
+            continue
+        if str(asset.get("kind") or "").strip().lower() != "character_reference":
+            continue
+        label = str(asset.get("name") or asset.get("label") or "the attached character reference").strip()
+        return (
+            "The person on camera must be the exact individual in the attached "
+            f"character reference image ({label}): same face, same appearance, "
+            "same age. Do not invent a different person, and do not describe or "
+            "alter them. They star in every scene from opening to call to action."
+        )
+    return ""
+
+
 def asset_notes(assets: list) -> str:
     """
     Summarise attached assets for the prompt.
-
     Only names and kinds are described: the point is to tell the model what
     will be laid over the footage so it composes around it.
     """

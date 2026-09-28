@@ -7,6 +7,7 @@ persistence, and that a failed attempt is never silently overwritten.
 """
 import asyncio
 import importlib
+import json
 import os
 import sys
 import tempfile
@@ -490,6 +491,83 @@ class TestListingAndCapabilities:
     def test_capability_endpoint_lists_ineligible_separately(self, api):
         result = _run(api.list_studio_video_models())
         assert any(m["key"] == "aleph-2" for m in result["ineligible"])
+
+
+class TestStudioIdentityReference:
+    def _anchor_project(self, api, name="Anchor Person"):
+        """A ready project with a real character_reference asset attached."""
+        from models import (
+            BrandProfileCreateRequest, ApproveAppProfileRequest,
+            CreateStudioProjectRequest, now_iso,
+        )
+        profile = _run(api.create_brand(payload=BrandProfileCreateRequest(
+            brand_name=name, app_category="Productivity",
+        ), user_id=ANON))
+        _run(api.approve_app_profile(
+            profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=ANON))
+        template = _run(api.list_templates(user_id=ANON))["templates"][0]
+        project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
+            brand_profile_id=profile["id"], template_id=template["id"],
+        ), user_id=ANON))
+
+        # A real 1x1 PNG on disk so the identity resolver accepts it.
+        face = Path(tempfile.mkdtemp(prefix="tiktok-anchor-")) / "face.png"
+        face.write_bytes(bytes.fromhex(
+            "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+            "0000000d49444154789c626001000000ffff0300000600055d3866680000000049454e44ae426082"))
+        asset_id = str(uuid.uuid4())
+        now = now_iso()
+        _run(api._execute(
+            "INSERT INTO assets (id, brand_profile_id, kind, name, file_path, label,"
+            " created_at, updated_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (asset_id, profile["id"], "character_reference", "Founder face",
+             str(face), "Founder face", now, now, ANON)))
+        _run(api._execute(
+            "UPDATE studio_projects SET assets = ?, hook_line = ?, script = ?,"
+            " status = 'ready_for_generation' WHERE id = ?",
+            (json.dumps([{
+                "asset_id": asset_id, "kind": "character_reference",
+                "label": "Founder face", "file_path": str(face),
+            }]),
+             "Stop writing empty pages", "A short script for the app.", project["id"])))
+        return _run(api.get_studio_project(project["id"], ANON))
+
+    def test_identity_reference_rides_along(self, api, monkeypatch):
+        from models import StudioGenerationRequest
+        project = self._anchor_project(api)
+        calls = _mock_submit(api, monkeypatch)
+        _run(api.submit_project_generation(
+            project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        assert len(calls) == 1
+        refs = calls[0].get("input_references") or []
+        assert len(refs) == 1
+        assert refs[0]["type"] == "image_url"
+        assert refs[0]["image_url"]["url"].startswith("data:image/png;base64,")
+        assert "exact individual" in calls[0]["prompt"]
+
+    def test_no_anchor_means_no_references(self, api, monkeypatch):
+        from models import StudioGenerationRequest
+        project, _, _ = _ready_project(api, "No Anchor")
+        calls = _mock_submit(api, monkeypatch)
+        _run(api.submit_project_generation(
+            project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        assert not calls[0].get("input_references")
+        assert "exact individual" not in calls[0]["prompt"]
+
+    def test_missing_file_is_refused_loudly(self, api, monkeypatch):
+        from models import StudioGenerationRequest
+        project = self._anchor_project(api, "Missing Face")
+        _run(api._execute(
+            "UPDATE studio_projects SET assets = ? WHERE id = ?",
+            (json.dumps([{
+                "asset_id": "no-such-asset", "kind": "character_reference",
+                "label": "Founder face", "file_path": "does-not-exist.png",
+            }]), project["id"])))
+        _mock_submit(api, monkeypatch)
+        with pytest.raises(HTTPException) as err:
+            _run(api.submit_project_generation(
+                project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        assert err.value.status_code == 409
 
     def test_archive_marks_status(self, api, monkeypatch):
         from models import StudioGenerationRequest

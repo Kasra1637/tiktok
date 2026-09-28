@@ -6919,6 +6919,69 @@ async def _record_cost(generation_id: str, response: dict) -> None:
     )
 
 
+async def _studio_identity_references(assets: list, model_key: str, user_id: str) -> list:
+    """Resolve the project's attached character_reference into input_references
+    for the video model, or return [] when none is attached.
+    The reference is the identity guide; the person-anchor prompt section
+    (generation_planning.person_anchor_notes) tells the model whose face it
+    is and what to do with it. Legacy face-swap mechanics proved the pairing
+    works: image reference in, matching person out.
+
+    Guardrails, all loud:
+    - Only the first character_reference asset is used.
+    - The asset row must exist, belong to this user, and point at a real
+      file on disk; otherwise the submission fails with a 409, never with a
+      quietly invented lookalike.
+    - Models that cannot take identity images are refused via
+      video_providers.accepts_identity_reference, before any spend.
+    """
+    anchor = None
+    for asset in assets or []:
+        if not isinstance(asset, dict):
+            continue
+        if str(asset.get("kind") or "").strip().lower() != "character_reference":
+            continue
+        anchor = asset
+        break
+    if anchor is None:
+        return []
+
+    if not video_providers.accepts_identity_reference(model_key):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "The selected video model cannot accept a character reference. "
+                "Detach the character reference asset or switch to a model that "
+                "supports identity images."
+            ),
+        )
+
+    asset_id = anchor.get("asset_id") or ""
+    row = None
+    if asset_id:
+        row = await _fetch_one(
+            "SELECT file_path FROM assets WHERE id = ? AND user_id = ?", (asset_id, user_id)
+        )
+    path = (row or {}).get("file_path") if isinstance(row, dict) else anchor.get("file_path")
+    if not path or not Path(path).is_file():
+        logger.warning(f"Character reference {asset_id or '(unresolved)'} has no file on disk; refusing generation")
+        raise HTTPException(
+            status_code=409,
+            detail="The attached character reference image is missing its file. Re-upload it before generating.",
+        )
+    from ai_service import image_to_base64
+
+    try:
+        b64 = image_to_base64(Path(path))
+    except Exception as e:
+        logger.warning(f"Character reference at {path} could not be read: {e}")
+        raise HTTPException(
+            status_code=409,
+            detail="The attached character reference image could not be read. Re-upload it before generating.",
+        ) from e
+    return [{"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}}]
+
+
 async def _submit_generation(
     project: dict,
     profile: dict,
@@ -6961,6 +7024,16 @@ async def _submit_generation(
         is_extension=is_extension,
     )
 
+    # Avatar influencer: an attached character_reference rides along as an
+    # input_references identity guide, following the proven legacy face-swap
+    # mechanics (identity image + prompt lock, no V2V video involved). First
+    # matching reference wins — attach only one per project. Anything else
+    # (missing file, a model that refuses references) fails the submission
+    # loudly rather than spending money on a lookalike.
+    studio_references = await _studio_identity_references(
+        project.get("assets") or [], model_key, user_id
+    )
+
     generation_id = str(uuid.uuid4())
     now = now_iso()
     await _execute(
@@ -6986,6 +7059,7 @@ async def _submit_generation(
                 prompt=prompt,
                 duration=seconds,
                 model=model_key,
+                input_references=studio_references or None,
                 # Default to native audio when the provider offers it; the plan's
                 # sound direction is already written into the prompt.
                 generate_audio=(
