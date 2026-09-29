@@ -22,14 +22,32 @@ yarn install
 
 Set `ALLOW_NPM_INSTALL=true` to bypass the guard.
 
-The script names below are CRA's defaults; run them with `yarn` (`yarn start`,
-`yarn build`, `yarn test`).
+Scripts run through craco, not plain CRA (`yarn start`, `yarn build`,
+`yarn test` invoke `craco start` / `craco build` / `craco test`). Two extra
+project scripts exist:
+
+```bash
+yarn check:imports   # every named import resolves
+yarn check:logic      # pure frontend helpers behave (video lengths, intents,
+                      # profile selection) — evaluated from the shipped files
+yarn check            # both of the above
+```
+
+## Environment
+
+CRA inlines `process.env.REACT_APP_*` at **build** time, so these must be set
+when the bundle is built, not at runtime:
+
+```bash
+REACT_APP_BACKEND_URL=http://localhost:8000
+REACT_APP_CLERK_PUBLISHABLE_KEY=pk_...   # optional; unset means anonymous access
+```
 
 ## Available Scripts
 
 In the project directory, you can run:
 
-### `npm start`
+### `yarn start`
 
 Runs the app in the development mode.\
 Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
@@ -37,12 +55,12 @@ Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
 The page will reload when you make changes.\
 You may also see any lint errors in the console.
 
-### `npm test`
+### `yarn test`
 
 Launches the test runner in the interactive watch mode.\
 See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
 
-### `npm run build`
+### `yarn build`
 
 Builds the app for production to the `build` folder.\
 It correctly bundles React in production mode and optimizes the build for the best performance.
@@ -52,11 +70,10 @@ Your app is ready to be deployed!
 
 See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
 
-### `npm run eject`
+### `eject`
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+Not available. This project builds through craco rather than raw react-scripts,
+so there is nothing to eject from; customize via `craco.config.js` instead.
 
 Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
 

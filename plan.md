@@ -1,5 +1,13 @@
 # plan.md — TikTok Hook Analyzer + Customization (No Auth / No Landing)
 
+> **Status note (added later, history preserved below).** This document is the
+> plan for the original V1 app — MongoDB, Gemini, no auth — and is kept as a
+> record of what was asked for then. The app was since remade around App
+> Profiles, hook templates, and the creation studio; the current spec is
+> `README.md`. Of this plan's Phase 3, the cost controls (deduplicate LLM
+> calls, rate limiting, background queue) are still open; everything else was
+> either built in the remake or superseded by it.
+
 ## 1) Objectives
 - Provide a niche-based browsing feed of **curated trending TikTok videos** (no TikTok API) + **manual TikTok URL** analysis.
 - Implement a **real hook-analysis pipeline** for the first 2–3 seconds: frames → vision LLM → **structured JSON** insights.

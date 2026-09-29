@@ -72,6 +72,8 @@ All optional except `OPENROUTER_API_KEY` if you want AI features. Copy
 | `R2_*` | Durable video storage. Unset means videos don't survive a redeploy |
 | `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` | Cloud SQLite. Unset uses local SQLite |
 | `MODAL_FRAME_EXTRACTOR_URL` | Offloads frame extraction off the API host |
+| `MODAL_SHARED_SECRET` | Authenticates the Modal frame-extraction worker |
+| `CORS_ORIGINS` | Allowed browser origins, comma-separated. Defaults to `*` |
 | `VIDEO_MODEL_DEFAULT` | Swap video provider without a code change |
 | `VIDEO_MODEL_ALLOWLIST` | Restrict which providers may be used at all |
 | `OVERLAY_FONT` | Font file for captions |
@@ -151,11 +153,7 @@ cd backend
 python -m pytest -q
 ```
 
-**474 passing, 3 failing.** The three failures are in
-`test_face_swap_prompt.py` and are **pre-existing**: they assert a prompt
-contract string removed in an earlier commit and fail identically at `fcc8a35`
-(the last commit before this work). They belong to the demoted legacy
-exact-match flow and were left untouched rather than rewritten to pass.
+**639 passing, 0 failing** (`cd backend`, `python -m pytest -q`).
 
 Overlay tests render real MP4s with ffmpeg and assert on output, because the
 worst bugs in that path (an orphaned filter chain, a 600-second output) exited
@@ -223,7 +221,7 @@ Other constraints:
 - `hook_templates` → **Hook Template Library** with structure fields,
   versioning, favorites, archive, and publication
 - Video generation → **one job per video** with provenance and cost tracking
-- Nav → Create / Insight / Setup / Legacy
+- Nav → Create / Insight / Research
 
 ### Added
 
@@ -231,19 +229,32 @@ App Profiles, content angles, the 18-template curated library, the
 recommendation engine, the creation studio, deterministic claim safety, the
 provider capability layer, the per-App-Profile asset library, deterministic
 overlay compositing, generation history, nine controlled variation axes,
-manual performance logging, trend research, analytics, structured feedback,
-operations, dashboard, and settings.
+manual performance logging, trend research, analytics, and structured feedback.
+
+### Removed since
+
+Nothing was deleted lightly; each of these was a view *of* the work rather
+than a place *of* work, and everything each one showed is still served where
+the work happens:
+
+| Removed | Where its content lives now |
+|---|---|
+| Operations (`/operations`) | Analytics (costs, rework), History (failures + Retry), per-generation endpoints |
+| Settings (`/settings`) | Studio footer (never-publishes line), Analytics (entered-by-hand figures), Create Video (not-proven-performers note) |
+| Dashboard (`/`) | Analytics (totals), History (failures + Retry), the sidebar (next steps). `/` redirects to `/create` |
+| App Profiles list (`/app-profiles`) | Your app (`/brand`) for research/edit/approve; the profile detail page survives for angles, templates, and per-app drafts. `/app-profiles` redirects to `/brand` |
 
 ### Removed / demoted
 
-Nothing was deleted. The exact-match recreation flow is **demoted** to a
-Legacy nav group and kept working:
+Pages that were views *of* the work rather than places *of* work have been
+deleted outright (see "Removed since" above). The exact-match recreation flow
+is **demoted** to the Research nav group and kept working:
 
 | Route | Was | Now |
 |---|---|---|
-| `/discover` | primary entry | Legacy |
-| `/face-swap` | primary creation | Legacy |
-| `/bookmarks` | Hook Templates | Legacy (renamed Saved Hooks) |
+| `/discover` | primary entry | Research group |
+| `/face-swap` | primary creation | Route removed; the backend helpers (`face_crop.py`, AI service face functions) remain for Trend Research and legacy comparison |
+| `/bookmarks` | Hook Templates | Research group (Saved Hooks) |
 | `/history` | exact-match history | **Generation History** (old one at `/legacy-history`) |
 
 No code path can publish, post, schedule, engage, or capture platform
