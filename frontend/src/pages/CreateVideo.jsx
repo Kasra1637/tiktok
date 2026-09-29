@@ -20,6 +20,10 @@ import {
   describeEmptySelection,
 } from "../lib/profileSelection";
 import {
+  requiredAssetStatus,
+  allRequiredAssetsAttached,
+} from "../lib/templateRequirements";
+import {
   Clapperboard, Loader2, AlertTriangle, Briefcase, Target, LayoutTemplate,
   Image as ImageIcon, FileText, Check, ChevronLeft, ChevronRight, Sparkles,
   Save, CheckCircle2, Star, Plus, Trash2,
@@ -38,6 +42,98 @@ const STEPS = [
   { key: "plan", label: "Creative plan", icon: FileText },
   { key: "review", label: "Review", icon: CheckCircle2 },
 ];
+
+function formatTemplateUse(n) {
+  if (!n) return "Never used";
+  return n === 1 ? "Used once" : `Used ${n} times`;
+}
+
+/**
+ * One recommended template. The first fit reason and limitation show inline;
+ * the rest — including this app's own recorded feedback, which the engine
+ * inserts at position 0 — open on demand so the card stays scannable.
+ *
+ * A div with button semantics rather than a <button>: the expand toggle is
+ * interactive, and interactive elements cannot nest inside a button.
+ */
+function RecommendationCard({ r, selected, onSelect }) {
+  const [expanded, setExpanded] = useState(false);
+  const reasons = Array.isArray(r.why_it_fits) ? r.why_it_fits : [];
+  const limits = Array.isArray(r.limitations) ? r.limitations : [];
+  const hiddenCount = Math.max(0, reasons.length - 1) + Math.max(0, limits.length - 1);
+  const example =
+    typeof r.template.example_preview === "string" && r.template.example_preview.trim()
+      ? r.template.example_preview.trim()
+      : "";
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      aria-pressed={selected}
+      className={`w-full rounded-xl border p-3 text-left transition-colors ${
+        selected
+          ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
+          : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium">{r.template.name}</span>
+        <span className="flex items-center gap-2">
+          <Badge variant="outline" className="text-[11px]">
+            {r.suggested_duration}s
+          </Badge>
+          <Badge variant="secondary" className="text-[11px]">
+            {formatTemplateUse(r.template.times_used)}
+          </Badge>
+          {selected && <Check className="h-4 w-4 text-[color:var(--brand-indigo)]" />}
+        </span>
+      </div>
+      {reasons[0] && (
+        <p className="mt-1 text-xs text-muted-foreground">{reasons[0]}</p>
+      )}
+      {limits[0] && (
+        <p className="mt-0.5 text-[11px] text-muted-foreground/80">
+          {limits[0]}
+        </p>
+      )}
+      {example && (
+        <p className="mt-1 text-xs text-foreground/80">
+          <span className="text-muted-foreground">Sounds like: </span>
+          &ldquo;{example}&rdquo;
+        </p>
+      )}
+      {expanded && (
+        <div className="mt-2 space-y-1 border-t border-[color:var(--hairline)] pt-2">
+          {reasons.slice(1).map((reason, i) => (
+            <p key={`r-${i}`} className="text-xs text-muted-foreground">{reason}</p>
+          ))}
+          {limits.slice(1).map((limitation, i) => (
+            <p key={`l-${i}`} className="text-[11px] text-muted-foreground/80">{limitation}</p>
+          ))}
+        </div>
+      )}
+      {hiddenCount > 0 && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded((v) => !v);
+          }}
+          className="mt-1.5 text-[11px] font-medium text-[color:var(--brand-indigo)] hover:underline"
+        >
+          {expanded ? "Show less" : `Show all ${hiddenCount} more`}
+        </button>
+      )}
+    </div>
+  );
+}
 
 function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -701,36 +797,12 @@ export default function CreateVideo() {
               <div className="space-y-2">
                 <span className="eyebrow block">Recommended</span>
                 {recommendations.map((r) => (
-                  <button
+                  <RecommendationCard
                     key={r.template.id}
-                    type="button"
-                    onClick={() => setTemplateId(r.template.id)}
-                    className={`w-full rounded-xl border p-3 text-left transition-colors ${
-                      templateId === r.template.id
-                        ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
-                        : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium">{r.template.name}</span>
-                      <span className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-[11px]">
-                          {r.suggested_duration}s
-                        </Badge>
-                        {templateId === r.template.id && (
-                          <Check className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-                        )}
-                      </span>
-                    </div>
-                    {r.why_it_fits?.[0] && (
-                      <p className="mt-1 text-xs text-muted-foreground">{r.why_it_fits[0]}</p>
-                    )}
-                    {r.limitations?.[0] && (
-                      <p className="mt-0.5 text-[11px] text-muted-foreground/80">
-                        {r.limitations[0]}
-                      </p>
-                    )}
-                  </button>
+                    r={r}
+                    selected={templateId === r.template.id}
+                    onSelect={() => setTemplateId(r.template.id)}
+                  />
                 ))}
               </div>
             )}
@@ -773,10 +845,29 @@ export default function CreateVideo() {
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">{template.opening_structure}</p>
                 {template.required_assets?.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {template.required_assets.map((a) => (
-                      <Badge key={a} variant="outline" className="text-[11px]">{humanize(a)}</Badge>
+                  <div className="mt-2 space-y-1.5">
+                    <span className="eyebrow block">Needs from you</span>
+                    {requiredAssetStatus(template.required_assets, project?.assets).map((r, i) => (
+                      <div key={`${r.kind || "unnamed"}-${i}`} className="flex items-center gap-2 text-xs">
+                        {project ? (
+                          r.have ? (
+                            <Check className="h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />
+                          ) : (
+                            <span aria-hidden="true" className="h-3.5 w-3.5 shrink-0 rounded-full border border-[color:var(--hairline-strong)]" />
+                          )
+                        ) : null}
+                        <span className={r.have ? "text-muted-foreground" : ""}>{humanize(r.kind)}</span>
+                        {!r.have && project && (
+                          <span className="text-muted-foreground">— not attached yet</span>
+                        )}
+                      </div>
                     ))}
+                    {project &&
+                      !allRequiredAssetsAttached(template.required_assets, project?.assets) && (
+                        <Button variant="secondary" size="sm" className="mt-1" onClick={() => setStep(3)}>
+                          <ImageIcon className="h-3.5 w-3.5" /> Attach in the Assets step
+                        </Button>
+                      )}
                   </div>
                 )}
               </div>

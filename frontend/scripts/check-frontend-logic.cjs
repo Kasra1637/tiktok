@@ -315,6 +315,40 @@ check("a missing pathname is not an auth page",
   A.shouldForceSignIn({ attemptedAuth: true, clerkConfigured: true }) === true);
 
 console.log("\n" + "=".repeat(70));
+console.log("frontend/src/lib/templateRequirements.js");
+console.log("=".repeat(70));
+
+const T = loadModule(path.resolve(__dirname, "..", "src", "lib", "templateRequirements.js"));
+
+// Step 2 names what a template needs; step 3 attaches it. Without a
+// have/missing state the founder holds the requirement in memory across
+// steps. These pin the matching rule behind the have/missing rows.
+console.log("\nrequiredAssetStatus - the draft's kinds decide, nothing else");
+const ATTACHED = [{ kind: "screenshot" }, { kind: "Character_Reference" }];
+let rows = T.requiredAssetStatus(["character_reference", "screenshot", "logo"], ATTACHED);
+check("matching ignores case and whitespace",
+  rows[0].have === true && rows[1].have === true && rows[2].have === false, rows);
+check("template order is preserved",
+  rows.map((r) => r.kind).join() === "character_reference,screenshot,logo");
+check("an attached asset with no kind never matches",
+  T.requiredAssetStatus(["screenshot"], [{}, { kind: null }])[0].have === false);
+check("a blank requirement is named but never met",
+  (() => { const r = T.requiredAssetStatus(["  "], ATTACHED)[0]; return r.kind === "" && r.have === false; })());
+check("non-array required is safe", T.requiredAssetStatus(null, ATTACHED).join() === "");
+check("non-array attached is safe",
+  T.requiredAssetStatus(["screenshot"], "nonsense")[0].have === false);
+check("no arguments is safe", T.requiredAssetStatus().join() === "");
+
+console.log("\nallRequiredAssetsAttached - the jump link's condition");
+check("all attached", T.allRequiredAssetsAttached(["screenshot"], ATTACHED) === true);
+check("one missing",
+  T.allRequiredAssetsAttached(["screenshot", "logo"], ATTACHED) === false);
+check("no requirements is vacuously complete",
+  T.allRequiredAssetsAttached([], ATTACHED) === true);
+check("no attachments meets nothing",
+  T.allRequiredAssetsAttached(["screenshot"], []) === false);
+
+console.log("\n" + "=".repeat(70));
 if (failures.length === 0) {
   console.log("All frontend length/intent logic behaves correctly.");
 } else {
