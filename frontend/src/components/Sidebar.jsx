@@ -6,7 +6,6 @@ import {
   Sparkles,
   Compass,
   Bookmark,
-  Briefcase,
   LayoutTemplate,
   Clapperboard,
   Images,
@@ -42,8 +41,7 @@ export const NAV_GROUPS = [
     items: [
       { to: "/", label: "Dashboard", icon: LayoutDashboard, testId: "dashboard-nav-link", hint: "Where things stand" },
       { to: "/create", label: "Create Video", icon: Clapperboard, testId: "create-nav-link", hint: "Guided wizard" },
-      { to: "/app-profiles", label: "App Profiles", icon: Briefcase, testId: "app-profiles-nav-link", hint: "Your apps" },
-      { to: "/brand", label: "Profile Editor", icon: PenLine, testId: "brand-nav-link", hint: "Research and edit" },
+      { to: "/brand", label: "Your app", icon: PenLine, testId: "brand-nav-link", hint: "Research, edit, approve" },
       { to: "/templates", label: "Hook Templates", icon: LayoutTemplate, testId: "templates-nav-link", hint: "Reusable structures" },
       { to: "/assets", label: "Asset Library", icon: Images, testId: "assets-nav-link", hint: "Real app visuals" },
       { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Everything you made" },
