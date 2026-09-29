@@ -17,8 +17,10 @@ Configuration (all optional):
                           spend to an unvetted model
 """
 
+import functools
 import logging
 import os
+import shutil
 from typing import Optional
 
 from ai_service import VIDEO_MODELS
@@ -79,6 +81,16 @@ _CAPABILITY_NOTES = {
 # because it edits an existing clip, which is exactly the dependency the
 # template workflow removed.
 STUDIO_ELIGIBLE = ("seedance-2.5", "minimax-h3")
+
+# The hook length used when nothing states one. 4s is the lowest length any
+# current provider can render, so it needs no trim; a template's own
+# hook_seconds overrides this wherever one is set.
+DEFAULT_HOOK_SECONDS = 4
+
+# Hook lengths offered in the studio UI. 2s and 3s are below every provider's
+# render floor and are therefore always delivered as a trim, which the UI says
+# out loud rather than presenting them as native.
+HOOK_LENGTH_CHOICES = (2, 3, 4, 5, 6)
 
 _FALLBACK_NOTES = {
     "vertical": True,
@@ -503,6 +515,120 @@ def continuity_plan(
         "attached": attached,
         "degraded": degraded,
     }
+
+
+def resolve_hook_length(target: Optional[int], model_key: Optional[str] = None) -> dict:
+    """
+    Reconcile the hook length a founder asked for with what a provider can
+    actually render.
+
+    These are genuinely different numbers and the gap is not small: every
+    provider's minimum render length is 4s or more, while the hook a template
+    declares (and the product promises) is 2-3s. So a 3-second hook is not
+    something that can be RENDERED - it is something that has to be rendered
+    longer and then cut down.
+
+    Returns:
+        {
+          "target": int,             # what was asked for
+          "render_seconds": int,     # what we must ask the model for
+          "trim_to": int,            # what we cut the render down to (0 = none)
+          "guarantee": "as_rendered" | "trimmed" | "clamped_down" | "trim_unavailable",
+          "provider", "provider_name", "note": str, "adjustments": [str],
+        }
+
+    `trim_unavailable` is returned when a trim is required but ffmpeg is not on
+    PATH, so the caller can say so BEFORE spending a paid render rather than
+    discovering it afterwards and silently handing back a 4s hook for a 3s
+    request.
+    """
+    model_key, _reason = resolve(model_key)
+    cap = capability(model_key)
+
+    # 0 is the "not chosen yet" sentinel on studio_projects.hook_seconds, so it
+    # has to mean the same as None here — otherwise a cleared choice silently
+    # becomes a 1-second hook.
+    if target in (None, "", 0):
+        want = DEFAULT_HOOK_SECONDS
+    else:
+        try:
+            want = int(target)
+        except (TypeError, ValueError):
+            want = DEFAULT_HOOK_SECONDS
+    # Kept for the "you asked for X" wording, since `want` is mutated below.
+    requested = want
+    adjustments: list = []
+
+    ceiling = cap["max_duration"]
+    floor = cap["min_duration"]
+    clamped_down = False
+    if want > ceiling:
+        adjustments.append(
+            f"{cap['name']} renders at most {ceiling}s, so a {want}s hook was "
+            f"requested at {ceiling}s."
+        )
+        want = ceiling
+        clamped_down = True
+    if want < 1:
+        want = 1
+
+    render_seconds = max(want, floor)
+    trim_to = want if render_seconds > want else 0
+
+    if trim_to:
+        adjustments.append(
+            f"{cap['name']} cannot render under {floor}s, so the hook is rendered at "
+            f"{render_seconds}s and cut down to {trim_to}s."
+        )
+
+    if trim_to:
+        guarantee = "trimmed"
+    elif clamped_down:
+        guarantee = "clamped_down"
+    else:
+        guarantee = "as_rendered"
+
+    if trim_to and not ffmpeg_available():
+        guarantee = "trim_unavailable"
+        note = (
+            f"A {trim_to}s hook needs a re-encode to cut it down, but ffmpeg is not "
+            f"available on this host. The hook would come back at {render_seconds}s. "
+            f"Install ffmpeg, or choose {floor}s or longer."
+        )
+    elif trim_to:
+        note = (
+            f"Delivered as a {trim_to}s clip, cut from a {render_seconds}s render "
+            f"because {cap['name']} cannot render under {floor}s."
+        )
+    elif clamped_down:
+        note = (
+            f"{cap['name']} renders at most {ceiling}s, so the hook is {ceiling}s "
+            f"rather than the {requested}s that was asked for."
+        )
+    else:
+        note = f"Rendered directly at {render_seconds}s; no trimming needed."
+
+    return {
+        "target": want,
+        "render_seconds": render_seconds,
+        "trim_to": trim_to,
+        "guarantee": guarantee,
+        "provider": model_key,
+        "provider_name": cap["name"],
+        "note": note,
+        "adjustments": adjustments,
+    }
+
+
+@functools.lru_cache(maxsize=1)
+def ffmpeg_available() -> bool:
+    """
+    Whether ffmpeg is on PATH.
+
+    Cached because it cannot change during a process's life, and it is consulted
+    on every hook render.
+    """
+    return shutil.which("ffmpeg") is not None
 
 
 def plan_duration(key: Optional[str], requested: int) -> dict:

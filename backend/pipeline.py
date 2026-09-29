@@ -506,3 +506,109 @@ async def concat_videos(paths: list, out_path: Path) -> Optional[Path]:
 
     logger.info(f"Concatenated {len(sources)} clips into {out_path.name}")
     return out_path
+
+
+async def trim_video_exact(video_path: Path, seconds: float, out_path: Path) -> Optional[Path]:
+    """
+    Cut a clip to an exact length, for delivery.
+
+    Needed because the shortest hook a founder can ask for (2-3s) is below
+    every provider's minimum render length, so the hook is rendered at the
+    floor and then cut down here.
+
+    Deliberately NOT trim_video_to_hook(). That one uses `-c copy` and is
+    correct for a V2V *reference* (fast, and a few frames of slack does not
+    matter when the model is only reading motion), but a stream copy cuts on a
+    packet boundary: measured on a 4s render with 2s keyframes, `-c copy -t 3`
+    produced 3.067s while this re-encode produces exactly 3.000s. A deliverable
+    that is advertised as a 3-second hook and is 3.067s long is a small lie
+    that compounds across every segment, so the delivered file is re-encoded.
+
+    Encoding parameters intentionally match concat_videos() so a trimmed hook
+    and an untrimmed extension join without a visible re-init.
+
+    Returns None (rather than raising) when the cut is not possible, so the
+    caller can keep the untrimmed render and say so rather than lose it.
+    """
+    source = Path(video_path)
+    out_path = Path(out_path)
+    if not source.is_file():
+        logger.warning(f"trim_video_exact: source {source.name} does not exist.")
+        return None
+    try:
+        target = float(seconds)
+    except (TypeError, ValueError):
+        logger.warning(f"trim_video_exact: bad duration {seconds!r}.")
+        return None
+    if target <= 0:
+        logger.warning(f"trim_video_exact: refusing non-positive duration {target}.")
+        return None
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(source),
+        "-t", f"{target:g}",
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-crf", "20",
+        "-pix_fmt", "yuv420p",
+        "-r", "30",
+        "-video_track_timescale", "30000",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-ar", "48000",
+        "-ac", "2",
+        "-movflags", "+faststart",
+        str(out_path),
+    ]
+    try:
+        rc, _stdout, err = await run_cmd(cmd, timeout=180)
+    except FileNotFoundError:
+        logger.warning("trim_video_exact: ffmpeg is not available on PATH.")
+        return None
+    except RuntimeError as e:
+        logger.warning(f"trim_video_exact timed out: {e}")
+        return None
+
+    if rc != 0 or not out_path.exists() or out_path.stat().st_size == 0:
+        logger.warning(
+            f"trim_video_exact failed for {source.name} -> {target:g}s: "
+            f"{err.strip()[-300:] or 'unknown error'}"
+        )
+        out_path.unlink(missing_ok=True)
+        return None
+
+    logger.info(f"Trimmed {source.name} to {target:g}s: {out_path.name}")
+    return out_path
+
+
+async def replace_with_trimmed(video_path: Path, seconds: float) -> Optional[Path]:
+    """
+    Trim a clip in place, atomically.
+
+    The hook's canonical path is also what an extension bridges from (the
+    previous clip's FINAL FRAME), so the trimmed file must REPLACE the render
+    rather than sit beside it as a sidecar. Leaving the full-length render at
+    the canonical path would make every extension continue from a frame the
+    viewer never saw.
+
+    Trims to a sibling temp file and then swaps, because ffmpeg cannot read and
+    write the same path in one pass.
+
+    Returns the canonical path on success, or None if the trim failed (in which
+    case the original is untouched and still usable).
+    """
+    source = Path(video_path)
+    if not source.is_file():
+        return None
+    temp = source.with_name(f".{source.stem}_trim{source.suffix}")
+    try:
+        trimmed = await trim_video_exact(source, seconds, temp)
+        if not trimmed:
+            temp.unlink(missing_ok=True)
+            return None
+        temp.replace(source)
+        return source
+    finally:
+        temp.unlink(missing_ok=True)

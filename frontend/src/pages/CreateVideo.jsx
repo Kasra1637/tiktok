@@ -25,6 +25,10 @@ const STEPS = [
   { key: "angle", label: "Audience & goal", icon: Target },
   { key: "template", label: "Hook template", icon: LayoutTemplate },
   { key: "assets", label: "Assets", icon: ImageIcon },
+  // The hook is validated before the full script is written, because a 3s
+  // concept is the cheapest possible test of whether the strategy works. This
+  // step is skippable: the one-pass plan flow below is still a complete path.
+  { key: "hook", label: "Influencer hook", icon: Sparkles },
   { key: "plan", label: "Creative plan", icon: FileText },
   { key: "review", label: "Review", icon: CheckCircle2 },
 ];
@@ -232,7 +236,7 @@ export default function CreateVideo() {
             setEdits({});
             // A duplicate always arrives with its plan intact; an unplanned
             // draft still needs assets before a plan can be generated.
-            setStep(draft.script_version > 0 ? 5 : 3);
+            setStep(draft.script_version > 0 ? 6 : 3);
           } catch (err) {
             if (cancelled) return;
             setError(getErrorMessage(err));
@@ -337,6 +341,61 @@ export default function CreateVideo() {
     }
   };
 
+  /**
+   * Make sure a draft exists without the founder having to ask.
+   *
+   * The Influencer hook step writes to a studio project, and the hook is meant
+   * to be validated BEFORE the plan is written. Previously the project was only
+   * created by the plan step, which forced the Assets step to carry a manual
+   * "Create draft" button purely to get out of the way.
+   *
+   * So: as soon as an App Profile and a hook template are both chosen, the
+   * draft is created or updated in the background. Drafts are free — only a
+   * marked-ready generation spends money — so doing this eagerly costs
+   * nothing. Returns the project, or null when it cannot be created.
+   */
+  const ensureProject = useCallback(async () => {
+    if (!profileId || !templateId) return null;
+    try {
+      if (project?.id) {
+        // Keep the draft's selections in step with the wizard without
+        // disturbing a plan that already exists.
+        if (
+          project.template_id === templateId &&
+          project.content_angle_id === (angleId || null) &&
+          project.objective === (objective || "")
+        ) {
+          return project;
+        }
+        const updated = await api.updateStudioProject(project.id, {
+          content_angle_id: angleId || "",
+          template_id: templateId || "",
+          objective,
+          duration_seconds: duration,
+          tone,
+        });
+        setProject(updated);
+        return updated;
+      }
+      const created = await api.createStudioProject({
+        brand_profile_id: profileId,
+        content_angle_id: angleId || "",
+        template_id: templateId || "",
+        objective,
+        duration_seconds: duration,
+        tone,
+      });
+      setProject(created);
+      return created;
+    } catch (err) {
+      // A failure here is not fatal: the plan step still creates the draft and
+      // surfaces the error properly. Swallowing it here would just show an
+      // empty hook step with no explanation.
+      setError(getErrorMessage(err));
+      return null;
+    }
+  }, [profileId, templateId, angleId, objective, duration, tone, project]);
+
   const handleGeneratePlan = async () => {
     const ready = await createProject();
     if (!ready) return;
@@ -361,7 +420,7 @@ export default function CreateVideo() {
       });
       setProject(updated);
       setEdits({});
-      setStep(5);
+      setStep(6);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -559,7 +618,7 @@ export default function CreateVideo() {
                 </select>
               </div>
               <div className="space-y-1.5">
-                <label htmlFor="duration" className="text-sm font-medium">Duration</label>
+                <label htmlFor="duration" className="text-sm font-medium">Total video length</label>
                 <select
                   id="duration"
                   value={duration}
@@ -702,29 +761,26 @@ export default function CreateVideo() {
           {!project ? (
             <div className="rounded-xl border border-[color:var(--hairline)] p-4">
               <p className="text-sm text-muted-foreground">
-                Create a draft from the selected profile, angle, template, and settings before
-                attaching assets. The draft stays free; only a marked-ready generation can spend money.
+                {canGenerate
+                  ? "A free draft from the selected profile, angle, and template is created for you, so assets can be attached straight away. Drafts cost nothing; only a marked-ready generation spends money."
+                  : "Pick an App Profile and a hook template first — a draft is created from those two as soon as they are set, and assets attach to it."}
               </p>
-              <Button
-                variant="brand"
-                size="sm"
-                className="mt-3"
-                disabled={busy || !canGenerate}
-                onClick={async () => {
-                  await createProject();
-                }}
-              >
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
-                Create draft for these selections
-              </Button>
-              {!canGenerate && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Pick an App Profile (step 1) and a hook template (step 3) first — those two unlock the draft.
-                </p>
+              {canGenerate && (
+                <Button
+                  variant="brand"
+                  size="sm"
+                  className="mt-3"
+                  disabled={busy}
+                  onClick={() => ensureProject()}
+                >
+                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
+                  Create the draft now
+                </Button>
               )}
             </div>
           ) : (
             <AssetLibrary
+              embedded
               profileId={profileId}
               projectId={project?.id}
               projectAssets={project?.assets}
@@ -772,6 +828,51 @@ export default function CreateVideo() {
     if (step === 4) {
       return (
         <StepShell
+          icon={Sparkles}
+          title="Influencer hook"
+          description="Build the app-specific strategy, render a short hook with your uploaded person in it, then extend it while the same character and scene carry through. Skippable — the creative plan below still produces a complete one-pass video."
+        >
+          <div className="space-y-3">
+            {!canGenerate ? (
+              <div className="rounded-xl border border-[color:var(--hairline)] p-4">
+                <p className="text-sm text-muted-foreground">
+                  Pick an App Profile and a hook template first — the strategy is built from
+                  both, so the hook has to serve the mechanism you picked.
+                </p>
+              </div>
+            ) : !project ? (
+              <div className="rounded-xl border border-[color:var(--hairline)] p-4">
+                <p className="text-sm text-muted-foreground">
+                  A free draft is created from your profile, angle, and template so the
+                  strategy and hook have somewhere to live. Drafts cost nothing; only a
+                  marked-ready generation spends money.
+                </p>
+                <Button
+                  variant="brand"
+                  size="sm"
+                  className="mt-3"
+                  disabled={busy}
+                  onClick={() => ensureProject()}
+                >
+                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                  Create the draft
+                </Button>
+              </div>
+            ) : (
+              <HookContinuityPanel
+                project={project}
+                onProjectChange={setProject}
+                onGenerationChange={() => {}}
+              />
+            )}
+          </div>
+        </StepShell>
+      );
+    }
+
+    if (step === 5) {
+      return (
+        <StepShell
           icon={FileText}
           title="Generate the creative plan"
           description="This writes your hook, script, shot timeline, overlays, and CTA. It costs no video generation."
@@ -811,7 +912,7 @@ export default function CreateVideo() {
             title="No plan yet"
             description="Generate a creative plan to review it here."
             action={
-              <Button variant="brand" onClick={() => setStep(4)}>
+              <Button variant="brand" onClick={() => setStep(5)}>
                 Go to plan step
               </Button>
             }
@@ -876,7 +977,7 @@ export default function CreateVideo() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <label htmlFor="review-duration" className="text-sm font-medium">Duration</label>
+                <label htmlFor="review-duration" className="text-sm font-medium">Total video length</label>
                 <select
                   id="review-duration"
                   value={editValue("duration_seconds", 20)}
@@ -1008,12 +1109,8 @@ export default function CreateVideo() {
               <p className="text-xs text-muted-foreground">Save your edits before marking ready.</p>
             )}
 
-            <HookContinuityPanel
-              project={project}
-              onProjectChange={setProject}
-              onGenerationChange={() => {}}
-            />
-
+            {/* The influencer hook, strategy, and segment chain live on their own
+                step. The one-pass GenerationPanel stays here. */}
             <GenerationPanel
               project={project}
               onGenerationChange={() => {}}

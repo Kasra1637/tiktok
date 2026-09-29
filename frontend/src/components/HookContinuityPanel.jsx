@@ -24,6 +24,12 @@ import {
 
 const POLL_INTERVAL_MS = 6000;
 
+// Mirrors video_providers.HOOK_LENGTH_CHOICES / DEFAULT_HOOK_SECONDS. The
+// backend validates against its own list, so a drift here would be refused
+// loudly rather than silently mis-rendered.
+const HOOK_LENGTHS = [2, 3, 4, 5, 6];
+const DEFAULT_HOOK = 4;
+
 const GUARANTEE_COPY = {
   frame_exact_plus_refs: {
     label: "Frame-exact",
@@ -126,6 +132,7 @@ function ContinuityNote({ continuity }) {
 export function HookContinuityPanel({ project, onProjectChange, onGenerationChange }) {
   const [models, setModels] = useState(null);
   const [selectedModel, setSelectedModel] = useState("");
+  const [hookSeconds, setHookSeconds] = useState(0);
   const [segments, setSegments] = useState([]);
   const [assembled, setAssembled] = useState(null);
   const [busy, setBusy] = useState("");
@@ -212,9 +219,44 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
     }
   };
 
+  // -------------------------------------------------------------------------
+  // Hook length
+  //
+  // The wanted length and the length the model can actually render are two
+  // different numbers, and every provider's floor is 4s or more while the hook
+  // a template declares is 2-3s. So a short hook is rendered at the floor and
+  // cut down afterwards. This mirrors the backend's resolve_hook_length() so
+  // the option labels are honest BEFORE the render is paid for — the backend
+  // still decides, and its plan is what the response reports back.
+  // -------------------------------------------------------------------------
+  const capability = models?.models?.find((m) => m.key === selectedModel);
+  const floor = capability?.min_duration ?? 4;
+  const ceiling = capability?.max_duration ?? 30;
+
+  const resolveLength = (target) => {
+    const render = Math.min(Math.max(target, floor), ceiling);
+    const trimTo = render > target ? target : 0;
+    return { target, render, trimTo };
+  };
+
+  const savedHook = Number(project?.hook_seconds || 0);
+  const effectiveHook = Number(hookSeconds || 0) || savedHook || DEFAULT_HOOK;
+  const lengthPlan = resolveLength(effectiveHook);
+
+  const handleHookLength = (value) => {
+    setHookSeconds(value);
+    if (!projectId) return;
+    // Persisted so a later strategy rebuild, the hook render, and any segment
+    // planning all read the SAME length rather than each re-deriving it.
+    api
+      .setProjectHookLength(projectId, value)
+      .then((updated) => onProjectChange?.(updated))
+      .catch((err) => setError(getErrorMessage(err)));
+  };
+
   const handleGenerateStrategy = () =>
     run("strategy", async () => {
-      const updated = await api.generateStrategy(projectId, {});
+      const updated = await api.generateStrategy(projectId, { hook_seconds: effectiveHook });
       onProjectChange?.(updated);
       setNotice(
         `Strategy v${updated.strategy_version} built from this app's profile. Review the hook and the locked person, then generate the hook.`
@@ -223,10 +265,16 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
 
   const handleGenerateHook = () =>
     run("hook", async () => {
-      const created = await api.generateHook(projectId, { model: selectedModel || undefined });
+      const created = await api.generateHook(projectId, {
+        model: selectedModel || undefined,
+        duration_seconds: effectiveHook,
+      });
       onGenerationChange?.(created);
+      const plan = created.hook_length;
       setNotice(
-        `Hook submitted as segment 0 (${created.duration}s). Approve it once it looks right — that is what lets it continue.`
+        plan?.trimTo
+          ? `Hook submitted as segment 0. It renders at ${plan.render_seconds}s and is cut down to ${plan.trimTo}s — approve it once it looks right, and that is what lets it continue.`
+          : `Hook submitted as segment 0 (${created.duration}s). Approve it once it looks right — that is what lets it continue.`
       );
       await loadSegments();
       schedulePoll(created.id);
@@ -341,6 +389,40 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
         </div>
       )}
 
+      {/* Hook length. Separate from the project's "total video length" because
+          it is a different axis: this is the first segment of it. */}
+      <div className="space-y-1.5">
+        <label htmlFor="hook-length" className="text-sm font-medium">Hook length</label>
+        <select
+          id="hook-length"
+          value={effectiveHook}
+          onChange={(e) => handleHookLength(Number(e.target.value))}
+          disabled={Boolean(busy) || Boolean(inFlightId)}
+          className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
+        >
+          {HOOK_LENGTHS.map((n) => {
+            const p = resolveLength(n);
+            return (
+              <option key={n} value={n}>
+                {n}s{p.trimTo ? ` — trimmed from a ${p.render}s render` : " — as rendered"}
+              </option>
+            );
+          })}
+        </select>
+        {lengthPlan.trimTo ? (
+          <p className="text-xs text-muted-foreground">
+            {capability?.name || "This provider"} cannot render under {floor}s, so the hook
+            is generated at {lengthPlan.render}s and cut down to {lengthPlan.trimTo}s. The
+            total video length is unchanged — this is only the opening segment.
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            The opening {lengthPlan.render}s of the video. The total length is set on the
+            Audience &amp; goal step.
+          </p>
+        )}
+      </div>
+
       {/* 1. Strategy */}
       <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
         <Button
@@ -443,6 +525,11 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
                     {segment.duration && (
                       <Badge variant="outline" className="text-[11px]">
                         <Clock className="mr-1 h-2.5 w-2.5" />{segment.duration}s
+                      </Badge>
+                    )}
+                    {segment.trim_to_seconds > 0 && (
+                      <Badge variant="outline" className="text-[11px]">
+                        trimmed to {segment.trim_to_seconds}s
                       </Badge>
                     )}
                     {money(segment.cost_usd) && (

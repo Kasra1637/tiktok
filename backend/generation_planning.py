@@ -27,12 +27,21 @@ _UI_RENDERING_WARNING = (
 )
 
 
-def _format_beats(beats, duration: int) -> str:
+def _format_beats(beats, duration: int, hook_seconds: int = 3) -> str:
+    """
+    Render the beat list, or a sensible default when the plan has none.
+
+    `hook_seconds` is the opening segment's length. It was previously hardcoded
+    to 3, which contradicted the template's own hook_seconds (2-3s) arriving
+    in the same prompt — so a 2s-hook template was told to hold its hook for 3
+    seconds. It is now threaded through from the caller.
+    """
+    hook = max(1, min(int(hook_seconds or 3), max(1, duration - 1)))
     if not beats:
         return (
-            f"- 0-3s: hook — {duration}s total video, hook in the first 3 seconds\n"
-            f"- 3-8s: problem or transition\n"
-            f"- 8-{max(8, duration - 3)}s: app demonstration and payoff\n"
+            f"- 0-{hook}s: hook — {duration}s total video, hook in the first {hook} seconds\n"
+            f"- {hook}-{hook + 5}s: problem or transition\n"
+            f"- {hook + 5}-{max(hook + 5, duration - 3)}s: app demonstration and payoff\n"
             f"- final {max(2, min(4, duration // 6))}s: call to action"
         )
     lines = []
@@ -121,15 +130,24 @@ def build_single_pass_prompt(
             "the app or repeat the hook; move straight into the payoff and the call to action."
         )
     else:
+        # Match the template's own hook length rather than asserting 3s, so this
+        # line agrees with the beat layout below and with the mechanism the
+        # founder selected.
+        hook_len = int((template or {}).get("hook_seconds") or plan.get("hook_seconds") or 3)
         sections.append(
-            f"The first 3 seconds are the hook and must land immediately: {hook or 'open on the strongest visual beat'}."
+            f"The first {hook_len} seconds are the hook and must land immediately: "
+            f"{hook or 'open on the strongest visual beat'}."
         )
 
     if script:
         sections.append(f"Spoken script, performed naturally on camera or as voiceover:\n\"{script}\"")
 
+    # The template's declared hook length wins over the 3s default, so the
+    # fallback beat layout and the mechanism in the same prompt agree.
+    hook_seconds = int(tpl.get("hook_seconds") or plan.get("hook_seconds") or 3)
     sections.append(
-        "Beat-by-beat timeline — follow these timings:\n" + _format_beats(plan.get("beat_timeline"), duration)
+        "Beat-by-beat timeline — follow these timings:\n"
+        + _format_beats(plan.get("beat_timeline"), duration, hook_seconds)
     )
 
     sections.append(

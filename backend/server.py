@@ -629,6 +629,12 @@ async def init_db():
                 -- read is what keeps an extension on-message.
                 strategy TEXT,
                 strategy_version INTEGER DEFAULT 0,
+                -- The hook length the founder wants for the opening segment, in
+                -- seconds. 0 means "not chosen yet", in which case the selected
+                -- template's own hook_seconds decides. Kept separate from
+                -- duration_seconds, which is the TOTAL video length: the hook is
+                -- the first segment of it, not a shorter version of it.
+                hook_seconds INTEGER DEFAULT 0,
                 script_version INTEGER DEFAULT 0,
                 status TEXT DEFAULT 'draft',
                 created_at TEXT,
@@ -685,6 +691,11 @@ async def init_db():
                 -- assembled video.
                 approved INTEGER DEFAULT 0,
                 approved_at TEXT,
+                -- Seconds the finished clip was cut down to, 0 when it is the
+                -- render as delivered. Set when the wanted hook length is below
+                -- the provider's minimum, so the record shows the real length
+                -- rather than only the length that was asked of the model.
+                trim_to_seconds INTEGER DEFAULT 0,
                 attempt INTEGER DEFAULT 1,
                 parent_generation_id TEXT,
                 variation_kind TEXT,
@@ -1153,11 +1164,13 @@ async def init_db():
         influencer_migrations = [
             ("studio_projects", "strategy", "TEXT"),
             ("studio_projects", "strategy_version", "INTEGER DEFAULT 0"),
+            ("studio_projects", "hook_seconds", "INTEGER DEFAULT 0"),
             ("generations", "segment_index", "INTEGER DEFAULT 0"),
             ("generations", "strategy_version", "INTEGER DEFAULT 0"),
             ("generations", "continuity", "TEXT"),
             ("generations", "approved", "INTEGER DEFAULT 0"),
             ("generations", "approved_at", "TEXT"),
+            ("generations", "trim_to_seconds", "INTEGER DEFAULT 0"),
         ]
         for table, column, decl in influencer_migrations:
             cursor = await conn.execute(f"PRAGMA table_info({table})")
@@ -6690,6 +6703,7 @@ async def create_studio_project(
 
     template_id = (payload.template_id or "").strip()
     template_version = None
+    template = None
     duration = payload.duration_seconds
     if template_id:
         template = await _fetch_one(
@@ -6716,17 +6730,28 @@ async def create_studio_project(
 
     project_id = str(uuid.uuid4())
     now = now_iso()
+    # The opening segment's length, defaulted from the template's own declared
+    # hook_seconds (2-3s for every curated template). 0 on the request means
+    # "follow the template", which is the common case; an explicit value wins.
+    hook_seconds = 0
+    if payload.hook_seconds:
+        hook_seconds = int(payload.hook_seconds)
+    elif template_id and template:
+        hook_seconds = int(template.get("hook_seconds") or 0)
+    if hook_seconds and hook_seconds not in video_providers.HOOK_LENGTH_CHOICES:
+        hook_seconds = video_providers.DEFAULT_HOOK_SECONDS
+
     await _execute(
         """INSERT INTO studio_projects
            (id, brand_profile_id, content_angle_id, template_id, template_version,
-            objective, audience, duration_seconds, tone, assets, script_version,
-            status, created_at, updated_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             objective, audience, duration_seconds, hook_seconds, tone, assets, script_version,
+             status, created_at, updated_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (project_id, profile["id"], (payload.content_angle_id or "").strip() or None,
          template_id or None, template_version,
          template_library.normalize_objective(payload.objective),
          (payload.audience or profile.get("target_audience") or "").strip() or None,
-         duration, (payload.tone or "").strip() or None,
+         duration, hook_seconds, (payload.tone or "").strip() or None,
          json.dumps([]), 0, "draft", now, now, user_id),
     )
     logger.info(f"Created studio project {project_id} for profile {profile['id']}")
@@ -6839,6 +6864,22 @@ async def update_studio_project(
             value = template_library.normalize_objective(value)
         elif key == "duration_seconds":
             value = template_library.clamp_duration(value)
+        elif key == "hook_seconds":
+            # The opening segment's length. 0 clears the choice so the template
+            # decides again. Clamped to the offered choices so a hand-typed
+            # value cannot ask for a length nothing will ever honour.
+            try:
+                want = int(value or 0)
+            except (TypeError, ValueError):
+                want = 0
+            if want and want not in video_providers.HOOK_LENGTH_CHOICES:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Hook length must be one of: "
+                           + ", ".join(f"{c}s" for c in video_providers.HOOK_LENGTH_CHOICES)
+                           + " seconds, or 0 to follow the template.",
+                )
+            value = max(0, want)
         elif value is not None:
             value = str(value).strip()
         set_clauses.append(f"{key} = ?")
@@ -7067,6 +7108,7 @@ def _public_generation(row: dict) -> dict:
     out["approved"] = bool(out.get("approved"))
     out["segment_index"] = int(out.get("segment_index") or 0)
     out["strategy_version"] = int(out.get("strategy_version") or 0)
+    out["trim_to_seconds"] = int(out.get("trim_to_seconds") or 0)
     out.pop("prompt_used", None)
     return out
 
@@ -7170,6 +7212,7 @@ async def _submit_generation(
     continuity_frame: Optional[Path] = None,
     continuity_video_url: str = "",
     previous_summary: str = "",
+    hook_trim: int = 0,
 ) -> dict:
     """
     Submit ONE video generation job.
@@ -7264,20 +7307,24 @@ async def _submit_generation(
             project_strategy = {}
     has_strategy = bool((strategy or project_strategy or {}).get("hook_line"))
     strategy_version = int(project.get("strategy_version") or 0) if has_strategy else 0
+    # How long the clip will be cut down to once it lands, 0 for no trim. The
+    # render is asked for at the provider floor and cut in poll, so this is
+    # recorded up front and drives the post-render cut.
+    trim_to_seconds = int(hook_trim or 0) if is_hook else 0
     await _execute(
         """INSERT INTO generations
            (id, studio_project_id, brand_profile_id, template_id, template_version,
             script_version, model, model_id, requested_duration, duration, status,
-            segment_role, segment_index, strategy_version, continuity,
+            segment_role, segment_index, strategy_version, continuity, trim_to_seconds,
             attempt, parent_generation_id, variation_kind, variation_params,
             cost_source, prompt_used, adjustments, retryable, approved,
             requested_at, created_at, updated_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?)""",
         (generation_id, project["id"], project.get("brand_profile_id"),
          project.get("template_id"), project.get("template_version"),
          project.get("script_version"), model_key, cap["id"],
          requested, seconds, segment_role, int(segment_index or 0), strategy_version,
-         json.dumps(continuity) if continuity else None,
+         json.dumps(continuity) if continuity else None, trim_to_seconds,
          attempt, parent_generation_id or None,
          variation_kind or None, json.dumps(variation_params or {}),
          "pending", prompt, json.dumps(plan["adjustments"]), now, now, now, user_id),
@@ -7532,10 +7579,37 @@ async def poll_generation(generation_id: str, user_id: str = Depends(get_current
     if status in ("completed", "succeeded", "success") and video_url:
         stored_url = None
         storage_error = None
+        trim_note = ""
         # Persist locally first so the clip survives even if R2 is unconfigured.
         try:
             local_path = await _download_generation_video(video_url, generation_id)
             if local_path:
+                # Apply the hook trim IN PLACE, before storage and before the row
+                # records a length. The canonical path is also what an extension
+                # bridges from (the previous clip's FINAL FRAME), so a trimmed
+                # hook that sat beside the full render as a sidecar would make
+                # every continuation resume from a frame the viewer never saw.
+                trim_to = int(row.get("trim_to_seconds") or 0)
+                if trim_to > 0:
+                    trimmed = await pipeline.replace_with_trimmed(local_path, trim_to)
+                    if trimmed:
+                        local_path = trimmed
+                        trim_note = f"Cut down to {trim_to}s."
+                        logger.info(
+                            f"Generation {generation_id}: hook trimmed to {trim_to}s "
+                            f"(rendered at a length the provider cannot go below)"
+                        )
+                    else:
+                        # Keep the full render rather than lose it, and say so:
+                        # the delivered clip is longer than was asked for.
+                        storage_error = (
+                            f"Could not cut the hook down to {trim_to}s, so it is "
+                            f"delivered at its full rendered length."
+                        )
+                        logger.warning(
+                            f"Generation {generation_id}: trim to {trim_to}s failed; "
+                            f"delivering the untrimmed render."
+                        )
                 stored_url = storage_service.upload_video(user_id, generation_id, Path(local_path))
             else:
                 storage_error = "The provider clip could not be downloaded for durable storage."
@@ -7543,10 +7617,15 @@ async def poll_generation(generation_id: str, user_id: str = Depends(get_current
             storage_error = str(e)[:500]
             logger.warning(f"Generation {generation_id}: storage step failed: {e}")
 
+        # The row records the length the founder will actually get, not the
+        # length that was asked of the model.
+        delivered_seconds = int(row.get("trim_to_seconds") or 0) or row.get("duration") or 0
         await _execute(
             "UPDATE generations SET status = 'completed', video_url = ?, r2_url = ?, "
-            "error = NULL, storage_error = ?, completed_at = ?, updated_at = ? WHERE id = ?",
-            (video_url, stored_url or "", storage_error, now, now, generation_id),
+            "duration = ?, error = NULL, storage_error = ?, completed_at = ?, updated_at = ? "
+            "WHERE id = ?",
+            (video_url, stored_url or "", delivered_seconds,
+             storage_error or trim_note or None, now, now, generation_id),
         )
         if stored_url:
             await _execute(
@@ -7768,13 +7847,23 @@ async def generate_project_strategy(
     )
     tone = (payload.tone or row.get("tone") or "").strip()
 
-    # The hook is deliberately short. It is clamped to the provider's real
-    # range rather than asked for as something the model cannot render — most
-    # providers will not produce under 4s at all.
-    model_key, _reason = video_providers.resolve(None)
-    cap = video_providers.capability(model_key)
-    requested_hook = payload.hook_seconds or 4
-    hook_seconds = max(cap["min_duration"], min(int(requested_hook), cap["max_duration"]))
+    # The hook length the founder wants for the opening segment. Resolution
+    # order: explicit request, the project's saved choice, then the selected
+    # template's own declared hook_seconds (2-3s for every curated template) —
+    # which is what makes a "Stop Doing This" template and a "Pain-Point
+    # Question" template produce differently-paced hooks.
+    #
+    # Deliberately NOT raised to the provider's minimum here. The strategy
+    # describes the hook the founder asked for; the render is asked for at the
+    # provider floor and cut down afterwards, and that is recorded on the
+    # generation so the delivered length is never a surprise.
+    requested_hook = (
+        payload.hook_seconds
+        or row.get("hook_seconds")
+        or template.get("hook_seconds")
+        or video_providers.DEFAULT_HOOK_SECONDS
+    )
+    hook_seconds = int(requested_hook or video_providers.DEFAULT_HOOK_SECONDS)
 
     profile_feedback = feedback_mod.summarize_profile_feedback(
         await _fetch_all(
@@ -7818,12 +7907,16 @@ async def generate_project_strategy(
 
     version = int(row.get("strategy_version") or 0) + 1
     now = now_iso()
+    # hook_seconds is written back so the hook render and any later segment
+    # planning read the SAME length, rather than each re-deriving it from the
+    # template and risking the two disagreeing.
     await _execute(
         """UPDATE studio_projects SET strategy = ?, strategy_version = ?,
+             hook_seconds = ?,
              safety_report = ?, safety_summary = ?, status = 'draft', updated_at = ?
            WHERE id = ? AND user_id = ?""",
-        (json.dumps(strategy), version, json.dumps(report), summary, now,
-         project_id, user_id),
+        (json.dumps(strategy), version, hook_seconds,
+         json.dumps(report), summary, now, project_id, user_id),
     )
     logger.info(
         f"Generated strategy for project {project_id} (v{version}) — hook "
@@ -7955,14 +8048,22 @@ async def generate_project_hook(
         raise HTTPException(status_code=404, detail="Template not found")
 
     model_key, reason = video_providers.resolve(payload.model or None)
-    cap = video_providers.capability(model_key)
-    seconds = max(
-        cap["min_duration"],
-        min(
-            int(payload.duration_seconds or strategy.get("hook_seconds") or 4),
-            cap["max_duration"],
-        ),
+
+    # The wanted hook length, then what the provider can actually render, then
+    # the cut in between. A 3s hook is not something a model can render here —
+    # every provider's floor is 4s or more — so it is rendered at the floor and
+    # trimmed, and the difference is recorded rather than absorbed.
+    wanted = (
+        payload.duration_seconds
+        or project.get("hook_seconds")
+        or strategy.get("hook_seconds")
+        or video_providers.DEFAULT_HOOK_SECONDS
     )
+    length_plan = video_providers.resolve_hook_length(int(wanted), model_key)
+    seconds = length_plan["render_seconds"]
+    if length_plan["guarantee"] == "trim_unavailable":
+        # Said before the render is paid for, not discovered afterwards.
+        raise HTTPException(status_code=409, detail=length_plan["note"])
 
     generation = await _submit_generation(
         project=project,
@@ -7988,8 +8089,11 @@ async def generate_project_hook(
                 for a in (project.get("assets") or [])
             ),
         ),
+        hook_trim=length_plan["trim_to"],
     )
     generation["provider_reason"] = reason
+    generation["hook_length"] = length_plan
+    generation["duration"] = length_plan["trim_to"] or length_plan["render_seconds"]
     return generation
 
 

@@ -314,7 +314,7 @@ STUDIO_TEXT_FIELDS = (
 
 STUDIO_EDITABLE_FIELDS = STUDIO_TEXT_FIELDS + (
     "content_angle_id", "template_id", "objective", "duration_seconds",
-    "beat_timeline", "overlays", "assets", "strategy",
+    "beat_timeline", "overlays", "assets", "strategy", "hook_seconds",
 )
 
 
@@ -324,12 +324,16 @@ class CreateStudioProjectRequest(BaseModel):
 
     Only brand_profile_id is required: the founder can pick an angle, objective,
     and template later, and the plan step will refuse to run without them.
+
+    hook_seconds is the opening segment's length, NOT the total video length —
+    that is duration_seconds. 0 means "decide from the template".
     """
     brand_profile_id: str
     content_angle_id: Optional[str] = ""
     template_id: Optional[str] = ""
     objective: Optional[str] = ""
     duration_seconds: Optional[int] = None
+    hook_seconds: Optional[int] = 0
     tone: Optional[str] = ""
     audience: Optional[str] = ""
 
@@ -340,6 +344,7 @@ class UpdateStudioProjectRequest(BaseModel):
     template_id: Optional[str] = None
     objective: Optional[str] = None
     duration_seconds: Optional[int] = None
+    hook_seconds: Optional[int] = None
     tone: Optional[str] = None
     audience: Optional[str] = None
     hook_line: Optional[str] = None

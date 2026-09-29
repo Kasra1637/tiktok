@@ -123,6 +123,8 @@ export const api = {
   updateStudioProject: (id, payload) => client.patch(`/studio/projects/${id}`, payload).then((r) => r.data),
   generatePlan: (id, payload = {}) => client.post(`/studio/projects/${id}/plan`, payload).then((r) => r.data),
   markProjectReady: (id) => client.post(`/studio/projects/${id}/ready`).then((r) => r.data),
+  setProjectHookLength: (id, hookSeconds) =>
+    client.patch(`/studio/projects/${id}`, { hook_seconds: hookSeconds }).then((r) => r.data),
 
   // Video generation (single-pass)
   getStudioVideoModels: () => client.get("/studio/video-models").then((r) => r.data),
