@@ -59,7 +59,7 @@ from models import (
     AssembleChainRequest,
     APP_PROFILE_LIST_FIELDS, APP_PROFILE_EDITABLE_FIELDS,
     TEMPLATE_STRUCTURED_FIELDS, TEMPLATE_TEXT_FIELDS, TEMPLATE_EDITABLE_FIELDS,
-    STUDIO_EDITABLE_FIELDS,
+    STUDIO_EDITABLE_FIELDS, STUDIO_TEXT_FIELDS,
     now_iso, row_to_dict,
 )
 from niches_config import NICHES, NICHE_MAP
@@ -85,6 +85,11 @@ FRAME_COUNT = 8
 HOOK_DURATION_SECONDS = 3.0
 SEARCH_QUERY_MAX_LENGTH = 100
 BRAND_URL_TEXT_MAX_CHARS = 8000
+
+# How much an extension adds when the request does not say. Chosen to sit at
+# Seedance's render floor so the default needs no trim, and short enough that
+# three or four extensions still land inside a normal 20s video.
+DEFAULT_EXTENSION_SECONDS = 5
 
 # Public HTTPS base URL this server is reachable at. OpenRouter's video
 # generation API requires V2V motion-reference videos (input_references[].video_url)
@@ -635,6 +640,13 @@ async def init_db():
                 -- duration_seconds, which is the TOTAL video length: the hook is
                 -- the first segment of it, not a shorter version of it.
                 hook_seconds INTEGER DEFAULT 0,
+                -- Whether the founder has declared they intend to extend this
+                -- hook into a full video. 1 by default: the hook is the opening
+                -- of a video, not a deliverable in its own right. Deliberately
+                -- NOT load-bearing for generation — it changes what the studio
+                -- offers and displays, never what gets rendered, so flipping it
+                -- cannot invalidate a strategy and force a rebuild.
+                extend_intent INTEGER DEFAULT 1,
                 script_version INTEGER DEFAULT 0,
                 status TEXT DEFAULT 'draft',
                 created_at TEXT,
@@ -1165,6 +1177,7 @@ async def init_db():
             ("studio_projects", "strategy", "TEXT"),
             ("studio_projects", "strategy_version", "INTEGER DEFAULT 0"),
             ("studio_projects", "hook_seconds", "INTEGER DEFAULT 0"),
+            ("studio_projects", "extend_intent", "INTEGER DEFAULT 1"),
             ("generations", "segment_index", "INTEGER DEFAULT 0"),
             ("generations", "strategy_version", "INTEGER DEFAULT 0"),
             ("generations", "continuity", "TEXT"),
@@ -6652,6 +6665,13 @@ def _public_project(row: dict) -> dict:
     out["safety_report"] = out.get("safety_report") or None
     out["duration_seconds"] = out.get("duration_seconds") or 0
     out["script_version"] = out.get("script_version") or 0
+    out["hook_seconds"] = int(out.get("hook_seconds") or 0)
+    out["strategy_version"] = int(out.get("strategy_version") or 0)
+    # SQLite has no boolean type, so this arrives as 0/1. Returned as a real
+    # bool so the studio can branch on it directly instead of comparing ints.
+    # Unset means yes: the hook is the opening of a video, so extending is the
+    # default path unless the founder says otherwise.
+    out["extend_intent"] = out.get("extend_intent") != 0
     return out
 
 
@@ -6740,18 +6760,21 @@ async def create_studio_project(
         hook_seconds = int(template.get("hook_seconds") or 0)
     if hook_seconds and hook_seconds not in video_providers.HOOK_LENGTH_CHOICES:
         hook_seconds = video_providers.DEFAULT_HOOK_SECONDS
+    # Unset means "yes, I intend to extend": the hook is the opening of a
+    # video, so extending is the expected path unless the founder says otherwise.
+    extend_intent = 1 if payload.extend_intent is None else (1 if payload.extend_intent else 0)
 
     await _execute(
         """INSERT INTO studio_projects
            (id, brand_profile_id, content_angle_id, template_id, template_version,
-             objective, audience, duration_seconds, hook_seconds, tone, assets, script_version,
-             status, created_at, updated_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             objective, audience, duration_seconds, hook_seconds, extend_intent, tone, assets,
+             script_version, status, created_at, updated_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (project_id, profile["id"], (payload.content_angle_id or "").strip() or None,
          template_id or None, template_version,
          template_library.normalize_objective(payload.objective),
          (payload.audience or profile.get("target_audience") or "").strip() or None,
-         duration, hook_seconds, (payload.tone or "").strip() or None,
+         duration, hook_seconds, extend_intent, (payload.tone or "").strip() or None,
          json.dumps([]), 0, "draft", now, now, user_id),
     )
     logger.info(f"Created studio project {project_id} for profile {profile['id']}")
@@ -6880,6 +6903,10 @@ async def update_studio_project(
                            + " seconds, or 0 to follow the template.",
                 )
             value = max(0, want)
+        elif key == "extend_intent":
+            # Deliberately not load-bearing: this records what the founder
+            # intends, and must never invalidate a strategy or a plan.
+            value = 1 if (value in (True, 1, "1", "true")) else 0
         elif value is not None:
             value = str(value).strip()
         set_clauses.append(f"{key} = ?")
@@ -6919,8 +6946,19 @@ async def update_studio_project(
         set_clauses.append("safety_summary = ?")
         values.append(claim_safety.summarize(report))
 
-    set_clauses.append("script_version = ?")
-    values.append(int(row.get("script_version") or 0) + 1)
+    # script_version tracks the WRITTEN content, so only a content edit bumps
+    # it. It previously bumped on every edit at all, which meant a preference
+    # change such as the extend-intent toggle or the hook length looked like a
+    # rewrite — and that in turn made the "heavy script edit" signal fire for
+    # edits that touched no script.
+    content_edited = any(
+        key in STUDIO_TEXT_FIELDS
+        or key in ("beat_timeline", "overlays", "assets", "strategy")
+        for key in updates
+    )
+    if content_edited:
+        set_clauses.append("script_version = ?")
+        values.append(int(row.get("script_version") or 0) + 1)
     set_clauses.append("updated_at = ?")
     values.append(now_iso())
     values.extend([project_id, user_id])
@@ -7307,10 +7345,12 @@ async def _submit_generation(
             project_strategy = {}
     has_strategy = bool((strategy or project_strategy or {}).get("hook_line"))
     strategy_version = int(project.get("strategy_version") or 0) if has_strategy else 0
-    # How long the clip will be cut down to once it lands, 0 for no trim. The
-    # render is asked for at the provider floor and cut in poll, so this is
-    # recorded up front and drives the post-render cut.
-    trim_to_seconds = int(hook_trim or 0) if is_hook else 0
+    # How long the clip will be cut down to once it lands, 0 for no trim. A
+    # length below the provider's floor is rendered at the floor and cut in poll,
+    # so this is recorded up front and drives the post-render cut. Applies to
+    # extensions too, not only the hook: "extend by 3s" is a legitimate choice
+    # and every provider's floor is 4s or more.
+    trim_to_seconds = int(hook_trim or 0)
     await _execute(
         """INSERT INTO generations
            (id, studio_project_id, brand_profile_id, template_id, template_version,
@@ -7924,6 +7964,17 @@ async def generate_project_strategy(
 
     version = int(row.get("strategy_version") or 0) + 1
     now = now_iso()
+    # Coverage is recorded ON the strategy before it is serialized. The studio
+    # needs to say "the plan covers N more segments" before the founder commits
+    # to a length, and a founder extending by 3s could otherwise run the plan
+    # out at segment 8 with no warning.
+    planned_segments = len(strategy.get("segments") or [])
+    strategy["planned_segments"] = planned_segments
+    strategy["max_planned_index"] = max(
+        (int(s.get("index", -1)) for s in (strategy.get("segments") or [])
+         if isinstance(s, dict)),
+        default=0,
+    )
     # hook_seconds is written back so the hook render and any later segment
     # planning read the SAME length, rather than each re-deriving it from the
     # template and risking the two disagreeing.
@@ -7937,7 +7988,7 @@ async def generate_project_strategy(
     )
     logger.info(
         f"Generated strategy for project {project_id} (v{version}) — hook "
-        f"{hook_seconds}s, {len(strategy.get('segments') or [])} segment(s) — {summary}"
+        f"{hook_seconds}s, {planned_segments} planned segment(s) — {summary}"
     )
     return _public_project(
         await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,))
@@ -8181,13 +8232,30 @@ async def extend_generation(
 
     model_key, _reason = video_providers.resolve(row.get("model") or None)
     cap = video_providers.capability(model_key)
-    extra = int(payload.duration_seconds or 5)
-    if extra > cap["max_duration"]:
+    # The founder picks how much to add. Resolve it against the provider the same
+    # way the hook's length is resolved: a length below the provider's floor is
+    # rendered at the floor and cut down, rather than silently becoming longer
+    # than asked for.
+    #
+    # A length ABOVE the ceiling is refused rather than clamped. Clamping is
+    # right for the floor (a trim can recover the exact length asked for) but
+    # wrong for the ceiling: asking for 60s on a 15s provider and receiving 15s
+    # is a different video, not a rounding difference.
+    requested_extra = int(payload.duration_seconds or DEFAULT_EXTENSION_SECONDS)
+    if requested_extra > cap["max_duration"]:
         raise HTTPException(
             status_code=400,
-            detail=f"{cap['name']} can add at most {cap['max_duration']}s in one pass.",
+            detail=(
+                f"{cap['name']} can add at most {cap['max_duration']}s in one pass, and "
+                f"you asked for {requested_extra}s. Extend more than once, or use a "
+                f"provider with a longer single-pass limit."
+            ),
         )
-    extra = max(cap["min_duration"], extra)
+    length_plan = video_providers.resolve_length(requested_extra, model_key)
+    if length_plan["guarantee"] == "trim_unavailable":
+        raise HTTPException(status_code=409, detail=length_plan["note"])
+    extra = length_plan["render_seconds"]
+    trim_to = length_plan["trim_to"]
 
     if not strategy:
         # No strategy: this project is on the original one-shot flow, so keep
@@ -8235,6 +8303,30 @@ async def extend_generation(
     # Which segment is this? The chain is the approved ancestry plus this one.
     segment_index = await _next_segment_index(row, user_id)
 
+    # Refuse to extend past the end of the planned arc.
+    #
+    # The strategy plans a sequence of beats precisely so each extension is a
+    # NEW beat. Past the last one there is nothing left to continue, and the old
+    # behaviour — silently falling back to the final planned beat — made every
+    # extra extension replay the previous one verbatim: same words, same action,
+    # the same clip twice. Improvising instead would be worse, because this
+    # workflow's whole premise is that an extension continues the ORIGINAL
+    # app-specific strategy. Rebuilding the strategy is free (text only).
+    planned = [
+        int(s.get("index", -1))
+        for s in (strategy.get("segments") or [])
+        if isinstance(s, dict)
+    ]
+    if planned and segment_index > max(planned):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"The strategy plans {len(planned)} segments, and you have used all of "
+                f"them. Extending further would repeat a beat you have already made. "
+                f"Rebuild the strategy to plan a longer video, or join what you have."
+            ),
+        )
+
     # The continuity anchors. The bridge frame is the whole point: it is the
     # previous clip's last real frame, and it becomes this clip's first frame.
     bridge_frame = None
@@ -8280,9 +8372,12 @@ async def extend_generation(
         continuity_frame=bridge_frame,
         continuity_video_url=parent_public_url if continuity.get("use_clip_reference") else "",
         previous_summary=strategy.get("hook_line") or "",
+        hook_trim=trim_to,
     )
     extension["extension_of"] = generation_id
     extension["continuity"] = continuity
+    extension["length_plan"] = length_plan
+    extension["duration"] = length_plan["trim_to"] or length_plan["render_seconds"]
     return extension
 
 

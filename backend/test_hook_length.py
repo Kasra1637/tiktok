@@ -324,9 +324,19 @@ def _ready_project_with_strategy(api, spec, hook_seconds=0):
                   "visual_style": "handheld UGC", "character_positioning": "centred",
                   "props": "a phone", "color_palette": "grey and teal"},
         "performance": {"movement": "one-handed", "voice_delivery": "low, quick"},
-        "segments": [{"index": 0, "role": "hook", "seconds": hook_seconds or 3,
-                      "goal": "land it", "script": "It was always this one tap.",
-                      "action": "Taps once"}],
+        # Hook plus a planned arc, matching what generate_video_strategy emits.
+        # These tests extend at least once, so a hook-only plan would now be
+        # correctly refused as "past the end of the plan".
+        "segments": [
+            {"index": 0, "role": "hook", "seconds": hook_seconds or 3,
+             "goal": "land it", "script": "It was always this one tap.",
+             "action": "Taps once"},
+        ] + [
+            {"index": i, "role": "cta" if i == 7 else "continuation", "seconds": 5,
+             "goal": f"beat {i}", "script": f"Beat {i} of the story.",
+             "action": f"action {i}"}
+            for i in range(1, 8)
+        ],
         "continuity_contract": {"established": ["teal scrubs", "a corridor"],
                                 "must_not_change": ["the face", "the scrubs"],
                                 "do_not_repeat": ["the hook line"]},

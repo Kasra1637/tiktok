@@ -1760,6 +1760,40 @@ REQUIRED_STRATEGY_KEYS = {
     "character", "scene", "performance", "segments", "continuity_contract",
 }
 
+# How many continuation beats a strategy plans.
+#
+# This exists because the founder decides how far to extend AFTER seeing the
+# hook, so the plan has to hold a whole arc rather than a single follow-up.
+# Planning exactly one continuation and then falling back to it for every later
+# index made extensions 2, 3, 4... replay extension 1 verbatim — the same
+# words, the same action — so "extend again" produced the same beat twice.
+#
+# Seven continuations (eight segments, the normalize cap) is comfortably more
+# than the product needs: the longest total is 30s and a single "extend to
+# target" costs one or two segments, so the arc is exhausted only by a founder
+# deliberately padding the video with minimum-length segments.
+CONTINUATION_BEATS = 7
+
+
+def _continuation_segment_schema(plan_seconds: int) -> str:
+    """
+    Emit the planned continuation segments as JSON schema text.
+
+    Each beat is a distinct point in the story, not a restatement: the last one
+    always lands the CTA so the arc is complete at any stopping point, which is
+    what makes stopping early a legitimate choice rather than a truncated video.
+    """
+    parts = []
+    for index in range(1, CONTINUATION_BEATS + 1):
+        role = "cta" if index == CONTINUATION_BEATS else "continuation"
+        parts.append(
+            f',\n    {{"index": {index}, "role": "{role}", "seconds": {plan_seconds}, '
+            f'"goal": "what this beat must achieve", '
+            f'"script": "the words spoken in THIS beat - different from every other beat", '
+            f'"action": "what they do in THIS beat"}}'
+        )
+    return "".join(parts)
+
 # The sub-objects are where continuity actually lives, so each one is required
 # with its own field list rather than being trusted as a free-form blob.
 STRATEGY_CHARACTER_FIELDS = (
@@ -1929,6 +1963,16 @@ async def generate_video_strategy(
             return [str(val)]
         return []
 
+    # A planning hint for how long each continuation beat is expected to run.
+    # It is a HINT, not the render length: the founder picks the real length per
+    # extension, and a beat's own `seconds` only describes the shape of the
+    # arc. Spread across the planned beats so a 20s total with a 4s hook does
+    # not plan two-second beats.
+    _remaining = max(0, int(total_duration or 0) - int(hook_seconds or 0))
+    plan_seconds = (
+        max(1, round(_remaining / CONTINUATION_BEATS)) if _remaining else int(hook_seconds or 4)
+    )
+
     facts = {
         "app_name": profile.get("brand_name") or "(unnamed app)",
         "category": profile.get("app_category") or profile.get("niche") or "(unstated)",
@@ -2051,11 +2095,9 @@ async def generate_video_strategy(
         '  },\n'
         '  "segments": [\n'
         f'    {{"index": 0, "role": "hook", "seconds": {hook_seconds}, "goal": "what these seconds must achieve",'
-        ' "script": "words spoken in this segment", "action": "what they do in this segment"},\n'
-        f'    {{"index": 1, "role": "continuation", "seconds": {max(1, total_duration - hook_seconds)},'
-        ' "goal": "what this segment must achieve", "script": "words spoken in this segment",'
-        ' "action": "what they do in this segment"}}\n'
-        '  ],\n'
+        ' "script": "words spoken in this segment", "action": "what they do in this segment"}'
+        + _continuation_segment_schema(plan_seconds)
+        + '\n  ],\n'
         '  "continuity_contract": {\n'
         '    "established": ["what the opening segment fixes for the rest of the video — 4-6 items"],\n'
         '    "must_not_change": ["appearance, wardrobe, setting, lighting, framing and props that every '
@@ -2069,6 +2111,12 @@ async def generate_video_strategy(
         "the app name dropped in.\n"
         "- The hook must serve the selected hook mechanism. If the mechanism is a question, the hook is a "
         "question; if it is a contrarian correction, the hook corrects something.\n"
+        f"- After the hook, plan {CONTINUATION_BEATS} further beats. The founder decides where to stop, so the "
+        "beats must work as a sequence AND the last one must land the call to action on its own — a viewer "
+        "who sees only the hook and the final beat still gets a complete video.\n"
+        "- Give every beat a genuinely different goal, script and action. Beat 1 is not beat 2 restated, and "
+        "no two beats may share a script. A repeated beat is worse than a missing one, because it plays the "
+        "same clip twice.\n"
         "- Fill the persona so specifically that a second video with the same character would be recognisably "
         "the same person in the same place. Vague terms like \"casual\" or \"a nice room\" are not acceptable.\n"
         "- must_not_change must cover the face, the hair, the wardrobe, the background, the lighting and the "

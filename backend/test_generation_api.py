@@ -450,11 +450,17 @@ class TestExtension:
                 "movement": "one-handed, small gestures, phone stays in frame",
                 "voice_delivery": "low, quick, tired but warm",
             },
+            # Hook plus a planned arc, as generate_video_strategy now emits.
             "segments": [
                 {"index": 0, "role": "hook", "seconds": 4, "goal": "land the exhaustion",
                  "script": hook_line, "action": "holds up the phone"},
                 {"index": 1, "role": "continuation", "seconds": 5, "goal": "show the log",
                  "script": "One tap and it's done.", "action": "taps the phone once"},
+            ] + [
+                {"index": i, "role": "cta" if i == 7 else "continuation", "seconds": 5,
+                 "goal": f"beat {i}", "script": f"Beat {i}.",
+                 "action": f"action {i}"}
+                for i in range(2, 8)
             ],
             "continuity_contract": {
                 "established": [

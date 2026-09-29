@@ -30,6 +30,11 @@ const POLL_INTERVAL_MS = 6000;
 const HOOK_LENGTHS = [2, 3, 4, 5, 6];
 const DEFAULT_HOOK = 4;
 
+// How much an extension adds. 3s sits below every provider's render floor and
+// is therefore always delivered as a trim, which the option label says.
+const EXTEND_CHOICES = [3, 5, 8, 10];
+const DEFAULT_EXTEND = 5;
+
 const GUARANTEE_COPY = {
   frame_exact_plus_refs: {
     label: "Frame-exact",
@@ -133,6 +138,7 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
   const [models, setModels] = useState(null);
   const [selectedModel, setSelectedModel] = useState("");
   const [hookSeconds, setHookSeconds] = useState(0);
+  const [extendBy, setExtendBy] = useState(DEFAULT_EXTEND);
   const [segments, setSegments] = useState([]);
   const [assembled, setAssembled] = useState(null);
   const [busy, setBusy] = useState("");
@@ -242,6 +248,9 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
   const savedHook = Number(project?.hook_seconds || 0);
   const effectiveHook = Number(hookSeconds || 0) || savedHook || DEFAULT_HOOK;
   const lengthPlan = resolveLength(effectiveHook);
+  // Unset on an older row means the default, which is "yes, extend": the hook
+  // is the opening of a video.
+  const extendIntent = project?.extend_intent === 0 ? false : true;
 
   const handleHookLength = (value) => {
     setHookSeconds(value);
@@ -253,6 +262,40 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
       .then((updated) => onProjectChange?.(updated))
       .catch((err) => setError(getErrorMessage(err)));
   };
+
+  // Declared intent to extend the hook into a full video.
+  //
+  // Deliberately NOT load-bearing: it changes what the panel offers and shows,
+  // never what gets rendered, so flipping it after a strategy exists cannot
+  // invalidate that strategy and force a paid rebuild. The hook is still the
+  // opening of a video either way, and extending is always available.
+  const handleExtendIntent = (value) => {
+    if (!projectId) return;
+    api
+      .setProjectExtendIntent(projectId, value)
+      .then((updated) => onProjectChange?.(updated))
+      .catch((err) => setError(getErrorMessage(err)));
+  };
+
+  // Running total uses the DELIVERED length of each completed segment, so a
+  // hook that was rendered at the floor and trimmed to 3s counts 3s, not the
+  // 4s that was asked of the model. Adding up the render lengths would
+  // overstate the video the founder will actually have.
+  const completedSegments = segments.filter(
+    (s) => s.status === "completed" && Number(s.duration) > 0
+  );
+  const runningTotal = completedSegments.reduce(
+    (sum, s) => sum + (s.trim_to_seconds > 0 ? s.trim_to_seconds : Number(s.duration || 0)),
+    0
+  );
+  const targetTotal = Number(project?.duration_seconds || 0);
+  const reachesTarget = targetTotal > 0 && runningTotal >= targetTotal;
+  const remainingToTarget = Math.max(0, targetTotal - runningTotal);
+  // How many more segments the strategy can still produce. Surfaced because the
+  // plan is finite: a founder extending by 3s could exhaust it before reaching
+  // a 30s target, and finding that out at segment 8 would be a dead end.
+  const plannedMaxIndex = Number(strategy?.max_planned_index || 0);
+  const plannedCoverage = Math.max(0, plannedMaxIndex - segments.length + 1);
 
   const handleGenerateStrategy = () =>
     run("strategy", async () => {
@@ -288,16 +331,24 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
       await loadSegments();
     });
 
-  const handleExtend = (id) =>
+  const handleExtend = (id, requestedSeconds) =>
     run(`extend-${id}`, async () => {
-      const created = await api.extendGeneration(id, { duration_seconds: 6 });
+      const created = await api.extendGeneration(id, {
+        duration_seconds: requestedSeconds,
+      });
       onGenerationChange?.(created);
       const plan = created.continuity || {};
-      setNotice(
-        plan.guarantee === "text_only"
-          ? "Extension submitted WITHOUT a visual anchor — this provider cannot pin the previous frame. Check the person and scene match before approving."
-          : `Extension submitted as segment ${created.segment_index}, continuing from the approved clip.`
-      );
+      const length = created.length_plan;
+      let message;
+      if (plan.guarantee === "text_only") {
+        message =
+          "Extension submitted WITHOUT a visual anchor — this provider cannot pin the previous frame. Check the person and scene match before approving.";
+      } else if (length?.trimTo) {
+        message = `Extension submitted as segment ${created.segment_index}, ${length.trimTo}s. It renders at ${length.renderSeconds}s and is cut down, because this provider cannot render under that.`;
+      } else {
+        message = `Extension submitted as segment ${created.segment_index}, continuing from the approved clip.`;
+      }
+      setNotice(message);
       await loadSegments();
       schedulePoll(created.id);
     });
@@ -329,8 +380,9 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
       </div>
 
       <p className="text-xs text-muted-foreground">
-        A 3&ndash;4 second hook built from this app&rsquo;s profile, then extended while the
-        same person and the same scene carry through.
+        The hook is the opening of a video, not a finished clip: build the app-specific
+        strategy, approve the hook, then extend it while the same person and scene carry
+        through. The joined file is the deliverable.
       </p>
 
       {error && (
@@ -421,6 +473,39 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
             Audience &amp; goal step.
           </p>
         )}
+      </div>
+
+      {/* Declared intent. The hook is always the opening of a video rather than a
+          deliverable in its own right; this records whether a full video is
+          planned now, and changes only what the panel offers below. */}
+      <div className="space-y-1.5">
+        <span className="text-sm font-medium">What happens after the hook</span>
+        <div className="grid gap-1.5 sm:grid-cols-2">
+          {[
+            { value: true, label: "Extend into a full video", hint: "Shows a running total against your target length." },
+            { value: false, label: "Just the hook for now", hint: "No target shown. You can extend later at any point." },
+          ].map((option) => (
+            <button
+              key={String(option.value)}
+              type="button"
+              onClick={() => handleExtendIntent(option.value)}
+              disabled={Boolean(busy)}
+              aria-pressed={extendIntent === option.value}
+              className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                extendIntent === option.value
+                  ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
+                  : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
+              }`}
+            >
+              <span className="block font-medium">{option.label}</span>
+              <span className="mt-0.5 block text-muted-foreground">{option.hint}</span>
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          This changes nothing about what gets generated, so switching it later never
+          discards the strategy or the clips you have already made.
+        </p>
       </div>
 
       {/* 1. Strategy */}
@@ -575,19 +660,53 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
                         </Button>
                       )}
                       {segment.approved && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => handleExtend(segment.id)}
-                          disabled={Boolean(busy) || Boolean(inFlightId)}
-                        >
-                          {busy === `extend-${segment.id}` ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-3.5 w-3.5" />
-                          )}
-                          Extend from here
-                        </Button>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <label
+                            htmlFor={`extend-by-${segment.id}`}
+                            className="sr-only"
+                          >
+                            How much to add for this extension
+                          </label>
+                          <select
+                            id={`extend-by-${segment.id}`}
+                            value={extendBy}
+                            onChange={(e) => setExtendBy(Number(e.target.value))}
+                            disabled={Boolean(busy) || Boolean(inFlightId)}
+                            className="rounded-lg border border-[color:var(--hairline)] bg-transparent px-2 py-1.5 text-xs"
+                          >
+                            {EXTEND_CHOICES.map((n) => {
+                              const p = resolveLength(n);
+                              return (
+                                <option key={n} value={n}>
+                                  +{n}s{p.trimTo ? ` (trimmed from ${p.render}s)` : ""}
+                                </option>
+                              );
+                            })}
+                            {targetTotal > 0 && remainingToTarget > 0 && (
+                              <option value="target">
+                                {`Fill to target (+${remainingToTarget}s)`}
+                              </option>
+                            )}
+                          </select>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() =>
+                              handleExtend(
+                                segment.id,
+                                extendBy === "target" ? remainingToTarget : Number(extendBy)
+                              )
+                            }
+                            disabled={Boolean(busy) || Boolean(inFlightId)}
+                          >
+                            {busy === `extend-${segment.id}` ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-3.5 w-3.5" />
+                            )}
+                            {extendIntent ? "Extend" : "Extend (optional)"}
+                          </Button>
+                        </div>
                       )}
                       {url && (
                         <Button variant="ghost" size="sm" asChild>
@@ -602,6 +721,49 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Running total. Only shown when a full video is actually planned, so
+          "just the hook for now" does not present a target that was never
+          chosen. Counts delivered length, so a trimmed hook counts what it
+          really is. */}
+      {extendIntent && completedSegments.length > 0 && targetTotal > 0 && (
+        <div className="space-y-1 border-t border-[color:var(--hairline)] pt-3">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-medium">
+              {runningTotal}s of {targetTotal}s
+            </span>
+            {reachesTarget ? (
+              <span className="text-[color:var(--brand-indigo)]">Target reached</span>
+            ) : (
+              <span className="text-muted-foreground">
+                {remainingToTarget}s to go
+              </span>
+            )}
+          </div>
+          <div
+            className="h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--indigo-8)]"
+            role="progressbar"
+            aria-valuenow={Math.min(runningTotal, targetTotal)}
+            aria-valuemin={0}
+            aria-valuemax={targetTotal}
+            aria-label="Video length so far"
+          >
+            <div
+              className="h-full rounded-full bg-[color:var(--brand-indigo)]"
+              style={{ width: `${Math.min(100, (runningTotal / targetTotal) * 100)}%` }}
+            />
+          </div>
+          {plannedCoverage > 0 && remainingToTarget > 0 && (
+            <p className="text-xs text-muted-foreground">
+              The strategy plans {plannedCoverage} more segment
+              {plannedCoverage === 1 ? "" : "s"}. At +{extendBy === "target" ? remainingToTarget : extendBy}s
+              {plannedCoverage * (extendBy === "target" ? remainingToTarget : extendBy) < remainingToTarget
+                ? ` that reaches about ${plannedCoverage * (extendBy === "target" ? remainingToTarget : extendBy)}s, so you may need to rebuild the strategy for the full ${targetTotal}s.`
+                : " that covers the rest of your target."}
+            </p>
+          )}
         </div>
       )}
 

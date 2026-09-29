@@ -450,17 +450,26 @@ def strategy_brief(strategy: dict) -> str:
 
 
 def _segment_for(strategy: dict, index: int) -> dict:
-    """The strategy's own plan for segment `index`, falling back to the last."""
-    segments = [s for s in (strategy.get("segments") or []) if isinstance(s, dict)]
-    if not segments:
-        return {}
-    for segment in segments:
+    """
+    The strategy's plan for segment `index`.
+
+    Returns {} for an index the strategy does not plan. It deliberately does NOT
+    fall back to the last planned segment: doing so made every extension past
+    the end of the plan replay the final beat verbatim - the same words and the
+    same action - so "extend again" produced the same clip twice. The endpoint
+    refuses to extend past the plan at all, so this is a backstop rather than
+    the main guard, and an unplanned segment is stated as unplanned instead of
+    quietly borrowing another beat's content.
+    """
+    for segment in (strategy.get("segments") or []):
+        if not isinstance(segment, dict):
+            continue
         try:
             if int(segment.get("index", -1)) == index:
                 return segment
         except (TypeError, ValueError):
             continue
-    return segments[-1] if index >= len(segments) else {}
+    return {}
 
 
 def _contract_list(strategy: dict, field: str, limit: int = 6) -> list:
@@ -608,6 +617,17 @@ def build_segment_prompt(
         sections.append(f"What happens in this segment: {action}")
     if script:
         sections.append(f"Spoken script for this segment, performed naturally on camera:\n\"{script}\"")
+    if is_continuation and not (goal or script or action):
+        # The strategy did not plan this beat. The endpoint normally refuses
+        # this outright, so reaching here means a plan gap rather than the end
+        # of the arc. Say what still has to happen instead of borrowing another
+        # beat's content, which is what used to happen here.
+        sections.append(
+            f"The strategy did not plan a specific beat for this moment. Continue the "
+            f"same story from the seam: advance the argument rather than restating what "
+            f"has already been said, and land the call to action if the video is ending. "
+            f"Do not replay any earlier moment."
+        )
 
     if tpl.get("opening_structure") and is_hook:
         sections.append(f"Hook mechanism to honour: {tpl['opening_structure']}")

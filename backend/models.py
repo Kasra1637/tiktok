@@ -315,6 +315,7 @@ STUDIO_TEXT_FIELDS = (
 STUDIO_EDITABLE_FIELDS = STUDIO_TEXT_FIELDS + (
     "content_angle_id", "template_id", "objective", "duration_seconds",
     "beat_timeline", "overlays", "assets", "strategy", "hook_seconds",
+    "extend_intent",
 )
 
 
@@ -334,6 +335,10 @@ class CreateStudioProjectRequest(BaseModel):
     objective: Optional[str] = ""
     duration_seconds: Optional[int] = None
     hook_seconds: Optional[int] = 0
+    # Declared intent to extend the hook into a full video. Defaults to True:
+    # the hook is the opening of a video, not a deliverable. Affects what the
+    # studio offers, not what it renders.
+    extend_intent: Optional[bool] = None
     tone: Optional[str] = ""
     audience: Optional[str] = ""
 
@@ -345,6 +350,7 @@ class UpdateStudioProjectRequest(BaseModel):
     objective: Optional[str] = None
     duration_seconds: Optional[int] = None
     hook_seconds: Optional[int] = None
+    extend_intent: Optional[bool] = None
     tone: Optional[str] = None
     audience: Optional[str] = None
     hook_line: Optional[str] = None

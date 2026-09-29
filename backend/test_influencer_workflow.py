@@ -193,11 +193,23 @@ def _store_strategy(api, project_id, hook_line, persona, scene, *, problem, feat
             "movement": persona["movement"],
             "voice_delivery": persona["voice"],
         },
+        # A full planned arc, as generate_video_strategy now emits: the hook
+        # plus seven continuations, the last landing the CTA. An earlier version
+        # of this fixture planned only one continuation, which is exactly the
+        # shape that made repeat extensions replay the same beat.
         "segments": [
             {"index": 0, "role": "hook", "seconds": 4, "goal": persona["promise"],
              "script": hook_line, "action": persona["action"]},
-            {"index": 1, "role": "continuation", "seconds": 6, "goal": f"show {feature}",
-             "script": persona["payoff"], "action": persona["payoff_action"]},
+        ] + [
+            {
+                "index": i,
+                "role": "cta" if i == 7 else "continuation",
+                "seconds": 6,
+                "goal": f"beat {i}: {persona['payoff'] if i == 1 else f'continue the story, step {i}'}",
+                "script": persona["payoff"] if i == 1 else f"Beat {i}: {feature}, continued.",
+                "action": persona["payoff_action"] if i == 1 else f"action for beat {i}",
+            }
+            for i in range(1, 8)
         ],
         "continuity_contract": {
             "established": [

@@ -125,6 +125,8 @@ export const api = {
   markProjectReady: (id) => client.post(`/studio/projects/${id}/ready`).then((r) => r.data),
   setProjectHookLength: (id, hookSeconds) =>
     client.patch(`/studio/projects/${id}`, { hook_seconds: hookSeconds }).then((r) => r.data),
+  setProjectExtendIntent: (id, extendIntent) =>
+    client.patch(`/studio/projects/${id}`, { extend_intent: extendIntent }).then((r) => r.data),
 
   // Video generation (single-pass)
   getStudioVideoModels: () => client.get("/studio/video-models").then((r) => r.data),

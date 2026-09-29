@@ -517,16 +517,19 @@ def continuity_plan(
     }
 
 
-def resolve_hook_length(target: Optional[int], model_key: Optional[str] = None) -> dict:
+def resolve_length(target: Optional[int], model_key: Optional[str] = None) -> dict:
     """
-    Reconcile the hook length a founder asked for with what a provider can
-    actually render.
+    Reconcile a wanted segment length with what a provider can actually render.
 
     These are genuinely different numbers and the gap is not small: every
     provider's minimum render length is 4s or more, while the hook a template
     declares (and the product promises) is 2-3s. So a 3-second hook is not
     something that can be RENDERED - it is something that has to be rendered
     longer and then cut down.
+
+    Applies to the hook and to extensions alike; it was originally written for
+    the hook only, and the misleading name is a fair part of why a 2-4s hook
+    read as a contradiction against a 10s minimum.
 
     Returns:
         {
@@ -539,7 +542,7 @@ def resolve_hook_length(target: Optional[int], model_key: Optional[str] = None) 
 
     `trim_unavailable` is returned when a trim is required but ffmpeg is not on
     PATH, so the caller can say so BEFORE spending a paid render rather than
-    discovering it afterwards and silently handing back a 4s hook for a 3s
+    discovering it afterwards and silently handing back a 4s clip for a 3s
     request.
     """
     model_key, _reason = resolve(model_key)
@@ -591,8 +594,8 @@ def resolve_hook_length(target: Optional[int], model_key: Optional[str] = None) 
     if trim_to and not ffmpeg_available():
         guarantee = "trim_unavailable"
         note = (
-            f"A {trim_to}s hook needs a re-encode to cut it down, but ffmpeg is not "
-            f"available on this host. The hook would come back at {render_seconds}s. "
+            f"A {trim_to}s clip needs a re-encode to cut it down, but ffmpeg is not "
+            f"available on this host. It would come back at {render_seconds}s. "
             f"Install ffmpeg, or choose {floor}s or longer."
         )
     elif trim_to:
@@ -602,7 +605,7 @@ def resolve_hook_length(target: Optional[int], model_key: Optional[str] = None) 
         )
     elif clamped_down:
         note = (
-            f"{cap['name']} renders at most {ceiling}s, so the hook is {ceiling}s "
+            f"{cap['name']} renders at most {ceiling}s, so this is {ceiling}s "
             f"rather than the {requested}s that was asked for."
         )
     else:
@@ -618,6 +621,12 @@ def resolve_hook_length(target: Optional[int], model_key: Optional[str] = None) 
         "note": note,
         "adjustments": adjustments,
     }
+
+
+# Kept so existing callers and tests keep working. The function is not
+# hook-specific any more: extensions resolve their length the same way, and a
+# "hook" name on a function serving both is how the 3-vs-4s confusion started.
+resolve_hook_length = resolve_length
 
 
 @functools.lru_cache(maxsize=1)

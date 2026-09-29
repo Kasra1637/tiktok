@@ -142,6 +142,9 @@ FIXTURES = {
             "movement": "one-handed, small gestures, the phone stays in frame throughout",
             "voice_delivery": "low, quick, tired but warm; ends on a real laugh",
         },
+        # Hook plus a full planned arc, as generate_video_strategy now emits.
+        # The verification extends segment 1, so the fixture has to plan more
+        # than the hook: a hook-only plan is now correctly refused.
         "segments": [
             {"index": 0, "role": "hook", "seconds": 4,
              "goal": "land the exhaustion and the relief in four seconds",
@@ -151,6 +154,12 @@ FIXTURES = {
              "goal": "show that one tap is genuinely the whole job",
              "script": "One tap and the shift is logged. Breaks too. That is it.",
              "action": "Taps the phone once, pockets it, keeps walking"},
+        ] + [
+            {"index": i, "role": "cta" if i == 7 else "continuation", "seconds": 6,
+             "goal": f"continue the story, step {i}",
+             "script": f"Beat {i} of the shift story.",
+             "action": f"action for beat {i}"}
+            for i in range(2, 8)
         ],
         "continuity_contract": {
             "established": ["a late-20s night-shift nurse in teal scrubs",
