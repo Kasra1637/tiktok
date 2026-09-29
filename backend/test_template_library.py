@@ -74,6 +74,46 @@ class TestCuratedSeeds:
         for tpl in tl.CURATED_TEMPLATES:
             assert isinstance(tpl["content_slots"], dict) and tpl["content_slots"]
 
+    def test_talking_head_templates_require_a_character_reference(self):
+        """
+        A talking-head template puts a person on camera, so it must ask for the
+        asset that actually reaches the model as an identity reference.
+
+        This is the invariant behind a silent failure. "creator_photo" is only
+        ever composited as an overlay and enters no part of the generation
+        pipeline, so a founder who attached exactly what the template asked for
+        got a generated lookalike with no error — the 409 guard in
+        _studio_identity_references only covers submissions that do carry a
+        character_reference. "character_reference" is the only kind passed to
+        the model as identity.
+        """
+        for tpl in tl.CURATED_TEMPLATES:
+            if not str(tpl.get("visual_style") or "").lower().startswith("talking_head"):
+                continue
+            assert "character_reference" in tpl["required_assets"], (
+                f"{tpl['name']} is a talking head but does not require a "
+                f"character_reference: {tpl['required_assets']}"
+            )
+            assert "creator_photo" not in tpl["required_assets"], (
+                f"{tpl['name']} is a talking head and must not require "
+                f"creator_photo, which never anchors a face: {tpl['required_assets']}"
+            )
+
+    def test_non_talking_head_templates_are_left_as_they_are(self):
+        """
+        The counterpart to the guard above, so a well-meaning sweep cannot
+        rewrite the whole library. "Three Mistakes" is numbered cards and
+        "Short Transformation Story" is b-roll; a composited creator photo is a
+        defensible requirement for those, and this pins that decision.
+        """
+        by_name = {tpl["name"]: tpl for tpl in tl.CURATED_TEMPLATES}
+        for name in ("Three Mistakes", "Short Transformation Story"):
+            tpl = by_name[name]
+            assert not str(tpl["visual_style"]).lower().startswith("talking_head")
+            assert "creator_photo" in tpl["required_assets"], (
+                f"{name} should keep creator_photo: {tpl['required_assets']}"
+            )
+
     def test_seed_rows_carry_honest_evidence_note(self):
         for row in tl.curated_template_rows():
             assert "No internal performance data" in row["evidence_note"]

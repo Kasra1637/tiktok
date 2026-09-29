@@ -14,17 +14,30 @@ import {
   Plus, ShieldCheck, Paperclip, Music, Link2, Check,
 } from "lucide-react";
 
+// Character reference and Creator photo both accept an image of a person, and
+// the difference decides whether a face reaches the video model at all:
+// character_reference is the only kind passed to the model as an identity
+// reference, while creator_photo is only ever composited as an overlay. The
+// plain labels below let those two be confused, so each says what it does.
 const KINDS = [
   ["screenshot", "Screenshot"],
   ["screen_recording", "Screen recording"],
   ["logo", "Logo"],
   ["product_image", "Product image"],
-  ["character_reference", "Character reference"],
-  ["creator_photo", "Creator photo"],
+  ["character_reference", "Character reference — the person on camera"],
+  ["creator_photo", "Creator photo — composited onto the video"],
   ["background_image", "Background image"],
   ["background_video", "Background video"],
   ["audio", "Audio"],
 ];
+
+/** What each kind is for, shown under the upload control. */
+const KIND_PURPOSE = {
+  character_reference:
+    "This is the face the model is given. Use it for an on-camera avatar: it is the only kind that anchors a person, and only the first one attached is used.",
+  creator_photo:
+    "A still of the creator, laid over the footage as a picture. It does not put anyone on camera — for that use a character reference.",
+};
 
 function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -667,6 +680,11 @@ export default function AssetLibrary({
               <option key={value} value={value}>{text}</option>
             ))}
           </select>
+          {KIND_PURPOSE[kind] && (
+            <p className="col-span-full text-xs text-muted-foreground">
+              {KIND_PURPOSE[kind]}
+            </p>
+          )}
           <Input
             value={label}
             onChange={(e) => setLabel(e.target.value)}

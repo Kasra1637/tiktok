@@ -1237,6 +1237,68 @@ async def init_db():
             seeded += 1
         if seeded:
             logger.info("Seeded %d curated hook template(s)", seeded)
+
+        # Backfill, not a second seed. The loop above skips any name that
+        # already exists, so correcting the curated literals only fixes a
+        # freshly created database — rows seeded before the correction would
+        # keep the old requirement forever.
+        #
+        # What was wrong: the curated talking-head templates required
+        # "creator_photo". That kind is composited as an overlay and reaches no
+        # part of the generation pipeline, so it never becomes the model input
+        # that anchors a face. A founder who attached exactly what was asked
+        # got a generated lookalike instead, silently — the loud 409 guard in
+        # _studio_identity_references only protects submissions that do carry a
+        # character_reference. "character_reference" is the only kind that is
+        # passed to the model as an identity reference.
+        #
+        # Kept narrow on purpose. Curated templates are shared rows
+        # (user_id='system') and PATCH /templates/{id} lets an operator edit
+        # them, so a blanket re-sync would silently discard their changes. Only
+        # rows that still ask for creator_photo and do not already ask for
+        # character_reference are touched, and the rule is derived from
+        # visual_style rather than a hand-written list, so a talking-head
+        # template added later is covered without editing this.
+        #
+        # Templates that are not talking heads are left alone: "Three Mistakes"
+        # is numbered cards and "Short Transformation Story" is b-roll, so a
+        # composited creator photo is a defensible requirement there.
+        for tpl in template_library.curated_template_rows():
+            style = str(tpl.get("visual_style") or "").strip().lower()
+            if not style.startswith("talking_head"):
+                continue
+            # Read what the DATABASE currently holds, not the literal above. The
+            # literals are already corrected, so testing those would mean this
+            # block never fires and the backfill does nothing — which is
+            # precisely the case it exists for.
+            cursor = await conn.execute(
+                "SELECT required_assets FROM hook_templates WHERE name = ? AND origin = 'curated'",
+                (tpl["name"],),
+            )
+            existing_row = await cursor.fetchone()
+            if not existing_row:
+                continue
+            try:
+                current = json.loads(existing_row[0] or "[]")
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if not isinstance(current, list):
+                continue
+            # Already corrected, or never asked for one: leave it alone. This is
+            # what keeps an operator's own edit to a curated row from being
+            # reverted on every boot.
+            if "creator_photo" not in current or "character_reference" in current:
+                continue
+            fixed = ["character_reference" if r == "creator_photo" else r for r in current]
+            await conn.execute(
+                "UPDATE hook_templates SET required_assets = ? "
+                "WHERE name = ? AND origin = 'curated'",
+                (json.dumps(fixed), tpl["name"]),
+            )
+            logger.info(
+                "Backfilled %s: required_assets %s -> %s", tpl["name"], current, fixed
+            )
+
         await conn.commit()
 
         # Migration: feedback_events gains a `signal` column for automatically

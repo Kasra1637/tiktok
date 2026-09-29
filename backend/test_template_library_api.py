@@ -89,6 +89,99 @@ class TestLibrarySeeding:
         assert all(r["review_status"] == "approved" for r in rows)
         assert all(r["opening_structure"] for r in rows)
 
+
+class TestTalkingHeadAssetBackfill:
+    """
+    The curated talking-head templates used to require "creator_photo", which
+    is only ever composited as an overlay and enters no part of the generation
+    pipeline, so it never became the identity reference that puts a face on
+    camera. The literals alone cannot fix this: seeding matches on name and
+    skips anything already present, so a database seeded before the correction
+    keeps the old requirement forever. These tests drive init_db against rows
+    that already exist, which is the only case that actually happens in
+    production.
+    """
+
+    def _talking_head_names(self, api):
+        import template_library as tl
+        return [
+            tpl["name"] for tpl in tl.CURATED_TEMPLATES
+            if str(tpl.get("visual_style") or "").lower().startswith("talking_head")
+        ]
+
+    def test_fresh_database_seeds_the_right_requirement(self, api):
+        for name in self._talking_head_names(api):
+            row = _run(api._fetch_one(
+                "SELECT required_assets FROM hook_templates WHERE name = ? AND origin = 'curated'",
+                (name,),
+            ))
+            assert "character_reference" in row["required_assets"], (name, row["required_assets"])
+            assert "creator_photo" not in row["required_assets"], (name, row["required_assets"])
+
+    def test_backfill_corrects_a_row_seeded_with_the_old_requirement(self, api):
+        """
+        Simulates the real upgrade: the row is already there with the wrong
+        requirement, so the name-match seed skips it and only the backfill can
+        put it right. Restored afterwards so the module fixture is left clean.
+        """
+        name = self._talking_head_names(api)[0]
+        _run(api._execute(
+            "UPDATE hook_templates SET required_assets = ? WHERE name = ? AND origin = 'curated'",
+            ('["creator_photo", "screenshot"]', name),
+        ))
+        stale = _run(api._fetch_one(
+            "SELECT required_assets FROM hook_templates WHERE name = ?", (name,)))
+        assert stale["required_assets"] == ["creator_photo", "screenshot"]
+
+        _run(api.init_db())
+
+        fixed = _run(api._fetch_one(
+            "SELECT required_assets FROM hook_templates WHERE name = ?", (name,)))
+        assert fixed["required_assets"] == ["character_reference", "screenshot"], fixed
+
+    def test_backfill_leaves_an_already_corrected_row_alone(self, api):
+        name = self._talking_head_names(api)[0]
+        _run(api._execute(
+            "UPDATE hook_templates SET required_assets = ? WHERE name = ? AND origin = 'curated'",
+            ('["character_reference", "screenshot"]', name),
+        ))
+        _run(api.init_db())
+        row = _run(api._fetch_one(
+            "SELECT required_assets, version FROM hook_templates WHERE name = ?", (name,)))
+        assert row["required_assets"] == ["character_reference", "screenshot"], row
+
+    def test_backfill_does_not_touch_a_non_talking_head_template(self, api):
+        """
+        The guard is scoped to talking heads. "Three Mistakes" is numbered cards
+        and keeps its creator photo — a blanket sweep would be wrong there.
+        """
+        row = _run(api._fetch_one(
+            "SELECT required_assets FROM hook_templates WHERE name = 'Three Mistakes'"))
+        _run(api.init_db())
+        after = _run(api._fetch_one(
+            "SELECT required_assets FROM hook_templates WHERE name = 'Three Mistakes'"))
+        assert after["required_assets"] == row["required_assets"]
+        assert "creator_photo" in after["required_assets"], after
+
+    def test_backfill_never_touches_a_users_own_template(self, api):
+        """
+        Curated rows are shared and editable, so the backfill is keyed on
+        origin='curated' and must not follow a same-named private copy.
+        """
+        import uuid as _uuid
+        mine = str(_uuid.uuid4())
+        _run(api._execute(
+            "INSERT INTO hook_templates (id, name, category, origin, required_assets, "
+            "created_at, updated_at, user_id) VALUES (?, ?, 'other', 'custom', ?, '', '', ?)",
+            (mine, self._talking_head_names(api)[0], '["creator_photo"]', ANON),
+        ))
+        _run(api.init_db())
+        row = _run(api._fetch_one(
+            "SELECT required_assets FROM hook_templates WHERE id = ?", (mine,)))
+        assert row["required_assets"] == ["creator_photo"], row
+        _run(api._execute("DELETE FROM hook_templates WHERE id = ?", (mine,)))
+
+
     def test_legacy_bookmarks_backfilled_to_bookmark_origin(self, api):
         """Rows predating the library must not masquerade as curated."""
         _run(api._execute(

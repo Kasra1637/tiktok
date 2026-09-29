@@ -153,7 +153,7 @@ CURATED_TEMPLATES = [
         "cta_pattern": "problem_to_solution_cta",
         "visual_style": "talking_head_with_broll",
         "camera_pacing": "steady, eye-level, cut to broll on the answer",
-        "required_assets": ["creator_photo", "screenshot"],
+        "required_assets": ["character_reference", "screenshot"],
         "default_duration": 20,
         "content_slots": {
             "question": "the pain-point question",
@@ -180,7 +180,7 @@ CURATED_TEMPLATES = [
         "cta_pattern": "correction_cta",
         "visual_style": "talking_head_direct_address",
         "camera_pacing": "static, slight push-in for emphasis",
-        "required_assets": ["creator_photo"],
+        "required_assets": ["character_reference"],
         "default_duration": 15,
         "content_slots": {
             "mistake": "the behaviour to stop",
@@ -206,7 +206,7 @@ CURATED_TEMPLATES = [
         "cta_pattern": "reveal_cta",
         "visual_style": "talking_head_then_demo",
         "camera_pacing": "hold the reveal beat, then cut on the reveal",
-        "required_assets": ["creator_photo", "screen_recording"],
+        "required_assets": ["character_reference", "screen_recording"],
         "default_duration": 20,
         "content_slots": {
             "regret": "the regret framing",
@@ -365,7 +365,7 @@ CURATED_TEMPLATES = [
         "cta_pattern": "agreement_cta",
         "visual_style": "talking_head_with_evidence",
         "camera_pacing": "steady, cut to evidence screens on the justification",
-        "required_assets": ["creator_photo", "screenshot"],
+        "required_assets": ["character_reference", "screenshot"],
         "default_duration": 20,
         "content_slots": {
             "contrarian_claim": "the disputed position",
