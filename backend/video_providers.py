@@ -236,6 +236,275 @@ def resolve(key: Optional[str] = None) -> tuple:
     return key, f"requested provider {key}"
 
 
+# Continuity anchors, ordered strongest-first. A provider can only carry so
+# much, so the order IS the priority rule: when a limit forces a choice, the
+# earliest anchor is the one that survives.
+#
+#   frame  — the previous clip's final frame, sent as the next clip's first
+#            frame. Pins the exact pose, framing, lighting and wardrobe at the
+#            seam, and because the face is already in that frame it also
+#            carries identity for free.
+#   clip   — the previous clip itself as a video reference, so the model can
+#            read the motion, pacing and performance rhythm that led into the
+#            seam rather than having to be told them.
+#   identity— the founder's original character_reference image. Strongest
+#            identity signal on its own, but the weakest continuity signal: it
+#            says who the person is, never where the last shot ended.
+#
+# This ordering is why a provider that can only take one anchor takes the frame
+# and not the face: a bridge frame is both a continuity anchor AND an identity
+# anchor, while a face reference is only the latter.
+CONTINUITY_ANCHOR_ORDER = ("frame", "clip", "identity")
+
+# What we are actually able to promise the founder, derived from what was
+# attached rather than from what was requested.
+CONTINUITY_GUARANTEES = {
+    "frame_exact": (
+        "The next clip opens on the previous clip's final frame, so the seam is "
+        "frame-identical. The model animates forward from a real frame of the "
+        "approved video rather than re-imagining the scene."
+    ),
+    "frame_exact_plus_refs": (
+        "The next clip opens on the previous clip's final frame AND carries the "
+        "previous clip and the character reference alongside it, so identity, "
+        "wardrobe and motion continuity are all anchored at the seam."
+    ),
+    "text_only": (
+        "This provider cannot receive the previous clip as a visual anchor, so "
+        "continuity is carried by the written scene lock only. The character and "
+        "setting are re-described rather than reproduced pixel-for-pixel, and "
+        "the result may not match the approved hook exactly."
+    ),
+}
+
+
+def continuity_plan(
+    key: Optional[str],
+    has_bridge_frame: bool = False,
+    has_parent_clip_url: bool = False,
+    has_character_reference: bool = False,
+) -> dict:
+    """
+    Decide which continuity anchors a provider can carry, and say what it lost.
+
+    This is the single source of truth for continuity. Both the prompt builder
+    and the submission path read it, so the prompt can never claim a level of
+    continuity the request does not actually deliver — which is the difference
+    between an extension that continues a video and one that quietly becomes a
+    different clip with a similar prompt.
+
+    Every anchor that was wanted but not attached is returned in `degraded`
+    with the reason, so the caller can surface it instead of pretending.
+
+    Args:
+        key: provider key.
+        has_bridge_frame: the previous clip's final frame could be extracted.
+        has_parent_clip_url: the previous clip is reachable over public HTTPS.
+        has_character_reference: a character_reference asset is attached.
+
+    Returns:
+        {
+          "provider", "provider_name", "guarantee", "notes",
+          "use_frame", "use_clip_reference", "use_identity_reference",
+          "wanted": [...], "attached": [...], "degraded": [{"anchor", "reason"}],
+        }
+    """
+    # An editor is rejected here, BEFORE resolve() normalizes it away, because
+    # resolve() falls back to a generator and would otherwise hide the real
+    # problem: an editor cannot produce the next segment at all, no matter how
+    # many anchors it is offered.
+    if key and is_known(key) and VIDEO_MODELS[key].get("is_video_editor", False):
+        editor = capability(key)
+        return {
+            "provider": key,
+            "provider_name": editor["name"],
+            "guarantee": "unsupported",
+            "notes": (
+                f"{editor['name']} is a video editor, not a generator. It cannot produce the "
+                "next segment of a chain. Choose a generative provider for the influencer "
+                "workflow."
+            ),
+            "use_frame": False,
+            "use_clip_reference": False,
+            "use_identity_reference": False,
+            "wanted": ["frame", "clip", "identity"],
+            "attached": [],
+            "degraded": [
+                {
+                    "anchor": anchor,
+                    "reason": f"{editor['name']} edits an existing clip and cannot generate a new segment.",
+                }
+                for anchor in ("frame", "clip", "identity")
+            ],
+        }
+
+    model_key, _resolve_reason = resolve(key)
+    cap = capability(model_key)
+
+    wanted: list = []
+    if has_bridge_frame:
+        wanted.append("frame")
+    if has_parent_clip_url:
+        wanted.append("clip")
+    if has_character_reference:
+        wanted.append("identity")
+
+    use_frame = False
+    use_clip = False
+    use_identity = False
+    degraded: list = []
+
+    def drop(anchor: str, reason: str) -> None:
+        degraded.append({"anchor": anchor, "reason": reason})
+
+    if not wanted:
+        return {
+            "provider": model_key,
+            "provider_name": cap["name"],
+            "guarantee": "single_segment",
+            "notes": (
+                "Nothing to continue from — this is the opening segment, so no continuity "
+                "anchor is needed. Identity is carried by the character reference alone."
+                if has_character_reference
+                else "Nothing to continue from, and no character reference is attached."
+            ),
+            "use_frame": False,
+            "use_clip_reference": False,
+            "use_identity_reference": bool(has_character_reference) and accepts_identity_reference(model_key),
+            "wanted": wanted,
+            "attached": (
+                ["identity"] if has_character_reference and accepts_identity_reference(model_key) else []
+            ),
+            "degraded": (
+                []
+                if has_character_reference or accepts_identity_reference(model_key)
+                else [{"anchor": "identity", "reason": f"{cap['name']} cannot accept reference images."}]
+            ),
+        }
+
+    # A bridge frame is the whole ballgame. Without it there is nothing to
+    # continue from, and saying so is the difference between an honest
+    # text-only warning and a silently different character.
+    if not has_bridge_frame:
+        for anchor in wanted:
+            drop(
+                anchor,
+                "The previous clip's final frame could not be extracted, so there is no "
+                "visual seam to continue from. Continuity is text-only and the scene may "
+                "be re-imagined.",
+            )
+        attached = []
+        if has_character_reference and accepts_identity_reference(model_key):
+            use_identity = True
+            attached = ["identity"]
+        return {
+            "provider": model_key,
+            "provider_name": cap["name"],
+            "guarantee": "text_only",
+            "notes": CONTINUITY_GUARANTEES["text_only"],
+            "use_frame": False,
+            "use_clip_reference": False,
+            "use_identity_reference": use_identity,
+            "wanted": wanted,
+            "attached": attached,
+            "degraded": degraded,
+        }
+
+    use_frame = True
+    attached = ["frame"]
+
+    # Can this provider also carry the other two references?
+    if cap.get("supports_combined_refs"):
+        if has_parent_clip_url:
+            use_clip = True
+            attached.append("clip")
+        if has_character_reference and accepts_identity_reference(model_key):
+            use_identity = True
+            attached.append("identity")
+        if has_character_reference and not accepts_identity_reference(model_key):
+            drop("identity", f"{cap['name']} cannot accept reference images.")
+        return {
+            "provider": model_key,
+            "provider_name": cap["name"],
+            "guarantee": "frame_exact_plus_refs",
+            "notes": CONTINUITY_GUARANTEES["frame_exact_plus_refs"],
+            "use_frame": use_frame,
+            "use_clip_reference": use_clip,
+            "use_identity_reference": use_identity,
+            "wanted": wanted,
+            "attached": attached,
+            "degraded": degraded,
+        }
+
+    # One anchor only. The frame wins on the ordering above, and it already
+    # contains the face, so dropping the identity reference costs less than it
+    # appears to — but it is still a real limitation and is reported as one.
+    if not cap.get("supports_last_frame"):
+        use_frame = False
+        drop(
+            "frame",
+            f"{cap['name']} reports no last-frame/first-frame continuation support, so the "
+            "seam frame cannot be pinned even though it was extracted.",
+        )
+    else:
+        if has_parent_clip_url:
+            drop(
+                "clip",
+                f"{cap['name']} cannot combine a first-frame image with video references in one "
+                "request. The seam frame was kept because it pins the scene and the identity at once.",
+            )
+        if has_character_reference:
+            drop(
+                "identity",
+                f"{cap['name']} accepts one visual anchor per request, and the seam frame already "
+                "carries the founder's face. The separate character reference was not sent.",
+            )
+
+    if not use_frame:
+        # This provider will not pin a seam frame, so fall back to whatever
+        # single anchor it does accept. The promise drops to text_only because
+        # the model is being asked to reproduce a scene it cannot see.
+        attached = []
+        if has_parent_clip_url and int(cap.get("max_reference_videos", 0) or 0) > 0:
+            use_clip = True
+            attached.append("clip")
+        if has_character_reference and accepts_identity_reference(model_key):
+            if not use_clip:
+                use_identity = True
+                attached.append("identity")
+            else:
+                drop(
+                    "identity",
+                    f"{cap['name']} takes one anchor per request; the previous clip was kept "
+                    "because it carries both identity and continuity.",
+                )
+        return {
+            "provider": model_key,
+            "provider_name": cap["name"],
+            "guarantee": "text_only",
+            "notes": CONTINUITY_GUARANTEES["text_only"],
+            "use_frame": use_frame,
+            "use_clip_reference": use_clip,
+            "use_identity_reference": use_identity,
+            "wanted": wanted,
+            "attached": attached,
+            "degraded": degraded,
+        }
+
+    return {
+        "provider": model_key,
+        "provider_name": cap["name"],
+        "guarantee": "frame_exact",
+        "notes": CONTINUITY_GUARANTEES["frame_exact"],
+        "use_frame": use_frame,
+        "use_clip_reference": False,
+        "use_identity_reference": False,
+        "wanted": wanted,
+        "attached": attached,
+        "degraded": degraded,
+    }
+
+
 def plan_duration(key: Optional[str], requested: int) -> dict:
     """
     Fit a requested duration to what the provider can actually do.

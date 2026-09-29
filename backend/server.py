@@ -28,6 +28,7 @@ import template_library
 import claim_safety
 import video_providers
 import generation_planning
+import recommendation_tags
 import overlays
 import variations
 import analytics
@@ -40,6 +41,7 @@ from ai_service import (
     abstract_template_drafts,
     strip_html_to_text, remix_chat_turn, empty_remix_brief, VIDEO_MODELS, DEFAULT_VIDEO_MODEL,
     analyze_image_for_hook, TEXT_MODEL, VISION_MODEL,
+    generate_video_strategy, normalize_strategy,
 )
 from models import (
     IngestVideoRequest, BrandContextRequest, GenerateVideoRequest,
@@ -53,6 +55,8 @@ from models import (
     StudioGenerationRequest,     UpdateAssetRequest, AttachAssetRequest,
     OverlayCompositionRequest, CreateVariationRequest, PerformanceEntryRequest,
     ResearchScanRequest, FeedbackRequest,
+    GenerateStrategyRequest, GenerateHookRequest, ApproveSegmentRequest,
+    AssembleChainRequest,
     APP_PROFILE_LIST_FIELDS, APP_PROFILE_EDITABLE_FIELDS,
     TEMPLATE_STRUCTURED_FIELDS, TEMPLATE_TEXT_FIELDS, TEMPLATE_EDITABLE_FIELDS,
     STUDIO_EDITABLE_FIELDS,
@@ -617,6 +621,14 @@ async def init_db():
                 assets TEXT,
                 safety_report TEXT,
                 safety_summary TEXT,
+                -- The app-specific video strategy: hook concept, messaging,
+                -- locked persona and scene, per-segment plan, and the
+                -- continuity contract every later segment is held to. Stored
+                -- on the project (not the generation) because both the hook
+                -- and every extension read the SAME strategy — that shared
+                -- read is what keeps an extension on-message.
+                strategy TEXT,
+                strategy_version INTEGER DEFAULT 0,
                 script_version INTEGER DEFAULT 0,
                 status TEXT DEFAULT 'draft',
                 created_at TEXT,
@@ -652,6 +664,27 @@ async def init_db():
                 duration INTEGER,
                 status TEXT DEFAULT 'submitted',
                 segment_role TEXT DEFAULT 'primary',
+                -- Position in the influencer chain: 0 is the hook, 1+ are
+                -- extensions. Distinct from segment_role ('primary' vs
+                -- 'extension') because a one-shot primary generation is also
+                -- segment 0, and the chain assembler orders on this.
+                segment_index INTEGER DEFAULT 0,
+                -- Which strategy version produced this segment. A segment
+                -- generated against a stale strategy is refused as a
+                -- continuation, so an extension can never quietly disagree
+                -- with the approved hook.
+                strategy_version INTEGER DEFAULT 0,
+                -- The continuity record for this submission: which anchors
+                -- were wanted, which were actually attached, and what was
+                -- degraded and why. Persisted so a founder can always see
+                -- what the provider was actually given, rather than trusting
+                -- a prompt that merely asked for continuity.
+                continuity TEXT,
+                -- Set once the founder approves this segment. Only approved
+                -- segments are used as continuity anchors and included in the
+                -- assembled video.
+                approved INTEGER DEFAULT 0,
+                approved_at TEXT,
                 attempt INTEGER DEFAULT 1,
                 parent_generation_id TEXT,
                 variation_kind TEXT,
@@ -1107,6 +1140,39 @@ async def init_db():
                 await conn.execute(
                     f"ALTER TABLE {table} ADD COLUMN user_id TEXT DEFAULT 'anonymous'"
                 )
+        await conn.commit()
+
+        # Migration: the app-specific influencer workflow.
+        #
+        # Adds the strategy to studio_projects and the chain/continuity
+        # bookkeeping to generations. Both are additive with safe defaults, so
+        # an existing database gains the columns and every pre-existing row
+        # reads as "no strategy" / "segment 0, not approved" — which is the
+        # truth, since those videos were produced before this workflow existed.
+        # The one-shot single-pass path keeps working unchanged.
+        influencer_migrations = [
+            ("studio_projects", "strategy", "TEXT"),
+            ("studio_projects", "strategy_version", "INTEGER DEFAULT 0"),
+            ("generations", "segment_index", "INTEGER DEFAULT 0"),
+            ("generations", "strategy_version", "INTEGER DEFAULT 0"),
+            ("generations", "continuity", "TEXT"),
+            ("generations", "approved", "INTEGER DEFAULT 0"),
+            ("generations", "approved_at", "TEXT"),
+        ]
+        for table, column, decl in influencer_migrations:
+            cursor = await conn.execute(f"PRAGMA table_info({table})")
+            cols = {r[1] for r in await cursor.fetchall()}
+            if column not in cols:
+                logger.info(f"Migration: adding {table}.{column}")
+                await conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+        await conn.commit()
+
+        # Migration: generations gains an index on the segment chain so the
+        # assembler can order a project's approved segments cheaply.
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_generations_chain "
+            "ON generations (studio_project_id, segment_index)"
+        )
         await conn.commit()
 
         # Seed the curated template library once. Runs AFTER the user_id
@@ -6292,94 +6358,160 @@ def _score_template_for_angle(
 
     Deliberately transparent and deterministic rather than an LLM call: the
     founder sees WHY a template was picked, and a recommendation can be
-    re-derived and audited. Scoring is a weighted sum of explicit signals,
-    each contributing a human-readable reason.
+    re-derived and audited. Scoring is a weighted sum of explicit signals;
+    reasons are ranked by weight so the first one shown is the strongest
+    factor.
+
+    URL-analysis factors are real inputs, with the angle taking precedence
+    and the profile as fallback: app category, target audience (normalized
+    to tags, plus funnel stages implied by the angle kind), the core problem
+    (normalized to problem tags), and the main feature. Matching is tag
+    overlap via recommendation_tags, never brittle full-string equality.
+    Reasons describe structure only - no performance claims.
     """
     score = 0.0
-    reasons: list = []
-    limitations: list = []
+    weighted = []  # (weight, reason), sorted by weight at the end
+    limitations = []
+    matched = {"category": None, "audience_tags": [], "problem_tags": [], "feature_keyword": ""}
 
+    def add(weight, reason):
+        weighted.append((weight, reason))
+
+    angle = angle or {}
     tpl_objective = (template.get("objective") or "").strip()
-    tpl_categories = [str(c).lower() for c in (template.get("app_categories") or [])]
-    tpl_audiences = [str(a).lower() for a in (template.get("audiences") or [])]
+    tpl_categories = [
+        recommendation_tags.category_key(c)
+        for c in (template.get("app_categories") or [])
+        if recommendation_tags.category_key(c)
+    ]
+    tpl_audience_tags = set(
+        recommendation_tags.audience_tags(*[str(a) for a in (template.get("audiences") or [])])
+    )
     required_assets = [str(a).lower() for a in (template.get("required_assets") or [])]
 
     if objective and tpl_objective:
         if tpl_objective == objective:
             score += 3.0
-            reasons.append(f"Built for the '{objective.replace('_', ' ')}' objective.")
+            add(3.0, f"Built for the '{objective.replace('_', ' ')}' objective.")
         else:
             score += 0.5
-            reasons.append(
-                f"Designed for '{tpl_objective.replace('_', ' ')}', close to your '{objective.replace('_', ' ')}' goal."
+            add(
+                0.5,
+                f"Designed for '{tpl_objective.replace('_', ' ')}', close to your '{objective.replace('_', ' ')}' goal.",
             )
 
-    profile_category = (profile.get("app_category") or profile.get("niche") or "").strip().lower()
+    profile_category = (profile.get("app_category") or profile.get("niche") or "").strip()
     if profile_category and tpl_categories:
-        if any(profile_category in c or c in profile_category for c in tpl_categories):
+        key = recommendation_tags.category_key(profile_category)
+        hit = next((c for c in tpl_categories if c in key or key in c), None)
+        if hit:
             score += 2.5
-            reasons.append(f"Suited to the '{profile.get('app_category') or profile.get('niche')}' category.")
+            add(2.5, f"Suited to the '{profile_category}' category.")
+            matched["category"] = hit
         else:
-            score += 0.0
             limitations.append(
-                f"Curated for {', '.join(tpl_categories)} rather than {profile.get('app_category') or profile.get('niche')}; expect to adapt the framing."
+                f"Curated for {', '.join(tpl_categories)} rather than {profile_category}; expect to adapt the framing."
             )
+    if profile_category and not tpl_categories:
+        score += 1.0
+        add(1.0, "Category-agnostic, so it adapts to any app.")
 
-    if angle:
-        angle_kind = (angle.get("kind") or "").strip()
-        audience = (angle.get("target_audience") or "").strip().lower()
-        feature = (angle.get("app_feature") or "").strip().lower()
+    # ---- Audience: people from the profile/angle, plus the funnel stage
+    # the angle kind implies. Curated templates tag funnel stage; profiles
+    # describe people; recommendation_tags normalizes both to one axis.
+    audience_texts = [angle.get("target_audience") or profile.get("target_audience") or ""]
+    audience_texts += recommendation_tags.text_list(profile.get("icp_segments"))
+    app_audience_tags = set(recommendation_tags.audience_tags(*audience_texts))
+    app_audience_tags |= set(recommendation_tags.angle_funnel_tags(angle.get("kind") or ""))
+    if app_audience_tags and tpl_audience_tags:
+        overlap = sorted(app_audience_tags & tpl_audience_tags)
+        if overlap:
+            score += 1.0
+            add(1.0, f"Matches your audience: {', '.join(overlap)}.")
+            matched["audience_tags"] = overlap
+            if len(overlap) >= 2:
+                score += 0.5
+    elif app_audience_tags and not tpl_audience_tags:
+        score += 0.5
+        add(0.5, "No audience restrictions, so it works for yours.")
 
-        # Category <-> angle affinity: demo-ish templates suit demonstration
-        # angles, story templates suit founder-story, and so on.
+    # ---- Problem: the core problem from the angle or the profile research.
+    problem_text = (angle.get("user_problem") or "").strip()
+    if not problem_text:
+        problem_text = "; ".join(recommendation_tags.text_list(profile.get("problems_solved")))
+    app_problem_tags = set(recommendation_tags.problem_tags(problem_text)) if problem_text else set()
+    if app_problem_tags:
+        template_blob = " ".join(
+            [str(template.get("name") or ""), str(template.get("category") or ""),
+             str(tpl_objective), str(template.get("opening_structure") or ""),
+             str(template.get("continuation_structure") or ""),
+             str(template.get("cta_pattern") or "")]
+            + [f"{k} {v}" for k, v in (template.get("content_slots") or {}).items()]
+        )
+        overlap = sorted(app_problem_tags & set(recommendation_tags.problem_tags(template_blob)))
+        foreground = (template.get("category") or "") in (
+            "pain-point-question", "contrarian", "before-after",
+        ) or tpl_objective == "address_user_problem"
+        if overlap:
+            score += 1.0
+            add(1.0, f"Built around the problem you target: {', '.join(overlap)}.")
+            matched["problem_tags"] = overlap
+            if len(overlap) >= 2:
+                score += 0.5
+        elif foreground:
+            score += 0.5
+            add(0.5, "Opens on the viewer's problem, which is what this angle leads with.")
+
+    # ---- Angle-kind / structure affinity (unchanged, structural) ----
+    angle_kind = (angle.get("kind") or "").strip()
+    if angle_kind:
         demo_categories = {"demo", "tutorial", "reveal"}
         story_categories = {"story", "pov", "before-after"}
         if angle_kind in ("feature_demonstration", "fast_tutorial") and template.get("category") in demo_categories:
             score += 2.0
-            reasons.append("Demonstrates a feature on screen, which is what this angle needs.")
+            add(2.0, "Demonstrates a feature on screen, which is what this angle needs.")
         elif angle_kind in ("founder_story", "daily_life_use_case") and template.get("category") in story_categories:
             score += 2.0
-            reasons.append("Narrative structure suits a story-led angle.")
+            add(2.0, "Narrative structure suits a story-led angle.")
         elif angle_kind in ("problem_solution", "common_mistake") and template.get("category") in (
             "pain-point-question", "contrarian", "listicle", "pattern-interrupt"
         ):
             score += 2.0
-            reasons.append("Direct-problem structure matches this angle.")
+            add(2.0, "Direct-problem structure matches this angle.")
         elif angle_kind in ("competitor_alternative", "product_comparison") and template.get("category") == "social-proof":
             score += 2.0
-            reasons.append("Comparison structure fits a side-by-side angle.")
+            add(2.0, "Comparison structure fits a side-by-side angle.")
         elif angle_kind in ("objection_handling", "privacy_pricing_differentiation") and template.get("category") in (
             "contrarian", "social-proof", "curiosity-gap"
         ):
             score += 1.5
-            reasons.append("Works well for answering an objection head-on.")
+            add(1.5, "Works well for answering an objection head-on.")
         else:
             score += 0.5
 
-        if audience and tpl_audiences:
-            for tpl_aud in tpl_audiences:
-                if tpl_aud and (tpl_aud in audience or audience in tpl_aud):
-                    score += 1.0
-                    reasons.append("Audience framing matches the selected segment.")
-                    break
+    # ---- Main feature: the angle's feature, or the top core feature from
+    # the URL analysis when no angle is selected.
+    main_feature = (angle.get("app_feature") or "").strip()
+    if not main_feature:
+        feats = recommendation_tags.text_list(profile.get("core_features"))
+        main_feature = feats[0] if feats else ""
+    if main_feature:
+        feature_tokens = {t for t in main_feature.replace(",", " ").split() if len(t) > 3}
+        slot_blob = " ".join(str(v) for v in (template.get("content_slots") or {}).values()).lower()
+        name_blob = f"{template.get('name') or ''} {template.get('category') or ''}".lower()
+        hit = next(
+            (tok for tok in feature_tokens if tok.lower() in slot_blob or tok.lower() in name_blob),
+            None,
+        )
+        if hit:
+            score += 1.0
+            add(1.0, f"Has a content slot that fits '{hit}' - your main feature.")
+            matched["feature_keyword"] = hit
 
-        if feature:
-            feature_tokens = {t for t in feature.replace(",", " ").split() if len(t) > 3}
-            slot_blob = " ".join(
-                str(v) for v in (template.get("content_slots") or {}).values()
-            ).lower()
-            if feature_tokens and any(tok in slot_blob for tok in feature_tokens):
-                score += 1.0
-                reasons.append("Has a content slot that fits the feature being demonstrated.")
-
-        if angle.get("claims_to_respect"):
-            limitations.append(
-                "Bounded by: " + "; ".join(str(c) for c in angle["claims_to_respect"][:3])
-            )
-
-    if not tpl_categories:
-        score += 1.0
-        reasons.append("Category-agnostic, so it adapts to any app.")
+    if angle.get("claims_to_respect"):
+        limitations.append(
+            "Bounded by: " + "; ".join(str(c) for c in angle["claims_to_respect"][:3])
+        )
 
     if required_assets:
         limitations.append(
@@ -6388,7 +6520,12 @@ def _score_template_for_angle(
     if not template.get("continuation_structure"):
         limitations.append("No continuation structure recorded; the studio will infer one.")
     if (template.get("review_status") or "approved") != "approved":
-        limitations.append("Unpublished research draft — review before using.")
+        limitations.append("Unpublished research draft - review before using.")
+
+    # Strongest factor first. Stable sort keeps same-weight reasons in
+    # insertion order, and feedback still lands at the very top below.
+    weighted.sort(key=lambda item: -item[0])
+    reasons = [reason for _, reason in weighted]
 
     feedback = feedback_mod.template_feedback_adjustment(
         feedback_events, template.get("id") or ""
@@ -6413,8 +6550,8 @@ def _score_template_for_angle(
         "reasons": reasons,
         "limitations": limitations,
         "feedback": feedback,
+        "matched": matched,
     }
-
 
 @api_router.get("/app-profiles/{profile_id}/template-recommendations")
 async def recommend_templates(
@@ -6474,6 +6611,7 @@ async def recommend_templates(
             "template": _public_library_template(tpl),
             "score": result["score"],
             "why_it_fits": result["reasons"],
+            "matched_factors": result["matched"],
             "target_audience": (angle or {}).get("target_audience") or profile.get("target_audience") or "",
             "app_feature": (angle or {}).get("app_feature") or "",
             "required_assets": tpl.get("required_assets") or [],
@@ -6672,11 +6810,29 @@ async def update_studio_project(
         return _public_project(row)
 
     set_clauses, values = [], []
+    strategy_edited = False
     for key, value in updates.items():
         if key in ("beat_timeline", "assets"):
             value = json.dumps(value if isinstance(value, list) else [])
         elif key == "overlays":
             value = json.dumps(_normalize_overlays(value))
+        elif key == "strategy":
+            # A hand-edited strategy is re-validated and version-bumped, the
+            # same as a generated one. Bumping the version is what stops a
+            # later extension from being built against a strategy the founder
+            # has since changed underneath an already-approved hook.
+            existing = row.get("strategy") or {}
+            if isinstance(existing, str):
+                try:
+                    existing = json.loads(existing)
+                except (json.JSONDecodeError, TypeError):
+                    existing = {}
+            if not isinstance(value, dict):
+                value = existing if isinstance(existing, dict) else {}
+            value = normalize_strategy({**existing, **value} if isinstance(existing, dict) else value)
+            set_clauses.append("strategy_version = strategy_version + 1")
+            strategy_edited = True
+            value = json.dumps(value)
         elif key in ("template_id", "content_angle_id"):
             value = (value or "").strip() or None
         elif key == "objective":
@@ -6707,6 +6863,13 @@ async def update_studio_project(
         for key, value in updates.items():
             if key in ("beat_timeline", "overlays", "assets"):
                 merged[key] = value if isinstance(value, list) else []
+            elif key == "strategy":
+                # Already serialized above; claim checking walks the structure,
+                # so give it the dict rather than the JSON string.
+                try:
+                    merged[key] = json.loads(value) if isinstance(value, str) else (value or {})
+                except (json.JSONDecodeError, TypeError):
+                    merged[key] = {}
             else:
                 merged[key] = value
         report = claim_safety.build_safety_report(merged, profile)
@@ -6899,7 +7062,11 @@ def _public_generation(row: dict) -> dict:
     out = dict(row)
     out["adjustments"] = out.get("adjustments") or []
     out["variation_params"] = out.get("variation_params") or {}
+    out["continuity"] = out.get("continuity") or {}
     out["retryable"] = bool(out.get("retryable"))
+    out["approved"] = bool(out.get("approved"))
+    out["segment_index"] = int(out.get("segment_index") or 0)
+    out["strategy_version"] = int(out.get("strategy_version") or 0)
     out.pop("prompt_used", None)
     return out
 
@@ -6990,21 +7157,38 @@ async def _submit_generation(
     model: str = "",
     duration: Optional[int] = None,
     segment_role: str = "primary",
+    segment_index: int = 0,
     parent_generation_id: str = "",
     is_extension: bool = False,
+    is_hook: bool = False,
     attempt: int = 1,
     variation_kind: str = "",
     variation_params: Optional[dict] = None,
     generate_audio: Optional[bool] = None,
+    strategy: Optional[dict] = None,
+    continuity: Optional[dict] = None,
+    continuity_frame: Optional[Path] = None,
+    continuity_video_url: str = "",
+    previous_summary: str = "",
 ) -> dict:
     """
-    Submit ONE video generation job for the whole video.
+    Submit ONE video generation job.
+
+    Two prompt paths, chosen by what the caller is doing:
+
+    - A segmented influencer segment (a strategy is supplied) uses
+      build_segment_prompt, which carries the app-specific strategy, the
+      locked persona and scene, and — for a continuation — an explicit record
+      of what the previous segment already established. It is also told, via
+      `continuity`, exactly which visual anchors are riding along, so it never
+      claims a level of continuity the request will not deliver.
+    - Everything else uses build_single_pass_prompt, which is unchanged.
 
     A second job is created only when the caller passes segment_role
-    'extension', which the endpoints below do exclusively for the three
-    justified reasons: the duration exceeds the provider's single-pass limit,
-    the founder explicitly asked to extend, or a segment is being replaced
-    after a recoverable failure.
+    'extension', which the endpoints do exclusively for the justified
+    reasons: the duration exceeds the provider's single-pass limit, the
+    founder explicitly asked to extend an approved take, or a segment is
+    being replaced after a recoverable failure.
     """
     requested = duration or project.get("duration_seconds") or 20
     plan = video_providers.plan_duration(model, requested)
@@ -7014,15 +7198,28 @@ async def _submit_generation(
         plan["primary_seconds"], max(1, requested)
     )
 
-    prompt = generation_planning.build_single_pass_prompt(
-        plan=project,
-        profile=profile,
-        template=template,
-        duration=seconds,
-        segment=segment_role,
-        asset_notes=generation_planning.asset_notes(project.get("assets") or []),
-        is_extension=is_extension,
-    )
+    if strategy:
+        prompt = generation_planning.build_segment_prompt(
+            strategy=strategy,
+            profile=profile,
+            template=template,
+            segment_index=int(segment_index or 0),
+            duration=seconds,
+            assets=project.get("assets") or [],
+            continuity=continuity,
+            is_hook=bool(is_hook) or int(segment_index or 0) == 0,
+            previous_summary=previous_summary,
+        )
+    else:
+        prompt = generation_planning.build_single_pass_prompt(
+            plan=project,
+            profile=profile,
+            template=template,
+            duration=seconds,
+            segment=segment_role,
+            asset_notes=generation_planning.asset_notes(project.get("assets") or []),
+            is_extension=is_extension,
+        )
 
     # Avatar influencer: an attached character_reference rides along as an
     # input_references identity guide, following the proven legacy face-swap
@@ -7033,21 +7230,55 @@ async def _submit_generation(
     studio_references = await _studio_identity_references(
         project.get("assets") or [], model_key, user_id
     )
+    # A continuity plan that decided not to send the identity reference (because
+    # the seam frame already carries the face) must not have it smuggled in
+    # behind its back, or the provider would be asked to carry two anchors it
+    # cannot take.
+    if continuity and not continuity.get("use_identity_reference", True):
+        studio_references = []
+    # The seam frame is gated by the same plan that decided it. Without this the
+    # request would carry a first frame on a provider that rejects one, or on a
+    # plan that reported text-only continuity — the prompt would then promise a
+    # visual seam the request does not contain.
+    if continuity and not continuity.get("use_frame", True):
+        continuity_frame = None
+    if continuity and continuity.get("use_clip_reference"):
+        studio_references = [
+            {"type": "video_url", "video_url": {"url": continuity_video_url}},
+            *studio_references,
+        ]
 
     generation_id = str(uuid.uuid4())
     now = now_iso()
+    # Stamp the strategy version whenever the project HAS one, not only when a
+    # strategy was passed in. The one-shot single-pass generation is still
+    # segment 0 of this project's chain, so it must record which strategy it
+    # belongs to — otherwise the staleness check on an extension has nothing
+    # to compare against and a re-strategised project would happily extend a
+    # hook built under a superseded strategy.
+    project_strategy = project.get("strategy") or {}
+    if isinstance(project_strategy, str):
+        try:
+            project_strategy = json.loads(project_strategy)
+        except (json.JSONDecodeError, TypeError):
+            project_strategy = {}
+    has_strategy = bool((strategy or project_strategy or {}).get("hook_line"))
+    strategy_version = int(project.get("strategy_version") or 0) if has_strategy else 0
     await _execute(
         """INSERT INTO generations
            (id, studio_project_id, brand_profile_id, template_id, template_version,
             script_version, model, model_id, requested_duration, duration, status,
-            segment_role, attempt, parent_generation_id, variation_kind, variation_params,
-            cost_source, prompt_used, adjustments, retryable, requested_at, created_at,
-            updated_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)""",
+            segment_role, segment_index, strategy_version, continuity,
+            attempt, parent_generation_id, variation_kind, variation_params,
+            cost_source, prompt_used, adjustments, retryable, approved,
+            requested_at, created_at, updated_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?)""",
         (generation_id, project["id"], project.get("brand_profile_id"),
          project.get("template_id"), project.get("template_version"),
          project.get("script_version"), model_key, cap["id"],
-         requested, seconds, segment_role, attempt, parent_generation_id or None,
+         requested, seconds, segment_role, int(segment_index or 0), strategy_version,
+         json.dumps(continuity) if continuity else None,
+         attempt, parent_generation_id or None,
          variation_kind or None, json.dumps(variation_params or {}),
          "pending", prompt, json.dumps(plan["adjustments"]), now, now, now, user_id),
     )
@@ -7060,6 +7291,10 @@ async def _submit_generation(
                 duration=seconds,
                 model=model_key,
                 input_references=studio_references or None,
+                # The previous clip's final frame becomes this clip's first
+                # frame. This is the mechanism that makes the extension read
+                # as a continuation rather than a new scene.
+                continuity_frame_path=continuity_frame,
                 # Default to native audio when the provider offers it; the plan's
                 # sound direction is already written into the prompt.
                 generate_audio=(
@@ -7085,9 +7320,15 @@ async def _submit_generation(
         raise HTTPException(status_code=502, detail=f"Video generation failed to submit: {message[:200]}")
 
     job_id = submitted.get("id") or ""
+    # Fold in what the provider actually accepted, so the record reflects the
+    # real request rather than the intended one.
+    reported = dict(continuity or {})
+    reported.update(submitted.get("continuity") or {})
     await _execute(
-        "UPDATE generations SET openrouter_job_id = ?, polling_url = ?, status = 'generating', updated_at = ? WHERE id = ?",
-        (job_id, submitted.get("polling_url") or "", now_iso(), generation_id),
+        "UPDATE generations SET openrouter_job_id = ?, polling_url = ?, status = 'generating', "
+        "continuity = ?, updated_at = ? WHERE id = ?",
+        (job_id, submitted.get("polling_url") or "", json.dumps(reported), now_iso(),
+         generation_id),
     )
     await _record_cost(generation_id, submitted)
 
@@ -7101,8 +7342,10 @@ async def _submit_generation(
     )
 
     logger.info(
-        f"Submitted generation {generation_id} ({segment_role}, attempt {attempt}) "
-        f"model={model_key} duration={seconds}s cost={submitted.get('usage', {}).get('cost') if isinstance(submitted.get('usage'), dict) else 'n/a'}"
+        f"Submitted generation {generation_id} ({segment_role}, segment {segment_index}, "
+        f"attempt {attempt}) model={model_key} duration={seconds}s "
+        f"continuity={reported.get('guarantee') or 'n/a'} "
+        f"cost={submitted.get('usage', {}).get('cost') if isinstance(submitted.get('usage'), dict) else 'n/a'}"
     )
     return _public_generation_detail(
         await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
@@ -7447,9 +7690,307 @@ async def retry_generation(generation_id: str, user_id: str = Depends(get_curren
         model=row.get("model") or "",
         duration=row.get("duration"),
         segment_role=row.get("segment_role") or "primary",
+        segment_index=int(row.get("segment_index") or 0),
         parent_generation_id=generation_id,
         attempt=int(row.get("attempt") or 1) + 1,
     )
+
+
+def _current_safety_report(project: dict, profile: dict) -> dict:
+    """
+    Recompute the claim verdict from the project as it stands right now.
+
+    The stored report is a cache, and the hook endpoint must not trust it: the
+    strategy is the newest place a claim can appear, and a report computed
+    before the strategy existed would let a banned hook line through a paid
+    render. Recomputing is cheap and deterministic, so the gate is always
+    evaluated against the text that is actually about to be sent to the model.
+    """
+    return claim_safety.build_safety_report(project or {}, profile or {})
+
+
+@api_router.post("/studio/projects/{project_id}/strategy")
+async def generate_project_strategy(
+    project_id: str, payload: GenerateStrategyRequest, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Build the app-specific video strategy for a project.
+
+    This is the step that makes the influencer workflow app-specific rather
+    than generic. It reads the approved App Profile, the selected hook
+    mechanism, the content angle and the objective, and returns a strategy
+    that fixes the hook concept, the messaging, the exact words, the
+    on-camera person's appearance and the scene they stand in — plus a
+    continuity contract that every later segment is held to.
+
+    Free: no video is generated here, only text. The founder reviews and edits
+    the strategy, then generates the 3-4 second hook from it.
+
+    Regenerating bumps strategy_version, which invalidates unapproved segments
+    built against the previous version so a hook can never be extended with a
+    strategy that no longer matches it.
+    """
+    require_ai_configured()
+    row = await _fetch_one(
+        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?", (project_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Studio project not found")
+
+    profile = await _require_profile_for_studio(row.get("brand_profile_id"), user_id)
+
+    if not row.get("template_id"):
+        raise HTTPException(
+            status_code=400,
+            detail="Choose a hook template first — the strategy must serve the selected mechanism.",
+        )
+    template = await _fetch_one(
+        "SELECT * FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",
+        (row["template_id"], user_id),
+    )
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    angle = None
+    if row.get("content_angle_id"):
+        angle = await _fetch_one(
+            "SELECT * FROM content_angles WHERE id = ? AND brand_profile_id = ? AND user_id = ?",
+            (row["content_angle_id"], row.get("brand_profile_id"), user_id),
+        )
+        if not angle:
+            raise HTTPException(status_code=404, detail="Content angle not found for this App Profile")
+
+    objective = template_library.normalize_objective(
+        payload.objective or row.get("objective") or ""
+    )
+    total_duration = template_library.clamp_duration(
+        payload.duration_seconds or row.get("duration_seconds")
+    )
+    tone = (payload.tone or row.get("tone") or "").strip()
+
+    # The hook is deliberately short. It is clamped to the provider's real
+    # range rather than asked for as something the model cannot render — most
+    # providers will not produce under 4s at all.
+    model_key, _reason = video_providers.resolve(None)
+    cap = video_providers.capability(model_key)
+    requested_hook = payload.hook_seconds or 4
+    hook_seconds = max(cap["min_duration"], min(int(requested_hook), cap["max_duration"]))
+
+    profile_feedback = feedback_mod.summarize_profile_feedback(
+        await _fetch_all(
+            "SELECT event, signal, reason, template_id FROM feedback_events "
+            "WHERE brand_profile_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 200",
+            (row.get("brand_profile_id"), user_id),
+        ),
+        template.get("id") or "",
+    )
+
+    try:
+        strategy = await _log_model_call(
+            "video_strategy", "text", TEXT_MODEL,
+            lambda: generate_video_strategy(
+                profile=profile,
+                template=template,
+                angle=angle,
+                objective=objective,
+                hook_seconds=hook_seconds,
+                total_duration=total_duration,
+                tone=tone,
+                brand_voice=profile.get("tone_voice") or "",
+                profile_feedback=profile_feedback,
+            ),
+            user_id,
+            brand_profile_id=row.get("brand_profile_id"),
+            studio_project_id=project_id,
+            template_id=template.get("id"),
+        )
+    except Exception as e:
+        logger.error(f"Strategy generation failed for project {project_id}: {e}")
+        raise HTTPException(status_code=502, detail=f"AI strategy generation failed. Please try again. ({str(e)[:150]})")
+
+    # The strategy carries the words that will actually be spoken, so it goes
+    # through exactly the same claim check as the plan. A banned claim in the
+    # hook line is still a banned claim, and generation is gated on this.
+    merged = dict(row)
+    merged["strategy"] = strategy
+    report = claim_safety.build_safety_report(merged, profile)
+    summary = claim_safety.summarize(report)
+
+    version = int(row.get("strategy_version") or 0) + 1
+    now = now_iso()
+    await _execute(
+        """UPDATE studio_projects SET strategy = ?, strategy_version = ?,
+             safety_report = ?, safety_summary = ?, status = 'draft', updated_at = ?
+           WHERE id = ? AND user_id = ?""",
+        (json.dumps(strategy), version, json.dumps(report), summary, now,
+         project_id, user_id),
+    )
+    logger.info(
+        f"Generated strategy for project {project_id} (v{version}) — hook "
+        f"{hook_seconds}s, {len(strategy.get('segments') or [])} segment(s) — {summary}"
+    )
+    return _public_project(
+        await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,))
+    )
+
+
+@api_router.post("/generations/{generation_id}/approve")
+async def approve_generation(
+    generation_id: str, payload: ApproveSegmentRequest, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Approve a completed segment.
+
+    Approval is the gate the whole influencer workflow turns on: only an
+    approved segment may anchor an extension, and only approved segments are
+    joined into the final video. A rejected segment is simply never approved,
+    so the founder keeps control over which take continues the story.
+    """
+    row = await _fetch_one(
+        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Generation not found")
+    if row.get("status") != "completed":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Only a completed video can be approved. This one is '{row.get('status')}'.",
+        )
+    await _execute(
+        "UPDATE generations SET approved = 1, approved_at = ?, updated_at = ? WHERE id = ?",
+        (now_iso(), now_iso(), generation_id),
+    )
+    return _public_generation_detail(
+        await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
+    )
+
+
+@api_router.get("/generations/{generation_id}/continuity")
+async def get_generation_continuity(
+    generation_id: str, user_id: str = Depends(get_current_user_id)
+):
+    """
+    What the provider was actually given for this segment, and what it was not.
+
+    The honest continuity report for one segment: which anchors were attached,
+    which were dropped, why, and what the founder should therefore expect to
+    see. Exposed separately because "did the model get the previous clip?" is
+    the question a founder asks when an extension looks wrong, and the answer
+    should be a record rather than an inference from the prompt.
+    """
+    row = await _fetch_one(
+        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Generation not found")
+    continuity = row.get("continuity") or {}
+    if isinstance(continuity, str):
+        try:
+            continuity = json.loads(continuity)
+        except (json.JSONDecodeError, TypeError):
+            continuity = {}
+    guarantee = str(continuity.get("guarantee") or "")
+    return {
+        "generation_id": generation_id,
+        "segment_index": int(row.get("segment_index") or 0),
+        "segment_role": row.get("segment_role") or "primary",
+        "continuity": continuity,
+        "guarantee": guarantee,
+        "attached": continuity.get("attached") or [],
+        "degraded": continuity.get("degraded") or [],
+        "notes": continuity.get("notes") or "",
+        "strategy_version": int(row.get("strategy_version") or 0),
+    }
+
+
+@api_router.post("/studio/projects/{project_id}/hook", status_code=202)
+async def generate_project_hook(
+    project_id: str, payload: GenerateHookRequest, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Generate the opening 3-4 second hook from the project's strategy.
+
+    Deliberately its own short job rather than a full-length generation: the
+    hook is the cheapest possible test of whether the concept works, and it is
+    what the founder approves before any extension is allowed.
+
+    Refuses without an approved App Profile, a strategy, and a passing claim
+    check — the hook is the part of the video most likely to overpromise, and
+    it is the part a viewer decides in under two seconds.
+    """
+    require_ai_configured()
+    project = await _fetch_one(
+        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?", (project_id, user_id)
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Studio project not found")
+
+    profile = await _require_profile_for_studio(project.get("brand_profile_id"), user_id)
+
+    strategy = project.get("strategy") or {}
+    if isinstance(strategy, str):
+        try:
+            strategy = json.loads(strategy)
+        except (json.JSONDecodeError, TypeError):
+            strategy = {}
+    if not strategy.get("hook_line"):
+        raise HTTPException(
+            status_code=400,
+            detail="Create the video strategy first — the hook is generated from it.",
+        )
+
+    report = _current_safety_report(project, profile)
+    if report and not report.get("passed", True):
+        blocking = [b.get("claim") for b in report.get("blocking", []) if b.get("claim")]
+        raise HTTPException(
+            status_code=409,
+            detail="Fix prohibited claims before generating: " + ", ".join(blocking[:3]),
+        )
+
+    template = await _fetch_one(
+        "SELECT * FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",
+        (project.get("template_id"), user_id),
+    )
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    model_key, reason = video_providers.resolve(payload.model or None)
+    cap = video_providers.capability(model_key)
+    seconds = max(
+        cap["min_duration"],
+        min(
+            int(payload.duration_seconds or strategy.get("hook_seconds") or 4),
+            cap["max_duration"],
+        ),
+    )
+
+    generation = await _submit_generation(
+        project=project,
+        profile=profile,
+        template=template,
+        user_id=user_id,
+        model=model_key,
+        duration=seconds,
+        segment_role="primary",
+        segment_index=0,
+        is_hook=True,
+        strategy=strategy,
+        # A hook is the opening segment, so there is nothing to continue from.
+        # It still carries the character reference, and the continuity record
+        # says so explicitly rather than leaving "attached" empty.
+        continuity=video_providers.continuity_plan(
+            model_key,
+            has_bridge_frame=False,
+            has_parent_clip_url=False,
+            has_character_reference=any(
+                isinstance(a, dict)
+                and str(a.get("kind") or "").strip().lower() == "character_reference"
+                for a in (project.get("assets") or [])
+            ),
+        ),
+    )
+    generation["provider_reason"] = reason
+    return generation
 
 
 @api_router.post("/generations/{generation_id}/extend", status_code=202)
@@ -7457,11 +7998,33 @@ async def extend_generation(
     generation_id: str, payload: StudioGenerationRequest, user_id: str = Depends(get_current_user_id)
 ):
     """
-    Continue a completed video beyond its current length.
+    Continue an approved video, preserving the person and the scene.
 
-    This is one of only three situations that justify a second model call,
-    the other two being a duration over the provider's single-pass limit and
-    a failed-segment replacement.
+    This is the request the influencer workflow depends on, and it works
+    differently from the generic "make it longer" extension:
+
+    1. The parent must be APPROVED. An unapproved take is never continued,
+       so a rejected hook cannot quietly become the first 4 seconds of the
+       final video.
+    2. The parent's final frame is extracted and sent as this segment's first
+       frame. That is the provider's own continuation mechanism, and it is
+       what makes the seam frame-identical rather than merely similar.
+    3. The parent clip and the original character reference ride along as
+       references when the provider can carry them, so identity, wardrobe and
+       motion are all anchored rather than re-described.
+    4. The prompt is rebuilt from the project's STRATEGY, not from the whole
+       original timeline, so the extension carries only its own beats plus an
+       explicit "the opening already established X, do not repeat it".
+    5. Whatever the provider cannot accept is returned as a recorded
+       degradation rather than being dropped silently.
+
+    The prompt is NOT regenerated from the full script, which is what used to
+    make an extension replay the hook with a new face.
+
+    Projects WITHOUT a strategy keep the original single-pass behaviour
+    unchanged, so the existing one-shot flow and its Extend button are
+    unaffected. The segmented contract above applies once a strategy exists,
+    which is what opts a project into the influencer workflow.
     """
     require_ai_configured()
     row = await _fetch_one(
@@ -7474,29 +8037,111 @@ async def extend_generation(
             status_code=409, detail="Only a completed video can be extended."
         )
 
-    extra = payload.duration_seconds or 10
-    model_key, _ = video_providers.resolve(row.get("model") or None)
-    cap = video_providers.capability(model_key)
-    if extra > cap["max_duration"]:
-        raise HTTPException(
-            status_code=400,
-            detail=f"{cap['name']} can add at most {cap['max_duration']}s in one pass.",
-        )
-
     project = await _fetch_one(
         "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?",
         (row.get("studio_project_id"), user_id),
     )
     if not project:
-        raise HTTPException(status_code=404, detail="The studio project for this generation is gone")
-    profile = await _fetch_one(
-        "SELECT * FROM brand_profiles WHERE id = ?", (project.get("brand_profile_id"),)
-    )
+        raise HTTPException(status_code=409, detail="The studio project for this generation is gone")
+    profile = await _require_profile_for_studio(project.get("brand_profile_id"), user_id)
     template = await _fetch_one(
-        "SELECT * FROM hook_templates WHERE id = ?", (project.get("template_id"),)
+        "SELECT * FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",
+        (project.get("template_id"), user_id),
     )
-    if not profile or not template:
-        raise HTTPException(status_code=409, detail="Cannot extend: profile or template is missing")
+    if not template:
+        raise HTTPException(status_code=409, detail="Template not found")
+
+    strategy = project.get("strategy") or {}
+    if isinstance(strategy, str):
+        try:
+            strategy = json.loads(strategy)
+        except (json.JSONDecodeError, TypeError):
+            strategy = {}
+
+    model_key, _reason = video_providers.resolve(row.get("model") or None)
+    cap = video_providers.capability(model_key)
+    extra = int(payload.duration_seconds or 5)
+    if extra > cap["max_duration"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{cap['name']} can add at most {cap['max_duration']}s in one pass.",
+        )
+    extra = max(cap["min_duration"], extra)
+
+    if not strategy:
+        # No strategy: this project is on the original one-shot flow, so keep
+        # its Extend behaviour exactly as it was — no approval gate, no
+        # continuity anchoring, and the same single-pass continuation prompt.
+        legacy = await _submit_generation(
+            project=project,
+            profile=profile,
+            template=template,
+            user_id=user_id,
+            model=model_key,
+            duration=extra,
+            segment_role="extension",
+            segment_index=0,
+            parent_generation_id=generation_id,
+            is_extension=True,
+            variation_kind="extension",
+            variation_params={"extra_seconds": extra, "source_model": row.get("model")},
+        )
+        legacy["extension_of"] = generation_id
+        return legacy
+
+    # Segmented influencer workflow. From here the contract is strict: only an
+    # approved take continues, and only under the strategy it was made with.
+    if not row.get("approved"):
+        raise HTTPException(
+            status_code=409,
+            detail="Approve this segment before extending it — only an approved take "
+                   "should continue the video.",
+        )
+
+    # Refuse to extend a segment that was built against a different strategy:
+    # an extension whose strategy disagrees with the approved hook would
+    # produce a video that contradicts itself halfway through.
+    parent_strategy_version = int(row.get("strategy_version") or 0)
+    project_strategy_version = int(project.get("strategy_version") or 0)
+    if parent_strategy_version and parent_strategy_version != project_strategy_version:
+        raise HTTPException(
+            status_code=409,
+            detail=f"This segment was made with strategy v{parent_strategy_version}, but the "
+                   f"project is now on v{project_strategy_version}. Regenerate the hook against "
+                   f"the current strategy before extending.",
+        )
+
+    # Which segment is this? The chain is the approved ancestry plus this one.
+    segment_index = await _next_segment_index(row, user_id)
+
+    # The continuity anchors. The bridge frame is the whole point: it is the
+    # previous clip's last real frame, and it becomes this clip's first frame.
+    bridge_frame = None
+    parent_local = pipeline.VIDEOS_DIR / f"{generation_id}.mp4"
+    parent_public_url = row.get("r2_url") or row.get("video_url") or ""
+    if parent_local.is_file():
+        bridge_path = pipeline.GENERATED_DIR / f"bridge-{generation_id}.png"
+        bridge_frame = await pipeline.extract_last_frame(parent_local, bridge_path)
+        if not bridge_frame:
+            logger.warning(
+                f"Extension {generation_id}: the previous clip's final frame could not be "
+                f"extracted, so continuity will be text-only. The scene may be re-imagined."
+            )
+
+    assets = project.get("assets") or []
+    has_character = any(
+        isinstance(a, dict) and str(a.get("kind") or "").strip().lower() == "character_reference"
+        for a in assets
+    )
+    continuity = video_providers.continuity_plan(
+        model_key,
+        has_bridge_frame=bool(bridge_frame),
+        has_parent_clip_url=bool(parent_public_url),
+        has_character_reference=has_character,
+    )
+    if continuity.get("guarantee") == "unsupported":
+        raise HTTPException(status_code=409, detail=continuity.get("notes") or
+                            "This provider cannot generate a continuation segment.")
 
     extension = await _submit_generation(
         project=project,
@@ -7506,13 +8151,126 @@ async def extend_generation(
         model=model_key,
         duration=extra,
         segment_role="extension",
+        segment_index=segment_index,
         parent_generation_id=generation_id,
         is_extension=True,
-        variation_kind="extension",
-        variation_params={"extra_seconds": extra, "source_model": row.get("model")},
+        strategy=strategy,
+        continuity=continuity,
+        continuity_frame=bridge_frame,
+        continuity_video_url=parent_public_url if continuity.get("use_clip_reference") else "",
+        previous_summary=strategy.get("hook_line") or "",
     )
     extension["extension_of"] = generation_id
+    extension["continuity"] = continuity
     return extension
+
+
+async def _next_segment_index(parent: dict, user_id: str) -> int:
+    """
+    The next position in the chain after a parent segment.
+
+    Walks the approved ancestry rather than counting rows, so a re-generated or
+    abandoned attempt cannot make two segments claim the same slot.
+    """
+    depth = 0
+    current = parent
+    seen = set()
+    while current and current.get("parent_generation_id") and depth < 20:
+        parent_id = current.get("parent_generation_id")
+        if parent_id in seen:
+            break
+        seen.add(parent_id)
+        current = await _fetch_one(
+            "SELECT * FROM generations WHERE id = ? AND user_id = ?", (parent_id, user_id)
+        )
+        depth += 1
+    return int(parent.get("segment_index") or 0) + 1
+
+
+@api_router.post("/generations/{generation_id}/assemble")
+async def assemble_generation_chain(
+    generation_id: str, payload: AssembleChainRequest, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Join the approved segment chain into one downloadable MP4.
+
+    Only completed segments on this lineage are used, in order. Anything still
+    generating or not approved is reported as skipped, so a partial chain is
+    never quietly presented as the finished video.
+    """
+    tip = await _fetch_one(
+        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
+    )
+    if not tip:
+        raise HTTPException(status_code=404, detail="Generation not found")
+
+    # Walk back to the hook, then forward in order.
+    lineage = []
+    current = tip
+    seen = set()
+    while current and current.get("id") not in seen:
+        seen.add(current.get("id"))
+        lineage.append(current)
+        parent_id = current.get("parent_generation_id")
+        current = await _fetch_one(
+            "SELECT * FROM generations WHERE id = ? AND user_id = ?", (parent_id, user_id)
+        ) if parent_id else None
+    lineage.reverse()
+
+    include_all = bool(payload.include_all)
+    used, skipped = [], []
+    paths = []
+    for segment in lineage:
+        if segment.get("status") != "completed":
+            skipped.append({"id": segment.get("id"), "reason": f"status is '{segment.get('status')}'"})
+            continue
+        if not include_all and not segment.get("approved"):
+            skipped.append({"id": segment.get("id"), "reason": "not approved"})
+            continue
+        local = pipeline.VIDEOS_DIR / f"{segment.get('id')}.mp4"
+        if not local.is_file():
+            skipped.append({"id": segment.get("id"), "reason": "local clip is no longer available"})
+            continue
+        paths.append(local)
+        used.append({
+            "id": segment.get("id"),
+            "segment_index": int(segment.get("segment_index") or 0),
+            "duration": segment.get("duration"),
+        })
+
+    if not paths:
+        raise HTTPException(
+            status_code=409,
+            detail="No completed segments are available to assemble yet."
+                   + (f" Skipped: {len(skipped)}." if skipped else ""),
+        )
+
+    out_path = pipeline.VIDEOS_DIR / f"chain-{generation_id}.mp4"
+    assembled = await pipeline.concat_videos(paths, out_path)
+    if not assembled:
+        raise HTTPException(
+            status_code=502,
+            detail="The segments could not be joined into one file. Each segment is still "
+                   "available to download on its own.",
+        )
+
+    stored_url = None
+    try:
+        if storage_service.is_configured():
+            stored_url = storage_service.upload_video(user_id, f"chain-{generation_id}", assembled)
+    except Exception as e:  # storage is best-effort; the local file still exists
+        logger.warning(f"Chain assembly storage step failed: {e}")
+
+    return {
+        "id": f"chain-{generation_id}",
+        "output_path": str(assembled),
+        "r2_url": stored_url or "",
+        "video_url": stored_url or "",
+        "segments": used,
+        "skipped": skipped,
+        "segment_count": len(used),
+        "storage_error": None if stored_url else "R2 is not configured; the joined file is available locally only.",
+    }
 
 
 @api_router.post("/generations/{generation_id}/archive")
@@ -8055,10 +8813,10 @@ async def create_overlay_composition(
         except (json.JSONDecodeError, TypeError):
             report = {}
     if report and not report.get("passed", True):
+        blocking = [b.get("claim") for b in report.get("blocking", []) if b.get("claim")]
         raise HTTPException(
             status_code=409,
-            detail="Fix prohibited claims before composing overlays: the overlay text is "
-                   "drawn from the same reviewed script.",
+            detail="Fix prohibited claims before generating: " + ", ".join(blocking[:3]),
         )
 
     wanted = list(payload.asset_ids or [])

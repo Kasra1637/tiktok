@@ -85,6 +85,12 @@ def _plan_fields(plan: dict):
 
     Claim checking must cover what is actually SAID and SHOWN, so this
     includes overlays, beats, and CTA — not just the spoken script body.
+
+    `strategy` is included because in the influencer workflow the spoken words
+    live there: the hook line, the per-segment scripts and the outcome promise
+    are generated into the strategy, and that text reaches the video model
+    verbatim. A banned claim that only appears in the strategy is still a
+    banned claim, so the whole nested structure is walked.
     """
     def walk(value):
         if isinstance(value, str):
@@ -99,7 +105,7 @@ def _plan_fields(plan: dict):
     for key in (
         "hook_line", "script", "cta", "visual_direction",
         "voice_direction", "sound_direction", "feature_emphasis",
-        "beat_timeline", "overlays",
+        "beat_timeline", "overlays", "strategy",
     ):
         yield from walk(plan.get(key))
 

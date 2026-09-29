@@ -8,6 +8,7 @@ import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import EmptyState from "../components/EmptyState";
 import SafetyPanel from "../components/SafetyPanel";
+import HookContinuityPanel from "../components/HookContinuityPanel";
 import GenerationPanel from "../components/GenerationPanel";
 import AssetLibrary from "./AssetLibrary";
 import { api, getErrorMessage } from "../lib/api";
@@ -1006,6 +1007,12 @@ export default function CreateVideo() {
             {hasEdits && (
               <p className="text-xs text-muted-foreground">Save your edits before marking ready.</p>
             )}
+
+            <HookContinuityPanel
+              project={project}
+              onProjectChange={setProject}
+              onGenerationChange={() => {}}
+            />
 
             <GenerationPanel
               project={project}

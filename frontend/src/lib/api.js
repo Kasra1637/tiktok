@@ -137,6 +137,19 @@ export const api = {
     client.post(`/generations/${id}/extend`, payload).then((r) => r.data),
   archiveGeneration: (id) => client.post(`/generations/${id}/archive`).then((r) => r.data),
 
+  // App-specific influencer workflow:
+  // strategy -> hook -> approve -> extend (repeatable) -> assemble
+  generateStrategy: (id, payload = {}) =>
+    client.post(`/studio/projects/${id}/strategy`, payload).then((r) => r.data),
+  generateHook: (id, payload = {}) =>
+    client.post(`/studio/projects/${id}/hook`, payload).then((r) => r.data),
+  approveGeneration: (id, payload = {}) =>
+    client.post(`/generations/${id}/approve`, payload).then((r) => r.data),
+  getGenerationContinuity: (id) =>
+    client.get(`/generations/${id}/continuity`).then((r) => r.data),
+  assembleChain: (id, payload = {}) =>
+    client.post(`/generations/${id}/assemble`, payload).then((r) => r.data),
+
   // Asset library (per App Profile)
   getAssets: (profileId, params = {}) =>
     client.get(`/app-profiles/${profileId}/assets`, { params }).then((r) => r.data),

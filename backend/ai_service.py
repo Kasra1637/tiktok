@@ -16,7 +16,11 @@ from typing import Optional
 import httpx
 
 from face_crop import crop_face_from_path
-from template_library import CONTENT_ANGLE_KINDS, normalize_angle_kind
+from template_library import (
+    CONTENT_ANGLE_KINDS,
+    normalize_angle_kind,
+    normalize_objective,
+)
 import feedback
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
@@ -865,6 +869,8 @@ async def generate_video(
     reference_audio_url: str = None,
     input_references: list = None,
     prefer_v2v_motion: bool = False,
+    continuity_frame_path: Path = None,
+    continuity_video_url: str = None,
 ) -> dict:
     """Submit a video generation job to OpenRouter using MiniMax H3.
 
@@ -897,6 +903,21 @@ async def generate_video(
                           coexist in the same request. For MiniMax H3, the face image
                           is moved to input_references (as identity guide) since H3
                           cannot combine frame_images with input_references.
+        continuity_frame_path: The previous segment's final frame, to be used as this
+                          segment's first frame. This is the strongest continuity
+                          mechanism available: it pins the exact pose, framing,
+                          lighting, wardrobe and face at the seam, so the two clips
+                          read as one take. Takes precedence over reference_image_path
+                          for the frame slot and does NOT trigger V2V mode — the
+                          bridge frame is the anchor, the identity reference rides
+                          alongside it in input_references when the provider can
+                          combine them.
+        continuity_video_url: Public HTTPS URL of the previous segment's clip, passed as
+                          a video reference so the model can read the motion and
+                          performance rhythm leading into the seam. Attached only when
+                          the provider supports combining a first frame with
+                          references, because the seam frame is the stronger anchor and
+                          a provider that can only take one must keep it.
     """
     # Resolve which model to use
     model_key = model if model and model in VIDEO_MODELS else DEFAULT_VIDEO_MODEL
@@ -953,13 +974,40 @@ async def generate_video(
 
     # First frame: the face-swapped image anchors identity throughout the video.
     # In V2V mode, we skip frame_images and put the image in input_references instead.
-    if reference_image_path and reference_image_path.exists() and not use_v2v_mode:
+    #
+    # A continuity_frame_path takes this slot with priority. It is the previous
+    # segment's final frame, so the new segment starts from where the last one
+    # actually stopped. It deliberately does NOT switch the request into V2V mode:
+    # V2V moves the image out of frame_images, which would discard the very frame
+    # that makes the seam work.
+    bridge_frame = (
+        continuity_frame_path
+        if continuity_frame_path and Path(continuity_frame_path).exists()
+        else None
+    )
+    if bridge_frame and reference_video_url and not prefer_v2v_motion:
+        logger.info(
+            "Continuity mode: sending the previous segment's final frame as the first "
+            "frame and the previous clip as a reference. V2V motion mode is skipped so "
+            "the seam frame is not displaced."
+        )
+    if reference_image_path and reference_image_path.exists() and not use_v2v_mode and not bridge_frame:
         b64 = image_to_base64(reference_image_path)
         mime = "image/png"
         payload["frame_images"] = [
             {
                 "type": "image_url",
                 "image_url": {"url": f"data:{mime};base64,{b64}"},
+                "frame_type": "first_frame",
+            }
+        ]
+
+    if bridge_frame:
+        b64 = image_to_base64(bridge_frame)
+        payload["frame_images"] = [
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{b64}"},
                 "frame_type": "first_frame",
             }
         ]
@@ -992,15 +1040,36 @@ async def generate_video(
             "audio_url": {"url": reference_audio_url},
         })
 
-    # Safety: if frame_images is set AND refs exist, drop refs to avoid the
-    # TaskTypeConstraint error. This shouldn't happen with the logic above
-    # (frame_images is only set when NOT in V2V mode), but guard against it.
+    # A provider that cannot carry a first frame AND references together would
+    # reject the request outright (BytePlus returns TaskTypeConstraint, MiniMax
+    # returns a 400), so exactly one visual anchor survives. The seam frame wins
+    # because it carries the face AND the scene in a single image, whereas a
+    # bare face reference says who the person is but not where the last shot
+    # ended. This used to drop references unconditionally; it is now
+    # capability-aware, because a provider that CAN combine them (Seedance) must
+    # keep them or the influencer loses its identity reference for no reason.
+    #
+    # Whatever is dropped is reported back, never silently discarded.
+    dropped_anchors = []
     if payload.get("frame_images") and refs:
-        logger.warning(
-            f"Cannot combine frame_images + input_references — "
-            f"dropping {len(refs)} reference(s) to keep first-frame identity anchor."
-        )
-        refs = []
+        if supports_combined:
+            logger.info(
+                f"{model_config['name']} supports a first frame alongside references; "
+                f"sending {len(refs)} reference(s) with the continuity frame."
+            )
+        else:
+            dropped_anchors = [
+                "clip" if r.get("type") == "video_url" else
+                ("audio" if r.get("type") == "audio_url" else "identity")
+                for r in refs
+            ]
+            logger.warning(
+                f"Cannot combine frame_images + input_references on "
+                f"{model_config['name']} — dropping {len(refs)} reference(s) "
+                f"({', '.join(sorted(set(dropped_anchors)))}) to keep the continuity "
+                f"frame, which pins the scene and the face together."
+            )
+            refs = []
 
     if refs:
         payload["input_references"] = refs
@@ -1008,7 +1077,7 @@ async def generate_video(
     logger.info(
         f"Submitting video generation ({model_config['name']}): duration={payload['duration']}s, "
         f"resolution={payload['resolution']}, has_frame_image={bool(payload.get('frame_images'))}, "
-        f"v2v_mode={use_v2v_mode}, audio={generate_audio}, "
+        f"continuity_frame={bool(bridge_frame)}, v2v_mode={use_v2v_mode}, audio={generate_audio}, "
         f"num_references={len(payload.get('input_references', []))}, "
         f"has_v2v_motion={bool(reference_video_url)}, model={model_id}"
     )
@@ -1052,6 +1121,14 @@ async def generate_video(
             raise RuntimeError("Video generation returned no job ID.")
         # Normalize: ensure 'id' key is always present
         data["id"] = job_id
+        # Report what was ACTUALLY attached, so the caller never claims a
+        # continuity guarantee the request does not deliver.
+        data["continuity"] = {
+            "has_continuity_frame": bool(bridge_frame),
+            "has_frame_images": bool(payload.get("frame_images")),
+            "reference_types": [r.get("type") for r in payload.get("input_references", [])],
+            "dropped_anchors": sorted(set(dropped_anchors)),
+        }
         return data
 
 
@@ -1555,6 +1632,381 @@ async def generate_creative_plan(
     result["claims_used"] = [str(c).strip() for c in (result.get("claims_used") or []) if str(c).strip()][:8]
     result["duration_seconds"] = duration_seconds
     return result
+
+
+REQUIRED_STRATEGY_KEYS = {
+    "strategy_summary", "audience_problem", "emotional_triggers", "hook_concept",
+    "hook_line", "hook_promise", "hook_action", "hook_dialogue", "messaging_pillars",
+    "primary_feature", "desired_outcome", "differentiation_beat", "cta_strategy",
+    "character", "scene", "performance", "segments", "continuity_contract",
+}
+
+# The sub-objects are where continuity actually lives, so each one is required
+# with its own field list rather than being trusted as a free-form blob.
+STRATEGY_CHARACTER_FIELDS = (
+    "appearance", "facial_features", "hairstyle", "wardrobe",
+    "body_appearance", "age_range", "facial_expression", "styling_details",
+)
+STRATEGY_SCENE_FIELDS = (
+    "camera_angle", "framing", "lighting", "environment", "background",
+    "setting", "visual_style", "character_positioning", "props", "color_palette",
+)
+STRATEGY_PERFORMANCE_FIELDS = ("movement", "voice_delivery")
+STRATEGY_CONTRACT_FIELDS = ("established", "must_not_change", "do_not_repeat")
+
+_STRATEGY_TEXT_LIMITS = {
+    "strategy_summary": 900,
+    "audience_problem": 700,
+    "hook_concept": 700,
+    "hook_line": 200,
+    "hook_promise": 300,
+    "hook_action": 400,
+    "hook_dialogue": 400,
+    "primary_feature": 400,
+    "desired_outcome": 400,
+    "differentiation_beat": 400,
+    "cta_strategy": 400,
+}
+
+
+def _clean_strategy_text(value, limit: int) -> str:
+    return str(value or "").strip()[:limit]
+
+
+def _clean_strategy_list(value, limit: int, cap: int = 6) -> list:
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list):
+        return []
+    return [str(v).strip()[:limit] for v in value if str(v).strip()][:cap]
+
+
+def _normalize_strategy_section(raw, fields) -> dict:
+    """Coerce a nested strategy section to known keys, all non-empty strings.
+
+    A missing key becomes "" rather than vanishing, so the continuity prompt
+    can state the whole lock and the founder can see exactly which attributes
+    were pinned and which were left open.
+    """
+    raw = raw if isinstance(raw, dict) else {}
+    return {field: _clean_strategy_text(raw.get(field), 300) for field in fields}
+
+
+def normalize_strategy(raw: dict) -> dict:
+    """
+    Validate and normalize a strategy payload.
+
+    Split out from the model call so the shape can be tested directly and so
+    the endpoint can re-validate a founder-edited strategy.
+    """
+    result = {
+        key: _clean_strategy_text(raw.get(key), _STRATEGY_TEXT_LIMITS.get(key, 600))
+        for key in (
+            "strategy_summary", "audience_problem", "hook_concept", "hook_line",
+            "hook_promise", "hook_action", "hook_dialogue", "primary_feature",
+            "desired_outcome", "differentiation_beat", "cta_strategy",
+        )
+    }
+    result["emotional_triggers"] = _clean_strategy_list(raw.get("emotional_triggers"), 200)
+    result["messaging_pillars"] = _clean_strategy_list(raw.get("messaging_pillars"), 300)
+
+    result["character"] = _normalize_strategy_section(raw.get("character"), STRATEGY_CHARACTER_FIELDS)
+    result["scene"] = _normalize_strategy_section(raw.get("scene"), STRATEGY_SCENE_FIELDS)
+    result["performance"] = _normalize_strategy_section(raw.get("performance"), STRATEGY_PERFORMANCE_FIELDS)
+
+    contract = raw.get("continuity_contract") if isinstance(raw.get("continuity_contract"), dict) else {}
+    result["continuity_contract"] = {
+        field: _clean_strategy_list(contract.get(field), 260, cap=8)
+        for field in STRATEGY_CONTRACT_FIELDS
+    }
+
+    segments = []
+    for index, item in enumerate(raw.get("segments") or []):
+        if not isinstance(item, dict):
+            continue
+        try:
+            seconds = int(item.get("seconds") or 0)
+        except (TypeError, ValueError):
+            seconds = 0
+        role = _clean_strategy_text(item.get("role") or ("hook" if index == 0 else "continuation"), 40)
+        segments.append({
+            "index": index,
+            "role": role,
+            "seconds": max(1, min(seconds or 0, 30)),
+            "goal": _clean_strategy_text(item.get("goal"), 400),
+            "script": _clean_strategy_text(item.get("script"), 900),
+            "action": _clean_strategy_text(item.get("action"), 400),
+        })
+        if len(segments) >= 8:
+            break
+    if not segments:
+        segments = [{"index": 0, "role": "hook", "seconds": 4, "goal": "", "script": "", "action": ""}]
+    result["segments"] = segments
+    return result
+
+
+def strategy_text(strategy: dict) -> str:
+    """
+    Flatten every human-readable string in a strategy.
+
+    Used by claim safety so the strategy's own wording — the hook line, the
+    spoken script, the promises — is checked exactly like the plan's is. A
+    banned claim that appears only in the strategy is still a banned claim.
+    """
+    if not isinstance(strategy, dict):
+        return ""
+    parts: list = []
+    for key, value in strategy.items():
+        if isinstance(value, str):
+            parts.append(value)
+        elif isinstance(value, dict):
+            parts.extend(v for v in value.values() if isinstance(v, str))
+            for nested in value.values():
+                if isinstance(nested, list):
+                    parts.extend(str(v) for v in nested)
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict):
+                    parts.extend(str(v) for v in item.values() if isinstance(v, str))
+    return " \n ".join(p for p in parts if p.strip())
+
+
+async def generate_video_strategy(
+    profile: dict,
+    template: dict,
+    angle: Optional[dict] = None,
+    objective: str = "",
+    hook_seconds: int = 4,
+    total_duration: int = 20,
+    tone: str = "",
+    brand_voice: str = "",
+    profile_feedback: Optional[dict] = None,
+) -> dict:
+    """
+    Turn an App Profile into a video strategy specific to THIS app.
+
+    This is the step that stops the influencer workflow from producing a
+    generic talking-head video with an app name stapled on. It decides the
+    hook concept, the messaging, the words, the action and the whole look of
+    the on-camera person and scene BEFORE any video is generated, and it writes
+    a continuity contract that every later segment is held to.
+
+    The character and scene sections are the continuity contract in concrete
+    form: once the first segment locks a face, a wardrobe, a background and a
+    camera angle, the same values are restated for every extension so the
+    provider is told what must not change rather than asked to keep it in mind.
+
+    Returns a normalized strategy dict (see normalize_strategy). Never invents
+    features, prices, ratings or outcomes; uncertain claims are pushed to the
+    profile's own review tier instead.
+    """
+    def _list(name):
+        val = profile.get(name)
+        if isinstance(val, list):
+            return [str(v) for v in val if str(v).strip()]
+        if val:
+            return [str(val)]
+        return []
+
+    facts = {
+        "app_name": profile.get("brand_name") or "(unnamed app)",
+        "category": profile.get("app_category") or profile.get("niche") or "(unstated)",
+        "description": profile.get("brand_description") or "(unstated)",
+        "platforms": _list("platforms"),
+        "pricing_trial": profile.get("pricing_trial") or "(unstated)",
+        "features": _list("core_features"),
+        "use_cases": _list("primary_use_cases"),
+        "problems": _list("problems_solved"),
+        "audience": profile.get("target_audience") or "(unstated)",
+        "icp_segments": _list("icp_segments"),
+        "outcomes": _list("desired_outcomes"),
+        "differentiators": profile.get("differentiation") or "(unstated)",
+        "competitors": _list("competitors"),
+        "limitations": profile.get("known_limitations") or "(none recorded)",
+    }
+
+    mechanism = {
+        "template_name": template.get("name") or "(no template)",
+        "hook_category": template.get("category") or "(unstated)",
+        "objective": objective or "(unstated)",
+        "opening_structure": template.get("opening_structure") or "(unstated)",
+        "hook_seconds": hook_seconds,
+        "continuation_structure": template.get("continuation_structure") or "(unstated)",
+        "cta_pattern": template.get("cta_pattern") or "(unstated)",
+        "visual_style": template.get("visual_style") or "(unstated)",
+        "camera_pacing": template.get("camera_pacing") or "(unstated)",
+        "required_assets": _list_of(template, "required_assets"),
+        "content_slots": template.get("content_slots") or {},
+    }
+
+    brief = {
+        "angle_kind": (angle or {}).get("kind") or "(none)",
+        "angle_label": (angle or {}).get("label") or "",
+        "angle_audience": (angle or {}).get("target_audience") or profile.get("target_audience") or "",
+        "angle_problem": (angle or {}).get("user_problem") or "",
+        "angle_hook_promise": (angle or {}).get("hook_promise") or "",
+        "angle_feature": (angle or {}).get("app_feature") or "",
+        "angle_emotion": (angle or {}).get("desired_emotion") or "",
+        "angle_cta": (angle or {}).get("recommended_cta") or "",
+        "claims_to_respect": _list_of(angle, "claims_to_respect"),
+        "hook_seconds": hook_seconds,
+        "total_duration": total_duration,
+        "tone": tone or "(unstated)",
+        "brand_voice": brand_voice or profile.get("tone_voice") or "(unstated)",
+    }
+
+    claim_rules = {
+        "approved": _list("claims_approved"),
+        "needs_review": _list("claims_review"),
+        "never_use": _list("claims_banned"),
+    }
+
+    feedback_context = ""
+    if profile_feedback:
+        feedback_context = (
+            "\n\nPAST FEEDBACK FOR THIS APP (counts and fixed reason codes only):\n"
+            f"{feedback.build_profile_feedback_section(profile_feedback)}\n"
+        )
+
+    system_message = (
+        "You are the creative director for a short-form video campaign promoting one "
+        "specific mobile app. You produce an app-specific video strategy: the hook "
+        "concept, the exact words, what the on-camera person does, and a locked "
+        "description of that person's appearance and the scene they stand in. "
+        "Describe viewers by FUNCTIONAL need and use case only — never infer sensitive "
+        "personal traits (health diagnoses, mental-health labels, finances, religion, "
+        "sexuality, political leaning). For health-adjacent apps, describe the product's "
+        "functionality, never a condition the viewer may have. Use ONLY facts supplied "
+        "below; never invent a feature, price, rating, review, download count or "
+        "testimonial. Respond with STRICT JSON only, no markdown fences."
+    )
+
+    prompt = (
+        f"VERIFIED APP FACTS:\n{json.dumps(facts, indent=2)}\n\n"
+        f"HOOK MECHANISM (the selected template must be honoured, not replaced):\n{json.dumps(mechanism, indent=2)}\n\n"
+        f"CREATIVE BRIEF:\n{json.dumps(brief, indent=2)}\n\n"
+        f"CLAIM RULES:\n{json.dumps(claim_rules, indent=2)}\n"
+        f"{feedback_context}\n"
+        "Return ONLY a JSON object with this exact schema:\n"
+        "{\n"
+        '  "strategy_summary": "2-3 sentences on the strategy for THIS app and why it fits THIS audience",\n'
+        '  "audience_problem": "the concrete problem this viewer actually has, in their words",\n'
+        '  "emotional_triggers": ["2-4 emotions this video should trigger, each tied to this app\'s use case"],\n'
+        '  "hook_concept": "what the first seconds DO, visually and dramatically — not a slogan",\n'
+        '  "hook_line": "the single spoken hook line, max 12 words",\n'
+        '  "hook_promise": "what the hook promises the viewer in the next few seconds",\n'
+        '  "hook_action": "the physical action the on-camera person performs during the hook",\n'
+        '  "hook_dialogue": "the exact words spoken in the hook, or the delivery direction if none",\n'
+        '  "messaging_pillars": ["2-4 things the video must land, derived from this app\'s real features"],\n'
+        f'  "primary_feature": "the ONE feature this video shows, from the facts above",\n'
+        '  "desired_outcome": "the viewer outcome, described as a change the app supports, never a guarantee",\n'
+        '  "differentiation_beat": "how to use this app\'s stated differentiation against its competitors",\n'
+        '  "cta_strategy": "the single next action, and why it suits this audience",\n'
+        '  "character": {\n'
+        f'    "appearance": "overall look and presence of the on-camera person",\n'
+        f'    "facial_features": "face shape, features, and anything that must stay identical",\n'
+        f'    "hairstyle": "hair colour, length and style — locked for the whole video",\n'
+        f'    "wardrobe": "every garment and accessory, described once and held for the whole video",\n'
+        f'    "body_appearance": "build, height impression and how they hold themselves",\n'
+        f'    "age_range": "apparent age range",\n'
+        f'    "facial_expression": "default expression and how it changes",\n'
+        f'    "styling_details": "glasses, jewellery, nails, makeup, tattoos — or explicitly none",\n'
+        '  },\n'
+        '  "scene": {\n'
+        f'    "camera_angle": "the exact camera position and angle, e.g. eye-level handheld 1m away",\n'
+        f'    "framing": "framing and shot size, e.g. medium close-up, head and shoulders",\n'
+        f'    "lighting": "light direction, quality and colour temperature",\n'
+        f'    "environment": "the physical place, named concretely",\n'
+        f'    "background": "what is behind them, concretely and unchanging",\n'
+        f'    "setting": "time of day and situational context",\n'
+        f'    "visual_style": "the overall look — documentary, polished UGC, cinematic",\n'
+        f'    "character_positioning": "where they stand or sit in frame",\n'
+        f'    "props": "objects in shot, or explicitly none",\n'
+        f'    "color_palette": "the colour palette of the scene",\n'
+        '  },\n'
+        '  "performance": {\n'
+        f'    "movement": "how they move and what they do with their hands and face",\n'
+        f'    "voice_delivery": "tone, pace and energy of the voice",\n'
+        '  },\n'
+        '  "segments": [\n'
+        f'    {{"index": 0, "role": "hook", "seconds": {hook_seconds}, "goal": "what these seconds must achieve",'
+        ' "script": "words spoken in this segment", "action": "what they do in this segment"},\n'
+        f'    {{"index": 1, "role": "continuation", "seconds": {max(1, total_duration - hook_seconds)},'
+        ' "goal": "what this segment must achieve", "script": "words spoken in this segment",'
+        ' "action": "what they do in this segment"}}\n'
+        '  ],\n'
+        '  "continuity_contract": {\n'
+        '    "established": ["what the opening segment fixes for the rest of the video — 4-6 items"],\n'
+        '    "must_not_change": ["appearance, wardrobe, setting, lighting, framing and props that every '
+        'later segment must reproduce exactly"],\n'
+        '    "do_not_repeat": ["what the opening already said or showed, so later segments do not say it again"]\n'
+        '  }\n'
+        "}\n"
+        "Rules:\n"
+        f"- The opening segment lasts {hook_seconds} seconds and must be the strongest {hook_seconds} seconds "
+        f"for THIS app. Write a real hook for this app's real audience, not a generic influencer opening with "
+        "the app name dropped in.\n"
+        "- The hook must serve the selected hook mechanism. If the mechanism is a question, the hook is a "
+        "question; if it is a contrarian correction, the hook corrects something.\n"
+        "- Fill the persona so specifically that a second video with the same character would be recognisably "
+        "the same person in the same place. Vague terms like \"casual\" or \"a nice room\" are not acceptable.\n"
+        "- must_not_change must cover the face, the hair, the wardrobe, the background, the lighting and the "
+        "framing. Those are the attributes a video model will otherwise silently reinvent.\n"
+        "- Every segment must be satisfiable using only the verified facts above. Put anything that would need a "
+        "claim from needs_review into do_not_repeat or omit it entirely.\n"
+        "- Never promise a guaranteed outcome, never invent a testimonial, a rating or a review, and never state "
+        "pricing that is not in the facts.\n"
+        "- Use only approved claims. Never use anything in never_use.\n"
+        "Return ONLY valid JSON."
+    )
+
+    payload = {
+        "model": TEXT_MODEL,
+        "messages": [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.5,
+        "max_tokens": 4000,
+    }
+
+    async with httpx.AsyncClient(timeout=120) as client:
+        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+
+    full_text = data["choices"][0]["message"]["content"]
+    raw = _parse_json_response(full_text, "Video strategy")
+    if isinstance(raw, dict) and isinstance(raw.get("strategy"), dict):
+        raw = raw["strategy"]
+
+    missing = REQUIRED_STRATEGY_KEYS - set(raw.keys())
+    if missing:
+        logger.error(f"Video strategy missing fields {missing}. Raw text: {full_text[:1500]!r}")
+        raise RuntimeError(f"Video strategy missing required fields: {missing}")
+
+    strategy = normalize_strategy(raw)
+    strategy["duration_seconds"] = int(total_duration or 0)
+    strategy["hook_seconds"] = int(hook_seconds or 0)
+    strategy["objective"] = normalize_objective(objective)
+    strategy["template_id"] = str(template.get("id") or "")
+    strategy["template_name"] = str(template.get("name") or "")
+    strategy["template_version"] = int(template.get("version") or 1)
+    strategy["content_angle_id"] = str((angle or {}).get("id") or "")
+    strategy["brand_profile_id"] = str(profile.get("id") or "")
+    return strategy
+
+
+def _list_of(source, name: str) -> list:
+    """Coerce a possibly-JSON value on a row into a list of strings."""
+    val = (source or {}).get(name)
+    if isinstance(val, list):
+        return [str(v) for v in val if str(v).strip()]
+    if val:
+        return [str(val)]
+    return []
 
 
 def _normalize_beats(beats, duration: int) -> list:

@@ -426,3 +426,83 @@ async def trim_video_to_hook(video_path: Path, duration: float = 3.0) -> Optiona
 
     logger.info(f"Trimmed {video_path.name} to {duration}s hook clip: {trimmed_path.name}")
     return trimmed_path
+
+
+async def concat_videos(paths: list, out_path: Path) -> Optional[Path]:
+    """
+    Join an ordered list of clips into ONE deliverable MP4.
+
+    Used to turn an approved hook plus its approved extensions into a single
+    file, which is what "one continuous video" has to mean to be downloadable
+    and postable.
+
+    The clips are re-encoded rather than stream-copied. Segments can come back
+    from a provider with different resolution, frame rate or codec parameters,
+    and the concat demuxer with `-c copy` produces a corrupt or unplayable file
+    in that case rather than failing loudly. Re-encoding normalises every
+    segment to the same parameters, which is also what makes the join seamless
+    rather than a series of visible re-inits.
+
+    Returns None (rather than raising) when the join is not possible, so the
+    caller can fall back to the individual clips and say so.
+    """
+    sources = [Path(p) for p in (paths or []) if p and Path(p).is_file()]
+    if not sources:
+        logger.warning("concat_videos: no readable source clips.")
+        return None
+    if len(sources) == 1:
+        # A single-segment video is already the deliverable; copying would
+        # re-encode for nothing.
+        return sources[0]
+
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    list_path = out_path.parent / f".{out_path.stem}_concat.txt"
+    try:
+        # The concat demuxer needs a file, and the paths can contain spaces or
+        # drive letters, so each entry is quoted per its own spec.
+        list_path.write_text(
+            "\n".join(f"file '{str(p).replace(chr(39), chr(39) * 3)}'" for p in sources),
+            encoding="utf-8",
+        )
+        cmd = [
+            "ffmpeg", "-y",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", str(list_path),
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "20",
+            "-pix_fmt", "yuv420p",
+            # Force identical timebase and frame rate so the join is a clean
+            # cut with no duplicated or dropped frame at each boundary.
+            "-r", "30",
+            "-video_track_timescale", "30000",
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "-ar", "48000",
+            "-ac", "2",
+            "-movflags", "+faststart",
+            str(out_path),
+        ]
+        try:
+            rc, _stdout, err = await run_cmd(cmd, timeout=300)
+        except FileNotFoundError:
+            logger.warning("concat_videos: ffmpeg is not available on PATH.")
+            return None
+        except RuntimeError as e:
+            logger.warning(f"concat_videos timed out: {e}")
+            return None
+
+        if rc != 0 or not out_path.exists() or out_path.stat().st_size == 0:
+            logger.warning(
+                f"concat_videos failed for {len(sources)} clips: "
+                f"{err.strip()[-300:] or 'unknown error'}"
+            )
+            out_path.unlink(missing_ok=True)
+            return None
+    finally:
+        list_path.unlink(missing_ok=True)
+
+    logger.info(f"Concatenated {len(sources)} clips into {out_path.name}")
+    return out_path

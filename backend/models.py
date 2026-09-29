@@ -25,6 +25,8 @@ def row_to_dict(row, columns: list) -> dict:
         "claims_to_respect", "evidence",
         # Studio projects (structured plan fields)
         "beat_timeline", "overlays", "assets", "safety_report",
+        # App-specific influencer strategy + per-generation continuity record
+        "strategy", "continuity",
         # Generation lineage and refinement history
         "variation_params", "adjustments",
         # Overlay compositions
@@ -312,7 +314,7 @@ STUDIO_TEXT_FIELDS = (
 
 STUDIO_EDITABLE_FIELDS = STUDIO_TEXT_FIELDS + (
     "content_angle_id", "template_id", "objective", "duration_seconds",
-    "beat_timeline", "overlays", "assets",
+    "beat_timeline", "overlays", "assets", "strategy",
 )
 
 
@@ -350,6 +352,11 @@ class UpdateStudioProjectRequest(BaseModel):
     sound_direction: Optional[str] = None
     cta: Optional[str] = None
     assets: Optional[List[dict]] = None
+    # The app-specific strategy is editable so a founder can correct the hook
+    # line or tighten the locked persona without paying to regenerate. Edits
+    # bump strategy_version, which invalidates any unapproved segment built
+    # against the old one.
+    strategy: Optional[dict] = None
 
 
 class GeneratePlanRequest(BaseModel):
@@ -363,6 +370,49 @@ class GeneratePlanRequest(BaseModel):
     duration_seconds: Optional[int] = None
     tone: Optional[str] = None
     audience: Optional[str] = None
+
+
+class GenerateStrategyRequest(BaseModel):
+    """
+    Optional overrides for the app-specific video strategy.
+
+    hook_seconds defaults to the project's own hook length; it is clamped to
+    the provider's single-pass range so a 3-4 second hook can never be asked
+    for as something the model cannot render.
+    """
+    objective: Optional[str] = None
+    duration_seconds: Optional[int] = None
+    tone: Optional[str] = None
+    hook_seconds: Optional[int] = None
+
+
+class GenerateHookRequest(BaseModel):
+    """
+    Submit the opening 3-4 second hook segment.
+
+    The hook is a separate, shorter job from the full video on purpose: it is
+    the cheapest possible place to find out whether the concept works, and
+    approving it is what unlocks extensions.
+    """
+    model: Optional[str] = None
+    duration_seconds: Optional[int] = None
+    generate_audio: Optional[bool] = None
+
+
+class ApproveSegmentRequest(BaseModel):
+    """Approve a generated segment so it can anchor extensions and be assembled."""
+    note: Optional[str] = None
+
+
+class AssembleChainRequest(BaseModel):
+    """
+    Join an approved segment chain into one file.
+
+    Only approved, completed segments are included, in order. Unapproved or
+    still-generating segments are reported as skipped rather than silently
+    dropped, so a partial chain is never presented as the finished video.
+    """
+    include_all: Optional[bool] = False
 
 
 class StudioGenerationRequest(BaseModel):

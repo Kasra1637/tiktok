@@ -304,3 +304,339 @@ def asset_notes(assets: list) -> str:
         label = str(asset.get("name") or asset.get("label") or "").strip()
         parts.append(f"{kind}{f' ({label})' if label else ''}")
     return ", ".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# App-specific influencer segments
+# ---------------------------------------------------------------------------
+# Below here is the segmented influencer workflow. build_single_pass_prompt()
+# above stays as the one-shot path: it is correct for a single generation and
+# is covered by its own tests. These builders differ in kind rather than degree
+# — they take a video STRATEGY (app-specific concept, locked persona, locked
+# scene, continuity contract) and emit the prompt for ONE segment of it.
+
+_SECTION_LABELS = {
+    "character": (
+        ("appearance", "overall look"),
+        ("facial_features", "face"),
+        ("hairstyle", "hair"),
+        ("age_range", "apparent age"),
+        ("body_appearance", "build and posture"),
+        ("wardrobe", "wardrobe"),
+        ("styling_details", "styling details"),
+        ("facial_expression", "expression"),
+    ),
+    "scene": (
+        ("environment", "location"),
+        ("background", "background"),
+        ("setting", "time of day and context"),
+        ("camera_angle", "camera angle"),
+        ("framing", "framing"),
+        ("lighting", "lighting"),
+        ("color_palette", "colour palette"),
+        ("visual_style", "visual style"),
+        ("character_positioning", "position in frame"),
+        ("props", "props"),
+    ),
+    "performance": (
+        ("movement", "movement"),
+        ("voice_delivery", "voice delivery"),
+    ),
+}
+
+
+def character_scene_lock(strategy: dict) -> str:
+    """
+    Render the strategy's persona as an explicit do-not-change block.
+
+    A video model has no memory of the previous segment. Anything not restated
+    is an invitation to reinvent it, and the attributes it reinvents most
+    reliably are the face, the wardrobe and the background — exactly the three
+    that make an extension read as the same video. So every attribute the
+    strategy fixed is written out again, by name, as a locked value.
+    """
+    strategy = strategy or {}
+    lines = []
+    for section, fields in _SECTION_LABELS.items():
+        values = strategy.get(section)
+        if not isinstance(values, dict):
+            continue
+        described = [
+            f"{label}: {str(values.get(key)).strip()}"
+            for key, label in fields
+            if str(values.get(key) or "").strip()
+        ]
+        if described:
+            lines.append("\n".join(f"  {item}" for item in described))
+
+    if not lines:
+        return ""
+    return (
+        "THE PERSON AND THE SCENE ARE LOCKED. Reproduce these exactly — same face, "
+        "same hair, same wardrobe, same place, same light, same camera:\n"
+        + "\n".join(lines)
+        + "\n\nThese are not suggestions. Do not restyle, re-age, re-crop, re-light, "
+        "re-wardrobe or relocate this person, and do not swap in a different person, "
+        "even if the later part of the story would seem to call for it."
+    )
+
+
+def strategy_brief(strategy: dict) -> str:
+    """
+    The app-specific messaging the segment must keep communicating.
+
+    Present on the opening segment AND every extension, so the continuation
+    cannot drift into a generic advertisement. The app's problem, feature,
+    outcome, differentiation and CTA are restated each time rather than
+    assumed to have been absorbed by the previous segment.
+    """
+    strategy = strategy or {}
+    parts = []
+    summary = str(strategy.get("strategy_summary") or "").strip()
+    if summary:
+        parts.append(f"Strategy for this video: {summary}")
+
+    problem = str(strategy.get("audience_problem") or "").strip()
+    if problem:
+        parts.append(f"The problem this viewer actually has: {problem}")
+
+    triggers = [str(t).strip() for t in (strategy.get("emotional_triggers") or []) if str(t).strip()]
+    if triggers:
+        parts.append(f"Emotions to land: {'; '.join(triggers[:4])}")
+
+    pillars = [str(p).strip() for p in (strategy.get("messaging_pillars") or []) if str(p).strip()]
+    if pillars:
+        parts.append("Messaging that must be delivered: " + "; ".join(pillars[:4]))
+
+    feature = str(strategy.get("primary_feature") or "").strip()
+    if feature:
+        parts.append(f"The one feature shown: {feature}")
+
+    outcome = str(strategy.get("desired_outcome") or "").strip()
+    if outcome:
+        parts.append(f"Outcome the viewer should expect: {outcome}")
+
+    diff = str(strategy.get("differentiation_beat") or "").strip()
+    if diff:
+        parts.append(f"How this app is different: {diff}")
+
+    cta = str(strategy.get("cta_strategy") or "").strip()
+    if cta:
+        parts.append(f"Call-to-action strategy: {cta}")
+
+    if not parts:
+        return ""
+    return "THIS APP-SPECIFIC STRATEGY — it governs every segment of this video:\n" + "\n".join(
+        f"  {p}" for p in parts
+    )
+
+
+def _segment_for(strategy: dict, index: int) -> dict:
+    """The strategy's own plan for segment `index`, falling back to the last."""
+    segments = [s for s in (strategy.get("segments") or []) if isinstance(s, dict)]
+    if not segments:
+        return {}
+    for segment in segments:
+        try:
+            if int(segment.get("index", -1)) == index:
+                return segment
+        except (TypeError, ValueError):
+            continue
+    return segments[-1] if index >= len(segments) else {}
+
+
+def _contract_list(strategy: dict, field: str, limit: int = 6) -> list:
+    contract = strategy.get("continuity_contract")
+    if not isinstance(contract, dict):
+        return []
+    return [str(v).strip() for v in (contract.get(field) or []) if str(v).strip()][:limit]
+
+
+def build_segment_prompt(
+    strategy: dict,
+    profile: dict,
+    template: Optional[dict] = None,
+    segment_index: int = 0,
+    duration: int = 4,
+    assets: Optional[list] = None,
+    continuity: Optional[dict] = None,
+    is_hook: bool = False,
+    previous_summary: str = "",
+) -> str:
+    """
+    Build the prompt for ONE segment of the app-specific influencer video.
+
+    Segment 0 is the hook: it establishes the person and the scene. Every
+    segment after it is a continuation, and the difference is not cosmetic —
+    a continuation is told what the previous segment already delivered and what
+    it must therefore NOT repeat, and it is told the same locked persona and
+    the same app strategy so the story cannot drift generic.
+
+    Args:
+        strategy: the normalized app-specific strategy (see
+            ai_service.normalize_strategy). Required: without it there is no
+            app specificity to preserve.
+        profile: the approved App Profile, for the accurate product name.
+        template: the hook template, for mechanism and pacing language.
+        segment_index: 0 for the hook, 1+ for extensions.
+        duration: seconds this segment must cover.
+        assets: the project's attached assets (character_reference etc).
+        continuity: the video_providers.continuity_plan() record for this
+            request. Read, never re-decided — this prompt must not claim more
+            continuity than the submission will actually deliver.
+        is_hook: True for the opening segment.
+        previous_summary: what the previous segment established, in one line.
+    """
+    strategy = strategy or {}
+    tpl = template or {}
+    app_name = (profile or {}).get("brand_name") or "the app"
+    segment = _segment_for(strategy, segment_index)
+    continuity = continuity or {}
+    guarantee = str(continuity.get("guarantee") or "")
+    degraded = continuity.get("degraded") or []
+    seconds = max(1, int(duration or 0))
+    is_continuation = not is_hook and int(segment_index or 0) > 0
+
+    sections = []
+
+    if is_continuation:
+        # State the seam in the terms the model can act on. When a real frame
+        # was attached, say so, because that is the difference between
+        # "continue this" and "make something like this".
+        if continuity.get("use_frame"):
+            sections.append(
+                f"You are continuing an existing video. The image supplied as the first frame is the "
+                f"EXACT final frame of the clip the viewer has already seen. Start from those pixels: "
+                f"the same pose, framing, focus and light, with motion continuing naturally forward. "
+                f"Begin mid-action. Do not re-open the scene, do not re-establish the shot, do not "
+                f"restart the performance, and do not show any title card, black frame or fade."
+            )
+        else:
+            # No visual anchor. Say that plainly in the prompt as well as in
+            # the report, so the model aims at the written lock rather than
+            # assuming it can see the previous clip.
+            sections.append(
+                "You are continuing an existing video, but you have NOT been given the previous "
+                "clip or any frame from it. Reproduce the locked person and scene below from the "
+                "written description alone, as exactly as possible. Treat the description as "
+                "authoritative: do not reinterpret, restyle or re-invent any part of it."
+            )
+    else:
+        sections.append(
+            f"Create a {seconds}-second vertical (9:16) promotional video for the mobile app "
+            f"{app_name}. This is the OPENING HOOK and it has {seconds} seconds to land."
+        )
+        hook_line = str(strategy.get("hook_line") or "").strip()
+        hook_concept = str(strategy.get("hook_concept") or "").strip()
+        hook_action = str(strategy.get("hook_action") or "").strip()
+        hook_dialogue = str(strategy.get("hook_dialogue") or "").strip()
+        promise = str(strategy.get("hook_promise") or "").strip()
+        if hook_concept:
+            sections.append(f"What these {seconds} seconds must DO: {hook_concept}")
+        if hook_line:
+            sections.append(f"The spoken hook line, delivered on camera: \"{hook_line}\"")
+        if hook_action:
+            sections.append(f"What the person physically does: {hook_action}")
+        if hook_dialogue:
+            sections.append(f"Dialogue and delivery: {hook_dialogue}")
+        if promise:
+            sections.append(f"What the hook promises: {promise}")
+
+    lock = character_scene_lock(strategy)
+    if lock:
+        sections.append(lock)
+
+    brief = strategy_brief(strategy)
+    if brief:
+        sections.append(brief)
+
+    # What the previous segment already delivered. This is the mechanism that
+    # stops an extension from restarting the video: the model is told what the
+    # viewer has already seen and heard, so it moves forward instead of
+    # re-introducing the app.
+    if is_continuation:
+        established = _contract_list(strategy, "established")
+        must_not_change = _contract_list(strategy, "must_not_change")
+        do_not_repeat = _contract_list(strategy, "do_not_repeat")
+        parts = []
+        if previous_summary:
+            parts.append(f"The previous segment ended on: {previous_summary}")
+        if established:
+            parts.append(
+                "The opening segment already established: " + "; ".join(established[:6])
+            )
+        if must_not_change:
+            parts.append(
+                "Carry these forward unchanged: " + "; ".join(must_not_change[:6])
+            )
+        if do_not_repeat:
+            parts.append(
+                "Do NOT repeat any of this — the viewer has already seen or heard it: "
+                + "; ".join(do_not_repeat[:6])
+            )
+        parts.append(
+            "Move the story forward from the seam: deliver this segment's goal, then the "
+            "app benefit, then the call to action. Do not re-introduce the app or the "
+            "person, do not repeat the hook line, and do not restart the opening framing."
+        )
+        sections.append("CONTINUITY — what came before:\n" + "\n".join(f"  {p}" for p in parts))
+
+    goal = str(segment.get("goal") or "").strip()
+    script = str(segment.get("script") or "").strip()
+    action = str(segment.get("action") or "").strip()
+    if goal:
+        sections.append(f"What these {seconds} seconds must achieve: {goal}")
+    if action:
+        sections.append(f"What happens in this segment: {action}")
+    if script:
+        sections.append(f"Spoken script for this segment, performed naturally on camera:\n\"{script}\"")
+
+    if tpl.get("opening_structure") and is_hook:
+        sections.append(f"Hook mechanism to honour: {tpl['opening_structure']}")
+    if tpl.get("continuation_structure") and is_continuation:
+        sections.append(f"Continuation structure to honour: {tpl['continuation_structure']}")
+    if tpl.get("visual_style"):
+        sections.append(f"Visual style: {tpl['visual_style']}")
+    if tpl.get("camera_pacing"):
+        sections.append(f"Camera and pacing: {tpl['camera_pacing']}")
+
+    sections.append(
+        "On-screen text will be added afterwards. Plan clean space for it, and do not "
+        "render any text, interface, price, rating or logo yourself."
+    )
+    sections.append(_UI_RENDERING_WARNING)
+
+    notes = asset_notes(assets or [])
+    if notes:
+        sections.append(f"Real app assets composited over this footage: {notes}")
+
+    person_anchor = person_anchor_notes(assets or [])
+    if person_anchor:
+        sections.append(person_anchor)
+
+    if degraded:
+        # Never let the prompt imply a guarantee the request could not make.
+        # The founder sees the same list on the generation record.
+        reasons = "; ".join(
+            str(d.get("reason") or "").strip() for d in degraded if str(d.get("reason") or "").strip()
+        )
+        if reasons:
+            sections.append(
+                "This provider could not receive every continuity reference: " + reasons +
+                " Honour the written lock above with particular care, and treat the described "
+                "person and scene as exacting requirements rather than suggestions."
+            )
+
+    sections.append(
+        f"Vertical 9:16 throughout. One continuous {seconds}-second take with no cut, no "
+        f"black frame, and no title card. The person on camera is the same individual in "
+        f"every frame of this segment."
+    )
+    if is_continuation and guarantee in ("text_only",):
+        sections.append(
+            "Because this request carries no visual reference from the previous clip, "
+            "reproduce the locked description as precisely as possible — the same person "
+            "in the same clothes in the same place under the same light."
+        )
+
+    return "\n\n".join(section for section in sections if section)
