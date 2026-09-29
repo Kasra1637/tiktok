@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { rememberCurrentAppId } from "../lib/currentApp";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
@@ -129,6 +130,11 @@ export default function BrandSetup() {
     setPlayUrl(data.play_url || "");
     setSupportUrls(productsToText(data.support_urls));
     setNotes(data.notes || "");
+    // Every route into this page ends here — first load, the picker, research,
+    // save, approve — so this is the one place worth recording which app is
+    // being worked on. A page that needs a profile but is not handed one, such
+    // as the standalone Asset Library, can then open on the same app.
+    rememberCurrentAppId(data.id);
   };
 
   const refreshProfilesList = () => {

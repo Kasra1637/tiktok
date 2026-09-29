@@ -220,6 +220,62 @@ check("the empty state agrees with the partition",
     ...p, id: String(i),
   }))), "same set, different ids");
 
+// The sidebar's Asset Library link carries no profile, so this resolution is
+// the only thing between that page and "Choose an App Profile first" with no
+// way to choose one.
+console.log("\nresolveActiveProfileId - explicit sources win, in order");
+const MIXED2 = [
+  { id: "recent-approved", brand_name: "Recent Approved", status: "approved" },
+  { id: "older-approved", brand_name: "Older Approved", status: "approved" },
+  { id: "draft-only", brand_name: "Draft Only", status: "draft" },
+];
+check("the studio's prop is never overridden by a default",
+  P.resolveActiveProfileId({ propId: "from-wizard", profiles: MIXED2 }) === "from-wizard");
+check("a route param beats a remembered default",
+  P.resolveActiveProfileId({ paramId: "from-url", rememberedId: "older-approved", profiles: MIXED2 })
+  === "from-url");
+check("?profile= beats a remembered default",
+  P.resolveActiveProfileId({ queryId: "from-query", rememberedId: "older-approved", profiles: MIXED2 })
+  === "from-query");
+check("the prop beats the param",
+  P.resolveActiveProfileId({ propId: "a", paramId: "b", queryId: "c" }) === "a");
+check("an explicit id is trusted while profiles are still loading",
+  P.resolveActiveProfileId({ propId: "not-loaded-yet", profiles: [] }) === "not-loaded-yet");
+
+console.log("\nresolveActiveProfileId - remembered, but only if it still exists");
+// The stale case: the id refers to an app from a previous session.
+check("a remembered id that still exists is used",
+  P.resolveActiveProfileId({ rememberedId: "older-approved", profiles: MIXED2 })
+  === "older-approved");
+check("a remembered id that is gone is ignored, not used",
+  P.resolveActiveProfileId({ rememberedId: "deleted-app", profiles: MIXED2 })
+  === "recent-approved",
+  P.resolveActiveProfileId({ rememberedId: "deleted-app", profiles: MIXED2 }));
+check("whitespace is not treated as an id",
+  P.resolveActiveProfileId({ propId: "   ", profiles: MIXED2 }) === "recent-approved");
+check("a remembered id with whitespace still matches",
+  P.resolveActiveProfileId({ rememberedId: "  older-approved  ", profiles: MIXED2 })
+  === "older-approved");
+
+console.log("\nresolveActiveProfileId - never empty while an app exists");
+check("the newest approved is the default",
+  P.resolveActiveProfileId({ profiles: MIXED2 }) === "recent-approved");
+// The API orders by updated_at DESC, so position 0 is the newest. This function
+// must not re-sort, or the two would disagree about "newest".
+check("newest means position 0, as the API ordered it",
+  P.resolveActiveProfileId({ profiles: [...MIXED2].reverse() }) === "older-approved");
+check("one unapproved app is still usable, not a dead end",
+  P.resolveActiveProfileId({ profiles: [{ id: "solo-draft", status: "draft" }] }) === "solo-draft");
+check("a mixture prefers approved over a draft",
+  P.resolveActiveProfileId({ profiles: [{ id: "d", status: "draft" }, { id: "a", status: "approved" }] })
+  === "a");
+check("no profiles resolves to empty, which shows the editor link",
+  P.resolveActiveProfileId({ profiles: [] }) === "");
+check("a missing profiles array is safe", P.resolveActiveProfileId({}) === "");
+check("a non-array profiles value is safe",
+  P.resolveActiveProfileId({ profiles: "nonsense" }) === "");
+check("no arguments at all is safe", P.resolveActiveProfileId() === "");
+
 console.log("\n" + "=".repeat(70));
 if (failures.length === 0) {
   console.log("All frontend length/intent logic behaves correctly.");

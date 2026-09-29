@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
@@ -7,6 +7,8 @@ import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import EmptyState from "../components/EmptyState";
 import { api, getErrorMessage, mediaUrl } from "../lib/api";
+import { resolveActiveProfileId, profileLabel, partitionProfiles } from "../lib/profileSelection";
+import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
 import {
   Images, Loader2, AlertTriangle, Upload, Trash2, Archive, ArchiveRestore,
   Plus, ShieldCheck, Paperclip, Music, Link2, Check,
@@ -275,6 +277,36 @@ function UsageHistory({ uses }) {
   );
 }
 
+/**
+ * Which app's assets are on screen. The sidebar's Asset Library link carries no
+ * profile, so without this the page could not answer that question at all.
+ *
+ * Every option shows its approval state. Someone looking for a missing app needs
+ * to be able to tell "this one is here but not approved yet" from "this one is
+ * gone" at a glance, which a bare list of names cannot do.
+ */
+function ProfilePicker({ profiles, value, onChange }) {
+  return (
+    <select
+      value={value || ""}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label="Choose which app these assets belong to"
+      data-testid="asset-profile-picker"
+      className="rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3 py-2 text-sm font-medium"
+    >
+      <option value="" disabled>
+        Choose an app...
+      </option>
+      {profiles.map((p) => (
+        <option key={p.id} value={p.id}>
+          {profileLabel(p)}
+          {p.status === "approved" ? "" : " (needs approval)"}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export default function AssetLibrary({
   profileId,
   projectId,
@@ -290,10 +322,28 @@ export default function AssetLibrary({
    */
   embedded = false,
 }) {
-  // Usable as a route (/app-profiles/:profileId/assets) or embedded in the
-  // wizard, which already knows which profile it is working on.
+  // Usable as a route (/app-profiles/:profileId/assets), embedded in the
+  // wizard, which already knows which profile it is working on, or opened from
+  // the sidebar at plain /assets — where nothing supplied a profile at all and
+  // the page dead-ended. The standalone case resolves its own below.
   const params = useParams();
-  const activeProfileId = profileId || params.profileId || "";
+  const [searchParams, setSearchParams] = useSearchParams();
+  const embeddedWithProfile = Boolean(profileId);
+  const [profiles, setProfiles] = useState([]);
+  const [rememberedId, setRememberedId] = useState(() => readCurrentAppId());
+
+  const activeProfileId = resolveActiveProfileId({
+    propId: profileId,
+    paramId: params.profileId,
+    queryId: searchParams.get("profile") || "",
+    rememberedId,
+    profiles,
+  });
+
+  const selectableProfiles = useMemo(
+    () => (profiles.length > 0 ? profiles : activeProfileId ? [{ id: activeProfileId }] : []),
+    [profiles, activeProfileId]
+  );
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -317,15 +367,60 @@ export default function AssetLibrary({
       });
       setAssets(data.assets || []);
     } catch (err) {
-      setError(getErrorMessage(err));
+      // A profile that no longer exists, or belongs to someone else, arrives as
+      // a 404 with a bare "App Profile not found". On the standalone page the
+      // founder can fix that by picking another app, so say so instead of
+      // leaving a dead end. Embedded in the studio there is nothing to pick, so
+      // the raw error is the honest thing to show.
+      if (!embedded && err?.response?.status === 404) {
+        setAssets([]);
+        setError(
+          "That app is no longer available. Pick one of your apps below to see its assets."
+        );
+      } else {
+        setError(getErrorMessage(err));
+      }
     } finally {
       setLoading(false);
     }
-  }, [activeProfileId, includeArchived]);
+  }, [activeProfileId, includeArchived, embedded]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // The standalone page has to discover which apps exist, because the sidebar
+  // link carries no profile. Only there: embedded in the studio the profile is
+  // already known and this would be a wasted request on every step render.
+  useEffect(() => {
+    if (embedded) return;
+    let cancelled = false;
+    api
+      .getAppProfiles()
+      .then((d) => {
+        if (!cancelled) setProfiles(d.profiles || []);
+      })
+      .catch(() => {
+        // Leave the list empty; the page falls back to its empty state, which
+        // now links to the editor rather than stranding anyone.
+        if (!cancelled) setProfiles([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [embedded]);
+
+  // Choosing an app here is the same choice the editor makes, so it is
+  // remembered and becomes the default the next time /assets is opened with no
+  // profile in the URL.
+  const handleSwitchProfile = (nextId) => {
+    setAssets([]);
+    setError(null);
+    setNotice(null);
+    rememberCurrentAppId(nextId);
+    setRememberedId(nextId);
+    setSearchParams(nextId ? { profile: nextId } : {}, { replace: true });
+  };
 
   const handleUpload = async (event) => {    const file = event.target.files?.[0];
     if (!file || !activeProfileId) return;
@@ -427,12 +522,71 @@ export default function AssetLibrary({
   }, [assets]);
 
   if (!activeProfileId) {
+    // This used to be a dead end: EmptyState accepts an action, and none was
+    // passed, so the sidebar's Asset Library told you to choose an app and
+    // offered no way to choose one. Two different causes need two different
+    // next steps, so they are told apart rather than merged into one message.
+    const { approved, unapproved } = partitionProfiles(profiles);
+    const waiting = unapproved.length > 0;
     return (
-      <EmptyState
-        icon={Images}
-        title="Choose an App Profile first"
-        description="Assets belong to one app and can only be used in that app's videos."
-      />
+      <div className="space-y-4">
+        {!embedded && (
+          <PageHeader
+            icon={Images}
+            title="Asset Library"
+            description="Real app visuals. These are composited onto the video deterministically, so interfaces, text, and pricing stay accurate."
+          />
+        )}
+        {loading ? (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading your apps...
+          </p>
+        ) : profiles.length === 0 ? (
+          <EmptyState
+            icon={Images}
+            title="No app yet"
+            description="Assets belong to one app and can only be used in that app's videos. Research an app first, then come back for its visuals."
+            action={
+              <Button variant="brand" asChild>
+                <Link to="/brand">Set up your app</Link>
+              </Button>
+            }
+          />
+        ) : (
+          <EmptyState
+            icon={Images}
+            title="Choose an App Profile"
+            description={
+              waiting
+                ? `Assets belong to one app. You have ${approved.length} approved and ${unapproved.length} still waiting for approval.`
+                : "Assets belong to one app and can only be used in that app's videos."
+            }
+            action={
+              <div className="flex flex-col items-center gap-2">
+                {selectableProfiles.length > 1 ? (
+                  <ProfilePicker
+                    profiles={selectableProfiles}
+                    value=""
+                    onChange={handleSwitchProfile}
+                  />
+                ) : (
+                  <Button variant="brand" asChild>
+                    <Link to={`/app-profiles/${selectableProfiles[0].id}`}>
+                      Open {profileLabel(selectableProfiles[0])}
+                    </Link>
+                  </Button>
+                )}
+                {waiting && (
+                  <p className="text-xs text-muted-foreground">
+                    Approval is needed before a video can be generated, not before
+                    you can upload visuals.
+                  </p>
+                )}
+              </div>
+            }
+          />
+        )}
+      </div>
     );
   }
 
@@ -445,6 +599,28 @@ export default function AssetLibrary({
           icon={Images}
           title="Asset Library"
           description="Real app visuals. These are composited onto the video deterministically, so interfaces, text, and pricing stay accurate."
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Shown whenever there is something to switch between. With a
+                  single app it would be a one-option menu, which is noise. */}
+              {profiles.length > 1 && (
+                <ProfilePicker
+                  profiles={profiles}
+                  value={activeProfileId}
+                  onChange={handleSwitchProfile}
+                />
+              )}
+              <span className="text-xs text-muted-foreground">
+                {activeProfileId
+                  ? `Assets for ${profileLabel(
+                      profiles.find((p) => p.id === activeProfileId) || {
+                        id: activeProfileId,
+                      }
+                    )}`
+                  : ""}
+              </span>
+            </div>
+          }
         />
       )}
 
