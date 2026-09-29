@@ -272,6 +272,125 @@ def _parse_json_response(full_text: str, context: str) -> dict:
     raise RuntimeError(f"{context} did not return valid JSON")
 
 
+class TruncatedResponse(RuntimeError):
+    """
+    The model stopped because it hit max_tokens, not because it finished.
+
+    Worth its own exception: truncated JSON fails the parser in exactly the
+    same way as a model that wrapped its answer in prose, so without this the
+    only clue is "did not return valid JSON" and the real cause — a too-small
+    token budget — goes unquestioned. Gemini 2.5 Flash is a thinking model, and
+    thought tokens are drawn from the same completion budget, so a large JSON
+    schema can exhaust max_tokens before the closing brace is ever written.
+    """
+
+
+async def _chat_json(
+    system_message: str,
+    prompt: str,
+    context: str,
+    temperature: float = 0.4,
+    max_tokens: int = 3000,
+    attempts: int = 2,
+    timeout: int = 120,
+) -> dict:
+    """
+    One chat completion that must come back as a JSON object.
+
+    Handles the two ways that actually goes wrong, which a bare json.loads does
+    not:
+
+    - Truncation (finish_reason == "length") is detected and retried with a
+      larger budget AND a request for shorter values, because repeating the
+      same request at the same size will be truncated identically.
+    - A formatting slip (prose around the JSON, a fence, a stray comma) is
+      retried once with an explicit JSON-only reminder, which fixes it far
+      more often than it recurs.
+
+    Only after the retries are exhausted does it raise.
+    """
+    last_error = None
+
+    for attempt in range(1, attempts + 1):
+        # A retry gets a bigger budget and a nudge to be more economical.
+        budget = max_tokens if attempt == 1 else max_tokens * 2
+        attempt_prompt = prompt
+        if attempt > 1:
+            attempt_prompt = (
+                prompt
+                + "\n\nIMPORTANT: Your previous reply was cut off or was not parseable. "
+                "Reply with ONE complete JSON object and nothing else - no prose, no "
+                "markdown fence, no trailing commentary. Keep every string value to "
+                "under 25 words so the whole object fits."
+            )
+
+        payload = {
+            "model": TEXT_MODEL,
+            "messages": [
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": attempt_prompt},
+            ],
+            "temperature": temperature,
+            "max_tokens": budget,
+        }
+
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(
+                f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        choices = data.get("choices") or []
+        if not choices:
+            logger.error(
+                f"{context}: no choices in response: {json.dumps(data)[:1000]}"
+            )
+            raise RuntimeError(f"{context}: model returned no response")
+
+        choice = choices[0]
+        finish_reason = choice.get("finish_reason")
+        full_text = choice.get("message", {}).get("content", "") or ""
+
+        if not full_text:
+            logger.error(
+                f"{context}: empty content, finish_reason={finish_reason}, "
+                f"budget={budget}, response: {json.dumps(data)[:1000]}"
+            )
+            last_error = TruncatedResponse(
+                f"{context}: model returned no content (finish_reason={finish_reason})"
+            )
+            continue
+
+        if finish_reason == "length":
+            # The JSON was cut mid-object, so the parser cannot see it. Say so.
+            logger.error(
+                f"{context}: response truncated by max_tokens (budget={budget}). "
+                f"Raw tail: {full_text[-400:]!r}"
+            )
+            last_error = TruncatedResponse(
+                f"{context} was cut off after {budget} tokens "
+                f"(finish_reason=length) before the JSON closed"
+            )
+            continue
+
+        try:
+            return _parse_json_response(full_text, context)
+        except RuntimeError as e:
+            last_error = e
+            if attempt < attempts:
+                logger.warning(
+                    f"{context}: attempt {attempt} returned unparseable JSON, retrying "
+                    f"with a stricter instruction. Raw head: {full_text[:300]!r}"
+                )
+                continue
+            raise
+
+    if last_error:
+        raise last_error
+    raise RuntimeError(f"{context}: model returned no usable response")
+
+
 def _decode_image_base64(value: str, context: str) -> bytes:
     """Decode image bytes returned by OpenRouter's dedicated Images API."""
     if not value:
@@ -1959,32 +2078,36 @@ async def generate_video_strategy(
         "- Never promise a guaranteed outcome, never invent a testimonial, a rating or a review, and never state "
         "pricing that is not in the facts.\n"
         "- Use only approved claims. Never use anything in never_use.\n"
-        "Return ONLY valid JSON."
+        # Length discipline. This object is large, and an over-long value here
+        # is what pushes the reply past the completion budget and gets it cut
+        # off mid-object. Concision costs nothing here: the fields are read as
+        # locked values restated into a prompt, not as prose.
+        "- Keep EVERY string value under 25 words and each list to 2-4 short items. Be specific, not lengthy. "
+        "A long value helps nothing and risks the whole object being cut off.\n"
+        "- Return ONE complete JSON object and nothing else: no prose before or after it, no markdown fence."
     )
 
-    payload = {
-        "model": TEXT_MODEL,
-        "messages": [
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": prompt},
-        ],
-        "temperature": 0.5,
-        "max_tokens": 4000,
-    }
-
-    async with httpx.AsyncClient(timeout=120) as client:
-        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-
-    full_text = data["choices"][0]["message"]["content"]
-    raw = _parse_json_response(full_text, "Video strategy")
-    if isinstance(raw, dict) and isinstance(raw.get("strategy"), dict):
+    # This is the largest JSON schema in the codebase: ~45 values across five
+    # nested objects, several of them prose. Gemini 2.5 Flash is a thinking
+    # model and its thought tokens come out of the SAME completion budget, so a
+    # budget that looks generous on paper can be exhausted before the closing
+    # brace is written. 8192 is the floor that reliably fits this schema.
+    raw = await _chat_json(
+        system_message=system_message,
+        prompt=prompt,
+        context="Video strategy",
+        temperature=0.5,
+        max_tokens=8192,
+        attempts=2,
+    )
+    if isinstance(raw.get("strategy"), dict):
         raw = raw["strategy"]
 
     missing = REQUIRED_STRATEGY_KEYS - set(raw.keys())
     if missing:
-        logger.error(f"Video strategy missing fields {missing}. Raw text: {full_text[:1500]!r}")
+        logger.error(
+            f"Video strategy missing fields {missing}. Keys returned: {sorted(raw.keys())}"
+        )
         raise RuntimeError(f"Video strategy missing required fields: {missing}")
 
     strategy = normalize_strategy(raw)

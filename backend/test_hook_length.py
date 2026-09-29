@@ -522,25 +522,31 @@ class TestTrimIsApplied:
         The regression this whole feature could introduce: if the trim left the
         full render at the canonical path, every continuation would resume from
         a frame the viewer never saw.
+
+        The load-bearing assertion is the canonical file's LENGTH. Comparing
+        extracted frame bytes looked equivalent but was flaky: it depended on
+        two independent ffmpeg encodes plus where `-sseof -1` happens to land,
+        so it could pass without proving anything and fail for the wrong reason.
+        The length cannot: 3.0s is only possible if the trimmed file replaced
+        the 4s render at that exact path.
         """
         from models import ApproveSegmentRequest, StudioGenerationRequest
-        _project, gen, _updated = self._complete_with_real_clip(api, monkeypatch, trim_to=3)
+        _project, gen, updated = self._complete_with_real_clip(api, monkeypatch, trim_to=3)
 
         canonical = api.pipeline.VIDEOS_DIR / f"{gen['id']}.mp4"
-        # What the extension will bridge from is the last frame of this file.
-        bridge = api.pipeline.GENERATED_DIR / f"probe-{gen['id']}.png"
-        extracted = _run(api.pipeline.extract_last_frame(canonical, bridge))
-        assert extracted is not None, "could not read a final frame from the trimmed hook"
+        assert canonical.is_file()
+        delivered = _duration(canonical)
+        assert abs(delivered - 3.0) < 0.02, (
+            f"the canonical file is {delivered:.3f}s, so the trim did NOT replace "
+            f"the render at the path an extension bridges from. "
+            f"storage_error={updated.get('storage_error')!r}"
+        )
+        assert abs(delivered - 4.0) > 0.5, "the full render is still at the canonical path"
 
-        # And the frame must come from the 3s clip, not the 4s render.
-        trimmed_last = api.pipeline.GENERATED_DIR / f"trimmed-last-{gen['id']}.png"
-        _run(api.pipeline.extract_last_frame(canonical, trimmed_last))
-        full = _make_clip(api.pipeline.GENERATED_DIR / f"full-{gen['id']}.mp4", 4)
-        full_last = api.pipeline.GENERATED_DIR / f"full-last-{gen['id']}.png"
-        _run(api.pipeline.extract_last_frame(full, full_last))
-        assert trimmed_last.read_bytes() != full_last.read_bytes(), (
-            "the trimmed hook's final frame is identical to the full render's, so "
-            "the trim did not actually take effect on the canonical file"
+        # And the seam frame the extension will use is readable from that file.
+        bridge = api.pipeline.GENERATED_DIR / f"probe-{gen['id']}.png"
+        assert _run(api.pipeline.extract_last_frame(canonical, bridge)) is not None, (
+            "could not read a final frame from the trimmed hook"
         )
 
         # The extension proceeds from the approved, trimmed hook.

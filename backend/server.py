@@ -7894,8 +7894,25 @@ async def generate_project_strategy(
             template_id=template.get("id"),
         )
     except Exception as e:
-        logger.error(f"Strategy generation failed for project {project_id}: {e}")
-        raise HTTPException(status_code=502, detail=f"AI strategy generation failed. Please try again. ({str(e)[:150]})")
+        # Distinguish a truncated response from every other failure, because
+        # they need different fixes: truncation means the token budget is wrong,
+        # anything else means the model or the request is. Both are already
+        # logged with the raw text, so this only has to be honest in the UI.
+        from ai_service import TruncatedResponse
+
+        logger.error(f"Strategy generation failed for project {project_id}: {e!r}")
+        if isinstance(e, TruncatedResponse):
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "The strategy reply was cut off before it finished, so it could not be "
+                    "read. This is a length problem, not a bad request — please try again."
+                ),
+            )
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI strategy generation failed. Please try again. ({str(e)[:150]})",
+        )
 
     # The strategy carries the words that will actually be spoken, so it goes
     # through exactly the same claim check as the plan. A banned claim in the
