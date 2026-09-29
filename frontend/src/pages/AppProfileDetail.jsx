@@ -7,7 +7,7 @@ import PageHeader from "../components/PageHeader";
 import { api, getErrorMessage } from "../lib/api";
 import {
   Briefcase, Loader2, AlertTriangle, ArrowLeft, Sparkles, Target,
-  ShieldAlert, Lightbulb, ChevronRight,
+  ShieldAlert, Lightbulb, ChevronRight, Video,
 } from "lucide-react";
 
 /** Read an array-or-empty field into a clean list. */
@@ -156,15 +156,21 @@ export default function AppProfileDetail() {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [drafts, setDrafts] = useState([]);
 
   const load = useCallback(async () => {
     try {
-      const [p, a] = await Promise.all([
+      const [p, a, d] = await Promise.all([
         api.getAppProfile(profileId),
         api.getContentAngles(profileId).catch(() => ({ angles: [] })),
+        // A profile is reusable for as many videos as you want, so the page
+        // shows the drafts already built on it. Scoped by brand_profile_id, and
+        // the backend filters on the caller's user_id too.
+        api.getStudioProjects({ brand_profile_id: profileId }).catch(() => ({ projects: [] })),
       ]);
       setProfile(p);
       setAngles(a.angles || []);
+      setDrafts(d.projects || []);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -264,6 +270,24 @@ export default function AppProfileDetail() {
             <Button variant="secondary" size="sm" asChild>
               <Link to="/brand">Edit</Link>
             </Button>
+            {/* An App Profile is not consumed by making a video: the same
+                approved profile backs every video, and the studio reuses its
+                angles, assets and templates. This is the way back in, on the
+                page where someone is looking at the app itself. */}
+            <Button variant="brand" size="sm" asChild>
+              <Link
+                to={`/create?profile=${encodeURIComponent(profileId)}`}
+                onClick={(e) => {
+                  if (!approved) {
+                    e.preventDefault();
+                    setNotice("Approve this profile first — the studio only accepts approved apps.");
+                  }
+                }}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                New video
+              </Link>
+            </Button>
           </div>
         }
       />
@@ -329,6 +353,51 @@ export default function AppProfileDetail() {
         </div>
 
         <div className="space-y-4">
+          <div className="surface space-y-3 rounded-2xl p-5">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="flex items-center gap-2 font-display text-base font-semibold">
+                <Video className="h-4 w-4 text-[color:var(--brand-indigo)]" />
+                Videos from this app
+              </h3>
+              <span className="text-xs text-muted-foreground">
+                {drafts.length ? `${drafts.length} draft${drafts.length === 1 ? "" : "s"}` : ""}
+              </span>
+            </div>
+
+            {drafts.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {approved
+                  ? "Nothing built on this app yet. The profile, its angles and its templates stay here and can be reused for every video you make."
+                  : "Approve this profile to start building videos on it. It can be reused as often as you like."}
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {drafts.map((d) => (
+                  <Link
+                    key={d.id}
+                    to={`/create?profile=${encodeURIComponent(profileId)}&project=${encodeURIComponent(d.id)}`}
+                    className="block rounded-xl border border-[color:var(--hairline)] p-3 transition-colors hover:border-[color:var(--indigo-35)]"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-medium">
+                        {d.hook_line || d.objective || "Untitled draft"}
+                      </span>
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {d.script_version > 0
+                        ? "Plan ready — resume in the studio"
+                        : "Setup started — still needs a hook and assets"}
+                    </p>
+                  </Link>
+                ))}
+                <p className="pt-1 text-xs text-muted-foreground">
+                  Each draft is independent, so you can start a fresh video on this app at any time.
+                </p>
+              </div>
+            )}
+          </div>
+
           <div className="surface space-y-3 rounded-2xl p-5">
             <div className="flex items-center justify-between gap-2">
               <h3 className="flex items-center gap-2 font-display text-base font-semibold">

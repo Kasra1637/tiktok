@@ -167,6 +167,43 @@ class TestProjectCreation:
         assert mine["projects"]
         assert theirs["projects"] == []
 
+    def test_one_profile_backs_many_drafts(self, api):
+        """
+        An App Profile is a reusable starting point, not something consumed by
+        the first video. This is the invariant behind the profile page's "New
+        video" button and its list of drafts: if a one-draft-per-profile
+        constraint ever gets added, reuse silently dies here first.
+        """
+        profile = _approved_profile(api, "Reusable")
+        template = _a_template(api)
+        first = _a_project(api, profile, template)
+        second = _a_project(api, profile, template)
+        assert first["id"] != second["id"]
+        # The profile is still intact and still approved after both.
+        assert _run(api.get_app_profile(profile["id"], ANON))["status"] == "approved"
+
+    def test_drafts_can_be_filtered_to_one_profile(self, api):
+        """
+        The profile page lists only this app's drafts. Two apps, so a filter
+        that ignored brand_profile_id would show the wrong app's history.
+        """
+        a = _approved_profile(api, "Filter A")
+        b = _approved_profile(api, "Filter B")
+        template = _a_template(api)
+        draft_a = _a_project(api, a, template)
+        draft_b = _a_project(api, b, template)
+
+        only_a = _run(api.list_studio_projects(brand_profile_id=a["id"], user_id=ANON))
+        assert [p["id"] for p in only_a["projects"]] == [draft_a["id"]]
+
+        only_b = _run(api.list_studio_projects(brand_profile_id=b["id"], user_id=ANON))
+        assert [p["id"] for p in only_b["projects"]] == [draft_b["id"]]
+
+        # The filter must not become a way to read someone else's drafts.
+        leaked = _run(api.list_studio_projects(
+            brand_profile_id=a["id"], user_id=OTHER_USER))
+        assert leaked["projects"] == []
+
 
 class TestPlanGating:
     def test_plan_requires_a_template(self, api, monkeypatch):

@@ -6,7 +6,7 @@ import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import EmptyState from "../components/EmptyState";
 import { api, getErrorMessage } from "../lib/api";
-import { Briefcase, Loader2, AlertTriangle, ExternalLink, Plus, ArrowRight, Trash2 } from "lucide-react";
+import { Briefcase, Loader2, AlertTriangle, ExternalLink, Plus, ArrowRight, Trash2, Video } from "lucide-react";
 
 function StatusBadge({ status }) {
   if (status === "approved") {
@@ -162,6 +162,25 @@ export default function AppProfiles() {
                     {p.approved_at ? " · approved" : ""}
                   </span>
                   <div className="flex items-center gap-2">
+                    {/* An app is a reusable starting point, not a one-shot
+                        input. This is why a built profile doesn't feel spent. */}
+                    {p.status === "approved" && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        asChild
+                        className="pointer-events-auto h-7 gap-1.5 rounded-lg px-2 text-xs"
+                        data-testid={`new-video-${p.id}`}
+                      >
+                        <Link
+                          to={`/create?profile=${encodeURIComponent(p.id)}`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Video className="h-3.5 w-3.5" />
+                          New video
+                        </Link>
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
