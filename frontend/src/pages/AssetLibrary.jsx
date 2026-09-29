@@ -708,7 +708,7 @@ export default function AssetLibrary({
           <span className="text-xs text-muted-foreground">
             {assets.length} asset{assets.length === 1 ? "" : "s"}
             {Object.keys(counts).length > 0 &&
-              ` Â· ${Object.entries(counts).map(([k, n]) => `${n} ${humanize(k).toLowerCase()}`).join(", ")}`}
+              ` · ${Object.entries(counts).map(([k, n]) => `${n} ${humanize(k).toLowerCase()}`).join(", ")}`}
           </span>
           <Button
             variant="ghost"
@@ -727,20 +727,17 @@ export default function AssetLibrary({
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading assets...
         </p>
       ) : assets.length === 0 ? (
-        <EmptyState
-          icon={Images}
-          title="No assets yet"
-          // No action button here, on either layout. The toolbar directly above
-          // already has the Upload button, so a second identical one only
-          // competes with it — and the file input it triggered is the same
-          // control. What this state is for is saying what to upload and why,
-          // which the toolbar cannot do.
-          description={
-            embedded
-              ? "Use the Upload button above to add your first one."
-              : "Add screenshots, screen recordings, and your logo so the finished video shows the real app instead of a generated approximation."
-          }
-        />
+        // This was a full EmptyState — dashed 400px box, icon, title, copy —
+        // sitting below a toolbar that already has a working Upload button and
+        // already says "0 assets". That box is sized for a page that is a dead
+        // end; this is a section inside a working page, so the box was
+        // disproportionate. The one line below carries the part the toolbar
+        // cannot: why uploading is worth doing.
+        <p className="text-sm text-muted-foreground">
+          {embedded
+            ? "Use the Upload button above to add your first one."
+            : "Add screenshots, screen recordings, and your logo so the finished video shows the real app instead of a generated approximation."}
+        </p>
       ) : (
         <div className="space-y-2">
           {assets.map((a) => (
