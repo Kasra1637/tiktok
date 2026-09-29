@@ -26,7 +26,6 @@ import AssetLibrary from "./pages/AssetLibrary";
 import Dashboard from "./pages/Dashboard";
 import Analytics from "./pages/Analytics";
 import TrendResearch from "./pages/TrendResearch";
-import Settings from "./pages/Settings";
 import { OnboardingProvider } from "./components/onboarding/OnboardingProvider";
 
 function App() {
@@ -61,7 +60,6 @@ function App() {
                         <Route path="/" element={<Dashboard />} />
                         <Route path="/analytics" element={<Analytics />} />
                         <Route path="/research" element={<TrendResearch />} />
-                        <Route path="/settings" element={<Settings />} />
                         <Route path="/templates" element={<Templates />} />
                         <Route path="/templates/:templateId" element={<TemplateDetail />} />
                         <Route path="/create" element={<CreateVideo />} />

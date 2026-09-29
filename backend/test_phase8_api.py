@@ -584,20 +584,16 @@ class TestDashboard:
         assert any(p["brand_name"] == "Draft App" for p in board["profiles_awaiting_approval"])
 
 
-class TestSettings:
-    def test_reports_provider_and_integration_state(self, api):
-        result = _run(api.settings_overview(user_id=ANON))
-        assert result["providers"]["default"]
-        assert result["providers"]["thirty_second_request"]["primary_seconds"] > 0
-        assert result["integrations"]["openrouter"] is True
-
-    def test_states_the_honest_notes(self, api):
-        result = _run(api.settings_overview(user_id=ANON))
-        joined = " ".join(result["notes"]).lower()
-        assert "published by hand" in joined or "publish" in joined
-        assert "never verified" in joined
-        assert "not proven performers" in joined
-        assert result["publishing"] == "manual"
+# The Settings page and GET /api/settings are gone. The three honesty notes it
+# carried are each stated somewhere the user still is, so none of them went dark
+# with the page:
+#
+#   never publishes          frontend/src/pages/Dashboard.jsx
+#   TikTok figures are by hand   frontend/src/pages/Analytics.jsx
+#   templates are not proven     frontend/src/pages/CreateVideo.jsx
+#
+# Integration status went with it. It was a read-only self-serve report, so
+# nothing is stranded and no behaviour depended on the endpoint.
 
 
 class TestResearch:

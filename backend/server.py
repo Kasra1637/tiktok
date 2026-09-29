@@ -9901,9 +9901,9 @@ async def analytics_report(
     return report
 
 
-def _apify_configured() -> bool:
-    import apify_tiktok
-    return apify_tiktok.is_configured()
+# _apify_configured() used to live here, reporting whether the Apify integration
+# was configured for the Settings page. That page is gone, this was its only
+# caller, and apify_tiktok.is_configured() still exists for anyone who needs it.
 
 
 @api_router.get("/dashboard")
@@ -9946,43 +9946,6 @@ async def dashboard(user_id: str = Depends(get_current_user_id)):
         "pending_template_drafts": pending_drafts,
         "recent_generations": recent,
         "recent_failures": failed,
-    }
-
-
-@api_router.get("/settings")
-async def settings_overview(user_id: str = Depends(get_current_user_id)):
-    """
-    Configuration and capability view. Reports what is configured and what is
-    NOT, rather than silently degrading.
-    """
-    default_key = video_providers.default_model_key()
-    plan = video_providers.plan_duration(default_key, 30)
-    return {
-        "providers": {
-            "default": default_key,
-            "allowlist": [c["key"] for c in video_providers.list_capabilities()],
-            "max_single_pass_seconds": video_providers.capability(default_key)["max_duration"],
-            "thirty_second_request": plan,
-        },
-        "integrations": {
-            "openrouter": bool(os.environ.get("OPENROUTER_API_KEY")),
-            "apify": _apify_configured(),
-            "cloudflare_r2": storage_service.is_configured(),
-            "turso": bool(os.environ.get("TURSO_DATABASE_URL")),
-            "modal": bool(os.environ.get("MODAL_FRAME_EXTRACTOR_URL")),
-        },
-        "overlays": {
-            "ffmpeg_available": bool(shutil.which("ffmpeg")),
-            "font": overlays.resolve_font() or "",
-        },
-        "publishing": "manual",
-        "notes": [
-            "Videos are generated here and published by hand. This app never posts "
-            "to TikTok or any platform.",
-            "TikTok performance figures are entered by hand and are never verified.",
-            "Templates are curated structures, not proven performers, until this "
-            "app's own history says otherwise.",
-        ],
     }
 
 
