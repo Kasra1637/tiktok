@@ -328,7 +328,6 @@ export default function AssetLibrary({
   // the page dead-ended. The standalone case resolves its own below.
   const params = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const embeddedWithProfile = Boolean(profileId);
   const [profiles, setProfiles] = useState([]);
   const [rememberedId, setRememberedId] = useState(() => readCurrentAppId());
 
@@ -344,6 +343,16 @@ export default function AssetLibrary({
     () => (profiles.length > 0 ? profiles : activeProfileId ? [{ id: activeProfileId }] : []),
     [profiles, activeProfileId]
   );
+
+  // The active profile as a record, when it is one we know about. Embedded in
+  // the studio the profile list is deliberately not fetched, so this is null
+  // there and the approval state is left to the wizard, which already gates on
+  // it and would not have let the step render.
+  const activeProfile = useMemo(
+    () => profiles.find((p) => p.id === activeProfileId) || null,
+    [profiles, activeProfileId]
+  );
+
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -610,15 +619,21 @@ export default function AssetLibrary({
                   onChange={handleSwitchProfile}
                 />
               )}
-              <span className="text-xs text-muted-foreground">
-                {activeProfileId
-                  ? `Assets for ${profileLabel(
-                      profiles.find((p) => p.id === activeProfileId) || {
-                        id: activeProfileId,
-                      }
-                    )}`
-                  : ""}
-              </span>
+              {/* The approval state is stated here unconditionally, not left to
+                  the picker. With exactly one app there is no picker, so this
+                  line is the only place it can appear — and "here but not
+                  approved" is precisely what someone checking for a missing
+                  app needs to be able to see. */}
+              {activeProfile && (
+                <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span>Assets for {profileLabel(activeProfile)}</span>
+                  {activeProfile.status === "approved" ? (
+                    <Badge variant="outline" className="text-[10px]">Approved</Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-[10px]">Needs approval</Badge>
+                  )}
+                </span>
+              )}
             </div>
           }
         />
