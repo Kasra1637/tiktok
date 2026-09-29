@@ -14,6 +14,12 @@ import AssetLibrary from "./AssetLibrary";
 import { api, getErrorMessage } from "../lib/api";
 import { recordSignal, classifyScriptEdit } from "../lib/feedback";
 import {
+  partitionProfiles,
+  profileLabel,
+  describeUnapprovedCount,
+  describeEmptySelection,
+} from "../lib/profileSelection";
+import {
   Clapperboard, Loader2, AlertTriangle, Briefcase, Target, LayoutTemplate,
   Image as ImageIcon, FileText, Check, ChevronLeft, ChevronRight, Sparkles,
   Save, CheckCircle2, Star, Plus, Trash2,
@@ -211,8 +217,11 @@ export default function CreateVideo() {
         const list = data.profiles || [];
         if (cancelled) return;
         setProfiles(list);
-        // Only approved profiles may enter the studio.
-        const approved = list.filter((p) => p.status === "approved");
+        // Only approved profiles may enter the studio. The `?profile=` deep
+        // link is a different path: it preselects a specific app and is
+        // handled further down. Both must agree on what counts as approved, so
+        // both go through the same partition rather than repeating the filter.
+        const approved = partitionProfiles(list).approved;
         const requestedProjectId = params.get("project");
         if (requestedProjectId) {
           try {
@@ -511,7 +520,9 @@ export default function CreateVideo() {
 
   function renderStep() {
     if (step === 0) {
-      const approved = profiles.filter((p) => p.status === "approved");
+      // The gate and the explanation come from one place, so the picker can
+      // never become permissive while still claiming it excludes the rest.
+      const { approved, unapproved } = partitionProfiles(profiles);
       return (
         <StepShell
           icon={Briefcase}
@@ -522,7 +533,7 @@ export default function CreateVideo() {
             <EmptyState
               icon={Briefcase}
               title="No approved App Profile"
-              description="Research an app and approve the profile before creating a video."
+              description={describeEmptySelection(profiles)}
               action={
                 <Button variant="brand" asChild>
                   <Link to="/app-profiles">Go to App Profiles</Link>
@@ -551,6 +562,30 @@ export default function CreateVideo() {
                   </p>
                 </button>
               ))}
+            </div>
+          )}
+
+          {unapproved.length > 0 && (
+            <div className="rounded-2xl border border-[color:var(--hairline)] bg-secondary/20 p-4">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">
+                    {describeUnapprovedCount(unapproved.length)}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {unapproved.map(profileLabel).join(", ")}
+                  </p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    These are the apps you already created. They are not selectable until you
+                    review and approve them, so that a script can only build on facts you have
+                    checked.
+                  </p>
+                  <Button variant="secondary" size="sm" asChild className="mt-3">
+                    <Link to="/app-profiles">Review and approve</Link>
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
         </StepShell>

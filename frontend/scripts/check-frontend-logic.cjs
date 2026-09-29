@@ -31,8 +31,8 @@ function check(label, condition, detail) {
   }
 }
 
-function loadModule() {
-  const source = fs.readFileSync(SRC, "utf8");
+function loadModule(src = SRC) {
+  const source = fs.readFileSync(src, "utf8");
   // Strip the ESM export keywords so the file can be evaluated as a script, and
   // re-expose whatever it declared. Only the export syntax changes; the code
   // under test is evaluated verbatim, so the assertions cannot drift from what
@@ -43,7 +43,7 @@ function loadModule() {
   let m;
   while ((m = decl.exec(stripped))) names.add(m[1]);
   if (names.size === 0) {
-    throw new Error("found no top-level declarations in " + SRC);
+    throw new Error("found no top-level declarations in " + src);
   }
   const expose = `\n;module.exports = { ${[...names].join(", ")} };`;
   const sandbox = { module: { exports: {} }, exports: {} };
@@ -142,6 +142,83 @@ check("an old strategy with no coverage field is unknown, not zero",
   L.plannedCoverage([{ segment_index: 0 }], {}));
 check("never goes negative",
   L.plannedCoverage([{ segment_index: 0 }], { max_planned_index: 2 }) === 2);
+
+console.log("\n" + "=".repeat(70));
+console.log("frontend/src/lib/profileSelection.js");
+console.log("=".repeat(70));
+
+const P = loadModule(path.resolve(__dirname, "..", "src", "lib", "profileSelection.js"));
+
+// The regression: the studio's first step used to render only approved
+// profiles, so a profile the founder had already created but not yet approved
+// was invisible. Five apps and two approvals showed two, with no hint that the
+// other three existed. These assert that nothing is ever silently dropped.
+console.log("\npartitionProfiles - nothing may be dropped");
+const MIXED = [
+  { id: "a", brand_name: "Approved App", status: "approved" },
+  { id: "b", brand_name: "Waiting One", status: "draft" },
+  { id: "c", brand_name: "Waiting Two", status: "metadata_ready" },
+  { id: "d", brand_name: "Also Approved", status: "approved" },
+];
+const part = P.partitionProfiles(MIXED);
+check("every profile lands in exactly one bucket",
+  part.approved.length + part.unapproved.length === MIXED.length,
+  { approved: part.approved.length, unapproved: part.unapproved.length });
+check("approved holds only approved", part.approved.every((p) => p.status === "approved"),
+  part.approved.map((p) => p.status));
+check("unapproved holds none of the approved",
+  part.unapproved.every((p) => p.status !== "approved"),
+  part.unapproved.map((p) => p.status));
+check("both approved profiles are selectable",
+  part.approved.map((p) => p.id).join() === "a,d", part.approved.map((p) => p.id));
+check("the two drafts are reported, not hidden",
+  part.unapproved.map((p) => p.id).join() === "b,c", part.unapproved.map((p) => p.id));
+check("a profile never appears in both buckets",
+  !part.approved.some((a) => part.unapproved.some((u) => u.id === a.id)));
+
+console.log("\nisProfileSelectable - the gate itself stays strict");
+// An unrecognised status must fail closed. If a new status were ever treated as
+// approved, a video could be built on facts nobody reviewed.
+check("approved is selectable", P.isProfileSelectable({ status: "approved" }) === true);
+for (const status of ["draft", "metadata_ready", "pending", "", null, undefined, "Approved"]) {
+  check(`status ${JSON.stringify(status)} is NOT selectable`,
+    P.isProfileSelectable({ status }) === false, status);
+}
+check("a missing profile is not selectable", P.isProfileSelectable(null) === false);
+check("gate and partition never disagree",
+  MIXED.every((p) => P.isProfileSelectable(p) === (part.approved.includes(p))));
+
+console.log("\ndescribeUnapprovedCount - the count a founder reads");
+check("zero says nothing", P.describeUnapprovedCount(0) === "", P.describeUnapprovedCount(0));
+check("one is singular", P.describeUnapprovedCount(1) === "1 profile waiting for approval",
+  P.describeUnapprovedCount(1));
+check("three is plural", P.describeUnapprovedCount(3) === "3 profiles waiting for approval",
+  P.describeUnapprovedCount(3));
+check("a nonsense count says nothing", P.describeUnapprovedCount(NaN) === "");
+
+console.log("\nprofileLabel - never a blank row");
+check("a real name is used", P.profileLabel({ brand_name: "Zest" }) === "Zest");
+check("a missing name is not blank", P.profileLabel({}) === "Untitled app");
+check("a whitespace name is not blank", P.profileLabel({ brand_name: "   " }) === "Untitled app",
+  P.profileLabel({ brand_name: "   " }));
+check("a null profile is not blank", P.profileLabel(null) === "Untitled app");
+
+console.log("\ndescribeEmptySelection - names the profiles that are waiting");
+check("with none waiting it says what to do next",
+  P.describeEmptySelection([]) === "Research an app and approve the profile before creating a video.",
+  P.describeEmptySelection([]));
+const oneWaiting = P.describeEmptySelection([{ brand_name: "Wait", status: "draft" }]);
+check("with one waiting it names it", oneWaiting.includes("Wait"), oneWaiting);
+check("with one waiting it counts correctly", oneWaiting.includes("1 profile"), oneWaiting);
+const twoWaiting = P.describeEmptySelection(MIXED);
+check("with several waiting it names them all",
+  twoWaiting.includes("Waiting One") && twoWaiting.includes("Waiting Two"), twoWaiting);
+check("with several waiting it does not claim an approved app is waiting",
+  !twoWaiting.includes("Approved App"), twoWaiting);
+check("the empty state agrees with the partition",
+  P.describeEmptySelection(MIXED) === P.describeEmptySelection(part.unapproved.map((p, i) => ({
+    ...p, id: String(i),
+  }))), "same set, different ids");
 
 console.log("\n" + "=".repeat(70));
 if (failures.length === 0) {

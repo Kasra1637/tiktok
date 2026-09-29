@@ -205,6 +205,64 @@ class TestProjectCreation:
         assert leaked["projects"] == []
 
 
+class TestProfilePickerFeedsTheWizard:
+    """
+    The wizard's first step is a picker over GET /api/app-profiles. It splits
+    that list itself into selectable and waiting, then NAMES the waiting ones,
+    because a profile you already created but have not approved used to be
+    invisible there: the step rendered only the approved half and said nothing
+    about the rest, so five apps and two approvals looked like two.
+
+    That makes this endpoint load-bearing for a promise it does not itself
+    enforce. It must keep returning unapproved profiles, or the wizard has
+    nothing left to name and the problem returns silently.
+    """
+
+    def test_listing_returns_unapproved_profiles_too(self, api):
+        _approved_profile(api, "Picked App")
+        _approved_profile(api, "Still Waiting", approve=False)
+        profiles = _run(api.list_app_profiles(user_id=ANON))["profiles"]
+        by_name = {p["brand_name"]: p for p in profiles}
+        assert "Still Waiting" in by_name, "an unapproved profile must still be returned"
+        assert by_name["Still Waiting"]["status"] != "approved"
+
+    def test_every_created_profile_is_returned_exactly_once(self, api):
+        # The `api` fixture is module-scoped, so ANON's profiles accumulate
+        # across every test in this file. Count the names this test created
+        # rather than the whole list, which is what makes the assertion about
+        # duplication still hold.
+        for name in ("One", "Twice", "Twice", "Three"):
+            _approved_profile(api, name, approve=(name != "Twice"))
+        profiles = _run(api.list_app_profiles(user_id=ANON))["profiles"]
+        names = [p["brand_name"] for p in profiles]
+        assert names.count("One") == 1
+        assert names.count("Three") == 1
+        # Two genuinely distinct profiles may share a name, and both must come
+        # back. The picker keys on id, not name, so a duplicate label is fine —
+        # but losing one is not.
+        assert names.count("Twice") == 2, names
+        waiting = [p for p in profiles if p["brand_name"] == "Twice"]
+        assert all(p["status"] != "approved" for p in waiting)
+        assert len({p["id"] for p in waiting}) == 2, "both must be distinct records"
+
+    def test_listing_stays_scoped_to_the_caller(self, api):
+        _approved_profile(api, "Mine Approved")
+        _approved_profile(api, "Mine Waiting", approve=False)
+        assert _run(api.list_app_profiles(user_id=OTHER_USER))["profiles"] == []
+
+    def test_status_is_exactly_the_string_the_picker_compares(self, api):
+        """
+        The frontend compares status === "approved" verbatim, so the approve
+        endpoint has to write that exact literal. A rename on either side would
+        make every profile unselectable, or worse, make drafts selectable.
+        """
+        approved = _approved_profile(api, "Exact Match")
+        waiting = _approved_profile(api, "Not Exact", approve=False)
+        profiles = {p["id"]: p for p in _run(api.list_app_profiles(user_id=ANON))["profiles"]}
+        assert profiles[approved["id"]]["status"] == "approved"
+        assert profiles[waiting["id"]]["status"] != "approved"
+
+
 class TestPlanGating:
     def test_plan_requires_a_template(self, api, monkeypatch):
         _patch_plan(monkeypatch, api, FAKE_PLAN)
