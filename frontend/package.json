@@ -64,7 +64,10 @@
   "scripts": {
     "start": "craco start",
     "build": "craco build",
-    "test": "craco test"
+    "test": "craco test",
+    "check:imports": "node scripts/check-imports.cjs",
+    "check:logic": "node scripts/check-frontend-logic.cjs",
+    "check": "node scripts/check-imports.cjs && node scripts/check-frontend-logic.cjs"
   },
   "browserslist": {
     "production": [

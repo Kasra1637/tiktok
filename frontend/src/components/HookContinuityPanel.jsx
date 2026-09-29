@@ -4,6 +4,19 @@ import { Badge } from "./ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage, mediaUrl } from "../lib/api";
 import {
+  HOOK_LENGTHS,
+  DEFAULT_HOOK,
+  EXTEND_CHOICES,
+  DEFAULT_EXTEND,
+  FILL_TO_TARGET,
+  readExtendIntent,
+  resolveLength as resolveLengthFor,
+  parseExtendChoice,
+  canFillToTarget,
+  resolveExtendRequest,
+  plannedCoverage as plannedCoverageFor,
+} from "../lib/videoLength";
+import {
   Loader2, Clapperboard, AlertTriangle, Download, RefreshCw, Check,
   Info, Clock, User, MapPin, Film, Scissors, ShieldQuestion,
   Sparkles, Play, Link2,
@@ -24,16 +37,11 @@ import {
 
 const POLL_INTERVAL_MS = 6000;
 
-// Mirrors video_providers.HOOK_LENGTH_CHOICES / DEFAULT_HOOK_SECONDS. The
-// backend validates against its own list, so a drift here would be refused
-// loudly rather than silently mis-rendered.
-const HOOK_LENGTHS = [2, 3, 4, 5, 6];
-const DEFAULT_HOOK = 4;
-
-// How much an extension adds. 3s sits below every provider's render floor and
-// is therefore always delivered as a trim, which the option label says.
-const EXTEND_CHOICES = [3, 5, 8, 10];
-const DEFAULT_EXTEND = 5;
+// Hook lengths, extend lengths and their rules live in ../lib/videoLength so
+// they can be asserted directly. That file was extracted after this panel
+// shipped an `extend_intent === 0` that could never read "off" and a
+// `Number("target")` that turned "fill to target" into a silent 5s request —
+// neither of which any build step or backend test could see.
 
 const GUARANTEE_COPY = {
   frame_exact_plus_refs: {
@@ -226,31 +234,27 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
   };
 
   // -------------------------------------------------------------------------
-  // Hook length
+  // Hook and extension lengths
   //
   // The wanted length and the length the model can actually render are two
   // different numbers, and every provider's floor is 4s or more while the hook
-  // a template declares is 2-3s. So a short hook is rendered at the floor and
-  // cut down afterwards. This mirrors the backend's resolve_hook_length() so
-  // the option labels are honest BEFORE the render is paid for — the backend
-  // still decides, and its plan is what the response reports back.
+  // a template declares is 2-3s. So a short segment is rendered at the floor
+  // and cut down afterwards. resolveLength() mirrors the backend's
+  // resolve_length() so the option labels are honest BEFORE the render is paid
+  // for — the backend still decides, and its plan is what the response reports.
   // -------------------------------------------------------------------------
   const capability = models?.models?.find((m) => m.key === selectedModel);
   const floor = capability?.min_duration ?? 4;
   const ceiling = capability?.max_duration ?? 30;
 
-  const resolveLength = (target) => {
-    const render = Math.min(Math.max(target, floor), ceiling);
-    const trimTo = render > target ? target : 0;
-    return { target, render, trimTo };
-  };
+  const resolveLength = (target) => resolveLengthFor(target, capability);
 
   const savedHook = Number(project?.hook_seconds || 0);
   const effectiveHook = Number(hookSeconds || 0) || savedHook || DEFAULT_HOOK;
   const lengthPlan = resolveLength(effectiveHook);
-  // Unset on an older row means the default, which is "yes, extend": the hook
-  // is the opening of a video.
-  const extendIntent = project?.extend_intent === 0 ? false : true;
+  // Read as a boolean. The previous `=== 0` never read "off" because the API
+  // returns a real boolean and `false === 0` is false.
+  const extendIntent = readExtendIntent(project);
 
   const handleHookLength = (value) => {
     setHookSeconds(value);
@@ -294,8 +298,13 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
   // How many more segments the strategy can still produce. Surfaced because the
   // plan is finite: a founder extending by 3s could exhaust it before reaching
   // a 30s target, and finding that out at segment 8 would be a dead end.
-  const plannedMaxIndex = Number(strategy?.max_planned_index || 0);
-  const plannedCoverage = Math.max(0, plannedMaxIndex - segments.length + 1);
+  // null when the strategy predates coverage reporting, so we say nothing
+  // rather than claiming "0 remaining".
+  const plannedCoverage = plannedCoverageFor(segments, strategy);
+  // "Fill to target" is only offered when the provider can actually render the
+  // remainder in one pass. On a 15s ceiling a 20s remainder cannot be, and
+  // offering it anyway produced an option that always failed.
+  const fillAvailable = canFillToTarget(remainingToTarget, capability);
 
   const handleGenerateStrategy = () =>
     run("strategy", async () => {
@@ -670,7 +679,7 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
                           <select
                             id={`extend-by-${segment.id}`}
                             value={extendBy}
-                            onChange={(e) => setExtendBy(Number(e.target.value))}
+                            onChange={(e) => setExtendBy(parseExtendChoice(e.target.value))}
                             disabled={Boolean(busy) || Boolean(inFlightId)}
                             className="rounded-lg border border-[color:var(--hairline)] bg-transparent px-2 py-1.5 text-xs"
                           >
@@ -682,22 +691,45 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
                                 </option>
                               );
                             })}
-                            {targetTotal > 0 && remainingToTarget > 0 && (
-                              <option value="target">
+                            {fillAvailable && (
+                              <option value={FILL_TO_TARGET}>
                                 {`Fill to target (+${remainingToTarget}s)`}
+                              </option>
+                            )}
+                            {!fillAvailable && remainingToTarget > ceiling && (
+                              <option disabled value="unreachable">
+                                {`Needs ${remainingToTarget}s — more than one pass`}
                               </option>
                             )}
                           </select>
                           <Button
                             variant="secondary"
                             size="sm"
-                            onClick={() =>
-                              handleExtend(
-                                segment.id,
-                                extendBy === "target" ? remainingToTarget : Number(extendBy)
-                              )
+                            onClick={() => {
+                              // Resolved here rather than inline, so an
+                              // unreachable choice disables the button instead
+                              // of putting NaN on the wire, which the server
+                              // would read as "no preference" and answer with
+                              // its own default — a silently different request.
+                              const req = resolveExtendRequest(
+                                extendBy,
+                                remainingToTarget,
+                                capability
+                              );
+                              if (!req) {
+                                setNotice(
+                                  "That needs more than one pass on this model. Extend in two " +
+                                    "steps, or pick a shorter length."
+                                );
+                                return;
+                              }
+                              handleExtend(segment.id, req.seconds);
+                            }}
+                            disabled={
+                              Boolean(busy) ||
+                              Boolean(inFlightId) ||
+                              !resolveExtendRequest(extendBy, remainingToTarget, capability)
                             }
-                            disabled={Boolean(busy) || Boolean(inFlightId)}
                           >
                             {busy === `extend-${segment.id}` ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -755,15 +787,23 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
               style={{ width: `${Math.min(100, (runningTotal / targetTotal) * 100)}%` }}
             />
           </div>
-          {plannedCoverage > 0 && remainingToTarget > 0 && (
-            <p className="text-xs text-muted-foreground">
-              The strategy plans {plannedCoverage} more segment
-              {plannedCoverage === 1 ? "" : "s"}. At +{extendBy === "target" ? remainingToTarget : extendBy}s
-              {plannedCoverage * (extendBy === "target" ? remainingToTarget : extendBy) < remainingToTarget
-                ? ` that reaches about ${plannedCoverage * (extendBy === "target" ? remainingToTarget : extendBy)}s, so you may need to rebuild the strategy for the full ${targetTotal}s.`
-                : " that covers the rest of your target."}
-            </p>
-          )}
+          {plannedCoverage !== null && remainingToTarget > 0 && (() => {
+            // Warns BEFORE the founder spends: a plan is finite, and a founder
+            // extending by 3s could exhaust it before reaching the target.
+            const per = resolveExtendRequest(extendBy, remainingToTarget, capability);
+            const each = per ? per.seconds : 0;
+            const reachable = each * plannedCoverage;
+            return (
+              <p className="text-xs text-muted-foreground">
+                {`The strategy plans ${plannedCoverage} more segment${plannedCoverage === 1 ? "" : "s"}. `}
+                {!each
+                  ? "Choose a length to see whether that covers the rest of your target."
+                  : reachable < remainingToTarget
+                    ? `At +${each}s that reaches about ${reachable}s, so you may need to rebuild the strategy for the full ${targetTotal}s.`
+                    : `At +${each}s that covers the rest of your target.`}
+              </p>
+            );
+          })()}
         </div>
       )}
 
