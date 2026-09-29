@@ -277,6 +277,44 @@ check("a non-array profiles value is safe",
 check("no arguments at all is safe", P.resolveActiveProfileId() === "");
 
 console.log("\n" + "=".repeat(70));
+console.log("frontend/src/lib/authRecovery.js");
+console.log("=".repeat(70));
+
+const A = loadModule(path.resolve(__dirname, "..", "src", "lib", "authRecovery.js"));
+
+// The regression: a 401 fell through to page-level `.catch(() => setX([]))`,
+// so a dead session rendered as "no apps" — an existing profile looked
+// deleted. The interceptor retries once with a fresh token; these pin the two
+// decisions around that retry.
+console.log("\nshouldRetryWithFreshToken - exactly one retry, only for 401");
+check("a first-time 401 retries",
+  A.shouldRetryWithFreshToken({ status: 401, alreadyRetried: false }) === true);
+check("an already-retried 401 does not loop",
+  A.shouldRetryWithFreshToken({ status: 401, alreadyRetried: true }) === false);
+for (const status of [400, 403, 404, 500, null, undefined]) {
+  check(`status ${JSON.stringify(status)} never retries`,
+    A.shouldRetryWithFreshToken({ status, alreadyRetried: false }) === false);
+}
+check("no arguments never retries", A.shouldRetryWithFreshToken() === false);
+
+console.log("\nshouldForceSignIn - dead session goes to sign-in, nothing else does");
+check("dead session with credentials goes to sign-in",
+  A.shouldForceSignIn({ attemptedAuth: true, clerkConfigured: true, pathname: "/create" }) === true);
+check("a credential-less 401 never redirects (public page, backend problem)",
+  A.shouldForceSignIn({ attemptedAuth: false, clerkConfigured: true, pathname: "/create" }) === false);
+check("no-auth mode never redirects (no sign-in exists to go to)",
+  A.shouldForceSignIn({ attemptedAuth: true, clerkConfigured: false, pathname: "/create" }) === false);
+check("already on /sign-in never redirects (reload loop)",
+  A.shouldForceSignIn({ attemptedAuth: true, clerkConfigured: true, pathname: "/sign-in" }) === false);
+check("already on /sign-up never redirects",
+  A.shouldForceSignIn({ attemptedAuth: true, clerkConfigured: true, pathname: "/sign-up" }) === false);
+check("a sub-path of sign-in counts as the auth page",
+  A.shouldForceSignIn({ attemptedAuth: true, clerkConfigured: true, pathname: "/sign-in/sso-callback" }) === false);
+check("no arguments never redirects", A.shouldForceSignIn() === false);
+check("a missing pathname is not an auth page",
+  A.shouldForceSignIn({ attemptedAuth: true, clerkConfigured: true }) === true);
+
+console.log("\n" + "=".repeat(70));
 if (failures.length === 0) {
   console.log("All frontend length/intent logic behaves correctly.");
 } else {

@@ -1,4 +1,6 @@
 import axios from "axios";
+import { isClerkConfigured } from "./clerk";
+import { shouldRetryWithFreshToken, shouldForceSignIn } from "./authRecovery";
 
 const BACKEND_URL = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/+$/, "");
 const API = `${BACKEND_URL}/api`;
@@ -12,31 +14,105 @@ export const mediaUrl = (path) => {
 const client = axios.create({ baseURL: API, timeout: 120000 });
 
 /**
- * Attach the Clerk session JWT to every outgoing request.
+ * The session token source, registered once from inside <ClerkProvider> (see
+ * components/auth/AuthTokenBridge.jsx). A module slot rather than an import of
+ * Clerk state, because this module must stay usable in no-auth mode where no
+ * provider exists at all.
  *
- * @clerk/clerk-react exposes `window.Clerk` after initialization. We call
- * `session.getToken()` which returns the current short-lived JWT (and
- * silently refreshes it when needed). If Clerk isn't loaded yet or the user
- * is not signed in, the request goes out without a token — the backend will
- * return 401 which the ProtectedRoute wrapper prevents from ever reaching
- * the UI in normal use.
+ * The registered function receives whatever options object the caller passes
+ * through, so the 401 path below can force a fresh token with
+ * `{ skipCache: true }` using the same source as the first attempt.
  */
-client.interceptors.request.use(async (config) => {
+let getTokenFn = null;
+
+export function setAuthTokenProvider(fn) {
+  getTokenFn = typeof fn === "function" ? fn : null;
+}
+
+async function currentToken(forceFresh = false) {
+  const opts = forceFresh ? { skipCache: true } : undefined;
+  if (getTokenFn) {
+    try {
+      const t = await getTokenFn(opts);
+      if (t) return t;
+    } catch {
+      // Fall through to the legacy global read below.
+    }
+  }
   try {
-    const clerk = window.Clerk;
+    const clerk = typeof window !== "undefined" ? window.Clerk : null;
     if (clerk && clerk.session) {
-      const token = await clerk.session.getToken();
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
+      const t = await clerk.session.getToken();
+      if (t) return t;
     }
   } catch (e) {
-    // Token fetch failed — let the request proceed unauthenticated.
-    // The backend will reject it if the route requires auth.
     console.warn("Failed to attach auth token:", e);
+  }
+  return null;
+}
+
+/**
+ * Attach the Clerk session JWT to every outgoing request.
+ *
+ * If no token is available the request goes out without one. In no-auth mode
+ * the backend files everything under "anonymous" and that is correct; when
+ * auth is configured the backend answers 401, which the response interceptor
+ * below handles — never the page-level `.catch(() => setX([]))` handlers.
+ */
+client.interceptors.request.use(async (config) => {
+  const token = await currentToken();
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
+
+/**
+ * A 401 must never resolve as data.
+ *
+ * The failure this exists for: a request goes out with a stale or missing
+ * token (transient refresh failure, expired session mid-use), the backend
+ * answers 401, and the page's error handler converts it to an empty list —
+ * so a profile that exists renders as "no apps". First the request is
+ * retried once with a forced-fresh token, which heals the transient case
+ * invisibly. If that still 401s the session is dead: when the request had
+ * actually attempted authentication, the user is sent to sign in again
+ * instead of staring at someone else's (empty) state. Requests that carried
+ * no credentials — public endpoints, no-auth mode — are left alone so a
+ * marketing visitor is never bounced to sign-in by a backend misconfiguration.
+ */
+client.interceptors.response.use(
+  (response) => response,
+  async (err) => {
+    const config = err?.config;
+    const status = err?.response?.status;
+    if (!config || !shouldRetryWithFreshToken({ status, alreadyRetried: config._authRetried })) {
+      throw err;
+    }
+    config._authRetried = true;
+    const fresh = await currentToken(true);
+    if (fresh) {
+      config.headers = config.headers || {};
+      config.headers.Authorization = `Bearer ${fresh}`;
+      return client(config);
+    }
+    const attemptedAuth = Boolean(
+      config.headers && config.headers.Authorization
+    );
+    if (
+      shouldForceSignIn({
+        attemptedAuth,
+        clerkConfigured: isClerkConfigured,
+        pathname:
+          typeof window !== "undefined" ? window.location.pathname : "",
+      })
+    ) {
+      window.location.href = "/sign-in";
+    }
+    throw err;
+  }
+);
 
 export const api = {
   getNiches: () => client.get("/niches").then((r) => r.data),

@@ -1,5 +1,6 @@
 import { ClerkProvider } from "@clerk/clerk-react";
 import { CLERK_PUBLISHABLE_KEY, isClerkConfigured } from "../../lib/clerk";
+import { AuthTokenBridge } from "./AuthTokenBridge";
 
 /**
  * Global Clerk appearance — applied to every modal, form, and user button.
@@ -91,7 +92,7 @@ export function AuthProvider({ children }) {
       signUpUrl="/sign-up"
       appearance={clerkAppearance}
     >
-      {children}
+      <AuthTokenBridge>{children}</AuthTokenBridge>
     </ClerkProvider>
   );
 }
