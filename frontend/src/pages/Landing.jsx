@@ -348,9 +348,9 @@ export default function Landing() {
             className="animate-fade-up font-display mt-8 text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-[4.5rem]"
             style={{ animationDelay: "60ms" }}
           >
-            <span className="text-shine">Hooks that stop thumbs.</span>
+            <span className="text-shine">Make a promo for your app.</span>
             <br />
-            <span className="text-gradient-brand">Your app, pixel-perfect.</span>
+            <span className="text-gradient-brand">Without filming anything.</span>
             <br />
             <span className="text-shine">You post it.</span>
           </h1>
@@ -359,8 +359,8 @@ export default function Landing() {
             className="animate-fade-up mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl"
             style={{ animationDelay: "120ms" }}
           >
-            Paste your link. Get a scroll-stopping promo built on your real screenshots.
-            Download it, post it, own it.
+            You built the app. Skip the filming. Get a short promo built on your real screens and
+            post it yourself.
           </p>
 
           <div
