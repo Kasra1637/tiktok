@@ -11,7 +11,7 @@ import { resolveActiveProfileId, profileLabel, partitionProfiles } from "../lib/
 import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
 import {
   Images, Loader2, AlertTriangle, Upload, Trash2, Archive, ArchiveRestore,
-  Plus, ShieldCheck, Paperclip, Music, Link2, Check,
+  ShieldCheck, Paperclip, Music, Link2, Check,
 } from "lucide-react";
 
 // Character reference and Creator photo both accept an image of a person, and
@@ -730,20 +730,15 @@ export default function AssetLibrary({
         <EmptyState
           icon={Images}
           title="No assets yet"
-          // Embedded, the step header above already explains why these matter
-          // and the toolbar right here has the Upload button, so a third
-          // explanation plus a second identical button is pure noise.
+          // No action button here, on either layout. The toolbar directly above
+          // already has the Upload button, so a second identical one only
+          // competes with it — and the file input it triggered is the same
+          // control. What this state is for is saying what to upload and why,
+          // which the toolbar cannot do.
           description={
             embedded
               ? "Use the Upload button above to add your first one."
               : "Add screenshots, screen recordings, and your logo so the finished video shows the real app instead of a generated approximation."
-          }
-          action={
-            embedded ? null : (
-              <Button variant="brand" onClick={() => fileRef.current?.click()}>
-                <Plus className="h-4 w-4" /> Upload your first asset
-              </Button>
-            )
           }
         />
       ) : (
