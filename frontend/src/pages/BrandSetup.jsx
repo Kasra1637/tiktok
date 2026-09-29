@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
@@ -331,6 +331,16 @@ export default function BrandSetup() {
                 )}
               </Badge>
             ) : null}
+            {/* The App Profiles list used to be the only route to
+                /app-profiles/:id, which is where content angles, template
+                recommendations and the per-app "Videos from this app" list
+                live. With the list gone this is the one way in, so those
+                features stay reachable instead of becoming URL-only. */}
+            {brand?.id && (
+              <Button variant="secondary" size="sm" asChild>
+                <Link to={`/app-profiles/${brand.id}`}>Content angles</Link>
+              </Button>
+            )}
           </div>
         }
       />

@@ -251,8 +251,11 @@ export default function AppProfileDetail() {
   return (
     <div className="space-y-6">
       <Button variant="ghost" size="sm" asChild className="-ml-2">
-        <Link to="/app-profiles">
-          <ArrowLeft className="h-3.5 w-3.5" /> All profiles
+        {/* Was "All profiles" -> /app-profiles. There is no list page any
+            more, and the editor is where an app is created, approved and
+            switched between, so that is the honest way back. */}
+        <Link to="/brand">
+          <ArrowLeft className="h-3.5 w-3.5" /> Your app
         </Link>
       </Button>
 

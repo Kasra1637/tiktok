@@ -1,5 +1,5 @@
 import "./App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "./components/ui/sonner";
 import AppShell from "./components/AppShell";
 import PageTransition from "./components/PageTransition";
@@ -17,7 +17,6 @@ import History from "./pages/History";
 import GenerationHistory from "./pages/GenerationHistory";
 import BrandSetup from "./pages/BrandSetup";
 import HookTemplates from "./pages/HookTemplates";
-import AppProfiles from "./pages/AppProfiles";
 import AppProfileDetail from "./pages/AppProfileDetail";
 import Templates from "./pages/Templates";
 import TemplateDetail from "./pages/TemplateDetail";
@@ -53,7 +52,12 @@ function App() {
                     <PageTransition>
                       <Routes>
                         {/* Primary workflow: profiles -> templates -> studio (Phase 4) */}
-                        <Route path="/app-profiles" element={<AppProfiles />} />
+                        {/* The App Profiles list is gone: the editor was where
+                            you went to do the work anyway. This redirect keeps
+                            the public footer, the Dashboard, the studio's
+                            "Review and approve", and the profile detail back
+                            link all landing somewhere real instead of a 404. */}
+                        <Route path="/app-profiles" element={<Navigate to="/brand" replace />} />
                         <Route path="/app-profiles/:profileId" element={<AppProfileDetail />} />
                         <Route path="/app-profiles/:profileId/assets" element={<AssetLibrary />} />
                         <Route path="/assets" element={<AssetLibrary />} />

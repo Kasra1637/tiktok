@@ -536,7 +536,7 @@ export default function CreateVideo() {
               description={describeEmptySelection(profiles)}
               action={
                 <Button variant="brand" asChild>
-                  <Link to="/app-profiles">Go to App Profiles</Link>
+                  <Link to="/app-profiles">Go to your app</Link>
                 </Button>
               }
             />
@@ -1235,7 +1235,7 @@ export default function CreateVideo() {
         )}
         {step === STEPS.length - 1 && project && (
           <Button variant="ghost" onClick={() => navigate("/app-profiles")}>
-            Back to profiles
+            Back to your app
           </Button>
         )}
       </div>

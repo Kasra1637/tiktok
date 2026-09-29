@@ -178,8 +178,8 @@ export default function Dashboard() {
           <ActionRow
             to="/app-profiles"
             icon={Briefcase}
-            title="App Profiles"
-            description="Research and approve an app"
+            title="Your app"
+            description="Research, edit and approve your app"
             count={(data?.profiles || []).length}
           />
           <ActionRow
