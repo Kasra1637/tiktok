@@ -22,7 +22,6 @@ import Templates from "./pages/Templates";
 import TemplateDetail from "./pages/TemplateDetail";
 import CreateVideo from "./pages/CreateVideo";
 import AssetLibrary from "./pages/AssetLibrary";
-import Dashboard from "./pages/Dashboard";
 import Analytics from "./pages/Analytics";
 import TrendResearch from "./pages/TrendResearch";
 import { OnboardingProvider } from "./components/onboarding/OnboardingProvider";
@@ -61,7 +60,16 @@ function App() {
                         <Route path="/app-profiles/:profileId" element={<AppProfileDetail />} />
                         <Route path="/app-profiles/:profileId/assets" element={<AssetLibrary />} />
                         <Route path="/assets" element={<AssetLibrary />} />
-                        <Route path="/" element={<Dashboard />} />
+                        {/* The Dashboard is gone. It restated what Analytics and
+                            History already show — totals, spend, and failed
+                            generations with a Retry button — and then linked out
+                            to Create Video, App Profiles and Templates, all of
+                            which are in the sidebar anyway. "/" now goes where
+                            the work is. A redirect rather than a dead route, so
+                            the sidebar logo and any bookmark still land somewhere
+                            real. The public "/" for signed-out visitors is the
+                            landing page, declared above and unaffected. */}
+                        <Route path="/" element={<Navigate to="/create" replace />} />
                         <Route path="/analytics" element={<Analytics />} />
                         <Route path="/research" element={<TrendResearch />} />
                         <Route path="/templates" element={<Templates />} />

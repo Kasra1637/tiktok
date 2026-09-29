@@ -9968,47 +9968,17 @@ async def analytics_report(
 # caller, and apify_tiktok.is_configured() still exists for anyone who needs it.
 
 
-@api_router.get("/dashboard")
-async def dashboard(user_id: str = Depends(get_current_user_id)):
-    """
-    Landing view: what needs attention, and the path to the next action.
-    Deliberately thin — the detail lives in analytics and operations.
-    """
-    profiles = await _fetch_all(
-        "SELECT id, brand_name, status, version, updated_at FROM brand_profiles "
-        "WHERE user_id = ? ORDER BY updated_at DESC",
-        (user_id,),
-    )
-    pending_drafts = await _fetch_all(
-        "SELECT id, name, category, created_at FROM hook_templates "
-        "WHERE user_id = ? AND origin = 'research_draft' AND review_status = 'draft' "
-        "ORDER BY created_at DESC LIMIT 20",
-        (user_id,),
-    )
-    recent = await _fetch_all(
-        "SELECT id, status, model, duration, cost_usd, created_at FROM generations "
-        "WHERE user_id = ? ORDER BY created_at DESC LIMIT 8",
-        (user_id,),
-    )
-    failed = await _fetch_all(
-        "SELECT id, error, retryable, created_at FROM generations "
-        "WHERE user_id = ? AND status = 'failed' ORDER BY created_at DESC LIMIT 8",
-        (user_id,),
-    )
-    # generation_metrics is pure and synchronous, so it is called directly.
-    totals = analytics.generation_metrics(
-        await _fetch_all("SELECT * FROM generations WHERE user_id = ?", (user_id,))
-    )
-    return {
-        "totals": totals,
-        "profiles": profiles,
-        "profiles_awaiting_approval": [
-            p for p in profiles if p.get("status") != "approved"
-        ],
-        "pending_template_drafts": pending_drafts,
-        "recent_generations": recent,
-        "recent_failures": failed,
-    }
+# GET /api/dashboard is gone with the Dashboard page. It aggregated totals,
+# spend, unapproved profiles, research drafts and recent failures, all of which
+# are already served where the work happens: GET /api/analytics for the totals,
+# GET /api/generations with a Failed badge and a Retry button for failures, and
+# GET /api/app-profiles for approvals. Nothing read it but the page.
+#
+# What went dark with it: the single line telling a founder their video is
+# published by hand and never posted automatically. That line was moved to the
+# studio footer rather than dropped, and TestNoPlatformAutomation is what
+# actually guarantees the behaviour.
+#
 
 
 # ---------------------------------------------------------------------------

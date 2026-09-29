@@ -559,36 +559,23 @@ class TestModelRequestLedger:
         assert err.value.status_code == 409
 
 
-class TestDashboard:
-    def test_lists_profiles_and_pending_drafts(self, api):
-        _profile(api, "Dash One")
-        tpl_id = str(uuid.uuid4())
-        _run(api._execute(
-            """INSERT INTO hook_templates (id, name, category, opening_structure,
-               origin, review_status, archived, version, created_at, updated_at, user_id)
-               VALUES (?, 'Research Draft', 'other', 'A structure', 'research_draft',
-               'draft', 0, 1, '', '', ?)""", (tpl_id, ANON)))
-        board = _run(api.dashboard(user_id=ANON))
-        assert any(p["brand_name"] == "Dash One" for p in board["profiles"])
-        assert any(d["id"] == tpl_id for d in board["pending_template_drafts"])
-
-    def test_empty_dashboard(self, api):
-        board = _run(api.dashboard(user_id=OTHER_USER))
-        assert board["totals"]["videos_created"] == 0
-        assert board["profiles"] == []
-
-    def test_surfaces_unapproved_profiles(self, api):
-        from models import BrandProfileCreateRequest
-        _run(api.create_brand(payload=BrandProfileCreateRequest(brand_name="Draft App"), user_id=ANON))
-        board = _run(api.dashboard(user_id=ANON))
-        assert any(p["brand_name"] == "Draft App" for p in board["profiles_awaiting_approval"])
+# The Dashboard page and GET /api/dashboard are gone. Its three tests went with
+# the endpoint, and nothing they covered became untested:
+#
+#   profiles / profiles_awaiting_approval   GET /api/app-profiles; the same
+#                                           approved-vs-draft split is asserted
+#                                           in test_studio_api's picker tests
+#   totals (videos_created, spend, rate)     GET /api/analytics
+#   pending_template_drafts                  GET /api/templates by review_status
+#   recent_failures                          GET /api/generations, which History
+#                                           renders with a Failed badge and Retry
 
 
 # The Settings page and GET /api/settings are gone. The three honesty notes it
 # carried are each stated somewhere the user still is, so none of them went dark
 # with the page:
 #
-#   never publishes          frontend/src/pages/Dashboard.jsx
+#   never publishes          frontend/src/pages/CreateVideo.jsx (studio footer)
 #   TikTok figures are by hand   frontend/src/pages/Analytics.jsx
 #   templates are not proven     frontend/src/pages/CreateVideo.jsx
 #

@@ -203,7 +203,6 @@ export const api = {
   recordFeedback: (payload) => client.post("/feedback", payload).then((r) => r.data),
   getFeedback: (params = {}) => client.get("/feedback", { params }).then((r) => r.data),
   getAnalytics: (params = {}) => client.get("/analytics", { params }).then((r) => r.data),
-  getDashboard: () => client.get("/dashboard").then((r) => r.data),
 };
 
 export const getErrorMessage = (err) => {

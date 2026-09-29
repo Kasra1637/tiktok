@@ -9,7 +9,6 @@ import {
   LayoutTemplate,
   Clapperboard,
   Images,
-  LayoutDashboard,
   Radar,
   BarChart3,
   PenLine,
@@ -39,7 +38,6 @@ export const NAV_GROUPS = [
   {
     label: "Create",
     items: [
-      { to: "/", label: "Dashboard", icon: LayoutDashboard, testId: "dashboard-nav-link", hint: "Where things stand" },
       { to: "/create", label: "Create Video", icon: Clapperboard, testId: "create-nav-link", hint: "Guided wizard" },
       { to: "/brand", label: "Your app", icon: PenLine, testId: "brand-nav-link", hint: "Research, edit, approve" },
       { to: "/templates", label: "Hook Templates", icon: LayoutTemplate, testId: "templates-nav-link", hint: "Reusable structures" },
@@ -246,7 +244,7 @@ export function Sidebar({ collapsed, onToggleCollapsed }) {
           to="/"
           className="flex min-w-0 items-center gap-2.5 outline-none"
           data-testid="logo-home-link"
-          title="HookForge — go to Dashboard"
+          title="HookForge — go to Create Video"
         >
           <LogoMark />
           {!collapsed && (

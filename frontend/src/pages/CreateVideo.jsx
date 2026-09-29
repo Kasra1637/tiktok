@@ -1246,6 +1246,16 @@ export default function CreateVideo() {
           Templates are curated structures, not proven performers.
         </p>
       )}
+
+      {/* This line used to live on the Dashboard, which is gone. It is the only
+          place in the app that tells the founder their finished video is never
+          posted for them, so it moved here — the studio, at the moment they are
+          actually making the video — rather than being dropped. The structural
+          TestNoPlatformAutomation proves it; this says so where it is read. */}
+      <p className="text-xs text-muted-foreground">
+        Videos are generated here and posted by hand. This tool never publishes to any
+        platform and never asks for platform credentials.
+      </p>
     </div>
   );
 }
