@@ -336,31 +336,23 @@ export default function Landing() {
         <Aurora />
         <div className="grid-overlay" />
         <div className="relative z-10 mx-auto max-w-5xl px-5 pb-24 pt-20 text-center sm:pt-28">
-          <div className="animate-fade-up inline-flex items-center gap-2 rounded-full border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] px-3.5 py-1.5 text-sm font-semibold text-[color:var(--brand-indigo)] backdrop-blur-sm">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inset-0 animate-pulse-ring rounded-full bg-[color:var(--brand-indigo)]" />
-              <span className="relative h-1.5 w-1.5 rounded-full bg-[color:var(--brand-indigo)]" />
-            </span>
-            Your app link → A hook that lands → A video you post yourself
-          </div>
-
           <h1
-            className="animate-fade-up font-display mt-8 text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-[4.5rem]"
+            className="animate-fade-up font-display text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-[4.5rem]"
             style={{ animationDelay: "60ms" }}
           >
-            <span className="text-shine">Make a promo for your app.</span>
+            <span className="text-shine">Your real app, not a guess.</span>
             <br />
-            <span className="text-gradient-brand">Without filming anything.</span>
+            <span className="text-gradient-brand">Screenshots in, promo out.</span>
             <br />
-            <span className="text-shine">You post it.</span>
+            <span className="text-shine">Posted by you, not by us.</span>
           </h1>
 
           <p
             className="animate-fade-up mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl"
             style={{ animationDelay: "120ms" }}
           >
-            You built the app. Skip the filming. Get a short promo built on your real screens and
-            post it yourself.
+            People trust what they can see. So your real screens go in, and nothing about
+            your app gets guessed at.
           </p>
 
           <div

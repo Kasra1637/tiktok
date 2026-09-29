@@ -329,11 +329,6 @@ select option:hover {
     from { transform: translateX(-120%); }
     to { transform: translateX(220%); }
 }
-@keyframes pulse-ring {
-    0% { box-shadow: 0 0 0 0 rgba(129, 140, 248, 0.35); }
-    70% { box-shadow: 0 0 0 10px rgba(129, 140, 248, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(129, 140, 248, 0); }
-}
 @keyframes marquee-x {
     from { transform: translateX(0); }
     to { transform: translateX(-50%); }
@@ -342,7 +337,6 @@ select option:hover {
 .animate-float-slow { animation: float-slow 16s ease-in-out infinite; }
 .animate-float-slower { animation: float-slower 22s ease-in-out infinite; }
 .animate-fade-up { animation: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.animate-pulse-ring { animation: pulse-ring 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
 .animate-marquee { animation: marquee-x 40s linear infinite; }
 
 /* Light sweep across a surface on hover — used on feature/step cards. */
@@ -368,7 +362,6 @@ select option:hover {
     .animate-float-slow,
     .animate-float-slower,
     .animate-fade-up,
-    .animate-pulse-ring,
     .animate-marquee {
         animation: none !important;
     }
