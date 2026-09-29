@@ -282,6 +282,13 @@ export default function AssetLibrary({
   projectDuration,
   onProjectChanged,
   onChanged,
+  /**
+   * True when rendered inside the Create Video wizard, which already supplies
+   * a step header ("Assets" + why assets matter) directly above. In that case
+   * this component must not restate it: two headers saying the same thing is
+   * the duplication you see stacked at the top of the step.
+   */
+  embedded = false,
 }) {
   // Usable as a route (/app-profiles/:profileId/assets) or embedded in the
   // wizard, which already knows which profile it is working on.
@@ -431,11 +438,15 @@ export default function AssetLibrary({
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        icon={Images}
-        title="Asset Library"
-        description="Real app visuals. These are composited onto the video deterministically, so interfaces, text, and pricing stay accurate."
-      />
+      {/* Only the standalone route owns a title. Embedded, the wizard step
+          header above already says this. */}
+      {!embedded && (
+        <PageHeader
+          icon={Images}
+          title="Asset Library"
+          description="Real app visuals. These are composited onto the video deterministically, so interfaces, text, and pricing stay accurate."
+        />
+      )}
 
       <Alert>
         <ShieldCheck className="h-4 w-4 text-[color:var(--brand-indigo)]" />
@@ -510,11 +521,20 @@ export default function AssetLibrary({
         <EmptyState
           icon={Images}
           title="No assets yet"
-          description="Add screenshots, screen recordings, and your logo so the finished video shows the real app instead of a generated approximation."
+          // Embedded, the step header above already explains why these matter
+          // and the toolbar right here has the Upload button, so a third
+          // explanation plus a second identical button is pure noise.
+          description={
+            embedded
+              ? "Use the Upload button above to add your first one."
+              : "Add screenshots, screen recordings, and your logo so the finished video shows the real app instead of a generated approximation."
+          }
           action={
-            <Button variant="brand" onClick={() => fileRef.current?.click()}>
-              <Plus className="h-4 w-4" /> Upload your first asset
-            </Button>
+            embedded ? null : (
+              <Button variant="brand" onClick={() => fileRef.current?.click()}>
+                <Plus className="h-4 w-4" /> Upload your first asset
+              </Button>
+            )
           }
         />
       ) : (

@@ -55,11 +55,18 @@ RUN mkdir -p /app/backend/storage/videos /app/backend/storage/frames \
              /app/backend/storage/uploads /app/backend/storage/generated \
              /app/backend/storage/templates
 
-# IMPORTANT: This RUN instruction MUST change value on every deploy where
-# frontend code changed. It busts Docker BuildKit's runtime stage cache
-# which otherwise reuses the old COPY --from=builder output independently
-# of whether the builder stage produced new files.
-RUN echo "FRONTEND_VERSION=hookflow-v4-seedream-2026-08-10" > /tmp/frontend_version.txt
+# IMPORTANT: this layer exists to invalidate the COPY --from=builder below.
+# Without it BuildKit reuses the previous runtime layer and serves a STALE
+# frontend while the backend is new, which looks like "my deploy didn't
+# happen" and, worse, like random client-side crashes.
+#
+# The version is derived from the built asset manifest rather than hand-written
+# as a date. A hand-edited string silently went stale once already, so any
+# frontend change that altered a hashed asset filename now changes this value
+# automatically and the COPY is forced to re-run.
+RUN set -eu; \
+    digest=$(md5sum /app/frontend/build/asset-manifest.json | cut -d' ' -f1); \
+    echo "FRONTEND_VERSION=auto-${digest}" > /tmp/frontend_version.txt
 COPY --from=builder /app/frontend/build /app/frontend_build/
 
 # Expose the application port
