@@ -17,9 +17,9 @@ import { Button } from "../components/ui/button";
 const FEATURES = [
   {
     icon: Briefcase,
-    title: "App Profiles",
+    title: "Your App Hub",
     description:
-      "Skip the research grind. Paste your links and walk away with a pitch-perfect profile you control.",
+      "Paste your links once. Review what it builds, approve it, then reuse that profile in every video.",
   },
   {
     icon: Target,
@@ -31,7 +31,7 @@ const FEATURES = [
     icon: LayoutTemplate,
     title: "Hook Template Library",
     description:
-      "Never stare at a blank page. Browse proven hooks, favorite your winners, and make any of them yours.",
+      "Never start blank. Browse curated hooks, keep your winners close, and shape any one to fit your app.",
   },
   {
     icon: Wand2,
@@ -97,7 +97,7 @@ const FEATURES = [
     icon: BadgeAlert,
     title: "Every Job, Accounted For",
     description:
-      "No silent failures. Every job's cost, status, and errors in one place — retry any hiccup in a click.",
+      "Nothing ever vanishes. Each video's cost and status are in History — retry any failure in one click.",
   },
   {
     icon: Search,
@@ -610,7 +610,7 @@ export default function Landing() {
                       variant="outline"
                       className="w-full gap-2.5 rounded-xl border-[color:var(--hairline-strong)] bg-[color:var(--indigo-4)] px-8 py-6 text-base font-semibold hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] sm:w-auto"
                     >
-                      <Globe className="h-5 w-5" /> Set Up an App Profile
+                      <Globe className="h-5 w-5" /> Open Your App Profile
                     </Button>
                   </Link>
                 </AuthedOnly>
