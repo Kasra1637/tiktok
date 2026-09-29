@@ -20,7 +20,6 @@ import {
   PanelLeftOpen,
   X,
   HelpCircle,
-  Activity,
   Archive,
 } from "lucide-react";
 
@@ -55,7 +54,6 @@ export const NAV_GROUPS = [
     items: [
       { to: "/research", label: "Trend Research", icon: Radar, testId: "research-nav-link", hint: "Find new mechanics" },
       { to: "/analytics", label: "Analytics", icon: BarChart3, testId: "analytics-nav-link", hint: "Internal metrics" },
-      { to: "/operations", label: "Operations", icon: Activity, testId: "operations-nav-link", hint: "Jobs and costs" },
     ],
   },
   {

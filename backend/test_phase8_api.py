@@ -416,52 +416,6 @@ class TestAnalyticsReport:
         assert report["rework"]["regenerated"] == 1
 
 
-class TestOperations:
-    def test_reports_job_counts(self, api):
-        profile = _profile(api, "Ops One")
-        _generation(api, profile, "completed")
-        _generation(api, profile, "failed")
-        ops = _run(api.operations_overview(user_id=ANON))
-        assert ops["jobs"]["total"] >= 2
-        assert ops["jobs"]["failed"] >= 1
-
-    def test_failures_carry_retry_classification(self, api):
-        profile = _profile(api, "Ops Two")
-        gen = _generation(api, profile, "failed")
-        _run(api._execute(
-            "UPDATE generations SET error = ?, retryable = 1 WHERE id = ?",
-            ("HTTP 503 overloaded", gen["id"])))
-        ops = _run(api.operations_overview(user_id=ANON))
-        failing = [f for f in ops["failures"] if f["id"] == gen["id"]]
-        assert failing
-        assert failing[0]["retryable"] is True
-        assert "503" in failing[0]["error"]
-
-    def test_reports_provider_availability(self, api):
-        ops = _run(api.operations_overview(user_id=ANON))
-        keys = {p["key"] for p in ops["providers"]}
-        assert "seedance-2.5" in keys and "minimax-h3" in keys
-        assert any(p["is_default"] for p in ops["providers"])
-        assert all("studio_eligible" in p for p in ops["providers"])
-
-    def test_reports_integration_state(self, api):
-        ops = _run(api.operations_overview(user_id=ANON))
-        config = ops["config"]
-        assert config["ai_configured"] is True
-        # Unconfigured integrations are reported as False, not hidden.
-        assert config["apify_configured"] is False
-        assert config["r2_configured"] is False
-
-    def test_states_that_publishing_is_manual(self, api):
-        ops = _run(api.operations_overview(user_id=ANON))
-        assert "never posts" in ops["manual_publishing"].lower()
-
-    def test_is_scoped_to_user(self, api):
-        profile = _profile(api, "Ops Three")
-        _generation(api, profile)
-        assert _run(api.operations_overview(user_id=OTHER_USER))["jobs"]["total"] == 0
-
-
 class TestModelRequestLedger:
     USER = "ops-model-user"
 
@@ -495,27 +449,67 @@ class TestModelRequestLedger:
         assert "unavailable" in rows[1]["error"]
         assert rows[0]["latency_ms"] >= 0
 
-    def test_operations_reports_requests_research_and_asset_events(self, api):
+    def test_asset_events_and_research_runs_are_persisted_for_their_owner(self, api):
+        """
+        Used to assert this through the Operations page. The page is gone, but
+        what it was reading is a real invariant: these ledgers exist, they are
+        written, and they are scoped to their owner. So they are asserted where
+        they actually live.
+        """
         _run(api._record_asset_event(
             "upload_rejected", "Uploaded file is empty.", self.USER,
             brand_profile_id="profile-1", asset_kind="audio", filename="empty.mp3",
         ))
+        run_id = str(uuid.uuid4())
         _run(api._execute(
             """INSERT INTO research_runs
                (id, kind, query, status, created_at, user_id)
                VALUES (?, 'keyword', 'journaling app', 'failed', ?, ?)""",
-            (str(uuid.uuid4()), "2026-01-01T00:00:00+00:00", self.USER),
+            (run_id, "2026-01-01T00:00:00+00:00", self.USER),
         ))
-        ops = _run(api.operations_overview(user_id=self.USER))
-        assert ops["model_requests"]["total"] >= 2
-        assert ops["model_requests"]["by_modality"]["text"]["completed"] >= 1
-        assert ops["failed_model_requests"]
-        assert any(e["kind"] == "upload_rejected" for e in ops["asset_events"])
-        assert any(r["status"] == "failed" for r in ops["research_runs"])
 
-    def test_completed_generation_storage_failure_is_visible_and_retryable(
+        events = _run(api._fetch_all(
+            "SELECT kind, reason FROM asset_events WHERE user_id = ?", (self.USER,)))
+        assert any(e["kind"] == "upload_rejected" for e in events)
+
+        runs = _run(api._fetch_all(
+            "SELECT id, status FROM research_runs WHERE user_id = ?", (self.USER,)))
+        assert [r["id"] for r in runs] == [run_id]
+        assert runs[0]["status"] == "failed"
+
+        # And they are scoped: another user sees neither.
+        assert _run(api._fetch_all(
+            "SELECT id FROM asset_events WHERE user_id = ?", (OTHER_USER,))) == []
+        assert _run(api._fetch_all(
+            "SELECT id FROM research_runs WHERE user_id = ?", (OTHER_USER,))) == []
+
+    def test_model_request_ledger_summarises_by_modality(self, api):
+        """
+        analytics.model_request_summary is still used by the analytics report,
+        so the summary it produces keeps being worth asserting.
+        """
+        import analytics
+
+        async def succeed():
+            return {"usage": {"cost": 0.02}}
+
+        _run(api._log_model_call(
+            "summary-text-check", "text", "text-model", succeed, self.USER))
+        rows = _run(api._fetch_all(
+            "SELECT operation, modality, status, cost_usd FROM model_requests WHERE user_id = ?",
+            (self.USER,)))
+        summary = analytics.model_request_summary(rows)
+        assert summary["total"] >= 1
+        assert summary["by_modality"]["text"]["completed"] >= 1
+
+    def test_completed_generation_storage_failure_is_recorded_and_retryable(
         self, api, monkeypatch
     ):
+        """
+        A storage failure has to be recoverable, not just reported. With the
+        Operations page gone there is no longer a view that surfaces it, so the
+        record itself is what must carry it.
+        """
         profile = _profile(api, "Ops Storage")
         gen = _generation(api, profile, "completed")
         local_path = api.pipeline.VIDEOS_DIR / f"{gen['id']}.mp4"
@@ -525,8 +519,13 @@ class TestModelRequestLedger:
             "UPDATE generations SET r2_url = '', storage_error = ? WHERE id = ?",
             ("R2 upload failed", gen["id"]),
         ))
-        ops = _run(api.operations_overview(user_id=ANON))
-        assert any(f["id"] == gen["id"] for f in ops["storage_failures"])
+
+        # The failure is readable from the generation record itself, and it is
+        # scoped to its owner.
+        stored = _run(api.get_generation(gen["id"], ANON))
+        assert stored["storage_error"] == "R2 upload failed"
+        with pytest.raises(HTTPException):
+            _run(api.get_generation(gen["id"], OTHER_USER))
 
         monkeypatch.setattr(api.storage_service, "is_configured", lambda: True)
         monkeypatch.setattr(
@@ -764,8 +763,8 @@ class TestNoPlatformAutomation:
         for forbidden in ("login", "cookie", "session-token", "credentials"):
             assert forbidden not in paths.lower()
 
-    def test_operations_states_publishing_is_manual(self, api):
-        ops = _run(api.operations_overview(user_id=ANON))
-        text = ops["manual_publishing"].lower()
-        assert "never posts" in text
-        assert "by hand" in text
+    # The "publishing is manual" guarantee used to be asserted as a string in the
+    # Operations payload. It is no longer asserted that way, because a copy-text
+    # check on a sentence is worth nothing next to the three structural tests
+    # above it, which prove there is no code path that can post a video at all.
+    # The user-facing statement now lives on the Assets and Review screens.

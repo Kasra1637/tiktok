@@ -25,7 +25,6 @@ import CreateVideo from "./pages/CreateVideo";
 import AssetLibrary from "./pages/AssetLibrary";
 import Dashboard from "./pages/Dashboard";
 import Analytics from "./pages/Analytics";
-import Operations from "./pages/Operations";
 import TrendResearch from "./pages/TrendResearch";
 import Settings from "./pages/Settings";
 import { OnboardingProvider } from "./components/onboarding/OnboardingProvider";
@@ -61,7 +60,6 @@ function App() {
                         <Route path="/assets" element={<AssetLibrary />} />
                         <Route path="/" element={<Dashboard />} />
                         <Route path="/analytics" element={<Analytics />} />
-                        <Route path="/operations" element={<Operations />} />
                         <Route path="/research" element={<TrendResearch />} />
                         <Route path="/settings" element={<Settings />} />
                         <Route path="/templates" element={<Templates />} />
