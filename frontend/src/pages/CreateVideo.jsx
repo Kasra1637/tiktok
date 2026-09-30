@@ -26,7 +26,7 @@ import {
 import { DEFAULT_HOOK } from "../lib/videoLength";
 import {
   Clapperboard, Loader2, AlertTriangle, Briefcase, Target, LayoutTemplate,
-  Image as ImageIcon, FileText, Check, ChevronLeft, ChevronRight, Sparkles,
+  Image as ImageIcon, FileText, Check, Sparkles,
   Save, CheckCircle2, Star, Plus, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -1348,12 +1348,10 @@ export default function CreateVideo() {
               key={s.key}
               type="button"
               onClick={() => setStep(i)}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                 active
                   ? "bg-primary/15 text-[color:var(--brand-indigo)]"
-                  : done
-                    ? "text-muted-foreground hover:text-foreground"
-                    : "text-muted-foreground/60"
+                  : "text-muted-foreground hover:bg-[color:var(--indigo-8)] hover:text-foreground"
               }`}
               aria-current={active ? "step" : undefined}
             >
@@ -1376,29 +1374,18 @@ export default function CreateVideo() {
         {stepContent}
       </div>
 
-      <div className="flex items-center justify-between">
-        <Button
-          variant="ghost"
-          onClick={() => setStep((s) => Math.max(0, s - 1))}
-          disabled={step === 0}
-        >
-          <ChevronLeft className="h-4 w-4" /> Back
-        </Button>
-        {step < STEPS.length - 1 && (
-          <Button
-            variant="secondary"
-            onClick={() => setStep((s) => Math.min(STEPS.length - 1, s + 1))}
-            disabled={step === 0 && !profileId}
-          >
-            Next <ChevronRight className="h-4 w-4" />
-          </Button>
-        )}
-        {step === STEPS.length - 1 && project && (
+      {/* Back and Next used to live here and were pure duplication: every step
+          pill above is already a button, and clicking one leaves any step, so
+          the `step === 0 && !profileId` guard they carried was bypassable
+          anyway. The one thing the pills cannot do is leave the studio, so the
+          exit stays — on the last step only, which is where it already was. */}
+      {step === STEPS.length - 1 && project && (
+        <div className="flex items-center justify-end">
           <Button variant="ghost" onClick={() => navigate("/app-profiles")}>
             Back to your app
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       {template && (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
