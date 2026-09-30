@@ -1623,10 +1623,12 @@ async def generate_creative_plan(
     transition, 8-20s demonstration or payoff, final seconds CTA. Beats are
     scaled to the requested duration rather than hardcoded.
 
-    The prompt forbids rendering UI, text, pricing, and logos in the generated
-    footage: those are composited deterministically afterwards from real app
-    assets, so the model must leave clean space for them instead of inventing
-    a fake interface.
+    The prompt directs the model to render the full scene itself — environment,
+    setting, props and on-screen context invented concretely from the verified
+    facts — because nothing is composited over the footage except captions and
+    the end card. On-screen text stays out of the model's hands (captions are
+    added afterwards), and anything the viewer could read as a factual claim
+    about the app must come from verified facts or stay out of frame.
 
     Returns a dict matching REQUIRED_PLAN_KEYS plus `claims_used` (the model's
     own account of which approved claims it used, reconciled by claim_safety).
@@ -1722,10 +1724,13 @@ async def generate_creative_plan(
         "demonstration or payoff, and the final seconds CTA. Scale the beats to "
         f"{duration_seconds} seconds total; the hook stays under 3 seconds.\n"
         "- Fill every content_slot in the template with a concrete value for THIS app.\n"
-        "- CRITICAL: do NOT write app interface text, button labels, prices, ratings, or logos "
-        "into visual_direction, script, or overlays as if the model would render them. Real "
-        "screenshots and overlays are composited afterwards. Describe clean space where they "
-        "will be placed, and keep overlay text to short phrases.\n"
+        "- CRITICAL: nothing is composited over the footage except captions and the end "
+        "card. Describe the full scene — environment, setting, props and any on-screen "
+        "context — concretely from the verified facts above, and keep overlay text to "
+        "short phrases. Never invent interface text, button labels, prices, ratings, "
+        "logos, testimonials, or anything the viewer could read as a factual claim "
+        "about the app. The generated scene is illustrative: the script and CTA must "
+        "never claim it shows real app footage or a screen recording.\n"
         "- Use ONLY features, pricing, and claims present above. Never invent a feature, a "
         "price, a rating, a review, a download count, or a user testimonial.\n"
         "- Never use anything in claims.never_use. If a claims.needs_review item would help, "
@@ -2064,7 +2069,9 @@ async def generate_video_strategy(
         "You are the creative director for a short-form video campaign promoting one "
         "specific mobile app. You produce an app-specific video strategy: the hook "
         "concept, the exact words, what the on-camera person does, and a locked "
-        "description of that person's appearance and the scene they stand in. "
+        "description of the scene they stand in. The person's appearance is never "
+        "described anywhere in your response — it comes from the founder's "
+        "photograph, and any written description of them would contradict it. "
         "Describe viewers by FUNCTIONAL need and use case only — never infer sensitive "
         "personal traits (health diagnoses, mental-health labels, finances, religion, "
         "sexuality, political leaning). For health-adjacent apps, describe the product's "
@@ -2149,10 +2156,27 @@ async def generate_video_strategy(
         "- Give every beat a genuinely different goal, script and action. Beat 1 is not beat 2 restated, and "
         "no two beats may share a script. A repeated beat is worse than a missing one, because it plays the "
         "same clip twice.\n"
-        "- Fill the persona so specifically that a second video with the same character would be recognisably "
-        "the same person in the same place. Vague terms like \"casual\" or \"a nice room\" are not acceptable.\n"
-        "- must_not_change must cover the face, the hair, the wardrobe, the background, the lighting and the "
-        "framing. Those are the attributes a video model will otherwise silently reinvent.\n"
+        "- Fill every content_slot in the hook mechanism with a concrete value for THIS app, "
+        "drawn from the verified facts and the brief above — the feature slot names an actual "
+        "feature from core_features, the problem slot the actual audience problem. An unfilled "
+        "slot is a generic video.\n"
+        "- Invent the environment, setting, props and on-screen context concretely from the "
+        "verified facts (features, use cases, problems, audience, platforms) — a kitchen "
+        "counter at 7am for an evening-reflection app, not \"a nice room\". Nothing is "
+        "composited over the footage except captions and the end card, so what the camera "
+        "must show has to be written here, in scene, segments and hook_action.\n"
+        "- The generated scene is illustrative, never documentary: the script, captions and "
+        "CTA must never claim it shows real app footage or a screen recording. Anything the "
+        "viewer could read as a factual claim about the app — interface text, button labels, "
+        "prices, ratings, logos — must come from the verified facts or stay out of frame.\n"
+        "- Make the scene so specific that a second video with the same strategy would be "
+        "recognisably the same place. The person's sameness is the photograph's job, not the "
+        "text's — never describe them to achieve it. Vague terms like \"casual\" or \"a nice "
+        "room\" are not acceptable.\n"
+        "- must_not_change must cover the background, the lighting, the framing, the props "
+        "and the delivery — the scene attributes a video model will otherwise silently "
+        "reinvent. Never the face, hair, age, build or styling: those come from the "
+        "founder's photograph, not from anything written here.\n"
         "- Every segment must be satisfiable using only the verified facts above. Put anything that would need a "
         "claim from needs_review into do_not_repeat or omit it entirely.\n"
         "- Never promise a guaranteed outcome, never invent a testimonial, a rating or a review, and never state "

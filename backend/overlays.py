@@ -621,17 +621,24 @@ def describe_command(argv: list) -> str:
 
 def build_spec_from_plan(
     plan: dict,
-    assets: list,
     cta: str = "",
     duration: float = 0.0,
 ) -> dict:
     """
-    Turn a reviewed plan plus attached assets into a composition spec.
+    Turn a reviewed plan into a composition spec.
 
     Deliberately conservative: text comes only from the plan's already
     claim-checked overlays, and the end card is derived from the CTA. No new
     copy is invented here, because anything written at this stage would never
     have passed the claim check.
+
+    Face-only product: attached assets never enter the spec. The character
+    reference rides to the video model as an input reference, never as an
+    overlay — pasting the founder's photograph onto the footage would be a
+    picture-in-picture stranger, not identity. Retired uploads are refused
+    upstream before composition, so images, videos and audios are always
+    empty here; the layer renderers below stay for unit-tested geometry, not
+    for live traffic.
     """
     spec = {
         "captions": [],
@@ -655,47 +662,6 @@ def build_spec_from_plan(
             "size": 64,
             "color": "white",
         })
-
-    for asset in assets or []:
-        if not isinstance(asset, dict):
-            continue
-        path = str(asset.get("file_path") or "").strip()
-        if not path:
-            continue
-        kind = str(asset.get("kind") or "screenshot").lower()
-        entry = {
-            "path": path,
-            "start": asset.get("start", 0),
-            "end": asset.get("end", duration),
-            "kind": kind,
-        }
-        if kind in VIDEO_KINDS:
-            entry.setdefault("scale", 0.85)
-            entry["position"] = asset.get("position") or "center"
-            spec["videos"].append(entry)
-        elif kind in AUDIO_KINDS:
-            role = str(asset.get("audio_role") or "background").lower()
-            try:
-                gain = float(asset.get("audio_gain", AUDIO_DEFAULT_GAINS.get(role, 0.25)))
-            except (TypeError, ValueError):
-                gain = AUDIO_DEFAULT_GAINS.get(role, 0.25)
-            spec["audios"].append({
-                "path": path,
-                "start": asset.get("start", 0),
-                "end": asset.get("end", duration),
-                "role": role if role in AUDIO_ROLES else "background",
-                "gain": min(max(gain, 0.0), 2.0),
-                "label": str(asset.get("label") or ""),
-            })
-        else:
-            if kind == "logo":
-                entry.setdefault("scale", 0.14)
-                entry.setdefault("position", "top_right")
-                entry.setdefault("opacity", 0.95)
-            else:
-                entry.setdefault("scale", 0.8)
-                entry.setdefault("position", "center")
-            spec["images"].append(entry)
 
     cta_text = (cta or plan.get("cta") or "").strip()
     if cta_text and duration:

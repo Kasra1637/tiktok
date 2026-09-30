@@ -272,64 +272,43 @@ PLAN = {
 
 class TestSpecFromPlan:
     def test_captions_come_from_the_plan(self):
-        spec = overlays.build_spec_from_plan(PLAN, [], duration=12)
+        spec = overlays.build_spec_from_plan(PLAN, duration=12)
         assert [c["text"] for c in spec["captions"]] == ["one prompt", "100% offline"]
 
     def test_end_card_uses_the_cta(self):
-        spec = overlays.build_spec_from_plan(PLAN, [], duration=12)
+        spec = overlays.build_spec_from_plan(PLAN, duration=12)
         assert spec["end_card"]["text"] == "Try it free"
         assert spec["end_card"]["end"] == 12
 
     def test_end_card_absent_without_a_cta(self):
-        spec = overlays.build_spec_from_plan({"overlays": []}, [], duration=12)
+        spec = overlays.build_spec_from_plan({"overlays": []}, duration=12)
         assert spec["end_card"] is None
 
-    def test_logo_goes_to_images_with_corner_position(self):
-        spec = overlays.build_spec_from_plan(
-            PLAN, [{"kind": "logo", "file_path": "x.png"}], duration=12)
-        assert len(spec["images"]) == 1
-        assert spec["images"][0]["position"] == "top_right"
-
-    def test_screen_recording_goes_to_videos(self):
-        spec = overlays.build_spec_from_plan(
-            PLAN, [{"kind": "screen_recording", "file_path": "x.mp4"}], duration=12)
-        assert len(spec["videos"]) == 1
-        assert spec["images"] == []
-
-    def test_authorized_audio_goes_to_audio_with_role_and_gain(self):
+    def test_attachments_never_enter_the_spec(self):
+        """
+        Face-only product: the character reference rides to the video model
+        as an input reference, never as an overlay — and retired uploads are
+        refused upstream. The spec carries captions and the end card only,
+        no matter what attachment rows still exist.
+        """
         spec = overlays.build_spec_from_plan(
             PLAN,
-            [{
-                "kind": "audio",
-                "file_path": "bed.m4a",
-                "start": 1,
-                "end": 4,
-                "audio_role": "voiceover",
-                "audio_gain": 1.5,
-            }],
             duration=12,
         )
         assert spec["images"] == []
         assert spec["videos"] == []
-        assert spec["audios"][0]["role"] == "voiceover"
-        assert spec["audios"][0]["gain"] == 1.5
-        assert spec["audios"][0]["start"] == 1
-        assert spec["audios"][0]["end"] == 4
-
-    def test_timing_is_carried_through(self):
-        spec = overlays.build_spec_from_plan(
-            PLAN, [{"kind": "screenshot", "file_path": "x.png", "start": 3, "end": 9}], duration=12)
-        assert spec["images"][0]["start"] == 3
-        assert spec["images"][0]["end"] == 9
+        assert spec["audios"] == []
+        assert [c["text"] for c in spec["captions"]] == ["one prompt", "100% offline"]
+        assert spec["end_card"]["text"] == "Try it free"
 
     def test_caption_text_is_length_capped(self):
         long_plan = {"overlays": [{"start": 0, "end": 3, "text": "x" * 500}]}
-        spec = overlays.build_spec_from_plan(long_plan, [], duration=10)
+        spec = overlays.build_spec_from_plan(long_plan, duration=10)
         assert len(spec["captions"][0]["text"]) <= 60
 
     def test_blank_overlay_text_is_dropped(self):
         spec = overlays.build_spec_from_plan(
-            {"overlays": [{"start": 0, "end": 3, "text": "   "}]}, [], duration=10)
+            {"overlays": [{"start": 0, "end": 3, "text": "   "}]}, duration=10)
         assert spec["captions"] == []
 
     def test_no_new_copy_is_invented(self):
@@ -345,7 +324,7 @@ class TestSpecFromPlan:
         assert "Verified CTA" in blob
 
     def test_missing_plan_is_safe(self):
-        spec = overlays.build_spec_from_plan({}, [], duration=0)
+        spec = overlays.build_spec_from_plan({}, duration=0)
         assert spec["captions"] == [] and spec["end_card"] is None
 
 

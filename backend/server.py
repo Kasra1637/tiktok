@@ -7469,7 +7469,6 @@ async def _submit_generation(
             template=template,
             duration=seconds,
             segment=segment_role,
-            asset_notes=generation_planning.asset_notes(project.get("assets") or []),
             is_extension=is_extension,
         )
 
@@ -8022,8 +8021,10 @@ async def generate_project_strategy(
     than generic. It reads the approved App Profile, the selected hook
     mechanism, the content angle and the objective, and returns a strategy
     that fixes the hook concept, the messaging, the exact words, the
-    on-camera person's appearance and the scene they stand in — plus a
-    continuity contract that every later segment is held to.
+    on-camera person's action and the scene they stand in — plus a
+    continuity contract that every later segment is held to. The person's
+    appearance is never described anywhere in the strategy; it comes from
+    the founder's photograph.
 
     Free: no video is generated here, only text. The founder reviews and edits
     the strategy, then generates the 3-4 second hook from it.
@@ -9189,11 +9190,13 @@ async def create_overlay_composition(
     user_id: str = Depends(get_current_user_id),
 ):
     """
-    Compose real app visuals and verified text onto a generated clip.
+    Compose verified text onto a generated clip.
 
-    This is the step that makes "no fabricated interfaces" true: the model
-    supplies a person and a scene, and every factual element -- screenshots,
-    logo, on-screen text, the CTA -- is composited deterministically here.
+    This is the step that keeps on-screen text honest: the model supplies a
+    person and a scene, and the captions plus the CTA end card — both from
+    the claim-checked plan — are composited deterministically here. Nothing
+    else is composited: the character reference rides to the video model as
+    an input reference, and retired uploads are refused before composition.
 
     The composition is recorded separately from the generation so the exact
     composite can be re-rendered or audited without paying for another
@@ -9243,30 +9246,13 @@ async def create_overlay_composition(
         wanted, generation.get("brand_profile_id"), user_id
     )
 
-    timing = {}
-    for entry in attached if isinstance(attached, list) else []:
-        if isinstance(entry, dict) and entry.get("asset_id"):
-            timing[entry["asset_id"]] = entry
-
-    composed_assets = []
-    for asset in assets:
-        entry = dict(timing.get(asset["id"]) or {})
-        composed_assets.append({
-            "asset_id": asset["id"],
-            "kind": asset["kind"],
-            "label": asset.get("label") or asset.get("name") or "",
-            "file_path": asset["file_path"],
-            "start": entry.get("start", 0),
-            "end": entry.get("end", generation.get("duration")),
-            "position": entry.get("position"),
-            "scale": entry.get("scale"),
-            "audio_role": entry.get("audio_role"),
-            "audio_gain": entry.get("audio_gain"),
-        })
-
+    # Face-only product: resolved attachments never enter the spec — the
+    # character reference rides to the video model as an input reference and
+    # retired uploads are refused before composition. Resolution still runs
+    # so granular rejections (wrong profile, missing file, unconfirmed
+    # rights) are reported rather than silently dropped.
     spec = overlays.build_spec_from_plan(
         plan=project,
-        assets=composed_assets,
         cta=payload.end_card_text or project.get("cta") or "",
         duration=float(generation.get("duration") or project.get("duration_seconds") or 0),
     )

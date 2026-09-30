@@ -1018,3 +1018,84 @@ class TestStrategyNormalization:
         assert strategy["emotional_triggers"] == ["a single trigger"]
         assert strategy["continuity_contract"]["established"] == []
         assert len(strategy["segments"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# 7. Strategy prompt directives: the creative plan replaces uploaded assets
+# ---------------------------------------------------------------------------
+class TestStrategyPromptDirectives:
+    """
+    The creative plan is what generates environment and on-screen context
+    from App Profile facts instead of compositing uploads. These pin the
+    directives that make it do that, capturing the prompt by stubbing
+    _chat_json — no network, no model.
+    """
+
+    def _capture_prompt(self, monkeypatch):
+        import ai_service
+        captured = {}
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured["system"] = system_message
+            captured["prompt"] = prompt
+            return {
+                "strategy_summary": "s", "audience_problem": "p",
+                "emotional_triggers": ["t"], "hook_concept": "c",
+                "hook_line": "h", "hook_promise": "p", "hook_action": "a",
+                "hook_dialogue": "d", "messaging_pillars": ["m"],
+                "primary_feature": "f", "desired_outcome": "o",
+                "differentiation_beat": "b", "cta_strategy": "c",
+                "character": {"__note": "omit"},
+                "scene": {"environment": "kitchen"},
+                "performance": {"movement": "still"},
+                "segments": [{
+                    "index": 0, "role": "hook", "seconds": 3,
+                    "goal": "g", "script": "s", "action": "a",
+                }],
+                "continuity_contract": {
+                    "established": [], "must_not_change": [], "do_not_repeat": [],
+                },
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        return captured
+
+    def _run_strategy(self, monkeypatch):
+        import ai_service
+        captured = self._capture_prompt(monkeypatch)
+        result = asyncio.run(ai_service.generate_video_strategy(
+            profile={"brand_name": "Taskly", "core_features": ["timer"]},
+            template={
+                "name": "Stop Doing This",
+                "content_slots": {"mistake": "the behaviour to stop"},
+                "required_assets": ["character_reference"],
+            },
+            angle=None,
+            objective="address_user_problem",
+            hook_seconds=2,
+            total_duration=15,
+            tone="",
+            brand_voice="",
+            profile_feedback={},
+        ))
+        assert result["template_name"] == "Stop Doing This"
+        return captured
+
+    def test_content_slots_must_be_filled_from_facts(self, monkeypatch):
+        captured = self._run_strategy(monkeypatch)
+        assert "Fill every content_slot" in captured["prompt"]
+
+    def test_environment_is_invented_from_facts_not_composited(self, monkeypatch):
+        captured = self._run_strategy(monkeypatch)
+        assert "Invent the environment" in captured["prompt"]
+        assert "composited afterwards" not in captured["prompt"]
+
+    def test_generated_scene_is_framed_as_illustrative(self, monkeypatch):
+        captured = self._run_strategy(monkeypatch)
+        assert "illustrative" in captured["prompt"]
+        assert "screen recording" in captured["prompt"]
+
+    def test_appearance_is_never_described(self, monkeypatch):
+        captured = self._run_strategy(monkeypatch)
+        assert "appearance is never" in captured["system"]
+        assert "must_not_change must cover the background" in captured["prompt"]

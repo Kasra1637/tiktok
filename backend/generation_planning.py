@@ -10,20 +10,32 @@ network or a model:
 - extract_cost(): reads cost out of whatever shape OpenRouter returns.
 - is_recoverable_error(): decides whether a failure is worth retrying.
 
-The prompt contract matters for the product rule that the model must never
-render app UI, small text, pricing, or logos — those are composited
-deterministically afterwards from real assets. The model is told to leave
-clean space for them instead of inventing an interface.
+The prompt contract matters for the product rule that the model renders
+everything it shows: the environment, setting, lighting and props are
+invented from the verified app facts in the prompt, because nothing is
+composited over the footage except deterministic captions and the end
+card. The one thing the model must never invent is the person — they come
+from the founder's character reference photograph, which rides along as a
+model input. Anything the viewer could read as a factual claim about the
+app (prices, ratings, interface text) must come from verified facts or
+stay out of frame.
 """
 from typing import Optional
 
 # Words the model must not attempt to draw. Listed so the instruction can be
-# explicit rather than relying on the model inferring "don't fake the UI".
+# explicit rather than relying on the model inferring "don't fake the facts".
+# Note what is NOT here: the environment, setting, lighting and props ARE
+# invented by the model from the verified app facts — nothing is composited
+# over the footage except captions and the end card, so the scene has to be
+# rendered, not reserved.
 _UI_RENDERING_WARNING = (
     "Do NOT draw or render: app interface elements, app screenshots, button "
     "labels, prices, ratings, review counts, download counts, logos, or any "
-    "small on-screen text. Those are composited afterwards from real app "
-    "assets. Leave clean, uncluttered space where they will be placed."
+    "small on-screen text. Nothing is composited over this footage except "
+    "captions and the end card, so invent the environment, setting, lighting "
+    "and props concretely from the verified app facts — but anything the "
+    "viewer could read as a factual claim about the app must come from those "
+    "facts, never from invention. Leave clean, uncluttered space for the captions."
 )
 
 
@@ -84,7 +96,6 @@ def build_single_pass_prompt(
     template: Optional[dict] = None,
     duration: int = 20,
     segment: str = "full",
-    asset_notes: str = "",
     is_extension: bool = False,
 ) -> str:
     """
@@ -98,8 +109,6 @@ def build_single_pass_prompt(
         duration: seconds this generation must cover.
         segment: "full" for the primary generation, or "extension" when this
             job continues a previous one.
-        asset_notes: what real assets will be composited afterwards, so the
-            model leaves appropriate room.
         is_extension: True when continuing a longer video. The prompt then
             asks the model to continue seamlessly rather than open cold.
     """
@@ -178,9 +187,10 @@ def build_single_pass_prompt(
 
     sections.append(_UI_RENDERING_WARNING)
 
-    if asset_notes:
-        sections.append(f"Real app assets that will be composited over this footage: {asset_notes}")
-
+    # The attached face is covered by the person anchor below, and nothing
+    # else can be attached — so there is no composited-assets section. Any
+    # retired uploads still sitting on an old project are refused before any
+    # prompt is built, and never reach here.
     person_anchor = person_anchor_notes(plan.get("assets") or [])
     if person_anchor:
         sections.append(person_anchor)
@@ -308,24 +318,6 @@ def person_anchor_notes(assets: list) -> str:
             "They star in every scene from opening to call to action."
         )
     return ""
-
-
-def asset_notes(assets: list) -> str:
-    """
-    Summarise attached assets for the prompt.
-    Only names and kinds are described: the point is to tell the model what
-    will be laid over the footage so it composes around it.
-    """
-    if not assets:
-        return ""
-    parts = []
-    for asset in assets[:8]:
-        if not isinstance(asset, dict):
-            continue
-        kind = str(asset.get("kind") or asset.get("type") or "asset").strip()
-        label = str(asset.get("name") or asset.get("label") or "").strip()
-        parts.append(f"{kind}{f' ({label})' if label else ''}")
-    return ", ".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -653,14 +645,13 @@ def build_segment_prompt(
 
     sections.append(
         "On-screen text will be added afterwards. Plan clean space for it, and do not "
-        "render any text, interface, price, rating or logo yourself."
+        "render any text yourself."
     )
     sections.append(_UI_RENDERING_WARNING)
 
-    notes = asset_notes(assets or [])
-    if notes:
-        sections.append(f"Real app assets composited over this footage: {notes}")
-
+    # The attached face is covered by the person anchor below, and nothing
+    # else can be attached — so there is no composited-assets section here
+    # either. Retired uploads are refused before any prompt is built.
     person_anchor = person_anchor_notes(assets or [])
     if person_anchor:
         sections.append(person_anchor)

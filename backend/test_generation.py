@@ -221,20 +221,30 @@ class TestSinglePassPrompt:
         prompt = gp.build_single_pass_prompt(PLAN, PROFILE, TEMPLATE, 20)
         assert "licensed audio" in prompt
 
-    def test_asset_notes_appear_when_supplied(self):
-        prompt = gp.build_single_pass_prompt(
-            PLAN, PROFILE, TEMPLATE, 20,
-            asset_notes="screenshot (Onboarding), logo",
-        )
-        assert "Onboarding" in prompt
+    def test_no_composited_assets_section(self):
+        # Face-only product: the photograph is covered by the person anchor
+        # and nothing else can be attached, so the prompt no longer lists
+        # real assets to composite — only the captions carve-out remains.
+        prompt = gp.build_single_pass_prompt(PLAN, PROFILE, TEMPLATE, 20)
+        assert "Real app assets" not in prompt
+
+    def test_person_anchor_locks_the_face(self):
+        plan = dict(PLAN, assets=[{
+            "kind": "character_reference", "name": "Founder face",
+            "label": "Founder face", "file_path": "face.png",
+        }])
+        prompt = gp.build_single_pass_prompt(plan, PROFILE, TEMPLATE, 20)
+        assert "the person in the attached character reference" in prompt
 
     def test_missing_plan_fields_do_not_crash(self):
         prompt = gp.build_single_pass_prompt({}, {}, {}, 15)
         assert isinstance(prompt, str) and len(prompt) > 0
 
-    def test_empty_assets_yield_no_notes(self):
-        assert gp.asset_notes([]) == ""
-        assert gp.asset_notes([{"kind": "screenshot", "name": "Home"}]) == "screenshot (Home)"
+    def test_person_anchor_ignores_retired_kinds(self):
+        assert gp.person_anchor_notes([]) == ""
+        assert gp.person_anchor_notes([{"kind": "screenshot", "name": "Home"}]) == ""
+        assert "character reference" in gp.person_anchor_notes(
+            [{"kind": "character_reference", "name": "Home"}])
 
 
 class TestCostExtraction:
