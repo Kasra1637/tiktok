@@ -298,10 +298,14 @@ def person_anchor_notes(assets: list) -> str:
             continue
         label = str(asset.get("name") or asset.get("label") or "the attached character reference").strip()
         return (
-            "The person on camera must be the exact individual in the attached "
-            f"character reference image ({label}): same face, same appearance, "
-            "same age. Do not invent a different person, and do not describe or "
-            "alter them. They star in every scene from opening to call to action."
+            "The person on camera is the person in the attached character reference "
+            f"image ({label}). Copy that person: the same face, hair, skin, apparent age, "
+            "build and clothing as they appear in the photograph, animated rather than "
+            "re-imagined. The image is the only authority on who they are — where this "
+            "prompt or any written description states otherwise, ignore the text and "
+            "follow the image. Do not invent a different person, do not blend them with "
+            "anyone else, and do not describe them in words instead of using the image. "
+            "They star in every scene from opening to call to action."
         )
     return ""
 
@@ -365,17 +369,26 @@ _SECTION_LABELS = {
 
 def character_scene_lock(strategy: dict) -> str:
     """
-    Render the strategy's persona as an explicit do-not-change block.
+    Render the strategy's scene and performance as an explicit do-not-change
+    block.
 
     A video model has no memory of the previous segment. Anything not restated
     is an invitation to reinvent it, and the attributes it reinvents most
-    reliably are the face, the wardrobe and the background — exactly the three
-    that make an extension read as the same video. So every attribute the
-    strategy fixed is written out again, by name, as a locked value.
+    reliably are the scene, the wardrobe and the camera — so every attribute
+    the strategy fixed is written out again, by name, as a locked value.
+
+    The person's appearance is deliberately NOT restated. The on-camera person is
+    copied from the founder's uploaded character reference image, and this
+    function used to write a model's guess at that face, hair, age and wardrobe
+    alongside the photograph, under a heading telling the provider both were
+    locked. Strategies generated before that was removed still carry such a
+    block, so "character" is skipped here by name rather than trusted.
     """
     strategy = strategy or {}
     lines = []
     for section, fields in _SECTION_LABELS.items():
+        if section == "character":
+            continue
         values = strategy.get(section)
         if not isinstance(values, dict):
             continue
@@ -390,12 +403,12 @@ def character_scene_lock(strategy: dict) -> str:
     if not lines:
         return ""
     return (
-        "THE PERSON AND THE SCENE ARE LOCKED. Reproduce these exactly — same face, "
-        "same hair, same wardrobe, same place, same light, same camera:\n"
+        "THE SCENE AND THE DELIVERY ARE LOCKED. Reproduce these exactly — same place, "
+        "same light, same camera, same wardrobe and props, same way of moving and speaking:\n"
         + "\n".join(lines)
-        + "\n\nThese are not suggestions. Do not restyle, re-age, re-crop, re-light, "
-        "re-wardrobe or relocate this person, and do not swap in a different person, "
-        "even if the later part of the story would seem to call for it."
+        + "\n\nThese are not suggestions. Do not restyle, re-light, re-wardrobe or relocate "
+        "this scene, and do not swap in a different location, prop or outfit, even if the "
+        "later part of the story would seem to call for it."
     )
 
 

@@ -1816,10 +1816,15 @@ def _continuation_segment_schema(plan_seconds: int) -> str:
 
 # The sub-objects are where continuity actually lives, so each one is required
 # with its own field list rather than being trusted as a free-form blob.
-STRATEGY_CHARACTER_FIELDS = (
-    "appearance", "facial_features", "hairstyle", "wardrobe",
-    "body_appearance", "age_range", "facial_expression", "styling_details",
-)
+#
+# There is deliberately no STRATEGY_CHARACTER_FIELDS. The on-camera person is
+# copied from the founder's uploaded character reference image, so a written
+# description of their face, hair, age, build or wardrobe is not a fallback —
+# it is a fabrication, and it was being sent to the model alongside the
+# photograph as a "locked" value. The two disagreed, and the model was told
+# both were authoritative, which is how a founder's own face came back as
+# somebody else's. The scene and performance directions are plan-level and do
+# not conflict with a photograph, so those stay.
 STRATEGY_SCENE_FIELDS = (
     "camera_angle", "framing", "lighting", "environment", "background",
     "setting", "visual_style", "character_positioning", "props", "color_palette",
@@ -1883,7 +1888,9 @@ def normalize_strategy(raw: dict) -> dict:
     result["emotional_triggers"] = _clean_strategy_list(raw.get("emotional_triggers"), 200)
     result["messaging_pillars"] = _clean_strategy_list(raw.get("messaging_pillars"), 300)
 
-    result["character"] = _normalize_strategy_section(raw.get("character"), STRATEGY_CHARACTER_FIELDS)
+    # No "character" section: see STRATEGY_SCENE_FIELDS for why. An existing
+    # project may still carry one from before this change, so it is dropped here
+    # rather than trusted — an old fabrication must not reach a new prompt.
     result["scene"] = _normalize_strategy_section(raw.get("scene"), STRATEGY_SCENE_FIELDS)
     result["performance"] = _normalize_strategy_section(raw.get("performance"), STRATEGY_PERFORMANCE_FIELDS)
 
@@ -2088,14 +2095,14 @@ async def generate_video_strategy(
         '  "differentiation_beat": "how to use this app\'s stated differentiation against its competitors",\n'
         '  "cta_strategy": "the single next action, and why it suits this audience",\n'
         '  "character": {\n'
-        f'    "appearance": "overall look and presence of the on-camera person",\n'
-        f'    "facial_features": "face shape, features, and anything that must stay identical",\n'
-        f'    "hairstyle": "hair colour, length and style — locked for the whole video",\n'
-        f'    "wardrobe": "every garment and accessory, described once and held for the whole video",\n'
-        f'    "body_appearance": "build, height impression and how they hold themselves",\n'
-        f'    "age_range": "apparent age range",\n'
-        f'    "facial_expression": "default expression and how it changes",\n'
-        f'    "styling_details": "glasses, jewellery, nails, makeup, tattoos — or explicitly none",\n'
+        f'    "__note": "OMIT this whole object, and do not describe the presenter\'s '
+        f'appearance anywhere else in this response either -- not in strategy_summary, '
+        f'not in hook_concept, not in any field. The on-camera person is copied from the '
+        f'founder\'s uploaded character reference image, so any written description of their '
+        f'face, hair, skin, age, build, wardrobe or styling here would be an invention that '
+        f'contradicts the photograph they are supposed to match, and the two would be sent '
+        f'together. Write about the audience, the problem, the app and the action instead. '
+        f'There is no substitute for reading the image.",\n'
         '  },\n'
         '  "scene": {\n'
         f'    "camera_angle": "the exact camera position and angle, e.g. eye-level handheld 1m away",\n'
@@ -2119,9 +2126,14 @@ async def generate_video_strategy(
         + _continuation_segment_schema(plan_seconds)
         + '\n  ],\n'
         '  "continuity_contract": {\n'
-        '    "established": ["what the opening segment fixes for the rest of the video — 4-6 items"],\n'
-        '    "must_not_change": ["appearance, wardrobe, setting, lighting, framing and props that every '
-        'later segment must reproduce exactly"],\n'
+        '    "established": ["what the opening segment fixes for the rest of the video — 4-6 items. '
+        'Setting, lighting, framing, props and action only. Never the presenter\'s face, hair, '
+        'skin, age, build, wardrobe or styling: those come from the founder\'s photograph, not '
+        'from anything written here."],\n'
+        '    "must_not_change": ["setting, lighting, framing, props and wardrobe-that-is-'
+        'already-on-screen-in-the-photograph that every later segment must reproduce exactly. '
+        'Do NOT list the person\'s face, hair, age, build or styling -- an invented description '
+        'of them here contradicts the photograph they are supposed to match."],\n'
         '    "do_not_repeat": ["what the opening already said or showed, so later segments do not say it again"]\n'
         '  }\n'
         "}\n"

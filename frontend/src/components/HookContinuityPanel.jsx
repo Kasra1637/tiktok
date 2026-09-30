@@ -18,7 +18,7 @@ import {
 } from "../lib/videoLength";
 import {
   Loader2, Clapperboard, AlertTriangle, Download, RefreshCw, Check,
-  Info, Clock, User, MapPin, Film, Scissors, ShieldQuestion,
+  Info, Clock, MapPin, Film, Scissors, ShieldQuestion,
   Sparkles, Play, Link2,
 } from "lucide-react";
 
@@ -616,25 +616,22 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
               <span className="eyebrow">Why this works for this app</span>
               <p className="text-sm">{strategy.strategy_summary}</p>
             </div>
-            {/* Person and Scene are the same kind of thing — what the video
-                looks like — so they pair. Performance is how it is delivered
-                rather than what is in frame, and has two rows against their
-                eight and ten, so it takes the full width underneath instead of
-                sitting in a third grid cell and looking orphaned. */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <StrategyBlock
-                title="The person"
-                description="Locked for every segment."
-                icon={User}
-                rows={Object.entries(strategy.character || {})}
-              />
-              <StrategyBlock
-                title="The scene"
-                description="Locked for every segment."
-                icon={MapPin}
-                rows={Object.entries(strategy.scene || {})}
-              />
-            </div>
+            {/* There is no "person" block, and deliberately so. It used to sit
+                here above "The scene" listing the model's guess at the founder's
+                face, hair, age and wardrobe, under the heading "locked for every
+                segment" — while the actual photograph sat in the project's
+                assets. It read as a description of the person they uploaded, and
+                it was invented. The on-camera person is now copied from the
+                character reference image and nothing is written about them.
+                Scene and performance remain: they are plan-level and conflict
+                with nothing. Both take the full width, since the scene block is
+                the only one of its kind left in this row. */}
+            <StrategyBlock
+              title="The scene"
+              description="Locked for every segment."
+              icon={MapPin}
+              rows={Object.entries(strategy.scene || {})}
+            />
             <div className="border-t border-[color:var(--indigo-35)] pt-3">
               <StrategyBlock
                 title="Performance"
