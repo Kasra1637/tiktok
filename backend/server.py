@@ -7250,7 +7250,9 @@ async def _record_cost(generation_id: str, response: dict) -> None:
     )
 
 
-async def _studio_identity_references(assets: list, model_key: str, user_id: str) -> list:
+async def _studio_identity_references(
+    assets: list, model_key: str, user_id: str, template: Optional[dict] = None
+) -> list:
     """Resolve the project's attached character_reference into input_references
     for the video model, or return [] when none is attached.
     The reference is the identity guide; the person-anchor prompt section
@@ -7259,6 +7261,11 @@ async def _studio_identity_references(assets: list, model_key: str, user_id: str
     works: image reference in, matching person out.
 
     Guardrails, all loud:
+    - A template that declares character_reference in required_assets is
+      REFUSED without one. The requirement used to be decorative: it was
+      rendered as "Needs character reference" in the studio and on the
+      template, but nothing enforced it, so a paid render could go out with
+      no identity input at all and the model free to invent a presenter.
     - Only the first character_reference asset is used.
     - The asset row must exist, belong to this user, and point at a real
       file on disk; otherwise the submission fails with a 409, never with a
@@ -7275,6 +7282,21 @@ async def _studio_identity_references(assets: list, model_key: str, user_id: str
         anchor = asset
         break
     if anchor is None:
+        required = [
+            str(a or "").strip().lower()
+            for a in ((template or {}).get("required_assets") or [])
+        ]
+        if "character_reference" in required:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "This template puts a person on camera, so it needs a character "
+                    "reference. The video is generated from your photograph, so "
+                    "without one the model would invent someone who looks nothing "
+                    "like you. Attach a character reference on the Assets step and "
+                    "try again."
+                ),
+            )
         return []
 
     if not video_providers.accepts_identity_reference(model_key):
@@ -7406,7 +7428,7 @@ async def _submit_generation(
     # (missing file, a model that refuses references) fails the submission
     # loudly rather than spending money on a lookalike.
     studio_references = await _studio_identity_references(
-        project.get("assets") or [], model_key, user_id
+        project.get("assets") or [], model_key, user_id, template
     )
     # A continuity plan that decided not to send the identity reference (because
     # the seam frame already carries the face) must not have it smuggled in

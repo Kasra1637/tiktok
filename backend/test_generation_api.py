@@ -709,7 +709,14 @@ class TestStudioIdentityReference:
         assert len(refs) == 1
         assert refs[0]["type"] == "image_url"
         assert refs[0]["image_url"]["url"].startswith("data:image/png;base64,")
-        assert "exact individual" in calls[0]["prompt"]
+        # The photograph is named as the only authority on who the person is.
+        assert "The person on camera is the person in the attached character reference" in (
+            calls[0]["prompt"]
+        )
+        assert "The image is the only authority on who they are" in calls[0]["prompt"]
+        # ...and no invented description of them rides along with it.
+        for invented in ("round face", "teal scrubs", "low bun"):
+            assert invented not in calls[0]["prompt"], f"prompt invents an appearance: {invented}"
 
     def test_no_anchor_means_no_references(self, api, monkeypatch):
         from models import StudioGenerationRequest
@@ -718,7 +725,31 @@ class TestStudioIdentityReference:
         _run(api.submit_project_generation(
             project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
         assert not calls[0].get("input_references")
-        assert "exact individual" not in calls[0]["prompt"]
+        assert "attached character reference" not in calls[0]["prompt"]
+
+    def test_a_template_that_needs_a_face_refuses_without_one(self, api, monkeypatch):
+        """
+        The requirement used to be decoration: it was listed on the template and
+        in the studio, but nothing stopped the click. A paid render could go out
+        with no identity input at all, and the model free to invent a presenter.
+        The refusal has to happen before the provider is called, not after.
+        """
+        from models import StudioGenerationRequest
+        project = self._anchor_project(api, "Needs A Face")
+        # Drop the reference, and use a template that genuinely puts a person on
+        # camera so the requirement applies.
+        _run(api._execute(
+            "UPDATE studio_projects SET assets = '[]', template_id = "
+            "(SELECT id FROM hook_templates WHERE required_assets LIKE '%character_reference%' "
+            "AND review_status = 'approved' LIMIT 1) WHERE id = ?",
+            (project["id"],)))
+        calls = _mock_submit(api, monkeypatch)
+        with pytest.raises(HTTPException) as excinfo:
+            _run(api.submit_project_generation(
+                project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        assert excinfo.value.status_code == 409
+        assert "character reference" in str(excinfo.value.detail)
+        assert not calls, "the provider was called despite the refusal"
 
     def test_missing_file_is_refused_loudly(self, api, monkeypatch):
         from models import StudioGenerationRequest

@@ -140,6 +140,54 @@ function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/**
+ * What is still owed to the selected template, and a way to go and attach it.
+ *
+ * A missing character reference is not the same kind of blocker as a missing
+ * screenshot, so it gets its own sentence. Without a photograph of the person
+ * the model would invent one, and the founder would pay for a video of somebody
+ * who looks nothing like them — which is the whole point of attaching a
+ * reference in the first place.
+ */
+function MissingRequirements({ missing, onGoToAssets }) {
+  if (!missing || missing.length === 0) return null;
+  const needsPerson = missing.some((r) => r.kind === "character_reference");
+  const others = missing.filter((r) => r.kind !== "character_reference");
+  return (
+    <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-4">
+      <p className="text-sm font-medium">
+        {needsPerson
+          ? "This template needs a character reference before it can generate"
+          : "This template needs more from you before it can generate"}
+      </p>
+      <ul className="space-y-0.5 text-xs text-muted-foreground">
+        {missing.map((r) => (
+          <li key={r.kind}>
+            {r.kind === "character_reference" ? (
+              <>
+                Character reference — the video is generated from your photograph, so without
+                one the model would invent a person.
+              </>
+            ) : (
+              humanize(r.kind)
+            )}
+          </li>
+        ))}
+      </ul>
+      {others.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Everything else composited on top of the footage is optional for this step.
+        </p>
+      )}
+      {onGoToAssets && (
+        <Button variant="secondary" size="sm" onClick={onGoToAssets}>
+          <ImageIcon className="h-3.5 w-3.5" /> Attach in the Assets step
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function StepShell({ icon: Icon, title, description, children }) {
   return (
     <div className="space-y-4">
@@ -601,6 +649,23 @@ export default function CreateVideo() {
   };
 
   const canGenerate = Boolean(profileId && templateId);
+
+  // A template that puts a person on camera declares character_reference in
+  // required_assets, and the backend now refuses a generation without one (see
+  // _studio_identity_references). The requirement used to be decoration: it was
+  // listed on the template but nothing stopped the click, so a paid render could
+  // go out with no identity input and the model free to invent a presenter.
+  //
+  // Kept separate from canGenerate on purpose — "you have not chosen a template
+  // yet" and "you still owe this template a photograph" are different problems
+  // and the founder needs to be told which one they have.
+  const missingRequirements = template
+    ? requiredAssetStatus(template.required_assets, project?.assets).filter((r) => !r.have)
+    : [];
+  const assetsReady = missingRequirements.length === 0;
+  // Generation itself is refused server-side, so this is the early warning
+  // rather than the guarantee. It is deliberately not folded into canGenerate.
+  const blockedOnAssets = Boolean(template) && !assetsReady;
   const editValue = (key, fallback) =>
     edits[key] !== undefined ? edits[key] : project?.[key] ?? fallback;
   const hasEdits = Object.keys(edits).length > 0;
@@ -1035,6 +1100,11 @@ export default function CreateVideo() {
                   both, so the hook has to serve the mechanism you picked.
                 </p>
               </div>
+            ) : blockedOnAssets ? (
+              <MissingRequirements
+                missing={missingRequirements}
+                onGoToAssets={() => setStep(3)}
+              />
             ) : !project ? (
               <div className="rounded-xl border border-[color:var(--hairline)] p-4">
                 <p className="text-sm text-muted-foreground">
@@ -1076,7 +1146,7 @@ export default function CreateVideo() {
             <Button
               variant="brand"
               onClick={handleGeneratePlan}
-              disabled={busy || !canGenerate}
+              disabled={busy || !canGenerate || blockedOnAssets}
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               {project?.script_version ? "Regenerate plan" : "Generate plan"}
@@ -1084,6 +1154,10 @@ export default function CreateVideo() {
             {!templateId && (
               <p className="text-sm text-muted-foreground">Choose a template first.</p>
             )}
+            <MissingRequirements
+              missing={missingRequirements}
+              onGoToAssets={() => setStep(3)}
+            />
             {project?.script_version > 0 && (
               <p className="text-sm text-muted-foreground">
                 Current plan is version {project.script_version}. Regenerating replaces it.
@@ -1303,6 +1377,10 @@ export default function CreateVideo() {
             {hasEdits && (
               <p className="text-xs text-muted-foreground">Save your edits before marking ready.</p>
             )}
+            <MissingRequirements
+              missing={missingRequirements}
+              onGoToAssets={() => setStep(3)}
+            />
 
             {/* The influencer hook, strategy, and segment chain live on their own
                 step. The one-pass GenerationPanel stays here. */}
