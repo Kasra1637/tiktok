@@ -9,6 +9,7 @@ import asyncio
 import base64
 import json
 import logging
+import mimetypes
 import os
 from pathlib import Path
 from typing import Optional
@@ -198,6 +199,38 @@ def _headers():
 def image_to_base64(path: Path) -> str:
     with open(path, "rb") as f:
         return base64.b64encode(f.read()).decode("utf-8")
+
+
+# The formats the upload path accepts (server.ASSET_ALLOWED_EXT["image"]).
+# face_crop saves with the source file's own suffix, so a cropped face derived
+# from a .jpg upload is still a JPEG.
+_IMAGE_MIME_BY_SUFFIX = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+}
+
+
+def image_mime_type(path: Path) -> str:
+    """The MIME type that actually matches the file's bytes.
+
+    Every reference used to be labelled `image/png` regardless of what it was,
+    so a .jpg phone photo went out as `data:image/png;base64,<JPEG bytes>`. A
+    mislabelled data URI is invalid, which image_testing.md calls out by name.
+    The tests never caught it because every fixture is a .png.
+    """
+    suffix = Path(path).suffix.lower()
+    if suffix in _IMAGE_MIME_BY_SUFFIX:
+        return _IMAGE_MIME_BY_SUFFIX[suffix]
+    guessed, _encoding = mimetypes.guess_type(str(path))
+    return guessed or "image/png"
+
+
+def image_data_uri(path: Path) -> str:
+    """A base64 data URI whose declared MIME matches the encoded bytes."""
+    return f"data:{image_mime_type(path)};base64,{image_to_base64(path)}"
 
 
 def _clean_json_text(text: str) -> str:
@@ -544,10 +577,9 @@ async def analyze_hook(frame_paths: list, session_id: str, music_context: dict =
     # Build content array with images
     content = [{"type": "text", "text": prompt}]
     for fp in frame_paths:
-        b64 = image_to_base64(fp)
         content.append({
             "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{b64}"}
+            "image_url": {"url": image_data_uri(fp)}
         })
 
     payload = {
@@ -607,11 +639,8 @@ async def generate_customized_preview(
     (bcbf905, fe70420, 48c1082) for prior instances of this same failure mode
     across different underlying models.
     """
-    ref_b64 = image_to_base64(reference_frame_path)
-
     # Crop the person photo to just the face region before sending to the model.
     cropped_person_path = crop_face_from_path(person_photo_path)
-    person_b64 = image_to_base64(cropped_person_path)
 
     # Use OpenRouter's dedicated Images API with explicit identity + scene references.
     payload = {
@@ -620,8 +649,8 @@ async def generate_customized_preview(
             customization_prompt if mode == "custom" else ""
         ),
         "input_references": [
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{ref_b64}"}},
-            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{person_b64}"}},
+            {"type": "image_url", "image_url": {"url": image_data_uri(reference_frame_path)}},
+            {"type": "image_url", "image_url": {"url": image_data_uri(cropped_person_path)}},
         ],
         "resolution": "2K",
         "aspect_ratio": "9:16",
@@ -658,18 +687,15 @@ async def generate_face_swap(
     Optional customization_prompt lets the user request changes to clothing,
     environment, or other scene elements while keeping the identity swap intact.
     """
-    target_b64 = image_to_base64(target_image_path)
-
     # Crop the source face image to just the face region before sending to the model.
     cropped_source_path = crop_face_from_path(source_face_path)
-    source_b64 = image_to_base64(cropped_source_path)
 
     payload = {
         "model": FACE_SWAP_MODEL,
         "prompt": _build_face_swap_prompt(customization_prompt),
         "input_references": [
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{target_b64}"}},
-            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{source_b64}"}},
+            {"type": "image_url", "image_url": {"url": image_data_uri(target_image_path)}},
+            {"type": "image_url", "image_url": {"url": image_data_uri(cropped_source_path)}},
         ],
         "resolution": "2K",
         "aspect_ratio": "9:16",
@@ -806,8 +832,6 @@ async def analyze_image_for_hook(image_path: Path, session_id: str) -> dict:
     Returns a dict with the same keys as a hook analysis so it can be used
     interchangeably by the video generation prompt.
     """
-    b64 = image_to_base64(image_path)
-
     system_message = (
         "You are an expert short-form video (TikTok/Reels) hook strategist. You examine a single "
         "still image of a person and determine what attention-grabbing movement is happening or "
@@ -834,7 +858,7 @@ async def analyze_image_for_hook(image_path: Path, session_id: str) -> dict:
 
     content = [
         {"type": "text", "text": prompt},
-        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
+        {"type": "image_url", "image_url": {"url": image_data_uri(image_path)}},
     ]
 
     payload = {
@@ -923,11 +947,10 @@ async def _edit_video_with_aleph(
     }
 
     if face_anchor_path and face_anchor_path.exists():
-        b64 = image_to_base64(face_anchor_path)
         payload["frame_images"] = [
             {
                 "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{b64}"},
+                "image_url": {"url": image_data_uri(face_anchor_path)},
                 "frame_type": "first_frame",
             }
         ]
@@ -1111,22 +1134,19 @@ async def generate_video(
             "the seam frame is not displaced."
         )
     if reference_image_path and reference_image_path.exists() and not use_v2v_mode and not bridge_frame:
-        b64 = image_to_base64(reference_image_path)
-        mime = "image/png"
         payload["frame_images"] = [
             {
                 "type": "image_url",
-                "image_url": {"url": f"data:{mime};base64,{b64}"},
+                "image_url": {"url": image_data_uri(reference_image_path)},
                 "frame_type": "first_frame",
             }
         ]
 
     if bridge_frame:
-        b64 = image_to_base64(bridge_frame)
         payload["frame_images"] = [
             {
                 "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{b64}"},
+                "image_url": {"url": image_data_uri(bridge_frame)},
                 "frame_type": "first_frame",
             }
         ]

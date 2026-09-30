@@ -2211,6 +2211,28 @@ def public_media_url(local_path) -> Optional[str]:
     return f"{PUBLIC_BASE_URL}/api/media/{relative_path.as_posix()}"
 
 
+def served_media_path(local_path) -> Optional[str]:
+    """
+    Build a backend-relative URL for a file under storage/, for the browser.
+
+    Unlike public_media_url this needs no PUBLIC_BASE_URL: the frontend's
+    mediaUrl() prefixes the backend origin. That matters for the completion
+    path, where the R2 upload can fail and the only durable copy left is the
+    local file — and without a URL for it the panel falls back to the
+    provider's unsigned link, which expires and leaves an already-generated
+    video that will not play.
+    """
+    if not local_path:
+        return None
+    try:
+        storage_root = pipeline.STORAGE_DIR.resolve()
+        resolved = Path(local_path).resolve()
+        relative_path = resolved.relative_to(storage_root)
+    except (ValueError, OSError):
+        return None
+    return f"/api/media/{relative_path.as_posix()}"
+
+
 def require_ai_configured():
     if not os.environ.get("OPENROUTER_API_KEY"):
         raise HTTPException(
@@ -7278,17 +7300,30 @@ async def _studio_identity_references(assets: list, model_key: str, user_id: str
             status_code=409,
             detail="The attached character reference image is missing its file. Re-upload it before generating.",
         )
-    from ai_service import image_to_base64
+    from ai_service import image_data_uri
+    from face_crop import crop_face_from_path
+
+    # Crop to the face before sending. The legacy image paths have always done
+    # this (ai_service.py:613, 664) because models treat an unframed scene
+    # reference as authoritative and reproduce its face — so a full-body upload
+    # arrives with a face occupying a few percent of the frame and the model
+    # reads the scene instead of the person. face_crop degrades to the original
+    # when no face is found, so this can only improve the reference.
+    try:
+        reference_path = crop_face_from_path(Path(path))
+    except Exception as e:  # never fail a paid render over a crop
+        logger.warning(f"Character reference crop failed for {path} ({e}); sending original.")
+        reference_path = Path(path)
 
     try:
-        b64 = image_to_base64(Path(path))
+        data_uri = image_data_uri(reference_path)
     except Exception as e:
         logger.warning(f"Character reference at {path} could not be read: {e}")
         raise HTTPException(
             status_code=409,
             detail="The attached character reference image could not be read. Re-upload it before generating.",
         ) from e
-    return [{"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}}]
+    return [{"type": "image_url", "image_url": {"url": data_uri}}]
 
 
 async def _submit_generation(
@@ -7713,6 +7748,18 @@ async def poll_generation(generation_id: str, user_id: str = Depends(get_current
                             f"delivering the untrimmed render."
                         )
                 stored_url = storage_service.upload_video(user_id, generation_id, Path(local_path))
+                if not stored_url:
+                    # R2 is unconfigured or the upload failed, but the local copy
+                    # survived and /api/media serves it. Record that instead of
+                    # leaving r2_url empty, because an empty r2_url makes the
+                    # panel fall back to the provider's unsigned link — which
+                    # expires, and then an already-generated video will not play.
+                    stored_url = served_media_path(Path(local_path))
+                    if stored_url:
+                        storage_error = (
+                            "Saved to this server's storage rather than durable cloud "
+                            "storage, because the upload to cloud storage failed."
+                        )
             else:
                 storage_error = "The provider clip could not be downloaded for durable storage."
         except Exception as e:
