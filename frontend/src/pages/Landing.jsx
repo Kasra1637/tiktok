@@ -43,49 +43,49 @@ const FEATURES = [
     icon: FileText,
     title: "Script First, Video Second",
     description:
-      "Approve every word before a cent is spent. The full script and shot plan land first, yours to rewrite.",
+      "Approve every word before a cent is spent. The full script and shot plan land first, yours to rewrite — and drafting, planning and strategy cost no video generation at all.",
   },
   {
     icon: Clapperboard,
-    title: "One Smooth Video",
+    title: "Ten to Thirty Seconds",
     description:
-      "Post a polished 10 to 30 second promo in one take — no stitching, no janky cuts, no editing skills.",
+      "10, 15, 20 or 30 seconds, vertical 9:16. Hook first — 2 to 6 seconds — because a four-second clip is the cheapest test of whether the idea works at all.",
   },
   {
     icon: Film,
-    title: "Your App, Pixel-Perfect",
+    title: "No Fake UI",
     description:
-      "Your app looks exactly like your app — no invented UI, no uncanny fake screens, no wrong prices.",
+      "The model is told never to draw your app's screens, prices, ratings or logos. Captions and your CTA are composited from the script you approved, so nothing invented ever reaches the screen.",
   },
   {
     icon: ShieldCheck,
     title: "Claims, Checked",
     description:
-      "Stay out of trouble. Banned phrases get blocked and risky ones get flagged before you ever post.",
+      "A deterministic checker — not the AI — re-reads your script on every edit, blocks anything on your never-use list, and flags prices your profile doesn't contain.",
   },
   {
     icon: Layers,
-    title: "Asset Library",
+    title: "One Photo, You On Camera",
     description:
-      "One photograph anchors every video — filed per app and never mixed with another app's assets.",
+      "Every video is generated from a single photograph, filed per app. No avatar, no voice clone, no stock presenter standing in for you.",
   },
   {
     icon: Music2,
-    title: "Sound You're Allowed to Use",
+    title: "Sound, Generated With It",
     description:
-      "Voice, planned. Every video gets voice direction — tone, pace, and energy tuned to the audience — with sound kept rights-safe.",
+      "Clips carry their own speech and room tone in the same pass as the picture — no music uploads, no licensing, no mixing. Add the trending sound in the app you post to.",
   },
   {
     icon: RotateCcw,
-    title: "Remix, Don't Restart",
+    title: "Change One Thing",
     description:
-      "Tweak one thing and rerender, not the whole idea. Every version keeps its history — nothing lost.",
+      "Swap the hook, the CTA, the audience, the tone, the template or the length, and get a fresh draft with that change applied. Nothing renders until you decide it should.",
   },
   {
     icon: TrendingUp,
-    title: "Know What Works",
+    title: "Measured, Not Guesswork",
     description:
-      "See win rates, spend, and why you keep regenerating — by app, by template, all in one clear view.",
+      "Success rate, failures, spend split priced vs unpriced, and how often you reworked — by app, template, model, objective and audience. Unpriced runs are counted as unpriced, never as free.",
   },
   {
     icon: Check,
@@ -95,15 +95,15 @@ const FEATURES = [
   },
   {
     icon: BadgeAlert,
-    title: "Every Job, Accounted For",
+    title: "Every Run, Accounted For",
     description:
-      "Nothing ever vanishes. Each video's cost and status are in History — retry any failure in one click.",
+      "Open any video for the exact prompt sent, the claim check at generation time, the model, the cost and where that cost came from, and any error. Retryable failures retry in one click.",
   },
   {
     icon: Search,
-    title: "Fresh Ideas, On Demand",
+    title: "Hook Anatomy",
     description:
-      "Never run dry. Trend patterns become reviewed template drafts — a bottomless well of ideas, never a copy.",
+      "Paste a TikTok link and we read the public metadata, then break the first three seconds down — pacing, cuts, expressions, on-screen text, audio cues — and score the hook.",
   },
   {
     icon: Download,
@@ -138,9 +138,16 @@ const FLOW_STEPS = [
   },
   {
     step: "4",
+    label: "Grow",
+    icon: Layers,
+    detail:
+      "Approve the short hook, then extend it beat by beat. Each new segment starts from the previous frame, so the seam holds.",
+  },
+  {
+    step: "5",
     label: "Deliver",
     icon: Download,
-    detail: "Generate one smooth video, download it, and post it where fans are waiting.",
+    detail: "Generate the video, download it, and post it where fans are waiting.",
   },
 ];
 
@@ -217,6 +224,19 @@ const PIPELINE_BLOCKS = [
     ),
   },
   {
+    icon: Layers,
+    tone: "coral",
+    kicker: "Continuity",
+    title: "Beat by Beat, Seam Held",
+    body: (
+      <>
+        Approve a short hook and extend it. The previous clip's final frame becomes the next
+        clip's first, so you, the light and the room carry through instead of jumping. If a
+        model can't take a reference, we tell you exactly which one was dropped.
+      </>
+    ),
+  },
+  {
     icon: Film,
     tone: "indigo",
     kicker: "Finishing",
@@ -251,7 +271,7 @@ const MODELS = [
   { label: "Video (default)", value: "Seedance 2.5 — up to 30 seconds in one take, with sound, up to 720p" },
   { label: "Video (alternate)", value: "MiniMax H3 — crisper 2K picture in shorter takes; longer cuts take two passes" },
   { label: "Finishing touches", value: "Captions and end card layered on precisely" },
-  { label: "Trend spotting", value: "Public TikTok data — only feeds the optional research tab" },
+  { label: "Trend spotting", value: "Public TikTok metadata, via a research API key — only feeds the optional Trend Research tab" },
 ];
 
 
@@ -413,6 +433,9 @@ export default function Landing() {
             <span className="inline-flex items-center gap-1.5">
               <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Nothing auto-posts
             </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Nothing spent until you render
+            </span>
           </div>
 
           {/* Stats bar anchor kept for onboarding tour compatibility */}
@@ -426,8 +449,8 @@ export default function Landing() {
         <SectionHeading
           id="how-it-works"
           eyebrow="Dead simple"
-          title="App Link to Video in 4 Steps"
-          lede="No filming. No editing. No source video. Just four steps."
+          title="App Link to Video in 5 Steps"
+          lede="No filming. No editing. No source video. Just five steps."
         />
 
         <div className="relative">
@@ -436,11 +459,11 @@ export default function Landing() {
             aria-hidden="true"
             className="absolute left-0 right-0 top-[42px] hidden h-px bg-gradient-to-r from-transparent via-[color:var(--indigo-25)] to-transparent lg:block"
           />
-          <div className="relative grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="relative grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
             {FLOW_STEPS.map((s) => (
               <div
                 key={s.step}
-                className="surface surface-interactive shimmer-on-hover group rounded-2xl p-6 text-center"
+                className="surface surface-interactive shimmer-on-hover group rounded-2xl p-5 text-center"
               >
                 <div className="relative mx-auto mb-4 flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-gradient-to-br from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] font-bold text-white shadow-[var(--glow-indigo)]">
                   <span className="font-display text-lg">{s.step}</span>
