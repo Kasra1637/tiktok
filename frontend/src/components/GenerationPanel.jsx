@@ -204,7 +204,7 @@ export function GenerationPanel({ project, onGenerationChange }) {
   const capability = models?.models?.find((m) => m.key === selectedModel);
   const inFlight = generation && (generation.status === "submitted" || generation.status === "generating");
   const cost = generation ? money(generation.cost_usd) : null;
-  const downloadUrl = generation?.r2_url || generation?.video_url;
+  const downloadUrl = generation ? mediaUrl(generation.r2_url || generation.video_url) : null;
 
   return (
     <div className="space-y-3 rounded-2xl border border-[color:var(--hairline)] p-4">
@@ -294,6 +294,13 @@ export function GenerationPanel({ project, onGenerationChange }) {
               <span className="text-[11px] text-muted-foreground">cost not reported by provider</span>
             )}
           </div>
+
+          {/* A storage failure used to be invisible here, so a video that would
+              not load later looked like a playback bug rather than a failed
+              upload. HookContinuityPanel already showed this. */}
+          {generation.storage_error && (
+            <p className="text-xs text-muted-foreground">{generation.storage_error}</p>
+          )}
 
           {generation.status === "completed" && downloadUrl && (
             <>
