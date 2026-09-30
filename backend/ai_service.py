@@ -1782,8 +1782,16 @@ REQUIRED_STRATEGY_KEYS = {
     "strategy_summary", "audience_problem", "emotional_triggers", "hook_concept",
     "hook_line", "hook_promise", "hook_action", "hook_dialogue", "messaging_pillars",
     "primary_feature", "desired_outcome", "differentiation_beat", "cta_strategy",
-    "character", "scene", "performance", "segments", "continuity_contract",
+    "scene", "performance", "segments", "continuity_contract",
 }
+# Note what is missing on purpose: "character". The on-camera person is copied
+# from the founder's photograph, so a written appearance is a fabrication, not
+# a fallback. An earlier version of the schema requested a "character" object
+# whose only content was an instruction to omit it — the model complied, and
+# validation then failed the whole strategy with "missing required fields:
+# {'character'}". A key the prompt forbids must never be a key validation
+# demands. If a reply does contain one anyway (older strategies, ignored
+# instructions), normalize_strategy drops it rather than trusting it.
 
 # How many continuation beats a strategy plans.
 #
@@ -1975,13 +1983,15 @@ async def generate_video_strategy(
     This is the step that stops the influencer workflow from producing a
     generic talking-head video with an app name stapled on. It decides the
     hook concept, the messaging, the words, the action and the whole look of
-    the on-camera person and scene BEFORE any video is generated, and it writes
+    the scene BEFORE any video is generated, and it writes
     a continuity contract that every later segment is held to.
 
-    The character and scene sections are the continuity contract in concrete
-    form: once the first segment locks a face, a wardrobe, a background and a
-    camera angle, the same values are restated for every extension so the
-    provider is told what must not change rather than asked to keep it in mind.
+    The scene section is the continuity contract in concrete form: once the
+    first segment locks a background, a light, a camera angle and the
+    delivery, the same values are restated for every extension so the
+    provider is told what must not change rather than asked to keep it in
+    mind. The face is never described anywhere in the strategy — it comes
+    from the founder's photograph, which rides along as a model input.
 
     Returns a normalized strategy dict (see normalize_strategy). Never invents
     features, prices, ratings or outcomes; uncertain claims are pushed to the
@@ -2101,16 +2111,6 @@ async def generate_video_strategy(
         '  "desired_outcome": "the viewer outcome, described as a change the app supports, never a guarantee",\n'
         '  "differentiation_beat": "how to use this app\'s stated differentiation against its competitors",\n'
         '  "cta_strategy": "the single next action, and why it suits this audience",\n'
-        '  "character": {\n'
-        f'    "__note": "OMIT this whole object, and do not describe the presenter\'s '
-        f'appearance anywhere else in this response either -- not in strategy_summary, '
-        f'not in hook_concept, not in any field. The on-camera person is copied from the '
-        f'founder\'s uploaded character reference image, so any written description of their '
-        f'face, hair, skin, age, build, wardrobe or styling here would be an invention that '
-        f'contradicts the photograph they are supposed to match, and the two would be sent '
-        f'together. Write about the audience, the problem, the app and the action instead. '
-        f'There is no substitute for reading the image.",\n'
-        '  },\n'
         '  "scene": {\n'
         f'    "camera_angle": "the exact camera position and angle, e.g. eye-level handheld 1m away",\n'
         f'    "framing": "framing and shot size, e.g. medium close-up, head and shoulders",\n'
@@ -2160,6 +2160,11 @@ async def generate_video_strategy(
         "drawn from the verified facts and the brief above — the feature slot names an actual "
         "feature from core_features, the problem slot the actual audience problem. An unfilled "
         "slot is a generic video.\n"
+        "- There is no \"character\" key in this schema and none is wanted: do not add one, "
+        "and do not describe the presenter's face, hair, age, build, wardrobe or styling in "
+        "any field — not in strategy_summary, not in hook_concept, nowhere. The on-camera "
+        "person is copied from the founder's photograph; write about the audience, the "
+        "problem, the app and the action instead.\n"
         "- Invent the environment, setting, props and on-screen context concretely from the "
         "verified facts (features, use cases, problems, audience, platforms) — a kitchen "
         "counter at 7am for an evening-reflection app, not \"a nice room\". Nothing is "

@@ -1038,6 +1038,11 @@ class TestStrategyPromptDirectives:
         async def fake_chat_json(system_message, prompt, context, **kwargs):
             captured["system"] = system_message
             captured["prompt"] = prompt
+            # No "character" key: the schema does not ask for one and the
+            # rules forbid describing the presenter, so a compliant reply
+            # omits it. This is the exact shape that used to fail validation
+            # with "missing required fields: {'character'}" — the prompt told
+            # the model to omit the key while validation demanded it.
             return {
                 "strategy_summary": "s", "audience_problem": "p",
                 "emotional_triggers": ["t"], "hook_concept": "c",
@@ -1045,7 +1050,6 @@ class TestStrategyPromptDirectives:
                 "hook_dialogue": "d", "messaging_pillars": ["m"],
                 "primary_feature": "f", "desired_outcome": "o",
                 "differentiation_beat": "b", "cta_strategy": "c",
-                "character": {"__note": "omit"},
                 "scene": {"environment": "kitchen"},
                 "performance": {"movement": "still"},
                 "segments": [{
@@ -1099,3 +1103,28 @@ class TestStrategyPromptDirectives:
         captured = self._run_strategy(monkeypatch)
         assert "appearance is never" in captured["system"]
         assert "must_not_change must cover the background" in captured["prompt"]
+
+    def test_a_reply_without_character_validates(self, monkeypatch):
+        """
+        Regression: the prompt forbids a "character" key, so a compliant
+        reply omits it — and validation used to fail the whole strategy with
+        "missing required fields: {'character'}", surfacing in the UI as "AI
+        strategy generation failed. Please try again." No retry could ever
+        fix it, because the model was doing what it was told.
+        """
+        import ai_service
+        captured = self._capture_prompt(monkeypatch)
+        result = asyncio.run(ai_service.generate_video_strategy(
+            profile={"brand_name": "Taskly", "core_features": ["timer"]},
+            template={"name": "Stop Doing This", "content_slots": {}},
+            angle=None,
+            objective="address_user_problem",
+            hook_seconds=2,
+            total_duration=15,
+            tone="",
+            brand_voice="",
+            profile_feedback={},
+        ))
+        assert "character" not in result
+        assert result["scene"]["environment"] == "kitchen"
+        assert 'There is no "character" key in this schema' in captured["prompt"]
