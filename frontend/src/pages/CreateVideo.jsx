@@ -21,7 +21,8 @@ import {
 } from "../lib/profileSelection";
 import {
   requiredAssetStatus,
-  allRequiredAssetsAttached,
+  blockingRequirements,
+  optionalRequirements,
 } from "../lib/templateRequirements";
 import { DEFAULT_HOOK } from "../lib/videoLength";
 import {
@@ -141,48 +142,52 @@ function humanize(value) {
 }
 
 /**
- * What is still owed to the selected template, and a way to go and attach it.
+ * What the selected template is still waiting on.
  *
- * A missing character reference is not the same kind of blocker as a missing
- * screenshot, so it gets its own sentence. Without a photograph of the person
- * the model would invent one, and the founder would pay for a video of somebody
- * who looks nothing like them — which is the whole point of attaching a
- * reference in the first place.
+ * A missing character reference BLOCKS: without a photograph of the person the
+ * model would invent one, and the founder would pay for a video of somebody who
+ * looks nothing like them. The server refuses that case before spending, so this
+ * is the early warning rather than the guarantee.
+ *
+ * Everything else a template lists is a real app visual that gets composited
+ * over the finished footage. The video generates fine without it, so those are
+ * offered as a suggestion and never as a blocker. Treating them as one locked
+ * founders out of generating over a missing screenshot when their character
+ * reference was already attached.
  */
-function MissingRequirements({ missing, onGoToAssets }) {
-  if (!missing || missing.length === 0) return null;
-  const needsPerson = missing.some((r) => r.kind === "character_reference");
-  const others = missing.filter((r) => r.kind !== "character_reference");
+function MissingRequirements({ identity, composites, onGoToAssets }) {
+  const hasIdentity = identity && identity.length > 0;
+  const hasComposites = composites && composites.length > 0;
+  if (!hasIdentity && !hasComposites) return null;
+
   return (
     <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-4">
-      <p className="text-sm font-medium">
-        {needsPerson
-          ? "This template needs a character reference before it can generate"
-          : "This template needs more from you before it can generate"}
-      </p>
-      <ul className="space-y-0.5 text-xs text-muted-foreground">
-        {missing.map((r) => (
-          <li key={r.kind}>
-            {r.kind === "character_reference" ? (
-              <>
-                Character reference — the video is generated from your photograph, so without
-                one the model would invent a person.
-              </>
-            ) : (
-              humanize(r.kind)
-            )}
-          </li>
-        ))}
-      </ul>
-      {others.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          Everything else composited on top of the footage is optional for this step.
-        </p>
+      {hasIdentity && (
+        <>
+          <p className="text-sm font-medium">
+            This template needs a character reference before it can generate
+          </p>
+          <p className="text-xs text-muted-foreground">
+            The video is generated from your photograph, so without one the model
+            would invent a person for it.
+          </p>
+          {onGoToAssets && (
+            <Button variant="secondary" size="sm" onClick={onGoToAssets}>
+              <ImageIcon className="h-3.5 w-3.5" /> Attach in the Assets step
+            </Button>
+          )}
+        </>
       )}
-      {onGoToAssets && (
-        <Button variant="secondary" size="sm" onClick={onGoToAssets}>
-          <ImageIcon className="h-3.5 w-3.5" /> Attach in the Assets step
-        </Button>
+
+      {hasComposites && (
+        <div className={hasIdentity ? "border-t border-[color:var(--hairline)] pt-2" : ""}>
+          <p className="text-xs text-muted-foreground">
+            {hasIdentity
+              ? "Also nice to have, but the video generates without them: "
+              : "This template would use these if you attached them. The video generates without them: "}
+            {composites.map((r) => humanize(r.kind)).join(", ")}.
+          </p>
+        </div>
       )}
     </div>
   );
@@ -659,13 +664,22 @@ export default function CreateVideo() {
   // Kept separate from canGenerate on purpose — "you have not chosen a template
   // yet" and "you still owe this template a photograph" are different problems
   // and the founder needs to be told which one they have.
-  const missingRequirements = template
-    ? requiredAssetStatus(template.required_assets, project?.assets).filter((r) => !r.have)
+  // Only the character reference blocks, and the split lives in a tested
+  // helper rather than inline here. Everything else a template lists is a real
+  // app visual composited over the footage, and the video generates without it
+  // — the backend refuses a missing character reference and nothing else. The
+  // UI was briefly stricter than the server, which locked out founders whose
+  // person was already anchored over a screenshot they did not need.
+  const missingIdentity = template
+    ? blockingRequirements(template.required_assets, project?.assets)
     : [];
-  const assetsReady = missingRequirements.length === 0;
-  // Generation itself is refused server-side, so this is the early warning
-  // rather than the guarantee. It is deliberately not folded into canGenerate.
-  const blockedOnAssets = Boolean(template) && !assetsReady;
+  const missingComposites = template
+    ? optionalRequirements(template.required_assets, project?.assets)
+    : [];
+  // Server-side refusal is the guarantee; this is the early warning. Not folded
+  // into canGenerate, because "you have not chosen a template yet" and "you
+  // still owe this template a photograph" are different problems.
+  const blockedOnAssets = Boolean(template) && missingIdentity.length > 0;
   const editValue = (key, fallback) =>
     edits[key] !== undefined ? edits[key] : project?.[key] ?? fallback;
   const hasEdits = Object.keys(edits).length > 0;
@@ -992,16 +1006,19 @@ export default function CreateVideo() {
                         ) : null}
                         <span className={r.have ? "text-muted-foreground" : ""}>{humanize(r.kind)}</span>
                         {!r.have && project && (
-                          <span className="text-muted-foreground">— not attached yet</span>
+                          <span className="text-muted-foreground">
+                            {String(r.kind || "").trim().toLowerCase() === "character_reference"
+                              ? "— required, the video is generated from it"
+                              : "— optional, the video generates without it"}
+                          </span>
                         )}
                       </div>
                     ))}
-                    {project &&
-                      !allRequiredAssetsAttached(template.required_assets, project?.assets) && (
-                        <Button variant="secondary" size="sm" className="mt-1" onClick={() => setStep(3)}>
-                          <ImageIcon className="h-3.5 w-3.5" /> Attach in the Assets step
-                        </Button>
-                      )}
+                    {project && missingIdentity.length > 0 && (
+                      <Button variant="secondary" size="sm" className="mt-1" onClick={() => setStep(3)}>
+                        <ImageIcon className="h-3.5 w-3.5" /> Attach in the Assets step
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
@@ -1102,7 +1119,8 @@ export default function CreateVideo() {
               </div>
             ) : blockedOnAssets ? (
               <MissingRequirements
-                missing={missingRequirements}
+                identity={missingIdentity}
+                composites={missingComposites}
                 onGoToAssets={() => setStep(3)}
               />
             ) : !project ? (
@@ -1155,7 +1173,8 @@ export default function CreateVideo() {
               <p className="text-sm text-muted-foreground">Choose a template first.</p>
             )}
             <MissingRequirements
-              missing={missingRequirements}
+              identity={missingIdentity}
+              composites={missingComposites}
               onGoToAssets={() => setStep(3)}
             />
             {project?.script_version > 0 && (
@@ -1378,7 +1397,8 @@ export default function CreateVideo() {
               <p className="text-xs text-muted-foreground">Save your edits before marking ready.</p>
             )}
             <MissingRequirements
-              missing={missingRequirements}
+              identity={missingIdentity}
+              composites={missingComposites}
               onGoToAssets={() => setStep(3)}
             />
 
