@@ -212,11 +212,16 @@ def _store_strategy(api, project_id, hook_line, persona, scene, *, problem, feat
             for i in range(1, 8)
         ],
         "continuity_contract": {
+            # Scene and delivery only. The contract used to list the presenter's
+            # face, hair and wardrobe, which the strategy generator invents
+            # because it never sees the photograph — so the contract was a third
+            # channel carrying the same fabrication as the character block and
+            # the prose fields.
             "established": [
-                persona["who"], scene["environment"], scene["lighting"], scene["props"],
+                scene["environment"], scene["lighting"], scene["props"],
+                persona["action"],
             ],
             "must_not_change": [
-                "the face", persona["hair"], persona["wardrobe"],
                 scene["background"], scene["framing"],
             ],
             "do_not_repeat": [hook_line, persona["concept"]],
@@ -230,7 +235,12 @@ def _store_strategy(api, project_id, hook_line, persona, scene, *, problem, feat
 
 
 NURSE_PERSONA = {
-    "who": "a late-20s night-shift nurse in teal scrubs",
+    # A role, not a face. The presenter is copied from the founder's photograph,
+    # so a strategy describes who the video is FOR and never what the person
+    # looks like. The appearance fields below are kept deliberately: they are
+    # passed into the `character` block, which normalization now discards, and
+    # the hook test asserts none of them reach the prompt.
+    "who": "a hospital nurse working rotating shifts",
     "face": "round face, dark brows, tired eyes",
     "hair": "shoulder-length dark hair in a low bun",
     "wardrobe": "teal scrubs, silver badge, small hoop earrings",
@@ -250,7 +260,7 @@ NURSE_PERSONA = {
 }
 
 BUDGET_PERSONA = {
-    "who": "a 30s freelancer in a worn grey hoodie, sitting on a bed",
+    "who": "a freelancer tracking their own spending",
     "face": "narrow face, thin-rimmed glasses, unshaven",
     "hair": "messy dark curls pushed back with a band",
     "wardrobe": "faded grey hoodie, gold chain, one AirPod in the left ear",
@@ -279,7 +289,10 @@ NURSE_SCENE = {
     "style": "authentic handheld UGC",
     "position": "centred, phone at chest height",
     "props": "a phone only, no coffee cup",
-    "palette": "cool greys with teal scrubs",
+    # Describes the room, not what the person is wearing. The palette used to
+    # name the scrubs, which put the invented wardrobe back into the prompt
+    # through a scene field.
+    "palette": "cool greys, beige, fluorescent white",
 }
 
 BUDGET_SCENE = {
@@ -340,11 +353,13 @@ class TestAppSpecificity:
         assert "Check what it finds" in budget
         assert "One-tap shift logging" not in budget
 
-        # Different persona, different scene, different visual strategy.
-        assert "teal scrubs" in nurse and "teal scrubs" not in budget
+        # Different scene, different visual strategy. The persona's appearance
+        # used to be the differentiator here, via the invented wardrobe — that
+        # is no longer sent, so app-specificity is carried by the scene and the
+        # message, which is where it belongs. The message assertions above
+        # already prove the two apps are not interchangeable.
         assert "hospital staff corridor" in nurse
         assert "hospital staff corridor" not in budget
-        assert "grey hoodie" in budget and "grey hoodie" not in nurse
         assert "bedside lamp" in budget and "bedside lamp" not in nurse
 
         # And they share only the boilerplate contract, not the content.
@@ -358,10 +373,19 @@ class TestAppSpecificity:
             f"Shared: {sorted(overlap)[:6]}"
         )
 
-    def test_hook_prompt_states_all_the_required_appearance_attributes(self, api, monkeypatch):
+    def test_hook_prompt_locks_the_scene_but_never_the_appearance(self, api, monkeypatch):
         """
-        The generated hook must establish the person and the scene, not just
-        name the app. Every attribute the founder specified has to be present.
+        The hook must establish the scene and the delivery, but the on-camera
+        person is copied from the founder's photograph.
+
+        The appearance attributes used to be asserted as PRESENT. They were a
+        model's guess at a face, hair, age and wardrobe written from the app
+        profile -- the strategy call never sees the photograph -- and they were
+        sent to the video model under a heading telling it both were locked.
+        The provider was handed a real face and an invented one and told to
+        honour both, which is how a founder's own face came back as somebody
+        else's. The test asserted the opposite of what its own comment claimed,
+        which is why it survived.
         """
         prompt = self._hook_prompt(
             api, monkeypatch, NURSE_APP, NURSE_PERSONA, NURSE_SCENE,
@@ -369,12 +393,8 @@ class TestAppSpecificity:
             feature="One-tap shift logging", cta="Try it free",
             hook_line="I clocked out at 11:40. Every single night.")
 
+        # Scene and delivery are plan-level and conflict with nothing.
         for attribute in (
-            "late-20s night-shift nurse",   # identity / appearance
-            "round face, dark brows",       # facial features
-            "low bun",                      # hairstyle
-            "teal scrubs",                  # clothing
-            "tired half-smile",             # facial expression
             "eye-level, phone held",        # camera angle
             "medium close-up",              # framing
             "corridor fluorescents",        # lighting
@@ -388,9 +408,21 @@ class TestAppSpecificity:
         ):
             assert attribute in prompt, f"hook prompt is missing: {attribute}"
 
-        # The identity lock references the uploaded person, so the influencer
-        # is a real identity reference rather than an invented lookalike.
-        assert "exact individual in the attached character reference" in prompt
+        # The invented appearance is not, under any wording.
+        for invented in (
+            "late-20s night-shift nurse",   # appearance
+            "round face, dark brows",       # facial features
+            "low bun",                      # hairstyle
+            "teal scrubs",                  # wardrobe
+            "tired half-smile",             # facial expression
+        ):
+            assert invented not in prompt, (
+                f"hook prompt invents the person's appearance: {invented}"
+            )
+
+        # And the photograph is named as the only authority on who they are.
+        assert "The person on camera is the person in the attached character reference" in prompt
+        assert "The image is the only authority on who they are" in prompt
 
 
 # ---------------------------------------------------------------------------
@@ -483,23 +515,44 @@ class TestIdentityContinuity:
 # 3. Extensions preserve the scene and continue the same app message
 # ---------------------------------------------------------------------------
 class TestExtensionPreservesTheVideo:
-    def test_extension_reproduces_clothing_environment_and_background(self, api, monkeypatch):
+    def test_extension_reproduces_environment_and_background(self, api, monkeypatch):
+        """
+        The scene and the delivery are restated as a lock, because a video
+        model has no memory of the previous segment.
+
+        Wardrobe, hair and identity used to be asserted here too. They came from
+        the fabricated `character` block and are now supplied by the photograph
+        and by the previous clip, both of which ride along in the same request
+        as real visual inputs — so restating them as text was not continuity,
+        it was a second, invented source of truth.
+        """
         _project, _hook, _ext, calls = TestIdentityContinuity()._chain(api, monkeypatch)
         prompt = calls[1]["prompt"]
         for locked in (
-            "teal scrubs, silver badge, small hoop earrings",   # clothing
-            "low bun",                                          # hairstyle
             "a hospital staff corridor outside a break room",   # environment
             "grey vinyl floor, beige wall, a fire door",        # background
             "flat overhead corridor fluorescents, cool",        # lighting
             "medium close-up, head and shoulders",              # framing
             "a phone only, no coffee cup",                      # props
-            "late-20s night-shift nurse in teal scrubs",        # identity
         ):
             assert locked in prompt, f"extension dropped the locked detail: {locked}"
+
         # Stated as a lock, not a suggestion.
-        assert "THE PERSON AND THE SCENE ARE LOCKED" in prompt
+        assert "THE SCENE AND THE DELIVERY ARE LOCKED" in prompt
         assert "not suggestions" in prompt
+
+        # ...and the invented appearance is not restated as one.
+        for invented in (
+            "teal scrubs, silver badge, small hoop earrings",   # wardrobe
+            "low bun",                                          # hairstyle
+            "late-20s night-shift nurse in teal scrubs",        # appearance
+        ):
+            assert invented not in prompt, f"extension invented an appearance: {invented}"
+
+        # The real continuity inputs are carried in the request, not described.
+        refs = calls[1].get("input_references") or []
+        assert any(r.get("type") == "video_url" for r in refs), "the previous clip carries the look"
+        assert any(r.get("type") == "image_url" for r in refs), "the photograph carries the face"
 
     def test_extension_continues_the_app_specific_message(self, api, monkeypatch):
         _project, _hook, _ext, calls = TestIdentityContinuity()._chain(api, monkeypatch)
@@ -889,13 +942,33 @@ class TestStrategyNormalization:
     def test_missing_keys_become_empty_not_absent(self):
         from ai_service import normalize_strategy
         strategy = normalize_strategy({"hook_line": "Hi"})
-        for field in ("appearance", "facial_features", "hairstyle", "wardrobe"):
-            assert field in strategy["character"]
-            assert strategy["character"][field] == ""
         for field in ("camera_angle", "framing", "lighting", "environment", "background"):
             assert field in strategy["scene"]
+        for field in ("movement", "voice_delivery"):
+            assert field in strategy["performance"]
         for field in ("established", "must_not_change", "do_not_repeat"):
             assert field in strategy["continuity_contract"]
+
+    def test_a_character_section_cannot_be_stored(self):
+        """
+        Even if the model returns one — an older prompt, a cached completion, a
+        hand-edited payload — it must not survive normalization. A stored
+        character block is a fabricated description of a face, and
+        character_scene_lock() would otherwise restate it as a locked value
+        beside the founder's actual photograph.
+        """
+        from ai_service import normalize_strategy
+        strategy = normalize_strategy({
+            "hook_line": "Hi",
+            "character": {
+                "appearance": "a late-20s night-shift nurse in teal scrubs",
+                "facial_features": "round face, dark brows",
+                "hairstyle": "shoulder-length dark hair in a low bun",
+                "wardrobe": "teal scrubs, silver badge",
+                "age_range": "late 20s",
+            },
+        })
+        assert "character" not in strategy
 
     def test_a_huge_payload_is_truncated_not_stored_whole(self):
         from ai_service import normalize_strategy
@@ -911,11 +984,11 @@ class TestStrategyNormalization:
     def test_wrong_types_are_coerced_not_crashed_on(self):
         from ai_service import normalize_strategy
         strategy = normalize_strategy({
-            "character": "not a dict", "scene": None, "segments": "nope",
+            "scene": None, "segments": "nope",
             "emotional_triggers": "a single trigger",
             "continuity_contract": ["not", "a", "dict"],
         })
-        assert strategy["character"]["wardrobe"] == ""
+        assert strategy["scene"]["framing"] == ""
         assert strategy["emotional_triggers"] == ["a single trigger"]
         assert strategy["continuity_contract"]["established"] == []
         assert len(strategy["segments"]) == 1
