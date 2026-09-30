@@ -190,6 +190,11 @@ function StepShell({ icon: Icon, title, description, children }) {
 
 function AttachmentRow({ project, attachment, duration, onChanged }) {
   const isAudio = attachment.kind === "audio";
+  // The face rides to the video model as an input reference for the whole
+  // generation — it has no on-screen timing. Start/end/save exist for legacy
+  // overlay rows only, so a face row is a confirmation plus a Remove button
+  // and nothing that implies unfinished work.
+  const isFace = attachment.kind === "character_reference";
   const [start, setStart] = useState(String(attachment.start ?? 0));
   const [end, setEnd] = useState(attachment.end ?? duration ?? "");
   const [role, setRole] = useState(attachment.audio_role || "background");
@@ -244,14 +249,17 @@ function AttachmentRow({ project, attachment, duration, onChanged }) {
         <span className="min-w-0 flex-1 truncate text-sm">
           {attachment.label || attachment.asset_id.slice(0, 8)}
         </span>
-        <span className="shrink-0 text-xs text-muted-foreground">
-          {attachment.start ?? 0}&ndash;{attachment.end ?? "end"}s
-          {isAudio ? ` · ${attachment.audio_role || "background"}` : ""}
-        </span>
+        {!isFace && (
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {attachment.start ?? 0}&ndash;{attachment.end ?? "end"}s
+            {isAudio ? ` · ${attachment.audio_role || "background"}` : ""}
+          </span>
+        )}
         <Button variant="ghost" size="sm" aria-label="Remove from project" onClick={detach}>
           Remove
         </Button>
       </div>
+      {!isFace && (
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         <label className="space-y-1">
           <span className="text-[11px] text-muted-foreground">Start (s)</span>
@@ -303,6 +311,7 @@ function AttachmentRow({ project, attachment, duration, onChanged }) {
           </Button>
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -1051,7 +1060,8 @@ export default function CreateVideo() {
               </p>
             ) : (project?.assets || []).length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Nothing attached yet. Select assets above to place them on the timeline.
+                Nothing attached yet. Attach the character reference above — every video is
+                generated from it.
               </p>
             ) : (
               <div className="space-y-2">
