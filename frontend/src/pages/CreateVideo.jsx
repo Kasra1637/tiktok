@@ -23,6 +23,7 @@ import {
   requiredAssetStatus,
   allRequiredAssetsAttached,
 } from "../lib/templateRequirements";
+import { DEFAULT_HOOK } from "../lib/videoLength";
 import {
   Clapperboard, Loader2, AlertTriangle, Briefcase, Target, LayoutTemplate,
   Image as ImageIcon, FileText, Check, ChevronLeft, ChevronRight, Sparkles,
@@ -295,6 +296,12 @@ export default function CreateVideo() {
   const [templateId, setTemplateId] = useState(params.get("template") || "");
   const [objective, setObjective] = useState("");
   const [duration, setDuration] = useState(20);
+  // Whether this video is only the opening hook or a hook plus an extension.
+  // Declared here, on the step that sets the target, because the total length
+  // below only means something once this is answered. Seeded to true to match
+  // readExtendIntent() on the server and in lib/videoLength.js, so a fresh
+  // wizard and an existing draft agree on what "unset" means.
+  const [extendIntent, setExtendIntent] = useState(true);
   const [tone, setTone] = useState("");
   const [manualTemplate, setManualTemplate] = useState(false);
   const [edits, setEdits] = useState({});
@@ -434,6 +441,7 @@ export default function CreateVideo() {
             template_id: templateId || "",
             objective,
             duration_seconds: duration,
+            extend_intent: extendIntent,
             tone,
           });
       setProject(created);
@@ -444,6 +452,23 @@ export default function CreateVideo() {
     } finally {
       setBusy(false);
     }
+  };
+
+  /**
+   * Hook only, or hook plus an extension.
+   *
+   * The draft usually does not exist yet on this step, so the choice is held
+   * locally and written when the project is created. Once a draft does exist the
+   * local value is only a prediction, so it is PATCHed straight through — the
+   * hook step reads the same field and must not disagree with this screen.
+   */
+  const handleExtendIntent = (value) => {
+    setExtendIntent(value);
+    if (!project?.id) return;
+    api
+      .setProjectExtendIntent(project.id, value)
+      .then(setProject)
+      .catch((err) => setError(getErrorMessage(err)));
   };
 
   /**
@@ -488,6 +513,7 @@ export default function CreateVideo() {
         template_id: templateId || "",
         objective,
         duration_seconds: duration,
+        extend_intent: extendIntent,
         tone,
       });
       setProject(created);
@@ -499,7 +525,7 @@ export default function CreateVideo() {
       setError(getErrorMessage(err));
       return null;
     }
-  }, [profileId, templateId, angleId, objective, duration, tone, project]);
+  }, [profileId, templateId, angleId, objective, duration, extendIntent, tone, project]);
 
   const handleGeneratePlan = async () => {
     const ready = await createProject();
@@ -733,7 +759,40 @@ export default function CreateVideo() {
               )}
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* Declared intent, moved here from the hook step. It sits directly
+                above the target because it decides whether a total length is a
+                real choice or a number that would be ignored. */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">What happens after the hook</label>
+              <div className="grid gap-1.5 sm:grid-cols-2">
+                {[
+                  { value: true, label: "Extend into a full video", hint: "Sets a total length the video works up to." },
+                  { value: false, label: "Just the hook for now", hint: "The hook length is the whole video. You can extend later." },
+                ].map((option) => (
+                  <button
+                    key={String(option.value)}
+                    type="button"
+                    onClick={() => handleExtendIntent(option.value)}
+                    disabled={Boolean(busy)}
+                    aria-pressed={extendIntent === option.value}
+                    className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                      extendIntent === option.value
+                        ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
+                        : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
+                    }`}
+                  >
+                    <span className="block font-medium">{option.label}</span>
+                    <span className="mt-0.5 block text-muted-foreground">{option.hint}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* One column until there is a total length to sit beside, so a
+                hook-only video does not leave a hole next to the objective. */}
+            <div
+              className={`grid grid-cols-1 gap-4 ${extendIntent ? "sm:grid-cols-2" : ""}`}
+            >
               <div className="space-y-1.5">
                 <label htmlFor="objective" className="text-sm font-medium">Objective</label>
                 <select
@@ -748,20 +807,30 @@ export default function CreateVideo() {
                   ))}
                 </select>
               </div>
-              <div className="space-y-1.5">
-                <label htmlFor="duration" className="text-sm font-medium">Total video length</label>
-                <select
-                  id="duration"
-                  value={duration}
-                  onChange={(e) => setDuration(Number(e.target.value))}
-                  className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
-                >
-                  {(facets?.supported_durations || [10, 15, 20, 30]).map((d) => (
-                    <option key={d} value={d}>{d} seconds</option>
-                  ))}
-                </select>
-              </div>
+              {extendIntent && (
+                <div className="space-y-1.5">
+                  <label htmlFor="duration" className="text-sm font-medium">Total video length</label>
+                  <select
+                    id="duration"
+                    value={duration}
+                    onChange={(e) => setDuration(Number(e.target.value))}
+                    className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
+                  >
+                    {(facets?.supported_durations || [10, 15, 20, 30]).map((d) => (
+                      <option key={d} value={d}>{d} seconds</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
+
+            {!extendIntent && (
+              <p className="text-xs text-muted-foreground">
+                You are making a {DEFAULT_HOOK}s hook and nothing more, so there is no total
+                length to choose — the hook length is the whole video. You can switch to a full
+                video above at any point, and the hook you have already made carries over.
+              </p>
+            )}
 
             <div className="space-y-1.5">
               <label htmlFor="tone" className="text-sm font-medium">Tone (optional)</label>
