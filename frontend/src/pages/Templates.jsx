@@ -116,14 +116,6 @@ export function TemplateForm({ facets, initial, submitLabel, busy, error, onCanc
   }, [initial]);
 
   const set = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
-  const toggleAsset = (kind) => {
-    setForm((prev) => ({
-      ...prev,
-      required_assets: prev.required_assets.includes(kind)
-        ? prev.required_assets.filter((a) => a !== kind)
-        : [...prev.required_assets, kind],
-    }));
-  };
   const setSlot = (index, patch) => {
     setForm((prev) => ({
       ...prev,
@@ -150,7 +142,10 @@ export function TemplateForm({ facets, initial, submitLabel, busy, error, onCanc
       cta_pattern: form.cta_pattern,
       visual_style: form.visual_style,
       camera_pacing: form.camera_pacing,
-      required_assets: form.required_assets,
+      // Face-only library: the character reference is the single permitted
+      // requirement, so the form no longer offers a choice — the backend
+      // enforces the same rule on the way in.
+      required_assets: ["character_reference"],
       default_duration: Number(form.default_duration) || 20,
       content_slots: slots,
       example_preview: form.example_preview,
@@ -159,7 +154,6 @@ export function TemplateForm({ facets, initial, submitLabel, busy, error, onCanc
     });
   };
 
-  const assetKinds = facets?.asset_kinds || [];
   const categories = [...new Set([...(facets?.hook_categories || []), ...(facets?.categories_in_use || [])])];
   const durations = facets?.supported_durations?.length ? facets.supported_durations : [10, 15, 20, 30];
 
@@ -291,23 +285,10 @@ export function TemplateForm({ facets, initial, submitLabel, busy, error, onCanc
 
       <div className="space-y-2">
         <span className="text-sm font-medium">Required assets</span>
-        <div className="flex flex-wrap gap-1.5">
-          {assetKinds.map((kind) => {
-            const active = form.required_assets.includes(kind);
-            return (
-              <Button
-                key={kind}
-                type="button"
-                variant={active ? "brand" : "secondary"}
-                size="sm"
-                aria-pressed={active}
-                onClick={() => toggleAsset(kind)}
-              >
-                {humanize(kind)}
-              </Button>
-            );
-          })}
-        </div>
+        <p className="text-xs text-muted-foreground">
+          Every template requires the character reference — the face the video
+          is generated from. Nothing else can be required.
+        </p>
       </div>
 
       <div className="space-y-2">

@@ -348,32 +348,21 @@ check("no requirements is vacuously complete",
 check("no attachments meets nothing",
   T.allRequiredAssetsAttached(["screenshot"], []) === false);
 
-console.log("\nblocking vs optional requirements - only a face stops generation");
+console.log("\nblocking requirements - only a missing face stops generation");
 check("an attached reference never blocks",
-  T.blockingRequirements(["character_reference", "screenshot"], ATTACHED).length === 0);
-check("a missing screenshot never blocks",
-  // The regression: a founder whose character reference is already attached was
-  // locked out of generating until they added a screenshot the video does not
-  // need, because the UI treated every missing requirement as a blocker.
-  T.blockingRequirements(["character_reference", "screenshot"], ATTACHED).length === 0);
+  T.blockingRequirements(["character_reference"], ATTACHED).length === 0);
 check("a missing reference does block",
+  T.blockingRequirements(["character_reference"], []).map((r) => r.kind).join()
+    === "character_reference");
+check("the blocker is the face even among retired kinds",
+  // Retired kinds can still sit on old rows: they never block here because
+  // the backend refuses those projects outright before generation.
   T.blockingRequirements(["character_reference", "screenshot"], [{ kind: "screenshot" }])
     .map((r) => r.kind).join() === "character_reference");
-check("a missing screenshot is optional, not blocking",
-  T.blockingRequirements(["screenshot"], []).length === 0);
-check("a missing screenshot is reported as optional",
-  T.optionalRequirements(["character_reference", "screenshot"], [{ kind: "character_reference" }])
-    .map((r) => r.kind).join() === "screenshot");
-check("the two lists never overlap",
-  T.optionalRequirements(["character_reference", "screenshot"], [])
-    .every((r) => T.blockingRequirements(["character_reference", "screenshot"], [])
-      .indexOf(r) === -1));
 check("matching is still case-insensitive when blocking",
   T.blockingRequirements(["Character_Reference"], []).length === 1);
 check("nothing required means nothing blocks",
   T.blockingRequirements([], []).length === 0);
-check("nothing required means nothing is optional",
-  T.optionalRequirements([], []).length === 0);
 check("a blank requirement never blocks",
   T.blockingRequirements([""], []).length === 0);
 check("a non-array requirement never blocks",

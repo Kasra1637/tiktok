@@ -14,29 +14,19 @@ import {
   ShieldCheck, Paperclip, Music, Link2, Check,
 } from "lucide-react";
 
-// Character reference and Creator photo both accept an image of a person, and
-// the difference decides whether a face reaches the video model at all:
-// character_reference is the only kind passed to the model as an identity
-// reference, while creator_photo is only ever composited as an overlay. The
-// plain labels below let those two be confused, so each says what it does.
+// Face-only product: the character reference is the single permitted upload.
+// It is the only kind passed to the video model as an identity reference —
+// the face the video is generated from. Rows of retired kinds can still sit
+// in the library from before; they can be archived or deleted here but never
+// attached again.
 const KINDS = [
-  ["screenshot", "Screenshot"],
-  ["screen_recording", "Screen recording"],
-  ["logo", "Logo"],
-  ["product_image", "Product image"],
   ["character_reference", "Character reference — the person on camera"],
-  ["creator_photo", "Creator photo — composited onto the video"],
-  ["background_image", "Background image"],
-  ["background_video", "Background video"],
-  ["audio", "Audio"],
 ];
 
-/** What each kind is for, shown under the upload control. */
+/** What the upload is for, shown under the upload control. */
 const KIND_PURPOSE = {
   character_reference:
-    "This is the face the model is given. Use it for an on-camera avatar: it is the only kind that anchors a person, and only the first one attached is used.",
-  creator_photo:
-    "A still of the creator, laid over the footage as a picture. It does not put anyone on camera — for that use a character reference.",
+    "This is the face the model is given. Every video is generated from it: the person on camera is the person in this photograph, and the scene around them is invented from the App Profile.",
 };
 
 function humanize(value) {
@@ -47,87 +37,6 @@ function formatSeconds(value) {
   const seconds = Number(value);
   if (!Number.isFinite(seconds) || seconds < 0) return "";
   return `${seconds % 1 === 0 ? seconds : seconds.toFixed(1)}s`;
-}
-
-function AudioAttachControls({ asset, projectDuration, disabled, onAttach }) {
-  const [role, setRole] = useState("background");
-  const [gain, setGain] = useState("0.25");
-  const [start, setStart] = useState("0");
-  const [end, setEnd] = useState(String(projectDuration || ""));
-
-  const handleRoleChange = (next) => {
-    setRole(next);
-    // Keep the two supported mixes distinct by default: background stays under
-    // generated audio, while voiceover is meant to be heard as primary.
-    setGain(next === "voiceover" ? "1" : "0.25");
-  };
-
-  return (
-    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
-      <label className="space-y-1">
-        <span className="text-[11px] text-muted-foreground">Use as</span>
-        <select
-          value={role}
-          onChange={(e) => handleRoleChange(e.target.value)}
-          className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-2 py-1.5 text-xs"
-          aria-label={`How to use ${asset.label || asset.name || "audio"}`}
-        >
-          <option value="background">Background</option>
-          <option value="voiceover">Voiceover</option>
-        </select>
-      </label>
-      <label className="space-y-1">
-        <span className="text-[11px] text-muted-foreground">Gain</span>
-        <Input
-          type="number"
-          min="0"
-          max="2"
-          step="0.05"
-          value={gain}
-          onChange={(e) => setGain(e.target.value)}
-          aria-label="Audio gain"
-        />
-      </label>
-      <label className="space-y-1">
-        <span className="text-[11px] text-muted-foreground">Start (s)</span>
-        <Input
-          type="number"
-          min="0"
-          value={start}
-          onChange={(e) => setStart(e.target.value)}
-          aria-label="Audio start"
-        />
-      </label>
-      <label className="space-y-1">
-        <span className="text-[11px] text-muted-foreground">End (s)</span>
-        <Input
-          type="number"
-          min="0"
-          value={end}
-          onChange={(e) => setEnd(e.target.value)}
-          placeholder={projectDuration ? String(projectDuration) : "End"}
-          aria-label="Audio end"
-        />
-      </label>
-      <div className="flex items-end">
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={disabled}
-          onClick={() =>
-            onAttach(asset, {
-              start: start === "" ? 0 : Number(start),
-              end: end === "" ? undefined : Number(end),
-              audio_role: role,
-              audio_gain: gain === "" ? undefined : Number(gain),
-            })
-          }
-        >
-          <Link2 className="h-3.5 w-3.5" /> Attach
-        </Button>
-      </div>
-    </div>
-  );
 }
 
 function AssetRow({
@@ -144,6 +53,9 @@ function AssetRow({
 }) {
   const isVideo = asset.kind === "screen_recording" || asset.kind === "background_video";
   const isAudio = asset.kind === "audio";
+  // Rows of retired kinds still render — archive and delete stay available so
+  // the library can be cleaned — but they can never be attached again.
+  const isRetired = asset.kind !== "character_reference";
   const uses = asset.used_in || [];
   const attachable = Boolean(projectId && onAttach);
   const usable = attachable && asset.status === "active" && asset.rights_confirmed;
@@ -196,7 +108,7 @@ function AssetRow({
           <UsageHistory uses={uses} />
         </div>
         <div className="flex shrink-0 gap-1">
-          {attachable && !isAudio && !attached && (
+          {attachable && !isAudio && !isRetired && !attached && (
             <Button
               variant="secondary"
               size="sm"
@@ -246,13 +158,11 @@ function AssetRow({
           aria-label={`Preview ${asset.label || asset.name || "audio asset"}`}
         />
       )}
-      {attachable && isAudio && !attached && (
-        <AudioAttachControls
-          asset={asset}
-          projectDuration={projectDuration}
-          disabled={!usable || attachDisabled || attachBusy || busy}
-          onAttach={onAttach}
-        />
+      {isRetired && (
+        <p className="text-xs text-muted-foreground">
+          Retired kind — uploads went face-only. Archive or delete it to clean up;
+          it can no longer be attached to a project.
+        </p>
       )}
       {attachable && !usable && !attached && (
         <p className="text-xs text-muted-foreground">
@@ -371,7 +281,7 @@ export default function AssetLibrary({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
-  const [kind, setKind] = useState("screenshot");
+  const [kind, setKind] = useState("character_reference");
   const [label, setLabel] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
   const [attachBusyId, setAttachBusyId] = useState("");
@@ -495,15 +405,15 @@ export default function AssetLibrary({
 
   const handleDelete = async (asset) => {
     // Deleting the file does not rewrite the projects that referenced it, so
-    // the founder is warned first: those projects will fail to compose
-    // overlays until the asset is re-uploaded.
+    // the founder is warned first: those projects lose their reference until
+    // a new photograph is attached.
     const uses = asset.used_in || [];
     if (
       uses.length &&
       !window.confirm(
         `This asset is used in ${uses.length} project${uses.length === 1 ? "" : "s"} ` +
-          `(${uses.map((u) => u.name).join(", ")}). Deleting it will break overlay ` +
-          `composition for those projects. Delete anyway?`
+          `(${uses.map((u) => u.name).join(", ")}). Deleting it removes the face ` +
+          `reference from those projects until a new one is attached. Delete anyway?`
       )
     ) {
       return;
@@ -556,7 +466,7 @@ export default function AssetLibrary({
           <PageHeader
             icon={Images}
             title="Asset Library"
-            description="Real app visuals. These are composited onto the video deterministically, so interfaces, text, and pricing stay accurate."
+            description="Your photograph. Every video is generated from it, so the person on camera is you — the scene around them is invented from the App Profile."
           />
         )}
         {loading ? (
@@ -567,7 +477,7 @@ export default function AssetLibrary({
           <EmptyState
             icon={Images}
             title="No app yet"
-            description="Assets belong to one app and can only be used in that app's videos. Research an app first, then come back for its visuals."
+            description="Assets belong to one app and can only be used in that app's videos. Research an app first, then come back to add the face it will be presented by."
             action={
               <Button variant="brand" asChild>
                 <Link to="/brand">Set up your app</Link>
@@ -620,7 +530,7 @@ export default function AssetLibrary({
         <PageHeader
           icon={Images}
           title="Asset Library"
-          description="Real app visuals. These are composited onto the video deterministically, so interfaces, text, and pricing stay accurate."
+          description="Your photograph. Every video is generated from it, so the person on camera is you — the scene around them is invented from the App Profile."
           actions={
             <div className="flex flex-wrap items-center gap-2">
               {/* Shown whenever there is something to switch between. With a
@@ -688,7 +598,7 @@ export default function AssetLibrary({
           <Input
             value={label}
             onChange={(e) => setLabel(e.target.value)}
-            placeholder="Label, e.g. Onboarding"
+            placeholder="Label, e.g. Founder face"
             aria-label="Asset label"
           />
           <Button variant="brand" onClick={() => fileRef.current?.click()} disabled={busy}>
@@ -700,7 +610,7 @@ export default function AssetLibrary({
           ref={fileRef}
           type="file"
           className="hidden"
-          accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/quicktime,video/webm,audio/mpeg,audio/wav,audio/x-m4a,audio/aac,audio/ogg,audio/flac"
+          accept="image/png,image/jpeg,image/webp,image/gif"
           onChange={handleUpload}
           aria-label="Asset file"
         />
@@ -736,7 +646,7 @@ export default function AssetLibrary({
         <p className="text-sm text-muted-foreground">
           {embedded
             ? "Use the Upload button above to add your first one."
-            : "Add screenshots, screen recordings, and your logo so the finished video shows the real app instead of a generated approximation."}
+            : "Add the character reference photograph the finished video will be generated from."}
         </p>
       ) : (
         <div className="space-y-2">

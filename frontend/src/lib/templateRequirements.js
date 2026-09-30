@@ -42,27 +42,16 @@ export function allRequiredAssetsAttached(requiredAssets, attachedAssets) {
 /**
  * The one requirement that stops generation.
  *
- * Only a character reference blocks. Everything else a template lists is a real
- * app visual composited over the finished footage, and the video generates
- * without it — the backend refuses a missing character reference in
- * _studio_identity_references and refuses nothing else.
- *
- * This exists as a named function because the alternative was a filter
- * comparison sitting inside a component's render tree, which is exactly the
- * kind of thing nothing evaluates. It shipped once already: every missing
- * requirement was treated as a blocker, so a founder whose person was already
- * anchored could not generate until they attached a screenshot the video does
- * not need. scripts/check-frontend-logic.cjs asserts the two lists stay apart.
+ * Face-only product: the character reference is the single permitted asset
+ * kind, and every template requires exactly it. The backend refuses a
+ * generation without one in _studio_identity_references, and refuses retired
+ * uploads everywhere else — so this stays a named, tested function rather
+ * than an inline filter, which is exactly the shape that once shipped a bug
+ * where every missing requirement blocked. scripts/check-frontend-logic.cjs
+ * asserts the blocking rule.
  */
 export function blockingRequirements(requiredAssets, attachedAssets) {
   return requiredAssetStatus(requiredAssets, attachedAssets).filter(
     (r) => !r.have && normKind(r.kind) === "character_reference"
-  );
-}
-
-/** The missing ones that inform but never block. */
-export function optionalRequirements(requiredAssets, attachedAssets) {
-  return requiredAssetStatus(requiredAssets, attachedAssets).filter(
-    (r) => !r.have && normKind(r.kind) !== "character_reference"
   );
 }

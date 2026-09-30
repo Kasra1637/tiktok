@@ -22,7 +22,6 @@ import {
 import {
   requiredAssetStatus,
   blockingRequirements,
-  optionalRequirements,
 } from "../lib/templateRequirements";
 import { DEFAULT_HOOK } from "../lib/videoLength";
 import {
@@ -144,50 +143,29 @@ function humanize(value) {
 /**
  * What the selected template is still waiting on.
  *
- * A missing character reference BLOCKS: without a photograph of the person the
- * model would invent one, and the founder would pay for a video of somebody who
- * looks nothing like them. The server refuses that case before spending, so this
- * is the early warning rather than the guarantee.
- *
- * Everything else a template lists is a real app visual that gets composited
- * over the finished footage. The video generates fine without it, so those are
- * offered as a suggestion and never as a blocker. Treating them as one locked
- * founders out of generating over a missing screenshot when their character
- * reference was already attached.
+ * Face-only product: the character reference is the single permitted asset
+ * and every template requires exactly it. Without a photograph of the
+ * person the model would invent one, and the founder would pay for a video
+ * of somebody who looks nothing like them. The server refuses that case
+ * before spending, so this is the early warning rather than the guarantee.
  */
-function MissingRequirements({ identity, composites, onGoToAssets }) {
-  const hasIdentity = identity && identity.length > 0;
-  const hasComposites = composites && composites.length > 0;
-  if (!hasIdentity && !hasComposites) return null;
+function MissingRequirements({ identity, onGoToAssets }) {
+  if (!identity || identity.length === 0) return null;
 
   return (
     <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-4">
-      {hasIdentity && (
-        <>
-          <p className="text-sm font-medium">
-            This template needs a character reference before it can generate
-          </p>
-          <p className="text-xs text-muted-foreground">
-            The video is generated from your photograph, so without one the model
-            would invent a person for it.
-          </p>
-          {onGoToAssets && (
-            <Button variant="secondary" size="sm" onClick={onGoToAssets}>
-              <ImageIcon className="h-3.5 w-3.5" /> Attach in the Assets step
-            </Button>
-          )}
-        </>
-      )}
-
-      {hasComposites && (
-        <div className={hasIdentity ? "border-t border-[color:var(--hairline)] pt-2" : ""}>
-          <p className="text-xs text-muted-foreground">
-            {hasIdentity
-              ? "Also nice to have, but the video generates without them: "
-              : "This template would use these if you attached them. The video generates without them: "}
-            {composites.map((r) => humanize(r.kind)).join(", ")}.
-          </p>
-        </div>
+      <p className="text-sm font-medium">
+        This template needs a character reference before it can generate
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Every video is generated from your photograph — the person on camera
+        is the person in the reference, and the scene around them is invented
+        from the App Profile. Without one the model would invent somebody else.
+      </p>
+      {onGoToAssets && (
+        <Button variant="secondary" size="sm" onClick={onGoToAssets}>
+          <ImageIcon className="h-3.5 w-3.5" /> Attach in the Assets step
+        </Button>
       )}
     </div>
   );
@@ -655,26 +633,19 @@ export default function CreateVideo() {
 
   const canGenerate = Boolean(profileId && templateId);
 
-  // A template that puts a person on camera declares character_reference in
-  // required_assets, and the backend now refuses a generation without one (see
-  // _studio_identity_references). The requirement used to be decoration: it was
-  // listed on the template but nothing stopped the click, so a paid render could
+  // Face-only product: every template requires exactly the character
+  // reference, and the backend refuses a generation without one (see
+  // _studio_identity_references) as well as any project still holding
+  // retired uploads. The requirement used to be decoration: it was listed
+  // on the template but nothing stopped the click, so a paid render could
   // go out with no identity input and the model free to invent a presenter.
   //
   // Kept separate from canGenerate on purpose — "you have not chosen a template
   // yet" and "you still owe this template a photograph" are different problems
-  // and the founder needs to be told which one they have.
-  // Only the character reference blocks, and the split lives in a tested
-  // helper rather than inline here. Everything else a template lists is a real
-  // app visual composited over the footage, and the video generates without it
-  // — the backend refuses a missing character reference and nothing else. The
-  // UI was briefly stricter than the server, which locked out founders whose
-  // person was already anchored over a screenshot they did not need.
+  // and the founder needs to be told which one they have. The split lives in
+  // a tested helper rather than inline here.
   const missingIdentity = template
     ? blockingRequirements(template.required_assets, project?.assets)
-    : [];
-  const missingComposites = template
-    ? optionalRequirements(template.required_assets, project?.assets)
     : [];
   // Server-side refusal is the guarantee; this is the early warning. Not folded
   // into canGenerate, because "you have not chosen a template yet" and "you
@@ -1007,9 +978,7 @@ export default function CreateVideo() {
                         <span className={r.have ? "text-muted-foreground" : ""}>{humanize(r.kind)}</span>
                         {!r.have && project && (
                           <span className="text-muted-foreground">
-                            {String(r.kind || "").trim().toLowerCase() === "character_reference"
-                              ? "— required, the video is generated from it"
-                              : "— optional, the video generates without it"}
+                            — required, the video is generated from it
                           </span>
                         )}
                       </div>
@@ -1033,7 +1002,7 @@ export default function CreateVideo() {
         <StepShell
           icon={ImageIcon}
           title="Assets"
-          description="Real app visuals get composited onto the video deterministically, so interfaces and text stay accurate."
+          description="Your photograph. Every video is generated from it — the person on camera is the person in the reference."
         >
           {!project ? (
             <div className="rounded-xl border border-[color:var(--hairline)] p-4">
@@ -1120,7 +1089,6 @@ export default function CreateVideo() {
             ) : blockedOnAssets ? (
               <MissingRequirements
                 identity={missingIdentity}
-                composites={missingComposites}
                 onGoToAssets={() => setStep(3)}
               />
             ) : !project ? (
@@ -1174,7 +1142,6 @@ export default function CreateVideo() {
             )}
             <MissingRequirements
               identity={missingIdentity}
-              composites={missingComposites}
               onGoToAssets={() => setStep(3)}
             />
             {project?.script_version > 0 && (
@@ -1320,8 +1287,8 @@ export default function CreateVideo() {
                 </Button>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Composited onto the real app footage after generation. Without text overlays a
-                video is still made of the generated video and your assets.
+                Added afterwards from your approved script. Without text overlays a
+                video is still the generated video, captioned on demand.
               </p>
               {editValue("overlays", []).length === 0 ? (
                 <p className="mt-2 text-sm text-muted-foreground">No on-screen text.</p>
@@ -1398,7 +1365,6 @@ export default function CreateVideo() {
             )}
             <MissingRequirements
               identity={missingIdentity}
-              composites={missingComposites}
               onGoToAssets={() => setStep(3)}
             />
 

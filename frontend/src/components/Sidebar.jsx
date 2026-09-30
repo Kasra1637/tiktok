@@ -41,7 +41,7 @@ export const NAV_GROUPS = [
       { to: "/create", label: "Create Video", icon: Clapperboard, testId: "create-nav-link", hint: "Guided wizard" },
       { to: "/brand", label: "Your app", icon: PenLine, testId: "brand-nav-link", hint: "Research, edit, approve" },
       { to: "/templates", label: "Hook Templates", icon: LayoutTemplate, testId: "templates-nav-link", hint: "Reusable structures" },
-      { to: "/assets", label: "Asset Library", icon: Images, testId: "assets-nav-link", hint: "Real app visuals" },
+      { to: "/assets", label: "Asset Library", icon: Images, testId: "assets-nav-link", hint: "Character reference" },
       { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Everything you made" },
     ],
   },

@@ -67,13 +67,13 @@ const FEATURES = [
     icon: Layers,
     title: "Asset Library",
     description:
-      "Grab any screenshot or logo in seconds — filed per app and never mixed with another app's assets.",
+      "One photograph anchors every video — filed per app and never mixed with another app's assets.",
   },
   {
     icon: Music2,
     title: "Sound You're Allowed to Use",
     description:
-      "Sound pro, stay safe. Music and voiceover mix in only after you confirm the rights are truly yours.",
+      "Voice, planned. Every video gets voice direction — tone, pace, and energy tuned to the audience — with sound kept rights-safe.",
   },
   {
     icon: RotateCcw,
@@ -134,7 +134,7 @@ const FLOW_STEPS = [
     step: "3",
     label: "Plan",
     icon: FileText,
-    detail: "Add your real screenshots, get a script and shot plan, then edit every word.",
+    detail: "Add your photograph, get a script and shot plan, then edit every word.",
   },
   {
     step: "4",
@@ -220,11 +220,12 @@ const PIPELINE_BLOCKS = [
     icon: Film,
     tone: "indigo",
     kicker: "Finishing",
-    title: "Your App, Pixel-Perfect",
+    title: "Your Words, Locked In",
     body: (
       <>
-        The AI handles people and scenes — never your interface. Your real screenshots,
-        recordings, and logo layer on afterwards, so names, prices, and screens cannot drift.
+        The scene is generated around you from your app's verified facts — then your
+        captions and end card layer on afterwards from the approved script, so names
+        and calls to action cannot drift.
       </>
     ),
   },
@@ -249,7 +250,7 @@ const MODELS = [
   { label: "Words & analysis", value: "Gemini 2.5 Flash — research, profiles, angles, scripts, and template ideas" },
   { label: "Video (default)", value: "Seedance 2.5 — up to 30 seconds in one take, with sound, up to 720p" },
   { label: "Video (alternate)", value: "MiniMax H3 — crisper 2K picture in shorter takes; longer cuts take two passes" },
-  { label: "Finishing touches", value: "Captions, screenshots, logos, and audio layered on precisely" },
+  { label: "Finishing touches", value: "Captions and end card layered on precisely" },
   { label: "Trend spotting", value: "Public TikTok data — only feeds the optional research tab" },
 ];
 
@@ -340,9 +341,9 @@ export default function Landing() {
             className="animate-fade-up font-display text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-[4.5rem]"
             style={{ animationDelay: "60ms" }}
           >
-            <span className="text-shine">Your real app, not a guess.</span>
+            <span className="text-shine">Your face, not a stranger's.</span>
             <br />
-            <span className="text-gradient-brand">Screenshots in, promo out.</span>
+            <span className="text-gradient-brand">Photo in, promo out.</span>
             <br />
             <span className="text-shine">Posted by you, not by us.</span>
           </h1>
@@ -351,8 +352,8 @@ export default function Landing() {
             className="animate-fade-up mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl"
             style={{ animationDelay: "120ms" }}
           >
-            People trust what they can see. So your real screens go in, and nothing about
-            your app gets guessed at.
+            People trust a real person. So your photograph anchors every video, and the
+            scene around you is built from your app's verified facts.
           </p>
 
           <div
@@ -407,7 +408,7 @@ export default function Landing() {
               <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> You approve the brief
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Your real screenshots
+              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Your real face
             </span>
             <span className="inline-flex items-center gap-1.5">
               <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Nothing auto-posts
@@ -565,7 +566,7 @@ export default function Landing() {
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">
                 Paste your link. Approve your profile. Pick a hook. Get a finished promo with
-                your real app in it, ready to post and unmistakably yours.
+                you in it, ready to post and unmistakably yours.
               </p>
               <div className="mt-9 flex flex-col items-center justify-center gap-3.5 sm:flex-row">
                 <UnauthedOnly>

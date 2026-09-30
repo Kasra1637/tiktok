@@ -325,12 +325,12 @@ export function GenerationPanel({ project, onGenerationChange }) {
                   ) : (
                     <Layers className="h-3.5 w-3.5" />
                   )}
-                  {composition?.status === "completed" ? "Re-compose" : "Add real app visuals"}
+                  {composition?.status === "completed" ? "Re-compose" : "Add captions"}
                 </Button>
               </div>
               {composition?.status === "completed" && composition.output_url && (
                 <div className="space-y-1.5 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-3">
-                  <span className="eyebrow block">With real app visuals</span>
+                  <span className="eyebrow block">With captions and end card</span>
                   <video
                     src={mediaUrl(composition.r2_url || composition.output_url)}
                     controls
@@ -348,8 +348,8 @@ export function GenerationPanel({ project, onGenerationChange }) {
                 </div>
               )}
               <p className="text-xs text-muted-foreground">
-                Screenshots, logo, and captions are drawn from your real assets, so app
-                interfaces and text stay accurate. Post it yourself — nothing is published.
+                Captions and the end card come from your approved script, so names
+                and calls to action stay accurate. Post it yourself — nothing is published.
               </p>
             </>
           )}

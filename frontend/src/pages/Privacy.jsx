@@ -12,7 +12,7 @@ export default function Privacy() {
       <LegalSection number={2} title="Information We Collect">
         <LegalSubheading>Content You Provide:</LegalSubheading>
         <LegalList>
-          <LegalItem><strong>App assets:</strong> Screenshots, recordings, logos, images, background media, and audio you upload for a specific App Profile. Upload only assets you have the right to use.</LegalItem>
+          <LegalItem><strong>App assets:</strong> The character reference photograph you upload for a specific App Profile. Upload only a photograph you have the right to use.</LegalItem>
           <LegalItem><strong>Brand information:</strong> Website, App Store, Google Play, and support URLs you submit for research, and any App Profile data extracted or manually entered.</LegalItem>
           <LegalItem><strong>TikTok video URLs:</strong> URLs you paste for hook analysis.</LegalItem>
         </LegalList>
