@@ -75,18 +75,12 @@ CONTENT_ANGLE_KINDS = [
 # can be used; `custom` was created by an operator.
 TEMPLATE_ORIGINS = ["curated", "research_draft", "custom"]
 
-# Asset kinds a template can require. Drives the studio's asset picker and
-# the Phase 6 deterministic overlay pass.
+# The single asset kind the product accepts. Drives the studio's asset picker
+# and the facets endpoint. There used to be nine (screenshots, recordings,
+# logos, photos, audio...); every video is now generated from the founder's
+# photograph plus App Profile facts, so the character reference stands alone.
 ASSET_KINDS = [
-    "screenshot",
-    "screen_recording",
-    "logo",
-    "product_image",
     "character_reference",
-    "creator_photo",
-    "background_image",
-    "background_video",
-    "audio",
 ]
 
 # The honest evidence note for templates that have no measured performance yet.
@@ -405,8 +399,17 @@ def normalize_angle_kind(kind: Optional[str]) -> str:
 
 
 def normalize_asset_kind(kind: Optional[str]) -> str:
+    """
+    Map free-form kind input onto the controlled vocabulary.
+
+    Face-only library: anything that is not the character reference
+    normalizes to "". Callers treat "" as absent — the upload endpoint
+    refuses it, the list filter matches nothing — so a retired or mistyped
+    kind can never silently become a screenshot overlay the way the old
+    "screenshot" fallback allowed.
+    """
     k = (kind or "").strip().lower().replace("-", "_").replace(" ", "_")
-    return k if k in ASSET_KINDS else "screenshot"
+    return k if k in ASSET_KINDS else ""
 
 
 def clamp_duration(seconds, model_max: int = 30) -> int:

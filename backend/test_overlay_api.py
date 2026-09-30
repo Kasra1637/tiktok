@@ -8,6 +8,7 @@ filter chains, a 600-second output) were invisible to string assertions.
 """
 import asyncio
 import importlib
+import json
 import os
 import subprocess
 import sys
@@ -177,77 +178,47 @@ def _upload(api, profile_id, kind, filename, src: Path, user_id=ANON, **kwargs):
 
 
 class TestAssetLibrary:
-    def test_upload_rejects_video_extension_declared_as_an_image(self, api, tmp_root):
-        """A .mp4 declared as a screenshot would feed the wrong filter input."""
+    def test_upload_rejects_video_extension_declared_as_a_photo(self, api, tmp_root):
+        """A .mp4 declared as the character reference would feed the wrong input."""
         profile = _profile(api, "Ext Check")
         src = _make_clip(tmp_root / "clip.mp4", seconds=1)
         with pytest.raises(HTTPException) as err:
-            _upload(api, profile["id"], "screenshot", "clip.mp4", src)
+            _upload(api, profile["id"], "character_reference", "clip.mp4", src)
         assert err.value.status_code == 400
         assert ".png" in str(err.value.detail)
 
-    def test_upload_rejects_image_extension_for_a_recording(self, api, tmp_root):
-        profile = _profile(api, "Ext Check 2")
+    def test_upload_rejects_a_retired_kind(self, api, tmp_root):
+        """
+        Face-only product: screenshots, recordings, logos, photos, and audio
+        are refused at the door — the pipeline that consumed them is gone.
+        """
+        profile = _profile(api, "Retired Kind")
         src = _make_image(tmp_root / "shot.png")
-        with pytest.raises(HTTPException) as err:
-            _upload(api, profile["id"], "screen_recording", "shot.png", src)
-        assert err.value.status_code == 400
-        assert ".mp4" in str(err.value.detail)
+        for kind in ("screenshot", "screen_recording", "logo", "audio", "nonsense"):
+            with pytest.raises(HTTPException) as err:
+                _upload(api, profile["id"], kind, "shot.png", src)
+            assert err.value.status_code == 400
+            assert "Only the character reference" in str(err.value.detail)
 
     def test_upload_rejects_empty_file(self, api, tmp_root):
         profile = _profile(api, "Empty Asset")
         empty = tmp_root / "empty.png"
         empty.write_bytes(b"")
         with pytest.raises(HTTPException) as err:
-            _upload(api, profile["id"], "screenshot", "empty.png", empty)
+            _upload(api, profile["id"], "character_reference", "empty.png", empty)
         assert err.value.status_code == 400
 
     def test_upload_stores_file_and_row(self, api, tmp_root):
         profile = _profile(api, "Upload OK")
         src = _make_image(tmp_root / "shot.png")
-        created = _upload(api, profile["id"], "screenshot", "shot.png", src, label="Onboarding")
-        assert created["kind"] == "screenshot"
+        created = _upload(api, profile["id"], "character_reference", "shot.png", src,
+                          label="Founder face")
+        assert created["kind"] == "character_reference"
         assert Path(created["file_path"]).is_file()
         assert created["media_url"].endswith(created["id"])
-        assert created["label"] == "Onboarding"
+        assert created["label"] == "Founder face"
         # Stored under this profile's own folder.
         assert profile["id"] in created["file_path"]
-
-    def test_upload_accepts_a_recording(self, api, tmp_root):
-        profile = _profile(api, "Upload Rec")
-        src = _make_clip(tmp_root / "ok.mp4", seconds=2)
-        created = _upload(api, profile["id"], "screen_recording", "ok.mp4", src)
-        assert created["kind"] == "screen_recording"
-
-    def test_upload_accepts_a_background_video(self, api, tmp_root):
-        profile = _profile(api, "Upload Background")
-        src = _make_clip(tmp_root / "background.mp4", seconds=2)
-        created = _upload(api, profile["id"], "background_video", "background.mp4", src)
-        assert created["kind"] == "background_video"
-
-    def test_upload_accepts_authorized_audio_and_records_duration(self, api, tmp_root):
-        profile = _profile(api, "Upload Audio")
-        src = _make_tone(tmp_root / "bed.m4a", seconds=3)
-        created = _upload(
-            api, profile["id"], "audio", "bed.m4a", src, rights_confirmed=True
-        )
-        assert created["kind"] == "audio"
-        assert created["rights_confirmed"] is True
-        assert created["duration_seconds"] == pytest.approx(3.0, abs=0.2)
-
-    def test_upload_rejects_an_unplayable_audio_file(self, api, tmp_root):
-        profile = _profile(api, "Bad Audio")
-        fake = tmp_root / "fake.mp3"
-        fake.write_bytes(b"not audio")
-        with pytest.raises(HTTPException) as err:
-            _upload(api, profile["id"], "audio", "fake.mp3", fake, rights_confirmed=True)
-        assert err.value.status_code == 400
-
-    def test_unknown_kind_is_normalized(self, api, tmp_root):
-        profile = _profile(api, "Kind Normalize")
-        src = _make_image(tmp_root / "k.png")
-        created = _upload(api, profile["id"], "nonsense", "k.png", src)
-        assert created["kind"] == "screenshot"
 
     def test_listing_is_scoped_to_profile(self, api, tmp_root):
         p1 = _profile(api, "App One")
@@ -263,11 +234,11 @@ class TestAssetLibrary:
     def test_listing_filters_by_kind(self, api, tmp_root):
         profile = _profile(api, "Filter Kind")
         shot = _make_image(tmp_root / "f.png")
-        _insert_asset(api, profile["id"], "screenshot", shot)
-        _insert_asset(api, profile["id"], "logo", shot, name="logo.png")
-        listed = _run(api.list_assets(profile_id=profile["id"], kind="logo", user_id=ANON))
-        assert len(listed["assets"]) == 1
-        assert listed["assets"][0]["kind"] == "logo"
+        face = _insert_asset(api, profile["id"], "character_reference", shot)
+        _insert_asset(api, profile["id"], "screenshot", shot, name="legacy.png")
+        listed = _run(api.list_assets(
+            profile_id=profile["id"], kind="character_reference", user_id=ANON))
+        assert [a["id"] for a in listed["assets"]] == [face["id"]]
 
     def test_another_users_profile_is_404(self, api):
         profile = _profile(api, "Private Assets")
@@ -305,7 +276,7 @@ class TestAssetUsageHistory:
     def test_attaching_records_the_project(self, api, tmp_root):
         profile = _profile(api, "Used Asset")
         shot = _make_image(tmp_root / "used.png")
-        asset = _insert_asset(api, profile["id"], "screenshot", shot)
+        asset = _insert_asset(api, profile["id"], "character_reference", shot)
         self._attach(api, profile, asset)
         usage = _run(api.get_asset_usage(asset["id"], ANON))
         assert usage["usage_count"] == 1
@@ -315,7 +286,7 @@ class TestAssetUsageHistory:
         """One index serves the whole page, so no per-asset lookup is needed."""
         profile = _profile(api, "List Usage")
         shot = _make_image(tmp_root / "listed.png")
-        asset = _insert_asset(api, profile["id"], "screenshot", shot)
+        asset = _insert_asset(api, profile["id"], "character_reference", shot)
         self._attach(api, profile, asset)
         listed = _run(api.list_assets(profile_id=profile["id"], user_id=ANON))
         found = next(a for a in listed["assets"] if a["id"] == asset["id"])
@@ -329,7 +300,7 @@ class TestAssetUsageHistory:
         """
         profile = _profile(api, "Detach Clears")
         shot = _make_image(tmp_root / "detach.png")
-        asset = _insert_asset(api, profile["id"], "screenshot", shot)
+        asset = _insert_asset(api, profile["id"], "character_reference", shot)
         project = self._attach(api, profile, asset)
         _run(api.detach_asset_from_project(
             project_id=project["id"], asset_id=asset["id"], user_id=ANON))
@@ -343,7 +314,7 @@ class TestAssetUsageHistory:
         """
         profile = _profile(api, "Delete Keeps Record")
         shot = _make_image(tmp_root / "keep.png")
-        asset = _insert_asset(api, profile["id"], "screenshot", shot)
+        asset = _insert_asset(api, profile["id"], "character_reference", shot)
         project = self._attach(api, profile, asset)
         _run(api.delete_asset(asset["id"], ANON))
         after = _run(api.get_studio_project(project["id"], ANON))
@@ -357,8 +328,8 @@ class TestAssetUsageHistory:
         p1 = _profile(api, "Usage App One")
         p2 = _profile(api, "Usage App Two")
         shot = _make_image(tmp_root / "scoped.png")
-        asset_one = _insert_asset(api, p1["id"], "screenshot", shot)
-        self._attach(api, p2, _insert_asset(api, p2["id"], "screenshot", shot))
+        asset_one = _insert_asset(api, p1["id"], "character_reference", shot)
+        self._attach(api, p2, _insert_asset(api, p2["id"], "character_reference", shot))
         assert _run(api.get_asset_usage(asset_one["id"], ANON))["usage_count"] == 0
 
     def test_another_users_asset_is_404(self, api, tmp_root):
@@ -376,7 +347,7 @@ class TestAssetUsageHistory:
         """
         profile = _profile(api, "Delete Used")
         shot = _make_image(tmp_root / "del.png")
-        asset = _insert_asset(api, profile["id"], "screenshot", shot)
+        asset = _insert_asset(api, profile["id"], "character_reference", shot)
         self._attach(api, profile, asset)
         result = _run(api.delete_asset(asset["id"], ANON))
         assert result["usage_count"] == 1
@@ -476,7 +447,7 @@ class TestAssetUsageHistory:
 class TestCrossAppGuard:
     def test_attaching_another_apps_asset_is_refused(self, api, tmp_root):
         """
-        The core guard. One app's logo or screenshots must never reach another
+        The core guard. One app's photograph must never anchor another
         app's video.
         """
         from models import AttachAssetRequest
@@ -497,7 +468,7 @@ class TestCrossAppGuard:
         from models import AttachAssetRequest
         profile = _profile(api, "Attach Own")
         shot = _make_image(tmp_root / "own.png")
-        own = _insert_asset(api, profile["id"], "screenshot", shot, name="Own")
+        own = _insert_asset(api, profile["id"], "character_reference", shot, name="Own")
         project = _project(api, profile)
         result = _run(api.attach_asset_to_project(
             project_id=project["id"],
@@ -521,13 +492,31 @@ class TestCrossAppGuard:
         from models import AttachAssetRequest
         profile = _profile(api, "Detach")
         shot = _make_image(tmp_root / "det.png")
-        own = _insert_asset(api, profile["id"], "screenshot", shot)
+        own = _insert_asset(api, profile["id"], "character_reference", shot)
         project = _project(api, profile)
         _run(api.attach_asset_to_project(
             project_id=project["id"],
             payload=AttachAssetRequest(asset_id=own["id"]), user_id=ANON))
         result = _run(api.detach_asset_from_project(project["id"], own["id"], ANON))
         assert result["assets"] == []
+
+    def test_attaching_a_retired_kind_is_refused(self, api, tmp_root):
+        """
+        Face-only product: a screenshot sitting in the library from before
+        can never join a project again. The refusal names the rule.
+        """
+        from models import AttachAssetRequest
+        profile = _profile(api, "Retired Attach")
+        shot = _make_image(tmp_root / "retired.png")
+        old = _insert_asset(api, profile["id"], "screenshot", shot)
+        project = _project(api, profile)
+        with pytest.raises(HTTPException) as err:
+            _run(api.attach_asset_to_project(
+                project_id=project["id"],
+                payload=AttachAssetRequest(asset_id=old["id"]),
+                user_id=ANON))
+        assert err.value.status_code == 400
+        assert "Only the character reference" in str(err.value.detail)
 
 
 class TestOverlayCompositionGuard:
@@ -586,13 +575,42 @@ class TestOverlayCompositionGuard:
             gen["id"], OverlayCompositionRequest(asset_ids=[str(uuid.uuid4())]), ANON))
         assert any(r["reason"] == "not found" for r in result["rejected_assets"])
 
+    def test_retired_project_attachment_is_refused(self, api, tmp_root):
+        """
+        Face-only product, hard-error choice: a project still holding a
+        screenshot from before cannot compose until it is detached. The
+        refusal names the rule instead of silently dropping the input.
+        """
+        from models import OverlayCompositionRequest
+        profile = _profile(api, "Overlay Retired")
+        gen, project = _completed_generation(api, profile, _make_base_clip(tmp_root / "bc4.mp4"))
+        shot = _insert_asset(
+            api, profile["id"], "screenshot", _make_image(tmp_root / "retired_shot.png"))
+        _run(api._execute(
+            "UPDATE studio_projects SET assets = ? WHERE id = ?",
+            (json.dumps([{
+                "asset_id": shot["id"], "kind": "screenshot",
+                "label": "Old screenshot", "file_path": shot["file_path"],
+            }]), project["id"])))
+        with pytest.raises(HTTPException) as err:
+            _run(api.create_overlay_composition(
+                gen["id"], OverlayCompositionRequest(), ANON))
+        assert err.value.status_code == 409
+        assert "face-only" in str(err.value.detail)
+
 
 class TestAudioAssets:
-    def test_audio_options_are_rejected_for_images(self, api, tmp_root):
+    """
+    Audio uploads are gone — the voiceover/music pipeline has no input — but
+    the attach-time audio validation still guards the API against callers
+    passing audio options with the photograph.
+    """
+
+    def test_audio_options_are_rejected_for_the_photograph(self, api, tmp_root):
         from models import AttachAssetRequest
         profile = _profile(api, "Audio Image Guard")
         shot = _make_image(tmp_root / "audio-guard.png")
-        asset = _insert_asset(api, profile["id"], "screenshot", shot)
+        asset = _insert_asset(api, profile["id"], "character_reference", shot)
         project = _project(api, profile)
         with pytest.raises(HTTPException) as err:
             _run(api.attach_asset_to_project(
@@ -601,12 +619,13 @@ class TestAudioAssets:
                 user_id=ANON,
             ))
         assert err.value.status_code == 400
+        assert "apply only to audio" in str(err.value.detail)
 
     def test_audio_role_and_gain_are_validated(self, api, tmp_root):
         from models import AttachAssetRequest
         profile = _profile(api, "Audio Validation")
         asset = _insert_asset(
-            api, profile["id"], "audio", _make_tone(tmp_root / "validate.m4a"))
+            api, profile["id"], "character_reference", _make_image(tmp_root / "validate.png"))
         project = _project(api, profile)
         with pytest.raises(HTTPException) as err:
             _run(api.attach_asset_to_project(
@@ -623,74 +642,25 @@ class TestAudioAssets:
             ))
         assert err.value.status_code == 400
 
-    def test_unconfirmed_audio_is_rejected_at_composition(self, api, tmp_root):
-        from models import AttachAssetRequest, OverlayCompositionRequest
+    def test_unconfirmed_rights_are_rejected_at_composition(self, api, tmp_root):
+        from models import OverlayCompositionRequest
         profile = _profile(api, "Audio Rights")
         gen, project = _completed_generation(
             api, profile, _make_base_clip(tmp_root / "rights_base.mp4", seconds=6))
-        audio = _upload(
-            api, profile["id"], "audio", "rights.m4a",
-            _make_tone(tmp_root / "rights.m4a"), rights_confirmed=False)
-        _run(api.attach_asset_to_project(
-            project_id=project["id"],
-            payload=AttachAssetRequest(asset_id=audio["id"]),
-            user_id=ANON,
-        ))
+        face = _insert_asset(
+            api, profile["id"], "character_reference",
+            _make_image(tmp_root / "rights.png"))
+        _run(api._execute(
+            "UPDATE assets SET rights_confirmed = 0 WHERE id = ?", (face["id"],)))
+        _run(api._execute(
+            "UPDATE studio_projects SET assets = ? WHERE id = ?",
+            (json.dumps([{
+                "asset_id": face["id"], "kind": "character_reference",
+                "label": "Founder face", "file_path": face["file_path"],
+            }]), project["id"])))
         result = _run(api.create_overlay_composition(
             gen["id"], OverlayCompositionRequest(), ANON))
         assert any(r["reason"] == "rights unconfirmed" for r in result["rejected_assets"])
-        assert result["applied"]["audios"] == 0
-
-    def test_background_audio_mixes_under_the_clip(self, api, tmp_root):
-        import overlays
-        from models import AttachAssetRequest, OverlayCompositionRequest
-        profile = _profile(api, "Audio Background")
-        gen, project = _completed_generation(
-            api, profile, _make_base_clip(tmp_root / "background_base.mp4", seconds=6))
-        audio = _insert_asset(
-            api, profile["id"], "audio", _make_tone(tmp_root / "bed-check.m4a"))
-        _run(api.attach_asset_to_project(
-            project_id=project["id"],
-            payload=AttachAssetRequest(
-                asset_id=audio["id"], start=1, end=5,
-                audio_role="background", audio_gain=0.25),
-            user_id=ANON,
-        ))
-        result = _run(api.create_overlay_composition(
-            gen["id"], OverlayCompositionRequest(), ANON))
-        assert result["status"] == "completed", result.get("error")
-        assert result["applied"]["audios"] == 1
-        out = Path(_run(api._fetch_one(
-            "SELECT output_path FROM overlay_compositions WHERE id = ?", (result["id"],))
-        )["output_path"])
-        assert abs(overlays.probe_duration(out) - 6.0) < 0.5
-        assert overlays.has_audio_stream(out) is True
-
-    def test_voiceover_renders_over_generated_audio(self, api, tmp_root):
-        import overlays
-        from models import AttachAssetRequest, OverlayCompositionRequest
-        profile = _profile(api, "Audio Voiceover")
-        gen, project = _completed_generation(
-            api, profile,
-            _make_base_clip_with_audio(tmp_root / "voice_base.mp4", seconds=6))
-        voice = _insert_asset(
-            api, profile["id"], "audio", _make_tone(tmp_root / "voice-check.m4a"))
-        _run(api.attach_asset_to_project(
-            project_id=project["id"],
-            payload=AttachAssetRequest(
-                asset_id=voice["id"], start=2, end=4,
-                audio_role="voiceover", audio_gain=1.0),
-            user_id=ANON,
-        ))
-        result = _run(api.create_overlay_composition(
-            gen["id"], OverlayCompositionRequest(), ANON))
-        assert result["status"] == "completed", result.get("error")
-        assert result["applied"]["audios"] == 1
-        out = Path(_run(api._fetch_one(
-            "SELECT output_path FROM overlay_compositions WHERE id = ?", (result["id"],))
-        )["output_path"])
-        assert abs(overlays.probe_duration(out) - 6.0) < 0.5
-        assert overlays.has_audio_stream(out) is True
 
     def test_voiceover_mutes_generated_audio_in_its_window(self, api, tmp_root):
         import overlays
@@ -726,7 +696,7 @@ class TestOverlayRendering:
         base = _make_base_clip(tmp_root / "len.mp4", seconds=12)
         gen, _ = _completed_generation(api, profile, base)
         shot = _insert_asset(
-            api, profile["id"], "screenshot", _make_image(tmp_root / "len_shot.png"))
+            api, profile["id"], "character_reference", _make_image(tmp_root / "len_shot.png"))
         _run(api._execute(
             "UPDATE studio_projects SET hook_line='Hi', script='A script.', cta='Try free' WHERE 1=1"
         ))

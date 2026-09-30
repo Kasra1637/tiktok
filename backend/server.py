@@ -6218,7 +6218,28 @@ def _template_row_values(payload: dict) -> dict:
     out = {}
     for key in TEMPLATE_STRUCTURED_FIELDS:
         if key in payload:
-            out[key] = json.dumps(_normalize_str_list(payload[key]))
+            if key == "required_assets":
+                # Face-only library: the character reference is the single
+                # permitted requirement. Anything else is refused rather than
+                # coerced, so an operator learns the rule instead of shipping
+                # a template nobody can satisfy. An omitted or empty list
+                # means the face, which every video needs.
+                kinds = [
+                    str(a).strip().lower()
+                    for a in (_normalize_str_list(payload[key]) or [])
+                ]
+                if any(k != "character_reference" for k in kinds):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            "Only the character reference can be required by a "
+                            "template. Screenshots, recordings, logos, photos, "
+                            "and audio are not uploaded anymore."
+                        ),
+                    )
+                out[key] = json.dumps(kinds or ["character_reference"])
+            else:
+                out[key] = json.dumps(_normalize_str_list(payload[key]))
     if "content_slots" in payload and payload["content_slots"] is not None:
         slots = payload["content_slots"]
         out["content_slots"] = json.dumps(slots if isinstance(slots, dict) else {})
@@ -6381,7 +6402,9 @@ async def duplicate_template(template_id: str, user_id: str = Depends(get_curren
          source.get("objective") or "", source.get("opening_structure"),
          source.get("hook_seconds"), source.get("continuation_structure"),
          source.get("cta_pattern"), source.get("visual_style"), source.get("camera_pacing"),
-         json.dumps(_normalize_str_list(source.get("required_assets"))),
+         # Face-only library: a copy is always usable with just the face,
+         # even when the source is a legacy custom row carrying retired kinds.
+         json.dumps(["character_reference"]),
          source.get("default_duration"),
          json.dumps(source.get("content_slots") or {}),
          source.get("example_preview") or "",
@@ -7244,6 +7267,36 @@ async def _record_cost(generation_id: str, response: dict) -> None:
     )
 
 
+def _retired_project_assets(assets: list) -> list:
+    """Attachment entries whose kind is no longer part of the product."""
+    return [
+        a for a in (assets or [])
+        if isinstance(a, dict) and (a.get("kind") or "") != "character_reference"
+    ]
+
+
+def _refuse_retired_project_assets(assets: list) -> None:
+    """
+    Loud 409 for projects still holding retired uploads (screenshots,
+    recordings, logos, photos, audio). The founder chose hard-error over
+    silent-ignore: these must be detached on the Assets step before the
+    project can move again, so a generation never silently drops inputs the
+    founder thought were in play.
+    """
+    retired = _retired_project_assets(assets)
+    if not retired:
+        return
+    kinds = sorted({str(a.get("kind") or "file").replace("_", " ") for a in retired})
+    raise HTTPException(
+        status_code=409,
+        detail=(
+            f"This project still holds {', '.join(kinds)} from before uploads "
+            "went face-only, and nothing but the character reference can be "
+            "used anymore. Detach them on the Assets step and try again."
+        ),
+    )
+
+
 async def _studio_identity_references(
     assets: list, model_key: str, user_id: str, template: Optional[dict] = None
 ) -> list:
@@ -7255,6 +7308,10 @@ async def _studio_identity_references(
     works: image reference in, matching person out.
 
     Guardrails, all loud:
+    - A project still holding retired uploads (anything but the character
+      reference) is REFUSED before anything else. Those inputs can no longer
+      reach any pipeline stage, so generating around them would silently drop
+      what the founder thought was in play.
     - A template that declares character_reference in required_assets is
       REFUSED without one. The requirement used to be decorative: it was
       rendered as "Needs character reference" in the studio and on the
@@ -7267,6 +7324,7 @@ async def _studio_identity_references(
     - Models that cannot take identity images are refused via
       video_providers.accepts_identity_reference, before any spend.
     """
+    _refuse_retired_project_assets(assets)
     anchor = None
     for asset in assets or []:
         if not isinstance(asset, dict):
@@ -7983,6 +8041,10 @@ async def generate_project_strategy(
 
     profile = await _require_profile_for_studio(row.get("brand_profile_id"), user_id)
 
+    # Face-only product: retired uploads attached before the rule must be
+    # detached before the project can move again — strategy included.
+    _refuse_retired_project_assets(row.get("assets"))
+
     if not row.get("template_id"):
         raise HTTPException(
             status_code=400,
@@ -8633,21 +8695,12 @@ async def archive_generation(generation_id: str, user_id: str = Depends(get_curr
 # ---------------------------------------------------------------------------
 # Asset library (per App Profile)
 # ---------------------------------------------------------------------------
-ASSET_MAX_BYTES = 200 * 1024 * 1024  # 200 MB: long screen recordings included
+ASSET_MAX_BYTES = 200 * 1024 * 1024  # 200 MB ceiling
 ASSET_IMAGE_TYPES = {
-    "screenshot": "image",
-    "logo": "image",
-    "product_image": "image",
     "character_reference": "image",
-    "creator_photo": "image",
-    "background_image": "image",
 }
-ASSET_VIDEO_TYPES = {"screen_recording": "video", "background_video": "video"}
-ASSET_AUDIO_TYPES = {"audio": "audio"}
 ASSET_ALLOWED_EXT = {
     "image": {".png", ".jpg", ".jpeg", ".webp", ".gif"},
-    "video": {".mp4", ".mov", ".webm", ".m4v"},
-    "audio": {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"},
 }
 ASSET_AUDIO_ROLES = ("background", "voiceover")
 GENERATED_ID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
@@ -8805,12 +8858,16 @@ async def upload_asset(
     user_id: str = Depends(get_current_user_id),
 ):
     """
-    Upload an asset into one App Profile's library.
+    Upload the founder's photograph into one App Profile's library.
 
-    The file extension must match the declared kind. That check exists
-    because a screenshot declared as a screen recording (or the reverse) would
-    make the overlay pass feed the wrong filter input and produce a silently
-    broken composite.
+    Face-only product: the character reference is the single permitted
+    upload. Every video is generated from that photograph plus App Profile
+    facts, so screenshots, recordings, logos, photos, and audio are refused
+    here rather than accepted into a pipeline that can no longer use them.
+
+    The file extension must match. That check exists because a video file
+    declared as a photograph would make the identity pass feed the wrong
+    input and produce a silently broken submission.
     """
     profile = await _fetch_one(
         "SELECT id FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
@@ -8819,18 +8876,23 @@ async def upload_asset(
         raise HTTPException(status_code=404, detail="App Profile not found")
 
     asset_kind = template_library.normalize_asset_kind(kind)
-    expected_type = (
-        ASSET_IMAGE_TYPES.get(asset_kind)
-        or ASSET_VIDEO_TYPES.get(asset_kind)
-        or ASSET_AUDIO_TYPES.get(asset_kind)
-    )
-    if not expected_type:
+    if asset_kind != "character_reference":
         await _record_asset_event(
-            "upload_rejected", f"Unsupported asset kind: {kind}", user_id,
+            "upload_rejected",
+            f"Only the character reference can be uploaded (asked for: {kind}).",
+            user_id,
             brand_profile_id=profile_id, asset_kind=kind,
             filename=file.filename or "",
         )
-        raise HTTPException(status_code=400, detail=f"Unsupported asset kind: {kind}")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Only the character reference can be uploaded. Every video is "
+                "generated from your photograph plus the App Profile — "
+                "screenshots, recordings, logos, and audio are not accepted."
+            ),
+        )
+    expected_type = ASSET_IMAGE_TYPES.get(asset_kind)
 
     raw = await file.read()
     if not raw:
@@ -8872,26 +8934,9 @@ async def upload_asset(
     target = _asset_dir(profile_id) / f"{asset_id}{ext}"
     target.write_bytes(raw)
 
-    # Audio must be a playable file, not merely an audio extension: an invalid
-    # payload would otherwise fail only at composition time. A rejected upload
-    # removes its temporary file so the library cannot accumulate junk.
+    # No playability probe: the only uploadable kind is a still photograph,
+    # so there is no audio whose decodability would need verifying up front.
     duration_seconds = None
-    if expected_type == "audio":
-        duration_seconds = overlays.probe_duration(target)
-        if duration_seconds <= 0:
-            try:
-                target.unlink()
-            except OSError:
-                pass
-            await _record_asset_event(
-                "upload_rejected", "Audio file could not be read.", user_id,
-                brand_profile_id=profile_id, asset_kind=asset_kind,
-                filename=file.filename or "",
-            )
-            raise HTTPException(
-                status_code=400,
-                detail="That audio file could not be read. Upload a playable audio file.",
-            )
 
     now = now_iso()
     await _execute(
@@ -8918,6 +8963,17 @@ async def update_asset(
         raise HTTPException(status_code=404, detail="Asset not found")
 
     updates = payload.model_dump(exclude_unset=True)
+    if "kind" in updates:
+        # Face-only library: a retired or mistyped kind normalizes to "" and
+        # must not be written, or the row would advertise an asset the
+        # product can no longer accept.
+        kind = template_library.normalize_asset_kind(updates["kind"])
+        if kind != "character_reference":
+            raise HTTPException(
+                status_code=400,
+                detail="Only the character reference can be stored in the library.",
+            )
+        updates["kind"] = kind
     set_clauses, values = [], []
     for key, value in updates.items():
         if key == "rights_confirmed":
@@ -8966,8 +9022,7 @@ async def delete_asset(asset_id: str, user_id: str = Depends(get_current_user_id
         "deleted": asset_id,
         "usage_count": len(still_used),
         "note": (
-            f"{len(still_used)} project(s) still reference this asset and will fail to "
-            "compose overlays."
+            f"{len(still_used)} project(s) still reference this asset."
             if still_used else None
         ),
     }
@@ -8978,11 +9033,11 @@ async def attach_asset_to_project(
     project_id: str, payload: AttachAssetRequest, user_id: str = Depends(get_current_user_id)
 ):
     """
-    Attach a library asset to a project.
+    Attach the character reference to a project.
 
     Enforces that the asset belongs to the SAME App Profile as the project.
-    This is the cross-app guard: without it, one app's logo or screenshots
-    could be composited into another app's video.
+    This is the cross-app guard: without it, one app's photograph could
+    anchor another app's video.
     """
     project = await _fetch_one(
         "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?", (project_id, user_id)
@@ -9009,6 +9064,20 @@ async def attach_asset_to_project(
             asset_kind=asset.get("kind"),
         )
         raise HTTPException(status_code=409, detail="The asset file is missing on disk.")
+
+    # Face-only product: a retired upload (screenshot, recording, logo,
+    # photo, audio) can still sit in the library from before, but it can
+    # never join a project again. Refused here, at attach time, rather than
+    # failing later inside generation.
+    if (asset.get("kind") or "") != "character_reference":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Only the character reference can be attached to a project. "
+                f"This asset is a {(asset.get('kind') or 'file').replace('_', ' ')} "
+                "from before uploads went face-only."
+            ),
+        )
 
     current = project.get("assets") or []
     if not isinstance(current, list):
@@ -9146,6 +9215,10 @@ async def create_overlay_composition(
     )
     if not project:
         raise HTTPException(status_code=404, detail="The studio project for this generation is gone")
+
+    # Face-only product: retired uploads attached before the rule must be
+    # detached before composing, same as every other pipeline stage.
+    _refuse_retired_project_assets(project.get("assets"))
 
     report = project.get("safety_report") or {}
     if isinstance(report, str):

@@ -127,7 +127,7 @@ class TestVocabularies:
         assert tl.normalize_category("not-a-real-category") == "other"
         assert tl.normalize_objective("not_a_real_objective") == ""
         assert tl.normalize_angle_kind("nonsense") == "problem_solution"
-        assert tl.normalize_asset_kind("nonsense") == "screenshot"
+        assert tl.normalize_asset_kind("nonsense") == ""
 
     def test_normalizers_accept_loose_input(self):
         assert tl.normalize_category("Pain Point Question") == "pain-point-question"

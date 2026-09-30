@@ -782,6 +782,29 @@ class TestStudioIdentityReference:
         assert "character reference" in str(excinfo.value.detail)
         assert not calls, "the provider was called despite the refusal"
 
+    def test_retired_attachment_is_refused_before_the_face_check(self, api, monkeypatch):
+        """
+        A project holding a screenshot from before uploads went face-only is
+        refused loudly. The retired input is reported first — even though no
+        face is attached either — so the founder detaches it instead of
+        chasing the face requirement on a project that still cannot run.
+        """
+        from models import StudioGenerationRequest
+        project, _, _ = _ready_project(api, "Retired Attach", with_character=False)
+        _run(api._execute(
+            "UPDATE studio_projects SET assets = ? WHERE id = ?",
+            (json.dumps([{
+                "asset_id": "old-shot", "kind": "screenshot",
+                "label": "Old screenshot", "file_path": "gone.png",
+            }]), project["id"])))
+        calls = _mock_submit(api, monkeypatch)
+        with pytest.raises(HTTPException) as err:
+            _run(api.submit_project_generation(
+                project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        assert err.value.status_code == 409
+        assert "face-only" in str(err.value.detail)
+        assert not calls, "the provider was called despite the refusal"
+
     def test_missing_file_is_refused_loudly(self, api, monkeypatch):
         from models import StudioGenerationRequest
         project = self._anchor_project(api, "Missing Face")

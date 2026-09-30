@@ -251,6 +251,7 @@ class TestTemplateListing:
         assert len(facets["objectives"]) == 10
         assert len(facets["content_angle_kinds"]) == 12
         assert facets["supported_durations"] == [10, 15, 20, 30]
+        assert facets["asset_kinds"] == ["character_reference"]
 
     def test_unknown_category_filter_returns_empty_not_error(self, api):
         # Scoped to curated: "nonsense" normalizes to "other", which matches
@@ -301,20 +302,42 @@ class TestTemplateCrud:
             name="Internal QA Template", category="demo",
             opening_structure="Open on the finished result.",
             continuation_structure="Explain, then CTA.",
-            required_assets=["screenshot", "logo"],
+            required_assets=["character_reference"],
             default_duration=15,
             content_slots={"app_feature": "the timer"},
             example_preview="Open on the finished timer, then show two taps.",
         ), user_id=ANON))
         assert made["origin"] == "custom"
         assert made["is_usable"] is True
-        assert made["required_assets"] == ["screenshot", "logo"]
+        assert made["required_assets"] == ["character_reference"]
         assert made["content_slots"] == {"app_feature": "the timer"}
         assert made["example_preview"] == "Open on the finished timer, then show two taps."
 
         fetched = _run(api.get_template(template_id=made["id"], user_id=ANON))
         assert fetched["name"] == "Internal QA Template"
         assert fetched["example_preview"] == made["example_preview"]
+
+    def test_create_rejects_a_retired_requirement(self, api):
+        """
+        Face-only library: a template demanding a screenshot, recording,
+        logo, photo, or audio can never be satisfied, so creation refuses it
+        rather than shipping a dead template.
+        """
+        from models import CreateTemplateRequest
+        with pytest.raises(HTTPException) as err:
+            _run(api.create_template(payload=CreateTemplateRequest(
+                name="Retired QA Template",
+                opening_structure="Open on the app.",
+                required_assets=["screenshot", "logo"],
+            ), user_id=ANON))
+        assert err.value.status_code == 400
+        assert "character reference" in str(err.value.detail)
+
+    def test_create_defaults_to_the_character_reference(self, api):
+        from models import CreateTemplateRequest
+        made = _run(api.create_template(payload=CreateTemplateRequest(
+            name="Default QA Template", opening_structure="A"), user_id=ANON))
+        assert made["required_assets"] == ["character_reference"]
 
     def test_update_bumps_version(self, api):
         from models import CreateTemplateRequest, UpdateTemplateRequest
@@ -347,7 +370,7 @@ class TestTemplateCrud:
                 cta_pattern="Edited CTA.",
                 visual_style="Edited visual.",
                 camera_pacing="Edited pacing.",
-                required_assets=["screenshot"],
+                required_assets=["character_reference"],
                 default_duration=15,
                 content_slots={"app_feature": "timer"},
                 example_preview="Edited example.",
@@ -363,7 +386,7 @@ class TestTemplateCrud:
         assert updated["audiences"] == ["busy parents"]
         assert updated["objective"] == "demonstrate_feature"
         assert updated["hook_seconds"] == 4
-        assert updated["required_assets"] == ["screenshot"]
+        assert updated["required_assets"] == ["character_reference"]
         assert updated["default_duration"] == 15
         assert updated["content_slots"] == {"app_feature": "timer"}
         assert updated["example_preview"] == "Edited example."

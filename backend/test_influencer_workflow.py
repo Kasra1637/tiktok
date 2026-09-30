@@ -491,6 +491,29 @@ class TestIdentityContinuity:
             for r in refs
         )
 
+    def test_retired_attachment_is_refused_at_strategy_time(
+        self, api, monkeypatch
+    ):
+        """
+        The hard-error choice applies at every pipeline stage, strategy
+        included: a project still holding a screenshot cannot even be
+        planned until it is detached. No model call happens — the refusal
+        precedes it, so no AI mock is needed.
+        """
+        from models import GenerateStrategyRequest
+        project, _profile, _template = _make_project(api, NURSE_APP)
+        _run(api._execute(
+            "UPDATE studio_projects SET assets = ? WHERE id = ?",
+            (json.dumps([{
+                "asset_id": "old-shot", "kind": "screenshot",
+                "label": "Old screenshot", "file_path": "gone.png",
+            }]), project["id"])))
+        with pytest.raises(HTTPException) as err:
+            _run(api.generate_project_strategy(
+                project_id=project["id"], payload=GenerateStrategyRequest(), user_id=ANON))
+        assert err.value.status_code == 409
+        assert "face-only" in str(err.value.detail)
+
     def test_missing_character_reference_is_refused_not_silently_anonymous(
         self, api, monkeypatch
     ):
