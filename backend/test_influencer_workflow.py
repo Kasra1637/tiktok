@@ -617,6 +617,27 @@ class TestContinuityIsHonest:
         # ...and the face is still anchored where possible.
         assert calls[1].get("input_references")
 
+    def test_the_hook_is_never_told_its_character_reference_failed_to_arrive(
+        self, api, monkeypatch
+    ):
+        """
+        The hook has no previous clip, so it has no seam to miss. Its identity
+        reference IS attached — and `degraded` is copied straight into the
+        prompt — so listing the reference as dropped told the model the
+        founder's face had not arrived, in the very request carrying it. That is
+        a self-inflicted likeness loss on the one segment the founder judges.
+        """
+        _project, hook, _ext, calls = TestIdentityContinuity()._chain(api, monkeypatch)
+        continuity = hook["continuity"]
+        assert continuity["guarantee"] == "single_segment"
+        assert continuity["attached"] == ["identity"]
+        assert continuity["degraded"] == []
+        # Nothing was lost, so the prompt must not claim anything was.
+        assert "final frame could not be extracted" not in calls[0]["prompt"]
+        assert "could not receive every continuity reference" not in calls[0]["prompt"]
+        # And the face really is in the request, so the record above is true.
+        assert any(r.get("type") == "image_url" for r in calls[0].get("input_references") or [])
+
     def test_continuity_record_is_readable_from_the_api(self, api, monkeypatch):
         _project, hook, ext, _calls = TestIdentityContinuity()._chain(api, monkeypatch)
         report = _run(api.get_generation_continuity(ext["id"], ANON))

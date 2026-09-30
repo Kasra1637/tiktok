@@ -398,7 +398,18 @@ def continuity_plan(
     # continue from, and saying so is the difference between an honest
     # text-only warning and a silently different character.
     if not has_bridge_frame:
+        # The seam frame is a CONTINUITY anchor. Its absence says nothing about
+        # the identity reference, which is attached independently below, so
+        # `identity` is never degraded here.
+        #
+        # Degrading it anyway was worse than cosmetic. build_segment_prompt()
+        # copies `degraded` into the prompt, so the HOOK request told the model
+        # the character reference had not arrived — in the very request that
+        # carried it. That is a self-inflicted likeness loss on the one segment
+        # the founder judges first.
         for anchor in wanted:
+            if anchor == "identity":
+                continue
             drop(
                 anchor,
                 "The previous clip's final frame could not be extracted, so there is no "
@@ -409,11 +420,28 @@ def continuity_plan(
         if has_character_reference and accepts_identity_reference(model_key):
             use_identity = True
             attached = ["identity"]
+
+        # Downgrade the guarantee only when something was genuinely lost. An
+        # opening segment has no previous clip by definition, so its absent seam
+        # is not a degradation — and calling it one raised a destructive
+        # "text-only" warning on the first segment, where nothing is wrong.
+        if degraded:
+            guarantee = "text_only"
+            notes = CONTINUITY_GUARANTEES["text_only"]
+        else:
+            guarantee = "single_segment"
+            notes = (
+                "Nothing to continue from, so there is no seam to pin. Identity is carried "
+                "by the character reference alone."
+                if attached
+                else "Nothing to continue from, so there is no seam to pin."
+            )
+
         return {
             "provider": model_key,
             "provider_name": cap["name"],
-            "guarantee": "text_only",
-            "notes": CONTINUITY_GUARANTEES["text_only"],
+            "guarantee": guarantee,
+            "notes": notes,
             "use_frame": False,
             "use_clip_reference": False,
             "use_identity_reference": use_identity,
