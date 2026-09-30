@@ -19,97 +19,97 @@ const FEATURES = [
     icon: Briefcase,
     title: "Your App Hub",
     description:
-      "Paste your links once. Review what it builds, approve it, then reuse that profile in every video.",
+      "Paste your links once. We draft the profile, you approve it, and every video after that starts from it.",
   },
   {
     icon: Target,
     title: "Audiences & Angles",
     description:
-      "Know exactly who to talk to and what to promise — every angle hands you the hook, promise, and close.",
+      "Pick who you're talking to and what you want them to do. The angle hands you the hook, the promise and the close.",
   },
   {
     icon: LayoutTemplate,
     title: "Hook Template Library",
     description:
-      "Never start blank. Browse curated hooks, keep your winners close, and shape any one to fit your app.",
+      "Never start from a blank page. Favourite what works, reshape what doesn't.",
   },
   {
     icon: Wand2,
     title: "Smart Template Picks",
     description:
-      "Choose in minutes, not evenings. Every pick arrives with its reason — the final call stays yours.",
+      "A shortlist for your app and angle. Each pick tells you why it fits, and where it falls short.",
   },
   {
     icon: FileText,
     title: "Script First, Video Second",
     description:
-      "Approve every word before a cent is spent. The full script and shot plan land first, yours to rewrite — and drafting, planning and strategy cost no video generation at all.",
+      "Read the script before you pay for the video. Rewrite any word of it. Planning itself costs nothing.",
   },
   {
     icon: Clapperboard,
     title: "Ten to Thirty Seconds",
     description:
-      "10, 15, 20 or 30 seconds, vertical 9:16. Hook first — 2 to 6 seconds — because a four-second clip is the cheapest test of whether the idea works at all.",
+      "10, 15, 20 or 30 seconds, vertical. Hooks run 2 to 6, because four seconds is the cheapest test of the whole idea.",
   },
   {
     icon: Film,
     title: "No Fake UI",
     description:
-      "The model is told never to draw your app's screens, prices, ratings or logos. Captions and your CTA are composited from the script you approved, so nothing invented ever reaches the screen.",
+      "The model is forbidden from drawing your screens, prices or ratings. Captions and the CTA come from the script you approved.",
   },
   {
     icon: ShieldCheck,
     title: "Claims, Checked",
     description:
-      "A deterministic checker — not the AI — re-reads your script on every edit, blocks anything on your never-use list, and flags prices your profile doesn't contain.",
+      "A checker, not the AI, re-reads your script on every edit. Anything on your never-use list stays blocked; prices your profile never listed get flagged.",
   },
   {
     icon: Layers,
     title: "One Photo, You On Camera",
     description:
-      "Every video is generated from a single photograph, filed per app. No avatar, no voice clone, no stock presenter standing in for you.",
+      "One photograph. That face is you in every clip. No avatar, no voice clone, no stand-in.",
   },
   {
     icon: Music2,
     title: "Sound, Generated With It",
     description:
-      "Clips carry their own speech and room tone in the same pass as the picture — no music uploads, no licensing, no mixing. Add the trending sound in the app you post to.",
+      "Speech and room tone arrive with the clip. No audio files to license, no mixing. Add the trending sound where you post.",
   },
   {
     icon: RotateCcw,
     title: "Change One Thing",
     description:
-      "Swap the hook, the CTA, the audience, the tone, the template or the length, and get a fresh draft with that change applied. Nothing renders until you decide it should.",
+      "Swap the hook, the CTA, the tone, the template or the length and get a fresh draft back. Nothing renders until you say so.",
   },
   {
     icon: TrendingUp,
     title: "Measured, Not Guesswork",
     description:
-      "Success rate, failures, spend split priced vs unpriced, and how often you reworked — by app, template, model, objective and audience. Unpriced runs are counted as unpriced, never as free.",
+      "Success rate, failures, spend and rework, broken down by app, template, model and audience. Unpriced runs stay labelled unpriced.",
   },
   {
     icon: Check,
     title: "Feedback Loop",
     description:
-      "Every rejection teaches the app. Templates you reject slide down; your winners keep on climbing.",
+      "Reject a template and it slides down the list. Your winners keep climbing.",
   },
   {
     icon: BadgeAlert,
     title: "Every Run, Accounted For",
     description:
-      "Open any video for the exact prompt sent, the claim check at generation time, the model, the cost and where that cost came from, and any error. Retryable failures retry in one click.",
+      "Every video shows its receipts: the exact prompt sent, the claim check at generation time, the model, the cost and where it came from, any error.",
   },
   {
     icon: Search,
     title: "Hook Anatomy",
     description:
-      "Paste a TikTok link and we read the public metadata, then break the first three seconds down — pacing, cuts, expressions, on-screen text, audio cues — and score the hook.",
+      "Paste a TikTok link. We read the first three seconds — pacing, cuts, faces, on-screen text, audio — then score the hook.",
   },
   {
     icon: Download,
     title: "You Post It",
     description:
-      "Full control, always. Download your video and post it anywhere — your accounts stay untouchable.",
+      "Download it, post it wherever. We never touch your accounts.",
   },
 ];
 
@@ -122,32 +122,31 @@ const FLOW_STEPS = [
     step: "1",
     label: "Profile",
     icon: Briefcase,
-    detail: "Paste your app's links. AI builds your profile — you review and hit approve.",
+    detail: "Paste your links. We draft your app profile; you approve it.",
   },
   {
     step: "2",
     label: "Brief",
     icon: Target,
-    detail: "Pick your audience and your goal. Get template picks, each with its reason.",
+    detail: "Pick your audience and goal. Get template picks with reasons.",
   },
   {
     step: "3",
     label: "Plan",
     icon: FileText,
-    detail: "Add your photograph, get a script and shot plan, then edit every word.",
+    detail: "Add your photo. Get the script and shot plan, then edit every line.",
   },
   {
     step: "4",
     label: "Grow",
     icon: Layers,
-    detail:
-      "Approve the short hook, then extend it beat by beat. Each new segment starts from the previous frame, so the seam holds.",
+    detail: "Approve the hook, then extend it. Each segment picks up from the last frame.",
   },
   {
     step: "5",
     label: "Deliver",
     icon: Download,
-    detail: "Generate the video, download it, and post it where fans are waiting.",
+    detail: "Generate, download, post it wherever your audience is.",
   },
 ];
 
@@ -206,8 +205,8 @@ const PIPELINE_BLOCKS = [
     title: "Studied, Then Approved",
     body: (
       <>
-        Your links become a profile: features, audiences, pricing, and what is safe to say. You sign
-        off before anything generates — refreshes never overwrite your approvals.
+        Your links become a profile: features, audience, pricing, and what you're allowed to
+        claim. You approve it before anything generates, and a refresh never overwrites that.
       </>
     ),
   },
@@ -218,8 +217,8 @@ const PIPELINE_BLOCKS = [
     title: "One Smooth Video",
     body: (
       <>
-        Hook and ending arrive as a single vertical clip, with sound where the model allows it. A
-        second pass happens only to stretch the length or to replace a failed segment.
+        Hook and ending arrive in a single vertical clip, with sound where the model supports
+        it. A second pass only stretches the length or replaces a dead segment.
       </>
     ),
   },
@@ -230,9 +229,9 @@ const PIPELINE_BLOCKS = [
     title: "Beat by Beat, Seam Held",
     body: (
       <>
-        Approve a short hook and extend it. The previous clip's final frame becomes the next
-        clip's first, so you, the light and the room carry through instead of jumping. If a
-        model can't take a reference, we tell you exactly which one was dropped.
+        Extend the hook and the last frame becomes the next first frame, so you, the light and
+        the room carry through instead of jumping. If a model drops a reference, we name the one
+        it dropped.
       </>
     ),
   },
@@ -243,9 +242,8 @@ const PIPELINE_BLOCKS = [
     title: "Your Words, Locked In",
     body: (
       <>
-        The scene is generated around you from your app's verified facts — then your
-        captions and end card layer on afterwards from the approved script, so names
-        and calls to action cannot drift.
+        The scene gets built around you from your app's verified facts. Captions and the end
+        card layer on afterwards, taken from the script you approved.
       </>
     ),
   },
@@ -256,8 +254,8 @@ const PIPELINE_BLOCKS = [
     title: "Ideas, Not Copies",
     body: (
       <>
-        Popular patterns become template drafts that wait for your review — inspiration
-        without imitation. No creator's face, voice, or sound ever crosses into what you make.
+        Patterns turn into template drafts that wait for your review. No creator's face, voice
+        or sound ever crosses into what you make.
       </>
     ),
   },
@@ -267,11 +265,11 @@ const PIPELINE_BLOCKS = [
 
 
 const MODELS = [
-  { label: "Words & analysis", value: "Gemini 2.5 Flash — research, profiles, angles, scripts, and template ideas" },
-  { label: "Video (default)", value: "Seedance 2.5 — up to 30 seconds in one take, with sound, up to 720p" },
-  { label: "Video (alternate)", value: "MiniMax H3 — crisper 2K picture in shorter takes; longer cuts take two passes" },
-  { label: "Finishing touches", value: "Captions and end card layered on precisely" },
-  { label: "Trend spotting", value: "Public TikTok metadata, via a research API key — only feeds the optional Trend Research tab" },
+  { label: "Words & analysis", value: "Gemini 2.5 Flash — research, profiles, angles, scripts" },
+  { label: "Video (default)", value: "Seedance 2.5 — one take up to 30s, native sound, 720p" },
+  { label: "Video (alternate)", value: "MiniMax H3 — 2K, but 15 seconds per pass" },
+  { label: "Finishing touches", value: "Captions and end card, layered on precisely" },
+  { label: "Trend spotting", value: "Public TikTok metadata via a research API key — Trend Research tab only" },
 ];
 
 
@@ -372,8 +370,8 @@ export default function Landing() {
             className="animate-fade-up mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl"
             style={{ animationDelay: "120ms" }}
           >
-            People trust a real person. So your photograph anchors every video, and the
-            scene around you is built from your app's verified facts.
+            People trust a face they know. Yours anchors every clip, and the scene
+            around it comes from what we know about your app.
           </p>
 
           <div
@@ -425,7 +423,7 @@ export default function Landing() {
             style={{ animationDelay: "220ms" }}
           >
             <span className="inline-flex items-center gap-1.5">
-              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> You approve the brief
+              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> You approve every word
             </span>
             <span className="inline-flex items-center gap-1.5">
               <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Your real face
@@ -483,7 +481,7 @@ export default function Landing() {
           id="features"
           eyebrow="Capabilities"
           title="Everything Handled"
-          lede="From app link to finished video, with every step handled for you."
+          lede="From a link to a finished video. Every step in between handled."
         />
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -508,8 +506,8 @@ export default function Landing() {
         <SectionHeading
           id="pipeline"
           eyebrow="Under the hood"
-          title="How the Magic Happens"
-          lede="How your app link becomes a video you are proud to post."
+          title="How It Gets Made"
+          lede="How a link becomes a video you're happy to post."
         />
 
         <div className="space-y-4">
@@ -588,8 +586,8 @@ export default function Landing() {
                 Your next promo is one link away.
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">
-                Paste your link. Approve your profile. Pick a hook. Get a finished promo with
-                you in it, ready to post and unmistakably yours.
+                Paste your link. Approve the profile. Pick a hook. Get a promo with you
+                in it, ready to post.
               </p>
               <div className="mt-9 flex flex-col items-center justify-center gap-3.5 sm:flex-row">
                 <UnauthedOnly>
@@ -648,7 +646,7 @@ export default function Landing() {
                 <span className="font-display text-base font-bold tracking-tight">HookForge</span>
               </div>
               <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted-foreground">
-                App promos for founders — paste a link, get a video, post it yourself.
+                App promos for founders. Paste a link, get a video with you in it, post it yourself.
               </p>
             </div>
 
