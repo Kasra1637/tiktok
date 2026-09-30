@@ -367,9 +367,29 @@ export default function AssetLibrary({
       // The operator asserts they have the right to use this asset.
       form.append("rights_confirmed", "true");
       const created = await api.uploadAsset(activeProfileId, form);
-      setNotice(`Added ${humanize(created.kind)} "${created.label || created.name}".`);
       setLabel("");
       if (fileRef.current) fileRef.current.value = "";
+      // Embedded in the wizard with an open draft that has no face yet, the
+      // upload IS the intent — link it at once instead of demanding a second
+      // click on Attach. Scoped tightly: embedded only, face kind only, and
+      // never a replacement (a draft that already has a face is untouched, as
+      // is the standalone library page, which has no draft at all).
+      let attachedNote = "";
+      const draftHasFace = (projectAssets || []).some(
+        (a) => a && a.kind === "character_reference"
+      );
+      if (embedded && projectId && created && created.kind === "character_reference" && !draftHasFace) {
+        try {
+          await api.attachAsset(projectId, { asset_id: created.id });
+          attachedNote = " It is attached to this draft.";
+          onProjectChanged?.();
+        } catch (attachErr) {
+          // The upload itself succeeded, so this is additive: the photo is
+          // in the library and can still be attached by hand.
+          setError(getErrorMessage(attachErr));
+        }
+      }
+      setNotice(`Added ${humanize(created.kind)} "${created.label || created.name}".${attachedNote}`);
       load();
       onChanged?.();
     } catch (err) {
