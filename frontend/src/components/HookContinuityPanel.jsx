@@ -88,24 +88,131 @@ function StatusBadge({ status }) {
   return <Badge variant={variant} className="text-xs">{label}</Badge>;
 }
 
-function StrategyBlock({ title, icon: Icon, rows }) {
+/**
+ * Turn a machine key into something readable.
+ *
+ * The strategy comes back from the model with snake_case keys, and they were
+ * being printed verbatim: "facial_features", "body_appearance", "color_palette".
+ * That reads as a debug dump rather than a plan the founder is meant to act on.
+ *
+ * `ACRONYMS` covers the cases where a plain title-case is wrong, and
+ * `STRATEGY_LABELS` covers the ones that need real words rather than a
+ * mechanical transform.
+ */
+const STRATEGY_LABELS = {
+  camera_angle: "Camera angle",
+  visual_style: "Visual style",
+  age_range: "Age range",
+  color_palette: "Colour palette",
+  hair_style: "Hair style",
+  body_appearance: "Body and posture",
+  facial_features: "Face",
+  facial_expression: "Expression",
+  styling_details: "Styling details",
+  voice_delivery: "Voice delivery",
+  character_positioning: "Position in frame",
+};
+
+const ACRONYMS = {
+  ai: "AI",
+  api: "API",
+  fps: "FPS",
+  hd: "HD",
+  us: "US",
+  uk: "UK",
+  url: "URL",
+  vlog: "Vlog",
+  cta: "CTA",
+};
+
+function strategyLabel(key) {
+  if (STRATEGY_LABELS[key]) return STRATEGY_LABELS[key];
+  return String(key)
+    .split("_")
+    .filter(Boolean)
+    .map((word) => ACRONYMS[word.toLowerCase()] || word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+/**
+ * A titled group of label/value rows.
+ *
+ * The label sits on its own line above the value rather than beside it. Side by
+ * side, `shrink-0` on the label plus a long value forced the value column to
+ * wrap into a ragged narrow strip, which is what made this block hard to scan.
+ * Stacked, every value gets the full column width regardless of key length.
+ */
+function StrategyBlock({ title, icon: Icon, rows, description }) {
   const filled = rows.filter(([, value]) => String(value || "").trim());
   if (!filled.length) return null;
   return (
-    <div className="space-y-1">
-      <span className="eyebrow flex items-center gap-1.5">
-        <Icon className="h-3 w-3" /> {title}
-      </span>
-      <dl className="space-y-0.5 text-sm">
+    <div className="space-y-2">
+      <div className="space-y-0.5">
+        <span className="eyebrow flex items-center gap-1.5">
+          <Icon className="h-3 w-3" /> {title}
+        </span>
+        {description && (
+          <p className="text-xs text-muted-foreground">{description}</p>
+        )}
+      </div>
+      <dl className="space-y-2">
         {filled.map(([label, value]) => (
-          <div key={label} className="flex gap-2">
-            <dt className="shrink-0 text-muted-foreground">{label}</dt>
-            <dd className="min-w-0">{String(value)}</dd>
+          <div key={label}>
+            <dt className="text-xs font-medium text-muted-foreground">
+              {strategyLabel(label)}
+            </dt>
+            <dd className="mt-0.5 text-sm leading-snug">{String(value)}</dd>
           </div>
         ))}
       </dl>
     </div>
   );
+}
+
+/**
+ * Collapse a long run of same-role segments into one readable line.
+ *
+ * A typical plan is 7-8 identical "continuation (1s)" lines, which is a wall of
+ * near-duplicate text that hides the two lines that actually matter — the hook
+ * and the CTA. Runs of the same role and length collapse to "2-8. Continuation
+ * (1s each)"; anything that stands alone keeps its own line, so a plan with one
+ * continuation does not gain a range for no reason.
+ *
+ * A collapsed run reports the summed duration and the COUNT of goals rather than
+ * the first goal it happens to encounter. Printing one goal out of seven would
+ * read as though that was all the run did, which is exactly the kind of quiet
+ * misreading this collapse exists to prevent.
+ */
+function collapseSegments(segments) {
+  const runs = [];
+  segments.forEach((s, i) => {
+    const last = runs[runs.length - 1];
+    const seconds = Number(s.seconds) || 0;
+    if (last && last.role === s.role && last.seconds === seconds) {
+      last.end = i;
+      last.total += seconds;
+      if (s.goal) last.goalCount += 1;
+      return;
+    }
+    runs.push({
+      role: s.role,
+      seconds,
+      total: seconds,
+      start: i,
+      end: i,
+      goal: s.goal,
+      goalCount: s.goal ? 1 : 0,
+    });
+  });
+  return runs;
+}
+
+function segmentRange(run) {
+  // 1-based, and a collapsed run reads "2-8" rather than "2–8" so it stays
+  // unambiguous when copied out of the page.
+  const from = run.start + 1;
+  const to = run.end + 1;
+  return from === to ? `${from}` : `${from}-${to}`;
 }
 
 function ContinuityNote({ continuity }) {
@@ -269,17 +376,13 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
 
   // Declared intent to extend the hook into a full video.
   //
-  // Deliberately NOT load-bearing: it changes what the panel offers and shows,
-  // never what gets rendered, so flipping it after a strategy exists cannot
-  // invalidate that strategy and force a paid rebuild. The hook is still the
-  // opening of a video either way, and extending is always available.
-  const handleExtendIntent = (value) => {
-    if (!projectId) return;
-    api
-      .setProjectExtendIntent(projectId, value)
-      .then((updated) => onProjectChange?.(updated))
-      .catch((err) => setError(getErrorMessage(err)));
-  };
+  // Set on the Audience & goal step, where the total length is chosen, and
+  // persisted with the project. Read-only here: it gates the running total and
+  // the extend button's label, so a hook-only video never presents a target
+  // that was never chosen. Deliberately NOT load-bearing — it changes what this
+  // panel shows, never what gets rendered, so changing it after a strategy
+  // exists cannot invalidate that strategy and force a paid rebuild. The hook is
+  // the opening of a video either way, and extending is always available.
 
   // Running total uses the DELIVERED length of each completed segment, so a
   // hook that was rendered at the floor and trimmed to 3s counts 3s, not the
@@ -484,38 +587,9 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
         )}
       </div>
 
-      {/* Declared intent. The hook is always the opening of a video rather than a
-          deliverable in its own right; this records whether a full video is
-          planned now, and changes only what the panel offers below. */}
-      <div className="space-y-1.5">
-        <span className="text-sm font-medium">What happens after the hook</span>
-        <div className="grid gap-1.5 sm:grid-cols-2">
-          {[
-            { value: true, label: "Extend into a full video", hint: "Shows a running total against your target length." },
-            { value: false, label: "Just the hook for now", hint: "No target shown. You can extend later at any point." },
-          ].map((option) => (
-            <button
-              key={String(option.value)}
-              type="button"
-              onClick={() => handleExtendIntent(option.value)}
-              disabled={Boolean(busy)}
-              aria-pressed={extendIntent === option.value}
-              className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
-                extendIntent === option.value
-                  ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
-                  : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
-              }`}
-            >
-              <span className="block font-medium">{option.label}</span>
-              <span className="mt-0.5 block text-muted-foreground">{option.hint}</span>
-            </button>
-          ))}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          This changes nothing about what gets generated, so switching it later never
-          discards the strategy or the clips you have already made.
-        </p>
-      </div>
+      {/* Declared intent lives on the Audience & goal step now, because it
+          decides whether a total length is a real choice. It is still READ
+          here: it gates the running total below and the extend button's label. */}
 
       {/* 1. Strategy */}
       <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
@@ -542,42 +616,88 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
               <span className="eyebrow">Why this works for this app</span>
               <p className="text-sm">{strategy.strategy_summary}</p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            {/* Person and Scene are the same kind of thing — what the video
+                looks like — so they pair. Performance is how it is delivered
+                rather than what is in frame, and has two rows against their
+                eight and ten, so it takes the full width underneath instead of
+                sitting in a third grid cell and looking orphaned. */}
+            <div className="grid gap-4 sm:grid-cols-2">
               <StrategyBlock
-                title="The person (locked for every segment)"
+                title="The person"
+                description="Locked for every segment."
                 icon={User}
                 rows={Object.entries(strategy.character || {})}
               />
               <StrategyBlock
-                title="The scene (locked for every segment)"
+                title="The scene"
+                description="Locked for every segment."
                 icon={MapPin}
                 rows={Object.entries(strategy.scene || {})}
               />
+            </div>
+            <div className="border-t border-[color:var(--indigo-35)] pt-3">
               <StrategyBlock
                 title="Performance"
                 icon={Film}
                 rows={Object.entries(strategy.performance || {})}
               />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <span className="eyebrow">Segments planned</span>
-              <ol className="space-y-1 text-sm">
-                {(strategy.segments || []).map((s) => (
-                  <li key={s.index}>
-                    <span className="font-medium">{s.role}</span> ({s.seconds}s) — {s.goal}
-                  </li>
-                ))}
+              <ol className="space-y-1.5 text-sm">
+                {collapseSegments(strategy.segments || []).map((run) => {
+                  const collapsed = run.start !== run.end;
+                  return (
+                    <li key={`${run.start}-${run.role}`} className="flex gap-2">
+                      <span className="w-8 shrink-0 font-mono text-xs text-muted-foreground">
+                        {segmentRange(run)}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="font-medium capitalize">{run.role}</span>{" "}
+                        <span className="text-muted-foreground">
+                          {collapsed
+                            ? `x${run.end - run.start + 1}, ${run.total}s total`
+                            : `${run.seconds}s`}
+                        </span>
+                        {!collapsed && run.goal && (
+                          <>
+                            {" — "}
+                            {run.goal}
+                          </>
+                        )}
+                        {collapsed && run.goalCount > 0 && (
+                          <span className="block text-xs text-muted-foreground">
+                            {run.goalCount} {run.goalCount === 1 ? "beat covers" : "beats cover"}{" "}
+                            {run.goalCount === 1 ? "its goal" : "their goals"}
+                            {run.goal ? `, starting with "${run.goal}"` : ""}.
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  );
+                })}
               </ol>
+              <p className="text-xs text-muted-foreground">
+                The hook and the CTA are the two segments that carry the video. The
+                continuations between them hold the same person and scene in place
+                while the point lands.
+              </p>
             </div>
+            {/* Restates the fields above in the model's own words, so it is
+                deliberately the quietest block here: it is the contract, not new
+                information. */}
             {strategy.continuity_contract?.must_not_change?.length > 0 && (
-              <div className="space-y-1">
-                <span className="eyebrow">Locked across the whole video</span>
+              <details className="space-y-1.5 border-t border-[color:var(--indigo-35)] pt-3">
+                <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                  Continuity contract ({strategy.continuity_contract.must_not_change.length} locked
+                  {strategy.continuity_contract.must_not_change.length === 1 ? "" : "s"})
+                </summary>
                 <ul className="list-disc space-y-0.5 pl-4 text-sm">
                   {strategy.continuity_contract.must_not_change.map((c, i) => (
                     <li key={i}>{c}</li>
                   ))}
                 </ul>
-              </div>
+              </details>
             )}
           </div>
         )}
