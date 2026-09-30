@@ -14,8 +14,8 @@ from server import _score_template_for_angle
 class TestCuratedSeeds:
     """The shipped library must be complete, abstract, and honestly labelled."""
 
-    def test_eighteen_templates_seeded(self):
-        assert len(tl.CURATED_TEMPLATES) == 18
+    def test_ten_templates_seeded(self):
+        assert len(tl.CURATED_TEMPLATES) == 10
 
     def test_every_template_has_full_structure(self):
         """A template missing any structural field cannot drive a generation."""
@@ -36,10 +36,15 @@ class TestCuratedSeeds:
         for tpl in tl.CURATED_TEMPLATES:
             assert tpl["objective"] in tl.VIDEO_OBJECTIVES, tpl["name"]
 
-    def test_required_assets_are_all_known_kinds(self):
+    def test_every_template_requires_exactly_the_character_reference(self):
+        """
+        Face-only library: the character reference is the single permitted
+        asset kind. Every template puts the founder on camera, so each one
+        requires exactly ["character_reference"] — no screenshots, recordings,
+        logos, photos, or audio, not even as options.
+        """
         for tpl in tl.CURATED_TEMPLATES:
-            for asset in tpl["required_assets"]:
-                assert asset in tl.ASSET_KINDS, f"{tpl['name']}: {asset}"
+            assert tpl["required_assets"] == ["character_reference"], tpl["name"]
 
     def test_hook_seconds_within_first_three_seconds(self):
         """A hook that runs long is not a hook."""
@@ -74,45 +79,37 @@ class TestCuratedSeeds:
         for tpl in tl.CURATED_TEMPLATES:
             assert isinstance(tpl["content_slots"], dict) and tpl["content_slots"]
 
-    def test_talking_head_templates_require_a_character_reference(self):
+    def test_retired_interface_led_templates_are_gone(self):
         """
-        A talking-head template puts a person on camera, so it must ask for the
-        asset that actually reaches the model as an identity reference.
+        Templates whose whole mechanic was real app footage were deleted, not
+        rewritten: no screenshot, recording, logo, or product shot can ever be
+        uploaded again, so nothing may reference them.
+        """
+        names = {tpl["name"] for tpl in tl.CURATED_TEMPLATES}
+        for retired in (
+            "Before and After",
+            "Quick App Demonstration",
+            "Feature Reveal",
+            "Competitor Alternative",
+            "Fast Tutorial",
+            "Screen-Recording Reveal",
+            "Problem, App, Result",
+            "Three Taps to Solve This",
+        ):
+            assert retired not in names, retired
 
-        This is the invariant behind a silent failure. "creator_photo" is only
-        ever composited as an overlay and enters no part of the generation
-        pipeline, so a founder who attached exactly what the template asked for
-        got a generated lookalike with no error — the 409 guard in
-        _studio_identity_references only covers submissions that do carry a
-        character_reference. "character_reference" is the only kind passed to
-        the model as identity.
+    def test_creator_photo_is_gone_everywhere(self):
+        """
+        Inversion of the old pin. creator_photo never anchored a face and no
+        second upload kind survives: "Three Mistakes" and "Short
+        Transformation Story" are presenter-led now and require the same
+        character reference as everything else.
         """
         for tpl in tl.CURATED_TEMPLATES:
-            if not str(tpl.get("visual_style") or "").lower().startswith("talking_head"):
-                continue
-            assert "character_reference" in tpl["required_assets"], (
-                f"{tpl['name']} is a talking head but does not require a "
-                f"character_reference: {tpl['required_assets']}"
-            )
-            assert "creator_photo" not in tpl["required_assets"], (
-                f"{tpl['name']} is a talking head and must not require "
-                f"creator_photo, which never anchors a face: {tpl['required_assets']}"
-            )
-
-    def test_non_talking_head_templates_are_left_as_they_are(self):
-        """
-        The counterpart to the guard above, so a well-meaning sweep cannot
-        rewrite the whole library. "Three Mistakes" is numbered cards and
-        "Short Transformation Story" is b-roll; a composited creator photo is a
-        defensible requirement for those, and this pins that decision.
-        """
+            assert "creator_photo" not in tpl["required_assets"], tpl["name"]
         by_name = {tpl["name"]: tpl for tpl in tl.CURATED_TEMPLATES}
         for name in ("Three Mistakes", "Short Transformation Story"):
-            tpl = by_name[name]
-            assert not str(tpl["visual_style"]).lower().startswith("talking_head")
-            assert "creator_photo" in tpl["required_assets"], (
-                f"{name} should keep creator_photo: {tpl['required_assets']}"
-            )
+            assert by_name[name]["required_assets"] == ["character_reference"]
 
     def test_seed_rows_carry_honest_evidence_note(self):
         for row in tl.curated_template_rows():
@@ -185,7 +182,7 @@ class TestRecommendationScorer:
         base = {
             "name": "T", "category": "demo", "objective": "demonstrate_feature",
             "app_categories": ["productivity"], "audiences": ["cold_audience"],
-            "required_assets": ["screenshot"], "content_slots": {"app_feature": "the timer"},
+            "required_assets": ["character_reference"], "content_slots": {"app_feature": "the timer"},
             "continuation_structure": "Then CTA.", "review_status": "approved",
         }
         base.update(overrides)
@@ -230,10 +227,10 @@ class TestRecommendationScorer:
         angle = {"kind": "problem_solution", "target_audience": "", "app_feature": "",
                  "claims_to_respect": []}
         result = _score_template_for_angle(
-            self._template(required_assets=["screen_recording", "logo"]),
+            self._template(required_assets=["character_reference"]),
             self._profile(), angle, "",
         )
-        assert any("screen recording" in lim for lim in result["limitations"])
+        assert any("character reference" in lim for lim in result["limitations"])
 
     def test_claims_to_respect_are_carried_into_limitations(self):
         angle = {

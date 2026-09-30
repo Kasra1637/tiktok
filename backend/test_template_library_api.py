@@ -70,7 +70,7 @@ class TestLibrarySeeding:
         rows = _run(api._fetch_all(
             "SELECT id FROM hook_templates WHERE origin = 'curated'"
         ))
-        assert len(rows) == 18
+        assert len(rows) == 10
 
     def test_seed_is_idempotent(self, api):
         _run(api.init_db())
@@ -78,7 +78,7 @@ class TestLibrarySeeding:
         rows = _run(api._fetch_all(
             "SELECT id FROM hook_templates WHERE origin = 'curated'"
         ))
-        assert len(rows) == 18
+        assert len(rows) == 10
 
     def test_seeded_templates_are_shared_and_approved(self, api):
         rows = _run(api._fetch_all(
@@ -90,78 +90,85 @@ class TestLibrarySeeding:
         assert all(r["opening_structure"] for r in rows)
 
 
-class TestTalkingHeadAssetBackfill:
+class TestFaceOnlyMigration:
     """
-    The curated talking-head templates used to require "creator_photo", which
-    is only ever composited as an overlay and enters no part of the generation
-    pipeline, so it never became the identity reference that puts a face on
-    camera. The literals alone cannot fix this: seeding matches on name and
-    skips anything already present, so a database seeded before the correction
-    keeps the old requirement forever. These tests drive init_db against rows
-    that already exist, which is the only case that actually happens in
-    production.
+    Face-only library: every curated template requires exactly
+    ["character_reference"], and templates whose whole mechanic was real app
+    footage are archived, not deleted. The literals alone cannot do either:
+    seeding matches on name and skips anything already present, so a database
+    seeded before the rule keeps stale requirements and retired templates
+    forever. These tests drive init_db against rows that already exist, which
+    is the only case that actually happens in production.
     """
 
-    def _talking_head_names(self, api):
+    def test_fresh_database_seeds_face_only_requirements(self, api):
         import template_library as tl
-        return [
-            tpl["name"] for tpl in tl.CURATED_TEMPLATES
-            if str(tpl.get("visual_style") or "").lower().startswith("talking_head")
-        ]
-
-    def test_fresh_database_seeds_the_right_requirement(self, api):
-        for name in self._talking_head_names(api):
+        assert len(tl.CURATED_TEMPLATES) == 10
+        for tpl in tl.CURATED_TEMPLATES:
             row = _run(api._fetch_one(
-                "SELECT required_assets FROM hook_templates WHERE name = ? AND origin = 'curated'",
-                (name,),
+                "SELECT required_assets, archived FROM hook_templates "
+                "WHERE name = ? AND origin = 'curated'",
+                (tpl["name"],),
             ))
-            assert "character_reference" in row["required_assets"], (name, row["required_assets"])
-            assert "creator_photo" not in row["required_assets"], (name, row["required_assets"])
+            assert row["required_assets"] == ["character_reference"], (tpl["name"], row)
+            assert not row["archived"], tpl["name"]
 
-    def test_backfill_corrects_a_row_seeded_with_the_old_requirement(self, api):
+    def test_migration_resets_a_stale_requirement(self, api):
         """
-        Simulates the real upgrade: the row is already there with the wrong
-        requirement, so the name-match seed skips it and only the backfill can
-        put it right. Restored afterwards so the module fixture is left clean.
+        Simulates the real upgrade: the row is already there with retired
+        requirements, so the name-match seed skips it and only the migration
+        can put it right. Ends in the clean state, so the shared fixture is
+        left as found.
         """
-        name = self._talking_head_names(api)[0]
+        name = "Pain-Point Question"
         _run(api._execute(
             "UPDATE hook_templates SET required_assets = ? WHERE name = ? AND origin = 'curated'",
-            ('["creator_photo", "screenshot"]', name),
+            ('["screenshot", "logo"]', name),
         ))
         stale = _run(api._fetch_one(
             "SELECT required_assets FROM hook_templates WHERE name = ?", (name,)))
-        assert stale["required_assets"] == ["creator_photo", "screenshot"]
+        assert stale["required_assets"] == ["screenshot", "logo"]
 
         _run(api.init_db())
 
         fixed = _run(api._fetch_one(
             "SELECT required_assets FROM hook_templates WHERE name = ?", (name,)))
-        assert fixed["required_assets"] == ["character_reference", "screenshot"], fixed
+        assert fixed["required_assets"] == ["character_reference"], fixed
 
-    def test_backfill_leaves_an_already_corrected_row_alone(self, api):
-        name = self._talking_head_names(api)[0]
-        _run(api._execute(
-            "UPDATE hook_templates SET required_assets = ? WHERE name = ? AND origin = 'curated'",
-            ('["character_reference", "screenshot"]', name),
-        ))
+    def test_migration_leaves_an_already_correct_row_alone(self, api):
+        name = "Pain-Point Question"
+        before = _run(api._fetch_one(
+            "SELECT required_assets, version FROM hook_templates WHERE name = ?", (name,)))
         _run(api.init_db())
         row = _run(api._fetch_one(
             "SELECT required_assets, version FROM hook_templates WHERE name = ?", (name,)))
-        assert row["required_assets"] == ["character_reference", "screenshot"], row
+        assert row["required_assets"] == ["character_reference"], row
+        assert row["version"] == before["version"], row
 
-    def test_backfill_does_not_touch_a_non_talking_head_template(self, api):
+    def test_migration_archives_retired_templates(self, api):
         """
-        The guard is scoped to talking heads. "Three Mistakes" is numbered cards
-        and keeps its creator photo — a blanket sweep would be wrong there.
+        Simulates the real upgrade: the database was seeded when "Fast
+        Tutorial" was still a library template. Deleting the literal cannot
+        remove the row, so the migration archives it instead — the picker
+        hides archived rows but existing projects keep their foreign keys.
+        The row is removed afterwards so the shared fixture is left clean.
         """
-        row = _run(api._fetch_one(
-            "SELECT required_assets FROM hook_templates WHERE name = 'Three Mistakes'"))
+        import uuid as _uuid
+        _run(api._execute(
+            "INSERT INTO hook_templates (id, name, category, origin, required_assets, "
+            "archived, created_at, updated_at, user_id) VALUES (?, 'Fast Tutorial', "
+            "'tutorial', 'curated', ?, 0, '', '', 'system')",
+            (str(_uuid.uuid4()), '["screen_recording"]'),
+        ))
         _run(api.init_db())
-        after = _run(api._fetch_one(
-            "SELECT required_assets FROM hook_templates WHERE name = 'Three Mistakes'"))
-        assert after["required_assets"] == row["required_assets"]
-        assert "creator_photo" in after["required_assets"], after
+        row = _run(api._fetch_one(
+            "SELECT archived FROM hook_templates "
+            "WHERE name = 'Fast Tutorial' AND origin = 'curated'"))
+        assert row["archived"] == 1, row
+        assert "Fast Tutorial" not in [
+            t["name"] for t in _run(api.list_templates(user_id=ANON))["templates"]]
+        _run(api._execute(
+            "DELETE FROM hook_templates WHERE name = 'Fast Tutorial' AND origin = 'curated'"))
 
     def test_backfill_never_touches_a_users_own_template(self, api):
         """
@@ -173,7 +180,7 @@ class TestTalkingHeadAssetBackfill:
         _run(api._execute(
             "INSERT INTO hook_templates (id, name, category, origin, required_assets, "
             "created_at, updated_at, user_id) VALUES (?, ?, 'other', 'custom', ?, '', '', ?)",
-            (mine, self._talking_head_names(api)[0], '["creator_photo"]', ANON),
+            (mine, "Pain-Point Question", '["creator_photo"]', ANON),
         ))
         _run(api.init_db())
         row = _run(api._fetch_one(
@@ -201,11 +208,13 @@ class TestTalkingHeadAssetBackfill:
 
 class TestTemplateListing:
     def test_lists_curated_templates(self, api):
-        result = _run(api.list_templates(user_id=ANON))
-        assert len(result["templates"]) == 18
+        # Scoped to origin='curated': other tests in this shared database
+        # create custom rows, which the default listing correctly includes.
+        result = _run(api.list_templates(origin="curated", user_id=ANON))
+        assert len(result["templates"]) == 10
 
     def test_every_listed_template_is_usable(self, api):
-        result = _run(api.list_templates(user_id=ANON))
+        result = _run(api.list_templates(origin="curated", user_id=ANON))
         assert all(t["is_usable"] for t in result["templates"])
 
     def test_no_template_claims_proven(self, api):
@@ -214,18 +223,18 @@ class TestTemplateListing:
             assert "proven" not in (t.get("evidence_note") or "").lower()
 
     def test_search_matches_name(self, api):
-        result = _run(api.list_templates(q="tutorial", user_id=ANON))
+        result = _run(api.list_templates(q="mistakes", user_id=ANON))
         names = [t["name"] for t in result["templates"]]
-        assert "Fast Tutorial" in names
+        assert "Three Mistakes" in names
 
     def test_search_matches_opening_structure(self, api):
         result = _run(api.list_templates(q="open mid-motion", user_id=ANON))
         assert "Pattern Interrupt" in [t["name"] for t in result["templates"]]
 
     def test_category_filter(self, api):
-        result = _run(api.list_templates(category="demo", user_id=ANON))
-        assert result["templates"]
-        assert all(t["category"] == "demo" for t in result["templates"])
+        result = _run(api.list_templates(category="story", user_id=ANON))
+        assert len(result["templates"]) == 2
+        assert all(t["category"] == "story" for t in result["templates"])
 
     def test_objective_filter(self, api):
         result = _run(api.list_templates(objective="educate_viewers", user_id=ANON))
@@ -244,7 +253,9 @@ class TestTemplateListing:
         assert facets["supported_durations"] == [10, 15, 20, 30]
 
     def test_unknown_category_filter_returns_empty_not_error(self, api):
-        result = _run(api.list_templates(category="nonsense", user_id=ANON))
+        # Scoped to curated: "nonsense" normalizes to "other", which matches
+        # other tests' leftover custom rows in this shared database.
+        result = _run(api.list_templates(category="nonsense", origin="curated", user_id=ANON))
         assert result["templates"] == []
 
 
@@ -561,7 +572,13 @@ class TestRecommendations:
         result = _run(api.recommend_templates(profile_id=profile["id"], user_id=ANON))
         assert copy["id"] not in [r["template"]["id"] for r in result["recommendations"]]
 
-    def test_demonstration_angle_prefers_demo_templates(self, api):
+    def test_demonstration_angle_returns_face_only_templates(self, api):
+        """
+        The interface-led demo templates are gone, so a demonstration angle
+        can no longer prefer them. What it must still guarantee: every
+        recommendation is usable with nothing but a character reference, and
+        no limitation names a retired upload.
+        """
         from models import CreateContentAngleRequest
         profile = _make_profile(api, ANON, name="Reco App 4")
         angle = _run(api.create_manual_content_angle(
@@ -575,8 +592,21 @@ class TestRecommendations:
         result = _run(api.recommend_templates(
             profile_id=profile["id"], angle_id=angle["id"],
             objective="demonstrate_feature", user_id=ANON))
+        assert result["recommendations"]
+        # Curated scope: other tests in this shared database create custom
+        # rows with retired requirements, which recommendations correctly
+        # include until those rows are edited under the face-only rule.
+        curated = [r for r in result["recommendations"]
+                   if r["template"].get("origin") == "curated"]
+        assert curated
+        for r in curated:
+            assert r["required_assets"] == ["character_reference"], r
+            assert not any(
+                retired in lim
+                for lim in r["limitations"]
+                for retired in ("screenshot", "screen recording", "logo")
+            ), r["limitations"]
         top = result["recommendations"][0]
-        assert top["template"]["category"] in ("demo", "tutorial", "reveal")
         assert top["app_feature"] == "Task timer"
 
     def test_recommendations_sorted_by_score_desc(self, api):
@@ -717,7 +747,7 @@ class TestCrossUserIsolation:
 
     def test_curated_templates_visible_to_everyone(self, api):
         listing = _run(api.list_templates(user_id=OTHER_USER))
-        assert len(listing["templates"]) >= 18
+        assert len(listing["templates"]) >= 10
 
     def test_another_users_profile_is_404(self, api):
         profile = _make_profile(api, ANON, name="Secret App")

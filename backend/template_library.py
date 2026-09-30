@@ -105,8 +105,9 @@ DEFAULT_DURATION = 20
 # Curated template seeds
 # ---------------------------------------------------------------------------
 # Each entry is abstract. `content_slots` are the fill-in points the creative
-# plan fills for a specific app; `required_assets` is what the founder must
-# supply (or what Phase 6 composites deterministically).
+# plan fills for a specific app; `required_assets` is always exactly
+# ["character_reference"] — the face that anchors every video. Nothing else
+# is ever uploaded, attached, or composited.
 CURATED_TEMPLATES = [
     {
         "name": "Pattern Interrupt",
@@ -120,13 +121,13 @@ CURATED_TEMPLATES = [
         ),
         "hook_seconds": 2,
         "continuation_structure": (
-            "Cut to the problem the product solves (2-5s), then the app in real use "
-            "(5s-end), closing on the CTA."
+            "Cut to the problem the product solves (2-5s), then the presenter living "
+            "the solved state (5s-end), closing on the CTA."
         ),
         "cta_pattern": "soft_cta",
         "visual_style": "fast_cuts_high_contrast",
         "camera_pacing": "quick handheld, hard cut on the beat, no slow build",
-        "required_assets": ["background_video", "logo"],
+        "required_assets": ["character_reference"],
         "default_duration": 15,
         "content_slots": {
             "pattern_beat": "the unexpected visual beat",
@@ -147,13 +148,13 @@ CURATED_TEMPLATES = [
         ),
         "hook_seconds": 3,
         "continuation_structure": (
-            "Name the cost of leaving it unfixed (3-8s), show the app resolving it "
-            "(8-16s), CTA (final seconds)."
+            "Name the cost of leaving it unfixed (3-8s), show the resolved state "
+            "on camera (8-16s), CTA (final seconds)."
         ),
         "cta_pattern": "problem_to_solution_cta",
         "visual_style": "talking_head_with_broll",
         "camera_pacing": "steady, eye-level, cut to broll on the answer",
-        "required_assets": ["character_reference", "screenshot"],
+        "required_assets": ["character_reference"],
         "default_duration": 20,
         "content_slots": {
             "question": "the pain-point question",
@@ -201,43 +202,18 @@ CURATED_TEMPLATES = [
         ),
         "hook_seconds": 3,
         "continuation_structure": (
-            "Reveal the thing (3-6s), demonstrate it working (6-16s), CTA."
+            "Reveal the thing (3-6s), show it working in the presenter's world "
+            "(6-16s), CTA."
         ),
         "cta_pattern": "reveal_cta",
         "visual_style": "talking_head_then_demo",
         "camera_pacing": "hold the reveal beat, then cut on the reveal",
-        "required_assets": ["character_reference", "screen_recording"],
+        "required_assets": ["character_reference"],
         "default_duration": 20,
         "content_slots": {
             "regret": "the regret framing",
             "reveal": "what was revealed",
             "app_feature": "the feature being shown",
-            "cta": "the single next action",
-        },
-    },
-    {
-        "name": "Before and After",
-        "category": "before-after",
-        "app_categories": [],
-        "audiences": ["cold_audience", "skeptical_viewers"],
-        "objective": "demonstrate_feature",
-        "opening_structure": (
-            "Hard split or hard cut between the 'before' state and the 'after' state. "
-            "Show the after first if the contrast is the surprise."
-        ),
-        "hook_seconds": 3,
-        "continuation_structure": (
-            "Explain the single change that produced the difference (3-10s), then CTA."
-        ),
-        "cta_pattern": "outcome_cta",
-        "visual_style": "split_screen_or_hard_cut",
-        "camera_pacing": "static matched framing across both states",
-        "required_assets": ["screenshot", "screenshot"],
-        "default_duration": 15,
-        "content_slots": {
-            "before": "the before state",
-            "after": "the after state",
-            "mechanism": "what produced the change",
             "cta": "the single next action",
         },
     },
@@ -256,40 +232,14 @@ CURATED_TEMPLATES = [
             "Mistake 1 (3-8s), 2 (8-13s), 3 (13-18s) with the app as the fix, CTA."
         ),
         "cta_pattern": "listicle_cta",
-        "visual_style": "numbered_cards_with_broll",
-        "camera_pacing": "one clear beat per item, count visibly on screen",
-        "required_assets": ["creator_photo", "screenshot"],
+        "visual_style": "presenter_led_listicle",
+        "camera_pacing": "one clear beat per item, count on camera",
+        "required_assets": ["character_reference"],
         "default_duration": 20,
         "content_slots": {
             "promise": "the numbered promise",
             "mistakes": "the three mistakes, one per line",
             "app_feature": "the feature that fixes them",
-            "cta": "the single next action",
-        },
-    },
-    {
-        "name": "Quick App Demonstration",
-        "category": "demo",
-        "app_categories": [],
-        "audiences": ["cold_audience", "evaluating_viewers"],
-        "objective": "demonstrate_feature",
-        "opening_structure": (
-            "Start already inside the app. No logo card, no intro — the interface is "
-            "the hook."
-        ),
-        "hook_seconds": 2,
-        "continuation_structure": (
-            "Complete one real task start to finish (2-12s), state the outcome (12-16s), CTA."
-        ),
-        "cta_pattern": "try_it_cta",
-        "visual_style": "screen_recording_first",
-        "camera_pacing": "follows the interaction, no reframing mid-task",
-        "required_assets": ["screen_recording", "logo"],
-        "default_duration": 15,
-        "content_slots": {
-            "task": "the single task being completed",
-            "outcome": "what the user ends up with",
-            "app_feature": "the feature doing the work",
             "cta": "the single next action",
         },
     },
@@ -305,13 +255,13 @@ CURATED_TEMPLATES = [
         ),
         "hook_seconds": 3,
         "continuation_structure": (
-            "Run the scenario (3-10s), reveal the app as the reason it works out "
+            "Run the scenario (3-10s), reveal the outcome the app made possible "
             "(10-16s), CTA."
         ),
         "cta_pattern": "scenario_cta",
-        "visual_style": "first_person_implied",
+        "visual_style": "presenter_led_scenario",
         "camera_pacing": "immersive, handheld, scene-first",
-        "required_assets": ["background_video", "logo"],
+        "required_assets": ["character_reference"],
         "default_duration": 15,
         "content_slots": {
             "scenario": "the POV situation",
@@ -333,12 +283,12 @@ CURATED_TEMPLATES = [
         "hook_seconds": 3,
         "continuation_structure": (
             "Pay off the gap early (3-7s), then earn the rest of the watch with the "
-            "app in use, CTA."
+            "presenter, CTA."
         ),
         "cta_pattern": "reveal_cta",
         "visual_style": "withheld_then_revealed",
         "camera_pacing": "hold the gap, reveal on a clean cut",
-        "required_assets": ["background_video", "screenshot"],
+        "required_assets": ["character_reference"],
         "default_duration": 15,
         "content_slots": {
             "withheld": "what is deliberately not shown",
@@ -364,66 +314,13 @@ CURATED_TEMPLATES = [
         ),
         "cta_pattern": "agreement_cta",
         "visual_style": "talking_head_with_evidence",
-        "camera_pacing": "steady, cut to evidence screens on the justification",
-        "required_assets": ["character_reference", "screenshot"],
+        "camera_pacing": "steady, cut to illustrative evidence on the justification",
+        "required_assets": ["character_reference"],
         "default_duration": 20,
         "content_slots": {
             "contrarian_claim": "the disputed position",
             "justification": "why the product supports it",
             "concession": "the honest counterargument",
-            "cta": "the single next action",
-        },
-    },
-    {
-        "name": "Feature Reveal",
-        "category": "reveal",
-        "app_categories": [],
-        "audiences": ["existing_users", "evaluating_viewers"],
-        "objective": "demonstrate_feature",
-        "opening_structure": (
-            "Lead with the one thing a viewer cannot get elsewhere, shown in real use "
-            "rather than described."
-        ),
-        "hook_seconds": 3,
-        "continuation_structure": (
-            "Show it working (3-12s), show the result it produces (12-16s), CTA."
-        ),
-        "cta_pattern": "try_it_cta",
-        "visual_style": "screen_recording_with_callouts",
-        "camera_pacing": "screen-led, callouts appear on the beat",
-        "required_assets": ["screen_recording", "screenshot"],
-        "default_duration": 15,
-        "content_slots": {
-            "feature": "the single feature",
-            "proof": "what it does in real use",
-            "result": "the output it produces",
-            "cta": "the single next action",
-        },
-    },
-    {
-        "name": "Competitor Alternative",
-        "category": "social-proof",
-        "app_categories": [],
-        "audiences": ["evaluating_viewers", "skeptical_viewers"],
-        "objective": "compare_alternative",
-        "opening_structure": (
-            "Name the situation where someone would pick the obvious alternative, then "
-            "reframe what matters about the choice."
-        ),
-        "hook_seconds": 3,
-        "continuation_structure": (
-            "Compare on dimensions the viewer actually cares about (3-12s) using only "
-            "verified facts, then CTA."
-        ),
-        "cta_pattern": "switch_cta",
-        "visual_style": "side_by_side_comparison",
-        "camera_pacing": "matched shots, one per comparison dimension",
-        "required_assets": ["screenshot", "screenshot", "logo"],
-        "default_duration": 20,
-        "content_slots": {
-            "alternative": "the alternative being compared against",
-            "dimensions": "the comparison dimensions, one per line",
-            "advantage": "the verified advantage",
             "cta": "the single next action",
         },
     },
@@ -443,118 +340,14 @@ CURATED_TEMPLATES = [
             "result (15-18s), CTA."
         ),
         "cta_pattern": "story_cta",
-        "visual_style": "documentary_broll",
+        "visual_style": "presenter_led_story",
         "camera_pacing": "measured, cut on the narrative beats",
-        "required_assets": ["creator_photo", "background_video", "screenshot"],
+        "required_assets": ["character_reference"],
         "default_duration": 20,
         "content_slots": {
             "turning_point": "the opening turn",
             "friction": "what was hard before",
             "app_role": "what the app did",
-            "cta": "the single next action",
-        },
-    },
-    {
-        "name": "Fast Tutorial",
-        "category": "tutorial",
-        "app_categories": [],
-        "audiences": ["cold_audience", "existing_users"],
-        "objective": "educate_viewers",
-        "opening_structure": (
-            "State the outcome the viewer gets, then go. No preamble, no 'hey guys'. "
-            "First frame is already step one."
-        ),
-        "hook_seconds": 2,
-        "continuation_structure": (
-            "Two or three steps maximum, one per beat (2-14s), show the finished result, CTA."
-        ),
-        "cta_pattern": "save_cta",
-        "visual_style": "screen_recording_step_cards",
-        "camera_pacing": "one step per cut, on-screen step counter",
-        "required_assets": ["screen_recording", "screenshot"],
-        "default_duration": 15,
-        "content_slots": {
-            "outcome": "what they'll be able to do",
-            "steps": "the steps, one per line",
-            "result": "the finished result",
-            "cta": "the single next action",
-        },
-    },
-    {
-        "name": "Screen-Recording Reveal",
-        "category": "demo",
-        "app_categories": [],
-        "audiences": ["evaluating_viewers", "existing_users"],
-        "objective": "demonstrate_feature",
-        "opening_structure": (
-            "Begin on a real screen recording mid-action. Interface legibility beats "
-            "any intro."
-        ),
-        "hook_seconds": 3,
-        "continuation_structure": (
-            "Continue the flow (3-12s), pull back to name what they just saw (12-16s), CTA."
-        ),
-        "cta_pattern": "try_it_cta",
-        "visual_style": "screen_recording_native",
-        "camera_pacing": "native interaction speed, no speed-up on the key moment",
-        "required_assets": ["screen_recording"],
-        "default_duration": 15,
-        "content_slots": {
-            "action": "what is happening on screen",
-            "feature_name": "what the feature is called",
-            "benefit": "why it matters to the viewer",
-            "cta": "the single next action",
-        },
-    },
-    {
-        "name": "Problem, App, Result",
-        "category": "pattern-interrupt",
-        "app_categories": [],
-        "audiences": ["cold_audience", "targeted_audience"],
-        "objective": "explain_app",
-        "opening_structure": (
-            "Three-beat spine: name the problem concretely, introduce the app as the "
-            "direct answer, show the result."
-        ),
-        "hook_seconds": 3,
-        "continuation_structure": (
-            "Problem (0-6s), app (6-12s), result (12-18s), CTA (final seconds)."
-        ),
-        "cta_pattern": "problem_to_solution_cta",
-        "visual_style": "narrated_with_interfaces",
-        "camera_pacing": "one beat per cut, aligned to the spine",
-        "required_assets": ["screenshot", "logo", "product_image"],
-        "default_duration": 20,
-        "content_slots": {
-            "problem": "the concrete problem",
-            "app_intro": "one sentence on what the app is",
-            "result": "the result the viewer can expect",
-            "cta": "the single next action",
-        },
-    },
-    {
-        "name": "Three Taps to Solve This",
-        "category": "tutorial",
-        "app_categories": [],
-        "audiences": ["cold_audience", "evaluating_viewers"],
-        "objective": "demonstrate_feature",
-        "opening_structure": (
-            "Promise a tiny, concrete effort count up front. It must be true — if it "
-            "takes more, change the number."
-        ),
-        "hook_seconds": 2,
-        "continuation_structure": (
-            "Count the actions on screen (2-10s), land the result (10-14s), CTA."
-        ),
-        "cta_pattern": "save_cta",
-        "visual_style": "tap_counter_over_interface",
-        "camera_pacing": "one tap per cut, visible counter",
-        "required_assets": ["screen_recording"],
-        "default_duration": 15,
-        "content_slots": {
-            "effort_promise": "the specific effort count",
-            "steps": "the taps, one per line",
-            "result": "what the user now has",
             "cta": "the single next action",
         },
     },
@@ -575,7 +368,7 @@ CURATED_TEMPLATES = [
         "cta_pattern": "routine_cta",
         "visual_style": "daylight_documentary",
         "camera_pacing": "natural, unpolished, chronological",
-        "required_assets": ["background_video", "screenshot", "logo"],
+        "required_assets": ["character_reference"],
         "default_duration": 20,
         "content_slots": {
             "moment": "the routine moment",

@@ -491,12 +491,13 @@ class TestIdentityContinuity:
             for r in refs
         )
 
-    def test_missing_character_reference_still_anchors_the_face_via_the_frame(
+    def test_missing_character_reference_is_refused_not_silently_anonymous(
         self, api, monkeypatch
     ):
         """
         A project without an uploaded face must not silently produce an
-        anonymous influencer while the prompt still claims a locked person.
+        anonymous influencer. Every template puts a person on camera, so the
+        hook refuses loudly before the provider is called.
         """
         from models import GenerateHookRequest
         project, _profile, _template = _make_project(api, NURSE_APP, with_character=False)
@@ -505,10 +506,12 @@ class TestIdentityContinuity:
                         problem="Shift paperwork", feature="One-tap shift logging",
                         cta="Try it free")
         calls = _mock_submit(api, monkeypatch)
-        _run(api.generate_project_hook(
-            project_id=project["id"], payload=GenerateHookRequest(), user_id=ANON))
-        assert not calls[0].get("input_references")
-        assert "exact individual in the attached character reference" not in calls[0]["prompt"]
+        with pytest.raises(HTTPException) as err:
+            _run(api.generate_project_hook(
+                project_id=project["id"], payload=GenerateHookRequest(), user_id=ANON))
+        assert err.value.status_code == 409
+        assert "character reference" in str(err.value.detail)
+        assert not calls, "the provider was called despite the refusal"
 
 
 # ---------------------------------------------------------------------------

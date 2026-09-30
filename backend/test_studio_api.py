@@ -63,7 +63,7 @@ def _approved_profile(api, name="Studio App", **kwargs):
     return profile
 
 
-def _a_template(api, name="Quick App Demonstration"):
+def _a_template(api, name="Stop Doing This"):
     return _run(api.list_templates(q=name, user_id=ANON))["templates"][0]
 
 
@@ -405,8 +405,8 @@ class TestClaimSafetyOnEdit:
     def test_switching_template_repins_version(self, api):
         from models import UpdateStudioProjectRequest
         profile = _approved_profile(api, "Repin")
-        first = _a_template(api, "Fast Tutorial")
-        second = _a_template(api, "Before and After")
+        first = _a_template(api, "Stop Doing This")
+        second = _a_template(api, "Pain-Point Question")
         project = _a_project(api, profile, first)
         edited = _run(api.update_studio_project(
             project_id=project["id"],

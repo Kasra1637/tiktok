@@ -60,9 +60,14 @@ def _run(coro):
     return asyncio.run(coro)
 
 
-def _ready_project(api, name="Gen App", template_query="Quick App Demonstration",
-                   duration=20, model_note=None):
-    """An approved profile, a template, and a project marked ready."""
+def _ready_project(api, name="Gen App", template_query="Stop Doing This",
+                   duration=20, model_note=None, with_character=True):
+    """An approved profile, a face-anchored template, and a project marked ready.
+
+    Face-only library: every template puts a person on camera, so the fixture
+    attaches a real character_reference unless a test explicitly opts out to
+    exercise the refusal.
+    """
     from models import (
         BrandProfileCreateRequest, ApproveAppProfileRequest,
         CreateStudioProjectRequest,
@@ -83,10 +88,29 @@ def _ready_project(api, name="Gen App", template_query="Quick App Demonstration"
         template_id=template["id"],
         duration_seconds=duration,
     ), user_id=ANON))
+    from models import now_iso
+    assets = []
+    if with_character:
+        # A real 1x1 PNG on disk so the identity resolver accepts it.
+        face = Path(tempfile.mkdtemp(prefix="tiktok-ready-")) / "face.png"
+        face.write_bytes(bytes.fromhex(
+            "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+            "0000000d49444154789c626001000000ffff0300000600055d3866680000000049454e44ae426082"))
+        asset_id = str(uuid.uuid4())
+        now = now_iso()
+        _run(api._execute(
+            "INSERT INTO assets (id, brand_profile_id, kind, name, file_path, label,"
+            " created_at, updated_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (asset_id, profile["id"], "character_reference", "Founder face",
+             str(face), "Founder face", now, now, ANON)))
+        assets = [{
+            "asset_id": asset_id, "kind": "character_reference",
+            "label": "Founder face", "file_path": str(face),
+        }]
     _run(api._execute(
-        """UPDATE studio_projects SET hook_line = ?, script = ?, status = 'ready_for_generation'
+        """UPDATE studio_projects SET assets = ?, hook_line = ?, script = ?, status = 'ready_for_generation'
            WHERE id = ?""",
-        ("Stop writing empty pages", "A short script for the app.", project["id"])))
+        (json.dumps(assets), "Stop writing empty pages", "A short script for the app.", project["id"])))
     return _run(api.get_studio_project(project["id"], ANON)), profile, template
 
 
@@ -718,14 +742,21 @@ class TestStudioIdentityReference:
         for invented in ("round face", "teal scrubs", "low bun"):
             assert invented not in calls[0]["prompt"], f"prompt invents an appearance: {invented}"
 
-    def test_no_anchor_means_no_references(self, api, monkeypatch):
+    def test_no_anchor_means_refusal_not_silent_generation(self, api, monkeypatch):
+        """
+        Face-only library: a project with no character reference cannot
+        generate at all. The refusal happens before the provider is called —
+        there is no mode where the model quietly invents a presenter.
+        """
         from models import StudioGenerationRequest
-        project, _, _ = _ready_project(api, "No Anchor")
+        project, _, _ = _ready_project(api, "No Anchor", with_character=False)
         calls = _mock_submit(api, monkeypatch)
-        _run(api.submit_project_generation(
-            project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
-        assert not calls[0].get("input_references")
-        assert "attached character reference" not in calls[0]["prompt"]
+        with pytest.raises(HTTPException) as err:
+            _run(api.submit_project_generation(
+                project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        assert err.value.status_code == 409
+        assert "character reference" in str(err.value.detail)
+        assert not calls, "the provider was called despite the refusal"
 
     def test_a_template_that_needs_a_face_refuses_without_one(self, api, monkeypatch):
         """
