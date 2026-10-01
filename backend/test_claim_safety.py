@@ -2,9 +2,12 @@
 Tests for the deterministic claim-safety checker.
 
 This module is the safety net for generated scripts, so it is tested against
-the failure modes it exists to prevent: prohibited claims, invented pricing,
-fabricated social proof, guaranteed outcomes, regulated claims, and viewer
-diagnosis framing.
+the failure modes it exists to prevent: prohibited claims, fabricated social
+proof, guaranteed outcomes, regulated claims, and viewer diagnosis framing.
+
+There is no price check, and that is deliberate: the App Profile carries no
+pricing, so there is nothing to verify a stated price against. See the note on
+build_safety_report.
 """
 import pytest
 
@@ -16,7 +19,6 @@ PROFILE = {
     "core_features": ["Voice journaling", "Prompts", "Reminders"],
     "primary_use_cases": ["Evening reflection"],
     "problems_solved": ["Blank-page friction"],
-    "pricing_trial": "Free, Pro $79.99/year",
     "known_limitations": "iOS and Android only",
     "claims_approved": ["3-day free trial", "works offline", "no account needed"],
     "claims_review": ["4.8 star rating", "50k downloads"],
@@ -50,44 +52,6 @@ class TestNormalize:
         assert cs.normalize("") == ""
         assert cs.normalize(None) == ""
 
-
-class TestMoneyExtraction:
-    """
-    Prices are the highest-consequence thing an app promo can get wrong, so
-    decimal points must survive matching.
-    """
-
-    def test_decimal_points_preserved(self):
-        text = cs.script_money_text(plan(script="It costs $4.99 a month."))
-        assert "$4.99" in text
-
-    def test_invented_price_flagged(self):
-        report = cs.build_safety_report(plan(script="Vocolens is just $4.99 a month."), PROFILE)
-        assert [p["claim"] for p in report["pricing_mismatches"]] == ["$4.99"]
-
-    def test_real_price_passes(self):
-        report = cs.build_safety_report(plan(script="Pro is $79.99 per year."), PROFILE)
-        assert report["pricing_mismatches"] == []
-
-    def test_similar_price_is_still_flagged(self):
-        """$4.50 must not be excused because the profile once said $4.99."""
-        report = cs.build_safety_report(plan(script="Only $4.50 a month."), PROFILE)
-        assert [p["claim"] for p in report["pricing_mismatches"]] == ["$4.50"]
-
-    def test_pricing_in_overlay_text_is_checked(self):
-        report = cs.build_safety_report(
-            plan(script="A journaling app.", overlays=[{"start": 0, "end": 3, "text": "$9.99/mo"}]),
-            PROFILE,
-        )
-        assert [p["claim"] for p in report["pricing_mismatches"]] == ["$9.99"]
-
-    def test_no_prices_means_no_warnings(self):
-        report = cs.build_safety_report(plan(), PROFILE)
-        assert report["pricing_mismatches"] == []
-
-    def test_dollar_amount_appears_in_claim(self):
-        report = cs.build_safety_report(plan(script="Costs $12."), PROFILE)
-        assert report["pricing_mismatches"][0]["claim"] == "$12"
 
 
 class TestBannedClaims:
@@ -210,15 +174,25 @@ class TestReportShape:
         report = cs.build_safety_report(plan(), PROFILE)
         for key in (
             "passed", "blocking", "claims_used", "unverified", "risk_warnings",
-            "pricing_mismatches", "sources_used", "self_declared_claims",
+            "sources_used", "self_declared_claims",
             "unverified_self_claims",
         ):
             assert key in report
 
+    def test_no_price_check_remains(self):
+        """
+        The price check was deleted with pricing_trial, because with no price on
+        record it flagged every price in every script — a check that always
+        fires teaches the founder to ignore the panel that matters. Prices are
+        kept out of the video at the prompt instead.
+        """
+        report = cs.build_safety_report(plan(script="This app is $4.99 a month."), PROFILE)
+        assert "pricing_mismatches" not in report
+        assert "Clean" in cs.summarize(report)
+
     def test_sources_reflect_populated_profile_fields(self):
         report = cs.build_safety_report(plan(), PROFILE)
         assert "core_features" in report["sources_used"]
-        assert "pricing_trial" in report["sources_used"]
 
     def test_empty_profile_yields_no_sources(self):
         report = cs.build_safety_report(plan(), {})

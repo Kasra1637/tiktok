@@ -104,7 +104,7 @@ REQUIRED_BRAND_ANALYSIS_KEYS = {
 # label — needs / hook promise" one-liners so they stay editable text.
 REQUIRED_APP_PROFILE_KEYS = {
     "brand_name", "brand_description", "app_category", "niche", "platforms",
-    "pricing_trial", "core_features", "primary_use_cases", "problems_solved",
+    "core_features", "primary_use_cases", "problems_solved",
     "products_or_services", "target_audience", "ideal_customer_profile",
     "icp_segments", "desired_outcomes", "differentiation", "competitors",
     "known_limitations", "tone_voice", "claims_approved", "claims_review",
@@ -1488,7 +1488,6 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         '  "app_category": "app category (e.g. Health & Fitness, Productivity)",\n'
         '  "niche": "same as app_category unless the positioning is narrower",\n'
         '  "platforms": ["iOS", "Android"] (only platforms evidenced by the sources),\n'
-        '  "pricing_trial": "pricing and trial info exactly as stated, or empty string if unstated",\n'
         '  "core_features": ["concrete features evidenced by the sources"],\n'
         '  "primary_use_cases": ["top jobs the app helps users do"],\n'
         '  "problems_solved": ["user problems the app removes"],\n'
@@ -1502,15 +1501,16 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         '  "known_limitations": "material limitations a promo must not contradict (platforms, trial terms, feature gaps)",\n'
         '  "tone_voice": "short description of the brand voice",\n'
         '  "claims_approved": ["factual claims safe to use in promos"],\n'
-        '  "claims_review": ["claims that need verification before use (ratings, counts, pricing, results)"],\n'
+        '  "claims_review": ["claims that need verification before use (ratings, counts, results)"],\n'
         '  "claims_banned": ["claims promos must never make (guaranteed outcomes, fake reviews, medical/financial promises)"],\n'
         '  "ctas": ["suitable calls to action, e.g. Try it free, Get it on the App Store"],\n'
         '  "video_themes": ["4-8 suggested short-form video themes for this app"]\n'
         "}\n"
         "Rules: use ONLY functionality evidenced by the sources or notes; never invent "
-        "ratings, download counts, prices, or features. Put anything uncertain in "
-        "claims_review, never in claims_approved. Keep every list to 8 items max. "
-        "Return ONLY valid JSON."
+        "ratings, download counts, or features. Do NOT report pricing, plan names or trial "
+        "terms — the App Profile deliberately carries no price, and no generated video may "
+        "state one. Put anything uncertain in claims_review, never in claims_approved. "
+        "Keep every list to 8 items max. Return ONLY valid JSON."
     )
 
     payload = {
@@ -1561,7 +1561,9 @@ async def generate_content_angles(profile: dict, max_angles: int = 8) -> list:
         viewer diagnosis.
       - Every angle must be satisfiable using only the profile's verified
         fields. Anything speculative is pushed to claims_to_respect.
-      - No guaranteed outcomes, no testimonials, no invented pricing.
+      - No guaranteed outcomes, no testimonials. Never state a price, plan name or
+        trial term: the App Profile carries none, and a video that quotes one
+        cannot be verified.
 
     Args:
         profile: an App Profile row (brand_profiles) with fields already
@@ -1581,7 +1583,6 @@ async def generate_content_angles(profile: dict, max_angles: int = 8) -> list:
         "category": profile.get("app_category") or profile.get("niche") or "(unstated)",
         "description": profile.get("brand_description") or "(unstated)",
         "platforms": _list("platforms"),
-        "pricing_trial": profile.get("pricing_trial") or "(unstated)",
         "features": _list("core_features"),
         "use_cases": _list("primary_use_cases"),
         "problems": _list("problems_solved"),
@@ -1628,8 +1629,8 @@ async def generate_content_angles(profile: dict, max_angles: int = 8) -> list:
         "}\n"
         "Rules: use ONLY facts present in the profile. If an angle would require a "
         "claim from claims_needing_review, list that claim in claims_to_respect. Never "
-        "promise guaranteed outcomes, invent testimonials or reviews, state pricing that "
-        "is not in the profile, or imply a feature the profile does not list. Vary the "
+        "promise guaranteed outcomes, invent testimonials or reviews, state any price or "
+        "trial term, or imply a feature the profile does not list. Vary the "
         "kinds — do not return eight variations of the same angle. Return ONLY valid JSON."
     )
 
@@ -1928,7 +1929,6 @@ async def generate_creative_plan(
         "category": profile.get("app_category") or profile.get("niche") or "(unstated)",
         "description": profile.get("brand_description") or "(unstated)",
         "platforms": _list("platforms"),
-        "pricing_trial": profile.get("pricing_trial") or "(unstated)",
         "features": _list("core_features"),
         "use_cases": _list("primary_use_cases"),
         "problems": _list("problems_solved"),
@@ -2013,8 +2013,9 @@ async def generate_creative_plan(
         "logos, testimonials, or anything the viewer could read as a factual claim "
         "about the app. The generated scene is illustrative: the script and CTA must "
         "never claim it shows real app footage or a screen recording.\n"
-        "- Use ONLY features, pricing, and claims present above. Never invent a feature, a "
-        "price, a rating, a review, a download count, or a user testimonial.\n"
+        "- Use ONLY the features and claims present above. Never invent a feature, a rating, "
+        "a review, a download count, or a user testimonial, and never state a price: no "
+        "price is on record for this app, so a quote could not be checked.\n"
         "- Never use anything in claims.never_use. If a claims.needs_review item would help, "
         "leave it out rather than using it.\n"
         "- Never promise a guaranteed outcome and never describe the viewer as having a "
@@ -2318,7 +2319,6 @@ async def generate_video_strategy(
         "category": profile.get("app_category") or profile.get("niche") or "(unstated)",
         "description": profile.get("brand_description") or "(unstated)",
         "platforms": _list("platforms"),
-        "pricing_trial": profile.get("pricing_trial") or "(unstated)",
         "features": _list("core_features"),
         "use_cases": _list("primary_use_cases"),
         "problems": _list("problems_solved"),
@@ -2533,8 +2533,13 @@ async def generate_video_strategy(
         "founder's photograph, not from anything written here.\n"
         "- Every segment must be satisfiable using only the verified facts above. Put anything that would need a "
         "claim from needs_review into do_not_repeat or omit it entirely.\n"
-        "- Never promise a guaranteed outcome, never invent a testimonial, a rating or a review, and never state "
-        "pricing that is not in the facts.\n"
+        "- Never promise a guaranteed outcome, never invent a testimonial, a rating or a "
+        "review, and never state a price, plan name or trial term — the App Profile carries "
+        "none, so nothing could verify it.\n"
+        "- Never speak in the presenter's first person about using this app (I use this, I "
+        "have used this for years, as a nurse I rely on this). The presenter is a stand-in "
+        "and nothing is known about their real relationship to the product, so any personal "
+        "claim would be invented.\n"
         "- Use only approved claims. Never use anything in never_use.\n"
         # Length discipline. This object is large, and an over-long value here
         # is what pushes the reply past the completion budget and gets it cut

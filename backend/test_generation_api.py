@@ -76,7 +76,6 @@ def _ready_project(api, name="Gen App", template_query="Stop Doing This",
         brand_name=name,
         app_category="Productivity",
         core_features=["Task timer"],
-        pricing_trial="Free, Pro $79.99/year",
         claims_approved=["3-day free trial"],
         claims_banned=["cures anxiety"],
     ), user_id=ANON))

@@ -331,7 +331,6 @@ export default function AppProfileDetail() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Category" value={profile?.app_category || profile?.niche} />
               <Field label="Platforms" value={list(profile?.platforms).join(", ")} />
-              <Field label="Pricing & trial" value={profile?.pricing_trial} />
               <Field label="Tone / voice" value={profile?.tone_voice} />
             </div>
             <ListBlock label="Core features" items={list(profile?.core_features)} />

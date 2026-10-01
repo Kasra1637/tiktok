@@ -17,7 +17,6 @@ const EMPTY_FORM = {
   niche: "",
   app_category: "",
   platforms: "",
-  pricing_trial: "",
   products_services: "",
   core_features: "",
   primary_use_cases: "",
@@ -70,7 +69,6 @@ function profileToForm(data) {
     niche: data.niche || "",
     app_category: data.app_category || "",
     platforms: productsToText(data.platforms),
-    pricing_trial: data.pricing_trial || "",
     products_services: productsToText(data.products_services),
     core_features: productsToText(data.core_features),
     primary_use_cases: productsToText(data.primary_use_cases),
@@ -239,7 +237,6 @@ export default function BrandSetup() {
         niche: form.niche,
         app_category: form.app_category,
         platforms: textToProducts(form.platforms),
-        pricing_trial: form.pricing_trial,
         products_services: textToProducts(form.products_services),
         core_features: textToProducts(form.core_features),
         primary_use_cases: textToProducts(form.primary_use_cases),
@@ -572,14 +569,6 @@ export default function BrandSetup() {
                     onChange={handleFieldChange("platforms")}
                     placeholder="e.g. iOS, Android"
                     data-testid="app-platforms-field"
-                  />
-                </Field>
-                <Field label="Pricing & trial">
-                  <Input
-                    value={form.pricing_trial}
-                    onChange={handleFieldChange("pricing_trial")}
-                    placeholder="e.g. Free, Pro $79.99/yr · 3-day trial"
-                    data-testid="app-pricing-field"
                   />
                 </Field>
               </div>

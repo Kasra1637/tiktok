@@ -112,7 +112,7 @@ APP_PROFILE_TEXT_FIELDS = (
     "website_url", "appstore_url", "play_url", "notes", "brand_name",
     "brand_description", "niche", "app_category", "target_audience",
     "ideal_customer_profile", "differentiation", "tone_voice",
-    "pricing_trial", "known_limitations", "raw_extracted_text",
+    "known_limitations", "raw_extracted_text",
 )
 
 APP_PROFILE_EDITABLE_FIELDS = APP_PROFILE_TEXT_FIELDS + APP_PROFILE_LIST_FIELDS
@@ -141,7 +141,6 @@ class BrandProfileCreateRequest(BaseModel):
     notes: Optional[str] = ""
     app_category: Optional[str] = ""
     platforms: Optional[List[str]] = None
-    pricing_trial: Optional[str] = ""
     core_features: Optional[List[str]] = None
     primary_use_cases: Optional[List[str]] = None
     problems_solved: Optional[List[str]] = None
@@ -174,7 +173,6 @@ class BrandProfileUpdateRequest(BaseModel):
     notes: Optional[str] = None
     app_category: Optional[str] = None
     platforms: Optional[List[str]] = None
-    pricing_trial: Optional[str] = None
     core_features: Optional[List[str]] = None
     primary_use_cases: Optional[List[str]] = None
     problems_solved: Optional[List[str]] = None

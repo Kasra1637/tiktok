@@ -27,11 +27,10 @@ export function SafetyPanel({ report, summary }) {
   const blocking = report.blocking || [];
   const unverified = report.unverified || [];
   const warnings = report.risk_warnings || [];
-  const prices = report.pricing_mismatches || [];
   const used = report.claims_used || [];
   const undeclared = report.unverified_self_claims || [];
   const sources = report.sources_used || [];
-  const flagged = blocking.length + unverified.length + warnings.length + prices.length + undeclared.length;
+  const flagged = blocking.length + unverified.length + warnings.length + undeclared.length;
 
   return (
     <div className="space-y-3">
@@ -59,22 +58,6 @@ export function SafetyPanel({ report, summary }) {
               <li key={i}>
                 <span className="font-medium">&ldquo;{b.claim}&rdquo;</span>
                 <span className="text-muted-foreground"> — {b.reason}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {prices.length > 0 && (
-        <div className="rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-4">
-          <span className="eyebrow flex items-center gap-1.5">
-            <HelpCircle className="h-3 w-3" /> Pricing not in your profile
-          </span>
-          <ul className="mt-2 space-y-1 text-sm">
-            {prices.map((p, i) => (
-              <li key={i}>
-                <span className="font-medium">{p.claim}</span>
-                <span className="text-muted-foreground"> — {p.reason}</span>
               </li>
             ))}
           </ul>

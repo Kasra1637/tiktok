@@ -70,9 +70,6 @@ _PUNCT = re.compile(r"[^\w\s%$]")
 # Money amounts are matched on RAW text with a precise regex, never on the
 # punctuation-stripped blob. Stripping punctuation would turn "$4.99" into
 # "$4" and make "$4.99" indistinguishable from a profile price of "$4.50".
-_MONEY = re.compile(r"\$\s?\d+(?:\.\d{1,2})?")
-
-
 def normalize(text: str) -> str:
     """Lowercase, strip punctuation, and collapse whitespace for matching."""
     if not text:
@@ -115,11 +112,6 @@ def script_text(plan: dict) -> str:
     return normalize(" \n ".join(_plan_fields(plan or {})))
 
 
-def script_money_text(plan: dict) -> str:
-    """Flattened plan text with money left intact, for price checks."""
-    return " \n ".join(_plan_fields(plan or {}))
-
-
 def _contains(haystack: str, needle: str) -> bool:
     n = normalize(needle)
     return bool(n) and n in haystack
@@ -157,30 +149,6 @@ def find_unverified_claims(text: str, review_claims: Iterable[str]) -> list:
         for c in (review_claims or [])
         if _contains(text, c)
     ]
-
-
-def find_pricing_claims(money_text: str, known_pricing: str) -> list:
-    """
-    Money amounts in the script that do not appear in the profile.
-
-    Guards against invented pricing, which is one of the most damaging ways
-    an app promo can be wrong. Only fires when the script states a price the
-    profile never had. Expects money-normalized text so "$4.99" and "$4.50"
-    stay distinguishable.
-    """
-    amounts = set(_MONEY.findall(money_text))
-    if not amounts:
-        return []
-    known_amounts = {a.replace(" ", "") for a in _MONEY.findall(known_pricing or "")}
-    out = []
-    for amount in sorted(amounts):
-        if amount.replace(" ", "") in known_amounts:
-            continue
-        out.append({
-            "claim": amount.strip(),
-            "reason": "price not found in the App Profile",
-        })
-    return out
 
 
 def find_risk_patterns(text: str) -> list:
@@ -248,24 +216,28 @@ def build_safety_report(plan: dict, profile: dict) -> dict:
           "blocking": [...],         # banned claims / hard failures
           "claims_used": [...],      # verified against claims_approved
           "unverified": [...],       # from claims_review
-          "risk_warnings": [...],    # regulated / guaranteed / testimonial
-          "pricing_mismatches": [...],
-          "sources_used": [...],     # which profile fields fed the plan
-          "self_declared_claims": [...],  # what the model said it used
+            "risk_warnings": [...],    # regulated / guaranteed / testimonial
+            "sources_used": [...],     # which profile fields fed the plan
+            "self_declared_claims": [...],  # what the model said it used
         }
 
     `passed` is False only for hard failures. Warnings are returned but do
     not block, so the founder keeps editorial control over tone while
     prohibited claims can never reach a video.
+
+    There is deliberately no price check. The App Profile no longer carries
+    pricing, so there is nothing to verify a stated price against — and a check
+    with no anchor flags every price in every script, which teaches the founder
+    to ignore the panel that actually matters. Prices are kept out of the video
+    at the prompt instead: generation_planning's no-render rule tells the model
+    never to put one on screen.
     """
     text = script_text(plan)
-    money_text = script_money_text(plan)
     self_declared = [
         str(c) for c in ((plan or {}).get("claims_used") or []) if str(c).strip()
     ]
 
     blocking = find_banned_violations(text, profile.get("claims_banned"))
-    pricing_mismatches = find_pricing_claims(money_text, profile.get("pricing_trial"))
     risk_warnings = find_risk_patterns(text) + detect_sensitive_targeting(text)
 
     used = find_used_claims(text, profile.get("claims_approved"))
@@ -274,7 +246,7 @@ def build_safety_report(plan: dict, profile: dict) -> dict:
     sources = []
     for field in (
         "brand_name", "app_category", "core_features", "primary_use_cases",
-        "problems_solved", "pricing_trial", "known_limitations",
+        "problems_solved", "known_limitations",
     ):
         value = profile.get(field)
         if value and (isinstance(value, list) and value or isinstance(value, str) and value.strip()):
@@ -286,7 +258,6 @@ def build_safety_report(plan: dict, profile: dict) -> dict:
         "claims_used": used,
         "unverified": unverified,
         "risk_warnings": risk_warnings,
-        "pricing_mismatches": pricing_mismatches,
         "sources_used": sources,
         "self_declared_claims": self_declared,
         "unverified_self_claims": sorted(set(self_declared) - set(used)),
@@ -297,14 +268,11 @@ def summarize(report: dict) -> str:
     """One-line reviewer-facing summary. Never claims safety it did not find."""
     if report.get("passed") and not (
         report.get("risk_warnings") or report.get("unverified")
-        or report.get("pricing_mismatches")
     ):
-        return "Clean: no banned claims, risky language, or invented pricing detected."
+        return "Clean: no banned claims or risky language detected."
     bits = []
     if report.get("blocking"):
         bits.append(f"{len(report['blocking'])} prohibited claim(s)")
-    if report.get("pricing_mismatches"):
-        bits.append(f"{len(report['pricing_mismatches'])} unverified price(s)")
     if report.get("unverified"):
         bits.append(f"{len(report['unverified'])} claim(s) needing review")
     if report.get("risk_warnings"):
