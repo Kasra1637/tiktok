@@ -36,9 +36,9 @@ FACE_SWAP_MODEL = "google/gemini-3.1-flash-image"  # Gemini 3.1 Flash Image — 
 TEXT_MODEL = "google/gemini-2.5-flash"
 
 # Video generation models.
-# Seedance 2.5 is the template studio's default: it supports a 30-second
-# single pass with native audio and multimodal references. MiniMax H3 remains
-# available for shorter, higher-resolution renders.
+# MiniMax H3 is the template studio's only provider: 2K picture, native
+# audio, V2V motion transfer, up to 15s per pass. Anything longer needs a
+# second job, which the studio plans for rather than truncating.
 VIDEO_MODELS = {
     "aleph-2": {
         "id": "runway/aleph-2",
@@ -56,18 +56,6 @@ VIDEO_MODELS = {
         "resolution": "1080p",
         "is_video_editor": True,  # fundamentally different request shape — see generate_video()
     },
-    "seedance-2.5": {
-        "id": "bytedance/seedance-2.5",
-        "name": "Seedance 2.5",
-        "description": "30s one-pass video with motion reference control. Up to 50 multimodal refs, native audio.",
-        "max_duration": 30,
-        "min_duration": 4,
-        "supports_references": True,
-        "supports_native_audio": True,
-        "supports_v2v_motion": True,
-        "resolution": "720p",
-        "supports_combined_refs": True,  # Can use frame_images + input_references together
-    },
     "minimax-h3": {
         "id": "minimax/hailuo-3",
         "name": "MiniMax H3",
@@ -82,8 +70,10 @@ VIDEO_MODELS = {
     },
 }
 # Default for new template-studio generations. The provider remains
-# configurable through VIDEO_MODEL_DEFAULT and VIDEO_MODEL_ALLOWLIST.
-DEFAULT_VIDEO_MODEL = "seedance-2.5"
+# configurable through VIDEO_MODEL_DEFAULT and VIDEO_MODEL_ALLOWLIST, but
+# MiniMax H3 is currently the only studio-eligible provider: anything else
+# configured resolves back here with a logged reason.
+DEFAULT_VIDEO_MODEL = "minimax-h3"
 # Legacy fallback
 VIDEO_MODEL = VIDEO_MODELS[DEFAULT_VIDEO_MODEL]["id"]
 
@@ -964,7 +954,7 @@ async def _edit_video_with_aleph(
     """
     Submit a video EDIT job to Runway Aleph 2.0 via OpenRouter.
 
-    Unlike generative models (Seedance, MiniMax H3), Aleph does not synthesize
+    Unlike generative models (MiniMax H3), Aleph does not synthesize
     a new scene — it takes the actual source video and applies ONLY the named
     edit, preserving every pixel it wasn't told to change (body movement,
     hand gestures, camera angle, clothing, background, timing). This is why
@@ -988,8 +978,7 @@ async def _edit_video_with_aleph(
     if not source_video_url:
         raise RuntimeError(
             "Runway Aleph 2.0 requires a source video to edit — no reference "
-            "video is available for this generation. Fall back to a generative "
-            "model (Seedance 2.5 or MiniMax H3) instead."
+            "video is available for this generation. Fall back to MiniMax H3 instead."
         )
 
     payload = {
@@ -1140,11 +1129,9 @@ async def generate_video(
         input_references: Optional pre-built list of reference objects to pass directly.
                          Each item should follow OpenRouter's input_references schema.
         prefer_v2v_motion: When True AND a reference_video_url is provided, enables
-                          V2V motion transfer mode. For Seedance 2.5, both the face
-                          image (as first_frame) and the video motion reference can
-                          coexist in the same request. For MiniMax H3, the face image
-                          is moved to input_references (as identity guide) since H3
-                          cannot combine frame_images with input_references.
+                         V2V motion transfer mode. The face image is moved to
+                         input_references (as identity guide) since the provider
+                         cannot combine frame_images with input_references.
         continuity_frame_path: The previous segment's final frame, to be used as this
                           segment's first frame. This is the strongest continuity
                           mechanism available: it pins the exact pose, framing,
@@ -1203,9 +1190,8 @@ async def generate_video(
     use_v2v_mode = prefer_v2v_motion and reference_video_url and reference_image_path and reference_image_path.exists()
 
     # === Reference Strategy ===
-    # Both Seedance 2.5 and MiniMax H3 via OpenRouter CANNOT combine frame_images
-    # with input_references (BytePlus returns TaskTypeConstraint error, MiniMax
-    # returns a 400). The strategy for V2V mode is the same for both:
+    # MiniMax H3 via OpenRouter cannot combine frame_images with
+    # input_references (MiniMax returns a 400). The strategy is therefore:
     #   - Face image → input_references (as image ref for identity guidance)
     #   - Video → input_references (as video ref for motion replication)
     #   Both coexist in input_references without conflict.
@@ -1285,8 +1271,8 @@ async def generate_video(
     # because it carries the face AND the scene in a single image, whereas a
     # bare face reference says who the person is but not where the last shot
     # ended. This used to drop references unconditionally; it is now
-    # capability-aware, because a provider that CAN combine them (Seedance) must
-    # keep them or the influencer loses its identity reference for no reason.
+    # capability-aware, so a provider that can combine frame and references
+    # keeps both. None does today, but the branch stays for one that does.
     #
     # Whatever is dropped is reported back, never silently discarded.
     dropped_anchors = []

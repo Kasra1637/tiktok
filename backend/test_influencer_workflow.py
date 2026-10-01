@@ -429,7 +429,7 @@ class TestAppSpecificity:
 # 2. The uploaded influencer is the same person across hook and extensions
 # ---------------------------------------------------------------------------
 class TestIdentityContinuity:
-    def _chain(self, api, monkeypatch, model="seedance-2.5", with_bridge_frame=True):
+    def _chain(self, api, monkeypatch, model="minimax-h3", with_bridge_frame=True):
         """Generate a hook, approve it, extend it. Returns every submit call."""
         from models import ApproveSegmentRequest, GenerateHookRequest, StudioGenerationRequest
         project, _profile, _template = _make_project(api, NURSE_APP)
@@ -472,24 +472,24 @@ class TestIdentityContinuity:
         assert refs[0]["type"] == "image_url"
         assert refs[0]["image_url"]["url"].startswith("data:image/png;base64,")
 
-    def test_extension_keeps_the_character_reference_and_adds_the_continuity_frame(
+    def test_extension_carries_the_clip_and_reports_the_dropped_face(
         self, api, monkeypatch
     ):
         """
-        On a provider that can combine them, the extension carries the previous
-        clip's final frame AND the founder's face.
+        MiniMax cannot combine a first frame with references: it cannot take
+        the seam frame at all, so the extension carries the previous clip and
+        the founder's face is recorded as lost — loudly, with a reason, never
+        silently.
         """
         _project, _hook, _ext, calls = self._chain(api, monkeypatch)
         assert calls[0].get("continuity_frame_path") is None, "the hook has nothing to continue from"
-        assert calls[1].get("continuity_frame_path") is not None
+        assert calls[1].get("continuity_frame_path") is None, "this provider cannot take the frame"
         refs = calls[1].get("input_references") or []
-        # The previous clip (for motion) plus the founder's face.
+        # The previous clip (for motion) — and only the clip.
         assert any(r.get("type") == "video_url" for r in refs)
-        assert any(
-            r.get("type") == "image_url"
-            and r["image_url"]["url"].startswith("data:image/png;base64,")
-            for r in refs
-        )
+        assert not any(r.get("type") == "image_url" for r in refs)
+        dropped = {d["anchor"]: d["reason"] for d in _ext["continuity"]["degraded"]}
+        assert "identity" in dropped and dropped["identity"]
 
     def test_retired_attachment_is_refused_at_strategy_time(
         self, api, monkeypatch
@@ -578,7 +578,10 @@ class TestExtensionPreservesTheVideo:
         # The real continuity inputs are carried in the request, not described.
         refs = calls[1].get("input_references") or []
         assert any(r.get("type") == "video_url" for r in refs), "the previous clip carries the look"
-        assert any(r.get("type") == "image_url" for r in refs), "the photograph carries the face"
+        assert not any(r.get("type") == "image_url" for r in refs), (
+            "MiniMax cannot combine the frame with references, so the face rides "
+            "the written lock instead of the request"
+        )
 
     def test_extension_continues_the_app_specific_message(self, api, monkeypatch):
         _project, _hook, _ext, calls = TestIdentityContinuity()._chain(api, monkeypatch)
@@ -636,13 +639,22 @@ class TestExtensionPreservesTheVideo:
 # 4. Unsupported continuity is reported, never silently accepted
 # ---------------------------------------------------------------------------
 class TestContinuityIsHonest:
-    def test_seedance_reports_frame_exact_plus_refs(self, api, monkeypatch):
-        _project, _hook, ext, _calls = TestIdentityContinuity()._chain(
-            api, monkeypatch, model="seedance-2.5")
-        assert ext["continuity"]["guarantee"] == "frame_exact_plus_refs"
-        assert ext["continuity"]["use_frame"] is True
-        assert ext["continuity"]["attached"] == ["frame", "clip", "identity"]
-        assert ext["continuity"]["degraded"] == []
+    def test_removed_provider_resolves_to_the_minimax_plan(self, api, monkeypatch):
+        """
+        Seedance is gone from VIDEO_MODELS, but old rows still name it. The
+        plan resolves to MiniMax with a reason instead of raising — the same
+        graceful fallback capability() gives unknown keys.
+        """
+        import video_providers
+        plan = video_providers.continuity_plan(
+            "seedance-2.5",
+            has_bridge_frame=True,
+            has_parent_clip_url=True,
+            has_character_reference=True,
+        )
+        assert plan["provider"] == "minimax-h3"
+        assert plan["guarantee"] == "text_only"
+        assert plan["attached"] == ["clip"]
 
     def test_minimax_reports_it_cannot_pin_the_seam_frame(self, api, monkeypatch):
         """
@@ -721,8 +733,8 @@ class TestContinuityIsHonest:
         _project, hook, ext, _calls = TestIdentityContinuity()._chain(api, monkeypatch)
         report = _run(api.get_generation_continuity(ext["id"], ANON))
         assert report["segment_index"] == 1
-        assert report["guarantee"] == "frame_exact_plus_refs"
-        assert report["attached"] == ["frame", "clip", "identity"]
+        assert report["guarantee"] == "text_only"
+        assert report["attached"] == ["clip"]
         assert report["notes"]
 
     def test_video_editor_cannot_continue_a_chain(self, api, monkeypatch):
@@ -732,7 +744,7 @@ class TestContinuityIsHonest:
         """
         import video_providers
 
-        os.environ["VIDEO_MODEL_ALLOWLIST"] = "seedance-2.5,aleph-2"
+        os.environ["VIDEO_MODEL_ALLOWLIST"] = "minimax-h3,aleph-2"
         try:
             plan = video_providers.continuity_plan(
                 "aleph-2",
@@ -749,7 +761,7 @@ class TestContinuityIsHonest:
 
     def test_an_editor_request_falls_back_to_a_generator_at_hook_time(self, api, monkeypatch):
         from models import ApproveSegmentRequest, GenerateHookRequest
-        os.environ["VIDEO_MODEL_ALLOWLIST"] = "seedance-2.5,aleph-2"
+        os.environ["VIDEO_MODEL_ALLOWLIST"] = "minimax-h3,aleph-2"
         try:
             project, _profile, _template = _make_project(api, NURSE_APP)
             _store_strategy(api, project["id"], "I clocked out at 11:40.",
@@ -761,13 +773,13 @@ class TestContinuityIsHonest:
                 project_id=project["id"],
                 payload=GenerateHookRequest(model="aleph-2"),
                 user_id=ANON))
-            assert hook["model"] == "seedance-2.5"
+            assert hook["model"] == "minimax-h3"
             assert "edits an existing clip" in hook["provider_reason"]
         finally:
             os.environ.pop("VIDEO_MODEL_ALLOWLIST", None)
 
     def test_generate_video_reports_what_it_actually_attached(self, api, monkeypatch):
-        """The provider layer must not claim a frame it never sent."""
+        """The provider layer must not claim a reference it never sent."""
         import ai_service
 
         sent = {}
@@ -798,19 +810,19 @@ class TestContinuityIsHonest:
         frame.write_bytes(_TINY_PNG)
 
         result = _run(ai_service.generate_video(
-            prompt="continue", duration=5, model="seedance-2.5",
+            prompt="continue", duration=5, model="minimax-h3",
             continuity_frame_path=frame,
             input_references=[{"type": "image_url",
                                "image_url": {"url": "data:image/png;base64,AAAA"}}],
         ))
         assert result["continuity"]["has_continuity_frame"] is True
         assert result["continuity"]["has_frame_images"] is True
-        assert result["continuity"]["dropped_anchors"] == []
+        assert result["continuity"]["dropped_anchors"] == ["identity"]
         # The frame really is in the request, as a first_frame.
         frames = sent["payload"]["frame_images"]
         assert len(frames) == 1 and frames[0]["frame_type"] == "first_frame"
-        # ...and the reference was NOT dropped, because this provider can combine.
-        assert sent["payload"]["input_references"]
+        # ...and the reference was dropped, because this provider cannot combine.
+        assert "input_references" not in sent["payload"]
 
 
 def _async_return(value):

@@ -267,13 +267,13 @@ class TestDurationSplitting:
     def test_within_limit_needs_no_extension(self, api, monkeypatch):
         _mock_submit(api, monkeypatch)
         from models import StudioGenerationRequest
-        project, _, _ = _ready_project(api, "No Split", duration=20)
+        project, _, _ = _ready_project(api, "No Split", duration=10)
         result = _run(api.submit_project_generation(
             project_id=project["id"],
-            payload=StudioGenerationRequest(model="seedance-2.5"),
+            payload=StudioGenerationRequest(model="minimax-h3"),
             user_id=ANON))
         assert result["duration_plan"]["needs_extension"] is False
-        assert result["duration"] == 20
+        assert result["duration"] == 10
 
     def test_editor_model_is_refused_for_the_studio(self, api, monkeypatch):
         """Aleph needs a source clip, which the template flow does not have."""
@@ -511,7 +511,7 @@ class TestExtension:
             (json.dumps(strategy), project_id)))
         return strategy
 
-    def _completed(self, api, monkeypatch, name="Extend App", model="seedance-2.5",
+    def _completed(self, api, monkeypatch, name="Extend App", model="minimax-h3",
                    approve=True, with_strategy=True):
         from models import StudioGenerationRequest
         _mock_submit(api, monkeypatch, response={"id": "j", "usage": {"cost": 0.3}})
@@ -674,9 +674,9 @@ class TestListingAndCapabilities:
     def test_capability_endpoint_reports_studio_models(self, api):
         result = _run(api.list_studio_video_models())
         keys = [m["key"] for m in result["models"]]
-        assert "seedance-2.5" in keys and "minimax-h3" in keys
+        assert keys == ["minimax-h3"]
         assert "aleph-2" not in keys
-        assert result["default"]
+        assert result["default"] == "minimax-h3"
 
     def test_capability_endpoint_lists_ineligible_separately(self, api):
         result = _run(api.list_studio_video_models())

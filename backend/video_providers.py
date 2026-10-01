@@ -35,19 +35,6 @@ logger = logging.getLogger(__name__)
 # supports_combined_refs: whether one request can carry both a first-frame
 # image and other references. False means we must pick one.
 _CAPABILITY_NOTES = {
-    "seedance-2.5": {
-        "vertical": True,
-        "max_reference_images": 30,
-        "max_reference_videos": 10,
-        "max_reference_audio": 10,
-        "supports_first_frame": True,
-        "supports_last_frame": True,
-        "notes": (
-            "30s in one pass, native audio, up to 50 multimodal references. "
-            "Supports first-frame guidance. The longest single generation "
-            "available here, so 20s and 30s both fit in one job."
-        ),
-    },
     "minimax-h3": {
         "vertical": True,
         "max_reference_images": 9,
@@ -79,15 +66,16 @@ _CAPABILITY_NOTES = {
 
 # Providers the template workflow can actually drive. Aleph is excluded
 # because it edits an existing clip, which is exactly the dependency the
-# template workflow removed.
-STUDIO_ELIGIBLE = ("seedance-2.5", "minimax-h3")
+# template workflow removed. MiniMax H3 is currently the only entry: any
+# other configured key resolves back to the default with a logged reason.
+STUDIO_ELIGIBLE = ("minimax-h3",)
 
-# The hook length used when nothing states one. 4s is the lowest length any
+# The hook length used when nothing states one. 5s is the lowest length the
 # current provider can render, so it needs no trim; a template's own
 # hook_seconds overrides this wherever one is set.
-DEFAULT_HOOK_SECONDS = 4
+DEFAULT_HOOK_SECONDS = 5
 
-# Hook lengths offered in the studio UI. 2s and 3s are below every provider's
+# Hook lengths the studio works with. 2s to 4s are below the provider's
 # render floor and are therefore always delivered as a trim, which the UI says
 # out loud rather than presenting them as native.
 HOOK_LENGTH_CHOICES = (2, 3, 4, 5, 6)
@@ -161,9 +149,9 @@ def is_studio_eligible(key: str) -> bool:
 def accepts_identity_reference(key: str) -> bool:
     """Whether the provider can take an identity image as input_references.
 
-    Seedance 2.5 accepts up to 30 reference images; MiniMax H3 up to 9. Both
-    coexist with no source video. Editors (Aleph) need a real clip to edit —
-    the template workflow has none — so they are refused here too.
+    MiniMax H3 accepts up to 9 reference images with no source video.
+    Editors (Aleph) need a real clip to edit — the template workflow has
+    none — so they are refused here too.
     """
     if not is_known(key):
         return False
@@ -549,8 +537,8 @@ def resolve_length(target: Optional[int], model_key: Optional[str] = None) -> di
     """
     Reconcile a wanted segment length with what a provider can actually render.
 
-    These are genuinely different numbers and the gap is not small: every
-    provider's minimum render length is 4s or more, while the hook a template
+    These are genuinely different numbers and the gap is not small: the
+    provider's minimum render length is 5s, while the hook a template
     declares (and the product promises) is 2-3s. So a 3-second hook is not
     something that can be RENDERED - it is something that has to be rendered
     longer and then cut down.

@@ -378,10 +378,10 @@ class TestAnalyticsReport:
     def test_report_breaks_down_by_model_and_app(self, api):
         profile = _profile(api, "An Two")
         _generation(api, profile, model="minimax-h3")
-        _generation(api, profile, model="seedance-2.5")
+        _generation(api, profile, model="aleph-2")
         report = _run(api.analytics_report(brand_profile_id=profile["id"], user_id=ANON))
-        keys = {e["key"] for e in report["by_model"]}
-        assert keys == {"minimax-h3", "seedance-2.5"}
+        by_model = {e["key"] for e in report["by_model"]}
+        assert by_model == {"minimax-h3", "aleph-2"}
         assert report["by_app"][0]["label"] == "An Two"
 
     def test_report_lists_templates_with_outcomes(self, api):

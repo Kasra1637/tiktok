@@ -14,34 +14,44 @@ import video_providers as vp
 
 class TestProviderResolution:
     def test_default_is_the_configured_app_default(self):
-        assert vp.default_model_key() == "seedance-2.5"
+        assert vp.default_model_key() == "minimax-h3"
 
     def test_env_override_changes_the_default(self, monkeypatch):
-        monkeypatch.setenv("VIDEO_MODEL_DEFAULT", "seedance-2.5")
-        assert vp.default_model_key() == "seedance-2.5"
+        monkeypatch.setenv("VIDEO_MODEL_DEFAULT", "minimax-h3")
+        assert vp.default_model_key() == "minimax-h3"
 
     def test_bad_env_default_is_ignored(self, monkeypatch):
         monkeypatch.setenv("VIDEO_MODEL_DEFAULT", "not-a-model")
-        assert vp.default_model_key() == "seedance-2.5"
+        assert vp.default_model_key() == "minimax-h3"
 
     def test_allowlist_restricts_usage(self, monkeypatch):
-        monkeypatch.setenv("VIDEO_MODEL_ALLOWLIST", "seedance-2.5")
-        assert vp.is_allowed("seedance-2.5") is True
-        assert vp.is_allowed("minimax-h3") is False
-        assert vp.default_model_key() == "seedance-2.5"
+        monkeypatch.setenv("VIDEO_MODEL_ALLOWLIST", "minimax-h3")
+        assert vp.is_allowed("minimax-h3") is True
+        assert vp.is_allowed("aleph-2") is False
+        assert vp.default_model_key() == "minimax-h3"
 
     def test_unknown_keys_in_allowlist_do_not_break_default(self, monkeypatch):
-        monkeypatch.setenv("VIDEO_MODEL_ALLOWLIST", "garbage,seedance-2.5")
-        assert vp.default_model_key() == "seedance-2.5"
+        monkeypatch.setenv("VIDEO_MODEL_ALLOWLIST", "garbage,minimax-h3")
+        assert vp.default_model_key() == "minimax-h3"
 
     def test_resolve_honours_an_allowed_request(self):
-        key, reason = vp.resolve("seedance-2.5")
-        assert key == "seedance-2.5"
+        key, reason = vp.resolve("minimax-h3")
+        assert key == "minimax-h3"
         assert "requested" in reason
 
     def test_resolve_falls_back_for_unknown_model(self):
         key, reason = vp.resolve("does-not-exist")
         assert key == vp.default_model_key()
+        assert "unknown" in reason
+
+    def test_resolve_falls_back_for_a_removed_provider(self):
+        """
+        Seedance was removed from VIDEO_MODELS. Old rows still name it, so
+        resolving it must degrade to the default with a reason — never raise,
+        never silently keep it.
+        """
+        key, reason = vp.resolve("seedance-2.5")
+        assert key == "minimax-h3"
         assert "unknown" in reason
 
     def test_resolve_refuses_video_editors(self):
@@ -57,8 +67,19 @@ class TestProviderResolution:
 
     def test_editor_is_not_studio_eligible(self):
         assert vp.is_studio_eligible("aleph-2") is False
-        assert vp.is_studio_eligible("seedance-2.5") is True
         assert vp.is_studio_eligible("minimax-h3") is True
+
+    def test_removed_provider_is_not_studio_eligible(self):
+        assert vp.is_studio_eligible("seedance-2.5") is False
+        assert vp.is_allowed("seedance-2.5") is False
+
+    def test_capability_falls_back_for_a_removed_provider(self):
+        """
+        A stale model id in the database degrades to a working generation
+        rather than a 500 — that is the contract that makes removal safe.
+        """
+        cap = vp.capability("seedance-2.5")
+        assert cap["key"] == "minimax-h3"
 
 
 class TestCapabilities:
@@ -66,11 +87,9 @@ class TestCapabilities:
         for cap in vp.list_capabilities():
             assert cap["vertical"] is True
 
-    def test_seedance_supports_a_single_30s_pass(self):
-        cap = vp.capability("seedance-2.5")
-        assert cap["max_duration"] >= 30
-        assert cap["supports_first_frame"] is True
-        assert cap["supports_native_audio"] is True
+    def test_minimax_is_the_only_studio_provider(self):
+        keys = [c["key"] for c in vp.list_capabilities()]
+        assert keys == ["minimax-h3"]
 
     def test_minimax_is_capped_at_15s(self):
         cap = vp.capability("minimax-h3")
@@ -86,7 +105,7 @@ class TestCapabilities:
         assert "aleph-2" not in keys
 
     def test_capability_record_has_the_planning_fields(self):
-        cap = vp.capability("seedance-2.5")
+        cap = vp.capability("minimax-h3")
         for field in (
             "id", "name", "min_duration", "max_duration", "resolution",
             "supports_references", "supports_native_audio", "vertical",
@@ -102,8 +121,8 @@ class TestDurationPlanning:
     """
 
     def test_duration_within_one_pass_needs_no_extension(self):
-        plan = vp.plan_duration("seedance-2.5", 20)
-        assert plan["primary_seconds"] == 20
+        plan = vp.plan_duration("minimax-h3", 12)
+        assert plan["primary_seconds"] == 12
         assert plan["needs_extension"] is False
         assert plan["extension_seconds"] == 0
 
@@ -118,9 +137,11 @@ class TestDurationPlanning:
         assert plan["needs_extension"] is True
         assert any("second job" in a for a in plan["adjustments"])
 
-    def test_seedance_needs_no_extension_at_any_supported_length(self):
-        for want in (10, 15, 20, 30):
-            assert vp.plan_duration("seedance-2.5", want)["needs_extension"] is False
+    def test_minimax_needs_a_second_job_past_15s(self):
+        for want in (20, 30):
+            plan = vp.plan_duration("minimax-h3", want)
+            assert plan["needs_extension"] is True
+            assert plan["primary_seconds"] == 15
 
     def test_below_provider_floor_is_raised(self):
         plan = vp.plan_duration("minimax-h3", 2)
@@ -128,8 +149,7 @@ class TestDurationPlanning:
         assert any("cannot go below" in a for a in plan["adjustments"])
 
     def test_never_returns_zero(self):
-        for model in ("seedance-2.5", "minimax-h3"):
-            assert vp.plan_duration(model, 1)["primary_seconds"] > 0
+        assert vp.plan_duration("minimax-h3", 1)["primary_seconds"] > 0
 
     def test_adjustment_records_provider_fallback(self):
         plan = vp.plan_duration("aleph-2", 20)
@@ -138,7 +158,6 @@ class TestDurationPlanning:
 
     def test_clamp_helper_matches_plan(self):
         assert vp.clamp_for_single_pass("minimax-h3", 30) == 15
-        assert vp.clamp_for_single_pass("seedance-2.5", 30) == 30
 
 
 PLAN = {

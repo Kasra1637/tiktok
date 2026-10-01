@@ -87,7 +87,7 @@ SEARCH_QUERY_MAX_LENGTH = 100
 BRAND_URL_TEXT_MAX_CHARS = 8000
 
 # How much an extension adds when the request does not say. Chosen to sit at
-# Seedance's render floor so the default needs no trim, and short enough that
+# the provider's render floor so the default needs no trim, and short enough that
 # three or four extensions still land inside a normal 20s video.
 DEFAULT_EXTENSION_SECONDS = 5
 

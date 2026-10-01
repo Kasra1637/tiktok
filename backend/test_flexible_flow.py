@@ -179,7 +179,7 @@ def _project(api, name, *, total=20, hook=4, with_strategy=True, beats=8):
     return _run(api.get_studio_project(project["id"], ANON))
 
 
-def _hook_and_approve(api, monkeypatch, project, model="seedance-2.5"):
+def _hook_and_approve(api, monkeypatch, project, model="minimax-h3"):
     """Generate the hook, mark it completed, approve it, and make it extendable."""
     from models import ApproveSegmentRequest, GenerateHookRequest
     _mock_submit(api, monkeypatch)
@@ -196,7 +196,7 @@ def _hook_and_approve(api, monkeypatch, project, model="seedance-2.5"):
     return hook
 
 
-def _extend(api, monkeypatch, parent, seconds, model="seedance-2.5"):
+def _extend(api, monkeypatch, parent, seconds, model="minimax-h3"):
     from models import StudioGenerationRequest
     calls = _mock_submit(api, monkeypatch)
     ext = _run(api.extend_generation(
@@ -280,13 +280,13 @@ class TestExtensionLength:
 
     def test_a_sub_floor_length_is_rendered_longer_then_trimmed(self, api, monkeypatch):
         """
-        "Extend by 3s" on a provider whose floor is 4s must be delivered at 3s,
-        not quietly at 4s. Same resolution the hook already uses.
+        "Extend by 3s" on a provider whose floor is 5s must be delivered at 3s,
+        not quietly at 5s. Same resolution the hook already uses.
         """
         project = _project(api, "Sub Floor Extend")
         hook = _hook_and_approve(api, monkeypatch, project)
         ext, call = _extend(api, monkeypatch, hook, seconds=3)
-        assert call["duration"] == 4, "the model must be asked for what it can render"
+        assert call["duration"] == 5, "the model must be asked for what it can render"
         assert ext["trim_to_seconds"] == 3, "but the delivered clip must be 3s"
         assert ext["duration"] == 3
         assert ext["length_plan"]["guarantee"] == "trimmed"

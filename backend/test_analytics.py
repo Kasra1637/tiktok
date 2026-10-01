@@ -107,10 +107,10 @@ class TestDimensions:
     def test_grouping_counts_and_orders_by_volume(self):
         rows = [
             gen(model="minimax-h3", id="a"), gen(model="minimax-h3", id="b"),
-            gen(model="seedance-2.5", id="c"),
+            gen(model="aleph-2", id="c"),
         ]
         out = an.by_dimension(rows, "model")
-        assert [e["key"] for e in out] == ["minimax-h3", "seedance-2.5"]
+        assert [e["key"] for e in out] == ["minimax-h3", "aleph-2"]
         assert out[0]["count"] == 2
 
     def test_missing_values_group_as_none(self):

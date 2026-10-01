@@ -114,9 +114,9 @@ def _mock_submit(api, monkeypatch, response=None):
 class TestResolveHookLength:
     def test_target_above_floor_needs_no_trim(self):
         import video_providers as vp
-        # Seedance's floor is 4s, so 4s+ is renderable as asked.
-        for target in (4, 5, 6):
-            r = vp.resolve_hook_length(target, "seedance-2.5")
+        # MiniMax's floor is 5s, so 5s+ is renderable as asked.
+        for target in (5, 6):
+            r = vp.resolve_hook_length(target, "minimax-h3")
             assert r["target"] == target
             assert r["render_seconds"] == target
             assert r["trim_to"] == 0
@@ -128,9 +128,9 @@ class TestResolveHookLength:
         it must be rendered at the floor and cut - never quietly upgraded.
         """
         import video_providers as vp
-        r = vp.resolve_hook_length(3, "seedance-2.5")
+        r = vp.resolve_hook_length(3, "minimax-h3")
         assert r["target"] == 3
-        assert r["render_seconds"] == 4
+        assert r["render_seconds"] == 5
         assert r["trim_to"] == 3
         assert r["guarantee"] == "trimmed"
         assert "cut down" in " ".join(r["adjustments"])
@@ -145,7 +145,7 @@ class TestResolveHookLength:
         for tpl in template_library.CURATED_TEMPLATES:
             declared = int(tpl["hook_seconds"])
             assert 1 <= declared <= 3, tpl["name"]
-            r = vp.resolve_hook_length(declared, "seedance-2.5")
+            r = vp.resolve_hook_length(declared, "minimax-h3")
             # The declared value is preserved as the TARGET; it is only the
             # render that is longer.
             assert r["target"] == declared, tpl["name"]
@@ -171,32 +171,31 @@ class TestResolveHookLength:
     def test_unset_target_falls_back_to_the_default(self):
         import video_providers as vp
         for value in (None, "", 0):
-            r = vp.resolve_hook_length(value, "seedance-2.5")
+            r = vp.resolve_hook_length(value, "minimax-h3")
             assert r["render_seconds"] == vp.DEFAULT_HOOK_SECONDS
             assert r["guarantee"] == "as_rendered"
 
-    def test_every_offered_choice_resolves_for_both_providers(self):
-        """No option in the UI may be a dead end."""
+    def test_every_offered_choice_resolves(self):
+        """No length the product can compute may be a dead end."""
         import video_providers as vp
-        for model in ("seedance-2.5", "minimax-h3"):
-            for choice in vp.HOOK_LENGTH_CHOICES:
-                r = vp.resolve_hook_length(choice, model)
-                assert r["render_seconds"] >= choice, (model, choice)
-                assert r["guarantee"] in (
-                    "as_rendered", "trimmed", "clamped_down", "trim_unavailable"
-                )
-                assert r["note"], (model, choice)
+        for choice in (2, 3, 4, 5, 6):
+            r = vp.resolve_hook_length(choice, "minimax-h3")
+            assert r["render_seconds"] >= choice, choice
+            assert r["guarantee"] in (
+                "as_rendered", "trimmed", "clamped_down", "trim_unavailable"
+            )
+            assert r["note"], choice
 
     def test_missing_ffmpeg_is_reported_before_a_paid_render(self):
         import video_providers as vp
         original = vp.ffmpeg_available
         vp.ffmpeg_available = lambda: False
         try:
-            r = vp.resolve_hook_length(3, "seedance-2.5")
+            r = vp.resolve_hook_length(3, "minimax-h3")
             assert r["guarantee"] == "trim_unavailable"
             assert "ffmpeg" in r["note"]
             # A length that needs no trim is unaffected.
-            assert vp.resolve_hook_length(5, "seedance-2.5")["guarantee"] == "as_rendered"
+            assert vp.resolve_hook_length(5, "minimax-h3")["guarantee"] == "as_rendered"
         finally:
             vp.ffmpeg_available = original
 
@@ -424,13 +423,13 @@ class TestHookEndToEnd:
         calls = _mock_submit(api, monkeypatch)
         gen = _run(api.generate_project_hook(
             project_id=project["id"],
-            payload=GenerateHookRequest(model="seedance-2.5", duration_seconds=3),
+            payload=GenerateHookRequest(model="minimax-h3", duration_seconds=3),
             user_id=ANON))
-        # Asked the model for 4s, not 3s.
-        assert calls[0]["duration"] == 4
+        # Asked the model for 5s, not 3s.
+        assert calls[0]["duration"] == 5
         assert gen["trim_to_seconds"] == 3
         assert gen["hook_length"]["target"] == 3
-        assert gen["hook_length"]["render_seconds"] == 4
+        assert gen["hook_length"]["render_seconds"] == 5
         assert gen["hook_length"]["trim_to"] == 3
         # The response already reports the length the founder will get.
         assert gen["duration"] == 3
@@ -441,7 +440,7 @@ class TestHookEndToEnd:
         calls = _mock_submit(api, monkeypatch)
         gen = _run(api.generate_project_hook(
             project_id=project["id"],
-            payload=GenerateHookRequest(model="seedance-2.5", duration_seconds=5),
+            payload=GenerateHookRequest(model="minimax-h3", duration_seconds=5),
             user_id=ANON))
         assert calls[0]["duration"] == 5
         assert gen["trim_to_seconds"] == 0
@@ -453,7 +452,7 @@ class TestHookEndToEnd:
         _mock_submit(api, monkeypatch)
         _run(api.generate_project_hook(
             project_id=project["id"],
-            payload=GenerateHookRequest(model="seedance-2.5"), user_id=ANON))
+            payload=GenerateHookRequest(model="minimax-h3"), user_id=ANON))
         again = _run(api.get_studio_project(project["id"], ANON))
         assert again["hook_seconds"] == 3
 
@@ -479,9 +478,9 @@ def _tpl_hook(api):
 # ---------------------------------------------------------------------------
 @needs_ffmpeg
 class TestTrimIsApplied:
-    def _complete_with_real_clip(self, api, monkeypatch, trim_to, render_seconds=4):
+    def _complete_with_real_clip(self, api, monkeypatch, trim_to, render_seconds=5):
         """
-        Drive a real 4s render through submit -> poll with a working local file,
+        Drive a real 5s render through submit -> poll with a working local file,
         so the trim path executes for real rather than being mocked away.
         """
         from models import GenerateHookRequest, StudioGenerationRequest
@@ -490,8 +489,8 @@ class TestTrimIsApplied:
 
         gen = _run(api.generate_project_hook(
             project_id=project["id"],
-            payload=GenerateHookRequest(model="seedance-2.5",
-                                        duration_seconds=trim_to or 4),
+            payload=GenerateHookRequest(model="minimax-h3",
+                                        duration_seconds=trim_to or 5),
             user_id=ANON))
 
         # Stand in for the provider's finished clip, downloaded by poll.
@@ -538,7 +537,7 @@ class TestTrimIsApplied:
         two independent ffmpeg encodes plus where `-sseof -1` happens to land,
         so it could pass without proving anything and fail for the wrong reason.
         The length cannot: 3.0s is only possible if the trimmed file replaced
-        the 4s render at that exact path.
+        the 5s render at that exact path.
         """
         from models import ApproveSegmentRequest, StudioGenerationRequest
         _project, gen, updated = self._complete_with_real_clip(api, monkeypatch, trim_to=3)
@@ -551,7 +550,7 @@ class TestTrimIsApplied:
             f"the render at the path an extension bridges from. "
             f"storage_error={updated.get('storage_error')!r}"
         )
-        assert abs(delivered - 4.0) > 0.5, "the full render is still at the canonical path"
+        assert abs(delivered - 5.0) > 0.5, "the full render is still at the canonical path"
 
         # And the seam frame the extension will use is readable from that file.
         bridge = api.pipeline.GENERATED_DIR / f"probe-{gen['id']}.png"
