@@ -51,6 +51,7 @@ from models import (
     CreateHookTemplateRequest, UpdateHookTemplateRequest,
     CreateContentAngleRequest, UpdateContentAngleRequest,
     CreateStudioProjectRequest, UpdateStudioProjectRequest, GeneratePlanRequest,
+    ObjectiveTemplatesRequest,
     StudioGenerationRequest,     UpdateAssetRequest, AttachAssetRequest,
     OverlayCompositionRequest, CreateVariationRequest, PerformanceEntryRequest,
     ResearchScanRequest, FeedbackRequest,
@@ -5691,19 +5692,24 @@ async def update_app_profile(
     )
 
 
-async def _ensure_brand_templates(profile: dict, user_id: str) -> list:
+async def _ensure_objective_templates(
+    profile: dict, objective: str, user_id: str
+) -> list:
     """
-    Generate this profile's tailored templates, replacing any previous set.
+    Generate this profile's tailored templates for one selected objective,
+    replacing any previous set for that same (profile, objective) key.
 
-    This is the brand-URL-to-template link: the researched, approved profile
-    produces structures no generic library can. Generate-then-replace, never
-    delete-then-generate — a model failure must leave the previous working
-    set intact rather than zeroing it. Any failure is logged and swallowed:
-    approval itself always succeeds, and templates are simply absent until
-    the next approve fills the gap.
+    The objective comes from the founder's wizard choice, never from the
+    model: every stored row carries the requested objective, which is what
+    makes the set worth generating per objective rather than once per
+    profile. Generate-then-replace, never delete-then-generate — a model
+    failure must leave the previous working set intact rather than zeroing
+    it. Any failure is logged and swallowed: the caller returns the empty
+    set with a reason instead of a 500.
     """
     profile_id = profile.get("id") or ""
-    if not profile_id:
+    want_objective = template_library.normalize_objective(objective)
+    if not profile_id or not want_objective:
         return []
     angles = await _fetch_all(
         "SELECT * FROM content_angles WHERE brand_profile_id = ? AND user_id = ?",
@@ -5712,19 +5718,22 @@ async def _ensure_brand_templates(profile: dict, user_id: str) -> list:
     try:
         drafts = await _log_model_call(
             "brand_templates", "text", TEXT_MODEL,
-            lambda: generate_brand_templates(profile, angles),
+            lambda: generate_brand_templates(
+                profile, angles, objective=want_objective),
             user_id,
             brand_profile_id=profile_id,
         )
     except Exception as e:
-        logger.error(f"Brand template generation failed for profile {profile_id}: {e!r}")
+        logger.error(
+            f"Brand template generation failed for profile {profile_id} "
+            f"objective {want_objective}: {e!r}")
         return []
     if not drafts:
         return []
     now = now_iso()
     await _execute(
-        "DELETE FROM hook_templates WHERE brand_profile_id = ? AND user_id = ?",
-        (profile_id, user_id),
+        "DELETE FROM hook_templates WHERE brand_profile_id = ? AND objective = ? AND user_id = ?",
+        (profile_id, want_objective, user_id),
     )
     for draft in drafts:
         await _execute(
@@ -5740,7 +5749,7 @@ async def _ensure_brand_templates(profile: dict, user_id: str) -> list:
             (str(uuid.uuid4()), draft["name"], draft["category"],
              json.dumps([profile.get("app_category") or ""] if profile.get("app_category") else []),
              json.dumps([profile.get("target_audience") or ""] if profile.get("target_audience") else []),
-             draft.get("objective") or "", draft["opening_structure"],
+             want_objective, draft["opening_structure"],
              draft.get("hook_seconds") or 3, draft.get("continuation_structure") or "",
              draft.get("cta_pattern") or "", draft.get("visual_style") or "",
              draft.get("camera_pacing") or "", json.dumps(["character_reference"]),
@@ -5749,7 +5758,9 @@ async def _ensure_brand_templates(profile: dict, user_id: str) -> list:
              f"Generated for {profile.get('brand_name') or 'this app'} from its approved profile.",
              profile_id, now, now, user_id),
         )
-    logger.info(f"Generated {len(drafts)} brand templates for profile {profile_id}")
+    logger.info(
+        f"Generated {len(drafts)} brand templates for profile {profile_id} "
+        f"objective {want_objective}")
     return drafts
 
 
@@ -5801,11 +5812,9 @@ async def approve_app_profile(
                 tuple(values) + (user_id,),
             )
             logger.info(f"Approved App Profile {profile_id} (version {(existing.get('version') or 1) + 1})")
-            fresh = await _fetch_one(
+            return await _fetch_one(
                 "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
             )
-            await _ensure_brand_templates(fresh, user_id)
-            return fresh
 
     # No pending proposal (or the founder skipped applying it): approving the
     # draft as it stands is itself a legal UPDATE, so the status flip commits
@@ -5819,11 +5828,9 @@ async def approve_app_profile(
         (now, now, profile_id, user_id),
     )
     logger.info(f"Approved App Profile {profile_id} (draft as-is, version {existing.get('version') or 1})")
-    fresh = await _fetch_one(
+    return await _fetch_one(
         "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
     )
-    await _ensure_brand_templates(fresh, user_id)
-    return fresh
 
 
 @api_router.post("/app-profiles/{profile_id}/refresh")
@@ -6608,6 +6615,68 @@ async def recommend_templates(
         "recommendations": scored[: max(1, min(int(limit or 8), 30))],
         "angle": _serialize_angle_row(angle) if angle else None,
         "objective": norm_objective,
+    }
+
+
+@api_router.post("/app-profiles/{profile_id}/objective-templates")
+async def ensure_objective_templates(
+    profile_id: str, payload: ObjectiveTemplatesRequest, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Tailored templates for this profile AND the founder's selected objective.
+
+    The objective is chosen per video in the wizard — it does not exist at
+    approve time — so generation lives here, called when the template step
+    loads with both profile and objective set. A cached set returns
+    immediately without a model call; otherwise the set generates
+    synchronously (same in-request precedent as strategy and plan builds)
+    and replaces any previous set for that (profile, objective) key.
+
+    Never 500s on a model failure: the previous set (or an empty list)
+    returns with the error attached, and the curated picks keep working.
+    """
+    profile = await _require_profile_for_studio(profile_id, user_id)
+    want_objective = template_library.normalize_objective(
+        (payload.objective if payload else "") or "")
+    if not want_objective:
+        raise HTTPException(
+            status_code=400,
+            detail="Pick an objective first — tailored templates are generated per objective.",
+        )
+    existing = await _fetch_all(
+        """SELECT * FROM hook_templates
+           WHERE brand_profile_id = ? AND objective = ? AND user_id = ?
+             AND archived = 0 AND review_status = 'approved'""",
+        (profile_id, want_objective, user_id),
+    )
+    # Regenerate means regenerate: an explicit ask replaces the set even
+    # when one exists. Anything else serves the cache without a model call.
+    if existing and not (payload.regenerate or False):
+        return {
+            "templates": [_public_library_template(t) for t in existing],
+            "generated": False,
+            "objective": want_objective,
+            "error": None,
+        }
+    try:
+        drafts = await _ensure_objective_templates(profile, want_objective, user_id)
+    except Exception as e:  # defensive: _ensure already swallows model errors
+        logger.error(f"Objective template generation failed: {e!r}")
+        drafts = []
+    rows = await _fetch_all(
+        """SELECT * FROM hook_templates
+           WHERE brand_profile_id = ? AND objective = ? AND user_id = ?
+             AND archived = 0 AND review_status = 'approved'""",
+        (profile_id, want_objective, user_id),
+    )
+    return {
+        "templates": [_public_library_template(t) for t in rows],
+        "generated": bool(drafts),
+        "objective": want_objective,
+        "error": None if drafts else (
+            "Tailoring failed — the curated picks below still work. "
+            "Reopening this step retries."
+        ),
     }
 
 

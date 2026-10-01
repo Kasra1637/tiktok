@@ -1740,16 +1740,22 @@ def normalize_brand_template(raw: dict) -> Optional[dict]:
 
 
 async def generate_brand_templates(
-    profile: dict, angles: Optional[list] = None, count: int = BRAND_TEMPLATE_COUNT
+    profile: dict, angles: Optional[list] = None, count: int = BRAND_TEMPLATE_COUNT,
+    objective: str = "",
 ) -> list:
     """
-    Draft tailored hook structures for one approved App Profile.
+    Draft tailored hook structures for one approved App Profile AND one
+    selected objective.
 
-    This is the brand-URL-to-template link: the profile researched from the
-    founder's links produces structures no generic library can — hooks shaped
-    around THIS app's features, audience language, and voice. Every video
-    stars the founder on camera, so structures are designed for a single
-    on-camera presenter, never for screenshots, recordings, or app footage.
+    The objective is caller-supplied (the founder picked it in the wizard),
+    never model-chosen: every returned structure serves that goal, which is
+    what makes the set worth generating per objective rather than once per
+    profile. This is the brand-URL-to-template link: the profile researched
+    from the founder's links produces structures no generic library can —
+    hooks shaped around THIS app's features, audience language, and voice.
+    Every video stars the founder on camera, so structures are designed for
+    a single on-camera presenter, never for screenshots, recordings, or app
+    footage.
 
     Guardrails enforced in the prompt: functional framing only (never a
     viewer diagnosis), every structure satisfiable from verified profile
@@ -1794,6 +1800,17 @@ async def generate_brand_templates(
             "feature": angle.get("app_feature") or "",
         })
     categories = ", ".join(HOOK_CATEGORIES)
+    want_objective = normalize_objective(objective)
+    if want_objective:
+        brief_line = (
+            f"Design exactly {count} DISTINCT hook structures for THIS app AND this objective: "
+            f"{want_objective}. Every structure below must serve that objective; a structure "
+            f"serving any other goal is a wrong answer no matter how good it reads. "
+        )
+    else:
+        # Defensive only: the endpoint refuses an empty objective, so this
+        # path means a direct caller. Spread rather than fail.
+        brief_line = f"Design exactly {count} DISTINCT hook structures for THIS app. "
 
     system_message = (
         "You are a short-form video strategist for mobile apps. You design hook "
@@ -1808,8 +1825,8 @@ async def generate_brand_templates(
         f"VERIFIED APP PROFILE:\n{json.dumps(context, indent=2)}\n\n"
         f"CONTENT ANGLES:\n{json.dumps(angle_briefs, indent=2)}\n\n"
         f"Categories (use only these): {categories}\n\n"
-        f"Design exactly {count} DISTINCT hook structures for THIS app, presenter-led "
-        "throughout: every video stars the founder on camera, so never design around "
+        f"{brief_line}"
+        "Presenter-led throughout: every video stars the founder on camera, so never design around "
         "screenshots, recordings, app footage, or any uploaded asset. Pre-fill every "
         "content slot with this app's concrete specifics, not placeholders. "
         "Return ONLY a JSON array where each element is:\n"

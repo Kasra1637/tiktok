@@ -386,3 +386,14 @@ class TestBrandTemplatePrompt:
         assert "screenshots" in prompt
         assert "double-quote" in prompt
         assert "required_assets" not in prompt
+
+    def test_prompt_targets_the_selected_objective(self, monkeypatch):
+        import asyncio
+        import ai_service
+        captured = self._capture(monkeypatch, self._reply(10))
+        result = asyncio.run(ai_service.generate_brand_templates(
+            {"brand_name": "Taskly", "core_features": ["timer"]}, [],
+            count=10, objective="demonstrate_feature"))
+        assert len(result) == 10
+        assert "demonstrate_feature" in captured["prompt"]
+        assert "must serve that objective" in captured["prompt"]

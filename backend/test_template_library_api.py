@@ -617,8 +617,8 @@ class TestCrossUserIsolation:
 
 
 def _brand_fake(names=("ZZZ Brand Hook One", "ZZZ Brand Hook Two")):
-    """Stub generate_brand_templates: two valid drafts, no network."""
-    async def fake(profile, angles=None, count=10):
+    """Stub generate_brand_templates: valid drafts, no network."""
+    async def fake(profile, angles=None, count=10, objective=""):
         return [
             {
                 "name": name,
@@ -638,67 +638,153 @@ def _brand_fake(names=("ZZZ Brand Hook One", "ZZZ Brand Hook Two")):
     return fake
 
 
+def _approve_profile(api, name):
+    profile = _make_profile(api, ANON, name=name)
+    _run(api.approve_app_profile(profile_id=profile["id"], payload={}, user_id=ANON))
+    return profile
+
+
+def _clean_brand_rows(api, profile_id):
+    _run(api._execute("DELETE FROM hook_templates WHERE brand_profile_id = ?", (profile_id,)))
+    _run(api._execute("DELETE FROM brand_profiles WHERE id = ?", (profile_id,)))
+
+
 class TestBrandTailoredTemplates:
     """
-    Approving a profile generates that brand's templates: the brand-URL to
-    template link. Runs last in this file so its rows cannot pollute the
-    shared database for earlier tests — and still cleans up regardless.
+    Tailored templates generate per (profile, selected objective) when the
+    wizard asks — never at approve time, where no objective exists. Runs
+    last in this file so its rows cannot pollute the shared database for
+    earlier tests — and still cleans up regardless.
     """
 
-    def test_approve_generates_scoped_usable_templates(self, api, monkeypatch):
+    def test_generates_scoped_usable_templates_for_the_objective(self, api, monkeypatch):
+        from models import ObjectiveTemplatesRequest
         monkeypatch.setattr(api, "generate_brand_templates", _brand_fake())
-        profile = _make_profile(api, ANON, name="ZZZ Brand App")
-        _run(api.approve_app_profile(profile_id=profile["id"], payload={}, user_id=ANON))
+        profile = _approve_profile(api, "ZZZ Brand App")
+        result = _run(api.ensure_objective_templates(
+            profile_id=profile["id"],
+            payload=ObjectiveTemplatesRequest(objective="address_user_problem"),
+            user_id=ANON))
+        assert result["generated"] is True
+        assert result["objective"] == "address_user_problem"
+        assert len(result["templates"]) == 2
         rows = _run(api._fetch_all(
-            "SELECT name, brand_profile_id, origin, review_status, required_assets "
+            "SELECT name, brand_profile_id, objective, origin, review_status, required_assets "
             "FROM hook_templates WHERE brand_profile_id = ?", (profile["id"],)))
         assert {r["name"] for r in rows} == {"ZZZ Brand Hook One", "ZZZ Brand Hook Two"}
         for r in rows:
+            assert r["objective"] == "address_user_problem"
             assert r["origin"] == "custom"
             assert r["review_status"] == "approved"
             assert r["required_assets"] == ["character_reference"]
         # Surfaced first in this profile's picker, with the reason rendered.
-        result = _run(api.recommend_templates(profile_id=profile["id"], user_id=ANON))
-        mine = [r for r in result["recommendations"]
+        recs = _run(api.recommend_templates(
+            profile_id=profile["id"], objective="address_user_problem", user_id=ANON))
+        mine = [r for r in recs["recommendations"]
                 if r["template"].get("brand_profile_id") == profile["id"]]
         assert mine
         assert any("Tailored for" in reason for r in mine for reason in r["why_it_fits"])
-        _run(api._execute("DELETE FROM hook_templates WHERE brand_profile_id = ?", (profile["id"],)))
-        _run(api._execute("DELETE FROM brand_profiles WHERE id = ?", (profile["id"],)))
+        _clean_brand_rows(api, profile["id"])
 
-    def test_approve_replaces_not_duplicates(self, api, monkeypatch):
+    def test_cache_hit_makes_no_model_call(self, api, monkeypatch):
         import uuid as _uuid
-        monkeypatch.setattr(api, "generate_brand_templates", _brand_fake(names=("ZZZ Brand New",)))
-        profile = _make_profile(api, ANON, name="ZZZ Brand Replace")
+        from models import ObjectiveTemplatesRequest
+
+        async def boom(*a, **k):
+            raise AssertionError("model must not be called on a cache hit")
+
+        monkeypatch.setattr(api, "generate_brand_templates", boom)
+        profile = _approve_profile(api, "ZZZ Brand Cached")
         _run(api._execute(
             "INSERT INTO hook_templates (id, name, category, origin, required_assets, "
-            "brand_profile_id, review_status, created_at, updated_at, user_id) "
-            "VALUES (?, 'ZZZ Brand Old', 'other', 'custom', ?, ?, 'approved', '', '', ?)",
-            (str(_uuid.uuid4()), '["character_reference"]', profile["id"], ANON)))
-        _run(api.approve_app_profile(profile_id=profile["id"], payload={}, user_id=ANON))
-        rows = _run(api._fetch_all(
-            "SELECT name FROM hook_templates WHERE brand_profile_id = ?", (profile["id"],)))
-        assert [r["name"] for r in rows] == ["ZZZ Brand New"]
-        _run(api._execute("DELETE FROM hook_templates WHERE brand_profile_id = ?", (profile["id"],)))
-        _run(api._execute("DELETE FROM brand_profiles WHERE id = ?", (profile["id"],)))
+            "objective, brand_profile_id, review_status, created_at, updated_at, user_id) "
+            "VALUES (?, 'ZZZ Brand Cached One', 'other', 'custom', ?, ?, ?, 'approved', '', '', ?)",
+            (str(_uuid.uuid4()), '["character_reference"]',
+             "address_user_problem", profile["id"], ANON)))
+        result = _run(api.ensure_objective_templates(
+            profile_id=profile["id"],
+            payload=ObjectiveTemplatesRequest(objective="address_user_problem"),
+            user_id=ANON))
+        assert result["generated"] is False
+        assert [t["name"] for t in result["templates"]] == ["ZZZ Brand Cached One"]
+        _clean_brand_rows(api, profile["id"])
 
-    def test_approve_succeeds_when_generation_fails(self, api, monkeypatch):
+    def test_regenerate_replaces_only_its_key(self, api, monkeypatch):
         import uuid as _uuid
+        from models import ObjectiveTemplatesRequest
+        monkeypatch.setattr(api, "generate_brand_templates", _brand_fake(names=("ZZZ Brand New",)))
+        profile = _approve_profile(api, "ZZZ Brand Replace")
+        for objective, name in (("address_user_problem", "ZZZ Brand Old"),
+                                ("demonstrate_feature", "ZZZ Brand Other")):
+            _run(api._execute(
+                "INSERT INTO hook_templates (id, name, category, origin, required_assets, "
+                "objective, brand_profile_id, review_status, created_at, updated_at, user_id) "
+                "VALUES (?, ?, 'other', 'custom', ?, ?, ?, 'approved', '', '', ?)",
+                (str(_uuid.uuid4()), name, '["character_reference"]',
+                 objective, profile["id"], ANON)))
+        result = _run(api.ensure_objective_templates(
+            profile_id=profile["id"],
+            payload=ObjectiveTemplatesRequest(
+                objective="address_user_problem", regenerate=True),
+            user_id=ANON))
+        assert result["generated"] is True
+        rows = _run(api._fetch_all(
+            "SELECT name, objective FROM hook_templates WHERE brand_profile_id = ?",
+            (profile["id"],)))
+        assert sorted((r["name"], r["objective"]) for r in rows) == [
+            ("ZZZ Brand New", "address_user_problem"),
+            ("ZZZ Brand Other", "demonstrate_feature"),
+        ]
+        _clean_brand_rows(api, profile["id"])
+
+    def test_failure_returns_empty_with_error(self, api, monkeypatch):
+        from models import ObjectiveTemplatesRequest
 
         async def boom(*a, **k):
             raise RuntimeError("model down")
 
         monkeypatch.setattr(api, "generate_brand_templates", boom)
-        profile = _make_profile(api, ANON, name="ZZZ Brand Failure")
-        _run(api._execute(
-            "INSERT INTO hook_templates (id, name, category, origin, required_assets, "
-            "brand_profile_id, review_status, created_at, updated_at, user_id) "
-            "VALUES (?, 'ZZZ Brand Survivor', 'other', 'custom', ?, ?, 'approved', '', '', ?)",
-            (str(_uuid.uuid4()), '["character_reference"]', profile["id"], ANON)))
+        profile = _approve_profile(api, "ZZZ Brand Failure")
+        result = _run(api.ensure_objective_templates(
+            profile_id=profile["id"],
+            payload=ObjectiveTemplatesRequest(objective="address_user_problem"),
+            user_id=ANON))
+        assert result["templates"] == []
+        assert result["generated"] is False
+        assert result["error"]
+        _clean_brand_rows(api, profile["id"])
+
+    def test_empty_objective_is_refused(self, api):
+        from models import ObjectiveTemplatesRequest
+        profile = _approve_profile(api, "ZZZ Brand Empty")
+        with pytest.raises(HTTPException) as err:
+            _run(api.ensure_objective_templates(
+                profile_id=profile["id"],
+                payload=ObjectiveTemplatesRequest(objective=""),
+                user_id=ANON))
+        assert err.value.status_code == 400
+        _clean_brand_rows(api, profile["id"])
+
+    def test_unapproved_profile_is_refused(self, api):
+        from models import ObjectiveTemplatesRequest
+        profile = _make_profile(api, ANON, name="ZZZ Brand Draft")
+        with pytest.raises(HTTPException) as err:
+            _run(api.ensure_objective_templates(
+                profile_id=profile["id"],
+                payload=ObjectiveTemplatesRequest(objective="address_user_problem"),
+                user_id=ANON))
+        assert err.value.status_code == 409
+        _run(api._execute("DELETE FROM brand_profiles WHERE id = ?", (profile["id"],)))
+
+    def test_approve_never_triggers_generation(self, api, monkeypatch):
+        async def boom(*a, **k):
+            raise AssertionError("approve must not generate templates")
+
+        monkeypatch.setattr(api, "generate_brand_templates", boom)
+        profile = _make_profile(api, ANON, name="ZZZ Brand Decoupled")
         approved = _run(api.approve_app_profile(profile_id=profile["id"], payload={}, user_id=ANON))
         assert approved["status"] == "approved"
         rows = _run(api._fetch_all(
-            "SELECT name FROM hook_templates WHERE brand_profile_id = ?", (profile["id"],)))
-        assert [r["name"] for r in rows] == ["ZZZ Brand Survivor"]
-        _run(api._execute("DELETE FROM hook_templates WHERE brand_profile_id = ?", (profile["id"],)))
+            "SELECT id FROM hook_templates WHERE brand_profile_id = ?", (profile["id"],)))
+        assert rows == []
         _run(api._execute("DELETE FROM brand_profiles WHERE id = ?", (profile["id"],)))

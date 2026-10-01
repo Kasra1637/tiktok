@@ -217,10 +217,17 @@ class UpdateHookTemplateRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Hook Template Library
 # ---------------------------------------------------------------------------
-# Templates are code-owned (template_library.py) or research-produced; there
-# is no hand-edit path, so no create/update request models exist. The picker
-# reads curated rows through list/recommendations, and research drafts are
-# approved through the publish endpoint.
+# Templates are code-owned (template_library.py), research-produced, or
+# brand-tailored per profile + objective; there is no hand-edit path, so no
+# create/update request models exist. The picker reads curated rows through
+# list/recommendations, and research drafts are approved through the publish
+# endpoint.
+
+
+class ObjectiveTemplatesRequest(BaseModel):
+    """Tailored template set for one profile and one selected objective."""
+    objective: str = ""
+    regenerate: bool = False
 
 
 # ---------------------------------------------------------------------------
