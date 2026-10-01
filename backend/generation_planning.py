@@ -495,6 +495,64 @@ def _contract_list(strategy: dict, field: str, limit: int = 6) -> list:
     return [str(v).strip() for v in (contract.get(field) or []) if str(v).strip()][:limit]
 
 
+def describe_seam_state(strategy: dict, previous_index: int) -> str:
+    """
+    Describe the state the viewer is looking at as the previous clip ends.
+
+    This is the single most important sentence in a continuation prompt, and it
+    used to be `strategy["hook_line"]` — the line the video OPENED with. So
+    every extension past the first was told it had been handed a video whose
+    last moment was the opening line: it described segment 0 again, at the seam
+    of segment 2 or 3. The bridge frame (the previous clip's literal last frame)
+    says what the pixels look like; this says what the moment MEANT, which a
+    frame cannot carry.
+
+    Built from the strategy's own plan for the segment that was just rendered, so
+    it is the beat that exists rather than an invention:
+      - the action in progress, because that is where the body and hands are
+      - the closing words of that beat's script, because that is what the viewer
+        just heard and must not hear again
+      - the beat's goal, so the continuation knows what has already been argued
+    The last clause restates it as unfinished on purpose: a mid-action beats a
+    settled one, because a settled action invites the model to start something
+    new instead of continuing the one in progress.
+
+    Returns "" when the strategy does not plan that segment, so the prompt's
+    existing "this beat was unplanned" path handles it rather than inventing a
+    seam.
+    """
+    segment = _segment_for(strategy, previous_index)
+    if not segment:
+        return ""
+
+    action = str(segment.get("action") or "").strip()
+    script = str(segment.get("script") or "").strip()
+    goal = str(segment.get("goal") or "").strip()
+
+    # The tail of the script, not the head: the seam follows the END of the
+    # beat, and leading with its opening words would reintroduce the segment.
+    closing = ""
+    if script:
+        sentences = [s.strip() for s in script.replace("!", ".").replace("?", ".").split(".") if s.strip()]
+        closing = sentences[-1] if sentences else script
+
+    parts = []
+    if action:
+        parts.append(f"mid-{action.rstrip('.')}" if not action.lower().startswith("mid-") else action)
+    if closing:
+        parts.append(f"finishing on the words {closing}")
+    if goal:
+        parts.append(f"having already established: {goal.rstrip('.')}")
+
+    if not parts:
+        return ""
+    return (
+        "; ".join(parts)
+        + ". This action is still in progress and this moment is unresolved — the next "
+        "segment picks it up from here rather than beginning a new scene."
+    )
+
+
 def build_segment_prompt(
     strategy: dict,
     profile: dict,
@@ -528,7 +586,9 @@ def build_segment_prompt(
             request. Read, never re-decided — this prompt must not claim more
             continuity than the submission will actually deliver.
         is_hook: True for the opening segment.
-        previous_summary: what the previous segment established, in one line.
+        previous_summary: the state the previous clip ENDS on — see
+            describe_seam_state(), which builds it from the strategy's plan for
+            that segment. It must describe the final moment, not the opening.
     """
     strategy = strategy or {}
     tpl = template or {}
@@ -603,7 +663,15 @@ def build_segment_prompt(
         do_not_repeat = _contract_list(strategy, "do_not_repeat")
         parts = []
         if previous_summary:
-            parts.append(f"The previous segment ended on: {previous_summary}")
+            # "Ended on" is right but too weak on its own: the model reads a
+            # past-tense fact and starts a fresh beat. Saying the moment is
+            # unresolved is what makes it continue rather than restart.
+            parts.append(f"The previous segment ended like this: {previous_summary}")
+            parts.append(
+                "That is the exact frame you are continuing from, and it is mid-action. Pick "
+                "it up from there — do not reset to a neutral pose, do not re-open the shot, and "
+                "do not re-state what that segment already said."
+            )
         if established:
             parts.append(
                 "The opening segment already established: " + "; ".join(established[:6])

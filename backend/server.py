@@ -6914,6 +6914,30 @@ async def update_studio_project(
             value = template_library.normalize_objective(value)
         elif key == "duration_seconds":
             value = template_library.clamp_duration(value)
+            # The plan's beat timeline is built for the length the plan was
+            # generated at, and _normalize_beats clamps every beat to that
+            # length. So changing the duration on a project that already has a
+            # plan leaves a timeline that no longer adds up to the stated
+            # runtime — and nothing in the UI could tell the founder, because
+            # the shot timeline is displayed read-only.
+            #
+            # The length is chosen on the Audience & goal step and consumed by
+            # the plan step, which writes it in the same statement as the beats
+            # it clamped to it. Changing it means regenerating the plan, and
+            # that is the only honest way to get a timeline that fits.
+            if (
+                int(row.get("script_version") or 0) > 0
+                and int(value or 0) != int(row.get("duration_seconds") or 0)
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"This project already has a script written to "
+                        f"{int(row.get('duration_seconds') or 0)}s, and its shot timeline is "
+                        f"built to that length. Change the total length on the Audience & goal "
+                        f"step and regenerate the plan, which rewrites the timeline to match."
+                    ),
+                )
         elif key == "hook_seconds":
             # The opening segment's length. 0 clears the choice so the template
             # decides again. Clamped to the offered choices so a hand-typed
@@ -8513,7 +8537,14 @@ async def extend_generation(
         continuity=continuity,
         continuity_frame=bridge_frame,
         continuity_video_url=parent_public_url if continuity.get("use_clip_reference") else "",
-        previous_summary=strategy.get("hook_line") or "",
+        # The state the previous clip ENDS on, built from the strategy's own
+        # plan for the segment just rendered. This was `hook_line`, which is the
+        # line the video OPENED with, so every extension past the first was
+        # handed a description of segment 0 at the seam of segment 2 or 3. The
+        # bridge frame carries the pixels; this carries the moment.
+        previous_summary=generation_planning.describe_seam_state(
+            strategy, int(row.get("segment_index") or 0)
+        ),
         hook_trim=trim_to,
     )
     extension["extension_of"] = generation_id

@@ -649,6 +649,112 @@ class TestExtensionPreservesTheVideo:
 # ---------------------------------------------------------------------------
 # 4. Unsupported continuity is reported, never silently accepted
 # ---------------------------------------------------------------------------
+class TestSeamState:
+    """
+    What the previous clip ENDS on is the most important sentence in a
+    continuation prompt.
+
+    It was `strategy["hook_line"]` — the line the video OPENED with. So every
+    extension past the first handed the model a description of segment 0 at the
+    seam of segment 2 or 3, and the model was told to continue from a moment the
+    viewer had been watching for five seconds already. The bridge frame carries
+    the pixels; nothing carried the moment.
+    """
+
+    def _strategy(self):
+        from ai_service import normalize_strategy
+        return normalize_strategy({
+            "strategy_summary": "s", "audience_problem": "p",
+            "emotional_triggers": ["t"], "hook_concept": "c",
+            "hook_line": "You do not have a clock problem.",
+            "hook_promise": "pr", "hook_action": "a",
+            "messaging_pillars": ["m"], "primary_feature": "f",
+            "desired_outcome": "o", "differentiation_beat": "b",
+            "cta_strategy": "c",
+            "scene": {"environment": "kitchen"},
+            "performance": {"movement": "still"},
+            "segments": [
+                {"index": 0, "role": "hook", "seconds": 4,
+                 "goal": "reframe the problem",
+                 "script": "You do not have a clock problem. You have a paperwork problem.",
+                 "action": "put her phone down and lean in"},
+                {"index": 1, "role": "continuation", "seconds": 6,
+                 "goal": "show the fix",
+                 "script": "Log the shift in one tap. That is the whole job.",
+                 "action": "tap once and hold up the phone"},
+            ],
+            "continuity_contract": {
+                "established": [], "must_not_change": [], "do_not_repeat": [],
+            },
+        })
+
+    def test_the_seam_is_the_end_of_that_beat_not_the_opening_line(self):
+        import generation_planning
+        strategy = self._strategy()
+        # Extending past segment 0.
+        seam = generation_planning.describe_seam_state(strategy, 0)
+        assert "lean in" in seam
+        # The TAIL of that beat's script, not its head: the seam follows the
+        # end of the beat, so its closing sentence is what the viewer last heard.
+        assert "paperwork problem" in seam
+        assert "unresolved" in seam
+
+    def test_a_later_segment_describes_its_own_seam(self):
+        """
+        The regression: segment 1's extension must not be handed segment 0's
+        material. This is the case that was actually broken — hook_line is the
+        same for every extension, so it looked fine for the first one and wrong
+        for all the rest.
+        """
+        import generation_planning
+        strategy = self._strategy()
+        first = generation_planning.describe_seam_state(strategy, 0)
+        second = generation_planning.describe_seam_state(strategy, 1)
+        assert first != second
+        assert "hold up the phone" in second
+        assert "lean in" not in second
+        # The hook line appears in neither, because neither beat ends on it.
+        assert strategy["hook_line"] not in first
+        assert strategy["hook_line"] not in second
+
+    def test_an_unplanned_index_says_nothing_rather_than_inventing(self):
+        import generation_planning
+        assert generation_planning.describe_seam_state(self._strategy(), 9) == ""
+
+    def test_the_prompt_tells_the_model_to_continue_not_restart(self):
+        import generation_planning
+        strategy = self._strategy()
+        prompt = generation_planning.build_segment_prompt(
+            strategy=strategy,
+            profile={"brand_name": "ShiftLog"},
+            segment_index=1,
+            duration=6,
+            is_hook=False,
+            previous_summary=generation_planning.describe_seam_state(strategy, 0),
+        )
+        assert "The previous segment ended like this" in prompt
+        assert "mid-action" in prompt
+        assert "do not reset to a neutral pose" in prompt
+        assert strategy["hook_line"] not in prompt.split("CONTINUITY")[1]
+
+    def test_the_extension_prompt_describes_the_final_moment(self, api, monkeypatch):
+        """
+        The wiring, through the real endpoint. The extension's prompt has to
+        carry the parent segment's own final moment, and must not carry the hook
+        line as if it were that moment.
+        """
+        project, _hook, _ext, calls = TestIdentityContinuity()._chain(api, monkeypatch)
+        prompt = calls[1]["prompt"]
+        hook_line = "I clocked out at 11:40. Every single night."
+        # The hook line still appears in the prompt, but as something already
+        # delivered (do_not_repeat), never as the state of the seam.
+        assert f"already seen or heard it: {hook_line}" in prompt
+        assert f"The previous segment ended like this: {hook_line}" not in prompt
+        # Segment 0's action, which is what the hook's last frame showed.
+        assert "mid-" in prompt
+        assert "unresolved" in prompt
+
+
 class TestContinuityIsHonest:
     def test_removed_provider_resolves_to_the_minimax_plan(self, api, monkeypatch):
         """

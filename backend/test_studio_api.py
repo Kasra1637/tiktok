@@ -309,6 +309,76 @@ class TestPlanGating:
         assert result["overlays"]
         assert result["script_version"] == 1
 
+    def test_duration_cannot_be_changed_once_a_plan_exists(self, api, monkeypatch):
+        """
+        The plan's beat timeline is built for the length the plan was generated
+        at, and every beat is clamped to it. Patching duration_seconds afterwards
+        therefore produced a timeline that no longer adds up to the stated
+        runtime — with the shot timeline displayed read-only, so nothing on
+        screen could say so.
+        """
+        _patch_plan(monkeypatch, api, FAKE_PLAN)
+        from models import GeneratePlanRequest, UpdateStudioProjectRequest
+        profile = _approved_profile(api, "Locked Length")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        _run(api.generate_plan(project_id=project["id"],
+                               payload=GeneratePlanRequest(duration_seconds=20),
+                               user_id=ANON))
+        with pytest.raises(HTTPException) as err:
+            _run(api.update_studio_project(
+                project_id=project["id"],
+                payload=UpdateStudioProjectRequest(duration_seconds=30),
+                user_id=ANON))
+        assert err.value.status_code == 409
+        assert "regenerate the plan" in err.value.detail
+
+    def test_the_same_duration_is_accepted_idempotently(self, api, monkeypatch):
+        """Re-sending the current length is not a change, so it is not refused."""
+        _patch_plan(monkeypatch, api, FAKE_PLAN)
+        from models import GeneratePlanRequest, UpdateStudioProjectRequest
+        profile = _approved_profile(api, "Same Length")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        _run(api.generate_plan(project_id=project["id"],
+                               payload=GeneratePlanRequest(duration_seconds=20),
+                               user_id=ANON))
+        result = _run(api.update_studio_project(
+            project_id=project["id"],
+            payload=UpdateStudioProjectRequest(duration_seconds=20),
+            user_id=ANON))
+        assert result["duration_seconds"] == 20
+
+    def test_duration_is_free_before_a_plan_exists(self, api):
+        """The length is chosen on the Audience & goal step, which is earlier."""
+        from models import UpdateStudioProjectRequest
+        profile = _approved_profile(api, "Pre Plan Length")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        result = _run(api.update_studio_project(
+            project_id=project["id"],
+            payload=UpdateStudioProjectRequest(duration_seconds=30),
+            user_id=ANON))
+        assert result["duration_seconds"] == 30
+
+    def test_regenerating_the_plan_at_a_new_length_rewrites_the_timeline(
+        self, api, monkeypatch
+    ):
+        """The sanctioned route: the plan writes the length with its beats."""
+        _patch_plan(monkeypatch, api, FAKE_PLAN)
+        from models import GeneratePlanRequest
+        profile = _approved_profile(api, "Regen Length")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        _run(api.generate_plan(project_id=project["id"],
+                               payload=GeneratePlanRequest(duration_seconds=20),
+                               user_id=ANON))
+        again = _run(api.generate_plan(project_id=project["id"],
+                                       payload=GeneratePlanRequest(duration_seconds=10),
+                                       user_id=ANON))
+        assert again["duration_seconds"] == 10
+        assert again["script_version"] == 2
+
     def test_plan_bumps_script_version_on_regenerate(self, api, monkeypatch):
         _patch_plan(monkeypatch, api, FAKE_PLAN)
         from models import GeneratePlanRequest

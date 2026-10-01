@@ -369,7 +369,7 @@ async def run():
         ext_prompt = generation_planning.build_segment_prompt(
             strategy=strategy, profile=profile, template=template, segment_index=1,
             duration=6, assets=assets, continuity=ext_continuity, is_hook=False,
-            previous_summary=strategy["hook_line"])
+            previous_summary=generation_planning.describe_seam_state(strategy, 0))
         prompts[name] = {"hook": hook_prompt, "extension": ext_prompt}
 
         print(f"\n  --- EXTENSION PROMPT (segment 1) ---\n")
