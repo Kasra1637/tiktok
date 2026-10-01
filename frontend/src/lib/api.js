@@ -176,16 +176,12 @@ export const api = {
   deleteContentAngle: (profileId, angleId) =>
     client.delete(`/app-profiles/${profileId}/content-angles/${angleId}`).then((r) => r.data),
 
-  // Hook Template Library
+  // Hook templates. The standalone library is gone: the wizard picks from
+  // profile-scoped recommendations, and research drafts are approved inline
+  // on the Trend Research page. Only the read endpoints the wizard needs
+  // plus publish (the sole draft approver) survive here.
   getTemplates: (params = {}) => client.get("/templates", { params }).then((r) => r.data),
   getTemplateFacets: () => client.get("/templates/facets").then((r) => r.data),
-  getTemplate: (id) => client.get(`/templates/${id}`).then((r) => r.data),
-  createTemplate: (payload) => client.post("/templates", payload).then((r) => r.data),
-  updateTemplate: (id, payload) => client.patch(`/templates/${id}`, payload).then((r) => r.data),
-  duplicateTemplate: (id) => client.post(`/templates/${id}/duplicate`).then((r) => r.data),
-  toggleTemplateFavorite: (id) => client.post(`/templates/${id}/favorite`).then((r) => r.data),
-  archiveTemplate: (id, archived = true) =>
-    client.post(`/templates/${id}/archive`, null, { params: { archived } }).then((r) => r.data),
   publishTemplate: (id) => client.post(`/templates/${id}/publish`).then((r) => r.data),
 
   // Template recommendations

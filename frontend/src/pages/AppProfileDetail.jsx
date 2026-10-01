@@ -450,7 +450,7 @@ export default function AppProfileDetail() {
                 {recommendations.map((r) => (
                   <Link
                     key={r.template.id}
-                    to={`/templates/${r.template.id}`}
+                    to={`/create?profile=${profileId}&template=${r.template.id}`}
                     className="block rounded-xl border border-[color:var(--hairline)] p-3 transition-colors hover:border-[color:var(--indigo-35)]"
                   >
                     <div className="flex items-center justify-between gap-2">
@@ -463,10 +463,10 @@ export default function AppProfileDetail() {
                   </Link>
                 ))}
                 <Link
-                  to="/templates"
+                  to={`/create?profile=${profileId}`}
                   className="block pt-1 text-center text-xs font-medium text-[color:var(--brand-indigo)] hover:underline"
                 >
-                  Browse the full library
+                  Pick one in the studio
                 </Link>
               </div>
             )}

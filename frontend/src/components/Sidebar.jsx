@@ -6,7 +6,6 @@ import {
   Sparkles,
   Compass,
   Bookmark,
-  LayoutTemplate,
   Clapperboard,
   Images,
   Radar,
@@ -23,7 +22,7 @@ import {
 /**
  * Sidebar navigation model.
  *
- * Ordering reflects the primary workflow: App Profiles -> Hook Templates ->
+ * Ordering reflects the primary workflow: App Profiles -> Create Video ->
  * History. Discovery, saved analyses, and old records remain under Research
  * for template research. Exact-match video creation is disabled, so those
  * creation routes are intentionally absent.
@@ -40,7 +39,6 @@ export const NAV_GROUPS = [
     items: [
       { to: "/create", label: "Create Video", icon: Clapperboard, testId: "create-nav-link", hint: "Guided wizard" },
       { to: "/brand", label: "Your app", icon: PenLine, testId: "brand-nav-link", hint: "Research, edit, approve" },
-      { to: "/templates", label: "Hook Templates", icon: LayoutTemplate, testId: "templates-nav-link", hint: "Reusable structures" },
       { to: "/assets", label: "Asset Library", icon: Images, testId: "assets-nav-link", hint: "Character reference" },
       { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Everything you made" },
     ],

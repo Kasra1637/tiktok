@@ -18,8 +18,6 @@ import GenerationHistory from "./pages/GenerationHistory";
 import BrandSetup from "./pages/BrandSetup";
 import HookTemplates from "./pages/HookTemplates";
 import AppProfileDetail from "./pages/AppProfileDetail";
-import Templates from "./pages/Templates";
-import TemplateDetail from "./pages/TemplateDetail";
 import CreateVideo from "./pages/CreateVideo";
 import AssetLibrary from "./pages/AssetLibrary";
 import Analytics from "./pages/Analytics";
@@ -50,7 +48,7 @@ function App() {
                   <AppShell>
                     <PageTransition>
                       <Routes>
-                        {/* Primary workflow: profiles -> templates -> studio (Phase 4) */}
+                        {/* Primary workflow: profiles -> studio */}
                         {/* The App Profiles list is gone: the editor was where
                             you went to do the work anyway. This redirect keeps
                             the public footer, the Dashboard, the studio's
@@ -72,8 +70,13 @@ function App() {
                         <Route path="/" element={<Navigate to="/create" replace />} />
                         <Route path="/analytics" element={<Analytics />} />
                         <Route path="/research" element={<TrendResearch />} />
-                        <Route path="/templates" element={<Templates />} />
-                        <Route path="/templates/:templateId" element={<TemplateDetail />} />
+                        {/* The template library is gone: templates are picked
+                            per App Profile inside the Create Video wizard, so
+                            there is nowhere standalone left to land. Redirects
+                            rather than dead routes, so bookmarks land where
+                            the work is. */}
+                        <Route path="/templates" element={<Navigate to="/create" replace />} />
+                        <Route path="/templates/:templateId" element={<Navigate to="/create" replace />} />
                         <Route path="/create" element={<CreateVideo />} />
                         <Route path="/brand" element={<BrandSetup />} />
                         {/* Generation History is now the primary /history view;

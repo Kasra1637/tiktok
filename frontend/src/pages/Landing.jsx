@@ -9,7 +9,7 @@ import {
 import {
   Sparkles, Search, Clapperboard, Globe, Film,
   TrendingUp, ArrowRight, Zap, Target, Layers, Music2,
-  Bookmark, FileText, BadgeAlert,
+  FileText, BadgeAlert,
   RotateCcw, Check, Wand2, Briefcase, LayoutTemplate, ShieldCheck, Download,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -405,15 +405,6 @@ export default function Landing() {
                   <Sparkles className="h-5 w-5" /> Go to App
                 </Button>
               </Link>
-              <Link to="/templates" className="w-full sm:w-auto">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="w-full gap-2.5 rounded-xl border-[color:var(--hairline-strong)] bg-[color:var(--indigo-4)] px-8 py-6 text-base font-semibold backdrop-blur-sm hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] sm:w-auto"
-                >
-                  <Bookmark className="h-5 w-5" /> Browse Templates
-                </Button>
-              </Link>
             </AuthedOnly>
           </div>
 
@@ -654,9 +645,6 @@ export default function Landing() {
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li>
                   <Link to="/create" className="transition-colors hover:text-foreground">Create Video</Link>
-                </li>
-                <li>
-                  <Link to="/templates" className="transition-colors hover:text-foreground">Hook Templates</Link>
                 </li>
                 <li>
                   <Link to="/history" className="transition-colors hover:text-foreground">Generation History</Link>

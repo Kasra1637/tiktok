@@ -343,7 +343,6 @@ export default function CreateVideo() {
   // wizard and an existing draft agree on what "unset" means.
   const [extendIntent, setExtendIntent] = useState(true);
   const [tone, setTone] = useState("");
-  const [manualTemplate, setManualTemplate] = useState(false);
   const [edits, setEdits] = useState({});
 
   const profileId = project?.brand_profile_id || selectedProfileId;
@@ -910,17 +909,9 @@ export default function CreateVideo() {
         <StepShell
           icon={LayoutTemplate}
           title="Choose a hook template"
-          description="Recommendations are a starting point — any compatible template works."
+          description="Scored for this app profile and angle — select the one that fits."
         >
           <div className="space-y-4">
-            <Button
-              variant={manualTemplate ? "secondary" : "brand"}
-              size="sm"
-              onClick={() => setManualTemplate((v) => !v)}
-            >
-              {manualTemplate ? "Showing all templates" : "Browse all templates instead"}
-            </Button>
-
             {recommendations.length > 0 && (
               <div className="space-y-2">
                 <span className="eyebrow block">Recommended</span>
@@ -932,34 +923,6 @@ export default function CreateVideo() {
                     onSelect={() => setTemplateId(r.template.id)}
                   />
                 ))}
-              </div>
-            )}
-
-            {manualTemplate && (
-              <div className="space-y-2">
-                <span className="eyebrow block">All templates ({templates.length})</span>
-                <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
-                  {templates.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => setTemplateId(t.id)}
-                      className={`w-full rounded-xl border p-3 text-left transition-colors ${
-                        templateId === t.id
-                          ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
-                          : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium">{t.name}</span>
-                        <Badge variant="secondary" className="text-[11px]">{t.default_duration}s</Badge>
-                      </div>
-                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                        {t.opening_structure}
-                      </p>
-                    </button>
-                  ))}
-                </div>
               </div>
             )}
 
