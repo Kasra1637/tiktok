@@ -338,8 +338,9 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
   // The strategy plans segment 0 at N seconds, and that number — resolved
   // against the provider floor/ceiling — is what renders. There is no
   // selector because there is no choice to make: any other length would no
-  // longer be the planned hook. Before a strategy exists the saved value is
-  // provisional, and building the strategy confirms it. resolveLength()
+  // longer be the planned hook. Nothing is displayed before a strategy
+  // exists; the saved value below only seeds the computation the hook
+  // submit and button label need once the plan is there. resolveLength()
   // mirrors the backend's resolve_length() so the delivered number is honest
   // BEFORE the render is paid for — the backend still decides, and its plan
   // is what the response reports.
@@ -400,9 +401,11 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
 
   const handleGenerateStrategy = () =>
     run("strategy", async () => {
-      // The locked hook length seeds the plan: segment 0 is planned at this
-      // length, which is what locks it from then on.
-      const updated = await api.generateStrategy(projectId, { hook_seconds: lockedHook });
+      // No hook length is sent: the server resolves the template default,
+      // the strategy plans segment 0 from it, and the lock displays the
+      // plan. Sending our own number here would let a stale saved value
+      // override the template the founder actually picked.
+      const updated = await api.generateStrategy(projectId, {});
       onProjectChange?.(updated);
       setNotice(
         `Strategy v${updated.strategy_version} built from this app's profile. Review the hook and the locked person, then generate the hook.`
@@ -544,15 +547,16 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
         </div>
       )}
 
-      {/* Hook length. Computed from the strategy, recommended, locked: the
-          planned hook beat is N seconds and nothing else would be the planned
-          hook, so there is no selector. Separate from the project's "total
-          video length" because it is a different axis: this is the first
-          segment of it. */}
+      {/* Hook length. Shown only once a strategy exists: the length is
+          computed from the plan, not chosen before it. The planned hook beat
+          is N seconds and nothing else would be the planned hook, so there is
+          no selector. Separate from the project's "total video length"
+          because it is a different axis: this is the first segment of it. */}
+      {hasStrategy && (
       <div className="space-y-1.5">
         <span className="text-sm font-medium">Hook length</span>
         <p className="rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm">
-          {hookDelivered}s — {hasStrategy ? "recommended for this plan" : "provisional"}
+          {hookDelivered}s — recommended for this plan
         </p>
         {lengthPlan.trimTo ? (
           <p className="text-xs text-muted-foreground">
@@ -564,10 +568,10 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
           <p className="text-xs text-muted-foreground">
             The opening {hookDelivered}s of the video. The total length is set on the
             Audience &amp; goal step.
-            {!hasStrategy && " The strategy confirms the length on build."}
           </p>
         )}
       </div>
+      )}
 
       {/* Declared intent lives on the Audience & goal step now, because it
           decides whether a total length is a real choice. It is still READ
