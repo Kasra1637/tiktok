@@ -643,6 +643,48 @@ class TestReadyGate:
         result = _run(api.mark_project_ready(project_id=project["id"], user_id=ANON))
         assert result["status"] == "ready_for_generation"
 
+    def test_building_a_strategy_does_not_un_ready_the_project(self, api, monkeypatch):
+        """A strategy build must not demote a project the founder already approved.
+
+        generate_project_strategy re-derives from the approved plan and changes
+        nothing the founder read, so it used to write status='draft' -- which
+        re-enabled the "Mark ready for generation" button sitting on the
+        previous step, bouncing anyone who built their strategy back a step to
+        re-approve a project they had not touched.
+        """
+        project = self._with_plan(api, monkeypatch, FAKE_PLAN, "Ready Then Strategy")
+        _run(api.mark_project_ready(project_id=project["id"], user_id=ANON))
+        from models import GenerateStrategyRequest
+
+        # Exercise the real endpoint with the model call replaced, the same way
+        # _patch_plan does for the plan: the point under test is the status the
+        # endpoint writes, not what the model returns.
+        async def fake_generate_video_strategy(**kwargs):
+            return {
+                "strategy_summary": "s", "audience_problem": "p",
+                "emotional_triggers": ["t"], "hook_concept": "c",
+                "hook_line": "You do not have a focus problem.",
+                "hook_promise": "p", "hook_action": "a",
+                "messaging_pillars": ["m"], "primary_feature": "f",
+                "desired_outcome": "o", "differentiation_beat": "b",
+                "cta_strategy": "c",
+                "scene": {"environment": "kitchen"},
+                "performance": {"movement": "still"},
+                "segments": [{"index": 0, "role": "hook", "seconds": 5,
+                              "goal": "g", "script": "You do not have a focus problem.",
+                              "action": "a"}],
+                "continuity_contract": {
+                    "established": ["kitchen"],
+                    "must_not_change": ["shirt"],
+                    "do_not_repeat": ["the opening line"],
+                },
+            }
+        monkeypatch.setattr(api, "generate_video_strategy", fake_generate_video_strategy)
+
+        after = _run(api.generate_project_strategy(
+            project_id=project["id"], payload=GenerateStrategyRequest(), user_id=ANON))
+        assert after["status"] == "ready_for_generation"
+
     def test_banned_claim_blocks_ready(self, api, monkeypatch):
         project = self._with_plan(api, monkeypatch, BANNED_PLAN, "Ready Banned")
         with pytest.raises(HTTPException) as err:

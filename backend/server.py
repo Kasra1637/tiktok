@@ -8244,12 +8244,23 @@ async def generate_project_strategy(
     # of silently leaving a strategy describing a hook line the founder has
     # since replaced. Stamped on the project rather than inside the strategy JSON
     # so a hand-edited strategy cannot overwrite it.
+    # Deliberately does NOT touch `status`. This endpoint re-derives the
+    # strategy from the founder's already-approved plan and changes nothing they
+    # read -- unlike generate_plan, which rewrites the script and genuinely does
+    # send the project back to draft. Demoting it here made the "Mark ready for
+    # generation" button on the Review step spring back into existence, so a
+    # founder who built their strategy was bounced a step to re-approve a
+    # project they had not changed. The segmented path never reads status at all
+    # (only submit_project_generation does, at its own guard), and a rebuilt
+    # strategy is still protected from being paid for twice: it bumps
+    # strategy_version, so extending an old segment is refused by the
+    # parent_strategy_version check in extend_generation.
     script_version_at_build = int(row.get("script_version") or 0)
     await _execute(
         """UPDATE studio_projects SET strategy = ?, strategy_version = ?,
              strategy_script_version = ?,
              hook_seconds = ?,
-             safety_report = ?, safety_summary = ?, status = 'draft', updated_at = ?
+             safety_report = ?, safety_summary = ?, updated_at = ?
            WHERE id = ? AND user_id = ?""",
         (json.dumps(strategy), version, script_version_at_build, hook_seconds,
          json.dumps(report), summary, now, project_id, user_id),
