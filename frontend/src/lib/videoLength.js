@@ -15,8 +15,9 @@
  * honestly before the render is paid for.
  */
 
-// Must match video_providers.HOOK_LENGTH_CHOICES.
-export const HOOK_LENGTHS = [2, 3, 4, 5, 6];
+// The hook length is computed from the strategy, recommended and locked —
+// there is no selector and therefore no list of choices. DEFAULT_HOOK is
+// the provisional value before any strategy exists.
 export const DEFAULT_HOOK = 4;
 
 export const EXTEND_CHOICES = [3, 5, 8, 10];

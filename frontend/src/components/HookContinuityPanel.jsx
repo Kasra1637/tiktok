@@ -4,7 +4,6 @@ import { Badge } from "./ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage, mediaUrl } from "../lib/api";
 import {
-  HOOK_LENGTHS,
   DEFAULT_HOOK,
   EXTEND_CHOICES,
   DEFAULT_EXTEND,
@@ -25,10 +24,10 @@ import {
 /**
  * The app-specific influencer workflow, end to end.
  *
- *   strategy -> 3-4s hook -> approve -> extend -> extend -> assemble
+ *   strategy -> hook (locked length) -> approve -> extend -> assemble
  *
  * The order is the product. The hook is generated on its own so the concept
- * can be judged in four seconds, approving it is what unlocks extensions, and
+ * can be judged in seconds, approving it is what unlocks extensions, and
  * only approved segments are joined into the final file. An extension always
  * continues the approved take rather than re-imagining it, and the panel says
  * plainly what the provider was actually given so a continuity gap is never
@@ -252,7 +251,6 @@ function ContinuityNote({ continuity }) {
 export function HookContinuityPanel({ project, onProjectChange, onGenerationChange }) {
   const [models, setModels] = useState(null);
   const [selectedModel, setSelectedModel] = useState("");
-  const [hookSeconds, setHookSeconds] = useState(0);
   const [extendBy, setExtendBy] = useState(DEFAULT_EXTEND);
   const [segments, setSegments] = useState([]);
   const [assembled, setAssembled] = useState(null);
@@ -341,14 +339,16 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
   };
 
   // -------------------------------------------------------------------------
-  // Hook and extension lengths
+  // Hook length: computed, recommended, locked.
   //
-  // The wanted length and the length the model can actually render are two
-  // different numbers, and every provider's floor is 4s or more while the hook
-  // a template declares is 2-3s. So a short segment is rendered at the floor
-  // and cut down afterwards. resolveLength() mirrors the backend's
-  // resolve_length() so the option labels are honest BEFORE the render is paid
-  // for — the backend still decides, and its plan is what the response reports.
+  // The strategy plans segment 0 at N seconds, and that number — resolved
+  // against the provider floor/ceiling — is what renders. There is no
+  // selector because there is no choice to make: any other length would no
+  // longer be the planned hook. Before a strategy exists the saved value is
+  // provisional, and building the strategy confirms it. resolveLength()
+  // mirrors the backend's resolve_length() so the delivered number is honest
+  // BEFORE the render is paid for — the backend still decides, and its plan
+  // is what the response reports.
   // -------------------------------------------------------------------------
   const capability = models?.models?.find((m) => m.key === selectedModel);
   const floor = capability?.min_duration ?? 4;
@@ -357,22 +357,13 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
   const resolveLength = (target) => resolveLengthFor(target, capability);
 
   const savedHook = Number(project?.hook_seconds || 0);
-  const effectiveHook = Number(hookSeconds || 0) || savedHook || DEFAULT_HOOK;
-  const lengthPlan = resolveLength(effectiveHook);
+  const plannedHook = Number(strategy?.segments?.[0]?.seconds) || 0;
+  const lockedHook = plannedHook || savedHook || DEFAULT_HOOK;
+  const lengthPlan = resolveLength(lockedHook);
+  const hookDelivered = lengthPlan.trimTo || lengthPlan.render;
   // Read as a boolean. The previous `=== 0` never read "off" because the API
   // returns a real boolean and `false === 0` is false.
   const extendIntent = readExtendIntent(project);
-
-  const handleHookLength = (value) => {
-    setHookSeconds(value);
-    if (!projectId) return;
-    // Persisted so a later strategy rebuild, the hook render, and any segment
-    // planning all read the SAME length rather than each re-deriving it.
-    api
-      .setProjectHookLength(projectId, value)
-      .then((updated) => onProjectChange?.(updated))
-      .catch((err) => setError(getErrorMessage(err)));
-  };
 
   // Declared intent to extend the hook into a full video.
   //
@@ -411,7 +402,9 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
 
   const handleGenerateStrategy = () =>
     run("strategy", async () => {
-      const updated = await api.generateStrategy(projectId, { hook_seconds: effectiveHook });
+      // The locked hook length seeds the plan: segment 0 is planned at this
+      // length, which is what locks it from then on.
+      const updated = await api.generateStrategy(projectId, { hook_seconds: lockedHook });
       onProjectChange?.(updated);
       setNotice(
         `Strategy v${updated.strategy_version} built from this app's profile. Review the hook and the locked person, then generate the hook.`
@@ -422,7 +415,7 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
     run("hook", async () => {
       const created = await api.generateHook(projectId, {
         model: selectedModel || undefined,
-        duration_seconds: effectiveHook,
+        duration_seconds: lockedHook,
       });
       onGenerationChange?.(created);
       const plan = created.hook_length;
@@ -553,26 +546,16 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
         </div>
       )}
 
-      {/* Hook length. Separate from the project's "total video length" because
-          it is a different axis: this is the first segment of it. */}
+      {/* Hook length. Computed from the strategy, recommended, locked: the
+          planned hook beat is N seconds and nothing else would be the planned
+          hook, so there is no selector. Separate from the project's "total
+          video length" because it is a different axis: this is the first
+          segment of it. */}
       <div className="space-y-1.5">
-        <label htmlFor="hook-length" className="text-sm font-medium">Hook length</label>
-        <select
-          id="hook-length"
-          value={effectiveHook}
-          onChange={(e) => handleHookLength(Number(e.target.value))}
-          disabled={Boolean(busy) || Boolean(inFlightId)}
-          className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
-        >
-          {HOOK_LENGTHS.map((n) => {
-            const p = resolveLength(n);
-            return (
-              <option key={n} value={n}>
-                {n}s{p.trimTo ? ` — trimmed from a ${p.render}s render` : " — as rendered"}
-              </option>
-            );
-          })}
-        </select>
+        <span className="text-sm font-medium">Hook length</span>
+        <p className="rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm">
+          {hookDelivered}s — {hasStrategy ? "recommended for this plan" : "provisional"}
+        </p>
         {lengthPlan.trimTo ? (
           <p className="text-xs text-muted-foreground">
             {capability?.name || "This provider"} cannot render under {floor}s, so the hook
@@ -581,8 +564,9 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            The opening {lengthPlan.render}s of the video. The total length is set on the
+            The opening {hookDelivered}s of the video. The total length is set on the
             Audience &amp; goal step.
+            {!hasStrategy && " The strategy confirms the length on build."}
           </p>
         )}
       </div>
@@ -709,7 +693,7 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
             disabled={Boolean(busy) || Boolean(inFlightId) || blocked}
           >
             {busy === "hook" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-            {segments.length ? "Regenerate the hook" : "Generate the 3–4s hook"}
+            {segments.length ? "Regenerate the hook" : `Generate the ${hookDelivered}s hook`}
           </Button>
 
           {segments.length === 0 && !inFlightId && (
