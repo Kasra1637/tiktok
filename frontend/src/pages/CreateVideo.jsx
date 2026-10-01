@@ -437,6 +437,16 @@ export default function CreateVideo() {
       .catch(() => setTemplates([]));
   }, []);
 
+  // Set once the founder picks a template themselves, and never cleared.
+  //
+  // This is what makes the default selection safe. The recommender reorders on
+  // this app's own recorded feedback (feedback.template_feedback_adjustment
+  // shifts a score by up to 4 points either way), so its top pick is
+  // meaningful — and reordering it on every reload meant a founder's deliberate
+  // choice could be silently replaced by whatever ranked first that time, which
+  // discarded the adjustment the click was overriding.
+  const templateChosenByHand = useRef(false);
+
   const loadRecommendations = useCallback(
     async (pid, aid) => {
       if (!pid) return;
@@ -446,7 +456,23 @@ export default function CreateVideo() {
           objective: objective || undefined,
           limit: 6,
         });
-        setRecommendations(rec.recommendations || []);
+        const rows = rec.recommendations || [];
+        setRecommendations(rows);
+        // Preselect the top pick when the founder has not chosen for
+        // themselves. Deliberately not "on every reload": a reload must never
+        // move a selection the founder made, so the only condition is that
+        // nothing is selected and nothing has ever been hand-picked.
+        //
+        // setTemplateId is called with a function so the check reads the value
+        // at the time this response lands rather than a value captured when the
+        // request was made — otherwise a slow response could overwrite a pick
+        // made while it was in flight.
+        if (rows.length > 0) {
+          setTemplateId((current) => {
+            if (current || templateChosenByHand.current) return current;
+            return rows[0].template.id;
+          });
+        }
       } catch {
         setRecommendations([]);
       }
@@ -502,6 +528,15 @@ export default function CreateVideo() {
     setRecommendations([]);
     setEdits({});
     setProject(null);
+    // The template is cleared with everything else, because it was chosen
+    // against the previous app's profile. This was latent before; auto-selection
+    // made it reachable, since a template preselected for one app would survive
+    // the switch and the new profile's recommendations would then see a
+    // selection already made and decline to preselect theirs.
+    setTemplateId("");
+    // The latch is per-app, not per-session: a deliberate pick for one app says
+    // nothing about the next one, so the new app starts from its own top pick.
+    templateChosenByHand.current = false;
     try {
       const d = await api.getContentAngles(id);
       setAngles(d.angles || []);
@@ -1008,7 +1043,11 @@ export default function CreateVideo() {
                     key={r.template.id}
                     r={r}
                     selected={templateId === r.template.id}
-                    onSelect={() => setTemplateId(r.template.id)}
+                    onSelect={() => {
+                      // Latched, so a later reload cannot move this pick.
+                      templateChosenByHand.current = true;
+                      setTemplateId(r.template.id);
+                    }}
                   />
                 ))}
               </div>
@@ -1021,6 +1060,16 @@ export default function CreateVideo() {
                   <Badge variant="secondary" className="text-[11px]">
                     {humanize(template.category)}
                   </Badge>
+                  {/* Says which of the two states the founder is in. A
+                      preselected template is a starting point scored for this
+                      app and this goal, and clicking any other card replaces it
+                      — but nothing on screen would otherwise distinguish that
+                      from a pick they made. */}
+                  {!templateChosenByHand.current && (
+                    <Badge variant="secondary" className="text-[11px]">
+                      Suggested
+                    </Badge>
+                  )}
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">{template.opening_structure}</p>
                 {template.required_assets?.length > 0 && (

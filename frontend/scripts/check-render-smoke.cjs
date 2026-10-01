@@ -696,6 +696,115 @@ async function main() {
     }
   });
 
+  // The recommender reorders on this app's recorded feedback, so its top pick
+  // is meaningful. Preselecting it means the founder can accept the suggestion
+  // instead of re-deriving it, and means the feedback adjustment is not thrown
+  // away by the act of opening the step.
+  // Two templates, so the order can flip between loads below.
+  const ORDERED_TEMPLATES = [
+    { ...TEMPLATE, id: "t-top", name: "Top Pick" },
+    { ...TEMPLATE, id: "t-second", name: "Second" },
+  ];
+
+  await check("the top recommendation is preselected when the founder has not chosen", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    // getTemplates must list them too: the selected-template card is rendered
+    // from the full library, not from the recommendation rows, so a
+    // recommendation for a template the library does not contain preselects an
+    // id that resolves to nothing.
+    await withApi(
+      {
+        getTemplates: async () => ({ templates: ORDERED_TEMPLATES }),
+        getTemplateRecommendations: async () => ({
+          recommendations: [
+            { template: ORDERED_TEMPLATES[0], score: 9, why_it_fits: ["fits"], limitations: [] },
+            { template: ORDERED_TEMPLATES[1], score: 5, why_it_fits: ["ok"], limitations: [] },
+          ],
+        }),
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        const pill = stepPill(ctx, "Hook template");
+        await act(async () => {
+          pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+      }
+    );
+    const text = ctx.text();
+    if (!text.includes("Top Pick")) {
+      throw new Error("the top recommendation is not preselected");
+    }
+    if (!text.includes("Suggested")) {
+      throw new Error("a preselected template is not labelled as a suggestion");
+    }
+  });
+
+  // The important half: a reload must not move a pick the founder made. The
+  // recommender's order depends on recorded feedback, so a re-rank between
+  // visits would otherwise silently replace a deliberate choice.
+  await check("reloading recommendations never replaces a hand-picked template", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    const order = { call: 0 };
+    await withApi(
+      {
+        getTemplates: async () => ({ templates: ORDERED_TEMPLATES }),
+        getTemplateRecommendations: async () => {
+          order.call += 1;
+          // The founder picks the one ranked second, then the order flips.
+          const rows = order.call === 1
+            ? [
+                { template: ORDERED_TEMPLATES[0], score: 9, why_it_fits: [], limitations: [] },
+                { template: ORDERED_TEMPLATES[1], score: 5, why_it_fits: [], limitations: [] },
+              ]
+            : [
+                { template: ORDERED_TEMPLATES[1], score: 9, why_it_fits: [], limitations: [] },
+                { template: ORDERED_TEMPLATES[0], score: 5, why_it_fits: [], limitations: [] },
+              ];
+          return { recommendations: rows };
+        },
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        let pill = stepPill(ctx, "Hook template");
+        await act(async () => {
+          pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+
+        // Click the second card by its rendered name.
+        const second = [...ctx.container.querySelectorAll("[role=button]")]
+          .find((el) => (el.textContent || "").includes("Second"));
+        if (!second) throw new Error("the second recommendation is not clickable");
+        await act(async () => {
+          second.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+
+        // Leave and come back, which re-runs the load with a flipped order.
+        pill = stepPill(ctx, "Assets");
+        await act(async () => {
+          pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+        pill = stepPill(ctx, "Hook template");
+        await act(async () => {
+          pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+      }
+    );
+    const text = ctx.text();
+    // The pick held: the card for the one clicked is the selected one, and it
+    // is no longer labelled as a suggestion even though it now ranks second.
+    if (text.includes("Suggested")) {
+      throw new Error("a hand-picked template is still labelled as a suggestion");
+    }
+    if (!text.includes("Second")) {
+      throw new Error("the hand-picked template is not the one shown after the reload");
+    }
+  });
+
   await check("wizard surfaces the tailored-template error instead of failing silently", async (ctx) => {
     global.__SMOKE_PARAMS = "";
       // The override has to span the whole check, not just the mount: the
