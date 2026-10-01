@@ -515,12 +515,14 @@ export default function CreateVideo() {
     setBusy(true);
     setError(null);
     try {
+      // On the update path duration_seconds is left to the plan step, which
+      // writes it together with the beat timeline built for it. Sending it here
+      // would be refused once a plan exists.
       const created = project?.id
         ? await api.updateStudioProject(project.id, {
             content_angle_id: angleId || "",
             template_id: templateId || "",
             objective,
-            duration_seconds: duration,
             tone,
             ...overrides,
           })
@@ -586,11 +588,15 @@ export default function CreateVideo() {
         ) {
           return project;
         }
+        // duration_seconds is deliberately NOT sent here. The plan step passes
+        // it to generatePlan, which writes it in the same statement as the beat
+        // timeline it clamped to that length. Patching it separately would
+        // either be refused (the plan already exists) or land a length the
+        // timeline does not match.
         const updated = await api.updateStudioProject(project.id, {
           content_angle_id: angleId || "",
           template_id: templateId || "",
           objective,
-          duration_seconds: duration,
           tone,
         });
         setProject(updated);
@@ -715,13 +721,11 @@ export default function CreateVideo() {
     edits[key] !== undefined ? edits[key] : project?.[key] ?? fallback;
   const hasEdits = Object.keys(edits).length > 0;
 
-  // Duration and tone are edited in the review step but also seed the plan in
-  // the previous step, so a change here has to move both or going back and
-  // regenerating would silently reinstate the old value.
-  const editDuration = (seconds) => {
-    setDuration(seconds);
-    setEdits((prev) => ({ ...prev, duration_seconds: seconds }));
-  };
+  // Tone is editable here and also seeds the plan, so a change has to move
+  // both or going back and regenerating would silently reinstate the old value.
+  // Duration is deliberately NOT editable here: the plan's beat timeline is
+  // built for the length it was generated at, so the number belongs to the step
+  // that chooses it, before the plan exists.
   const editTone = (value) => {
     setTone(value);
     setEdits((prev) => ({ ...prev, tone: value }));
@@ -930,6 +934,16 @@ export default function CreateVideo() {
                       <option key={d} value={d}>{d} seconds</option>
                     ))}
                   </select>
+                  {/* Changing this after a plan exists makes the plan's beat
+                      timeline wrong rather than the plan's text, so it is said
+                      out loud instead of leaving a founder to save an edit that
+                      silently does nothing. */}
+                  {project?.script_version > 0 && duration !== editValue("duration_seconds", 20) && (
+                    <p className="text-xs text-muted-foreground">
+                      A plan already exists at {editValue("duration_seconds", 20)}s. Regenerate it
+                      on the Creative plan step to write the shot timeline to {duration}s.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -1308,24 +1322,23 @@ export default function CreateVideo() {
               </div>
             )}
 
+            {/* Total length is shown, not edited. The plan's beat timeline is
+                built for the length it was generated at, and beats are clamped
+                to it, so changing the number here would leave a timeline that no
+                longer adds up to the stated duration. It is chosen on the
+                Audience & goal step and consumed by the plan step; changing it
+                means regenerating the plan, which is what the note says. */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <label htmlFor="review-duration" className="text-sm font-medium">Total video length</label>
-                <select
-                  id="review-duration"
-                  value={editValue("duration_seconds", 20)}
-                  onChange={(e) => editDuration(Number(e.target.value))}
-                  className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
-                >
-                  {(facets?.supported_durations || [10, 15, 20, 30]).map((d) => (
-                    <option key={d} value={d}>{d} seconds</option>
-                  ))}
-                </select>
-                {editValue("duration_seconds", 20) !== duration && (
-                  <p className="text-xs text-muted-foreground">
-                    Differs from the plan step. Regenerating the plan will use {duration}s.
-                  </p>
-                )}
+                <span className="text-sm font-medium">Total video length</span>
+                <p className="rounded-lg border border-[color:var(--hairline)] px-3 py-2 text-sm">
+                  {editValue("duration_seconds", 20)} seconds
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {project?.script_version
+                    ? "The shot timeline above is written to this length. To change it, change the length on the Audience & goal step and regenerate the plan."
+                    : "Set this on the Audience & goal step before generating the plan."}
+                </p>
               </div>
               <div className="space-y-1.5">
                 <label htmlFor="review-tone" className="text-sm font-medium">Tone</label>

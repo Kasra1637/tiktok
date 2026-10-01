@@ -646,6 +646,56 @@ async function main() {
   // Tailoring only fires once an objective exists, so this drives the real
   // order: pick the goal, then the tailored request runs and its attached error
   // has to appear on the template step.
+  // Length is chosen on the Audience & goal step and consumed by the plan
+  // step, so it must not be an editable control on Review: the beat timeline is
+  // built for the length the plan was generated at and beats are clamped to it,
+  // so changing the number there leaves a timeline that no longer adds up.
+  await check("Review shows the length but does not offer editing it", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await mount(CreateVideo, {})(ctx);
+      const pill = stepPill(ctx, "Review");
+      await act(async () => {
+        pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      });
+      await act(async () => {});
+      const text = ctx.text();
+      if (!text.includes("Total video length")) {
+        throw new Error("Review no longer states the total length");
+      }
+      if (!text.includes("written to this length")) {
+        throw new Error("Review does not explain that the timeline is tied to this length");
+      }
+      // The stale-timeline affordance: an editable length select with a
+      // "regenerating the plan will use Ns" note is what has to be gone.
+      if (text.includes("Regenerating the plan will use")) {
+        throw new Error("Review still offers an editable length that invalidates the beat timeline");
+      }
+      const durationSelect = [...ctx.container.querySelectorAll("select")]
+        .find((s) => s.id === "review-duration");
+      if (durationSelect) {
+        throw new Error("Review still renders an editable total-length control");
+      }
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("the length selector lives on the step before the plan", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await mount(CreateVideo, {})(ctx);
+    const pill = stepPill(ctx, "Audience & goal");
+    await act(async () => {
+      pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => {});
+    const select = ctx.container.querySelector("select#duration");
+    if (!select) throw new Error("the total length is no longer chosen before the plan");
+    if (!ctx.text().includes("Total video length")) {
+      throw new Error("the length control has no label");
+    }
+  });
+
   await check("wizard surfaces the tailored-template error instead of failing silently", async (ctx) => {
     global.__SMOKE_PARAMS = "";
       // The override has to span the whole check, not just the mount: the
