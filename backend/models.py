@@ -104,8 +104,7 @@ class ApproveAppProfileRequest(BaseModel):
 APP_PROFILE_LIST_FIELDS = (
     "support_urls", "platforms", "core_features", "primary_use_cases",
     "problems_solved", "icp_segments", "desired_outcomes", "competitors",
-    "products_services", "claims_approved", "claims_review", "claims_banned",
-    "ctas", "video_themes",
+    "claims_approved", "claims_review", "claims_banned",
 )
 
 APP_PROFILE_TEXT_FIELDS = (
@@ -129,7 +128,6 @@ class BrandProfileCreateRequest(BaseModel):
     brand_name: str
     brand_description: Optional[str] = ""
     niche: Optional[str] = ""
-    products_services: Optional[List[str]] = None
     target_audience: Optional[str] = ""
     ideal_customer_profile: Optional[str] = ""
     differentiation: Optional[str] = ""
@@ -151,8 +149,6 @@ class BrandProfileCreateRequest(BaseModel):
     claims_approved: Optional[List[str]] = None
     claims_review: Optional[List[str]] = None
     claims_banned: Optional[List[str]] = None
-    ctas: Optional[List[str]] = None
-    video_themes: Optional[List[str]] = None
 
 
 class BrandProfileUpdateRequest(BaseModel):
@@ -160,7 +156,6 @@ class BrandProfileUpdateRequest(BaseModel):
     brand_name: Optional[str] = None
     brand_description: Optional[str] = None
     niche: Optional[str] = None
-    products_services: Optional[List[str]] = None
     target_audience: Optional[str] = None
     ideal_customer_profile: Optional[str] = None
     differentiation: Optional[str] = None
@@ -183,8 +178,6 @@ class BrandProfileUpdateRequest(BaseModel):
     claims_approved: Optional[List[str]] = None
     claims_review: Optional[List[str]] = None
     claims_banned: Optional[List[str]] = None
-    ctas: Optional[List[str]] = None
-    video_themes: Optional[List[str]] = None
 
 
 class GenerateRemixScriptRequest(BaseModel):

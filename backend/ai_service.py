@@ -95,26 +95,31 @@ REQUIRED_VIDEO_PROMPT_KEYS = {
 }
 
 REQUIRED_BRAND_ANALYSIS_KEYS = {
-    "brand_name", "brand_description", "niche", "products_or_services",
+    "brand_name", "brand_description", "niche",
     "target_audience", "ideal_customer_profile", "differentiation", "tone_voice",
 }
 
 # Full App Profile schema produced by analyze_app_profile(). List fields come
 # back as JSON arrays of short strings; icp_segments entries are "Segment
 # label — needs / hook promise" one-liners so they stay editable text.
+#
+# products_or_services, ctas and video_themes were removed. video_themes was
+# never read by anything -- the model produced 4-8 themes per profile and no
+# generator, scorer or claim rule ever consumed them. The other two reached
+# only the legacy remix paths, which no UI route reaches.
 REQUIRED_APP_PROFILE_KEYS = {
     "brand_name", "brand_description", "app_category", "niche", "platforms",
     "core_features", "primary_use_cases", "problems_solved",
-    "products_or_services", "target_audience", "ideal_customer_profile",
+    "target_audience", "ideal_customer_profile",
     "icp_segments", "desired_outcomes", "differentiation", "competitors",
     "known_limitations", "tone_voice", "claims_approved", "claims_review",
-    "claims_banned", "ctas", "video_themes",
+    "claims_banned",
 }
 
 APP_PROFILE_LIST_KEYS = (
     "platforms", "core_features", "primary_use_cases", "problems_solved",
-    "products_or_services", "icp_segments", "desired_outcomes", "competitors",
-    "claims_approved", "claims_review", "claims_banned", "ctas", "video_themes",
+    "icp_segments", "desired_outcomes", "competitors",
+    "claims_approved", "claims_review", "claims_banned",
 )
 
 
@@ -1400,7 +1405,6 @@ async def analyze_brand_from_text(url: str, page_text: str) -> dict:
         '  "brand_name": "the brand/company/channel name",\n'
         '  "brand_description": "1-3 sentence description of what the brand does",\n'
         '  "niche": "the brand\'s niche/category/industry",\n'
-        '  "products_or_services": ["short list of specific products or services offered"],\n'
         '  "target_audience": "short label for who the brand is trying to reach (e.g. \'busy professionals 25-40\')",\n'
         '  "ideal_customer_profile": "Who are you trying to reach? A rich 2-4 sentence description of the '
         'ideal customer/viewer covering demographics (age range, gender skew, income/life-stage if inferable), '
@@ -1437,10 +1441,6 @@ async def analyze_brand_from_text(url: str, page_text: str) -> dict:
     if missing:
         logger.error(f"Brand analysis missing fields {missing}. Raw text: {full_text[:1500]!r}")
         raise RuntimeError(f"Brand analysis missing required fields: {missing}")
-
-    if not isinstance(result.get("products_or_services"), list):
-        raw = result.get("products_or_services")
-        result["products_or_services"] = [raw] if raw else []
 
     return result
 
@@ -1491,20 +1491,17 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         '  "core_features": ["concrete features evidenced by the sources"],\n'
         '  "primary_use_cases": ["top jobs the app helps users do"],\n'
         '  "problems_solved": ["user problems the app removes"],\n'
-        '  "products_or_services": ["tiers or offerings, e.g. Free, Pro yearly"],\n'
         '  "target_audience": "short label for the primary audience",\n'
         '  "ideal_customer_profile": "2-4 sentences: who they are, what they struggle with, where they spend time online",\n'
         '  "icp_segments": ["2-4 segments as one-liners: label, functional need, hook promise"],\n'
         '  "desired_outcomes": ["outcomes users want from the app"],\n'
         '  "differentiation": "2-4 sentences on what sets this app apart",\n'
         '  "competitors": ["named competitor apps if inferable, else empty"],\n'
-        '  "known_limitations": "material limitations a promo must not contradict (platforms, trial terms, feature gaps)",\n'
+        '  "known_limitations": "material limitations a promo must not contradict (platforms, feature gaps)",\n'
         '  "tone_voice": "short description of the brand voice",\n'
         '  "claims_approved": ["factual claims safe to use in promos"],\n'
         '  "claims_review": ["claims that need verification before use (ratings, counts, results)"],\n'
-        '  "claims_banned": ["claims promos must never make (guaranteed outcomes, fake reviews, medical/financial promises)"],\n'
-        '  "ctas": ["suitable calls to action, e.g. Try it free, Get it on the App Store"],\n'
-        '  "video_themes": ["4-8 suggested short-form video themes for this app"]\n'
+        '  "claims_banned": ["claims promos must never make (guaranteed outcomes, fake reviews, medical/financial promises)"]\n'
         "}\n"
         "Rules: use ONLY functionality evidenced by the sources or notes; never invent "
         "ratings, download counts, or features. Do NOT report pricing, plan names or trial "
@@ -1596,7 +1593,6 @@ async def generate_content_angles(profile: dict, max_angles: int = 8) -> list:
         "approved_claims": _list("claims_approved"),
         "claims_needing_review": _list("claims_review"),
         "banned_claims": _list("claims_banned"),
-        "ctas": _list("ctas"),
     }
 
     kinds = ", ".join(CONTENT_ANGLE_KINDS)
@@ -1787,7 +1783,6 @@ async def generate_brand_templates(
         "voice": profile.get("tone_voice") or "(unstated)",
         "approved_claims": _list("claims_approved"),
         "banned_claims": _list("claims_banned"),
-        "ctas": _list("ctas"),
     }
     angle_briefs = []
     for angle in (angles or [])[:8]:

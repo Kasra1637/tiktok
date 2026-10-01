@@ -17,7 +17,6 @@ const EMPTY_FORM = {
   niche: "",
   app_category: "",
   platforms: "",
-  products_services: "",
   core_features: "",
   primary_use_cases: "",
   problems_solved: "",
@@ -32,8 +31,6 @@ const EMPTY_FORM = {
   claims_approved: "",
   claims_review: "",
   claims_banned: "",
-  ctas: "",
-  video_themes: "",
 };
 
 function productsToText(products) {
@@ -69,7 +66,6 @@ function profileToForm(data) {
     niche: data.niche || "",
     app_category: data.app_category || "",
     platforms: productsToText(data.platforms),
-    products_services: productsToText(data.products_services),
     core_features: productsToText(data.core_features),
     primary_use_cases: productsToText(data.primary_use_cases),
     problems_solved: productsToText(data.problems_solved),
@@ -84,8 +80,6 @@ function profileToForm(data) {
     claims_approved: productsToText(data.claims_approved),
     claims_review: productsToText(data.claims_review),
     claims_banned: productsToText(data.claims_banned),
-    ctas: productsToText(data.ctas),
-    video_themes: productsToText(data.video_themes),
   };
 }
 
@@ -237,7 +231,6 @@ export default function BrandSetup() {
         niche: form.niche,
         app_category: form.app_category,
         platforms: textToProducts(form.platforms),
-        products_services: textToProducts(form.products_services),
         core_features: textToProducts(form.core_features),
         primary_use_cases: textToProducts(form.primary_use_cases),
         problems_solved: textToProducts(form.problems_solved),
@@ -252,8 +245,6 @@ export default function BrandSetup() {
         claims_approved: textToProducts(form.claims_approved),
         claims_review: textToProducts(form.claims_review),
         claims_banned: textToProducts(form.claims_banned),
-        ctas: textToProducts(form.ctas),
-        video_themes: textToProducts(form.video_themes),
       };
       // Update in place when a profile already exists, otherwise create one from
       // the manual fields — research is optional, not a prerequisite.
@@ -638,15 +629,6 @@ export default function BrandSetup() {
                 />
               </Field>
 
-              <Field label="Products / services" hint="Comma-separated — each becomes a separate entry.">
-                <Input
-                  value={form.products_services}
-                  onChange={handleFieldChange("products_services")}
-                  placeholder="Comma-separated, e.g. Free, Pro yearly"
-                  data-testid="brand-products-field"
-                />
-              </Field>
-
               <Field label="Ideal Customer">
                 <Textarea
                   value={form.ideal_customer_profile}
@@ -710,24 +692,6 @@ export default function BrandSetup() {
                   onChange={handleFieldChange("claims_banned")}
                   placeholder="Comma-separated, e.g. Guaranteed results, Fake reviews"
                   data-testid="app-claims-banned-field"
-                />
-              </Field>
-
-              <Field label="Calls to action" hint="Comma-separated.">
-                <Input
-                  value={form.ctas}
-                  onChange={handleFieldChange("ctas")}
-                  placeholder="e.g. Try it free, Get it on the App Store"
-                  data-testid="app-ctas-field"
-                />
-              </Field>
-
-              <Field label="Suggested video themes" hint="Comma-separated.">
-                <Input
-                  value={form.video_themes}
-                  onChange={handleFieldChange("video_themes")}
-                  placeholder="e.g. Before/after, 3-tap tutorial"
-                  data-testid="app-themes-field"
                 />
               </Field>
             </div>

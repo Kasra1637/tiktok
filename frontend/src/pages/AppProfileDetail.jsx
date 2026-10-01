@@ -347,8 +347,6 @@ export default function AppProfileDetail() {
             <Field label="Primary audience" value={profile?.target_audience} />
             <Field label="Ideal customer" value={profile?.ideal_customer_profile} />
             <ListBlock label="Segments" items={list(profile?.icp_segments)} />
-            <ListBlock label="Suggested video themes" items={list(profile?.video_themes)} />
-            <ListBlock label="Calls to action" items={list(profile?.ctas)} />
           </div>
 
           <ClaimPanel profile={profile || {}} />

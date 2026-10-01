@@ -5373,7 +5373,7 @@ async def analyze_brand_url(payload: AnalyzeBrandUrlRequest, user_id: str = Depe
     )
     values = (
         extracted.get("brand_name"), extracted.get("brand_description"),
-        extracted.get("niche"), json.dumps(extracted.get("products_or_services", [])),
+        extracted.get("niche"),
         extracted.get("target_audience"), extracted.get("ideal_customer_profile"),
         extracted.get("differentiation"), extracted.get("tone_voice"), page_text,
     )
@@ -5381,21 +5381,21 @@ async def analyze_brand_url(payload: AnalyzeBrandUrlRequest, user_id: str = Depe
         brand_id = existing["id"]
         await _execute(
             """UPDATE brand_profiles
-               SET brand_name = ?, brand_description = ?, niche = ?, products_services = ?,
+               SET brand_name = ?, brand_description = ?, niche = ?,
                    target_audience = ?, ideal_customer_profile = ?, differentiation = ?,
                    tone_voice = ?, raw_extracted_text = ?, updated_at = ?
                WHERE id = ?""",
-            values + (now, brand_id),
+             values + (now, brand_id),
         )
         logger.info(f"Refreshed existing brand profile {brand_id} from {url}")
     else:
         brand_id = str(uuid.uuid4())
         await _execute(
             """INSERT INTO brand_profiles
-               (id, website_url, brand_name, brand_description, niche, products_services,
-                target_audience, ideal_customer_profile, differentiation, tone_voice,
-                raw_extracted_text, created_at, updated_at, user_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (id, website_url, brand_name, brand_description, niche,
+                 target_audience, ideal_customer_profile, differentiation, tone_voice,
+                 raw_extracted_text, created_at, updated_at, user_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (brand_id, url) + values + (now, now, user_id),
         )
         logger.info(f"Created brand profile {brand_id} from {url}")
@@ -5423,18 +5423,18 @@ async def create_brand(payload: BrandProfileCreateRequest, user_id: str = Depend
     created_at = now_iso()
     await _execute(
         """INSERT INTO brand_profiles
-           (id, website_url, brand_name, brand_description, niche, products_services,
-            target_audience, ideal_customer_profile, differentiation, tone_voice,
-            raw_extracted_text, created_at, updated_at, user_id,
-            appstore_url, play_url, support_urls, notes, app_category, platforms,
-            core_features, primary_use_cases, problems_solved,
-            icp_segments, desired_outcomes, competitors, known_limitations,
-            claims_approved, claims_review, claims_banned, ctas, video_themes,
-            status, version)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           (id, website_url, brand_name, brand_description, niche,
+             target_audience, ideal_customer_profile, differentiation, tone_voice,
+             raw_extracted_text, created_at, updated_at, user_id,
+             appstore_url, play_url, support_urls, notes, app_category, platforms,
+             core_features, primary_use_cases, problems_solved,
+             icp_segments, desired_outcomes, competitors, known_limitations,
+             claims_approved, claims_review, claims_banned,
+             status, version)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (brand_id, website or None, name, payload.brand_description or "",
-         payload.niche or "", json.dumps(_normalize_str_list(payload.products_services)),
+         payload.niche or "",
          payload.target_audience or "", payload.ideal_customer_profile or "",
          payload.differentiation or "", payload.tone_voice or "", None,
          created_at, created_at, user_id,
@@ -5453,8 +5453,6 @@ async def create_brand(payload: BrandProfileCreateRequest, user_id: str = Depend
          json.dumps(_normalize_str_list(payload.claims_approved)),
          json.dumps(_normalize_str_list(payload.claims_review)),
          json.dumps(_normalize_str_list(payload.claims_banned)),
-         json.dumps(_normalize_str_list(payload.ctas)),
-         json.dumps(_normalize_str_list(payload.video_themes)),
          "draft", 1),
     )
     logger.info(f"Created brand profile {brand_id} ('{name}') from manual entry")
@@ -5604,27 +5602,26 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
     )[:BRAND_URL_TEXT_MAX_CHARS]
     await _execute(
         """INSERT INTO brand_profiles
-           (id, website_url, brand_name, brand_description, niche, products_services,
-            target_audience, ideal_customer_profile, differentiation, tone_voice,
-            raw_extracted_text, created_at, updated_at, user_id,
-            appstore_url, play_url, support_urls, notes, app_category, platforms,
-            core_features, primary_use_cases, problems_solved,
-            icp_segments, desired_outcomes, competitors, known_limitations,
-            claims_approved, claims_review, claims_banned, ctas, video_themes,
-            status, version, last_research_at, research_sources)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+           (id, website_url, brand_name, brand_description, niche,
+             target_audience, ideal_customer_profile, differentiation, tone_voice,
+             raw_extracted_text, created_at, updated_at, user_id,
+             appstore_url, play_url, support_urls, notes, app_category, platforms,
+             core_features, primary_use_cases, problems_solved,
+             icp_segments, desired_outcomes, competitors, known_limitations,
+             claims_approved, claims_review, claims_banned,
+             status, version, last_research_at, research_sources)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (brand_id, website, profile.get("brand_name") or "Untitled app",
          profile.get("brand_description") or "", profile.get("niche") or "",
-         json.dumps(profile.get("products_or_services") or []),
          profile.get("target_audience") or "",
          profile.get("ideal_customer_profile") or "",
          profile.get("differentiation") or "", profile.get("tone_voice") or "",
          combined_raw, now, now, user_id,
          appstore, play, json.dumps(support), payload.notes or "",
          profile.get("app_category") or "",
-          json.dumps(profile.get("platforms") or []),
-          json.dumps(profile.get("core_features") or []),
+         json.dumps(profile.get("platforms") or []),
+         json.dumps(profile.get("core_features") or []),
          json.dumps(profile.get("primary_use_cases") or []),
          json.dumps(profile.get("problems_solved") or []),
          json.dumps(profile.get("icp_segments") or []),
@@ -5634,8 +5631,6 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
          json.dumps(profile.get("claims_approved") or []),
          json.dumps(profile.get("claims_review") or []),
          json.dumps(profile.get("claims_banned") or []),
-         json.dumps(profile.get("ctas") or []),
-         json.dumps(profile.get("video_themes") or []),
          "draft", 1, now, json.dumps(sorted(sources.keys()))),
     )
     logger.info(f"Researched app profile {brand_id} from {len(sources)} source(s)")
@@ -5800,9 +5795,6 @@ async def approve_app_profile(
         for key in APP_PROFILE_EDITABLE_FIELDS:
             if key in pending and pending[key] not in (None, "", []):
                 apply[key] = pending[key]
-        # The AI schema uses products_or_services; the column is products_services.
-        if "products_or_services" in pending and "products_services" not in apply:
-            apply["products_services"] = pending["products_or_services"]
         if apply:
             set_clauses, values = _brand_update_parts(apply)
             set_clauses.append("pending_research = NULL")
