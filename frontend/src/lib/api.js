@@ -187,6 +187,10 @@ export const api = {
   // Template recommendations
   getTemplateRecommendations: (profileId, params = {}) =>
     client.get(`/app-profiles/${profileId}/template-recommendations`, { params }).then((r) => r.data),
+  // Tailored templates for one profile + objective. Called when the template
+  // step loads (fast on cache hit) and on explicit regenerate.
+  ensureObjectiveTemplates: (profileId, payload) =>
+    client.post(`/app-profiles/${profileId}/objective-templates`, payload).then((r) => r.data),
 
   // Studio projects (guided creation)
   getStudioProjects: (params = {}) => client.get("/studio/projects", { params }).then((r) => r.data),

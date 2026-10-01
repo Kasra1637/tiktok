@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -26,7 +26,7 @@ import {
 import { DEFAULT_HOOK } from "../lib/videoLength";
 import {
   Clapperboard, Loader2, AlertTriangle, Briefcase, Target, LayoutTemplate,
-  Image as ImageIcon, FileText, Check, Sparkles,
+  Image as ImageIcon, FileText, Check, Sparkles, RefreshCw,
   Save, CheckCircle2, Star, Plus, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -444,6 +444,43 @@ export default function CreateVideo() {
   useEffect(() => {
     loadRecommendations(profileId, angleId);
   }, [profileId, angleId, loadRecommendations]);
+
+  // Tailored templates generate per (profile, selected objective) — the
+  // objective does not exist at approve time, so this is where the request
+  // belongs. Auto-fires once per key while the founder reads the step
+  // (cache hits return instantly); the button below forces a refresh.
+  // Guarded by ref so a remount never pays for a second generation.
+  const tailorKeyRef = useRef("");
+  const [tailoring, setTailoring] = useState(false);
+  const [tailorError, setTailorError] = useState(null);
+
+  const runTailoring = useCallback(async (regenerate) => {
+    if (!profileId || !objective) return;
+    setTailoring(true);
+    setTailorError(null);
+    try {
+      const res = await api.ensureObjectiveTemplates(profileId, {
+        objective,
+        ...(regenerate ? { regenerate: true } : {}),
+      });
+      if (res.generated) {
+        await loadRecommendations(profileId, angleId);
+      }
+      if (res.error) setTailorError(res.error);
+    } catch (err) {
+      setTailorError(getErrorMessage(err));
+    } finally {
+      setTailoring(false);
+    }
+  }, [profileId, objective, angleId, loadRecommendations]);
+
+  useEffect(() => {
+    if (step !== 2 || !profileId || !objective) return;
+    const key = `${profileId}:${objective}`;
+    if (tailorKeyRef.current === key) return;
+    tailorKeyRef.current = key;
+    runTailoring(false);
+  }, [step, profileId, objective, runTailoring]);
 
   const selectProfile = async (id) => {
     setSelectedProfileId(id);
@@ -912,6 +949,28 @@ export default function CreateVideo() {
           description="Scored for this app profile and angle — select the one that fits."
         >
           <div className="space-y-4">
+            {profileId && objective && (
+              <div className="flex flex-wrap items-center gap-2">
+                {tailoring ? (
+                  <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Tailoring templates for this goal…
+                  </p>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => runTailoring(true)}
+                    title="Replace this goal's tailored templates with a fresh set"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" /> Regenerate tailored templates
+                  </Button>
+                )}
+              </div>
+            )}
+            {tailorError && !tailoring && (
+              <p className="text-xs text-muted-foreground">{tailorError}</p>
+            )}
             {recommendations.length > 0 && (
               <div className="space-y-2">
                 <span className="eyebrow block">Recommended</span>
