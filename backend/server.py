@@ -8028,6 +8028,23 @@ async def generate_project_strategy(
         template.get("id") or "",
     )
 
+    # The founder-approved creative plan, when one exists. The plan is written
+    # and reviewed before the first paid render, so the strategy has to produce
+    # THAT video. Without this the founder approved a script and then paid for a
+    # different one, and neither the plan's CTA nor its beats reached the hook.
+    approved_plan = None
+    if int(row.get("script_version") or 0) > 0 and str(row.get("script") or "").strip():
+        approved_plan = {
+            "hook_line": row.get("hook_line") or "",
+            "script": row.get("script") or "",
+            "cta": row.get("cta") or "",
+            "feature_emphasis": row.get("feature_emphasis") or "",
+            "visual_direction": row.get("visual_direction") or "",
+            "voice_direction": row.get("voice_direction") or "",
+            "sound_direction": row.get("sound_direction") or "",
+            "beat_timeline": row.get("beat_timeline") or [],
+        }
+
     try:
         strategy = await _log_model_call(
             "video_strategy", "text", TEXT_MODEL,
@@ -8041,6 +8058,7 @@ async def generate_project_strategy(
                 tone=tone,
                 brand_voice=profile.get("tone_voice") or "",
                 profile_feedback=profile_feedback,
+                plan=approved_plan,
             ),
             user_id,
             brand_profile_id=row.get("brand_profile_id"),

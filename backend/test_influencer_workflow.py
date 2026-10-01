@@ -150,6 +150,17 @@ def _make_project(api, spec, with_character=True):
     return _run(api.get_studio_project(project["id"], ANON)), profile, template
 
 
+def _approved_project(api, script="", hook_line="", version=1):
+    """A project the studio accepts, with a saved plan of the given shape."""
+    project, _profile, _template = _make_project(api, NURSE_APP)
+    _run(api._execute(
+        "UPDATE studio_projects SET script = ?, hook_line = ?, script_version = ?,"
+        " cta = ?, beat_timeline = ? WHERE id = ?",
+        (script, hook_line, version, "Start your 3-day trial", "[]", project["id"]),
+    ))
+    return project["id"]
+
+
 def _store_strategy(api, project_id, hook_line, persona, scene, *, problem, feature, cta):
     """Write a strategy shaped like a real one from two different apps."""
     from ai_service import normalize_strategy
@@ -1156,3 +1167,181 @@ class TestStrategyPromptDirectives:
         assert result["hook_dialogue"] == ""
         assert result["scene"]["environment"] == "kitchen"
         assert 'There is no "character" key in this schema' in captured["prompt"]
+
+
+class TestStrategyFollowsTheApprovedPlan:
+    """
+    The founder reads and edits the script on the Review step, before any video
+    is paid for. The strategy then has to produce THAT video.
+
+    It did not. The plan and the strategy were two independent generations and
+    neither read the other, so the founder approved a script and paid for a
+    render of a different one: different hook line, different beats, and a CTA
+    that never reached the video at all.
+    """
+
+    _PLAN = {
+        "hook_line": "You do not have a focus problem.",
+        "script": "You do not have a focus problem. You have too many lists.",
+        "cta": "Start your 3-day trial",
+        "feature_emphasis": "Task timer",
+        "visual_direction": "Close, 9:16, desk.",
+        "voice_direction": "Calm.",
+        "sound_direction": "Room tone.",
+        "beat_timeline": [
+            {"start": 0, "end": 5, "beat": "You do not have a focus problem."},
+            {"start": 5, "end": 12, "beat": "You have too many lists."},
+        ],
+    }
+
+    def _capture(self, monkeypatch):
+        import ai_service
+        captured = {}
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return {
+                "strategy_summary": "s", "audience_problem": "p",
+                "emotional_triggers": ["t"], "hook_concept": "c",
+                "hook_line": "h", "hook_promise": "p", "hook_action": "a",
+                "messaging_pillars": ["m"], "primary_feature": "f",
+                "desired_outcome": "o", "differentiation_beat": "b",
+                "cta_strategy": "c",
+                "scene": {"environment": "kitchen"},
+                "performance": {"movement": "still"},
+                "segments": [{"index": 0, "role": "hook", "seconds": 5,
+                              "goal": "g", "script": "s", "action": "a"}],
+                "continuity_contract": {
+                    "established": [], "must_not_change": [], "do_not_repeat": [],
+                },
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        return captured
+
+    def _run(self, monkeypatch, plan):
+        import ai_service
+        captured = self._capture(monkeypatch)
+        result = asyncio.run(ai_service.generate_video_strategy(
+            profile={"brand_name": "Taskly", "core_features": ["timer"]},
+            template={"name": "Stop Doing This", "content_slots": {}},
+            angle=None,
+            objective="address_user_problem",
+            hook_seconds=5,
+            total_duration=20,
+            tone="",
+            brand_voice="",
+            profile_feedback={},
+            plan=plan,
+        ))
+        return captured, result
+
+    def test_the_approved_words_reach_the_prompt(self, monkeypatch):
+        captured, _ = self._run(monkeypatch, self._PLAN)
+        prompt = captured["prompt"]
+        assert "APPROVED CREATIVE PLAN" in prompt
+        assert "You do not have a focus problem." in prompt
+        assert "Start your 3-day trial" in prompt
+        assert "Task timer" in prompt
+        # Both beats, in order — the plan is the video's spine.
+        assert "You have too many lists." in prompt
+        assert prompt.index("You do not have a focus problem.") < prompt.index(
+            "You have too many lists."
+        )
+
+    def test_the_plan_wins_over_the_models_own_hook(self, monkeypatch):
+        """
+        The directive matters as much as the data. Without it the model sees an
+        approved hook line and its own instruction to write the strongest hook
+        for this app, and will usually write its own.
+        """
+        captured, _ = self._run(monkeypatch, self._PLAN)
+        assert "The founder wrote it and reviewed it" in captured["prompt"]
+        assert "hook_line must be that hook line" in captured["prompt"]
+        assert "do not replace its words" in captured["prompt"]
+
+    def test_the_strategy_still_adds_what_a_plan_cannot_express(self, monkeypatch):
+        captured, _ = self._run(monkeypatch, self._PLAN)
+        assert "the on-camera action for each beat" in captured["prompt"]
+        assert "the scene, the performance, and the continuity contract" in captured["prompt"]
+
+    def test_no_plan_means_no_plan_section_and_no_directive(self, monkeypatch):
+        """
+        A project with no plan still has to produce a strategy, and must not be
+        told to obey a plan that does not exist.
+        """
+        captured, result = self._run(monkeypatch, None)
+        assert "APPROVED CREATIVE PLAN" not in captured["prompt"]
+        assert "hook_line must be that hook line" not in captured["prompt"]
+        assert result["template_name"] == "Stop Doing This"
+
+    def test_an_empty_plan_is_treated_as_no_plan(self, monkeypatch):
+        captured, _ = self._run(monkeypatch, {"script": "", "hook_line": "", "cta": "", "beat_timeline": []})
+        assert "APPROVED CREATIVE PLAN" not in captured["prompt"]
+
+    def test_the_endpoint_passes_the_approved_plan(self, api, monkeypatch):
+        """
+        The wiring, not just the prompt. A project with a saved script must hand
+        that script to the strategy; the endpoint used to pass no plan at all.
+        """
+        import server
+
+        seen = {}
+
+        async def fake_strategy(**kwargs):
+            seen.update(kwargs)
+            return {
+                "strategy_summary": "s", "audience_problem": "p",
+                "emotional_triggers": ["t"], "hook_concept": "c",
+                "hook_line": "h", "hook_promise": "p", "hook_action": "a",
+                "messaging_pillars": ["m"], "primary_feature": "f",
+                "desired_outcome": "o", "differentiation_beat": "b",
+                "cta_strategy": "c",
+                "scene": {"environment": "kitchen"},
+                "performance": {"movement": "still"},
+                "segments": [{"index": 0, "role": "hook", "seconds": 5,
+                              "goal": "g", "script": "s", "action": "a"}],
+                "continuity_contract": {
+                    "established": [], "must_not_change": [], "do_not_repeat": [],
+                },
+            }
+
+        monkeypatch.setattr(server, "generate_video_strategy", fake_strategy)
+
+        project_id = _approved_project(api, script="You do not have a focus problem.", hook_line="You do not have a focus problem.")
+        _run(api.generate_project_strategy(
+            project_id=project_id, payload=server.GenerateStrategyRequest(), user_id=ANON))
+
+        plan = seen.get("plan")
+        assert plan, "the endpoint built a strategy with no plan at all"
+        assert plan["hook_line"] == "You do not have a focus problem."
+        assert plan["script"] == "You do not have a focus problem."
+
+    def test_an_unplanned_project_passes_no_plan(self, api, monkeypatch):
+        import server
+
+        seen = {}
+
+        async def fake_strategy(**kwargs):
+            seen.update(kwargs)
+            return {
+                "strategy_summary": "s", "audience_problem": "p",
+                "emotional_triggers": ["t"], "hook_concept": "c",
+                "hook_line": "h", "hook_promise": "p", "hook_action": "a",
+                "messaging_pillars": ["m"], "primary_feature": "f",
+                "desired_outcome": "o", "differentiation_beat": "b",
+                "cta_strategy": "c",
+                "scene": {"environment": "kitchen"},
+                "performance": {"movement": "still"},
+                "segments": [{"index": 0, "role": "hook", "seconds": 5,
+                              "goal": "g", "script": "s", "action": "a"}],
+                "continuity_contract": {
+                    "established": [], "must_not_change": [], "do_not_repeat": [],
+                },
+            }
+
+        monkeypatch.setattr(server, "generate_video_strategy", fake_strategy)
+        project_id = _approved_project(api, script="", version=0)
+        _run(api.generate_project_strategy(
+            project_id=project_id, payload=server.GenerateStrategyRequest(), user_id=ANON))
+        assert seen.get("plan") is None

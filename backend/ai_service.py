@@ -2266,6 +2266,7 @@ async def generate_video_strategy(
     tone: str = "",
     brand_voice: str = "",
     profile_feedback: Optional[dict] = None,
+    plan: Optional[dict] = None,
 ) -> dict:
     """
     Turn an App Profile into a video strategy specific to THIS app.
@@ -2286,6 +2287,13 @@ async def generate_video_strategy(
     Returns a normalized strategy dict (see normalize_strategy). Never invents
     features, prices, ratings or outcomes; uncertain claims are pushed to the
     profile's own review tier instead.
+
+    `plan` is the founder-approved creative plan, when one exists. The founder
+    writes the script, the CTA and the visual direction there and then spends
+    money on the hook; a strategy that ignored it would render a different video
+    than the one they approved, so the approved words win and this only fills in
+    what a plan cannot express: the segment arc, the on-camera action per beat,
+    and the locked scene.
     """
     def _list(name):
         val = profile.get(name)
@@ -2358,6 +2366,44 @@ async def generate_video_strategy(
         "never_use": _list("claims_banned"),
     }
 
+    # The founder-approved creative plan, when there is one. Its words are
+    # already committed — the founder read and edited them before the first paid
+    # render — so they are handed over as fixed material and the strategy is
+    # built to deliver them. A beat's own text is the plan's, not a fresh line.
+    approved_plan = {}
+    if isinstance(plan, dict):
+        beats = plan.get("beat_timeline")
+        approved_plan = {
+            "hook_line": str(plan.get("hook_line") or "").strip(),
+            "cta": str(plan.get("cta") or "").strip(),
+            "feature_emphasis": str(plan.get("feature_emphasis") or "").strip(),
+            "visual_direction": str(plan.get("visual_direction") or "").strip(),
+            "voice_direction": str(plan.get("voice_direction") or "").strip(),
+            "sound_direction": str(plan.get("sound_direction") or "").strip(),
+            "beats": [
+                {
+                    "start": b.get("start"),
+                    "end": b.get("end"),
+                    "text": str(b.get("beat") or b.get("text") or "").strip(),
+                }
+                for b in (beats if isinstance(beats, list) else [])
+                if isinstance(b, dict)
+            ][:24],
+        }
+        # The plan's full script is the spine of the video. It is not echoed
+        # here: the beats above already carry its content beat by beat, and
+        # repeating it would crowd the prompt the strategy has to fit in.
+        if not any(approved_plan[k] for k in ("hook_line", "cta")) and not approved_plan["beats"]:
+            approved_plan = {}
+
+    approved_plan_context = ""
+    if approved_plan:
+        approved_plan_context = (
+            "\n\nAPPROVED CREATIVE PLAN (the founder wrote and signed off on this BEFORE any "
+            "video was generated — the strategy must produce THIS video, not a different one):\n"
+            f"{json.dumps(approved_plan, indent=2)}\n"
+        )
+
     feedback_context = ""
     if profile_feedback:
         feedback_context = (
@@ -2385,6 +2431,7 @@ async def generate_video_strategy(
         f"HOOK MECHANISM (the selected template must be honoured, not replaced):\n{json.dumps(mechanism, indent=2)}\n\n"
         f"CREATIVE BRIEF:\n{json.dumps(brief, indent=2)}\n\n"
         f"CLAIM RULES:\n{json.dumps(claim_rules, indent=2)}\n"
+        f"{approved_plan_context}"
         f"{feedback_context}\n"
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
@@ -2435,7 +2482,19 @@ async def generate_video_strategy(
         '  }\n'
         "}\n"
         "Rules:\n"
-        f"- The opening segment lasts {hook_seconds} seconds and must be the strongest {hook_seconds} seconds "
+        + (
+            "- An APPROVED CREATIVE PLAN is supplied above. The founder wrote it and reviewed it "
+            "before this video cost anything, so it is the video: hook_line must be that hook line, "
+            "the opening segment's script must be the plan's first beat, every later beat must be "
+            "delivered in the plan's order, and cta_strategy must deliver the plan's CTA. Do not "
+            "improve on it, do not reorder it, and do not replace its words with a different hook "
+            "just because you would have written it differently. What you add is what a plan cannot "
+            "express: the on-camera action for each beat, the scene, the performance, and the "
+            "continuity contract.\n"
+            if approved_plan
+            else ""
+        )
+        + f"- The opening segment lasts {hook_seconds} seconds and must be the strongest {hook_seconds} seconds "
         f"for THIS app. Write a real hook for this app's real audience, not a generic influencer opening with "
         "the app name dropped in.\n"
         "- The hook must serve the selected hook mechanism. If the mechanism is a question, the hook is a "
