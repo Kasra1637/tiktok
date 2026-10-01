@@ -514,15 +514,27 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
           </AlertDescription>
         </Alert>
       )}
-      {blocked && (
+      {blocked && (() => {
+        // Name the claim at the block site: the full list lives in the
+        // review step's SafetyPanel, but the founder is stopped HERE, so
+        // "fix the flagged claim" without naming it strands them.
+        const blockers = (project?.safety_report?.blocking || []).filter(
+          (b) => b && b.claim
+        );
+        return (
         <Alert variant="destructive">
           <AlertTitle>Prohibited claim present</AlertTitle>
           <AlertDescription>
+            {blockers.length > 0 && (
+              <>Found in this plan: {blockers.slice(0, 2).map((b) => `“${b.claim}”`).join(", ")}
+              {blockers.length > 2 ? `, plus ${blockers.length - 2} more` : ""}. </>
+            )}
             Fix the flagged claim in the plan above. The hook is blocked until the claim
             check passes.
           </AlertDescription>
         </Alert>
-      )}
+        );
+      })()}
 
       {models && (
         <div className="space-y-1.5">
