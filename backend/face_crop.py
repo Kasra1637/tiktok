@@ -11,6 +11,7 @@ so the pipeline doesn't break.
 """
 import logging
 from pathlib import Path
+from typing import Optional
 
 import cv2
 import numpy as np
@@ -88,6 +89,46 @@ def _crop_face_region(img: Image.Image, bbox: tuple) -> Image.Image:
     crop_y2 = min(img_h, y + h_face + pad_bottom)
 
     return img.crop((crop_x1, crop_y1, crop_x2, crop_y2))
+
+
+def count_faces_in_image(img_rgb: np.ndarray) -> Optional[int]:
+    """
+    Count confidently-detected faces in an RGB numpy array.
+
+    Returns None when detection cannot run at all (model file missing), so
+    callers can tell "unknown" apart from "zero faces found" — only the
+    latter justifies warning the founder, since the provider's privacy
+    filter fires on exactly the photos where no single face anchors the
+    frame (or where several compete).
+    """
+    if not _MODEL_PATH.exists():
+        logger.warning(f"Face detection model not found at {_MODEL_PATH}. Skipping face count.")
+        return None
+
+    h, w = img_rgb.shape[:2]
+
+    detector = cv2.FaceDetectorYN_create(
+        str(_MODEL_PATH), "", (w, h), _MIN_CONFIDENCE, 0.3, 5000
+    )
+    _, faces = detector.detect(img_rgb)
+
+    if faces is None:
+        return 0
+    return int(len(faces))
+
+
+def count_faces_from_path(image_path: Path) -> Optional[int]:
+    """
+    Count faces in an image file. Never raises: any failure (unreadable
+    file, detector error) returns None, because a pre-flight check must
+    never block an upload.
+    """
+    try:
+        img = Image.open(image_path).convert("RGB")
+        return count_faces_in_image(np.array(img))
+    except Exception as e:
+        logger.warning(f"Face count failed for {image_path.name} ({e}).")
+        return None
 
 
 def crop_face_from_path(image_path: Path) -> Path:

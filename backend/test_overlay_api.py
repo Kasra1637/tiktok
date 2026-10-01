@@ -220,6 +220,27 @@ class TestAssetLibrary:
         # Stored under this profile's own folder.
         assert profile["id"] in created["file_path"]
 
+    def test_upload_warns_when_no_face_detected(self, api, tmp_root):
+        """
+        Pre-flight check: a solid-color upload has no face, and the
+        provider's privacy filter fires on exactly such photos. The upload
+        still succeeds (the detector can be wrong) but says so.
+        """
+        profile = _profile(api, "Faceless Upload")
+        src = _make_image(tmp_root / "faceless.png")
+        created = _upload(api, profile["id"], "character_reference", "faceless.png", src)
+        assert created["face_count"] == 0
+        assert "No face detected" in created.get("face_warning", "")
+
+    def test_upload_accepts_a_clear_face_quietly(self, api, tmp_root):
+        import shutil
+        profile = _profile(api, "Clear Face")
+        src = tmp_root / "portrait.jpg"
+        shutil.copy(BACKEND_DIR / "storage" / "samples" / "test_portrait.jpg", src)
+        created = _upload(api, profile["id"], "character_reference", "portrait.jpg", src)
+        assert created["face_count"] == 1
+        assert "face_warning" not in created
+
     def test_listing_is_scoped_to_profile(self, api, tmp_root):
         p1 = _profile(api, "App One")
         p2 = _profile(api, "App Two")

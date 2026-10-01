@@ -754,6 +754,11 @@ async def init_db():
                 preview_path TEXT,
                 content_type TEXT,
                 duration_seconds REAL,
+                -- Faces counted by the local detector at upload time. NULL
+                -- means unknown (pre-existing rows, or detection unavailable);
+                -- 0 or 2+ warns the founder before the provider's privacy
+                -- filter refuses the photo at generation time.
+                face_count INTEGER,
                 -- Rights are the operator's assertion, recorded so a reviewer
                 -- can see it was considered. Unconfirmed assets can be stored
                 -- but are refused for production use.
@@ -1312,6 +1317,15 @@ async def init_db():
         if "duration_seconds" not in {row[1] for row in await cursor.fetchall()}:
             logger.info("Migration: adding duration_seconds column to assets")
             await conn.execute("ALTER TABLE assets ADD COLUMN duration_seconds REAL")
+        await conn.commit()
+
+        # Migration: assets gains a face count. Existing rows keep NULL
+        # (unknown) rather than a fabricated zero; the detector runs at
+        # upload time going forward.
+        cursor = await conn.execute("PRAGMA table_info(assets)")
+        if "face_count" not in {row[1] for row in await cursor.fetchall()}:
+            logger.info("Migration: adding face_count column to assets")
+            await conn.execute("ALTER TABLE assets ADD COLUMN face_count INTEGER")
         await conn.commit()
 
         # Migration: a generation can render successfully while its durable
@@ -8939,18 +8953,40 @@ async def upload_asset(
     # so there is no audio whose decodability would need verifying up front.
     duration_seconds = None
 
+    # Pre-flight face count. The provider's privacy filter fires on photos
+    # where no single face anchors the frame, so count locally and warn now
+    # rather than at generation time. Never blocks the upload: the detector
+    # can be wrong (stylised photo, sunglasses), and a warning the founder
+    # can overrule beats a refusal they cannot.
+    face_count = None
+    try:
+        from face_crop import count_faces_from_path
+        face_count = count_faces_from_path(target)
+    except Exception as e:  # never fail an upload over detection
+        logger.warning(f"Face count skipped for {asset_id} ({e}).")
+        face_count = None
+
     now = now_iso()
     await _execute(
         """INSERT INTO assets
            (id, brand_profile_id, kind, name, label, notes, file_path, content_type,
-            duration_seconds, rights_confirmed, status, created_at, updated_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)""",
+            duration_seconds, face_count, rights_confirmed, status, created_at, updated_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)""",
         (asset_id, profile_id, asset_kind, (file.filename or "")[:200],
          (label or "")[:120], (notes or "")[:500], str(target), file.content_type,
-         duration_seconds, 1 if rights_confirmed else 0, now, now, user_id),
+         duration_seconds, face_count, 1 if rights_confirmed else 0, now, now, user_id),
     )
     logger.info(f"Uploaded {asset_kind} asset {asset_id} for profile {profile_id}")
-    return _public_asset(await _fetch_one("SELECT * FROM assets WHERE id = ?", (asset_id,)))
+    created = _public_asset(await _fetch_one("SELECT * FROM assets WHERE id = ?", (asset_id,)))
+    if face_count is not None and face_count != 1:
+        created["face_warning"] = (
+            "No face detected in this photo — the video provider is likely to refuse it. "
+            "Use a clear, front-facing shot."
+            if face_count == 0 else
+            f"{face_count} faces detected — the provider may flag photos with more than "
+            "one person. Use a solo shot if generation is refused."
+        )
+    return created
 
 
 @api_router.patch("/assets/{asset_id}")

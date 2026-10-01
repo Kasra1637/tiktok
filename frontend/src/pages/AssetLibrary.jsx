@@ -91,6 +91,17 @@ function AssetRow({
             {!asset.rights_confirmed && (
               <Badge variant="outline" className="text-[11px]">Rights unconfirmed</Badge>
             )}
+            {/* Pre-flight face check, counted at upload time. A photo with no
+                detectable face — or several competing ones — is what the
+                video provider's privacy filter refuses at generation time. */}
+            {asset.face_count === 0 && (
+              <Badge variant="outline" className="text-[11px]">No face detected — may be refused</Badge>
+            )}
+            {Number(asset.face_count) >= 2 && (
+              <Badge variant="outline" className="text-[11px]">
+                {asset.face_count} faces — may be flagged
+              </Badge>
+            )}
             {attachable && attached && (
               <Badge variant="outline" className="text-[11px]">
                 <Check className="mr-1 h-3 w-3" /> Attached
