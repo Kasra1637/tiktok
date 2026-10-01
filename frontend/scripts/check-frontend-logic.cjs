@@ -72,16 +72,32 @@ check("null project defaults to on", L.readExtendIntent(null) === true);
 check("legacy integer 0 reads as OFF", L.readExtendIntent({ extend_intent: 0 }) === false);
 check("legacy integer 1 reads as ON", L.readExtendIntent({ extend_intent: 1 }) === true);
 
-console.log("\nparseExtendChoice — the silent NaN");
-check("'target' is preserved", L.parseExtendChoice("target") === "target");
-check("'5' becomes 5", L.parseExtendChoice("5") === 5);
-check("3 becomes 3", L.parseExtendChoice(3) === 3);
-check("garbage falls back, never NaN", L.parseExtendChoice("abc") === L.DEFAULT_EXTEND);
-check("empty falls back", L.parseExtendChoice("") === L.DEFAULT_EXTEND);
-check("negative falls back", L.parseExtendChoice(-3) === L.DEFAULT_EXTEND);
-const parsed = L.parseExtendChoice("target");
-check("the result is always finite or the sentinel",
-  parsed === "target" || Number.isFinite(parsed), parsed);
+console.log("\nresolveExtendLock — computed, recommended, locked");
+check("next planned beat resolves straight through",
+  JSON.stringify(L.resolveExtendLock(6, 20, SEEDANCE)) === JSON.stringify({ seconds: 6, planned: 6, render: 6, trimTo: 0 }),
+  L.resolveExtendLock(6, 20, SEEDANCE));
+check("a remainder smaller than the beat wins (automatic fill)",
+  JSON.stringify(L.resolveExtendLock(8, 3, SEEDANCE)) === JSON.stringify({ seconds: 3, planned: 3, render: 4, trimTo: 3 }),
+  L.resolveExtendLock(8, 3, SEEDANCE));
+check("a 3s beat on Seedance records its trim",
+  JSON.stringify(L.resolveExtendLock(3, 0, SEEDANCE)) === JSON.stringify({ seconds: 3, planned: 3, render: 4, trimTo: 3 }),
+  L.resolveExtendLock(3, 0, SEEDANCE));
+check("no plan and no remainder is null, never NaN",
+  L.resolveExtendLock(0, 0, SEEDANCE) === null,
+  L.resolveExtendLock(0, 0, SEEDANCE));
+check("a remainder beyond one pass is null, not guessed",
+  L.resolveExtendLock(0, 20, MINIMAX) === null,
+  L.resolveExtendLock(0, 20, MINIMAX));
+check("garbage inputs are null, never NaN",
+  L.resolveExtendLock("junk", null, SEEDANCE) === null,
+  L.resolveExtendLock("junk", null, SEEDANCE));
+// Whatever comes out must survive JSON, or the server silently substitutes.
+for (const args of [[6, 20], [8, 3], [3, 0]]) {
+  const r = L.resolveExtendLock(args[0], args[1], SEEDANCE);
+  const round = JSON.parse(JSON.stringify(r));
+  check(`[${args}] survives a JSON round trip`,
+    round !== null && Number.isFinite(round.seconds), round);
+}
 
 console.log("\nresolveLength");
 check("3s on Seedance renders 4 and trims to 3",
@@ -95,40 +111,6 @@ check("4s on MiniMax renders 5 and trims to 4",
   L.resolveLength(4, MINIMAX));
 check("a 0 or missing target never becomes a 1s clip",
   L.resolveLength(0, SEEDANCE).render === 4, L.resolveLength(0, SEEDANCE));
-
-console.log("\ncanFillToTarget — offering an option that cannot work");
-check("20s remaining on Seedance (30 max) can fill", L.canFillToTarget(20, SEEDANCE) === true);
-check("20s remaining on MiniMax (15 max) cannot", L.canFillToTarget(20, MINIMAX) === false);
-check("15s remaining on MiniMax can", L.canFillToTarget(15, MINIMAX) === true);
-check("nothing remaining cannot", L.canFillToTarget(0, SEEDANCE) === false);
-check("unknown capability does not offer it",
-  L.canFillToTarget(20, { min_duration: 4 }) === false);
-
-console.log("\nresolveExtendRequest — what actually goes on the wire");
-check("+5s on Seedance requests 5 with no trim",
-  JSON.stringify(L.resolveExtendRequest(5, 20, SEEDANCE)) === JSON.stringify({ seconds: 5, trimTo: 0 }),
-  L.resolveExtendRequest(5, 20, SEEDANCE));
-check("+3s on Seedance requests 3 and records a trim",
-  JSON.stringify(L.resolveExtendRequest(3, 20, SEEDANCE)) === JSON.stringify({ seconds: 3, trimTo: 3 }),
-  L.resolveExtendRequest(3, 20, SEEDANCE));
-check("'+3s' from a select string behaves the same",
-  JSON.stringify(L.resolveExtendRequest("3", 20, SEEDANCE)) === JSON.stringify({ seconds: 3, trimTo: 3 }),
-  L.resolveExtendRequest("3", 20, SEEDANCE));
-// The bug: "Fill to target" used to become NaN and then null on the wire.
-const fill = L.resolveExtendRequest("target", 12, SEEDANCE);
-check("fill to target on a 12s remainder requests 12",
-  JSON.stringify(fill) === JSON.stringify({ seconds: 12, trimTo: 0 }), fill);
-check("fill to target is never NaN", Number.isFinite(fill.seconds), fill);
-check("fill to target beyond the ceiling is refused, not guessed",
-  L.resolveExtendRequest("target", 20, MINIMAX) === null,
-  L.resolveExtendRequest("target", 20, MINIMAX));
-// Whatever comes out must survive JSON, or the server silently substitutes.
-for (const choice of [3, 5, 8, 10, "target", "junk"]) {
-  const r = L.resolveExtendRequest(choice, 12, SEEDANCE);
-  const round = JSON.parse(JSON.stringify(r));
-  check(`"${choice}" survives a JSON round trip`,
-    round !== null && Number.isFinite(round.seconds), round);
-}
 
 console.log("\nplannedCoverage");
 check("a fresh 8-beat plan with 1 segment reports 7",

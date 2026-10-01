@@ -20,13 +20,18 @@
 // the provisional value before any strategy exists.
 export const DEFAULT_HOOK = 4;
 
-export const EXTEND_CHOICES = [3, 5, 8, 10];
-export const DEFAULT_EXTEND = 5;
-
-// Sentinel for the "fill to the remaining target" option. A string, because
-// every <select> value is a string; a numeric sentinel here would invite the
-// Number() coercion that broke this in the first place.
-export const FILL_TO_TARGET = "target";
+/**
+ * The locked extension length for the next segment.
+ *
+ * Computed, recommended, locked: the next uncovered planned beat's seconds,
+ * resolved against the provider floor/ceiling so the delivered number is
+ * honest. When the remaining target is smaller than the planned beat, the
+ * remainder wins — that is the fill case, reached automatically rather than
+ * offered as a choice. Returns null when there is nothing to extend by, so
+ * the caller disables the button instead of sending a request the server
+ * will refuse. A remainder beyond one pass is likewise null: it needs two
+ * steps, not a guess.
+ */
 
 /**
  * Whether the founder has declared they intend to extend.
@@ -68,46 +73,22 @@ export function resolveLength(target, capability) {
   };
 }
 
-/**
- * Parse a <select> value into either a number of seconds or FILL_TO_TARGET.
- *
- * Anything unrecognised falls back to the default rather than becoming NaN: a
- * NaN here serialises to `null` on the wire, which the server reads as "no
- * preference" and answers with its own default — so a mis-parse turns into a
- * silently different request instead of a visible failure.
- */
-export function parseExtendChoice(raw) {
-  if (raw === FILL_TO_TARGET) return FILL_TO_TARGET;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < 1) return DEFAULT_EXTEND;
-  return n;
-}
-
-/** Whether "fill to the remaining target" can actually be requested. */
-export function canFillToTarget(remaining, capability) {
-  const left = Number(remaining) || 0;
-  if (left <= 0) return false;
-  const ceiling = Number(capability?.max_duration ?? 0);
-  // No capability yet: do not offer it, because we cannot know it is possible.
-  return ceiling > 0 && left <= ceiling;
-}
-
-/**
- * What the extend button should request, in seconds.
- *
- * Returns null when the choice cannot be honoured — the caller disables the
- * button rather than sending a request the server will refuse.
- */
-export function resolveExtendRequest(choice, remaining, capability) {
-  const parsed = parseExtendChoice(choice);
-  if (parsed !== FILL_TO_TARGET) {
-    const plan = resolveLength(parsed, capability);
-    return { seconds: plan.trimTo || plan.render, trimTo: plan.trimTo };
-  }
-  const left = Number(remaining) || 0;
-  if (!canFillToTarget(left, capability)) return null;
-  const plan = resolveLength(left, capability);
-  return { seconds: plan.trimTo || plan.render, trimTo: plan.trimTo };
+export function resolveExtendLock(plannedSeconds, remainingToTarget, capability) {
+  const planned = Number(plannedSeconds) || 0;
+  const remaining = Number(remainingToTarget) || 0;
+  const ceiling = Number(capability?.max_duration ?? 30);
+  const want = planned > 0
+    ? (remaining > 0 ? Math.min(planned, remaining) : planned)
+    : remaining;
+  if (want <= 0) return null;
+  if (want > ceiling) return null;
+  const plan = resolveLength(want, capability);
+  return {
+    seconds: plan.trimTo || plan.render,
+    planned: want,
+    render: plan.render,
+    trimTo: plan.trimTo,
+  };
 }
 
 /** How many more beats the plan can still produce, or null if unknown. */

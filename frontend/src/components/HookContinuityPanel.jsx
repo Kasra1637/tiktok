@@ -5,14 +5,9 @@ import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage, mediaUrl } from "../lib/api";
 import {
   DEFAULT_HOOK,
-  EXTEND_CHOICES,
-  DEFAULT_EXTEND,
-  FILL_TO_TARGET,
   readExtendIntent,
   resolveLength as resolveLengthFor,
-  parseExtendChoice,
-  canFillToTarget,
-  resolveExtendRequest,
+  resolveExtendLock as resolveExtendLockFor,
   plannedCoverage as plannedCoverageFor,
 } from "../lib/videoLength";
 import {
@@ -251,7 +246,6 @@ function ContinuityNote({ continuity }) {
 export function HookContinuityPanel({ project, onProjectChange, onGenerationChange }) {
   const [models, setModels] = useState(null);
   const [selectedModel, setSelectedModel] = useState("");
-  const [extendBy, setExtendBy] = useState(DEFAULT_EXTEND);
   const [segments, setSegments] = useState([]);
   const [assembled, setAssembled] = useState(null);
   const [busy, setBusy] = useState("");
@@ -395,10 +389,14 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
   // null when the strategy predates coverage reporting, so we say nothing
   // rather than claiming "0 remaining".
   const plannedCoverage = plannedCoverageFor(segments, strategy);
-  // "Fill to target" is only offered when the provider can actually render the
-  // remainder in one pass. On a 15s ceiling a 20s remainder cannot be, and
-  // offering it anyway produced an option that always failed.
-  const fillAvailable = canFillToTarget(remainingToTarget, capability);
+  // The locked extension for a segment: the next uncovered planned beat's
+  // seconds, resolved against the provider floor/ceiling. Computed per
+  // segment because each extension continues a different point in the plan.
+  const extendLockFor = (segmentIndex) => resolveExtendLockFor(
+    Number(strategy?.segments?.[Number(segmentIndex) + 1]?.seconds) || 0,
+    remainingToTarget,
+    capability
+  );
 
   const handleGenerateStrategy = () =>
     run("strategy", async () => {
@@ -769,67 +767,40 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
                           Approve this segment
                         </Button>
                       )}
-                      {segment.approved && (
+                      {segment.approved && (() => {
+                        // Extension length is computed, recommended, locked:
+                        // the next uncovered planned beat, resolved so the
+                        // delivered number is honest. No selector, because any
+                        // other length would no longer be the planned beat.
+                        const lock = extendLockFor(segment.segment_index);
+                        return (
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <label
-                            htmlFor={`extend-by-${segment.id}`}
-                            className="sr-only"
-                          >
-                            How much to add for this extension
-                          </label>
-                          <select
-                            id={`extend-by-${segment.id}`}
-                            value={extendBy}
-                            onChange={(e) => setExtendBy(parseExtendChoice(e.target.value))}
-                            disabled={Boolean(busy) || Boolean(inFlightId)}
-                            className="rounded-lg border border-[color:var(--hairline)] bg-transparent px-2 py-1.5 text-xs"
-                          >
-                            {EXTEND_CHOICES.map((n) => {
-                              const p = resolveLength(n);
-                              return (
-                                <option key={n} value={n}>
-                                  +{n}s{p.trimTo ? ` (trimmed from ${p.render}s)` : ""}
-                                </option>
-                              );
-                            })}
-                            {fillAvailable && (
-                              <option value={FILL_TO_TARGET}>
-                                {`Fill to target (+${remainingToTarget}s)`}
-                              </option>
+                          <span className="text-xs text-muted-foreground">
+                            {lock ? (
+                              <>+{lock.seconds}s — recommended{lock.trimTo ? ` (renders at ${lock.render}s, cut down)` : ""}</>
+                            ) : remainingToTarget > ceiling ? (
+                              <>Needs {remainingToTarget}s — more than one pass. Extend in two steps.</>
+                            ) : (
+                              <>The plan has no further beats for this segment.</>
                             )}
-                            {!fillAvailable && remainingToTarget > ceiling && (
-                              <option disabled value="unreachable">
-                                {`Needs ${remainingToTarget}s — more than one pass`}
-                              </option>
-                            )}
-                          </select>
+                          </span>
                           <Button
                             variant="secondary"
                             size="sm"
                             onClick={() => {
-                              // Resolved here rather than inline, so an
-                              // unreachable choice disables the button instead
-                              // of putting NaN on the wire, which the server
-                              // would read as "no preference" and answer with
-                              // its own default — a silently different request.
-                              const req = resolveExtendRequest(
-                                extendBy,
-                                remainingToTarget,
-                                capability
-                              );
-                              if (!req) {
+                              if (!lock) {
                                 setNotice(
                                   "That needs more than one pass on this model. Extend in two " +
                                     "steps, or pick a shorter length."
                                 );
                                 return;
                               }
-                              handleExtend(segment.id, req.seconds);
+                              handleExtend(segment.id, lock.seconds);
                             }}
                             disabled={
                               Boolean(busy) ||
                               Boolean(inFlightId) ||
-                              !resolveExtendRequest(extendBy, remainingToTarget, capability)
+                              !lock
                             }
                           >
                             {busy === `extend-${segment.id}` ? (
@@ -840,7 +811,8 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
                             {extendIntent ? "Extend" : "Extend (optional)"}
                           </Button>
                         </div>
-                      )}
+                        );
+                      })()}
                       {url && (
                         <Button variant="ghost" size="sm" asChild>
                           <a href={mediaUrl(url)} download>
