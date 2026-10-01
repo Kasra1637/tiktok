@@ -68,6 +68,28 @@ export function GenerationPanel({ project, onGenerationChange }) {
     };
   }, []);
 
+  // schedulePoll is declared BEFORE the effect that depends on it. A dependency
+  // array is evaluated during render, so listing this effect above the `const`
+  // read the binding in its temporal dead zone and threw a ReferenceError on
+  // every mount — which the app-wide ErrorBoundary turned into a blank screen
+  // on every route. scripts/check-render-smoke.cjs mounts this component, so
+  // that class of ordering mistake fails the gate instead of shipping.
+  const schedulePoll = useCallback((id) => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(async () => {
+      try {
+        const updated = await api.pollGeneration(id);
+        setGeneration(updated);
+        onGenerationChange?.(updated);
+        if (updated.status === "submitted" || updated.status === "generating") {
+          schedulePoll(id);
+        }
+      } catch (err) {
+        setError(getErrorMessage(err));
+      }
+    }, POLL_INTERVAL_MS);
+  }, [onGenerationChange]);
+
   // Adopt the newest generation for this project, and stop polling a
   // finished one so a completed video is not re-checked forever.
   useEffect(() => {
@@ -93,21 +115,6 @@ export function GenerationPanel({ project, onGenerationChange }) {
     };
   }, [projectId, schedulePoll]);
 
-  const schedulePoll = useCallback((id) => {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(async () => {
-      try {
-        const updated = await api.pollGeneration(id);
-        setGeneration(updated);
-        onGenerationChange?.(updated);
-        if (updated.status === "submitted" || updated.status === "generating") {
-          schedulePoll(id);
-        }
-      } catch (err) {
-        setError(getErrorMessage(err));
-      }
-    }, POLL_INTERVAL_MS);
-  }, [onGenerationChange]);
 
   const handleGenerate = async () => {
     setBusy(true);

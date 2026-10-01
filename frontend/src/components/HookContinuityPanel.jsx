@@ -9,6 +9,7 @@ import {
   resolveLength as resolveLengthFor,
   resolveExtendLock as resolveExtendLockFor,
   plannedCoverage as plannedCoverageFor,
+  highestSegmentIndex,
 } from "../lib/videoLength";
 import {
   Loader2, Clapperboard, AlertTriangle, Download, RefreshCw, Check,
@@ -395,6 +396,17 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
   // segment because each extension continues a different point in the plan.
   const extendLockFor = (segmentIndex) => resolveExtendLockFor(
     Number(strategy?.segments?.[Number(segmentIndex) + 1]?.seconds) || 0,
+    remainingToTarget,
+    capability
+  );
+  // The next beat the founder would actually land on, for the coverage warning
+  // below. The per-segment button has its own lock; this is the one number
+  // that predicts whether the finite plan can still reach the target.
+  const nextPlannedSeconds = Number(
+    strategy?.segments?.[highestSegmentIndex(segments) + 1]?.seconds
+  ) || 0;
+  const nextExtendLock = resolveExtendLockFor(
+    nextPlannedSeconds,
     remainingToTarget,
     capability
   );
@@ -879,8 +891,9 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
           {plannedCoverage !== null && remainingToTarget > 0 && (() => {
             // Warns BEFORE the founder spends: a plan is finite, and a founder
             // extending by 3s could exhaust it before reaching the target.
-            const per = resolveExtendRequest(extendBy, remainingToTarget, capability);
-            const each = per ? per.seconds : 0;
+            // The lock is the same computation the Extend button uses, so this
+            // predicts the length that would actually be delivered.
+            const each = nextExtendLock ? nextExtendLock.seconds : 0;
             const reachable = each * plannedCoverage;
             return (
               <p className="text-xs text-muted-foreground">

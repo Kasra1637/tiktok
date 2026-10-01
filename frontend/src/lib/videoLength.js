@@ -92,13 +92,17 @@ export function resolveExtendLock(plannedSeconds, remainingToTarget, capability)
   };
 }
 
+/** The highest segment index already produced, or 0 when there are none. */
+export function highestSegmentIndex(segments) {
+  return (segments || []).reduce(
+    (max, s) => Math.max(max, Number(s?.segment_index) || 0),
+    0
+  );
+}
+
 /** How many more beats the plan can still produce, or null if unknown. */
 export function plannedCoverage(segments, strategy) {
   const maxIndex = Number(strategy?.max_planned_index);
   if (!Number.isFinite(maxIndex) || maxIndex < 0) return null;
-  const used = (segments || []).reduce(
-    (max, s) => Math.max(max, Number(s?.segment_index) || 0),
-    0
-  );
-  return Math.max(0, maxIndex - used);
+  return Math.max(0, maxIndex - highestSegmentIndex(segments));
 }
