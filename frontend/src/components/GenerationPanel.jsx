@@ -4,6 +4,7 @@ import { Badge } from "./ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage, mediaUrl } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
+import { RecordResultsNudge } from "./RecordResultsNudge";
 import {
   Loader2, Clapperboard, AlertTriangle, Download, RefreshCw, RotateCcw,
   Play, Info, Clock, Layers,
@@ -319,7 +320,16 @@ export function GenerationPanel({ project, onGenerationChange }) {
               />
               <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" size="sm" asChild>
-                  <a href={downloadUrl} download>
+                  <a
+                    href={downloadUrl}
+                    download
+                    onClick={() => recordSignal("video_downloaded", "downloaded", {
+                      brand_profile_id: generation?.brand_profile_id || "",
+                      studio_project_id: generation?.studio_project_id || "",
+                      generation_id: generation?.id || "",
+                      template_id: generation?.template_id || "",
+                    })}
+                  >
                     <Download className="h-3.5 w-3.5" /> Download MP4
                   </a>
                 </Button>
@@ -348,6 +358,12 @@ export function GenerationPanel({ project, onGenerationChange }) {
                     <a
                       href={mediaUrl(composition.r2_url || composition.output_url)}
                       download
+                      onClick={() => recordSignal("video_downloaded", "downloaded", {
+                        brand_profile_id: generation?.brand_profile_id || "",
+                        studio_project_id: generation?.studio_project_id || "",
+                        generation_id: generation?.id || "",
+                        template_id: generation?.template_id || "",
+                      })}
                     >
                       <Download className="h-3.5 w-3.5" /> Download composited MP4
                     </a>
@@ -358,6 +374,10 @@ export function GenerationPanel({ project, onGenerationChange }) {
                 Captions and the end card come from your approved script, so names
                 and calls to action stay accurate. Post it yourself — nothing is published.
               </p>
+              <RecordResultsNudge
+                generationId={generation?.id}
+                recorded={Boolean(generation?.performance)}
+              />
             </>
           )}
 

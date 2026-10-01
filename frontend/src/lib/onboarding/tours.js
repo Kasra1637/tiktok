@@ -145,21 +145,28 @@ export const TOURS = {
           "Every hook you save here keeps its full analysis and reusable mechanic for template research.",
       },
       {
-        target: '[data-testid="bookmarks-savings-summary"]',
+        // These three were `bookmarks-savings-summary`,
+        // `bookmarks-category-filter` and `view-analysis-button`. None of
+        // those exist: HookTemplates.jsx names them templates-savings-summary
+        // and templates-category-filter, and there is no view-analysis-button
+        // on the page at all. TourOverlay advances silently past an unresolved
+        // target, so every one of these steps was being skipped without a
+        // trace, and the tour still counted as shown.
+        target: '[data-testid="templates-savings-summary"]',
         title: "Track your savings",
         optional: true,
         body:
           "This tracks how many times you've reused a saved analysis \u2014 each reuse avoids paying for another fresh AI analysis.",
       },
       {
-        target: '[data-testid="bookmarks-category-filter"]',
+        target: '[data-testid="templates-category-filter"]',
         title: "Organize by category",
         optional: true,
         body:
           "Filter your saved hooks by type \u2014 intrigue, reveal, reaction, and more \u2014 to quickly find the right one for a new client or brand.",
       },
       {
-        target: '[data-testid="view-analysis-button"]',
+        target: '[data-testid="use-template-button"]',
         title: "One click to research",
         body:
           "Open the saved analysis whenever you need the reusable mechanic \u2014 no re-analysis needed, ever.",
@@ -192,29 +199,36 @@ export const TOURS = {
     ],
   },
 
+  // Targets GenerationHistory, which is what /history actually serves.
+  // These three used to point at History.jsx's testids, and that page now
+  // lives at /legacy-history -- a route getTourIdForPath maps to null. So the
+  // tour was auto-launching against a page that had none of its targets, and
+  // TourOverlay silently advances past an unresolved target, so nothing failed
+  // and nothing showed. The first-timer was told this page was about
+  // "research and older records", then the tour marked itself seen forever.
   history: {
     id: "history",
     label: "History tour",
     steps: [
       {
         target: '[data-testid="history-list"]',
-        title: "Research and older records",
+        title: "Every video you have made",
         body:
-          "Every hook you've analyzed and the older records retained for research live here \u2014 nothing needed for template research is lost between sessions.",
+          "Each finished video, newest first, with the model it used, what it cost, and the claim check that ran at the time.",
       },
       {
-        target: '[data-testid="history-customization-thumb"]',
-        title: "Revisit an archived result",
+        target: '[data-testid="generation-details-button"]',
+        title: "Open the receipts",
         optional: true,
         body:
-          "Click any thumbnail to see the archived result and its underlying generation spec. New exact-match results cannot be created.",
+          "Details shows the exact prompt sent to the model and the claim check as it stood at generation time.",
       },
       {
-        target: '[data-testid="history-video-job-item"]',
-        title: "Review an archived brief",
+        target: '[data-testid="record-results-button"]',
+        title: "Tell it what worked",
         optional: true,
         body:
-          "See the exact prompt and brand details saved for this older record. New briefs are created in the template studio, not here.",
+          "Record the view numbers after you post. This is the one thing that makes the next video for this app better — it is how the app learns which opening actually carried.",
       },
     ],
   },
@@ -227,7 +241,10 @@ export function getTourIdForPath(pathname) {
   if (pathname === "/") return null; // Landing page — no onboarding tour
   if (pathname.startsWith("/discover")) return "discover";
   if (pathname.startsWith("/analysis/")) return "analysis";
-  if (pathname.startsWith("/bookmarks")) return "templates";
+  // "templates" was never a key in TOURS, so OnboardingProvider.startTour
+  // bailed on it and /bookmarks got no tour at all — while markTourSeen had
+  // already fired, so it would never be offered again. The key is "bookmarks".
+  if (pathname.startsWith("/bookmarks")) return "bookmarks";
   if (pathname.startsWith("/brand")) return "brand";
   if (pathname.startsWith("/history")) return "history";
   return null;

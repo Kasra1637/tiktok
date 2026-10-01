@@ -995,6 +995,108 @@ async function main() {
     expectText(ctx, "written description of the scene", "continuity is disclosed, not hidden");
   });
 
+  // An onboarding tour is invisible when its targets are missing, because
+  // TourOverlay advances silently past a target it cannot find — so a tour
+  // pointing at a page that no longer exists passes every other gate, shows a
+  // first-timer nothing, and still marks itself seen. Two real tours were in
+  // exactly that state: /history served GenerationHistory while the history
+  // tour's testids lived in History.jsx at /legacy-history, and /bookmarks
+  // mapped to a tour id that is not a key in TOURS at all.
+  //
+  // So every target is resolved against the real source files, here. A renamed
+  // testid or a moved page now fails the gate instead of quietly emptying the
+  // tour.
+  await check("every onboarding tour step points at a real element", async (ctx) => {
+    const { TOURS, getTourIdForPath } = load("lib/onboarding/tours.js");
+    const missing = [];
+
+    // The route a tour fires on, and the page component that route serves.
+    // Scoping matters: the history tour's testids all still exist in
+    // History.jsx, which is why the bug survived so long — they are real, on a
+    // page that /history stopped serving. A corpus-wide search would call them
+    // fine.
+    const ROUTE_PAGE = {
+      "/discover": "pages/NicheFeed.jsx",
+      "/bookmarks": "pages/HookTemplates.jsx",
+      "/brand": "pages/BrandSetup.jsx",
+      "/history": "pages/GenerationHistory.jsx",
+    };
+    const firstPath = (tourId) =>
+      ["/discover", "/bookmarks", "/brand", "/history"].find(
+        (p) => getTourIdForPath(p) === tourId
+      );
+
+    // The page plus everything it imports, so a target owned by a child
+    // component (HookBreakdown owns hook-section-*, Filmstrip owns
+    // filmstrip-frame-button-*) still resolves.
+    const reachableFrom = (rel, seen = new Set()) => {
+      if (seen.has(rel)) return "";
+      seen.add(rel);
+      const abs = resolveFile(path.join(SRC, rel));
+      const src = fs.readFileSync(abs, "utf8");
+      let out = src;
+      for (const m of src.matchAll(/from\s+"(\.[^"]+)"/g)) {
+        const target = path.relative(SRC, resolveFile(path.resolve(path.dirname(abs), m[1])));
+        out += "\n" + reachableFrom(target, seen);
+      }
+      return out;
+    };
+
+    for (const [tourId, tour] of Object.entries(TOURS)) {
+      const p = firstPath(tourId);
+      const rel = p && ROUTE_PAGE[p];
+      if (!rel) continue; // no known route serves this tour
+      const corpus = reachableFrom(rel);
+
+      for (const step of tour.steps) {
+        // A null target is the intended "whole page" step, not a failure.
+        if (!step.target) continue;
+        // A step may list alternates as "a, b". Every one has to resolve:
+        // TourOverlay skips an unresolved target, so a step whose only live
+        // selector is the second one silently degrades to nothing.
+        for (const selector of step.target.split(",")) {
+          const trimmed = selector.trim();
+          if (!trimmed) continue;
+          // Prefix selectors ([data-testid^="x-"]) are legal: resolve the
+          // prefix against the interpolated form too, since that is how the
+          // component declares it.
+          const exact = (trimmed.match(/data-testid="([^"]+)"/) || [])[1];
+          const prefix = (trimmed.match(/data-testid\^="([^"]+)"/) || [])[1];
+          if (exact) {
+            // A testid built with a template literal appears as
+            // `hook-section-${key}` in source, not as the final string.
+            const asTemplate = exact.replace(/[a-z_]+$/, "");
+            const declared =
+              corpus.includes(`"${exact}"`) ||
+              (asTemplate && corpus.includes("`" + asTemplate + "${"));
+            if (!declared) {
+              missing.push(`${tourId}: ${rel} (served at ${p}) has no data-testid="${exact}"`);
+            }
+          } else if (prefix) {
+            if (!corpus.includes("`" + prefix + "${") && !corpus.includes(`"${prefix}`)) {
+              missing.push(`${tourId}: ${rel} (served at ${p}) declares no testid starting "${prefix}"`);
+            }
+          } else {
+            missing.push(`${tourId}: unreadable target (${trimmed})`);
+          }
+        }
+      }
+    }
+    if (missing.length) throw new Error(missing.join("\n        "));
+  });
+
+  // The path-to-tour map has to name tours that exist, or the provider bails
+  // before opening anything while still having marked the tour seen.
+  await check("every routable path maps to a tour that exists", async (ctx) => {
+    const { TOURS, getTourIdForPath } = load("lib/onboarding/tours.js");
+    const paths = ["/discover", "/analysis/x", "/bookmarks", "/brand", "/history"];
+    const broken = paths
+      .map((p) => [p, getTourIdForPath(p)])
+      .filter(([, id]) => id !== null && !TOURS[id])
+      .map(([p, id]) => `${p} -> "${id}", which is not a key in TOURS`);
+    if (broken.length) throw new Error(broken.join("\n        "));
+  });
+
   // The two cards are one grid row. Bullets that are not length-matched make
   // the longer side wrap and gain a line the other side does not, which is a
   // visible asymmetry inside the section whose whole job is the contrast.

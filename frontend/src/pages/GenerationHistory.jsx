@@ -36,8 +36,18 @@ function StatusBadge({ status }) {
   return <Badge variant={variant} className="text-xs">{label}</Badge>;
 }
 
-function PerformanceForm({ generation, onSaved }) {
-  const [open, setOpen] = useState(false);
+/**
+ * `openInitially` is how the post-download nudge reaches this form.
+ *
+ * The nudge in RecordResultsNudge links to /history?generation=<id>, and the
+ * founder is standing there holding the view count they just saw on TikTok.
+ * Making them then find the right row and find the right button out of eight
+ * identical ghost buttons is where the learning loop actually dies, so the
+ * query param opens the form on arrival. It is a starting position, not a
+ * lock: the founder can still cancel it, and the form stays closable.
+ */
+function PerformanceForm({ generation, onSaved, openInitially = false }) {
+  const [open, setOpen] = useState(openInitially);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [form, setForm] = useState({
@@ -84,14 +94,22 @@ function PerformanceForm({ generation, onSaved }) {
 
   if (!open) {
     return (
-      <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setOpen(true)}
+        data-testid="record-results-button"
+      >
         <TrendingUp className="h-3.5 w-3.5" /> Record results
       </Button>
     );
   }
 
   return (
-    <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-3">
+    <div
+      className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-3"
+      data-testid="record-results-form"
+    >
       <span className="eyebrow block">Manually entered &mdash; not platform-verified</span>
       {error && <p className="text-xs text-destructive">{error}</p>}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
@@ -271,7 +289,7 @@ function GenerationDetails({ generationId, onClose }) {
   );
 }
 
-function GenerationRow({ row, onChanged }) {
+function GenerationRow({ row, onChanged, focusGenerationId }) {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -496,12 +514,19 @@ function GenerationRow({ row, onChanged }) {
             </Button>
           </>
         )}
-        {row.status === "completed" && <PerformanceForm generation={row} onSaved={onChanged} />}
+        {row.status === "completed" && (
+          <PerformanceForm
+            generation={row}
+            onSaved={onChanged}
+            openInitially={row.id === focusGenerationId}
+          />
+        )}
         <Button
           variant="ghost"
           size="sm"
           disabled={busy}
           onClick={() => setShowDetails(true)}
+          data-testid="generation-details-button"
         >
           <Info className="h-3.5 w-3.5" /> Details
         </Button>
@@ -605,6 +630,15 @@ export default function GenerationHistory() {
   const [error, setError] = useState(null);
   const [profileFilter, setProfileFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  // Where the post-download nudge sends the founder. They arrive holding the
+  // view count they just saw, so the matching row's results form starts open
+  // rather than making them find one row out of a list and then pick the right
+  // button out of eight identical ones. Read once on mount: a later filter
+  // change should not re-open a form someone already dismissed.
+  const [focusGenerationId] = useState(() => {
+    const raw = new URLSearchParams(window.location.search).get("generation") || "";
+    return raw.trim();
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -698,9 +732,14 @@ export default function GenerationHistory() {
           }
         />
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3" data-testid="history-list">
           {rows.map((row) => (
-            <GenerationRow key={row.id} row={row} onChanged={load} />
+            <GenerationRow
+              key={row.id}
+              row={row}
+              onChanged={load}
+              focusGenerationId={focusGenerationId}
+            />
           ))}
         </div>
       )}
