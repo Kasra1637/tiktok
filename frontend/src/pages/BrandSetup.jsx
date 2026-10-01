@@ -23,6 +23,7 @@ const EMPTY_FORM = {
   must_not_show: "",
   usage_moments: "",
   proof_moment: "",
+  viewer_objections: "",
   desired_outcomes: "",
   competitors: "",
   target_audience: "",
@@ -45,6 +46,41 @@ function textToProducts(text) {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+/**
+ * viewer_objections round-trips as three lines per objection.
+ *
+ * A comma-separated line would break the moment an objection contains one,
+ * which is most of them -- "it's just another subscription, I already pay for
+ * three". The three-line form also keeps the fields visually distinct, which
+ * matters because an objection without a current alternative is not usable.
+ */
+const OBJECTION_LINES = 3;
+
+function objectionsToText(objections) {
+  if (!Array.isArray(objections)) return objections || "";
+  return objections
+    .map((o) => [o?.objection, o?.what_they_do_now, o?.honest_answer].join("\n"))
+    .join("\n\n");
+}
+
+function textToObjections(text) {
+  const blocks = (text || "").split(/\n\s*\n/);
+  const out = [];
+  for (const block of blocks) {
+    const lines = block.split("\n").map((l) => l.trim());
+    // Trailing empties dropped so an objection answered on two lines still
+    // saves, rather than requiring the founder to pad a blank third line.
+    while (lines.length && !lines[lines.length - 1]) lines.pop();
+    if (lines.length < OBJECTION_LINES) continue;
+    out.push({
+      objection: lines[0],
+      what_they_do_now: lines[1],
+      honest_answer: lines.slice(2).join(" ").trim(),
+    });
+  }
+  return out;
 }
 
 /** One list item per line — for entries that themselves contain commas. */
@@ -74,6 +110,7 @@ function profileToForm(data) {
     must_not_show: productsToText(data.must_not_show),
     usage_moments: productsToText(data.usage_moments),
     proof_moment: data.proof_moment || "",
+    viewer_objections: objectionsToText(data.viewer_objections),
     desired_outcomes: productsToText(data.desired_outcomes),
     competitors: productsToText(data.competitors),
     target_audience: data.target_audience || "",
@@ -241,6 +278,7 @@ export default function BrandSetup() {
         must_not_show: textToProducts(form.must_not_show),
         usage_moments: textToProducts(form.usage_moments),
         proof_moment: form.proof_moment,
+        viewer_objections: textToObjections(form.viewer_objections),
         desired_outcomes: textToProducts(form.desired_outcomes),
         competitors: textToProducts(form.competitors),
         target_audience: form.target_audience,
@@ -672,6 +710,27 @@ export default function BrandSetup() {
                   onChange={handleFieldChange("proof_moment")}
                   placeholder="e.g. The envelope splits the moment the transfer lands"
                   data-testid="app-proof-moment-field"
+                />
+              </Field>
+
+              {/* The arc's material. Three lines per objection, separated by a
+                  blank line — the "does now" line is what makes an objection
+                  answerable rather than just a complaint to acknowledge. */}
+              <Field
+                label="Why they would not download"
+                hint="Three lines per objection, blank line between: the objection / what they use now / your honest answer. These become the video's argument."
+              >
+                <Textarea
+                  value={form.viewer_objections}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, viewer_objections: e.target.value }))
+                  }
+                  placeholder={
+                    "It is just another subscription\nThree other habit trackers I already pay for\nOne that costs nothing and works offline\n\n" +
+                    "I do not have time to set it up\nI abandon anything that takes a setup call\nIt logs the first task in under a second"
+                  }
+                  className="min-h-[140px]"
+                  data-testid="app-viewer-objections-field"
                 />
               </Field>
 

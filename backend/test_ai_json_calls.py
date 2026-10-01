@@ -234,6 +234,153 @@ class TestStrategyBudget:
         assert "Keep EVERY string value under 25 words" in src
         assert "no markdown fence" in src
 
+    def test_a_fully_populated_prompt_stays_under_a_ceiling(self, monkeypatch):
+        """
+        The guard I promised and did not write the first time.
+
+        Prompt length is not itself the budget problem -- the prompt is an input
+        and 8192 covers the completion. It is a proxy for the thing that actually
+        bites: every field the prompt asks for is a value the model must write
+        back, so growing the request grows the reply, and the reply is what gets
+        truncated. The strategy schema is already the largest in the codebase
+        and 4000 tokens produced a real production failure, so this measures a
+        worst case -- every field filled to its cap, the approved plan attached,
+        feedback history and past performance all present -- and fails with the
+        measured number, so raising the ceiling is a decision made with the
+        figure in hand rather than a shrug.
+        """
+        import ai_service
+
+        captured = {}
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return {
+                "strategy_summary": "s", "audience_problem": "p",
+                "emotional_triggers": ["t"], "hook_concept": "c",
+                "hook_line": "h", "hook_promise": "p", "hook_action": "a",
+                "messaging_pillars": ["m"], "primary_feature": "f",
+                "desired_outcome": "o", "differentiation_beat": "b",
+                "cta_strategy": "c", "scene": {"environment": "kitchen"},
+                "performance": {"movement": "still"},
+                "segments": [{"index": 0, "role": "hook", "seconds": 5,
+                              "goal": "g", "script": "s", "action": "a"}],
+                "continuity_contract": {
+                    "established": [], "must_not_change": [], "do_not_repeat": [],
+                },
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+
+        # Eight items per list: that is the cap APP_PROFILE_LIST_KEYS applies on
+        # the way in, so it is the true worst case rather than a generous one.
+        eight = [f"item {i}" for i in range(1, 9)]
+        asyncio.run(ai_service.generate_video_strategy(
+            profile={
+                "brand_name": "ShiftLog",
+                "brand_description": "Shift logging for healthcare workers.",
+                "app_category": "Productivity",
+                "platforms": ["iOS", "Android"],
+                "core_features": eight,
+                "primary_use_cases": eight,
+                "problems_solved": eight,
+                "icp_segments": eight,
+                "desired_outcomes": eight,
+                "competitors": eight,
+                "known_limitations": "iOS and Android only; no offline mode yet.",
+                "must_not_show": eight,
+                "usage_moments": eight,
+                "proof_moment": "One tap and the shift is on the log",
+                # Six is the normalizer's cap, so six is the worst case rather
+                # than a generous guess. Leaving this field out of the fixture
+                # would have made the ceiling test measure a profile that no
+                # real profile resembles.
+                "viewer_objections": [
+                    {
+                        "objection": f"Objection {i}",
+                        "what_they_do_now": f"The alternative they use today, number {i}",
+                        "honest_answer": f"The honest answer from the facts, number {i}",
+                    }
+                    for i in range(6)
+                ],
+                "target_audience": "hospital nurses working rotating shifts",
+            },
+            template={
+                "name": "Stop Doing This", "category": "problem",
+                "opening_structure": "Name the mistake.", "hook_seconds": 5,
+                "continuation_structure": "Then the fix.", "cta_pattern": "Try it",
+                "visual_style": "Talking head.", "camera_pacing": "Steady.",
+                "content_slots": {f"slot{i}": f"value{i}" for i in range(1, 9)},
+                "required_assets": ["character_reference"],
+            },
+            angle={
+                "kind": "problem", "label": "Too many lists",
+                "target_audience": "nurses", "user_problem": "paperwork",
+                "hook_promise": "less admin", "app_feature": "one-tap logging",
+                "desired_emotion": "relief", "recommended_cta": "Try it free",
+                "claims_to_respect": ["works offline"],
+            },
+            objective="address_user_problem", hook_seconds=5,
+            total_duration=30, tone="calm", brand_voice="plain, tired, warm",
+            profile_feedback={
+                "total": 200, "template_rejections": 9, "generation_rejections": 12,
+                "approvals": 6, "successful_marks": 4, "unsuccessful_marks": 3,
+                "heavy_script_edits": 2,
+                "top_reasons": [{"reason": "hook_too_generic", "count": 7}],
+                "selected_template": {},
+            },
+            proved_hooks={
+                "has_signal": True, "videos": 12,
+                "top": [{"template_id": "Stop Doing This", "videos": 5,
+                         "views": 4000, "save_rate": 0.08, "share_rate": 0.02}],
+                "bottom": [{"template_id": "Three Mistakes", "videos": 2,
+                            "views": 200, "save_rate": 0.01, "share_rate": 0.0}],
+            },
+            plan={
+                "hook_line": "h", "cta": "c", "feature_emphasis": "f",
+                "visual_direction": "v", "voice_direction": "vd",
+                "sound_direction": "sd",
+                "beat_timeline": [
+                    {"start": i * 5, "end": i * 5 + 5, "beat": f"beat {i}"}
+                    for i in range(4)
+                ],
+            },
+        ))
+
+        prompt = captured["prompt"]
+        # Measured worst case is 15,226 chars, with every list at its cap
+        # including six viewer objections. The ceiling sits just above it at
+        # 17,000, which absorbs one small field but fails on a schema rewrite.
+        # An earlier version used a round 18,000 picked without measuring, and
+        # it let a 15-beat inflation through -- which is the exact failure this
+        # test exists to prevent, so the number is the measurement.
+        CEILING = 17_000
+        assert len(prompt) <= CEILING, (
+            f"fully-populated strategy prompt is {len(prompt)} chars "
+            f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling (measured "
+            f"worst case 15,226). Every field added here is a value the model must "
+            f"write back, and a truncated strategy is a 502 the founder cannot fix."
+        )
+
+    def test_the_schema_still_asks_for_a_bounded_number_of_values(self):
+        """
+        The same concern counted directly rather than through prompt length.
+
+        The continuation beats are the one part of the schema that scales with a
+        constant, so pinning it is what stops a future edit from quietly asking
+        for twenty beats and paying for it in truncation retries.
+        """
+        import ai_service
+        assert ai_service.CONTINUATION_BEATS <= 7, (
+            f"CONTINUATION_BEATS is {ai_service.CONTINUATION_BEATS}; each one is a "
+            f"full segment object in the reply, and the completion budget is shared "
+            f"with Gemini's thinking tokens"
+        )
+        assert ai_service.CONTINUATION_BEATS >= 5, (
+            "fewer than five continuation beats leaves the arc without room for a "
+            "problem, a turn and a close"
+        )
+
 
 class TestStrategyEndpointError:
     """The endpoint must name truncation rather than leaking a JSON message."""

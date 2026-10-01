@@ -113,13 +113,15 @@ REQUIRED_APP_PROFILE_KEYS = {
     "target_audience", "ideal_customer_profile",
     "icp_segments", "desired_outcomes", "differentiation", "competitors",
     "known_limitations", "must_not_show", "usage_moments", "proof_moment",
-    "tone_voice", "claims_approved", "claims_review", "claims_banned",
+    "viewer_objections", "tone_voice", "claims_approved", "claims_review",
+    "claims_banned",
 }
 
 APP_PROFILE_LIST_KEYS = (
     "platforms", "core_features", "primary_use_cases", "problems_solved",
     "icp_segments", "desired_outcomes", "competitors", "must_not_show",
-    "usage_moments", "claims_approved", "claims_review", "claims_banned",
+    "usage_moments", "viewer_objections", "claims_approved",
+    "claims_review", "claims_banned",
 )
 
 
@@ -1509,6 +1511,13 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         'believable -- the moment the user sees the result happen. One sentence, present tense, '
         'filmmable: \'the envelope splits the moment the transfer lands\'. Empty string if the '
         'sources do not state one",\n'
+        # Objects rather than phrases, because an objection without the current
+        # alternative is not answerable: "it's another subscription" only
+        # converts if you know they already pay for three.
+        '  "viewer_objections": [{"objection": "the reason this viewer would NOT '
+        'download, in their words", "what_they_do_now": "the alternative they use today, '
+        'including doing nothing", "honest_answer": "what is true that addresses it, '
+        'without a guarantee or an invented claim"}],\n'
         '  "tone_voice": "short description of the brand voice",\n'
         '  "claims_approved": ["factual claims safe to use in promos"],\n'
         '  "claims_review": ["claims that need verification before use (ratings, counts, results)"],\n'
@@ -1552,7 +1561,47 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
             val = []
         result[key] = [str(v).strip() for v in val if str(v).strip()][:8]
 
+    # viewer_objections is a list of objects, so the list normalizer above would
+    # str() them into unreadable dict reprs. Normalized separately and, unlike
+    # the phrase lists, a malformed entry is dropped whole rather than kept as a
+    # half-answer: an objection with a missing honest_answer is worse than no
+    # objection, because the arc has nothing to aim at.
+    _normalize_objection_list(result)
+
     return result
+
+
+def _normalize_objection_list(result: dict) -> None:
+    """
+    Coerce the model reply's viewer_objections into usable triples.
+
+    The founder's schema and the database store this as a JSON list of objects,
+    so everything downstream -- the prompt, the detail page -- can rely on the
+    three keys being present and non-empty rather than re-checking at each read.
+    """
+    raw = result.get("viewer_objections")
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            raw = []
+    if not isinstance(raw, list):
+        result["viewer_objections"] = []
+        return
+    kept = []
+    for item in raw[:6]:
+        if not isinstance(item, dict):
+            continue
+        triple = {
+            "objection": str(item.get("objection") or "").strip()[:200],
+            "what_they_do_now": str(item.get("what_they_do_now") or "").strip()[:200],
+            "honest_answer": str(item.get("honest_answer") or "").strip()[:300],
+        }
+        if not triple["objection"] or not triple["honest_answer"]:
+            # No current alternative, or no answer: nothing the arc can use.
+            continue
+        kept.append(triple)
+    result["viewer_objections"] = kept
 
 
 async def generate_content_angles(profile: dict, max_angles: int = 8) -> list:
@@ -1940,6 +1989,12 @@ async def generate_creative_plan(
         "problems": _list("problems_solved"),
         "desired_outcomes": _list("desired_outcomes"),
         "differentiators": profile.get("differentiation") or "(unstated)",
+        # The plan prompt never saw the competitor list, while the strategy
+        # prompt did -- so the one document the founder now reads and approves
+        # before spending was written by a model that could not see what this
+        # app is up against, and the differentiation beat it asked for rested on
+        # a comparison it could only guess at.
+        "competitors": _list("competitors"),
         "known_limitations": profile.get("known_limitations") or "(none recorded)",
     }
 
@@ -2022,6 +2077,15 @@ async def generate_creative_plan(
         "- Use ONLY the features and claims present above. Never invent a feature, a rating, "
         "a review, a download count, or a user testimonial, and never state a price: no "
         "price is on record for this app, so a quote could not be checked.\n"
+        # The reason competitors is in this prompt at all. Without the rule the
+        # list is context the model may ignore, which is how it ended up in the
+        # strategy prompt and missing here.
+        "- If competitors are listed, the hook may open on the contrast between this app and "
+        "the one a viewer would otherwise reach for, naming the specific difference. Do not "
+        "state anything factual about a competitor: no features, prices, ratings or reviews "
+        "may be attributed to another product, and never put a competitor's name, logo or "
+        "interface on screen. Contrast this app's own verified facts against the viewer's "
+        "default assumption, not against a competitor's record.\n"
         "- Never use anything in claims.never_use. If a claims.needs_review item would help, "
         "leave it out rather than using it.\n"
         "- Never promise a guaranteed outcome and never describe the viewer as having a "
@@ -2342,6 +2406,12 @@ async def generate_video_strategy(
         # product facts the app's own copy usually states.
         "usage_moments": _list("usage_moments"),
         "proof_moment": str(profile.get("proof_moment") or "").strip() or "(unstated)",
+        # The arc's material. The seven continuation beats previously had no
+        # argument to make, so the middle of every video was another feature.
+        # Each entry is a reason this viewer would not download, what they use
+        # instead, and the honest reply -- so a beat can turn rather than
+        # accumulate.
+        "viewer_objections": profile.get("viewer_objections") or [],
     }
 
     mechanism = {
@@ -2570,6 +2640,19 @@ async def generate_video_strategy(
         "believable, and at least one segment must show it happening rather than describing it "
         "while something unrelated occurs on screen. If proof_moment is unstated, show the "
         "earliest visible result of the primary feature instead.\n"
+        # The arc. Seven beats with nothing to argue about is seven restatements
+        # of the hook, so this is the difference between a video that persuades
+        # and one that lists features.
+        "- viewer_objections are the beats. Each is an objection, what the viewer does today "
+        "instead, and an honest answer that is true from the verified facts. Give each "
+        "objection its own beat: name the objection in the viewer's own terms, show the "
+        "alternative they are leaving behind or the cost of doing nothing, then answer it with "
+        "this app's features. Do not stack two objections into one beat and do not repeat an "
+        "objection the previous beat already answered.\n"
+        "- An honest_answer may not promise a result, a saving, or a guarantee, and may not "
+        "claim a rating, count or price. Answer with what the app demonstrably does. If a "
+        "recorded objection has no answer the facts support, leave that beat out rather than "
+        "inventing one — the arc is better short than dishonest.\n"
         "- Never promise a guaranteed outcome, never invent a testimonial, a rating or a "
         "review, and never state a price, plan name or trial term — the App Profile carries "
         "none, so nothing could verify it.\n"

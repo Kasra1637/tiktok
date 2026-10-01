@@ -18,8 +18,8 @@ def row_to_dict(row, columns: list) -> dict:
         # App Profile (brand_profiles) structured fields
         "support_urls", "platforms", "core_features", "primary_use_cases",
         "problems_solved", "icp_segments", "desired_outcomes", "competitors",
-        "must_not_show", "usage_moments", "claims_approved",
-        "claims_review", "claims_banned",
+        "must_not_show", "usage_moments", "viewer_objections",
+        "claims_approved", "claims_review", "claims_banned",
         "ctas", "video_themes", "research_sources", "pending_research",
         # Hook Template Library (hook_templates) structured fields
         "app_categories", "audiences", "required_assets", "content_slots",
@@ -119,6 +119,19 @@ APP_PROFILE_TEXT_FIELDS = (
 APP_PROFILE_EDITABLE_FIELDS = APP_PROFILE_TEXT_FIELDS + APP_PROFILE_LIST_FIELDS
 
 
+class ViewerObjection(BaseModel):
+    """
+    One reason this viewer would not download, and the honest reply.
+
+    `what_they_do_now` is the field that makes it usable: an objection without
+    the current alternative has nothing to turn against, so the beat can only
+    restate the feature.
+    """
+    objection: str = ""
+    what_they_do_now: str = ""
+    honest_answer: str = ""
+
+
 class BrandProfileCreateRequest(BaseModel):
     """
     Create a brand profile from manually entered fields.
@@ -154,6 +167,7 @@ class BrandProfileCreateRequest(BaseModel):
     must_not_show: Optional[List[str]] = None
     usage_moments: Optional[List[str]] = None
     proof_moment: Optional[str] = ""
+    viewer_objections: Optional[List[ViewerObjection]] = None
     claims_approved: Optional[List[str]] = None
     claims_review: Optional[List[str]] = None
     claims_banned: Optional[List[str]] = None
@@ -186,6 +200,7 @@ class BrandProfileUpdateRequest(BaseModel):
     must_not_show: Optional[List[str]] = None
     usage_moments: Optional[List[str]] = None
     proof_moment: Optional[str] = None
+    viewer_objections: Optional[List[ViewerObjection]] = None
     claims_approved: Optional[List[str]] = None
     claims_review: Optional[List[str]] = None
     claims_banned: Optional[List[str]] = None

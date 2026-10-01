@@ -7,6 +7,7 @@ rather than model behaviour.
 """
 import asyncio
 import importlib
+import json
 import os
 import sys
 import tempfile
@@ -696,3 +697,259 @@ class TestIsolation:
         with pytest.raises(HTTPException) as err:
             _run(api.get_studio_project(str(uuid.uuid4()), ANON))
         assert err.value.status_code == 404
+
+
+
+
+class _StrategyCapture:
+    """
+    Capture the strategy prompt generate_video_strategy actually builds.
+
+    Asserting on source text was the first attempt and it is the wrong
+    instrument: the prompt is assembled from adjacent string literals, so a
+    phrase that reads as one sentence in the file is split across lines and a
+    grep for it finds nothing. Capturing the built prompt is the only version
+    of this assertion that means anything.
+    """
+
+    def __init__(self, monkeypatch):
+        import ai_service
+        self.captured = {}
+        captured = self.captured
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            captured["system"] = system_message
+            return {
+                "strategy_summary": "s", "audience_problem": "p",
+                "emotional_triggers": ["t"], "hook_concept": "c",
+                "hook_line": "h", "hook_promise": "p", "hook_action": "a",
+                "messaging_pillars": ["m"], "primary_feature": "f",
+                "desired_outcome": "o", "differentiation_beat": "b",
+                "cta_strategy": "c", "scene": {"environment": "kitchen"},
+                "performance": {"movement": "still"},
+                "segments": [{"index": 0, "role": "hook", "seconds": 5,
+                              "goal": "g", "script": "s", "action": "a"}],
+                "continuity_contract": {
+                    "established": [], "must_not_change": [], "do_not_repeat": [],
+                },
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+
+    def run(self, **profile_overrides):
+        import ai_service
+        profile = {"brand_name": "ShiftLog"}
+        profile.update(profile_overrides)
+        asyncio.run(ai_service.generate_video_strategy(
+            profile=profile,
+            template={"name": "T", "content_slots": {}},
+            angle=None, objective="address_user_problem",
+            hook_seconds=5, total_duration=20, tone="", brand_voice="",
+            profile_feedback={},
+        ))
+        return self.captured["prompt"]
+
+
+class TestViewerObjections:
+    """
+    The arc's material.
+
+    The seven continuation beats had no argument to make, so the middle of every
+    video was another feature restated -- an objection is a turn the story can
+    take, and it needs a current alternative to turn against, not just a
+    complaint to acknowledge.
+    """
+
+    OBJECTIONS = [{
+        "objection": "It is just another subscription",
+        "what_they_do_now": "Three habit trackers I already pay for",
+        "honest_answer": "One that costs nothing and works offline",
+    }]
+
+    def test_the_triples_reach_the_strategy_prompt(self, monkeypatch):
+        prompt = _StrategyCapture(monkeypatch).run(
+            viewer_objections=self.OBJECTIONS
+        )
+        assert "It is just another subscription" in prompt
+        assert "Three habit trackers I already pay for" in prompt
+        assert "One that costs nothing and works offline" in prompt
+
+    def test_they_are_obliged_to_become_beats(self, monkeypatch):
+        """
+        The directive is the point. A list the model may ignore reproduces the
+        problem the field was added to solve.
+        """
+        prompt = _StrategyCapture(monkeypatch).run(
+            viewer_objections=self.OBJECTIONS
+        )
+        assert "viewer_objections are the beats" in prompt
+        assert "Give each objection its own beat" in prompt
+        assert "Do not stack two objections into one beat" in prompt
+
+    def test_an_answer_may_not_be_a_promise(self, monkeypatch):
+        """
+        The tempting failure: an objection the model wants to close with a
+        guarantee. That is exactly the copy the claim checker blocks, so the
+        prompt has to forbid it before it is written.
+        """
+        prompt = _StrategyCapture(monkeypatch).run(
+            viewer_objections=self.OBJECTIONS
+        )
+        assert "may not promise a result" in prompt
+        assert "leave that beat out rather than inventing one" in prompt
+
+    def test_the_prompt_states_the_cost_of_an_empty_profile(self, monkeypatch):
+        """
+        Without objections, seven beats are seven restatements. The prompt has to
+        say so, or the model quietly falls back to listing features again.
+        """
+        prompt = _StrategyCapture(monkeypatch).run()
+        assert '"viewer_objections": []' in prompt
+
+
+class TestViewerObjectionNormalization:
+    """
+    Normalization drops an objection that has no answer rather than keeping it
+    half-built: a beat that raises something it cannot resolve is worse than a
+    short arc, because the model will improvise the resolution.
+    """
+
+    def test_a_complete_triple_survives(self):
+        import ai_service
+        result = {"viewer_objections": [dict(TestViewerObjections.OBJECTIONS[0])]}
+        ai_service._normalize_objection_list(result)
+        kept = result["viewer_objections"]
+        assert len(kept) == 1
+        assert kept[0]["what_they_do_now"].startswith("Three habit")
+
+    def test_an_objection_without_an_answer_is_dropped(self):
+        import ai_service
+        result = {"viewer_objections": [
+            {"objection": "Too expensive", "what_they_do_now": "Nothing"},
+            {"objection": "Takes too long", "what_they_do_now": "By hand",
+             "honest_answer": "Under a minute once set up"},
+        ]}
+        ai_service._normalize_objection_list(result)
+        assert [o["objection"] for o in result["viewer_objections"]] == ["Takes too long"]
+
+    def test_a_missing_current_alternative_is_kept(self):
+        """
+        Only the answer is load-bearing. "Doing nothing" is a real alternative,
+        so the founder may have left it blank rather than typing it.
+        """
+        import ai_service
+        result = {"viewer_objections": [
+            {"objection": "Too expensive", "honest_answer": "Free tier"},
+        ]}
+        ai_service._normalize_objection_list(result)
+        assert result["viewer_objections"][0]["honest_answer"] == "Free tier"
+        assert result["viewer_objections"][0]["what_they_do_now"] == ""
+
+    def test_malformed_input_becomes_an_empty_list(self):
+        import ai_service
+        for raw in (None, "not json", {"a": 1}, 42, [1, 2, 3]):
+            result = {"viewer_objections": raw}
+            ai_service._normalize_objection_list(result)
+            assert result["viewer_objections"] == [], raw
+
+    def test_a_json_string_is_parsed(self):
+        """
+        The stored column can arrive as a raw string through a path that has not
+        been through row_to_dict, and str()-ing a list of dicts would produce
+        unreadable reprs in the prompt.
+        """
+        import ai_service
+        result = {"viewer_objections": json.dumps(TestViewerObjections.OBJECTIONS)}
+        ai_service._normalize_objection_list(result)
+        assert len(result["viewer_objections"]) == 1
+
+    def test_it_is_capped(self):
+        import ai_service
+        result = {"viewer_objections": [
+            {"objection": f"o{i}", "honest_answer": "a"} for i in range(20)
+        ]}
+        ai_service._normalize_objection_list(result)
+        assert len(result["viewer_objections"]) == 6
+
+
+class TestPlanPromptSeesCompetitors:
+    """
+    The plan is the document the founder now reads and approves before spending.
+    It was also the only generation prompt that could not see what this app is
+    up against, so the differentiation beat it asked for rested on a comparison
+    the model could only guess at -- while the strategy prompt, downstream, had
+    the list all along.
+    """
+
+    def _capture(self, monkeypatch):
+        import ai_service
+        captured = {}
+
+        # generate_creative_plan posts through httpx.AsyncClient directly rather
+        # than the shared _chat_json helper, so the seam is the context manager:
+        # replace AsyncClient with a stub whose post() records the request body
+        # and returns a well-formed completion.
+        class _Resp:
+            status_code = 200
+
+            def raise_for_status(self):
+                return None
+
+            def json(self_inner):
+                return {"choices": [{"message": {"content": json.dumps({
+                    "hook_line": "h", "script": "s", "beat_timeline": [],
+                    "visual_direction": "v", "feature_emphasis": "f",
+                    "overlays": [], "voice_direction": "vd",
+                    "sound_direction": "sd", "cta": "c",
+                })}}]}
+
+        class _AsyncClient:
+            def __init__(self_inner, *a, **k):
+                pass
+
+            async def __aenter__(self_inner):
+                return self_inner
+
+            async def __aexit__(self_inner, *exc):
+                return False
+
+            async def post(self_inner, url, **kwargs):
+                captured["messages"] = (kwargs.get("json") or {}).get("messages")
+                return _Resp()
+
+        monkeypatch.setattr(ai_service.httpx, "AsyncClient", _AsyncClient)
+        return captured
+
+    def test_competitors_reach_the_plan_prompt(self, monkeypatch):
+        import ai_service
+        captured = self._capture(monkeypatch)
+        asyncio.run(ai_service.generate_creative_plan(
+            profile={"brand_name": "ShiftLog", "competitors": ["Daylio", "How We Feel"]},
+            template={"name": "T"},
+            objective="address_user_problem",
+            duration_seconds=20,
+        ))
+        prompt = json.dumps(captured["messages"])
+        assert "Daylio" in prompt
+        assert "How We Feel" in prompt
+
+    def test_it_forbids_claims_about_a_competitor(self, monkeypatch):
+        """
+        The data without the rule is context the model may ignore, and a short
+        video that names a competitor is exactly where an invented fact about a
+        third party does real damage. Asserted on the built prompt, not the
+        source: the rule is assembled from adjacent string literals, so a grep
+        for the sentence finds nothing.
+        """
+        import ai_service
+        captured = self._capture(monkeypatch)
+        asyncio.run(ai_service.generate_creative_plan(
+            profile={"brand_name": "ShiftLog", "competitors": ["Daylio"]},
+            template={"name": "T"},
+            objective="address_user_problem",
+            duration_seconds=20,
+        ))
+        prompt = json.dumps(captured["messages"])
+        assert "state anything factual about a competitor" in prompt
+        assert "never put a competitor's name" in prompt

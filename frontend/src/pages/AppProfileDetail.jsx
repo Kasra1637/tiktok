@@ -355,6 +355,29 @@ export default function AppProfileDetail() {
             />
             <ListBlock label="When the app is reached for" items={list(profile?.usage_moments)} />
             <Field label="The proof moment" value={profile?.proof_moment} />
+            {Array.isArray(profile?.viewer_objections) && profile.viewer_objections.length > 0 && (
+              <div className="space-y-2">
+                <span className="eyebrow block">Why they would not download</span>
+                {profile.viewer_objections.map((o, i) => (
+                  <div
+                    key={`${o.objection}-${i}`}
+                    className="rounded-xl border border-[color:var(--hairline)] p-3 text-sm"
+                  >
+                    <p className="font-medium">{o.objection}</p>
+                    {o.what_they_do_now && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Does now: {o.what_they_do_now}
+                      </p>
+                    )}
+                    {o.honest_answer && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Answer: {o.honest_answer}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* The only part of the profile that improves with use. Everything
