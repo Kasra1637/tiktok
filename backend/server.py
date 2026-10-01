@@ -8343,6 +8343,38 @@ async def get_generation_continuity(
     }
 
 
+async def _completed_segment_count(
+    project_id: str, user_id: str, exclude_id: str = ""
+) -> int:
+    """
+    How many finished segments a project has, for the staleness refusals.
+
+    Both staleness guards tell the founder to rebuild the strategy, which is
+    free -- but they do not mention that the segments they already paid for
+    were made against the old strategy_version and are refused by the extend
+    path afterwards. So the cost of following the instruction is only discovered
+    on the next click, after the rebuild.
+
+    Counts `completed` rather than every row, because that is what
+    assemble_generation_chain would actually fail to join: a failed or
+    in-flight segment costs nothing to have lost, and counting it would
+    overstate the damage. `exclude_id` drops the segment the founder is
+    currently looking at, since that is the one they are about to regenerate.
+
+    Deliberately not a COUNT(*) with a join: this runs on the error path of
+    two paid endpoints, and the table is small and per-user.
+    """
+    clauses = ["studio_project_id = ?", "user_id = ?", "status = 'completed'"]
+    params: list = [project_id, user_id]
+    if exclude_id:
+        clauses.append("id != ?")
+        params.append(exclude_id)
+    rows = await _fetch_all(
+        f"SELECT id FROM generations WHERE {' AND '.join(clauses)}", tuple(params)
+    )
+    return len(rows)
+
+
 @api_router.post("/studio/projects/{project_id}/hook", status_code=202)
 async def generate_project_hook(
     project_id: str, payload: GenerateHookRequest, user_id: str = Depends(get_current_user_id)
@@ -8391,6 +8423,21 @@ async def generate_project_hook(
     built_from = int(project.get("strategy_script_version") or 0)
     current_script = int(project.get("script_version") or 0)
     if built_from and current_script and built_from != current_script:
+        # Say what this costs the founder beyond the click. Rebuilding the
+        # strategy is free, but if segments were already rendered they were paid
+        # for against the OLD strategy_version, and the extend path refuses them
+        # (parent_strategy_version). So the founder is told to rebuild, rebuilds,
+        # and only discovers the paid work is stranded on the next extend -- by
+        # which point the number matters. Guarded on a non-zero count: the hook
+        # is usually the first render, and warning about zero segments reads as
+        # a bug.
+        stranded = await _completed_segment_count(project_id, user_id)
+        cost_note = (
+            f" {stranded} segment(s) you have already paid for were made against the old "
+            f"strategy and will need regenerating."
+            if stranded
+            else ""
+        )
         raise HTTPException(
             status_code=409,
             detail=(
@@ -8398,7 +8445,7 @@ async def generate_project_hook(
                 f"was built from script v{built_from}, the script is now v{current_script}), "
                 f"so the strategy still describes the old words. Rebuild the strategy to "
                 f"generate a hook from your current script. It is free — no video is "
-                f"generated until you ask."
+                f"generated until you ask.{cost_note}"
             ),
         )
 
@@ -8610,13 +8657,26 @@ async def extend_generation(
     strategy_built_from = int(project.get("strategy_script_version") or 0)
     current_script = int(project.get("script_version") or 0)
     if strategy_built_from and current_script and strategy_built_from != current_script:
+        # Here the founder is already holding a segment they paid for, so the
+        # stranded count is the whole point of the message. `exclude_id` keeps
+        # this segment out of it: it is the one they are trying to extend, and
+        # it is the one that will actually regenerate.
+        stranded = await _completed_segment_count(
+            project["id"], user_id, exclude_id=generation_id
+        )
+        cost_note = (
+            f" {stranded} other segment(s) on this project were made against the old strategy "
+            f"and will need regenerating too."
+            if stranded
+            else ""
+        )
         raise HTTPException(
             status_code=409,
             detail=(
                 f"Your script has been edited since this video's strategy was built "
                 f"(script v{strategy_built_from} then, v{current_script} now), so this video "
                 f"no longer matches the script you approved. Rebuild the strategy and "
-                f"regenerate the hook. It is free to rebuild."
+                f"regenerate the hook. It is free to rebuild.{cost_note}"
             ),
         )
 

@@ -1656,6 +1656,46 @@ class TestStrategyGoesStaleWhenTheScriptIsEdited:
         assert err.value.status_code == 409
         assert "Rebuild the strategy" in err.value.detail
         assert "free" in err.value.detail
+        # Nothing has been rendered yet on this path, so there is no paid work
+        # to lose and the message must not invent any. Warning about zero
+        # segments would read as a bug.
+        assert "already paid for" not in err.value.detail
+
+    def test_the_hook_refusal_counts_the_segments_it_would_strand(self, api, monkeypatch):
+        """The same refusal, but on a project that already has a paid hook.
+
+        The count is the point: the founder is told to rebuild, rebuilds, and
+        then finds the segment they bought is refused by the
+        parent_strategy_version check. This is the moment to say so.
+        """
+        from models import (ApproveSegmentRequest, GenerateHookRequest,
+                            StudioGenerationRequest, UpdateStudioProjectRequest)
+        import server
+        monkeypatch.setattr(server, "generate_video_strategy", self._fake_strategy)
+        project_id = _approved_project(api, script="The original hook line.", version=2)
+        _run(api.generate_project_strategy(
+            project_id=project_id, payload=server.GenerateStrategyRequest(), user_id=ANON))
+        _mock_submit(api, monkeypatch)
+        hook = _run(api.generate_project_hook(
+            project_id=project_id, payload=GenerateHookRequest(), user_id=ANON))
+        _run(api._execute(
+            "UPDATE generations SET status = 'completed', video_url = ? WHERE id = ?",
+            ("https://provider.test/hook.mp4", hook["id"])))
+        api.pipeline.VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
+        (api.pipeline.VIDEOS_DIR / f"{hook['id']}.mp4").write_bytes(_TINY_PNG)
+        _run(api.approve_generation(hook["id"], ApproveSegmentRequest(), ANON))
+
+        # Now edit the script, and ask for the hook again. Only ONE segment is
+        # completed on this project, so the message should name exactly one.
+        _run(api.update_studio_project(
+            project_id=project_id,
+            payload=UpdateStudioProjectRequest(hook_line="A completely new hook line."),
+            user_id=ANON))
+        with pytest.raises(HTTPException) as err:
+            _run(api.generate_project_hook(
+                project_id=project_id, payload=GenerateHookRequest(), user_id=ANON))
+        assert err.value.status_code == 409
+        assert "1 segment(s) you have already paid for" in err.value.detail
 
     def test_rebuilding_the_strategy_restores_the_hook(self, api, monkeypatch):
         """The route out has to actually work, or the refusal is a dead end."""
@@ -1746,6 +1786,69 @@ class TestStrategyGoesStaleWhenTheScriptIsEdited:
                 hook["id"], StudioGenerationRequest(duration_seconds=6), user_id=ANON))
         assert err.value.status_code == 409
         assert "no longer matches the script you approved" in err.value.detail
+        # And it must say what following that instruction costs. The hook was
+        # paid for against the old strategy_version, so the next extend is
+        # refused by the parent_strategy_version check -- a founder who is not
+        # told here finds out only after rebuilding, by losing a segment they
+        # already bought. This segment is excluded from its own count, and it
+        # is the only completed one, so there is nothing else to name.
+        assert "already paid for" not in err.value.detail
+        assert "other segment(s)" not in err.value.detail
+
+    def test_the_extend_refusal_names_the_other_segments_it_would_strand(
+            self, api, monkeypatch
+    ):
+        """Two paid segments, so the extend refusal has something to count.
+
+        The message names OTHER segments -- the one being extended is what the
+        founder is about to regenerate, so counting it would double-report the
+        damage they are already looking at.
+        """
+        from models import (ApproveSegmentRequest, GenerateHookRequest,
+                            StudioGenerationRequest, UpdateStudioProjectRequest)
+        import server
+        monkeypatch.setattr(server, "generate_video_strategy", self._fake_strategy)
+        project_id = _approved_project(api, script="The original hook line.", version=2)
+        _run(api.generate_project_strategy(
+            project_id=project_id, payload=server.GenerateStrategyRequest(), user_id=ANON))
+        _mock_submit(api, monkeypatch)
+
+        def _render_and_approve():
+            gen = _run(api.generate_project_hook(
+                project_id=project_id, payload=GenerateHookRequest(), user_id=ANON))
+            _run(api._execute(
+                "UPDATE generations SET status = 'completed', video_url = ? WHERE id = ?",
+                ("https://provider.test/hook.mp4", gen["id"])))
+            api.pipeline.VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
+            (api.pipeline.VIDEOS_DIR / f"{gen['id']}.mp4").write_bytes(_TINY_PNG)
+            _run(api.approve_generation(gen["id"], ApproveSegmentRequest(), ANON))
+            return gen
+
+        hook = _render_and_approve()
+
+        # A second finished segment, standing in for the approved extension the
+        # founder already paid for. Inserted rather than rendered because this
+        # test is about what the refusal COUNTS, and the single-beat plan would
+        # otherwise be spent before a real extension could complete.
+        _run(api._execute(
+            "INSERT INTO generations (id, user_id, studio_project_id, status, video_url,"
+            " segment_index, segment_role, strategy_version, created_at)"
+            " VALUES (?, ?, ?, 'completed', ?, 1, 'extension', 1, datetime('now'))",
+            ("gen-other", ANON, project_id, "https://provider.test/ext.mp4"),
+        ))
+
+        # The hook and one extension are now completed. Edit the script, then
+        # try to extend the hook again.
+        _run(api.update_studio_project(
+            project_id=project_id,
+            payload=UpdateStudioProjectRequest(hook_line="A completely new hook line."),
+            user_id=ANON))
+        with pytest.raises(HTTPException) as err:
+            _run(api.extend_generation(
+                hook["id"], StudioGenerationRequest(duration_seconds=6), user_id=ANON))
+        assert err.value.status_code == 409
+        # The extension is stranded; the hook being extended is not counted.
+        assert "1 other segment(s)" in err.value.detail
 
 class TestUsageMomentsAndProofMoment:
     """
