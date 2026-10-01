@@ -755,6 +755,130 @@ class TestSeamState:
         assert "unresolved" in prompt
 
 
+class TestMustNotShowIsEnforced:
+    """
+    The App Profile's must_not_show list, attached to the render that could
+    violate it.
+
+    It used to be known_limitations, a single advisory text field whose UI label
+    promised "Must never be contradicted by promos" while nothing checked it:
+    it reached the plan and strategy prompts as loose context and never reached
+    a video prompt at all. A founder who wrote "never show a hospital corridor"
+    had no way of knowing whether the model honoured it.
+    """
+
+    FORBIDDEN = [
+        "a hospital corridor",
+        "a competitor's app icon",
+    ]
+
+    def _profile(self):
+        return {"brand_name": "ShiftLog", "must_not_show": list(self.FORBIDDEN)}
+
+    def test_the_single_pass_prompt_carries_it(self):
+        import generation_planning
+        prompt = generation_planning.build_single_pass_prompt(
+            plan={"hook_line": "h", "script": "s", "cta": "c"},
+            profile=self._profile(),
+        )
+        assert "MUST NOT APPEAR" in prompt
+        for item in self.FORBIDDEN:
+            assert item in prompt
+
+    def test_every_segment_carries_it(self):
+        """
+        On every segment, not just the hook. An extension re-imagines the scene
+        from the strategy brief, so a forbidden detail can reappear at the seam
+        even when the opening honoured it.
+        """
+        import generation_planning
+        from ai_service import normalize_strategy
+        strategy = normalize_strategy({
+            "strategy_summary": "s", "audience_problem": "p",
+            "emotional_triggers": ["t"], "hook_concept": "c",
+            "hook_line": "h", "hook_promise": "p", "hook_action": "a",
+            "messaging_pillars": ["m"], "primary_feature": "f",
+            "desired_outcome": "o", "differentiation_beat": "b",
+            "cta_strategy": "c", "scene": {"environment": "kitchen"},
+            "performance": {"movement": "still"},
+            "segments": [
+                {"index": 0, "role": "hook", "seconds": 5, "goal": "g",
+                 "script": "s", "action": "a"},
+                {"index": 1, "role": "continuation", "seconds": 5, "goal": "g",
+                 "script": "s", "action": "a"},
+            ],
+            "continuity_contract": {
+                "established": [], "must_not_change": [], "do_not_repeat": [],
+            },
+        })
+        for index in (0, 1):
+            prompt = generation_planning.build_segment_prompt(
+                strategy=strategy, profile=self._profile(),
+                segment_index=index, duration=5, is_hook=index == 0,
+            )
+            assert "MUST NOT APPEAR" in prompt, f"segment {index} lost the rule"
+            assert "a hospital corridor" in prompt
+
+    def test_a_profile_with_none_records_no_rule(self):
+        """
+        No empty rule in the prompt for the majority of profiles. An instruction
+        with nothing after it trains the model to skim instruction blocks.
+        """
+        import generation_planning
+        for profile in (
+            {"brand_name": "ShiftLog"},
+            {"brand_name": "ShiftLog", "must_not_show": []},
+            {"brand_name": "ShiftLog", "must_not_show": ""},
+            {"brand_name": "ShiftLog", "must_not_show": None},
+            {"brand_name": "ShiftLog", "must_not_show": ["  ", ""]},
+        ):
+            prompt = generation_planning.build_single_pass_prompt(
+                plan={"hook_line": "h", "script": "s"}, profile=profile,
+            )
+            assert "MUST NOT APPEAR" not in prompt, f"empty rule emitted for {profile}"
+
+    def test_a_newline_separated_string_is_accepted(self):
+        """
+        A founder typing free text into a textarea produces a string, not a
+        list. Both shapes must reach the prompt, or the field silently stops
+        working for exactly the people who wrote it by hand.
+        """
+        import generation_planning
+        prompt = generation_planning.build_single_pass_prompt(
+            plan={"hook_line": "h", "script": "s"},
+            profile={
+                "brand_name": "ShiftLog",
+                "must_not_show": "a hospital corridor\na competitor's app icon",
+            },
+        )
+        assert "a hospital corridor" in prompt
+        assert "a competitor's app icon" in prompt
+
+    def test_the_endpoint_sends_the_profile_it_stored(self, api, monkeypatch):
+        """The wiring: a saved must_not_show must reach a real submit call."""
+        from models import ApproveSegmentRequest, GenerateHookRequest
+        import server
+        project, _profile, _template = _make_project(api, NURSE_APP)
+        _store_strategy(
+            api, project["id"], "I clocked out at 11:40.",
+            NURSE_PERSONA, NURSE_SCENE,
+            problem="Shift paperwork", feature="One-tap shift logging",
+            cta="Try it free",
+        )
+        # The list lives on the App Profile, not the project: the prompt builder
+        # reads it from `profile`, which _submit_generation resolves from
+        # brand_profile_id.
+        _run(api._execute(
+            "UPDATE brand_profiles SET must_not_show = ? WHERE id = ?",
+            (json.dumps(["a hospital corridor"]), project["brand_profile_id"]),
+        ))
+        calls = _mock_submit(api, monkeypatch)
+        _run(api.generate_project_hook(
+            project_id=project["id"], payload=GenerateHookRequest(), user_id=ANON))
+        assert "a hospital corridor" in calls[0]["prompt"]
+        assert calls[0]["prompt"].count("MUST NOT APPEAR") == 1
+
+
 class TestContinuityIsHonest:
     def test_removed_provider_resolves_to_the_minimax_plan(self, api, monkeypatch):
         """

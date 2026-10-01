@@ -20,9 +20,9 @@ const EMPTY_FORM = {
   core_features: "",
   primary_use_cases: "",
   problems_solved: "",
+  must_not_show: "",
   desired_outcomes: "",
   competitors: "",
-  known_limitations: "",
   target_audience: "",
   ideal_customer_profile: "",
   icp_segments: "",
@@ -69,9 +69,9 @@ function profileToForm(data) {
     core_features: productsToText(data.core_features),
     primary_use_cases: productsToText(data.primary_use_cases),
     problems_solved: productsToText(data.problems_solved),
+    must_not_show: productsToText(data.must_not_show),
     desired_outcomes: productsToText(data.desired_outcomes),
     competitors: productsToText(data.competitors),
-    known_limitations: data.known_limitations || "",
     target_audience: data.target_audience || "",
     ideal_customer_profile: data.ideal_customer_profile || "",
     icp_segments: linesToText(data.icp_segments),
@@ -234,9 +234,9 @@ export default function BrandSetup() {
         core_features: textToProducts(form.core_features),
         primary_use_cases: textToProducts(form.primary_use_cases),
         problems_solved: textToProducts(form.problems_solved),
+        must_not_show: textToProducts(form.must_not_show),
         desired_outcomes: textToProducts(form.desired_outcomes),
         competitors: textToProducts(form.competitors),
-        known_limitations: form.known_limitations,
         target_audience: form.target_audience,
         ideal_customer_profile: form.ideal_customer_profile,
         icp_segments: textToLines(form.icp_segments),
@@ -619,13 +619,22 @@ export default function BrandSetup() {
                 </Field>
               </div>
 
-              <Field label="Known limitations" hint="Must never be contradicted by promos.">
+              {/* Enforced, not advisory: this list is attached to every video
+                  prompt, so a detail here is an instruction to the model
+                  rather than background it can use or ignore. known_limitations
+                  is the advisory sibling and stays readable-only below. */}
+              <Field
+                label="Never show in the video"
+                hint="One per line. Attached to every render — use it for things a camera could actually depict."
+              >
                 <Textarea
-                  value={form.known_limitations}
-                  onChange={handleFieldChange("known_limitations")}
-                  placeholder="e.g. iOS only, trial requires subscription selection..."
-                  className="min-h-[60px]"
-                  data-testid="app-limitations-field"
+                  value={productsToText(form.must_not_show)}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, must_not_show: e.target.value }))
+                  }
+                  placeholder={"One per line, e.g.\nA hospital corridor\nA competitor's app icon\nAnyone under 18"}
+                  className="min-h-[80px]"
+                  data-testid="app-must-not-show-field"
                 />
               </Field>
 

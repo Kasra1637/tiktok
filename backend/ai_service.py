@@ -112,13 +112,13 @@ REQUIRED_APP_PROFILE_KEYS = {
     "core_features", "primary_use_cases", "problems_solved",
     "target_audience", "ideal_customer_profile",
     "icp_segments", "desired_outcomes", "differentiation", "competitors",
-    "known_limitations", "tone_voice", "claims_approved", "claims_review",
-    "claims_banned",
+    "known_limitations", "must_not_show", "tone_voice",
+    "claims_approved", "claims_review", "claims_banned",
 }
 
 APP_PROFILE_LIST_KEYS = (
     "platforms", "core_features", "primary_use_cases", "problems_solved",
-    "icp_segments", "desired_outcomes", "competitors",
+    "icp_segments", "desired_outcomes", "competitors", "must_not_show",
     "claims_approved", "claims_review", "claims_banned",
 )
 
@@ -1498,6 +1498,10 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         '  "differentiation": "2-4 sentences on what sets this app apart",\n'
         '  "competitors": ["named competitor apps if inferable, else empty"],\n'
         '  "known_limitations": "material limitations a promo must not contradict (platforms, feature gaps)",\n'
+        '  "must_not_show": ["concrete things a promo must never show or imply, each a short '
+        'phrase a camera could actually depict: a specific setting, a demographic stereotype, a '
+        'competitor product, a document or screen, a body part, a place this app has nothing to '
+        'do with. Empty list if none apply"],\n'
         '  "tone_voice": "short description of the brand voice",\n'
         '  "claims_approved": ["factual claims safe to use in promos"],\n'
         '  "claims_review": ["claims that need verification before use (ratings, counts, results)"],\n'

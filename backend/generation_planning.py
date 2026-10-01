@@ -38,6 +38,37 @@ _UI_RENDERING_WARNING = (
     "facts, never from invention. Leave clean, uncluttered space for the captions."
 )
 
+# The App Profile's must_not_show list, turned into a prompt section.
+#
+# This field's UI label used to promise "Must never be contradicted by promos"
+# and nothing checked it: it was passed to the plan and strategy prompts as
+# loose context and never reached a video prompt at all, so a model that
+# contradicted it had no way of knowing. Emitting it here is the whole point of
+# the rename — a founder who writes "never show a hospital corridor" now gets
+# that instruction attached to the render that could break it.
+def must_not_show_section(profile: dict) -> str:
+    """
+    The app-specific things that must never appear in frame.
+
+    Returns "" when the profile records none, so the prompt is unchanged for
+    the majority of profiles rather than carrying an empty rule.
+    """
+    raw = (profile or {}).get("must_not_show")
+    if isinstance(raw, str):
+        items = [part.strip() for part in raw.split("\n") if part.strip()]
+    elif isinstance(raw, (list, tuple)):
+        items = [str(part).strip() for part in raw if str(part).strip()]
+    else:
+        return ""
+    if not items:
+        return ""
+    listed = "; ".join(items[:8])
+    return (
+        "MUST NOT APPEAR — recorded on this app's profile as things a promo must never "
+        f"contradict or show: {listed}. Do not depict any of them, do not imply them, and "
+        "do not use them as background, prop, or setting detail."
+    )
+
 
 def _format_beats(beats, duration: int, hook_seconds: int = 3) -> str:
     """
@@ -186,6 +217,10 @@ def build_single_pass_prompt(
         sections.append(f"End on the call to action: {cta}")
 
     sections.append(_UI_RENDERING_WARNING)
+
+    forbidden = must_not_show_section(profile)
+    if forbidden:
+        sections.append(forbidden)
 
     # The attached face is covered by the person anchor below, and nothing
     # else can be attached — so there is no composited-assets section. Any
@@ -727,6 +762,13 @@ def build_segment_prompt(
         "render any text yourself."
     )
     sections.append(_UI_RENDERING_WARNING)
+
+    # On every segment, not just the first: an extension re-imagines the scene
+    # from the strategy brief, so a forbidden detail can reappear at the seam
+    # even when the hook honoured it.
+    forbidden = must_not_show_section(profile)
+    if forbidden:
+        sections.append(forbidden)
 
     # The attached face is covered by the person anchor below, and nothing
     # else can be attached — so there is no composited-assets section here

@@ -340,6 +340,14 @@ export default function AppProfileDetail() {
             <ListBlock label="Competitor apps" items={list(profile?.competitors)} />
             <Field label="Differentiators" value={profile?.differentiation} />
             <Field label="Known limitations" value={profile?.known_limitations} />
+            {/* Labelled as enforced because it is: this list is attached to
+                every video prompt, so it is an instruction to the model rather
+                than context it may use or ignore. The wording matters — the old
+                label promised the same enforcement over a field that had none. */}
+            <ListBlock
+              label="Never show in the video (enforced)"
+              items={list(profile?.must_not_show)}
+            />
           </div>
 
           <div className="surface space-y-4 rounded-2xl p-5">

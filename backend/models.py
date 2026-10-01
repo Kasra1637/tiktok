@@ -18,8 +18,8 @@ def row_to_dict(row, columns: list) -> dict:
         # App Profile (brand_profiles) structured fields
         "support_urls", "platforms", "core_features", "primary_use_cases",
         "problems_solved", "icp_segments", "desired_outcomes", "competitors",
-        "claims_approved", "claims_review", "claims_banned", "ctas",
-        "video_themes", "research_sources", "pending_research",
+        "must_not_show", "claims_approved", "claims_review", "claims_banned",
+        "ctas", "video_themes", "research_sources", "pending_research",
         # Hook Template Library (hook_templates) structured fields
         "app_categories", "audiences", "required_assets", "content_slots",
         "claims_to_respect", "evidence",
@@ -104,7 +104,7 @@ class ApproveAppProfileRequest(BaseModel):
 APP_PROFILE_LIST_FIELDS = (
     "support_urls", "platforms", "core_features", "primary_use_cases",
     "problems_solved", "icp_segments", "desired_outcomes", "competitors",
-    "claims_approved", "claims_review", "claims_banned",
+    "must_not_show", "claims_approved", "claims_review", "claims_banned",
 )
 
 APP_PROFILE_TEXT_FIELDS = (
@@ -146,6 +146,10 @@ class BrandProfileCreateRequest(BaseModel):
     desired_outcomes: Optional[List[str]] = None
     competitors: Optional[List[str]] = None
     known_limitations: Optional[str] = ""
+    # Enforced in the video prompt. known_limitations is advisory context for
+    # the plan and strategy; this one is attached to the render that could
+    # violate it, on every segment.
+    must_not_show: Optional[List[str]] = None
     claims_approved: Optional[List[str]] = None
     claims_review: Optional[List[str]] = None
     claims_banned: Optional[List[str]] = None
@@ -175,6 +179,7 @@ class BrandProfileUpdateRequest(BaseModel):
     desired_outcomes: Optional[List[str]] = None
     competitors: Optional[List[str]] = None
     known_limitations: Optional[str] = None
+    must_not_show: Optional[List[str]] = None
     claims_approved: Optional[List[str]] = None
     claims_review: Optional[List[str]] = None
     claims_banned: Optional[List[str]] = None
