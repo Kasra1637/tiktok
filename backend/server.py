@@ -1186,6 +1186,16 @@ async def init_db():
         influencer_migrations = [
             ("studio_projects", "strategy", "TEXT"),
             ("studio_projects", "strategy_version", "INTEGER DEFAULT 0"),
+            # The script_version the current strategy was built FROM.
+            #
+            # The strategy is generated from the founder's approved creative
+            # plan, so it is only true of that plan's words. A script edit bumps
+            # script_version and leaves the strategy describing the previous
+            # hook line, and nothing detected it. 0 means "built before this
+            # was recorded" and is treated as unknown rather than as a mismatch,
+            # so existing drafts keep working and are simply unprotected until
+            # the strategy is rebuilt.
+            ("studio_projects", "strategy_script_version", "INTEGER DEFAULT 0"),
             ("studio_projects", "hook_seconds", "INTEGER DEFAULT 0"),
             ("studio_projects", "extend_intent", "INTEGER DEFAULT 1"),
             ("generations", "segment_index", "INTEGER DEFAULT 0"),
@@ -6694,6 +6704,15 @@ def _public_project(row: dict) -> dict:
     out["script_version"] = out.get("script_version") or 0
     out["hook_seconds"] = int(out.get("hook_seconds") or 0)
     out["strategy_version"] = int(out.get("strategy_version") or 0)
+    # Which script the strategy was built from, and whether the script has moved
+    # on since. 0 on both sides means either side predates the other, which is
+    # not a mismatch — it is missing history, and the founder is not blocked for
+    # it. The studio reads `strategy_is_current` to warn before spending rather
+    # than to refuse silently.
+    built_from = int(out.get("strategy_script_version") or 0)
+    current_script = int(out.get("script_version") or 0)
+    out["strategy_script_version"] = built_from
+    out["strategy_is_current"] = not (built_from and current_script and built_from != current_script)
     # SQLite has no boolean type, so this arrives as 0/1. Returned as a real
     # bool so the studio can branch on it directly instead of comparing ints.
     # Unset means yes: the hook is the opening of a video, so extending is the
@@ -8144,12 +8163,20 @@ async def generate_project_strategy(
     # hook_seconds is written back so the hook render and any later segment
     # planning read the SAME length, rather than each re-deriving it from the
     # template and risking the two disagreeing.
+    # The script version this strategy was built from. The strategy is generated
+    # from the founder's approved plan, so it is only true of that plan's words:
+    # stamping the version is what lets a later script edit be detected instead
+    # of silently leaving a strategy describing a hook line the founder has
+    # since replaced. Stamped on the project rather than inside the strategy JSON
+    # so a hand-edited strategy cannot overwrite it.
+    script_version_at_build = int(row.get("script_version") or 0)
     await _execute(
         """UPDATE studio_projects SET strategy = ?, strategy_version = ?,
+             strategy_script_version = ?,
              hook_seconds = ?,
              safety_report = ?, safety_summary = ?, status = 'draft', updated_at = ?
            WHERE id = ? AND user_id = ?""",
-        (json.dumps(strategy), version, hook_seconds,
+        (json.dumps(strategy), version, script_version_at_build, hook_seconds,
          json.dumps(report), summary, now, project_id, user_id),
     )
     logger.info(
@@ -8264,6 +8291,29 @@ async def generate_project_hook(
         raise HTTPException(
             status_code=400,
             detail="Create the video strategy first — the hook is generated from it.",
+        )
+
+    # The strategy is built from the approved script, so it describes THAT
+    # script's hook line. Editing the script afterwards bumps script_version and
+    # leaves the strategy quoting words the founder has since replaced — and the
+    # hook is the render, so it would be paid for.
+    #
+    # Refused rather than warned, because the cost of being wrong here is
+    # silent: the founder would watch a video built from a script they deleted,
+    # and nothing in the result would explain the mismatch. Rebuilding the
+    # strategy is free (text only).
+    built_from = int(project.get("strategy_script_version") or 0)
+    current_script = int(project.get("script_version") or 0)
+    if built_from and current_script and built_from != current_script:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"You have edited the script since this strategy was built (the strategy "
+                f"was built from script v{built_from}, the script is now v{current_script}), "
+                f"so the strategy still describes the old words. Rebuild the strategy to "
+                f"generate a hook from your current script. It is free — no video is "
+                f"generated until you ask."
+            ),
         )
 
     report = _current_safety_report(project, profile)
@@ -8464,6 +8514,24 @@ async def extend_generation(
             detail=f"This segment was made with strategy v{parent_strategy_version}, but the "
                    f"project is now on v{project_strategy_version}. Regenerate the hook against "
                    f"the current strategy before extending.",
+        )
+
+    # The same staleness check one level out: if the script has moved on since
+    # this strategy was built, the approved hook already disagrees with the
+    # approved script, so extending it would spend money compounding the
+    # disagreement. The hook render refuses this too, so reaching it means the
+    # script was edited after the hook was already made.
+    strategy_built_from = int(project.get("strategy_script_version") or 0)
+    current_script = int(project.get("script_version") or 0)
+    if strategy_built_from and current_script and strategy_built_from != current_script:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Your script has been edited since this video's strategy was built "
+                f"(script v{strategy_built_from} then, v{current_script} now), so this video "
+                f"no longer matches the script you approved. Rebuild the strategy and "
+                f"regenerate the hook. It is free to rebuild."
+            ),
         )
 
     # Which segment is this? The chain is the approved ancestry plus this one.

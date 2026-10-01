@@ -1451,3 +1451,174 @@ class TestStrategyFollowsTheApprovedPlan:
         _run(api.generate_project_strategy(
             project_id=project_id, payload=server.GenerateStrategyRequest(), user_id=ANON))
         assert seen.get("plan") is None
+
+
+class TestStrategyGoesStaleWhenTheScriptIsEdited:
+    """
+    Chaining the plan into the strategy made the strategy only true of that
+    plan's words — and a script edit left it describing a hook line the founder
+    had already replaced, with nothing detecting it.
+
+    The strategy is stamped with the script_version it was built from, and the
+    two paid endpoints refuse a mismatch. Refused rather than warned because
+    the failure is otherwise invisible: the founder watches a video built from a
+    script they deleted, and the result cannot explain the mismatch.
+    """
+
+    async def _fake_strategy(self, **kwargs):
+        """The strategy the endpoint will await, as a real coroutine."""
+        return {
+            "strategy_summary": "s", "audience_problem": "p",
+            "emotional_triggers": ["t"], "hook_concept": "c",
+            "hook_line": "You do not have a focus problem.",
+            "hook_promise": "p", "hook_action": "a",
+            "messaging_pillars": ["m"], "primary_feature": "f",
+            "desired_outcome": "o", "differentiation_beat": "b",
+            "cta_strategy": "c",
+            "scene": {"environment": "kitchen"},
+            "performance": {"movement": "still"},
+            "segments": [{"index": 0, "role": "hook", "seconds": 5,
+                          "goal": "g", "script": "You do not have a focus problem.",
+                          "action": "a"}],
+            "continuity_contract": {
+                "established": [], "must_not_change": [], "do_not_repeat": [],
+            },
+        }
+
+    def test_the_strategy_stamps_the_script_version_it_built_from(self, api, monkeypatch):
+        import server
+        monkeypatch.setattr(server, "generate_video_strategy", self._fake_strategy)
+        project_id = _approved_project(
+            api, script="You do not have a focus problem.",
+            hook_line="You do not have a focus problem.", version=3)
+        result = _run(api.generate_project_strategy(
+            project_id=project_id, payload=server.GenerateStrategyRequest(), user_id=ANON))
+        assert result["strategy_script_version"] == 3
+        assert result["strategy_is_current"] is True
+
+    def test_editing_the_script_marks_the_strategy_stale(self, api, monkeypatch):
+        import server
+        from models import UpdateStudioProjectRequest
+        monkeypatch.setattr(server, "generate_video_strategy", self._fake_strategy)
+        project_id = _approved_project(api, script="The original hook line.", version=2)
+        _run(api.generate_project_strategy(
+            project_id=project_id, payload=server.GenerateStrategyRequest(), user_id=ANON))
+
+        # A content edit bumps script_version, which is exactly the event the
+        # stamp exists to catch.
+        edited = _run(api.update_studio_project(
+            project_id=project_id,
+            payload=UpdateStudioProjectRequest(hook_line="A completely new hook line."),
+            user_id=ANON))
+        assert edited["script_version"] == 3
+        assert edited["strategy_is_current"] is False
+
+    def test_the_hook_is_refused_against_a_stale_strategy(self, api, monkeypatch):
+        from models import GenerateHookRequest, UpdateStudioProjectRequest
+        import server
+        monkeypatch.setattr(server, "generate_video_strategy", self._fake_strategy)
+        project_id = _approved_project(api, script="The original hook line.", version=2)
+        _run(api.generate_project_strategy(
+            project_id=project_id, payload=server.GenerateStrategyRequest(), user_id=ANON))
+        _run(api.update_studio_project(
+            project_id=project_id,
+            payload=UpdateStudioProjectRequest(hook_line="A completely new hook line."),
+            user_id=ANON))
+        _mock_submit(api, monkeypatch)
+
+        with pytest.raises(HTTPException) as err:
+            _run(api.generate_project_hook(
+                project_id=project_id, payload=GenerateHookRequest(), user_id=ANON))
+        assert err.value.status_code == 409
+        assert "Rebuild the strategy" in err.value.detail
+        assert "free" in err.value.detail
+
+    def test_rebuilding_the_strategy_restores_the_hook(self, api, monkeypatch):
+        """The route out has to actually work, or the refusal is a dead end."""
+        from models import GenerateHookRequest, UpdateStudioProjectRequest
+        import server
+        monkeypatch.setattr(server, "generate_video_strategy", self._fake_strategy)
+        project_id = _approved_project(api, script="The original hook line.", version=2)
+        _run(api.generate_project_strategy(
+            project_id=project_id, payload=server.GenerateStrategyRequest(), user_id=ANON))
+        _run(api.update_studio_project(
+            project_id=project_id,
+            payload=UpdateStudioProjectRequest(hook_line="A completely new hook line."),
+            user_id=ANON))
+        calls = _mock_submit(api, monkeypatch)
+
+        rebuilt = _run(api.generate_project_strategy(
+            project_id=project_id, payload=server.GenerateStrategyRequest(), user_id=ANON))
+        assert rebuilt["strategy_is_current"] is True
+        hook = _run(api.generate_project_hook(
+            project_id=project_id, payload=GenerateHookRequest(), user_id=ANON))
+        assert hook["status"] in ("submitted", "generating")
+        assert calls, "the hook did not reach the provider after a rebuild"
+
+    def test_an_unstamped_strategy_is_not_treated_as_stale(self, api, monkeypatch):
+        """
+        strategy_script_version 0 means "built before this was recorded", not
+        "stale". Existing drafts must keep generating rather than being blocked
+        by a migration default.
+        """
+        from models import GenerateHookRequest
+        import server
+        monkeypatch.setattr(server, "generate_video_strategy", self._fake_strategy)
+        project_id = _approved_project(api, script="The original hook line.", version=2)
+        _run(api.generate_project_strategy(
+            project_id=project_id, payload=server.GenerateStrategyRequest(), user_id=ANON))
+        # Simulate a row written before the column existed.
+        _run(api._execute(
+            "UPDATE studio_projects SET strategy_script_version = 0, script_version = 9 "
+            "WHERE id = ?", (project_id,)))
+        _mock_submit(api, monkeypatch)
+        hook = _run(api.generate_project_hook(
+            project_id=project_id, payload=GenerateHookRequest(), user_id=ANON))
+        assert hook["status"] in ("submitted", "generating")
+
+    def test_a_strategy_built_from_no_script_is_not_stale(self, api, monkeypatch):
+        """
+        script_version 0 on the strategy side means it was built with no plan to
+        follow. Nothing to have gone stale.
+        """
+        import server
+        monkeypatch.setattr(server, "generate_video_strategy", self._fake_strategy)
+        project_id = _approved_project(api, script="", version=0)
+        result = _run(api.generate_project_strategy(
+            project_id=project_id, payload=server.GenerateStrategyRequest(), user_id=ANON))
+        assert result["strategy_script_version"] == 0
+        assert result["strategy_is_current"] is True
+
+    def test_extending_a_stale_video_is_refused(self, api, monkeypatch):
+        """
+        One level out from the hook: if the script moved on after the hook was
+        rendered, extending spends money compounding a disagreement the founder
+        cannot see in the result.
+        """
+        from models import (ApproveSegmentRequest, GenerateHookRequest,
+                            StudioGenerationRequest, UpdateStudioProjectRequest)
+        import server
+        monkeypatch.setattr(server, "generate_video_strategy", self._fake_strategy)
+        project_id = _approved_project(api, script="The original hook line.", version=2)
+        _run(api.generate_project_strategy(
+            project_id=project_id, payload=server.GenerateStrategyRequest(), user_id=ANON))
+        _mock_submit(api, monkeypatch)
+        hook = _run(api.generate_project_hook(
+            project_id=project_id, payload=GenerateHookRequest(), user_id=ANON))
+        _run(api._execute(
+            "UPDATE generations SET status = 'completed', video_url = ? WHERE id = ?",
+            ("https://provider.test/hook.mp4", hook["id"])))
+        api.pipeline.VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
+        (api.pipeline.VIDEOS_DIR / f"{hook['id']}.mp4").write_bytes(_TINY_PNG)
+        _run(api.approve_generation(hook["id"], ApproveSegmentRequest(), ANON))
+
+        # Only now, with a rendered hook in hand, does the founder edit.
+        _run(api.update_studio_project(
+            project_id=project_id,
+            payload=UpdateStudioProjectRequest(hook_line="A completely new hook line."),
+            user_id=ANON))
+        with pytest.raises(HTTPException) as err:
+            _run(api.extend_generation(
+                hook["id"], StudioGenerationRequest(duration_seconds=6), user_id=ANON))
+        assert err.value.status_code == 409
+        assert "no longer matches the script you approved" in err.value.detail
