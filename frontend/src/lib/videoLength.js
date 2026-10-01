@@ -17,8 +17,9 @@
 
 // The hook length is computed from the strategy, recommended and locked —
 // there is no selector and therefore no list of choices. DEFAULT_HOOK is
-// the provisional value before any strategy exists.
-export const DEFAULT_HOOK = 4;
+// the provisional value before any strategy exists: 5s renders natively on
+// the provider's floor, so it needs no trim.
+export const DEFAULT_HOOK = 5;
 
 /**
  * The locked extension length for the next segment.

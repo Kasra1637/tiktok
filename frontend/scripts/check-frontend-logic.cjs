@@ -53,7 +53,10 @@ function loadModule(src = SRC) {
 }
 
 const L = loadModule();
-const SEEDANCE = { min_duration: 4, max_duration: 30 };
+// MiniMax H3 is the only provider: 5s floor, 15s ceiling. WIDE is a generic
+// wide-range capability kept so the floor/trim math is still asserted against
+// two shapes instead of one.
+const WIDE = { min_duration: 4, max_duration: 30 };
 const MINIMAX = { min_duration: 5, max_duration: 15 };
 
 console.log("=".repeat(70));
@@ -74,26 +77,26 @@ check("legacy integer 1 reads as ON", L.readExtendIntent({ extend_intent: 1 }) =
 
 console.log("\nresolveExtendLock — computed, recommended, locked");
 check("next planned beat resolves straight through",
-  JSON.stringify(L.resolveExtendLock(6, 20, SEEDANCE)) === JSON.stringify({ seconds: 6, planned: 6, render: 6, trimTo: 0 }),
-  L.resolveExtendLock(6, 20, SEEDANCE));
+  JSON.stringify(L.resolveExtendLock(6, 20, WIDE)) === JSON.stringify({ seconds: 6, planned: 6, render: 6, trimTo: 0 }),
+  L.resolveExtendLock(6, 20, WIDE));
 check("a remainder smaller than the beat wins (automatic fill)",
-  JSON.stringify(L.resolveExtendLock(8, 3, SEEDANCE)) === JSON.stringify({ seconds: 3, planned: 3, render: 4, trimTo: 3 }),
-  L.resolveExtendLock(8, 3, SEEDANCE));
+  JSON.stringify(L.resolveExtendLock(8, 3, WIDE)) === JSON.stringify({ seconds: 3, planned: 3, render: 4, trimTo: 3 }),
+  L.resolveExtendLock(8, 3, WIDE));
 check("a 3s beat on Seedance records its trim",
-  JSON.stringify(L.resolveExtendLock(3, 0, SEEDANCE)) === JSON.stringify({ seconds: 3, planned: 3, render: 4, trimTo: 3 }),
-  L.resolveExtendLock(3, 0, SEEDANCE));
+  JSON.stringify(L.resolveExtendLock(3, 0, WIDE)) === JSON.stringify({ seconds: 3, planned: 3, render: 4, trimTo: 3 }),
+  L.resolveExtendLock(3, 0, WIDE));
 check("no plan and no remainder is null, never NaN",
-  L.resolveExtendLock(0, 0, SEEDANCE) === null,
-  L.resolveExtendLock(0, 0, SEEDANCE));
+  L.resolveExtendLock(0, 0, WIDE) === null,
+  L.resolveExtendLock(0, 0, WIDE));
 check("a remainder beyond one pass is null, not guessed",
   L.resolveExtendLock(0, 20, MINIMAX) === null,
   L.resolveExtendLock(0, 20, MINIMAX));
 check("garbage inputs are null, never NaN",
-  L.resolveExtendLock("junk", null, SEEDANCE) === null,
-  L.resolveExtendLock("junk", null, SEEDANCE));
+  L.resolveExtendLock("junk", null, WIDE) === null,
+  L.resolveExtendLock("junk", null, WIDE));
 // Whatever comes out must survive JSON, or the server silently substitutes.
 for (const args of [[6, 20], [8, 3], [3, 0]]) {
-  const r = L.resolveExtendLock(args[0], args[1], SEEDANCE);
+  const r = L.resolveExtendLock(args[0], args[1], WIDE);
   const round = JSON.parse(JSON.stringify(r));
   check(`[${args}] survives a JSON round trip`,
     round !== null && Number.isFinite(round.seconds), round);
@@ -101,16 +104,16 @@ for (const args of [[6, 20], [8, 3], [3, 0]]) {
 
 console.log("\nresolveLength");
 check("3s on Seedance renders 4 and trims to 3",
-  JSON.stringify(L.resolveLength(3, SEEDANCE)) === JSON.stringify({ target: 3, render: 4, trimTo: 3 }),
-  L.resolveLength(3, SEEDANCE));
+  JSON.stringify(L.resolveLength(3, WIDE)) === JSON.stringify({ target: 3, render: 4, trimTo: 3 }),
+  L.resolveLength(3, WIDE));
 check("4s on Seedance needs no trim",
-  JSON.stringify(L.resolveLength(4, SEEDANCE)) === JSON.stringify({ target: 4, render: 4, trimTo: 0 }),
-  L.resolveLength(4, SEEDANCE));
+  JSON.stringify(L.resolveLength(4, WIDE)) === JSON.stringify({ target: 4, render: 4, trimTo: 0 }),
+  L.resolveLength(4, WIDE));
 check("4s on MiniMax renders 5 and trims to 4",
   JSON.stringify(L.resolveLength(4, MINIMAX)) === JSON.stringify({ target: 4, render: 5, trimTo: 4 }),
   L.resolveLength(4, MINIMAX));
 check("a 0 or missing target never becomes a 1s clip",
-  L.resolveLength(0, SEEDANCE).render === 4, L.resolveLength(0, SEEDANCE));
+  L.resolveLength(0, WIDE).render === 4, L.resolveLength(0, WIDE));
 
 console.log("\nplannedCoverage");
 check("a fresh 8-beat plan with 1 segment reports 7",

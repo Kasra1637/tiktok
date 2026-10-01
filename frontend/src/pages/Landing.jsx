@@ -266,8 +266,7 @@ const PIPELINE_BLOCKS = [
 
 const MODELS = [
   { label: "Words & analysis", value: "Gemini 2.5 Flash — research, profiles, angles, scripts" },
-  { label: "Video (default)", value: "Seedance 2.5 — one take up to 30s, native sound, 720p" },
-  { label: "Video (alternate)", value: "MiniMax H3 — 2K, but 15 seconds per pass" },
+  { label: "Video", value: "MiniMax H3 — 2K picture, native sound, 5 to 15 seconds per pass; longer videos are built segment by segment" },
   { label: "Finishing touches", value: "Captions and end card, layered on precisely" },
   { label: "Trend spotting", value: "Public TikTok metadata via a research API key — Trend Research tab only" },
 ];
