@@ -145,11 +145,22 @@ const SEGMENT = {
   },
 };
 
-const ASSETS = [{ id: "a1", kind: "character_reference", name: "face.jpg", status: "ready" }];
+// The key is `asset_id`, not `id`: AttachmentRow slices attachment.asset_id for
+// the label, so a fixture using `id` throws on the Assets step.
+const ASSETS = [
+  { asset_id: "a1", kind: "character_reference", label: "face.jpg", status: "ready" },
+];
 
+// template_id and content_angle_id are set because canGenerate is
+// `profileId && templateId`: without them every step correctly refuses to open
+// the paid path, which would make the "paid controls exist" assertions prove
+// nothing.
 const BASE_PROJECT = {
   id: "p1",
   brand_profile_id: "b1",
+  content_angle_id: "a1",
+  template_id: "t1",
+  objective: "address_user_problem",
   status: "draft",
   script_version: 0,
   duration_seconds: 20,
@@ -316,6 +327,10 @@ function load(relPath) {
         Link: ({ children }) => React.createElement("a", { href: "#" }, children),
         useNavigate: () => () => {},
         useSearchParams: () => [searchParams(), () => {}],
+        // The embedded AssetLibrary on the Assets step reads the route, so a
+        // deep link that lands there needs these to exist.
+        useParams: () => ({}),
+        useLocation: () => ({ pathname: "/create", search: searchParams().toString() }),
       };
     }
     if (spec === "sonner") return { toast: { success: () => {}, error: () => {} } };
@@ -374,6 +389,7 @@ async function check(label, fn) {
   } catch (err) {
     console.log(`  [FAIL] ${label}`);
     console.log(`         ${err && err.message ? err.message : String(err)}`);
+    if (process.env.SMOKE_TRACE) console.log(err && err.stack ? err.stack : "");
     failures.push(label);
   }
 }
@@ -407,14 +423,18 @@ const { GenerationPanel } = load("components/GenerationPanel.jsx");
 const { HookContinuityPanel } = load("components/HookContinuityPanel.jsx");
 const CreateVideo = load("pages/CreateVideo.jsx").default;
 
+// The shipped order, in the order the founder walks it. Asserted as a whole
+// sequence rather than a set: the point of the reorder is that the free, claim-
+// checked plan comes before the step that spends money, and a set comparison
+// would pass just as happily if the hook went back to fourth.
 const STEP_LABELS = [
   "App Profile",
   "Audience & goal",
   "Hook template",
   "Assets",
-  "Influencer hook",
   "Creative plan",
   "Review",
+  "Influencer hook",
 ];
 
 const stepSource = fs.readFileSync(path.join(SRC, "pages", "CreateVideo.jsx"), "utf8");
@@ -526,6 +546,91 @@ async function main() {
       if (!ctx.text().trim()) throw new Error("the page rendered nothing");
     });
   }
+
+  // Nothing that costs money may render before the plan has been read. This is
+  // the reorder's whole point, and it is invisible to a type-check: both panels
+  // are still imported and still reachable, just on a later step.
+  await check("no paid control renders before the plan step", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    for (const label of ["App Profile", "Audience & goal", "Hook template", "Assets", "Creative plan"]) {
+      await mount(CreateVideo, {})(ctx);
+      const pill = stepPill(ctx, label);
+      await act(async () => {
+        pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      });
+      await act(async () => {});
+      const text = ctx.text();
+      for (const paid of ["Generate video", "Generate the 5s hook", "Build the app-specific strategy"]) {
+        if (text.includes(paid)) {
+          throw new Error(`step ${JSON.stringify(label)} renders a paid control: ${JSON.stringify(paid)}`);
+        }
+      }
+    }
+  });
+
+  await check("the hook step holds the paid controls once a plan exists", async (ctx) => {
+    // A plan reviewed, no strategy yet: the state the reorder puts the founder
+    // in when they arrive here. Deep-linked so the wizard has that draft.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi(
+        {
+          getStudioProject: async () => ({
+            ...PROJECT_WITH_STRATEGY,
+            strategy: null,
+            strategy_version: 0,
+          }),
+        },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          const pill = stepPill(ctx, "Influencer hook");
+          await act(async () => {
+            pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {});
+        }
+      );
+      if (!ctx.text().includes("Build the app-specific strategy")) {
+        throw new Error("the hook step no longer offers the strategy button");
+      }
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("the hook step refuses to spend without an approved plan", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      // A draft that exists but has no plan: the strategy, the hook render and
+      // the one-pass generation must all stay out of reach.
+      await withApi(
+        { getStudioProject: async () => ({ ...BASE_PROJECT, script_version: 0, script: "" }) },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          const pill = stepPill(ctx, "Influencer hook");
+          await act(async () => {
+            pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {});
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+    const text = ctx.text();
+    if (!text.includes("no plan yet")) {
+      throw new Error(
+        `the hook step does not explain that a plan comes first; it rendered: ${JSON.stringify(
+          text.slice(300, 800)
+        )}`
+      );
+    }
+    for (const paid of ["Build the app-specific strategy", "Generate the 5s hook", "Generate video"]) {
+      if (text.includes(paid)) {
+        throw new Error(`the hook step offers ${JSON.stringify(paid)} with no approved plan`);
+      }
+    }
+  });
 
   await check("wizard deep-links to a drafted project and lands on the right step", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";

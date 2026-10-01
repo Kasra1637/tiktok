@@ -31,17 +31,29 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+// The order is the product, and it is deliberate.
+//
+//   profile -> angle -> template -> assets -> plan -> review -> hook
+//
+// The script is written, checked for banned claims and read by the founder
+// BEFORE any video is paid for. The hook step then renders the video that
+// script describes: the strategy is built from the approved plan, so the words
+// the founder read are the words that get rendered.
+//
+// This was the other way round. The hook came first, so a founder approved a
+// strategy on trust, spent money on a render, and only then read a script
+// describing a different video — with the claim check and the SafetyPanel
+// running against text nobody had looked at before the spend.
 const STEPS = [
   { key: "profile", label: "App Profile", icon: Briefcase },
   { key: "angle", label: "Audience & goal", icon: Target },
   { key: "template", label: "Hook template", icon: LayoutTemplate },
   { key: "assets", label: "Assets", icon: ImageIcon },
-  // The hook is validated before the full script is written, because a 3s
-  // concept is the cheapest possible test of whether the strategy works. This
-  // step is skippable: the one-pass plan flow below is still a complete path.
-  { key: "hook", label: "Influencer hook", icon: Sparkles },
   { key: "plan", label: "Creative plan", icon: FileText },
   { key: "review", label: "Review", icon: CheckCircle2 },
+  // Last, because this is the only step that spends money. The plan above is
+  // free text, and it is what this step renders.
+  { key: "hook", label: "Influencer hook", icon: Sparkles },
 ];
 
 function formatTemplateUse(n) {
@@ -385,9 +397,10 @@ export default function CreateVideo() {
             setTone(draft.tone || "");
             setRecommendations([]);
             setEdits({});
-            // A duplicate always arrives with its plan intact; an unplanned
-            // draft still needs assets before a plan can be generated.
-            setStep(draft.script_version > 0 ? 6 : 3);
+            // A duplicate always arrives with its plan intact, so it opens on
+            // Review; an unplanned draft still needs assets before a plan can
+            // be written.
+            setStep(draft.script_version > 0 ? 5 : 3);
           } catch (err) {
             if (cancelled) return;
             setError(getErrorMessage(err));
@@ -627,7 +640,9 @@ export default function CreateVideo() {
       });
       setProject(updated);
       setEdits({});
-      setStep(6);
+      // Straight to Review: the plan is the thing to read, and the hook step
+      // below it is the first one that spends money.
+      setStep(5);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -1103,12 +1118,12 @@ export default function CreateVideo() {
       );
     }
 
-    if (step === 4) {
+    if (step === 6) {
       return (
         <StepShell
           icon={Sparkles}
           title="Influencer hook"
-          description="Build the app-specific strategy, render a short hook with your uploaded person in it, then extend it while the same character and scene carry through. Skippable — the creative plan below still produces a complete one-pass video."
+          description="Build the strategy from the plan you approved, render a short hook with your uploaded person in it, then extend it while the same character and scene carry through. The hook follows your script rather than replacing it."
         >
           <div className="space-y-3">
             {!canGenerate ? (
@@ -1142,23 +1157,54 @@ export default function CreateVideo() {
                 </Button>
               </div>
             ) : (
-              <HookContinuityPanel
-                project={project}
-                onProjectChange={setProject}
-                onGenerationChange={() => {}}
-              />
+              <>
+                {!project?.script_version ? (
+                  <div className="rounded-xl border border-[color:var(--hairline)] p-4">
+                    <p className="text-sm text-muted-foreground">
+                      There is no plan yet, so there are no approved words to render. Generate
+                      and review a creative plan first — it costs nothing, and it is what the
+                      strategy below is built from.
+                    </p>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="mt-3"
+                      disabled={busy}
+                      onClick={() => setStep(4)}
+                    >
+                      Go to the plan step
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <HookContinuityPanel
+                      project={project}
+                      onProjectChange={setProject}
+                      onGenerationChange={() => {}}
+                    />
+                    {/* The one-pass render of the same approved script, for a
+                        founder who does not want the segmented chain. It was on
+                        the review step, where it let money be spent on text the
+                        founder had not read yet. */}
+                    <GenerationPanel
+                      project={project}
+                      onGenerationChange={() => {}}
+                    />
+                  </>
+                )}
+              </>
             )}
           </div>
         </StepShell>
       );
     }
 
-    if (step === 5) {
+    if (step === 4) {
       return (
         <StepShell
           icon={FileText}
           title="Generate the creative plan"
-          description="This writes your hook, script, shot timeline, overlays, and CTA. It costs no video generation."
+          description="This writes your hook, script, shot timeline, overlays, and CTA, and checks every claim in it. Free — no video is generated until you have read it on the next step."
         >
           <div className="space-y-3">
             <Button
@@ -1186,20 +1232,20 @@ export default function CreateVideo() {
       );
     }
 
-    // Review step
-    return (
-      <StepShell
-        icon={CheckCircle2}
-        title="Review and edit"
-        description="Everything is editable. The claim check re-runs on every edit."
-      >
+    if (step === 5) {
+      return (
+        <StepShell
+          icon={CheckCircle2}
+          title="Review and edit"
+          description="Everything is editable. The claim check re-runs on every edit, and the hook step below renders this script rather than replacing it."
+        >
         {!project?.script_version ? (
           <EmptyState
             icon={FileText}
             title="No plan yet"
             description="Generate a creative plan to review it here."
             action={
-              <Button variant="brand" onClick={() => setStep(5)}>
+              <Button variant="brand" onClick={() => setStep(4)}>
                 Go to plan step
               </Button>
             }
@@ -1400,14 +1446,30 @@ export default function CreateVideo() {
               onGoToAssets={() => setStep(3)}
             />
 
-            {/* The influencer hook, strategy, and segment chain live on their own
-                step. The one-pass GenerationPanel stays here. */}
-            <GenerationPanel
-              project={project}
-              onGenerationChange={() => {}}
-            />
+            {/* Nothing that spends money renders on this step. GenerationPanel
+                and the segment chain both live on the hook step below, so the
+                claim check above has been read before any render is paid for. */}
+            <p className="text-sm text-muted-foreground">
+              Read the script and the claim check above, then open the Influencer hook step to
+              render it. Nothing is generated from this page.
+            </p>
           </div>
         )}
+        </StepShell>
+      );
+    }
+
+    // The hook step is the last one, and the only one that spends money. A
+    // founder cannot reach it by falling through from Review; the explicit
+    // `step === 6` above handles it, and this guards against a step index that
+    // is out of range rendering nothing at all.
+    return (
+      <StepShell
+        icon={Sparkles}
+        title="Influencer hook"
+        description="Build the strategy from the plan you approved, then render it."
+      >
+        <p className="text-sm text-muted-foreground">This step is unavailable.</p>
       </StepShell>
     );
   }
