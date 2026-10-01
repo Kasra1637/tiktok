@@ -53,6 +53,30 @@ TESTIMONIAL_PATTERNS = [
     r"\b#1 (?:app|download)\b",
 ]
 
+# First-person experience claims by the on-camera presenter.
+#
+# The presenter is an AI stand-in for the founder's photograph, and nothing in
+# the system records their real relationship to the product -- a founder-entered
+# "are you a nurse who uses this?" field was considered and dropped, because
+# asking a model for a fact only a person can supply is how you get a confident
+# wrong answer. So the honest move is to forbid the claim outright rather than
+# gate it on a field the model might contradict.
+#
+# Without this, a strategy that omits the relationship leaves the model to invent
+# one and then write "I've used this every shift for two years" from a face that
+# has never held anything. A real user-presenter loses the ability to say "I use
+# this too", which is the right trade: an invented testimonial is far worse than
+# a missing one.
+FIRST_PERSON_PATTERNS = [
+    r"\bi (?:have |'ve )?(?:been )?use[sd]?\b",
+    r"\bi (?:use|used|rely on|rely on it|depend on)\b",
+    r"\bi (?:swear|promise|guarantee)\b",
+    r"\bas an? \w+,? i\b",
+    r"\bmy (?:patients|clients|customers|students|team) (?:say|told me|use)\b",
+    r"\bi built (?:this|it)\b",
+    r"\bwe (?:built|developed|shipped) (?:this|it)\b",
+]
+
 # Disclosure words that, when present, soften a regulated claim.
 DISCLOSURE_MARKERS = (
     "not medical advice",
@@ -181,6 +205,18 @@ def find_risk_patterns(text: str) -> list:
                 "claim": match.group(0),
                 "reason": "implies social proof the app may not have",
             })
+
+    # Reported separately from the social-proof warnings above because the
+    # remedy is different: this is not the app's proof, it is the presenter
+    # claiming a personal history nothing on file can support.
+    for pattern in FIRST_PERSON_PATTERNS:
+        match = re.search(pattern, blob)
+        if match:
+            warnings.append({
+                "claim": match.group(0),
+                "reason": "first-person experience claim the presenter cannot substantiate",
+            })
+            break
 
     return warnings
 

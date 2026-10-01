@@ -157,20 +157,25 @@ export default function AppProfileDetail() {
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [drafts, setDrafts] = useState([]);
+  const [whatWorks, setWhatWorks] = useState(null);
 
   const load = useCallback(async () => {
     try {
-      const [p, a, d] = await Promise.all([
+      const [p, a, d, w] = await Promise.all([
         api.getAppProfile(profileId),
         api.getContentAngles(profileId).catch(() => ({ angles: [] })),
         // A profile is reusable for as many videos as you want, so the page
         // shows the drafts already built on it. Scoped by brand_profile_id, and
         // the backend filters on the caller's user_id too.
         api.getStudioProjects({ brand_profile_id: profileId }).catch(() => ({ projects: [] })),
+        // Aggregate only, and manual entries only. A missing signal is the
+        // expected case for a new profile, so it is not an error.
+        api.getProfileWhatWorks(profileId).catch(() => null),
       ]);
       setProfile(p);
       setAngles(a.angles || []);
       setDrafts(d.projects || []);
+      setWhatWorks(w);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -348,6 +353,42 @@ export default function AppProfileDetail() {
               label="Never show in the video (enforced)"
               items={list(profile?.must_not_show)}
             />
+            <ListBlock label="When the app is reached for" items={list(profile?.usage_moments)} />
+            <Field label="The proof moment" value={profile?.proof_moment} />
+          </div>
+
+          {/* The only part of the profile that improves with use. Everything
+              above was scraped once from the URL; this is the founder's own
+              numbers on their own videos, and the next strategy prompt reads
+              it. Aggregate per template, so it is evidence of what carried
+              views rather than a ranking of hooks. */}
+          <div className="surface space-y-3 rounded-2xl p-5">
+            <span className="eyebrow flex items-center gap-1.5">
+              <Target className="h-3 w-3" /> What has worked here
+            </span>
+            {!whatWorks || !whatWorks.has_signal ? (
+              <p className="text-sm text-muted-foreground">
+                Nothing recorded yet. Add view numbers to a finished video and the next strategy
+                will know which of this app&apos;s openings actually carried them.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Across {whatWorks.videos} recorded video(s). View counts only — not proof that one
+                  template is better.
+                </p>
+                <dl className="space-y-1.5 text-sm">
+                  {(whatWorks.top || []).map((row) => (
+                    <div key={row.template_id} className="flex items-baseline justify-between gap-3">
+                      <dt className="min-w-0 truncate">{row.template_id}</dt>
+                      <dd className="shrink-0 text-muted-foreground">
+                        {row.views.toLocaleString()} views · save {Math.round(row.save_rate * 100)}%
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </>
+            )}
           </div>
 
           <div className="surface space-y-4 rounded-2xl p-5">

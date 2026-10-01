@@ -421,6 +421,8 @@ async def init_db():
                 competitors TEXT,
                 known_limitations TEXT,
                 must_not_show TEXT,
+                usage_moments TEXT,
+                proof_moment TEXT,
                 claims_approved TEXT,
                 claims_review TEXT,
                 claims_banned TEXT,
@@ -968,7 +970,7 @@ async def init_db():
             "appstore_url", "play_url", "support_urls", "notes", "app_category",
             "platforms", "core_features", "primary_use_cases",
             "problems_solved", "icp_segments", "desired_outcomes", "competitors",
-            "known_limitations", "must_not_show",
+            "known_limitations", "must_not_show", "usage_moments", "proof_moment",
             "claims_approved", "claims_review",
             "claims_banned", "ctas", "video_themes", "status",
             "approved_at", "last_research_at", "research_sources",
@@ -5431,10 +5433,11 @@ async def create_brand(payload: BrandProfileCreateRequest, user_id: str = Depend
              appstore_url, play_url, support_urls, notes, app_category, platforms,
              core_features, primary_use_cases, problems_solved,
              icp_segments, desired_outcomes, competitors, known_limitations,
-             must_not_show, claims_approved, claims_review, claims_banned,
+             must_not_show, usage_moments, proof_moment,
+             claims_approved, claims_review, claims_banned,
              status, version)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (brand_id, website or None, name, payload.brand_description or "",
          payload.niche or "",
          payload.target_audience or "", payload.ideal_customer_profile or "",
@@ -5453,6 +5456,8 @@ async def create_brand(payload: BrandProfileCreateRequest, user_id: str = Depend
          json.dumps(_normalize_str_list(payload.competitors)),
          payload.known_limitations or "",
          json.dumps(_normalize_str_list(payload.must_not_show)),
+         json.dumps(_normalize_str_list(payload.usage_moments)),
+         payload.proof_moment or "",
          json.dumps(_normalize_str_list(payload.claims_approved)),
          json.dumps(_normalize_str_list(payload.claims_review)),
          json.dumps(_normalize_str_list(payload.claims_banned)),
@@ -5611,11 +5616,13 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
              appstore_url, play_url, support_urls, notes, app_category, platforms,
              core_features, primary_use_cases, problems_solved,
              icp_segments, desired_outcomes, competitors, known_limitations,
-             must_not_show, claims_approved, claims_review, claims_banned,
+             must_not_show, usage_moments, proof_moment,
+             claims_approved, claims_review, claims_banned,
              status, version, last_research_at, research_sources)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (brand_id, website, profile.get("brand_name") or "Untitled app",
+
          profile.get("brand_description") or "", profile.get("niche") or "",
          profile.get("target_audience") or "",
          profile.get("ideal_customer_profile") or "",
@@ -5632,6 +5639,8 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
          json.dumps(profile.get("competitors") or []),
          profile.get("known_limitations") or "",
          json.dumps(profile.get("must_not_show") or []),
+         json.dumps(profile.get("usage_moments") or []),
+         profile.get("proof_moment") or "",
          json.dumps(profile.get("claims_approved") or []),
          json.dumps(profile.get("claims_review") or []),
          json.dumps(profile.get("claims_banned") or []),
@@ -5666,6 +5675,44 @@ async def get_app_profile(profile_id: str, user_id: str = Depends(get_current_us
     if not profile:
         raise HTTPException(status_code=404, detail="App Profile not found")
     return profile
+
+
+@api_router.get("/app-profiles/{profile_id}/what-works")
+async def get_profile_what_works(profile_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Which of this app's own templates actually carried views, and which did not.
+
+    Read-only and aggregate. The App Profile is scraped once and then goes
+    stale, so this is the only field on it that improves with use: after ten
+    posts the founder's own numbers say which openings work here, and the next
+    strategy prompt reads them.
+
+    No video text, caption, or source URL is returned or read. Only per-template
+    counts, and only from manual entries -- so a future automated import cannot
+    quietly become an input to generation.
+    """
+    profile = await _fetch_one(
+        "SELECT id FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="App Profile not found")
+    summary = feedback_mod.summarize_proved_hooks(
+        await _fetch_all(
+            "SELECT g.template_id AS template_id, e.views AS views, e.likes AS likes, "
+            "e.comments AS comments, e.shares AS shares, e.saves AS saves, e.source AS source "
+            "FROM performance_entries e "
+            "LEFT JOIN generations g ON g.id = e.generation_id "
+            "WHERE e.brand_profile_id = ? AND e.user_id = ? "
+            "ORDER BY e.created_at DESC LIMIT 500",
+            (profile_id, user_id),
+        )
+    )
+    return {
+        "has_signal": summary["has_signal"],
+        "videos": summary["videos"],
+        "top": summary["top"],
+        "bottom": summary["bottom"],
+    }
 
 
 @api_router.patch("/app-profiles/{profile_id}")
@@ -8064,6 +8111,24 @@ async def generate_project_strategy(
         template.get("id") or "",
     )
 
+    # What this app's own finished videos actually did. The one signal in the
+    # system that improves with use: everything else on the profile is scraped
+    # once and then goes stale, so the model has no way to learn which openings
+    # worked here. Aggregate per-template counts only, and manual entries only --
+    # no video text, caption or source URL, and a future automated import cannot
+    # quietly feed itself into generation.
+    proved_hooks = feedback_mod.summarize_proved_hooks(
+        await _fetch_all(
+            "SELECT g.template_id AS template_id, e.views AS views, e.likes AS likes, "
+            "e.comments AS comments, e.shares AS shares, e.saves AS saves, e.source AS source "
+            "FROM performance_entries e "
+            "LEFT JOIN generations g ON g.id = e.generation_id "
+            "WHERE e.brand_profile_id = ? AND e.user_id = ? "
+            "ORDER BY e.created_at DESC LIMIT 500",
+            (row.get("brand_profile_id"), user_id),
+        )
+    )
+
     # The founder-approved creative plan, when one exists. The plan is written
     # and reviewed before the first paid render, so the strategy has to produce
     # THAT video. Without this the founder approved a script and then paid for a
@@ -8095,6 +8160,7 @@ async def generate_project_strategy(
                 brand_voice=profile.get("tone_voice") or "",
                 profile_feedback=profile_feedback,
                 plan=approved_plan,
+                proved_hooks=proved_hooks,
             ),
             user_id,
             brand_profile_id=row.get("brand_profile_id"),

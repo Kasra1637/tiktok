@@ -367,6 +367,128 @@ def template_feedback_adjustment(events, template_id: str) -> dict:
     return facts
 
 
+def summarize_proved_hooks(rows) -> dict:
+    """
+    What this app's own finished videos actually did, from manual performance.
+
+    This is the only signal in the system that improves with use. Everything
+    else on the App Profile is scraped once and then goes stale: the model
+    guesses which hook language sounds right, and nothing corrects it. Here the
+    founder's own numbers say which templates and which openings carried a video.
+
+    `rows` are the result of joining performance_entries to generations, which
+    is where template_id lives -- an entry is a performance number against a
+    render, and the render is what knows which template it used.
+
+    Deliberately aggregate and anonymous. No video text, caption or source URL is
+    read, only per-template counts, so nothing about a specific published video
+    reaches a prompt. `source` is respected rather than trusted: an entry not
+    marked manual is excluded, because a future automated import must not be
+    able to quietly feed itself into generation.
+
+    Returns an empty "no signal" shape rather than an invented best performer
+    when there is not enough data to say anything -- one view is not evidence,
+    and a confident-sounding wrong claim here would be worse than silence.
+    """
+    per_template = {}
+    total = 0
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("source") or "manual") != "manual":
+            continue
+        try:
+            views = int(row.get("views") or 0)
+        except (TypeError, ValueError):
+            views = 0
+        if views <= 0:
+            # A like or a save with no view count cannot be ranked against
+            # anything, and treating it as one would invent a rate.
+            continue
+        key = str(row.get("template_id") or "").strip() or "(untemplated)"
+        bucket = per_template.setdefault(
+            key,
+            {"template_id": key, "views": 0, "likes": 0, "shares": 0, "saves": 0, "videos": 0},
+        )
+        for field in ("views", "likes", "comments", "shares", "saves"):
+            try:
+                bucket[field] = bucket.get(field, 0) + int(row.get(field) or 0)
+            except (TypeError, ValueError):
+                pass
+        bucket["videos"] += 1
+        total += 1
+
+    if total == 0:
+        return {"has_signal": False, "videos": 0, "top": [], "bottom": []}
+
+    ranked = sorted(
+        per_template.values(),
+        key=lambda b: (-b["views"], b["template_id"]),
+    )
+
+    def _rate(bucket, field):
+        return round(bucket.get(field, 0) / bucket["views"], 4) if bucket["views"] else 0.0
+
+    def _shape(bucket):
+        return {
+            "template_id": bucket["template_id"],
+            "videos": bucket["videos"],
+            "views": bucket["views"],
+            "save_rate": _rate(bucket, "saves"),
+            "share_rate": _rate(bucket, "shares"),
+        }
+
+    return {
+        "has_signal": True,
+        "videos": total,
+        "top": [_shape(b) for b in ranked[:3]],
+        "bottom": [_shape(b) for b in reversed(ranked[-2:])] if len(ranked) > 1 else [],
+    }
+
+
+def build_proved_hooks_section(summary: dict) -> str:
+    """
+    Render the aggregate as prompt context, or say plainly that there is none.
+
+    Silence is the honest output for a new app. A prompt that says "the founder
+    found nothing yet" tells the model to rely on the app's own facts, which is
+    the correct instruction -- whereas an invented best performer would be
+    indistinguishable from a real one by the time it reaches generation.
+    """
+    summary = summary or {}
+    if not summary.get("has_signal"):
+        return (
+            "PAST PERFORMANCE: none recorded for this app yet. There is no evidence "
+            "about which openings work, so rely on the verified facts and do not "
+            "assume any approach is proven."
+        )
+
+    def _describe(item):
+        return (
+            f"{item['template_id']} ({item['videos']} video(s), {item['views']} views, "
+            f"save rate {item['save_rate']}, share rate {item['share_rate']})"
+        )
+
+    lines = [
+        f"PAST PERFORMANCE for this app across {summary['videos']} recorded video(s), "
+        "from the founder's own numbers:",
+    ]
+    top = summary.get("top") or []
+    if top:
+        lines.append("Carried the most views: " + "; ".join(_describe(i) for i in top) + ".")
+    bottom = summary.get("bottom") or []
+    if bottom:
+        lines.append(
+            "Underperformed: " + "; ".join(_describe(i) for i in bottom)
+            + ". Do not reuse these openings; the numbers are the founder's, not an estimate."
+        )
+    lines.append(
+        "This is view-count evidence only, not a claim that one template is better. "
+        "Use it to avoid repeating what already flopped, not as proof."
+    )
+    return "\n".join(lines)
+
+
 def build_profile_feedback_section(summary: dict) -> str:
     """
     Render feedback as prompt context without leaking free text.

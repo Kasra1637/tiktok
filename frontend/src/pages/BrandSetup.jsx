@@ -21,6 +21,8 @@ const EMPTY_FORM = {
   primary_use_cases: "",
   problems_solved: "",
   must_not_show: "",
+  usage_moments: "",
+  proof_moment: "",
   desired_outcomes: "",
   competitors: "",
   target_audience: "",
@@ -70,6 +72,8 @@ function profileToForm(data) {
     primary_use_cases: productsToText(data.primary_use_cases),
     problems_solved: productsToText(data.problems_solved),
     must_not_show: productsToText(data.must_not_show),
+    usage_moments: productsToText(data.usage_moments),
+    proof_moment: data.proof_moment || "",
     desired_outcomes: productsToText(data.desired_outcomes),
     competitors: productsToText(data.competitors),
     target_audience: data.target_audience || "",
@@ -235,6 +239,8 @@ export default function BrandSetup() {
         primary_use_cases: textToProducts(form.primary_use_cases),
         problems_solved: textToProducts(form.problems_solved),
         must_not_show: textToProducts(form.must_not_show),
+        usage_moments: textToProducts(form.usage_moments),
+        proof_moment: form.proof_moment,
         desired_outcomes: textToProducts(form.desired_outcomes),
         competitors: textToProducts(form.competitors),
         target_audience: form.target_audience,
@@ -635,6 +641,37 @@ export default function BrandSetup() {
                   placeholder={"One per line, e.g.\nA hospital corridor\nA competitor's app icon\nAnyone under 18"}
                   className="min-h-[80px]"
                   data-testid="app-must-not-show-field"
+                />
+              </Field>
+
+              {/* These two exist because the strategy asks for a scene and a
+                  demonstration, and no profile field supplied either. The model
+                  was inventing a kitchen at 7am for every app and then being
+                  told to "show it in use" with nothing saying what that is. */}
+              <Field
+                label="When is the app reached for?"
+                hint="Concrete moments, not categories — these set the scene the video is shot in."
+              >
+                <Textarea
+                  value={productsToText(form.usage_moments)}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, usage_moments: e.target.value }))
+                  }
+                  placeholder={"One per line, e.g.\nEnd of a night shift\n7am before the house wakes up\nPayday"}
+                  className="min-h-[80px]"
+                  data-testid="app-usage-moments-field"
+                />
+              </Field>
+
+              <Field
+                label="The proof moment"
+                hint="One moment the camera can film that makes the main claim believable."
+              >
+                <Input
+                  value={form.proof_moment}
+                  onChange={handleFieldChange("proof_moment")}
+                  placeholder="e.g. The envelope splits the moment the transfer lands"
+                  data-testid="app-proof-moment-field"
                 />
               </Field>
 

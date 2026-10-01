@@ -112,14 +112,14 @@ REQUIRED_APP_PROFILE_KEYS = {
     "core_features", "primary_use_cases", "problems_solved",
     "target_audience", "ideal_customer_profile",
     "icp_segments", "desired_outcomes", "differentiation", "competitors",
-    "known_limitations", "must_not_show", "tone_voice",
-    "claims_approved", "claims_review", "claims_banned",
+    "known_limitations", "must_not_show", "usage_moments", "proof_moment",
+    "tone_voice", "claims_approved", "claims_review", "claims_banned",
 }
 
 APP_PROFILE_LIST_KEYS = (
     "platforms", "core_features", "primary_use_cases", "problems_solved",
     "icp_segments", "desired_outcomes", "competitors", "must_not_show",
-    "claims_approved", "claims_review", "claims_banned",
+    "usage_moments", "claims_approved", "claims_review", "claims_banned",
 )
 
 
@@ -1502,6 +1502,13 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         'phrase a camera could actually depict: a specific setting, a demographic stereotype, a '
         'competitor product, a document or screen, a body part, a place this app has nothing to '
         'do with. Empty list if none apply"],\n'
+        '  "usage_moments": ["the specific situations when this app is actually reached for, '
+        'each a concrete moment with a time and a trigger: end of a night shift, 7am before the '
+        'house wakes up, payday, the 3pm slump. Not categories -- moments. 3-5, or empty"],\n'
+        '  "proof_moment": "the ONE thing a camera can film that makes this app\'s main claim '
+        'believable -- the moment the user sees the result happen. One sentence, present tense, '
+        'filmmable: \'the envelope splits the moment the transfer lands\'. Empty string if the '
+        'sources do not state one",\n'
         '  "tone_voice": "short description of the brand voice",\n'
         '  "claims_approved": ["factual claims safe to use in promos"],\n'
         '  "claims_review": ["claims that need verification before use (ratings, counts, results)"],\n'
@@ -2267,6 +2274,7 @@ async def generate_video_strategy(
     brand_voice: str = "",
     profile_feedback: Optional[dict] = None,
     plan: Optional[dict] = None,
+    proved_hooks: Optional[dict] = None,
 ) -> dict:
     """
     Turn an App Profile into a video strategy specific to THIS app.
@@ -2327,6 +2335,13 @@ async def generate_video_strategy(
         "differentiators": profile.get("differentiation") or "(unstated)",
         "competitors": _list("competitors"),
         "limitations": profile.get("known_limitations") or "(none recorded)",
+        # These two exist because the strategy schema asks for a scene and a
+        # hook action, and until now no profile field supplied either. The model
+        # had to invent a setting (a kitchen at 7am, regardless of the app) and
+        # a demonstration (whatever "show it in use" meant to it). Both are
+        # product facts the app's own copy usually states.
+        "usage_moments": _list("usage_moments"),
+        "proof_moment": str(profile.get("proof_moment") or "").strip() or "(unstated)",
     }
 
     mechanism = {
@@ -2410,6 +2425,16 @@ async def generate_video_strategy(
             f"{feedback.build_profile_feedback_section(profile_feedback)}\n"
         )
 
+    # Always emitted, even when empty. build_proved_hooks_section returns an
+    # explicit no-signal sentence for a new app, and that sentence is the
+    # instruction that matters: rely on the verified facts, assume nothing is
+    # proven. Omitting the block instead would leave the model with no signal
+    # and no acknowledgement of its absence.
+    proved_context = (
+        "\n\n"
+        f"{feedback.build_proved_hooks_section(proved_hooks or {})}\n"
+    )
+
     system_message = (
         "You are the creative director for a short-form video campaign promoting one "
         "specific mobile app. You produce an app-specific video strategy: the hook "
@@ -2431,7 +2456,8 @@ async def generate_video_strategy(
         f"CREATIVE BRIEF:\n{json.dumps(brief, indent=2)}\n\n"
         f"CLAIM RULES:\n{json.dumps(claim_rules, indent=2)}\n"
         f"{approved_plan_context}"
-        f"{feedback_context}\n"
+        f"{feedback_context}"
+        f"{proved_context}\n"
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
         '  "strategy_summary": "2-3 sentences on the strategy for THIS app and why it fits THIS audience",\n'
@@ -2532,6 +2558,18 @@ async def generate_video_strategy(
         "founder's photograph, not from anything written here.\n"
         "- Every segment must be satisfiable using only the verified facts above. Put anything that would need a "
         "claim from needs_review into do_not_repeat or omit it entirely.\n"
+        # The two fields that close the gaps the schema otherwise leaves to
+        # invention. Phrased as obligations, not suggestions: a field the model
+        # may use or ignore is the same as no field at all.
+        "- scene.setting must come from usage_moments. Those are the specific moments this app "
+        "is reached for, and they are the only evidence of when and where a viewer would use "
+        "it. Do not default to a generic kitchen, desk or morning routine. If usage_moments is "
+        "empty, state that the moment is unspecified in the setting rather than inventing a "
+        "plausible one.\n"
+        "- proof_moment is the one moment the camera must film that makes the main claim "
+        "believable, and at least one segment must show it happening rather than describing it "
+        "while something unrelated occurs on screen. If proof_moment is unstated, show the "
+        "earliest visible result of the primary feature instead.\n"
         "- Never promise a guaranteed outcome, never invent a testimonial, a rating or a "
         "review, and never state a price, plan name or trial term — the App Profile carries "
         "none, so nothing could verify it.\n"

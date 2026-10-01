@@ -18,7 +18,8 @@ def row_to_dict(row, columns: list) -> dict:
         # App Profile (brand_profiles) structured fields
         "support_urls", "platforms", "core_features", "primary_use_cases",
         "problems_solved", "icp_segments", "desired_outcomes", "competitors",
-        "must_not_show", "claims_approved", "claims_review", "claims_banned",
+        "must_not_show", "usage_moments", "claims_approved",
+        "claims_review", "claims_banned",
         "ctas", "video_themes", "research_sources", "pending_research",
         # Hook Template Library (hook_templates) structured fields
         "app_categories", "audiences", "required_assets", "content_slots",
@@ -104,14 +105,15 @@ class ApproveAppProfileRequest(BaseModel):
 APP_PROFILE_LIST_FIELDS = (
     "support_urls", "platforms", "core_features", "primary_use_cases",
     "problems_solved", "icp_segments", "desired_outcomes", "competitors",
-    "must_not_show", "claims_approved", "claims_review", "claims_banned",
+    "must_not_show", "usage_moments", "claims_approved",
+    "claims_review", "claims_banned",
 )
 
 APP_PROFILE_TEXT_FIELDS = (
     "website_url", "appstore_url", "play_url", "notes", "brand_name",
     "brand_description", "niche", "app_category", "target_audience",
     "ideal_customer_profile", "differentiation", "tone_voice",
-    "known_limitations", "raw_extracted_text",
+    "known_limitations", "proof_moment", "raw_extracted_text",
 )
 
 APP_PROFILE_EDITABLE_FIELDS = APP_PROFILE_TEXT_FIELDS + APP_PROFILE_LIST_FIELDS
@@ -150,6 +152,8 @@ class BrandProfileCreateRequest(BaseModel):
     # the plan and strategy; this one is attached to the render that could
     # violate it, on every segment.
     must_not_show: Optional[List[str]] = None
+    usage_moments: Optional[List[str]] = None
+    proof_moment: Optional[str] = ""
     claims_approved: Optional[List[str]] = None
     claims_review: Optional[List[str]] = None
     claims_banned: Optional[List[str]] = None
@@ -180,6 +184,8 @@ class BrandProfileUpdateRequest(BaseModel):
     competitors: Optional[List[str]] = None
     known_limitations: Optional[str] = None
     must_not_show: Optional[List[str]] = None
+    usage_moments: Optional[List[str]] = None
+    proof_moment: Optional[str] = None
     claims_approved: Optional[List[str]] = None
     claims_review: Optional[List[str]] = None
     claims_banned: Optional[List[str]] = None

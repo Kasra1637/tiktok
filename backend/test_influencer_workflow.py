@@ -1746,3 +1746,273 @@ class TestStrategyGoesStaleWhenTheScriptIsEdited:
                 hook["id"], StudioGenerationRequest(duration_seconds=6), user_id=ANON))
         assert err.value.status_code == 409
         assert "no longer matches the script you approved" in err.value.detail
+
+class TestUsageMomentsAndProofMoment:
+    """
+    The strategy schema asks for a scene and a hook action, and until these two
+    fields existed no profile field supplied either.
+
+    The model was inventing a setting -- a kitchen at 7am, for every app
+    regardless of what the app was -- and being told to "show the feature in
+    use" with nothing telling it what that looks like. Both are product facts
+    the app's own copy usually states, which is why they are research-filled
+    rather than founder-entered.
+    """
+
+    def _capture(self, monkeypatch, **overrides):
+        import ai_service
+        captured = {}
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return {
+                "strategy_summary": "s", "audience_problem": "p",
+                "emotional_triggers": ["t"], "hook_concept": "c",
+                "hook_line": "h", "hook_promise": "p", "hook_action": "a",
+                "messaging_pillars": ["m"], "primary_feature": "f",
+                "desired_outcome": "o", "differentiation_beat": "b",
+                "cta_strategy": "c", "scene": {"environment": "kitchen"},
+                "performance": {"movement": "still"},
+                "segments": [{"index": 0, "role": "hook", "seconds": 5,
+                              "goal": "g", "script": "s", "action": "a"}],
+                "continuity_contract": {
+                    "established": [], "must_not_change": [], "do_not_repeat": [],
+                },
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        profile = {
+            "brand_name": "ShiftLog",
+            "core_features": ["One-tap shift logging"],
+            "usage_moments": ["End of a night shift", "Handover at 7am"],
+            "proof_moment": "One tap and the shift is on the log",
+        }
+        profile.update(overrides)
+        asyncio.run(ai_service.generate_video_strategy(
+            profile=profile,
+            template={"name": "Stop Doing This", "content_slots": {}},
+            angle=None, objective="address_user_problem",
+            hook_seconds=5, total_duration=20, tone="", brand_voice="",
+            profile_feedback={},
+        ))
+        return captured
+
+    def test_both_reach_the_strategy_prompt(self, monkeypatch):
+        captured = self._capture(monkeypatch)
+        assert "End of a night shift" in captured["prompt"]
+        assert "One tap and the shift is on the log" in captured["prompt"]
+
+    def test_they_are_obligations_not_suggestions(self, monkeypatch):
+        """
+        The directive matters as much as the data. A field the model may use or
+        ignore is the same as no field, and this one exists because the model
+        was defaulting to a plausible generic setting.
+        """
+        captured = self._capture(monkeypatch)
+        assert "scene.setting must come from usage_moments" in captured["prompt"]
+        assert "proof_moment is the one moment the camera must film" in captured["prompt"]
+
+    def test_an_empty_profile_does_not_invent_a_setting_silently(self, monkeypatch):
+        """
+        With nothing recorded, the prompt has to say the moment is unspecified
+        rather than letting a default through. "Unstated" is the honest value
+        and the directive tells the model to pass it on.
+        """
+        captured = self._capture(
+            monkeypatch, usage_moments=[], proof_moment="",
+        )
+        assert '"usage_moments": []' in captured["prompt"]
+        assert '"proof_moment": "(unstated)"' in captured["prompt"]
+        assert "state that the moment is unspecified" in captured["prompt"]
+
+
+class TestProvedHooksReachThePrompt:
+    """
+    The founder's own recorded numbers, aggregated per template.
+
+    Everything else on the App Profile is scraped once and then goes stale, so
+    the model has no way to learn which openings work for THIS app. This is the
+    one signal that improves with use, and until now it was displayed on a page
+    and read by no prompt.
+    """
+
+    def test_no_history_says_so_explicitly(self):
+        """
+        Silence is the honest output for a new app, and the sentence matters:
+        "nothing recorded yet, do not assume anything is proven" is the correct
+        instruction. An invented best performer would be indistinguishable from
+        a real one by the time it reached generation.
+        """
+        import feedback
+        text = feedback.build_proved_hooks_section(
+            feedback.summarize_proved_hooks([])
+        )
+        assert "none recorded" in text
+        assert "do not" in text and "proven" in text
+
+    def test_ranking_is_by_views_and_names_the_underperformer(self, monkeypatch):
+        import ai_service
+        import feedback
+        rows = [
+            {"template_id": "t-win", "views": 5000, "likes": 400, "comments": 20,
+             "shares": 90, "saves": 300, "source": "manual"},
+            {"template_id": "t-lose", "views": 200, "likes": 2, "comments": 0,
+             "shares": 1, "saves": 0, "source": "manual"},
+        ]
+        summary = feedback.summarize_proved_hooks(rows)
+        assert summary["has_signal"] is True
+        assert summary["top"][0]["template_id"] == "t-win"
+        assert summary["bottom"][0]["template_id"] == "t-lose"
+
+        captured = {}
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return {
+                "strategy_summary": "s", "audience_problem": "p",
+                "emotional_triggers": ["t"], "hook_concept": "c",
+                "hook_line": "h", "hook_promise": "p", "hook_action": "a",
+                "messaging_pillars": ["m"], "primary_feature": "f",
+                "desired_outcome": "o", "differentiation_beat": "b",
+                "cta_strategy": "c", "scene": {"environment": "kitchen"},
+                "performance": {"movement": "still"},
+                "segments": [{"index": 0, "role": "hook", "seconds": 5,
+                              "goal": "g", "script": "s", "action": "a"}],
+                "continuity_contract": {
+                    "established": [], "must_not_change": [], "do_not_repeat": [],
+                },
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        asyncio.run(ai_service.generate_video_strategy(
+            profile={"brand_name": "ShiftLog"},
+            template={"name": "T", "content_slots": {}},
+            angle=None, objective="address_user_problem",
+            hook_seconds=5, total_duration=20, tone="", brand_voice="",
+            profile_feedback={}, proved_hooks=summary,
+        ))
+        assert "PAST PERFORMANCE" in captured["prompt"]
+        assert "t-win" in captured["prompt"]
+        assert "t-lose" in captured["prompt"]
+        # Says what the evidence is and is not, so the model does not treat a
+        # view count as proof that a template is better.
+        assert "not a claim that one template is better" in captured["prompt"]
+
+    def test_a_zero_view_entry_is_not_ranked(self):
+        """
+        A like with no view count cannot be turned into a rate, and treating it
+        as one would invent a ratio. A new profile full of unmeasured videos must
+        report no signal rather than a best performer.
+        """
+        import feedback
+        summary = feedback.summarize_proved_hooks([
+            {"template_id": "t1", "views": 0, "likes": 5, "comments": 0,
+             "shares": 0, "saves": 1, "source": "manual"},
+        ])
+        assert summary["has_signal"] is False
+        assert summary["top"] == []
+
+    def test_a_non_manual_entry_is_excluded(self):
+        """
+        A future automated import must not be able to quietly become an input to
+        generation. Only the founder's own numbers qualify.
+        """
+        import feedback
+        summary = feedback.summarize_proved_hooks([
+            {"template_id": "t1", "views": 9000, "likes": 0, "comments": 0,
+             "shares": 0, "saves": 0, "source": "apify"},
+        ])
+        assert summary["has_signal"] is False
+
+    def test_the_endpoint_joins_performance_to_the_template(self, api, monkeypatch):
+        """
+        The wiring, and the join. performance_entries has no template_id of its
+        own -- an entry is a number against a render, and the render is what
+        knows its template -- so the aggregation is a join, not a read.
+        """
+        from models import now_iso
+        async def fake_strategy(**kwargs):
+            seen.update(kwargs)
+            return {
+                "strategy_summary": "s", "audience_problem": "p",
+                "emotional_triggers": ["t"], "hook_concept": "c",
+                "hook_line": "h", "hook_promise": "p", "hook_action": "a",
+                "messaging_pillars": ["m"], "primary_feature": "f",
+                "desired_outcome": "o", "differentiation_beat": "b",
+                "cta_strategy": "c", "scene": {"environment": "kitchen"},
+                "performance": {"movement": "still"},
+                "segments": [{"index": 0, "role": "hook", "seconds": 5,
+                              "goal": "g", "script": "s", "action": "a"}],
+                "continuity_contract": {
+                    "established": [], "must_not_change": [], "do_not_repeat": [],
+                },
+            }
+
+        seen = {}
+        import server
+        monkeypatch.setattr(server, "generate_video_strategy", fake_strategy)
+
+        project, _profile, template = _make_project(api, NURSE_APP)
+        _run(api._execute(
+            "INSERT INTO generations (id, studio_project_id, brand_profile_id, "
+            "template_id, status, created_at, updated_at, user_id) "
+            "VALUES ('g1', ?, ?, ?, 'completed', '', '', ?)",
+            (project["id"], project["brand_profile_id"], template["id"], ANON),
+        ))
+        _run(api._execute(
+            "INSERT INTO performance_entries (id, generation_id, brand_profile_id, "
+            "views, saves, source, created_at, updated_at, user_id) "
+            "VALUES ('e1', 'g1', ?, 4200, 120, 'manual', ?, ?, ?)",
+            (project["brand_profile_id"], now_iso(), now_iso(), ANON),
+        ))
+        _run(api.generate_project_strategy(
+            project_id=project["id"],
+            payload=server.GenerateStrategyRequest(), user_id=ANON))
+
+        proved = seen.get("proved_hooks")
+        assert proved, "no performance signal reached the strategy call"
+        assert proved["has_signal"] is True
+        assert proved["top"][0]["template_id"] == template["id"]
+        assert proved["top"][0]["views"] == 4200
+
+
+class TestFirstPersonClaimsAreFlagged:
+    """
+    Nothing in the system records the presenter's real relationship to the
+    product, so any first-person experience claim is invented. A founder-entered
+    relationship field was considered and dropped: asking a model for a fact
+    only a person can supply is how you get a confident wrong answer, and gating
+    on a field it might contradict is worse than forbidding the claim.
+    """
+
+    def _report(self, script):
+        import claim_safety as cs
+        return cs.build_safety_report({"script": script}, {})
+
+    def test_invented_experience_is_flagged(self):
+        for script in (
+            "I have used this every shift for two years.",
+            "I rely on this app daily.",
+            "As a nurse, I use this on every ward round.",
+            "I built this app for my patients.",
+        ):
+            report = self._report(script)
+            reasons = [w["reason"] for w in report["risk_warnings"]]
+            assert any(
+                "first-person experience claim" in r for r in reasons
+            ), f"not flagged: {script}"
+
+    def test_it_is_a_warning_not_a_block(self):
+        """Editorial control stays with the founder, like every other risk tier."""
+        report = self._report("I use this every day.")
+        assert report["passed"] is True
+        assert report["risk_warnings"]
+
+    def test_ordinary_copy_is_untouched(self):
+        for script in (
+            "One tap and the shift is logged.",
+            "Try it and see the difference.",
+            "Your notes, in your voice.",
+        ):
+            reasons = [w["reason"] for w in self._report(script)["risk_warnings"]]
+            assert not any("first-person" in r for r in reasons), script
