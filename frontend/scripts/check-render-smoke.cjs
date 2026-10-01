@@ -919,6 +919,19 @@ async function main() {
     expectAbsent(ctx, "Reject a template", "there is no reject button");
     // Trend aggregates now steer the strategy prompt, not only the research tab.
     expectAbsent(ctx, "Trend Research tab only", "trend data reaches generation now");
+
+    // Frame continuity. The only studio-eligible provider reports
+    // supports_last_frame: False, so video_providers.continuity_plan forces
+    // guarantee "text_only" and server.py nulls the seam frame — every
+    // extension really is held to a written scene description. The app says so
+    // honestly in GUARANTEE_COPY; these two landing strings used to promise the
+    // opposite, and one of them sits in FLOW_STEPS, a screen above PIPELINE, so
+    // correcting only the pipeline block would have left the lie on screen.
+    expectAbsent(ctx, "last frame becomes the next first frame", "the seam frame is not sent");
+    expectAbsent(ctx, "picks up from the last frame", "the seam frame is not sent");
+    // The honest replacement has to actually be there, or a future edit could
+    // satisfy the two checks above by deleting the claim outright.
+    expectText(ctx, "written description of the scene", "continuity is disclosed, not hidden");
   });
 
   // The two cards are one grid row. Bullets that are not length-matched make

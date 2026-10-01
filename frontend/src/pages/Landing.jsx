@@ -140,7 +140,8 @@ const FLOW_STEPS = [
     step: "4",
     label: "Render",
     icon: Layers,
-    detail: "Approve the opening, then extend it. Each piece picks up from the last frame.",
+    detail:
+      "Approve the opening, then extend it. The person and scene are re-stated for each segment, and the panel tells you when a clip may drift.",
   },
   {
     step: "5",
@@ -255,9 +256,10 @@ const PIPELINE_BLOCKS = [
     title: "Each Piece Picks Up the Last",
     body: (
       <>
-        Extend the opening and the last frame becomes the next first frame, so you, the light
-        and the room carry through instead of jumping. If a model drops a reference, we name
-        the one it dropped.
+        Every extension is held to a written description of the scene, so the person and the
+        room are restated for each segment rather than cut from the previous clip. When the
+        model can't be given the previous frame, the panel says so on every segment instead of
+        pretending otherwise.
       </>
     ),
   },
