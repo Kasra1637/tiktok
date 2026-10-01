@@ -1118,6 +1118,16 @@ class TestStrategyPromptDirectives:
         assert "appearance is never" in captured["system"]
         assert "must_not_change must cover the background" in captured["prompt"]
 
+    def test_values_forbid_double_quotes(self, monkeypatch):
+        """
+        The likeliest systematic source of unparseable replies: hook lines
+        phrased as questions and dialogue written with quotation marks, both
+        of which break the JSON with unescaped quotes. The prompt says so
+        explicitly, with the consequence attached.
+        """
+        captured = self._run_strategy(monkeypatch)
+        assert "double-quote" in captured["prompt"]
+
     def test_a_reply_without_character_validates(self, monkeypatch):
         """
         Regression: the prompt forbids a "character" key, so a compliant

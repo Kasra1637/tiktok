@@ -2288,6 +2288,8 @@ async def generate_video_strategy(
         # locked values restated into a prompt, not as prose.
         "- Keep EVERY string value under 25 words and each list to 2-4 short items. Be specific, not lengthy. "
         "A long value helps nothing and risks the whole object being cut off.\n"
+        "- Never use double-quote characters inside any string value: write hook lines and dialogue "
+        "without quotation marks. A stray quote breaks the JSON and fails the whole strategy.\n"
         "- Return ONE complete JSON object and nothing else: no prose before or after it, no markdown fence."
     )
 
