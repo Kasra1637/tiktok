@@ -417,6 +417,33 @@ function expectAbsent(ctx, needle, why) {
   }
 }
 
+/**
+ * Asserts two string lists are within `tolerance` characters per row.
+ *
+ * Used for the landing page's problem/solution bullets. Those two cards sit
+ * side by side, so a row that runs long wraps to a second line on one side
+ * only and makes that side look busier than the other. Nothing in the build or
+ * the type-check can see it, and the copy is exactly the kind that gets edited
+ * one line at a time — so the balance has to be asserted or it silently rots.
+ */
+function expectBalanced(left, right, tolerance, label) {
+  if (left.length !== right.length) {
+    throw new Error(
+      `${label}: expected ${left.length} rows, got ${left.length} and ${right.length}`
+    );
+  }
+  for (let i = 0; i < left.length; i += 1) {
+    const delta = Math.abs(left[i].length - right[i].length);
+    if (delta > tolerance) {
+      throw new Error(
+        `${label}: row ${i + 1} is ${delta} chars apart (tolerance ${tolerance})\n` +
+          `        without (${left[i].length}): ${JSON.stringify(left[i])}\n` +
+          `        with    (${right[i].length}): ${JSON.stringify(right[i])}`
+      );
+    }
+  }
+}
+
 console.log("Mounting every wizard step and panel...");
 
 const { GenerationPanel } = load("components/GenerationPanel.jsx");
@@ -859,6 +886,58 @@ async function main() {
     if (seen[0].profileId !== "b1") {
       throw new Error(`wrong profile sent: ${JSON.stringify(seen[0].profileId)}`);
     }
+  });
+
+  // -------------------------------------------------------------------------
+  // Landing page
+  // -------------------------------------------------------------------------
+  // The landing page advertises capabilities, so a claim that quietly stops
+  // being true is the same class of defect as a panel that stops rendering —
+  // only slower, and it survives every other gate because nothing about the
+  // copy is load-bearing. Each string below was live copy at one point and none
+  // of them is true of the product now.
+  console.log("");
+  console.log("Mounting the landing page...");
+
+  const Landing = load("pages/Landing.jsx").default;
+
+  await check("Landing mounts", mount(Landing));
+
+  await check("Landing claims nothing the product cannot keep", async (ctx) => {
+    // Each check gets its own container, so the page has to be mounted here
+    // rather than reusing the mount above. Without this the assertions below
+    // read an empty document and pass without testing anything.
+    await mount(Landing)(ctx);
+    // Pricing left the App Profile, and its claim check was deleted outright.
+    expectAbsent(ctx, "pricing", "pricing is not in the product any more");
+    expectAbsent(ctx, "prices your profile", "the price check was deleted");
+    // There is no hook-length selector: the plan computes one and locks it.
+    expectAbsent(ctx, "Hooks run 2 to 6", "no hook length is chosen by hand");
+    // The template library redirects to /create and has no favourite toggle.
+    expectAbsent(ctx, "Favourite", "no favourite UI exists");
+    // Rejection is recorded on swap; there is no reject control anywhere.
+    expectAbsent(ctx, "Reject a template", "there is no reject button");
+    // Trend aggregates now steer the strategy prompt, not only the research tab.
+    expectAbsent(ctx, "Trend Research tab only", "trend data reaches generation now");
+  });
+
+  // The two cards are one grid row. Bullets that are not length-matched make
+  // the longer side wrap and gain a line the other side does not, which is a
+  // visible asymmetry inside the section whose whole job is the contrast.
+  await check("the problem/solution bullets are length-matched", async (ctx) => {
+    await mount(Landing)(ctx);
+    const row = /lucide-x[\s\S]*?lucide-check/;
+    const html = ctx.container.innerHTML;
+    const start = html.search(row);
+    if (start === -1) throw new Error("found no X/check rows to compare");
+    const scope = html.slice(start);
+    const text = (icon) =>
+      [...scope.matchAll(new RegExp(`${icon}[\\s\\S]*?<span>([^<]*)</span>`, "g"))].map((m) => m[1]);
+    const without = text("lucide-x");
+    const with_ = text("lucide-check");
+    if (without.length === 0) throw new Error("found no X-marked rows to compare");
+    if (with_.length === 0) throw new Error("found no check-marked rows to compare");
+    expectBalanced(without, with_, 1, "problem/solution bullets");
   });
 }
 

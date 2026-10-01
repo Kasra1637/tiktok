@@ -150,23 +150,32 @@ const FLOW_STEPS = [
   },
 ];
 
-/** Problem / solution contrast. Left is the manual path, right is the product. */
+/**
+ * Problem / solution contrast. Left is the manual path, right is the product.
+ *
+ * The two lists are written to matching character counts on purpose. The cards
+ * sit side by side in a two-column grid, and unbalanced bullets wrap to a ragged
+ * second line on one side only — which makes the slow path look busier than it
+ * is and quietly flatters the product. `check-render-smoke.cjs` asserts the
+ * match, so editing one line without the other fails the gate instead of
+ * shipping a lopsided card.
+ */
 const WEEK_WITHOUT = [
-  "Book a shoot. Find an afternoon the three of you are all free.",
-  "Write the script yourself, then re-record because take two sounded like a manual.",
-  "Explain your app from scratch, to every person, every time.",
-  "Pay for the edit, then find out the opening was the problem.",
-  "Download, crop, caption, export. Then do it all again for the next idea.",
-  "Post it, watch it land flat, and have no idea which part was wrong.",
+  "Book the shoot. Block out an afternoon, hope the light is good.",
+  "Write the script yourself, then read it back and hate how it sounds.",
+  "Film it four times because the first one had you squinting.",
+  "Pay someone to edit it, then wonder if the first three seconds work.",
+  "Post it, get 400 views, and blame the algorithm for all of it.",
+  "Do all of it again next week, for a completely different hook.",
 ];
 
 const WEEK_WITH = [
-  "Paste the link. Approve what it found out about your app.",
-  "Choose who you're talking to and what you want them to do.",
-  "Read the script. Fix the one line you don't like. Nothing's charged.",
-  "Render the opening. Extend it to the length you wanted.",
-  "Download and post. Record how it did.",
-  "The next one starts from the evidence, not from scratch.",
+  "Paste the link. It reads your app and writes a profile for you.",
+  "Pick who is watching. It writes six openings, you take the best one.",
+  "Read it, change any line you like, and nothing is charged.",
+  "Render the hook, then extend it out to the length you really wanted.",
+  "Post it, log the views, and let them shape the very next one.",
+  "Next week it's three clicks, and it already knows what worked.",
 ];
 
 const NAV_LINKS = [
@@ -376,19 +385,20 @@ export default function Landing() {
             className="animate-fade-up font-display text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-[4.5rem]"
             style={{ animationDelay: "60ms" }}
           >
-            <span className="text-shine">Stop being a stranger in your own ad.</span>
+            <span className="text-shine">You didn't build it to be talked about.</span>
             <br />
-            <span className="text-gradient-brand">One link, one photo, a video you post.</span>
+            <span className="text-gradient-brand">You built it to be used.</span>
             <br />
-            <span className="text-shine">You read it before you spend anything.</span>
+            <span className="text-shine">So put your face on it, and do it in an afternoon.</span>
           </h1>
 
           <p
             className="animate-fade-up mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl"
             style={{ animationDelay: "120ms" }}
           >
-            Paste your app link. It reads what your app actually does, then writes a promo
-            around one photo of you. Nothing renders until you've read every word.
+            Here's the thing nobody tells you about launch week: a stranger talking about your
+            app converts like wallpaper. You talking about it converts. Point a camera at
+            yourself, skip the shoot, and post it tonight.
           </p>
 
           <div
