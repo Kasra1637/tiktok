@@ -8,108 +8,108 @@ import {
 } from "../components/auth/AuthControls";
 import {
   Sparkles, Search, Clapperboard, Globe, Film,
-  TrendingUp, ArrowRight, Zap, Target, Layers, Music2,
-  FileText, BadgeAlert,
-  RotateCcw, Check, Wand2, Briefcase, LayoutTemplate, ShieldCheck, Download,
+  TrendingUp, ArrowRight, Zap, Target, Layers,
+  FileText, BadgeAlert, MessageSquareQuote, ChartLine,
+  X, Check, Wand2, Briefcase, LayoutTemplate, ShieldCheck, Download,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 
 const FEATURES = [
   {
     icon: Briefcase,
-    title: "Your App Hub",
+    title: "It learns your app",
     description:
-      "Paste your links once. We draft the profile, you approve it, and every video after that starts from it.",
+      "Paste your links once. It reads what your app does and who it's for, and every video after that starts there.",
   },
   {
     icon: Target,
-    title: "Audiences & Angles",
+    title: "You decide who, and what",
     description:
-      "Pick who you're talking to and what you want them to do. The angle hands you the hook, the promise and the close.",
+      "One choice about your audience and your goal. It shapes the hook, the promise and the close.",
   },
   {
     icon: LayoutTemplate,
-    title: "Hook Template Library",
+    title: "Never a blank page",
     description:
-      "Never start from a blank page. Favourite what works, reshape what doesn't.",
+      "Ten proven openings. The best fit for your app is already picked, and swapping takes one click.",
   },
   {
     icon: Wand2,
-    title: "Smart Template Picks",
+    title: "Every pick tells you why",
     description:
-      "A shortlist for your app and angle. Each pick tells you why it fits, and where it falls short.",
+      "A shortlist for this app and this goal, each one saying why it fits and where it falls short.",
   },
   {
     icon: FileText,
-    title: "Script First, Video Second",
+    title: "Nothing costs money until you say so",
     description:
-      "Read the script before you pay for the video. Rewrite any word of it. Planning itself costs nothing.",
+      "The script and shot plan are free. Read them, change any word. The first time you pay is the first time you render.",
   },
   {
     icon: Clapperboard,
-    title: "Ten to Thirty Seconds",
+    title: "Your length, the hook worked out",
     description:
-      "10, 15, 20 or 30 seconds, vertical. Hooks run 2 to 6, because four seconds is the cheapest test of the whole idea.",
+      "10, 15, 20 or 30 seconds, vertical. The hook is planned and locked for you, so extensions still land on script.",
+  },
+  {
+    icon: MessageSquareQuote,
+    title: "It argues the case",
+    description:
+      "Each beat answers one reason a viewer hasn't downloaded yet: doubt it works, the effort to switch. One at a time, not crammed into one breath.",
   },
   {
     icon: Film,
-    title: "No Fake UI",
+    title: "It never invents your screens",
     description:
-      "The model is forbidden from drawing your screens, prices or ratings. Captions and the CTA come from the script you approved.",
+      "No drawn interfaces, no made-up numbers. Captions and the end card come from the script you approved.",
   },
   {
     icon: ShieldCheck,
-    title: "Claims, Checked",
+    title: "Checked by something other than the AI",
     description:
-      "A checker, not the AI, re-reads your script on every edit. Anything on your never-use list stays blocked; prices your profile never listed get flagged.",
+      "It re-reads your script on every edit. Anything on your never-use list blocks the render, and stays blocked through every extension.",
   },
   {
     icon: Layers,
-    title: "One Photo, You On Camera",
+    title: "One photo, and that's you",
     description:
-      "One photograph. That face is you in every clip. No avatar, no voice clone, no stand-in.",
+      "Attach it once and your face is in every clip after it. No avatar, no voice clone, no stand-in.",
   },
   {
-    icon: Music2,
-    title: "Sound, Generated With It",
+    icon: ChartLine,
+    title: "It learns your numbers",
     description:
-      "Speech and room tone arrive with the clip. No audio files to license, no mixing. Add the trending sound where you post.",
-  },
-  {
-    icon: RotateCcw,
-    title: "Change One Thing",
-    description:
-      "Swap the hook, the CTA, the tone, the template or the length and get a fresh draft back. Nothing renders until you say so.",
+      "Record what each video actually did. What worked for this app is shown beside the next opening it recommends.",
   },
   {
     icon: TrendingUp,
-    title: "Measured, Not Guesswork",
+    title: "The full picture",
     description:
-      "Success rate, failures, spend and rework, broken down by app, template, model and audience. Unpriced runs stay labelled unpriced.",
+      "Success rate, failures, spend and rework, broken down by app, opening, model and audience.",
   },
   {
     icon: Check,
-    title: "Feedback Loop",
+    title: "It learns what you didn't like",
     description:
-      "Reject a template and it slides down the list. Your winners keep climbing.",
+      "Swap away from an opening and it slides down the list. Approve one and it keeps climbing.",
   },
   {
     icon: BadgeAlert,
-    title: "Every Run, Accounted For",
+    title: "Every video shows its receipts",
     description:
-      "Every video shows its receipts: the exact prompt sent, the claim check at generation time, the model, the cost and where it came from, any error.",
+      "The exact prompt sent, the claim check at the time, the model, the cost and where it came from, and any error.",
   },
   {
     icon: Search,
-    title: "Hook Anatomy",
+    title: "See why a video worked",
     description:
-      "Paste a TikTok link. We read the first three seconds — pacing, cuts, faces, on-screen text, audio — then score the hook.",
+      "Paste a TikTok link. It reads the first three seconds — pacing, cuts, face, on-screen text — and scores the opening.",
   },
   {
     icon: Download,
-    title: "You Post It",
+    title: "You post it",
     description:
-      "Download it, post it wherever. We never touch your accounts.",
+      "Download it, post wherever. It never touches your accounts.",
   },
 ];
 
@@ -120,43 +120,60 @@ const FEATURES = [
 const FLOW_STEPS = [
   {
     step: "1",
-    label: "Profile",
+    label: "Paste",
     icon: Briefcase,
-    detail: "Paste your links. We draft your app profile; you approve it.",
+    detail: "Your links. It reads what your app does and drafts the profile for you to approve.",
   },
   {
     step: "2",
-    label: "Brief",
+    label: "Choose",
     icon: Target,
-    detail: "Pick your audience and goal. Get template picks with reasons.",
+    detail: "Who you're talking to, and what you want them to do. Openings picked to match.",
   },
   {
     step: "3",
-    label: "Plan",
+    label: "Read",
     icon: FileText,
-    detail: "Add your photo. Get the script and shot plan, then edit every line.",
+    detail: "Add your photo. Get the script and shot plan, then change any line you don't like.",
   },
   {
     step: "4",
-    label: "Grow",
+    label: "Render",
     icon: Layers,
-    detail: "Approve the hook, then extend it. Each segment picks up from the last frame.",
+    detail: "Approve the opening, then extend it. Each piece picks up from the last frame.",
   },
   {
     step: "5",
-    label: "Deliver",
+    label: "Post",
     icon: Download,
-    detail: "Generate, download, post it wherever your audience is.",
+    detail: "Download and post it wherever your audience already is. Nothing is posted for you.",
   },
 ];
 
+/** Problem / solution contrast. Left is the manual path, right is the product. */
+const WEEK_WITHOUT = [
+  "Book a shoot. Find an afternoon the three of you are all free.",
+  "Write the script yourself, then re-record because take two sounded like a manual.",
+  "Explain your app from scratch, to every person, every time.",
+  "Pay for the edit, then find out the opening was the problem.",
+  "Download, crop, caption, export. Then do it all again for the next idea.",
+  "Post it, watch it land flat, and have no idea which part was wrong.",
+];
 
-
+const WEEK_WITH = [
+  "Paste the link. Approve what it found out about your app.",
+  "Choose who you're talking to and what you want them to do.",
+  "Read the script. Fix the one line you don't like. Nothing's charged.",
+  "Render the opening. Extend it to the length you wanted.",
+  "Download and post. Record how it did.",
+  "The next one starts from the evidence, not from scratch.",
+];
 
 const NAV_LINKS = [
   { href: "#how-it-works", label: "How it works" },
-  { href: "#features", label: "Features" },
-  { href: "#pipeline", label: "Pipeline" },
+  { href: "#your-week", label: "Your week" },
+  { href: "#features", label: "What you get" },
+  { href: "#pipeline", label: "How it's made" },
 ];
 
 /** Soft drifting color fields behind the hero. Decorative only. */
@@ -202,11 +219,11 @@ const PIPELINE_BLOCKS = [
     icon: Globe,
     tone: "indigo",
     kicker: "Intelligence",
-    title: "Studied, Then Approved",
+    title: "Read Before We Write",
     body: (
       <>
-        Your links become a profile: features, audience, pricing, and what you're allowed to
-        claim. You approve it before anything generates, and a refresh never overwrites that.
+        Your links become a profile: what the app does, who it's for, and what you're allowed
+        to claim. You approve it before anything generates, and a refresh never overwrites that.
       </>
     ),
   },
@@ -214,11 +231,11 @@ const PIPELINE_BLOCKS = [
     icon: Clapperboard,
     tone: "coral",
     kicker: "Generation",
-    title: "One Smooth Video",
+    title: "One Continuous Clip",
     body: (
       <>
         Hook and ending arrive in a single vertical clip, with sound where the model supports
-        it. A second pass only stretches the length or replaces a dead segment.
+        it. A second pass only stretches the length or replaces a weak segment.
       </>
     ),
   },
@@ -226,12 +243,12 @@ const PIPELINE_BLOCKS = [
     icon: Layers,
     tone: "coral",
     kicker: "Continuity",
-    title: "Beat by Beat, Seam Held",
+    title: "Each Piece Picks Up the Last",
     body: (
       <>
-        Extend the hook and the last frame becomes the next first frame, so you, the light and
-        the room carry through instead of jumping. If a model drops a reference, we name the one
-        it dropped.
+        Extend the opening and the last frame becomes the next first frame, so you, the light
+        and the room carry through instead of jumping. If a model drops a reference, we name
+        the one it dropped.
       </>
     ),
   },
@@ -239,11 +256,12 @@ const PIPELINE_BLOCKS = [
     icon: Film,
     tone: "indigo",
     kicker: "Finishing",
-    title: "Your Words, Locked In",
+    title: "The Scene Is Built Around You",
     body: (
       <>
-        The scene gets built around you from your app's verified facts. Captions and the end
-        card layer on afterwards, taken from the script you approved.
+        Shot in the moment your app is actually used, and built to show the one moment that
+        proves it. Captions and the end card layer on afterwards, taken from the script you
+        approved.
       </>
     ),
   },
@@ -251,11 +269,11 @@ const PIPELINE_BLOCKS = [
     icon: Search,
     tone: "indigo",
     kicker: "Research",
-    title: "Ideas, Not Copies",
+    title: "Patterns, Not Copies",
     body: (
       <>
-        Patterns turn into template drafts that wait for your review. No creator's face, voice
-        or sound ever crosses into what you make.
+        What carries in your niche becomes openings you can use, with the evidence attached
+        anonymously. No creator's face, voice or sound ever crosses into what you make.
       </>
     ),
   },
@@ -265,10 +283,10 @@ const PIPELINE_BLOCKS = [
 
 
 const MODELS = [
-  { label: "Words & analysis", value: "Gemini 2.5 Flash — research, profiles, angles, scripts" },
+  { label: "Words & analysis", value: "Gemini 2.5 Flash — research, profiles, angles, scripts and shot plans" },
   { label: "Video", value: "MiniMax H3 — 2K picture, native sound, 5 to 15 seconds per pass; longer videos are built segment by segment" },
   { label: "Finishing touches", value: "Captions and end card, layered on precisely" },
-  { label: "Trend spotting", value: "Public TikTok metadata via a research API key — Trend Research tab only" },
+  { label: "Trend data", value: "Public TikTok metadata via a research API key — aggregated with no source attached, and it steers the openings we suggest" },
 ];
 
 
@@ -358,19 +376,19 @@ export default function Landing() {
             className="animate-fade-up font-display text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-[4.5rem]"
             style={{ animationDelay: "60ms" }}
           >
-            <span className="text-shine">Your face, not a stranger's.</span>
+            <span className="text-shine">Stop being a stranger in your own ad.</span>
             <br />
-            <span className="text-gradient-brand">Photo in, promo out.</span>
+            <span className="text-gradient-brand">One link, one photo, a video you post.</span>
             <br />
-            <span className="text-shine">Posted by you, not by us.</span>
+            <span className="text-shine">You read it before you spend anything.</span>
           </h1>
 
           <p
             className="animate-fade-up mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl"
             style={{ animationDelay: "120ms" }}
           >
-            People trust a face they know. Yours anchors every clip, and the scene
-            around it comes from what we know about your app.
+            Paste your app link. It reads what your app actually does, then writes a promo
+            around one photo of you. Nothing renders until you've read every word.
           </p>
 
           <div
@@ -383,7 +401,7 @@ export default function Landing() {
                   size="lg"
                   className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-white shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
                 >
-                  <Sparkles className="h-5 w-5" /> Get Started
+                  <Sparkles className="h-5 w-5" /> Make my first video
                 </Button>
               </SignUpTrigger>
               <SignInTrigger>
@@ -392,7 +410,7 @@ export default function Landing() {
                   variant="outline"
                   className="w-full gap-2.5 rounded-xl border-[color:var(--hairline-strong)] bg-[color:var(--indigo-4)] px-8 py-6 text-base font-semibold backdrop-blur-sm hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] sm:w-auto"
                 >
-                  I have an account
+                  I already have an account
                 </Button>
               </SignInTrigger>
             </UnauthedOnly>
@@ -436,9 +454,9 @@ export default function Landing() {
       <section className="relative z-10 mx-auto max-w-6xl px-5 py-24" data-testid="landing-how-it-works">
         <SectionHeading
           id="how-it-works"
-          eyebrow="Dead simple"
-          title="App Link to Video in 5 Steps"
-          lede="No filming. No editing. No source video. Just five steps."
+          eyebrow="How it works"
+          title="From your link to a posted video"
+          lede="Five steps. No camera, no editor, no source footage."
         />
 
         <div className="relative">
@@ -465,13 +483,57 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ---------- Your week: problem / solution ---------- */}
+      <section
+        className="relative z-10 mx-auto max-w-6xl px-5 pb-24"
+        data-testid="landing-your-week"
+      >
+        <SectionHeading
+          id="your-week"
+          eyebrow="The difference"
+          title="What your week looks like"
+          lede="Same app. Same product. One very different way of getting it in front of people."
+        />
+
+        <div className="grid gap-5 lg:grid-cols-2">
+          <div className="surface rounded-2xl p-6 sm:p-7">
+            <span className="eyebrow">The old way</span>
+            <ul className="mt-5 space-y-3.5">
+              {WEEK_WITHOUT.map((line) => (
+                <li key={line} className="flex gap-3 text-sm leading-relaxed text-muted-foreground">
+                  <X className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span>{line}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* `.surface` is un-layered CSS, so it beats any Tailwind border or
+              background utility placed on the same element. The gradient hairline
+              is a masked pseudo-element instead, which nothing can override. */}
+          <div className="border-gradient relative rounded-2xl p-[1px]">
+            <div className="surface surface-interactive shimmer-on-hover rounded-2xl p-6 sm:p-7">
+              <span className="eyebrow text-[color:var(--brand-indigo)]">With HookForge</span>
+              <ul className="mt-5 space-y-3.5">
+                {WEEK_WITH.map((line) => (
+                  <li key={line} className="flex gap-3 text-sm leading-relaxed text-muted-foreground">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--brand-indigo)]" />
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ---------- Features ---------- */}
       <section className="relative z-10 mx-auto max-w-6xl px-5 pb-24" data-testid="landing-features">
         <SectionHeading
           id="features"
-          eyebrow="Capabilities"
-          title="Everything Handled"
-          lede="From a link to a finished video. Every step in between handled."
+          eyebrow="Everything in between"
+          title="You bring a link and a photo"
+          lede="Every step from there is handled, and every one of them is yours to change."
         />
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -496,8 +558,8 @@ export default function Landing() {
         <SectionHeading
           id="pipeline"
           eyebrow="Under the hood"
-          title="How It Gets Made"
-          lede="How a link becomes a video you're happy to post."
+          title="How it gets made"
+          lede="What happens between your link and a video you're happy to post."
         />
 
         <div className="space-y-4">
@@ -573,10 +635,10 @@ export default function Landing() {
                 <Zap className="h-3 w-3" /> Ready when you are
               </span>
               <h2 className="font-display mt-5 text-3xl font-bold tracking-tight sm:text-4xl">
-                Your next promo is one link away.
+                Your next promo is one photo away.
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">
-                Paste your link. Approve the profile. Pick a hook. Get a promo with you
+                Paste your link. Approve the profile. Pick the opening. Get a video with you
                 in it, ready to post.
               </p>
               <div className="mt-9 flex flex-col items-center justify-center gap-3.5 sm:flex-row">
@@ -586,7 +648,7 @@ export default function Landing() {
                       size="lg"
                       className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-white shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
                     >
-                      <Sparkles className="h-5 w-5" /> Get Started
+                      <Sparkles className="h-5 w-5" /> Make my first video
                     </Button>
                   </SignUpTrigger>
                   <SignInTrigger>
@@ -595,7 +657,7 @@ export default function Landing() {
                       variant="outline"
                       className="w-full gap-2.5 rounded-xl border-[color:var(--hairline-strong)] bg-[color:var(--indigo-4)] px-8 py-6 text-base font-semibold hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] sm:w-auto"
                     >
-                      Sign In
+                      I already have an account
                     </Button>
                   </SignInTrigger>
                 </UnauthedOnly>
@@ -614,7 +676,7 @@ export default function Landing() {
                       variant="outline"
                       className="w-full gap-2.5 rounded-xl border-[color:var(--hairline-strong)] bg-[color:var(--indigo-4)] px-8 py-6 text-base font-semibold hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] sm:w-auto"
                     >
-                      <Globe className="h-5 w-5" /> Open Your App Profile
+                      <Globe className="h-5 w-5" /> Open your app profile
                     </Button>
                   </Link>
                 </AuthedOnly>
@@ -636,7 +698,7 @@ export default function Landing() {
                 <span className="font-display text-base font-bold tracking-tight">HookForge</span>
               </div>
               <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted-foreground">
-                App promos for founders. Paste a link, get a video with you in it, post it yourself.
+                Promos with you in them, made from a link. You post them yourself.
               </p>
             </div>
 
