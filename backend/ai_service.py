@@ -19,8 +19,14 @@ import httpx
 from face_crop import crop_face_from_path
 from template_library import (
     CONTENT_ANGLE_KINDS,
+    HOOK_CATEGORIES,
+    SUPPORTED_DURATIONS,
+    DEFAULT_DURATION,
+    TEMPLATE_NAME_MAX,
     normalize_angle_kind,
+    normalize_category,
     normalize_objective,
+    clamp_duration,
 )
 import feedback
 
@@ -1682,6 +1688,178 @@ async def generate_content_angles(profile: dict, max_angles: int = 8) -> list:
     if not angles:
         raise RuntimeError("Content angles response contained no usable angles.")
     return angles
+
+
+# How many tailored structures each approved profile gets. Ten is a full
+# picker page without clutter; the picker ranks them against curated rows,
+# so a weak tenth still loses honestly rather than filling a quota.
+BRAND_TEMPLATE_COUNT = 10
+
+
+def normalize_brand_template(raw: dict) -> Optional[dict]:
+    """
+    Coerce one model-drafted brand template into row-ready shape, or None
+    when it is unusable. Invalid items are dropped, never repaired into
+    something the model did not write — except required_assets, which is
+    forced face-only by the product rule rather than requested and trusted.
+    """
+    if not isinstance(raw, dict):
+        return None
+    name = str(raw.get("name") or "").strip()[:TEMPLATE_NAME_MAX]
+    opening = str(raw.get("opening_structure") or "").strip()
+    if not name or not opening:
+        return None
+    slots = raw.get("content_slots")
+    if isinstance(slots, dict):
+        slots = {
+            str(k).strip(): str(v).strip()[:300]
+            for k, v in slots.items()
+            if str(k).strip() and str(v).strip()
+        } or {}
+    else:
+        slots = {}
+    try:
+        hook_seconds = max(1, min(6, int(raw.get("hook_seconds") or 3)))
+    except (TypeError, ValueError):
+        hook_seconds = 3
+    duration = raw.get("default_duration")
+    duration = duration if duration in SUPPORTED_DURATIONS else DEFAULT_DURATION
+    return {
+        "name": name,
+        "category": normalize_category(raw.get("category")),
+        "objective": normalize_objective(raw.get("objective")),
+        "opening_structure": opening,
+        "hook_seconds": hook_seconds,
+        "continuation_structure": str(raw.get("continuation_structure") or "").strip()[:1200],
+        "cta_pattern": str(raw.get("cta_pattern") or "").strip()[:300],
+        "visual_style": str(raw.get("visual_style") or "").strip()[:300],
+        "camera_pacing": str(raw.get("camera_pacing") or "").strip()[:300],
+        "content_slots": slots,
+        "default_duration": duration,
+    }
+
+
+async def generate_brand_templates(
+    profile: dict, angles: Optional[list] = None, count: int = BRAND_TEMPLATE_COUNT
+) -> list:
+    """
+    Draft tailored hook structures for one approved App Profile.
+
+    This is the brand-URL-to-template link: the profile researched from the
+    founder's links produces structures no generic library can — hooks shaped
+    around THIS app's features, audience language, and voice. Every video
+    stars the founder on camera, so structures are designed for a single
+    on-camera presenter, never for screenshots, recordings, or app footage.
+
+    Guardrails enforced in the prompt: functional framing only (never a
+    viewer diagnosis), every structure satisfiable from verified profile
+    facts, no invented features/prices/ratings/testimonials, no guaranteed
+    outcomes. required_assets is not requested at all — the caller forces
+    face-only, so the model cannot get it wrong.
+    """
+    def _list(name):
+        val = profile.get(name)
+        if isinstance(val, list):
+            return [str(v) for v in val if str(v).strip()]
+        if val:
+            return [str(val)]
+        return []
+
+    context = {
+        "app_name": profile.get("brand_name") or "(unnamed app)",
+        "category": profile.get("app_category") or profile.get("niche") or "(unstated)",
+        "description": profile.get("brand_description") or "(unstated)",
+        "features": _list("core_features"),
+        "use_cases": _list("primary_use_cases"),
+        "problems": _list("problems_solved"),
+        "audience": profile.get("target_audience") or "(unstated)",
+        "icp_segments": _list("icp_segments"),
+        "outcomes": _list("desired_outcomes"),
+        "differentiators": profile.get("differentiation") or "(unstated)",
+        "competitors": _list("competitors"),
+        "voice": profile.get("tone_voice") or "(unstated)",
+        "approved_claims": _list("claims_approved"),
+        "banned_claims": _list("claims_banned"),
+        "ctas": _list("ctas"),
+    }
+    angle_briefs = []
+    for angle in (angles or [])[:8]:
+        if not isinstance(angle, dict):
+            continue
+        angle_briefs.append({
+            "kind": angle.get("kind") or "",
+            "label": angle.get("label") or "",
+            "audience": angle.get("target_audience") or "",
+            "problem": angle.get("user_problem") or "",
+            "feature": angle.get("app_feature") or "",
+        })
+    categories = ", ".join(HOOK_CATEGORIES)
+
+    system_message = (
+        "You are a short-form video strategist for mobile apps. You design hook "
+        "structures tailored to ONE specific app, grounded strictly in its verified "
+        "profile facts. Describe viewers by FUNCTIONAL need and use case only — never "
+        "infer sensitive personal traits (health diagnoses, mental-health labels, "
+        "finances, religion, sexuality, political leaning). Respond with STRICT JSON "
+        "only, no markdown fences."
+    )
+
+    prompt = (
+        f"VERIFIED APP PROFILE:\n{json.dumps(context, indent=2)}\n\n"
+        f"CONTENT ANGLES:\n{json.dumps(angle_briefs, indent=2)}\n\n"
+        f"Categories (use only these): {categories}\n\n"
+        f"Design exactly {count} DISTINCT hook structures for THIS app, presenter-led "
+        "throughout: every video stars the founder on camera, so never design around "
+        "screenshots, recordings, app footage, or any uploaded asset. Pre-fill every "
+        "content slot with this app's concrete specifics, not placeholders. "
+        "Return ONLY a JSON array where each element is:\n"
+        "{\n"
+        '  "name": "short specific title naming this app\'s angle on the mechanic",\n'
+        '  "category": "one of the categories listed above",\n'
+        '  "objective": "address_user_problem | create_curiosity | demonstrate_feature | build_awareness | educate_viewers",\n'
+        '  "opening_structure": "what the first seconds do, concretely for THIS app",\n'
+        '  "hook_seconds": 2,\n'
+        '  "continuation_structure": "how the rest unfolds, concretely for THIS app",\n'
+        '  "cta_pattern": "the closing action pattern",\n'
+        '  "visual_style": "the look, presenter-led",\n'
+        '  "camera_pacing": "camera behaviour",\n'
+        '  "content_slots": {"app_feature": "the concrete feature", "cta": "the concrete next action"},\n'
+        '  "default_duration": 20\n'
+        "}\n"
+        "Rules: use ONLY facts present above. Never invent a feature, price, rating, "
+        "review, testimonial, or guaranteed outcome. Never use a banned claim. Vary "
+        "the categories and objectives — not ten variations of one idea. "
+        "hook_seconds is 1-6; default_duration is one of 10, 15, 20, 30. "
+        "Never use double-quote characters inside any string value. Return ONLY valid JSON."
+    )
+
+    # ~10 structures x ~12 short values is roughly triple the strategy
+    # schema, so the budget is tripled rather than reused.
+    raw = await _chat_json(
+        system_message=system_message,
+        prompt=prompt,
+        context="Brand templates",
+        temperature=0.5,
+        max_tokens=16384,
+        attempts=2,
+    )
+    if isinstance(raw, dict):
+        raw = raw.get("templates") or []
+    if not isinstance(raw, list):
+        raise RuntimeError("Brand templates response was not a list.")
+
+    templates = []
+    for item in raw:
+        normalized = normalize_brand_template(item)
+        if normalized is None:
+            continue
+        templates.append(normalized)
+        if len(templates) >= count:
+            break
+
+    if not templates:
+        raise RuntimeError("Brand templates response contained no usable templates.")
+    return templates
 
 
 REQUIRED_PLAN_KEYS = {

@@ -41,7 +41,7 @@ from ai_service import (
     abstract_template_drafts,
     strip_html_to_text, remix_chat_turn, empty_remix_brief, VIDEO_MODELS, DEFAULT_VIDEO_MODEL,
     analyze_image_for_hook, TEXT_MODEL, VISION_MODEL,
-    generate_video_strategy, normalize_strategy,
+    generate_video_strategy, normalize_strategy, generate_brand_templates,
 )
 from models import (
     IngestVideoRequest, BrandContextRequest, GenerateVideoRequest,
@@ -557,8 +557,14 @@ async def init_db():
                 is_favorite INTEGER DEFAULT 0,
                 evidence_note TEXT,
                 origin TEXT DEFAULT 'bookmark',
-                review_status TEXT DEFAULT 'approved'
+                review_status TEXT DEFAULT 'approved',
+                -- Brand that owns this template, for brand-tailored customs
+                -- generated on profile approval. NULL means shared or legacy
+                -- (curated rows, pre-scoping customs): visible everywhere.
+                brand_profile_id TEXT
             );
+            CREATE INDEX IF NOT EXISTS idx_templates_brand
+                ON hook_templates (brand_profile_id, archived);
 
             -- Content angles for one App Profile. Generated per app from the
             -- approved profile, each carrying the seven planning fields the
@@ -1308,13 +1314,26 @@ async def init_db():
             await conn.execute("ALTER TABLE feedback_events ADD COLUMN signal TEXT")
         await conn.commit()
 
-        # Migration: assets gains an audio duration. Existing image/video rows
+        # Migration: assets gains a face count. Existing image/video rows
         # keep NULL rather than a fabricated zero; audio duration is probed at
         # upload time going forward.
         cursor = await conn.execute("PRAGMA table_info(assets)")
         if "duration_seconds" not in {row[1] for row in await cursor.fetchall()}:
             logger.info("Migration: adding duration_seconds column to assets")
             await conn.execute("ALTER TABLE assets ADD COLUMN duration_seconds REAL")
+        await conn.commit()
+
+        # Migration: hook_templates gains brand scoping for brand-tailored
+        # customs generated on profile approval. Existing rows keep NULL
+        # (shared/legacy: visible everywhere), never a fabricated link.
+        cursor = await conn.execute("PRAGMA table_info(hook_templates)")
+        if "brand_profile_id" not in {row[1] for row in await cursor.fetchall()}:
+            logger.info("Migration: adding brand_profile_id column to hook_templates")
+            await conn.execute("ALTER TABLE hook_templates ADD COLUMN brand_profile_id TEXT")
+            await conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_templates_brand "
+                "ON hook_templates (brand_profile_id, archived)"
+            )
         await conn.commit()
 
         # Migration: assets gains a face count. Existing rows keep NULL
@@ -5672,6 +5691,68 @@ async def update_app_profile(
     )
 
 
+async def _ensure_brand_templates(profile: dict, user_id: str) -> list:
+    """
+    Generate this profile's tailored templates, replacing any previous set.
+
+    This is the brand-URL-to-template link: the researched, approved profile
+    produces structures no generic library can. Generate-then-replace, never
+    delete-then-generate — a model failure must leave the previous working
+    set intact rather than zeroing it. Any failure is logged and swallowed:
+    approval itself always succeeds, and templates are simply absent until
+    the next approve fills the gap.
+    """
+    profile_id = profile.get("id") or ""
+    if not profile_id:
+        return []
+    angles = await _fetch_all(
+        "SELECT * FROM content_angles WHERE brand_profile_id = ? AND user_id = ?",
+        (profile_id, user_id),
+    )
+    try:
+        drafts = await _log_model_call(
+            "brand_templates", "text", TEXT_MODEL,
+            lambda: generate_brand_templates(profile, angles),
+            user_id,
+            brand_profile_id=profile_id,
+        )
+    except Exception as e:
+        logger.error(f"Brand template generation failed for profile {profile_id}: {e!r}")
+        return []
+    if not drafts:
+        return []
+    now = now_iso()
+    await _execute(
+        "DELETE FROM hook_templates WHERE brand_profile_id = ? AND user_id = ?",
+        (profile_id, user_id),
+    )
+    for draft in drafts:
+        await _execute(
+            """INSERT INTO hook_templates
+               (id, name, category, app_categories, audiences, objective,
+                opening_structure, hook_seconds, continuation_structure,
+                cta_pattern, visual_style, camera_pacing, required_assets,
+                default_duration, content_slots, evidence_note, version,
+                archived, is_favorite, origin, review_status, times_used,
+                brand_profile_id, created_at, updated_at, user_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0,
+                       'custom', 'approved', 0, ?, ?, ?, ?)""",
+            (str(uuid.uuid4()), draft["name"], draft["category"],
+             json.dumps([profile.get("app_category") or ""] if profile.get("app_category") else []),
+             json.dumps([profile.get("target_audience") or ""] if profile.get("target_audience") else []),
+             draft.get("objective") or "", draft["opening_structure"],
+             draft.get("hook_seconds") or 3, draft.get("continuation_structure") or "",
+             draft.get("cta_pattern") or "", draft.get("visual_style") or "",
+             draft.get("camera_pacing") or "", json.dumps(["character_reference"]),
+             draft.get("default_duration") or template_library.DEFAULT_DURATION,
+             json.dumps(draft.get("content_slots") or {}),
+             f"Generated for {profile.get('brand_name') or 'this app'} from its approved profile.",
+             profile_id, now, now, user_id),
+        )
+    logger.info(f"Generated {len(drafts)} brand templates for profile {profile_id}")
+    return drafts
+
+
 @api_router.post("/app-profiles/{profile_id}/approve")
 async def approve_app_profile(
     profile_id: str, payload: ApproveAppProfileRequest, user_id: str = Depends(get_current_user_id)
@@ -5720,9 +5801,11 @@ async def approve_app_profile(
                 tuple(values) + (user_id,),
             )
             logger.info(f"Approved App Profile {profile_id} (version {(existing.get('version') or 1) + 1})")
-            return await _fetch_one(
+            fresh = await _fetch_one(
                 "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
             )
+            await _ensure_brand_templates(fresh, user_id)
+            return fresh
 
     # No pending proposal (or the founder skipped applying it): approving the
     # draft as it stands is itself a legal UPDATE, so the status flip commits
@@ -5736,9 +5819,11 @@ async def approve_app_profile(
         (now, now, profile_id, user_id),
     )
     logger.info(f"Approved App Profile {profile_id} (draft as-is, version {existing.get('version') or 1})")
-    return await _fetch_one(
+    fresh = await _fetch_one(
         "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
     )
+    await _ensure_brand_templates(fresh, user_id)
+    return fresh
 
 
 @api_router.post("/app-profiles/{profile_id}/refresh")
@@ -6267,6 +6352,14 @@ def _score_template_for_angle(
 
     def add(weight, reason):
         weighted.append((weight, reason))
+
+    # Brand-tailored templates were generated from this exact profile, so
+    # they start with a head start — bounded like every other signal, and
+    # named so the founder sees why rather than trusting a black box.
+    if (template.get("brand_profile_id") or "") and template.get("brand_profile_id") == (profile.get("id") or ""):
+        brand_name = (profile.get("brand_name") or "this app").strip()
+        score += 2.0
+        add(2.0, f"Tailored for {brand_name} — generated from this app's approved profile.")
 
     angle = angle or {}
     tpl_objective = (template.get("objective") or "").strip()

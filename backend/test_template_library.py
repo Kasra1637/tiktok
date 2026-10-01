@@ -232,6 +232,26 @@ class TestRecommendationScorer:
         )
         assert any("character reference" in lim for lim in result["limitations"])
 
+    def test_brand_tailored_template_outranks_identical_generic(self):
+        angle = {"kind": "problem_solution", "target_audience": "", "app_feature": "",
+                 "claims_to_respect": []}
+        profile = self._profile(id="p1", brand_name="Taskly")
+        generic = _score_template_for_angle(self._template(), profile, angle, "")
+        tailored = _score_template_for_angle(
+            self._template(brand_profile_id="p1"), profile, angle, "")
+        assert tailored["score"] > generic["score"]
+        assert any("Tailored for Taskly" in r for r in tailored["reasons"])
+
+    def test_other_brands_template_gets_no_bonus(self):
+        angle = {"kind": "problem_solution", "target_audience": "", "app_feature": "",
+                 "claims_to_respect": []}
+        profile = self._profile(id="p1", brand_name="Taskly")
+        foreign = _score_template_for_angle(
+            self._template(brand_profile_id="p2"), profile, angle, "")
+        plain = _score_template_for_angle(self._template(), profile, angle, "")
+        assert foreign["score"] == plain["score"]
+        assert not any("Tailored for" in r for r in foreign["reasons"])
+
     def test_claims_to_respect_are_carried_into_limitations(self):
         angle = {
             "kind": "problem_solution", "target_audience": "", "app_feature": "",
@@ -280,3 +300,89 @@ class TestAbstractStructureGuarantee:
             blob = " ".join(str(v) for v in tpl.values()).lower()
             for banned in ("frame by frame", "frame-by-frame", "exact copy", "replicate the"):
                 assert banned not in blob, f"{tpl['name']} uses {banned!r}"
+
+
+class TestBrandTemplateNormalization:
+    """Invalid model-drafted structures are dropped, never repaired into guesses."""
+
+    def test_drops_nameless_and_structureless_items(self):
+        import ai_service
+        assert ai_service.normalize_brand_template({}) is None
+        assert ai_service.normalize_brand_template({"name": "No opening"}) is None
+        assert ai_service.normalize_brand_template({"opening_structure": "No name"}) is None
+        assert ai_service.normalize_brand_template("nonsense") is None
+
+    def test_coerces_vocabularies_and_bounds(self):
+        import ai_service
+        good = ai_service.normalize_brand_template({
+            "name": "T", "category": "nonsense-kind", "objective": "nonsense-objective",
+            "opening_structure": "Open.", "hook_seconds": 99, "default_duration": 99,
+            "content_slots": {"a": "b", "": "junk", "c": ""},
+        })
+        assert good["category"] == "other"
+        assert good["hook_seconds"] == 6
+        assert good["default_duration"] == tl.DEFAULT_DURATION
+        assert good["content_slots"] == {"a": "b"}
+
+
+class TestBrandTemplatePrompt:
+    """
+    The generator's directives, captured by stubbing _chat_json — no network.
+    The prompt must demand brand-specific, presenter-led structures, because
+    that is the entire justification for generating templates per profile.
+    """
+
+    def _capture(self, monkeypatch, reply):
+        import ai_service
+        captured = {}
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured["system"] = system_message
+            captured["prompt"] = prompt
+            return reply
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        return captured
+
+    def _reply(self, n):
+        return [
+            {
+                "name": f"Brand Hook {i}",
+                "category": "pain-point-question",
+                "objective": "address_user_problem",
+                "opening_structure": f"Open on pain {i}.",
+                "hook_seconds": 3,
+                "continuation_structure": "Then the fix.",
+                "cta_pattern": "Try it.",
+                "visual_style": "Talking head.",
+                "camera_pacing": "Steady.",
+                "content_slots": {"app_feature": "Task timer", "cta": "Try it free"},
+                "default_duration": 20,
+            }
+            for i in range(n)
+        ]
+
+    def test_generates_the_requested_count(self, monkeypatch):
+        import asyncio
+        import ai_service
+        self._capture(monkeypatch, self._reply(10))
+        result = asyncio.run(ai_service.generate_brand_templates(
+            {"brand_name": "Taskly", "core_features": ["timer"], "target_audience": "Busy"},
+            [{"kind": "problem_solution", "label": "L", "target_audience": "Busy",
+              "user_problem": "P", "app_feature": "timer"}],
+            count=3,
+        ))
+        assert len(result) == 3
+        assert all(t["category"] == "pain-point-question" for t in result)
+
+    def test_prompt_demands_brand_specific_presenter_led_structures(self, monkeypatch):
+        import asyncio
+        import ai_service
+        captured = self._capture(monkeypatch, self._reply(1))
+        asyncio.run(ai_service.generate_brand_templates(
+            {"brand_name": "Taskly", "core_features": ["timer"]}, [], count=1))
+        prompt = captured["prompt"]
+        assert "Pre-fill every content slot" in prompt
+        assert "screenshots" in prompt
+        assert "double-quote" in prompt
+        assert "required_assets" not in prompt
