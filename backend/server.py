@@ -8140,7 +8140,7 @@ async def generate_project_strategy(
         # they need different fixes: truncation means the token budget is wrong,
         # anything else means the model or the request is. Both are already
         # logged with the raw text, so this only has to be honest in the UI.
-        from ai_service import TruncatedResponse
+        from ai_service import TruncatedResponse, ModelRefusal
 
         logger.error(f"Strategy generation failed for project {project_id}: {e!r}")
         if isinstance(e, TruncatedResponse):
@@ -8149,6 +8149,16 @@ async def generate_project_strategy(
                 detail=(
                     "The strategy reply was cut off before it finished, so it could not be "
                     "read. This is a length problem, not a bad request — please try again."
+                ),
+            )
+        if isinstance(e, ModelRefusal):
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "The model declined to answer instead of returning a strategy — "
+                    "usually its safety filter reacting to the app's topic, not a "
+                    "bad request. Please try again once; if it repeats, report it "
+                    "rather than retrying."
                 ),
             )
         raise HTTPException(

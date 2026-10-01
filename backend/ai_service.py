@@ -287,14 +287,18 @@ def _parse_json_response(full_text: str, context: str) -> dict:
     """
     cleaned = _clean_json_text(full_text)
     try:
-        return json.loads(cleaned)
+        return json.loads(cleaned, strict=False)
     except json.JSONDecodeError:
         pass
 
     candidate = _extract_balanced_object(cleaned)
     if candidate:
         try:
-            return json.loads(candidate)
+            # strict=False permits literal newlines/tabs inside strings — the
+            # most common model formatting slip, and semantically neutral
+            # (unlike trailing commas or quote repairs, which guess at
+            # meaning). A truly truncated object still fails here.
+            return json.loads(candidate, strict=False)
         except json.JSONDecodeError:
             pass
 
@@ -303,6 +307,20 @@ def _parse_json_response(full_text: str, context: str) -> dict:
         f"{full_text[:1500]!r}"
     )
     raise RuntimeError(f"{context} did not return valid JSON")
+
+
+class ModelRefusal(RuntimeError):
+    """
+    The model answered in prose instead of JSON — typically a safety refusal
+    ("I can't help with...") rather than a formatting slip.
+
+    Worth its own exception: without it a refusal surfaces as "did not return
+    valid JSON", which sends everyone hunting for a parser or budget problem
+    while the real cause is the model declining the prompt. Retrying the
+    identical prompt sometimes works (temperature), but a repeated refusal
+    means the prompt's topic trips the provider's filter, and the fix is the
+    wording, not the plumbing.
+    """
 
 
 class TruncatedResponse(RuntimeError):
@@ -316,6 +334,18 @@ class TruncatedResponse(RuntimeError):
     thought tokens are drawn from the same completion budget, so a large JSON
     schema can exhaust max_tokens before the closing brace is ever written.
     """
+
+
+def _is_refusal_finish_reason(finish_reason) -> bool:
+    """
+    Whether the provider stopped the reply on safety grounds rather than
+    length or completion. Matched loosely because providers name it
+    differently (content_filter, SAFETY, blocked) — this only ever compares
+    the finish_reason enum, never message text, so loose matching cannot
+    misfire on ordinary prose.
+    """
+    text = str(finish_reason or "").lower()
+    return any(marker in text for marker in ("filter", "safety", "blocked", "refus"))
 
 
 async def _chat_json(
@@ -395,6 +425,22 @@ async def _chat_json(
             )
             continue
 
+        if _is_refusal_finish_reason(finish_reason):
+            # The provider filtered the reply. Retrying the identical prompt
+            # can occasionally work, but name it either way: without this the
+            # failure below reports "did not return valid JSON" and the real
+            # cause — the filter, not the format — goes unquestioned.
+            logger.error(
+                f"{context}: model refused (finish_reason={finish_reason}). "
+                f"Raw head: {full_text[:300]!r}"
+            )
+            last_error = ModelRefusal(
+                f"{context} was refused by the model (finish_reason={finish_reason})"
+            )
+            if attempt < attempts:
+                continue
+            raise last_error
+
         if finish_reason == "length":
             # The JSON was cut mid-object, so the parser cannot see it. Say so.
             logger.error(
@@ -410,14 +456,28 @@ async def _chat_json(
         try:
             return _parse_json_response(full_text, context)
         except RuntimeError as e:
-            last_error = e
+            if "{" not in full_text:
+                # Prose with no JSON object at all — typically a refusal or
+                # apology the finish_reason did not label. Report it as one:
+                # "invalid JSON" would send everyone hunting for a parser or
+                # budget problem while the model simply declined the prompt.
+                logger.error(
+                    f"{context}: reply contained no JSON object. "
+                    f"Raw response: {full_text[:500]!r}"
+                )
+                last_error = ModelRefusal(
+                    f"{context} returned no JSON object — the model replied "
+                    f"in prose, which usually means it declined the prompt"
+                )
+            else:
+                last_error = e
             if attempt < attempts:
                 logger.warning(
                     f"{context}: attempt {attempt} returned unparseable JSON, retrying "
                     f"with a stricter instruction. Raw head: {full_text[:300]!r}"
                 )
                 continue
-            raise
+            raise last_error
 
     if last_error:
         raise last_error

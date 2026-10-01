@@ -135,16 +135,53 @@ class TestChatJson:
         assert result["hook_line"] == "It was always this one tap"
         assert len(rec.payloads) == 2
 
-    def test_a_formatting_slip_is_retried_then_raised(self, monkeypatch):
+    def test_a_prose_refusal_is_named_not_a_json_error(self, monkeypatch):
+        """
+        "I cannot help with that." has no braces at all — it is a refusal,
+        not a formatting slip. Reporting it as "did not return valid JSON"
+        used to send everyone hunting for a parser or budget problem while
+        the model had simply declined the prompt.
+        """
         import ai_service
         rec = _patch_client(monkeypatch, [_completion("I cannot help with that.")])
-        with pytest.raises(RuntimeError) as err:
+        with pytest.raises(ai_service.ModelRefusal) as err:
             _run(ai_service._chat_json("sys", "prompt", "Ctx"))
-        # Two attempts, and the last failure is a plain JSON error, because a
-        # refusal is not a truncation.
+        # Retried once (temperature sometimes works), then named as a refusal.
         assert len(rec.payloads) == 2
-        assert "valid JSON" in str(err.value)
+        assert "prose" in str(err.value) or "declined" in str(err.value)
+        assert "valid JSON" not in str(err.value)
         assert not isinstance(err.value, ai_service.TruncatedResponse)
+
+    def test_malformed_json_with_braces_is_still_a_json_error(self, monkeypatch):
+        """
+        The counterpart: braces present but unparseable is genuinely a format
+        problem, and must keep the JSON error rather than being renamed.
+        """
+        import ai_service
+        rec = _patch_client(monkeypatch, [_completion('{"a": 1,')])
+        with pytest.raises(RuntimeError) as err:
+            _run(ai_service._chat_json("sys", "prompt", "Ctx", attempts=1))
+        assert "valid JSON" in str(err.value)
+        assert not isinstance(err.value, ai_service.ModelRefusal)
+
+    def test_a_filtered_reply_names_the_finish_reason(self, monkeypatch):
+        import ai_service
+        rec = _patch_client(monkeypatch, [
+            _completion("I can't help with that topic.", finish_reason="content_filter")])
+        with pytest.raises(ai_service.ModelRefusal) as err:
+            _run(ai_service._chat_json("sys", "prompt", "Ctx", attempts=1))
+        assert "content_filter" in str(err.value)
+
+    def test_literal_newlines_inside_strings_are_salvaged(self, monkeypatch):
+        """
+        The most common model formatting slip: a raw newline inside a string
+        value. strict=False accepts it with zero semantic change, so this
+        parses on the first attempt instead of costing a retry.
+        """
+        import ai_service
+        rec = _patch_client(monkeypatch, [_completion('{"a": "line one\nline two"}')])
+        assert _run(ai_service._chat_json("sys", "prompt", "Ctx")) == {"a": "line one\nline two"}
+        assert len(rec.payloads) == 1
 
     def test_a_formatting_slip_recovers_on_retry(self, monkeypatch):
         import ai_service
@@ -260,6 +297,30 @@ class TestStrategyEndpointError:
         assert "cut off" in message
         assert "valid JSON" not in message
         assert "length problem" in message
+
+    def test_refusal_is_reported_as_a_refusal(self, api, monkeypatch):
+        """
+        A model that declines the prompt must not surface as a JSON error:
+        the founder would retry a request that fails the same way every
+        time, instead of reporting it.
+        """
+        from fastapi import HTTPException
+        from models import GenerateStrategyRequest
+        from ai_service import ModelRefusal
+
+        async def boom(**kwargs):
+            raise ModelRefusal("Video strategy returned no JSON object")
+
+        monkeypatch.setattr(api, "generate_video_strategy", boom)
+        project_id = self._project(api)
+        with pytest.raises(HTTPException) as err:
+            _run(api.generate_project_strategy(
+                project_id=project_id, payload=GenerateStrategyRequest(),
+                user_id="anonymous"))
+        assert err.value.status_code == 502
+        message = str(err.value.detail)
+        assert "declined" in message
+        assert "valid JSON" not in message
 
     def test_any_other_failure_still_reports_itself(self, api, monkeypatch):
         from fastapi import HTTPException
