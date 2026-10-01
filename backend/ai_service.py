@@ -1821,10 +1821,18 @@ async def generate_creative_plan(
 
 REQUIRED_STRATEGY_KEYS = {
     "strategy_summary", "audience_problem", "emotional_triggers", "hook_concept",
-    "hook_line", "hook_promise", "hook_action", "hook_dialogue", "messaging_pillars",
+    "hook_line", "hook_promise", "hook_action", "messaging_pillars",
     "primary_feature", "desired_outcome", "differentiation_beat", "cta_strategy",
     "scene", "performance", "segments", "continuity_contract",
 }
+# Note what else is missing on purpose: "hook_dialogue". It is enrichment —
+# the exact words or delivery direction for the hook beat — and every
+# consumer already tolerates its absence (normalize defaults it to "",
+# the segment prompt skips the dialogue line when empty, and no UI
+# renders it). A model that drops it gave a complete strategy; failing
+# validation over it produced "missing required fields: {'hook_dialogue'}"
+# on rebuilds that could never be fixed by retrying the same plan.
+#
 # Note what is missing on purpose: "character". The on-camera person is copied
 # from the founder's photograph, so a written appearance is a fabrication, not
 # a fallback. An earlier version of the schema requested a "character" object

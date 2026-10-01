@@ -1043,11 +1043,13 @@ class TestStrategyPromptDirectives:
             # omits it. This is the exact shape that used to fail validation
             # with "missing required fields: {'character'}" — the prompt told
             # the model to omit the key while validation demanded it.
+            # No "hook_dialogue" either: it is enrichment the model may drop,
+            # and every consumer tolerates its absence.
             return {
                 "strategy_summary": "s", "audience_problem": "p",
                 "emotional_triggers": ["t"], "hook_concept": "c",
                 "hook_line": "h", "hook_promise": "p", "hook_action": "a",
-                "hook_dialogue": "d", "messaging_pillars": ["m"],
+                "messaging_pillars": ["m"],
                 "primary_feature": "f", "desired_outcome": "o",
                 "differentiation_beat": "b", "cta_strategy": "c",
                 "scene": {"environment": "kitchen"},
@@ -1111,6 +1113,9 @@ class TestStrategyPromptDirectives:
         "missing required fields: {'character'}", surfacing in the UI as "AI
         strategy generation failed. Please try again." No retry could ever
         fix it, because the model was doing what it was told.
+        Same for "hook_dialogue": enrichment the model may drop, tolerated
+        everywhere it is read — which the shared fake above proves by omitting
+        both keys in every capture test.
         """
         import ai_service
         captured = self._capture_prompt(monkeypatch)
@@ -1126,5 +1131,6 @@ class TestStrategyPromptDirectives:
             profile_feedback={},
         ))
         assert "character" not in result
+        assert result["hook_dialogue"] == ""
         assert result["scene"]["environment"] == "kitchen"
         assert 'There is no "character" key in this schema' in captured["prompt"]
