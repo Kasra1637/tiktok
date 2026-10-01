@@ -22,6 +22,9 @@ export default function TrendResearch() {
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
   const [runs, setRuns] = useState([]);
+  const [expandedId, setExpandedId] = useState(null);
+  const [publishBusyId, setPublishBusyId] = useState("");
+  const [publishedIds, setPublishedIds] = useState(() => new Set());
 
   const loadRuns = useCallback(() => {
     api.getResearchRuns().then((d) => setRuns(d.runs || [])).catch(() => setRuns([]));
@@ -124,20 +127,75 @@ export default function TrendResearch() {
 
           {result.drafts.length > 0 && (
             <div className="space-y-2">
-              {result.drafts.map((d) => (
+              {result.drafts.map((d) => {
+                const published = publishedIds.has(d.id);
+                const expanded = expandedId === d.id;
+                return (
                 <div key={d.id} className="surface rounded-2xl p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="font-display text-sm font-semibold">{d.name}</span>
                     <span className="flex items-center gap-2">
                       <Badge variant="secondary" className="text-[11px]">{humanize(d.category)}</Badge>
-                      <Badge variant="outline" className="text-[11px]">unpublished</Badge>
+                      <Badge variant="outline" className="text-[11px]">
+                        {published ? "published" : "unpublished"}
+                      </Badge>
                     </span>
                   </div>
-                  <Button variant="secondary" size="sm" className="mt-2" asChild>
-                    <a href={`/templates/${d.id}`}>Review and publish</a>
-                  </Button>
+                  {expanded && (
+                    <dl className="mt-3 space-y-2 text-sm">
+                      {[
+                        ["Opening", d.opening_structure],
+                        ["Continuation", d.continuation_structure],
+                        ["CTA pattern", d.cta_pattern],
+                        ["Hook mechanic", d.hook_mechanic],
+                      ].map(([label, value]) => value ? (
+                        <div key={label}>
+                          <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
+                          <dd className="mt-0.5">{value}</dd>
+                        </div>
+                      ) : null)}
+                    </dl>
+                  )}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setExpandedId(expanded ? null : d.id)}
+                    >
+                      {expanded ? "Hide detail" : "Review"}
+                    </Button>
+                    {published ? (
+                      <Button variant="brand" size="sm" asChild>
+                        <a href="/create">Use in the studio</a>
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="brand"
+                        size="sm"
+                        disabled={publishBusyId === d.id}
+                        onClick={async () => {
+                          setPublishBusyId(d.id);
+                          setError(null);
+                          try {
+                            await api.publishTemplate(d.id);
+                            setPublishedIds((prev) => new Set(prev).add(d.id));
+                          } catch (err) {
+                            setError(getErrorMessage(err));
+                          } finally {
+                            setPublishBusyId("");
+                          }
+                        }}
+                      >
+                        {publishBusyId === d.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : null}
+                        Publish
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
 

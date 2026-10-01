@@ -9704,7 +9704,17 @@ async def run_trend_research(
              "abstracted", draft.get("pacing_note", ""), draft.get("hook_mechanic", ""),
              draft["evidence_note"], now_iso(), now_iso(), user_id),
         )
-        created.append({"id": template_id, "name": draft["name"], "category": draft["category"]})
+        created.append({
+            "id": template_id,
+            "name": draft["name"],
+            "category": draft["category"],
+            # Reviewable inline on the Trend Research page, which is the only
+            # review surface now that the library pages are gone.
+            "opening_structure": draft["opening_structure"],
+            "continuation_structure": draft["continuation_structure"],
+            "cta_pattern": draft["cta_pattern"],
+            "hook_mechanic": draft.get("hook_mechanic", ""),
+        })
 
     await _execute(
         "UPDATE research_runs SET sources_found = ?, findings = ?, drafts = ?, "
