@@ -298,6 +298,13 @@ class TestRecoverableErrors:
         "Unsupported parameter: duration",
         "Validation error: prompt too long",
         "Video job not found (404). It may have expired.",
+        # Real provider refusal of the character reference photo: the model
+        # vendors it as InputImageSensitiveContentDetected. Retrying the same
+        # photo burns money and always fails identically.
+        '{"error":{"code":"InputImageSensitiveContentDetected.PrivacyInformation",'
+        '"message":"The request failed because the input image contains private content"}}',
+        "Video generation failed (HTTP 400): {\"error\":{\"message\":\"HTTP 400: "
+        "{\"error\":{\"code\":\"InputImageSensitiveContentDetected.PrivacyInformation\"}}\"}}}}",
     ])
     def test_permanent_failures_are_not_retryable(self, message):
         assert gp.is_recoverable_error(message) is False
@@ -305,3 +312,25 @@ class TestRecoverableErrors:
     def test_empty_message_is_not_retryable(self):
         assert gp.is_recoverable_error("") is False
         assert gp.is_recoverable_error(None) is False
+
+
+class TestProviderRefusalMessage:
+    def test_photo_refusal_gets_a_human_message(self):
+        import ai_service
+        message = ai_service.describe_provider_refusal(
+            '{"error":{"code":"InputImageSensitiveContentDetected.PrivacyInformation",'
+            '"message":"The request failed because the input image"}}'
+        )
+        assert message is not None
+        assert "privacy filter" in message
+        assert "different photo" in message
+        # Short enough to survive the server's truncation of the submit
+        # detail: the raw nested JSON used to arrive cut off mid-string.
+        assert len(message) <= 190
+
+    def test_non_refusal_errors_get_no_message(self):
+        import ai_service
+        assert ai_service.describe_provider_refusal("Request timed out") is None
+        assert ai_service.describe_provider_refusal("HTTP 500 internal error") is None
+        assert ai_service.describe_provider_refusal("") is None
+        assert ai_service.describe_provider_refusal(None) is None

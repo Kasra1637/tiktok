@@ -1001,6 +1001,46 @@ async def _edit_video_with_aleph(
         return data
 
 
+# Provider error signatures that mean "this input will never be accepted".
+# Kept in sync with the permanent markers in
+# generation_planning.is_recoverable_error: anything listed here must also
+# read as permanent there, or a refusal becomes a retry that burns money and
+# always fails the same way.
+_PROVIDER_REFUSAL_MARKERS = (
+    "sensitive",
+    "privacy",
+    "contentdetect",
+    "content_detect",
+    "contentfilter",
+    "content_filter",
+    "policy_violation",
+    "policyviolation",
+    "inputimage",
+    "input_image",
+)
+
+
+def describe_provider_refusal(error_text: str) -> Optional[str]:
+    """
+    Founder-facing message for a provider content refusal, or None when the
+    payload is anything else.
+
+    The raw provider body is a nested JSON dump ("HTTP 400: {\"error\":
+    {\"code\": ...}}") that names a filter code and nothing actionable. On a
+    hook there is no bridge frame, so the refused input is the character
+    reference photo itself — and retrying it can never succeed, so the
+    message says what to change instead of inviting another attempt.
+    """
+    lowered = (error_text or "").lower()
+    if not any(marker in lowered for marker in _PROVIDER_REFUSAL_MARKERS):
+        return None
+    return (
+        "The provider refused the reference photo (privacy filter) — retrying "
+        "won't help. Use a different photo: face forward, plain background, "
+        "no other people or readable text."
+    )
+
+
 async def generate_video(
     prompt: str,
     reference_image_path: Path = None,
@@ -1246,7 +1286,8 @@ async def generate_video(
             if resp.status_code >= 400:
                 error_text = resp.text[:500]
                 logger.error(f"Video generation submission failed: HTTP {resp.status_code}: {error_text}")
-                raise RuntimeError(f"Video generation failed (HTTP {resp.status_code}): {error_text}")
+                human = describe_provider_refusal(error_text)
+                raise RuntimeError(human or f"Video generation failed (HTTP {resp.status_code}): {error_text}")
             break
 
         data = resp.json()
