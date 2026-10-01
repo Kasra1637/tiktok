@@ -260,194 +260,23 @@ class TestTemplateListing:
         assert result["templates"] == []
 
 
-class TestFavorites:
-    def test_favorite_toggles_on_and_off(self, api):
-        tpl_id = _run(api.list_templates(user_id=ANON))["templates"][0]["id"]
-        assert _run(api.toggle_template_favorite(template_id=tpl_id, user_id=ANON))["is_favorite"] is True
-        assert _run(api.toggle_template_favorite(template_id=tpl_id, user_id=ANON))["is_favorite"] is False
-
-    def test_favorites_only_filter(self, api):
-        tpl_id = _run(api.list_templates(user_id=ANON))["templates"][1]["id"]
-        _run(api.toggle_template_favorite(template_id=tpl_id, user_id=ANON))
-        favs = _run(api.list_templates(favorites_only=True, user_id=ANON))
-        assert [t["id"] for t in favs["templates"]] == [tpl_id]
-        _run(api.toggle_template_favorite(template_id=tpl_id, user_id=ANON))
-
-    def test_favorite_is_per_user_on_shared_template(self, api):
-        """Curated templates are shared; one user's favorite must not leak."""
-        tpl_id = _run(api.list_templates(user_id=ANON))["templates"][2]["id"]
-        _run(api.toggle_template_favorite(template_id=tpl_id, user_id=ANON))
-        mine = _run(api.get_template(template_id=tpl_id, user_id=ANON))
-        theirs = _run(api.get_template(template_id=tpl_id, user_id=OTHER_USER))
-        assert mine["is_favorite"] is True
-        assert theirs["is_favorite"] is False
-        _run(api.toggle_template_favorite(template_id=tpl_id, user_id=ANON))
-
-
-class TestTemplateCrud:
-    def test_create_requires_name_and_opening_structure(self, api):
-        from models import CreateTemplateRequest
-        with pytest.raises(HTTPException) as no_name:
-            _run(api.create_template(
-                payload=CreateTemplateRequest(name="  ", opening_structure="x"), user_id=ANON))
-        assert no_name.value.status_code == 400
-        with pytest.raises(HTTPException) as no_structure:
-            _run(api.create_template(
-                payload=CreateTemplateRequest(name="X", opening_structure=""), user_id=ANON))
-        assert no_structure.value.status_code == 400
-
-    def test_create_then_get(self, api):
-        from models import CreateTemplateRequest
-        made = _run(api.create_template(payload=CreateTemplateRequest(
-            name="Internal QA Template", category="demo",
-            opening_structure="Open on the finished result.",
-            continuation_structure="Explain, then CTA.",
-            required_assets=["character_reference"],
-            default_duration=15,
-            content_slots={"app_feature": "the timer"},
-            example_preview="Open on the finished timer, then show two taps.",
-        ), user_id=ANON))
-        assert made["origin"] == "custom"
-        assert made["is_usable"] is True
-        assert made["required_assets"] == ["character_reference"]
-        assert made["content_slots"] == {"app_feature": "the timer"}
-        assert made["example_preview"] == "Open on the finished timer, then show two taps."
-
-        fetched = _run(api.get_template(template_id=made["id"], user_id=ANON))
-        assert fetched["name"] == "Internal QA Template"
-        assert fetched["example_preview"] == made["example_preview"]
-
-    def test_create_rejects_a_retired_requirement(self, api):
-        """
-        Face-only library: a template demanding a screenshot, recording,
-        logo, photo, or audio can never be satisfied, so creation refuses it
-        rather than shipping a dead template.
-        """
-        from models import CreateTemplateRequest
-        with pytest.raises(HTTPException) as err:
-            _run(api.create_template(payload=CreateTemplateRequest(
-                name="Retired QA Template",
-                opening_structure="Open on the app.",
-                required_assets=["screenshot", "logo"],
-            ), user_id=ANON))
-        assert err.value.status_code == 400
-        assert "character reference" in str(err.value.detail)
-
-    def test_create_defaults_to_the_character_reference(self, api):
-        from models import CreateTemplateRequest
-        made = _run(api.create_template(payload=CreateTemplateRequest(
-            name="Default QA Template", opening_structure="A"), user_id=ANON))
-        assert made["required_assets"] == ["character_reference"]
-
-    def test_update_bumps_version(self, api):
-        from models import CreateTemplateRequest, UpdateTemplateRequest
-        made = _run(api.create_template(payload=CreateTemplateRequest(
-            name="Versioned Template", opening_structure="A"), user_id=ANON))
-        assert made["version"] == 1
-        updated = _run(api.update_template(
-            template_id=made["id"],
-            payload=UpdateTemplateRequest(continuation_structure="B"),
-            user_id=ANON,
-        ))
-        assert updated["version"] == 2
-        assert updated["continuation_structure"] == "B"
-
-    def test_update_supports_every_editable_field(self, api):
-        from models import CreateTemplateRequest, UpdateTemplateRequest
-        made = _run(api.create_template(payload=CreateTemplateRequest(
-            name="Editable Template", opening_structure="A"), user_id=ANON))
-        updated = _run(api.update_template(
-            template_id=made["id"],
-            payload=UpdateTemplateRequest(
-                name="Edited Template",
-                category="demo",
-                app_categories=["productivity"],
-                audiences=["busy parents"],
-                objective="demonstrate_feature",
-                opening_structure="Edited opening.",
-                hook_seconds=4,
-                continuation_structure="Edited continuation.",
-                cta_pattern="Edited CTA.",
-                visual_style="Edited visual.",
-                camera_pacing="Edited pacing.",
-                required_assets=["character_reference"],
-                default_duration=15,
-                content_slots={"app_feature": "timer"},
-                example_preview="Edited example.",
-                evidence_note="Edited evidence.",
-                notes="Edited notes.",
-            ),
-            user_id=ANON,
-        ))
-        assert updated["version"] == 2
-        assert updated["name"] == "Edited Template"
-        assert updated["category"] == "demo"
-        assert updated["app_categories"] == ["productivity"]
-        assert updated["audiences"] == ["busy parents"]
-        assert updated["objective"] == "demonstrate_feature"
-        assert updated["hook_seconds"] == 4
-        assert updated["required_assets"] == ["character_reference"]
-        assert updated["default_duration"] == 15
-        assert updated["content_slots"] == {"app_feature": "timer"}
-        assert updated["example_preview"] == "Edited example."
-
-    def test_update_rejects_empty_name(self, api):
-        from models import CreateTemplateRequest, UpdateTemplateRequest
-        made = _run(api.create_template(payload=CreateTemplateRequest(
-            name="Keep Name", opening_structure="A"), user_id=ANON))
-        with pytest.raises(HTTPException) as err:
-            _run(api.update_template(
-                template_id=made["id"], payload=UpdateTemplateRequest(name="   "), user_id=ANON))
-        assert err.value.status_code == 400
-
-    def test_duplicate_copies_structure_and_becomes_custom(self, api):
-        from models import CreateTemplateRequest
-        source = _run(api.create_template(payload=CreateTemplateRequest(
-            name="Duplicated QA Template",
-            opening_structure="Open on the finished result.",
-            continuation_structure="Explain, then CTA.",
-            content_slots={"app_feature": "the timer"},
-            example_preview="Duplicated example.",
-        ), user_id=ANON))
-        copy = _run(api.duplicate_template(template_id=source["id"], user_id=ANON))
-        assert copy["origin"] == "custom"
-        assert copy["opening_structure"] == source["opening_structure"]
-        assert copy["continuation_structure"] == source["continuation_structure"]
-        assert copy["content_slots"] == source["content_slots"]
-        assert copy["example_preview"] == "Duplicated example."
-        assert copy["id"] != source["id"]
-        assert copy["name"].endswith("(copy)")
-
-    def test_archive_hides_and_include_archived_reveals(self, api):
-        source = _run(api.list_templates(q="POV Scenario", user_id=ANON))["templates"][0]
-        copy = _run(api.duplicate_template(template_id=source["id"], user_id=ANON))
-        _run(api.archive_template(template_id=copy["id"], archived=True, user_id=ANON))
-
-        default_ids = [t["id"] for t in _run(api.list_templates(user_id=ANON))["templates"]]
-        assert copy["id"] not in default_ids
-
-        all_ids = [t["id"] for t in
-                   _run(api.list_templates(include_archived=True, user_id=ANON))["templates"]]
-        assert copy["id"] in all_ids
-
-        _run(api.archive_template(template_id=copy["id"], archived=False, user_id=ANON))
-        default_ids = [t["id"] for t in _run(api.list_templates(user_id=ANON))["templates"]]
-        assert copy["id"] in default_ids
-
-    def test_archived_template_is_not_usable(self, api):
-        source = _run(api.list_templates(q="Curiosity Gap", user_id=ANON))["templates"][0]
-        copy = _run(api.duplicate_template(template_id=source["id"], user_id=ANON))
-        _run(api.archive_template(template_id=copy["id"], archived=True, user_id=ANON))
-        assert _run(api.get_template(template_id=copy["id"], user_id=ANON))["is_usable"] is False
-
+class TestTemplatePublish:
+    """
+    The only surviving template write endpoint: research drafts stay
+    unusable until an operator reviews and publishes them, now from the
+    Trend Research page instead of the deleted library pages.
+    """
     def test_publish_makes_draft_usable(self, api):
-        from models import CreateTemplateRequest
-        made = _run(api.create_template(payload=CreateTemplateRequest(
-            name="Research Draft", opening_structure="A"), user_id=ANON))
+        tpl_id = str(uuid.uuid4())
         _run(api._execute(
-            "UPDATE hook_templates SET review_status = 'draft' WHERE id = ?", (made["id"],)))
-        assert _run(api.get_template(template_id=made["id"], user_id=ANON))["is_usable"] is False
-        published = _run(api.publish_template(template_id=made["id"], user_id=ANON))
+            """INSERT INTO hook_templates (id, name, category, origin, required_assets,
+               opening_structure, review_status, created_at, updated_at, user_id)
+               VALUES (?, 'Research Draft', 'other', 'research_draft',
+               '["character_reference"]', 'Open on the result.', 'draft', '', '', ?)""", (tpl_id, ANON)))
+        listed = [t for t in _run(api.list_templates(user_id=ANON))["templates"]
+                  if t["id"] == tpl_id]
+        assert listed and listed[0]["is_usable"] is False
+        published = _run(api.publish_template(template_id=tpl_id, user_id=ANON))
         assert published["review_status"] == "approved"
         assert published["is_usable"] is True
 
@@ -460,12 +289,6 @@ class TestTemplateCrud:
         with pytest.raises(HTTPException) as err:
             _run(api.publish_template(template_id=tpl_id, user_id=ANON))
         assert err.value.status_code == 400
-
-    def test_missing_template_is_404(self, api):
-        with pytest.raises(HTTPException) as err:
-            _run(api.get_template(template_id=str(uuid.uuid4()), user_id=ANON))
-        assert err.value.status_code == 404
-
 
 class TestContentAngles:
     def test_manual_angle_requires_label_audience_and_problem(self, api):
@@ -588,12 +411,17 @@ class TestRecommendations:
         assert all(r["template"]["is_usable"] for r in result["recommendations"])
 
     def test_archived_templates_never_recommended(self, api):
-        source = _run(api.list_templates(q="Day in the Life", user_id=ANON))["templates"][0]
-        copy = _run(api.duplicate_template(template_id=source["id"], user_id=ANON))
-        _run(api.archive_template(template_id=copy["id"], archived=True, user_id=ANON))
+        import uuid as _uuid
+        archived_id = str(_uuid.uuid4())
+        _run(api._execute(
+            "INSERT INTO hook_templates (id, name, category, origin, required_assets, "
+            "archived, created_at, updated_at, user_id) VALUES (?, 'Archived QA', 'other', "
+            "'custom', ?, 1, '', '', ?)",
+            (archived_id, '["character_reference"]', ANON)))
         profile = _make_profile(api, ANON, name="Reco App 3")
         result = _run(api.recommend_templates(profile_id=profile["id"], user_id=ANON))
-        assert copy["id"] not in [r["template"]["id"] for r in result["recommendations"]]
+        assert archived_id not in [r["template"]["id"] for r in result["recommendations"]]
+        _run(api._execute("DELETE FROM hook_templates WHERE id = ?", (archived_id,)))
 
     def test_demonstration_angle_returns_face_only_templates(self, api):
         """
@@ -759,14 +587,20 @@ class TestFeedbackInfluence:
 
 class TestCrossUserIsolation:
     def test_another_users_custom_template_is_hidden(self, api):
-        from models import CreateTemplateRequest
-        mine = _run(api.create_template(payload=CreateTemplateRequest(
-            name="Private QA Template", opening_structure="A"), user_id=OTHER_USER))
+        import uuid as _uuid
+        mine = str(_uuid.uuid4())
+        _run(api._execute(
+            "INSERT INTO hook_templates (id, name, category, origin, required_assets, "
+            "created_at, updated_at, user_id) VALUES (?, 'Private QA Template', 'other', "
+            "'custom', ?, '', '', ?)",
+            (mine, '["character_reference"]', OTHER_USER),
+        ))
         theirs = _run(api.list_templates(user_id=ANON))
-        assert mine["id"] not in [t["id"] for t in theirs["templates"]]
+        assert mine not in [t["id"] for t in theirs["templates"]]
         with pytest.raises(HTTPException) as err:
-            _run(api.get_template(template_id=mine["id"], user_id=ANON))
+            _run(api.publish_template(template_id=mine, user_id=ANON))
         assert err.value.status_code == 404
+        _run(api._execute("DELETE FROM hook_templates WHERE id = ?", (mine,)))
 
     def test_curated_templates_visible_to_everyone(self, api):
         listing = _run(api.list_templates(user_id=OTHER_USER))

@@ -636,7 +636,8 @@ class TestResearchDraftPublication:
                VALUES (?, 'Observed Pattern', 'other', 'Opens with a question',
                'Then the answer', 'research_draft', 'draft', 0, 1, '', '', ?)""",
             (tpl_id, ANON)))
-        row = _run(api.get_template(tpl_id, ANON))
+        row = _run(api.list_templates(q="Observed Pattern", user_id=ANON))["templates"][0]
+        assert row["id"] == tpl_id
         assert row["is_usable"] is False
         assert row["review_status"] == "draft"
 
