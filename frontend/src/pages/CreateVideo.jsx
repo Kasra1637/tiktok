@@ -23,7 +23,7 @@ import {
   requiredAssetStatus,
   blockingRequirements,
 } from "../lib/templateRequirements";
-import { DEFAULT_HOOK } from "../lib/videoLength";
+import { DEFAULT_HOOK, DEFAULT_DURATION } from "../lib/videoLength";
 import {
   Clapperboard, Loader2, AlertTriangle, Briefcase, Target, LayoutTemplate,
   Image as ImageIcon, FileText, Check, Sparkles, RefreshCw,
@@ -347,7 +347,13 @@ export default function CreateVideo() {
   const [angleId, setAngleId] = useState(params.get("angle") || "");
   const [templateId, setTemplateId] = useState(params.get("template") || "");
   const [objective, setObjective] = useState("");
-  const [duration, setDuration] = useState(20);
+  // Seeded to the shortest supported length, not the library default of 20s:
+  // every segment past the first is another paid render, and no studio-eligible
+  // model can do 20s in one pass today. Ten seconds is a first video that costs
+  // one render and is actually finishable, so the founder can learn the flow
+  // before spending on a two-pass target. The library default is left alone --
+  // it also sets the length of a project created with no explicit request.
+  const [duration, setDuration] = useState(DEFAULT_DURATION);
   // Whether this video is only the opening hook or a hook plus an extension.
   // Declared here, on the step that sets the target, because the total length
   // below only means something once this is answered. Seeded to true to match
@@ -752,6 +758,12 @@ export default function CreateVideo() {
   // into canGenerate, because "you have not chosen a template yet" and "you
   // still owe this template a photograph" are different problems.
   const blockedOnAssets = Boolean(template) && missingIdentity.length > 0;
+  // How many paid renders the chosen total length costs. The server sends the
+  // real per-duration count in the facets payload, derived from the default
+  // studio model's single-pass ceiling; 1 is the fallback for an older response
+  // that predates the field.
+  const extendPasses = facets?.duration_segments?.[duration] || 1;
+
   const editValue = (key, fallback) =>
     edits[key] !== undefined ? edits[key] : project?.[key] ?? fallback;
   const hasEdits = Object.keys(edits).length > 0;
@@ -965,17 +977,34 @@ export default function CreateVideo() {
                     onChange={(e) => setDuration(Number(e.target.value))}
                     className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
                   >
-                    {(facets?.supported_durations || [10, 15, 20, 30]).map((d) => (
-                      <option key={d} value={d}>{d} seconds</option>
-                    ))}
+                    {(facets?.supported_durations || [10, 15, 20, 30]).map((d) => {
+                      const passes = facets?.duration_segments?.[d] || 1;
+                      return (
+                        <option key={d} value={d}>
+                          {passes > 1
+                            ? `${d} seconds — ${passes} segments`
+                            : `${d} seconds — one pass`}
+                        </option>
+                      );
+                    })}
                   </select>
+                  {/* Each segment past the first is another paid render, so the
+                      count is stated at the point of choosing rather than left
+                      for the founder to discover at the extend button. */}
+                  {extendPasses > 1 && (
+                    <p className="text-xs text-muted-foreground">
+                      {duration}s is {extendPasses} segments, so {extendPasses} paid renders:
+                      the opening, then one per extension. The plan may run out of
+                      beats before you reach the target.
+                    </p>
+                  )}
                   {/* Changing this after a plan exists makes the plan's beat
                       timeline wrong rather than the plan's text, so it is said
                       out loud instead of leaving a founder to save an edit that
                       silently does nothing. */}
-                  {project?.script_version > 0 && duration !== editValue("duration_seconds", 20) && (
+                  {project?.script_version > 0 && duration !== editValue("duration_seconds", DEFAULT_DURATION) && (
                     <p className="text-xs text-muted-foreground">
-                      A plan already exists at {editValue("duration_seconds", 20)}s. Regenerate it
+                      A plan already exists at {editValue("duration_seconds", DEFAULT_DURATION)}s. Regenerate it
                       on the Creative plan step to write the shot timeline to {duration}s.
                     </p>
                   )}
@@ -1381,7 +1410,7 @@ export default function CreateVideo() {
               <div className="space-y-1.5">
                 <span className="text-sm font-medium">Total video length</span>
                 <p className="rounded-lg border border-[color:var(--hairline)] px-3 py-2 text-sm">
-                  {editValue("duration_seconds", 20)} seconds
+                  {editValue("duration_seconds", DEFAULT_DURATION)} seconds
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {project?.script_version

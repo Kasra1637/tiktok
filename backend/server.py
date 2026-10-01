@@ -6340,12 +6340,23 @@ async def template_facets(user_id: str = Depends(get_current_user_id)):
         "WHERE (user_id = ? OR user_id = 'system') AND archived = 0",
         (user_id,),
     )
+    # How many paid renders a total length actually costs, so the length picker
+    # can say so before the founder chooses rather than after they have paid.
+    # Derived from the default studio model's real single-pass ceiling -- today
+    # minimax-h3 caps at 15s, which makes the 20s and 30s options two passes.
+    # Read per request rather than baked in, so pointing VIDEO_MODEL_DEFAULT at
+    # a longer model relabels the options instead of quietly lying.
+    default_cap = video_providers.capability()
+    max_pass = max(1, int(default_cap.get("max_duration") or 30))
     return {
         "hook_categories": template_library.HOOK_CATEGORIES,
         "objectives": template_library.VIDEO_OBJECTIVES,
         "content_angle_kinds": template_library.CONTENT_ANGLE_KINDS,
         "asset_kinds": template_library.ASSET_KINDS,
         "supported_durations": template_library.SUPPORTED_DURATIONS,
+        "duration_segments": {
+            d: max(1, -(-int(d) // max_pass)) for d in template_library.SUPPORTED_DURATIONS
+        },
         "origins": template_library.TEMPLATE_ORIGINS,
         "categories_in_use": sorted({r["category"] for r in rows if r.get("category")}),
     }

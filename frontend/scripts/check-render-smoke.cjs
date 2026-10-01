@@ -230,6 +230,10 @@ const apiStub = {
   getTemplateFacets: async () => ({
     objectives: ["address_user_problem", "demonstrate_feature"],
     supported_durations: [10, 15, 20, 30],
+    // Shaped like the real server response, which derives the per-duration
+    // render count from the default studio model's single-pass ceiling
+    // (CAPABILITY.max_duration above). 20s and 30s are two paid renders.
+    duration_segments: { 10: 1, 15: 1, 20: 2, 30: 2 },
   }),
   getAppProfiles: async () => ({ profiles: [PROFILE] }),
   getContentAngles: async () => ({ angles: [ANGLE] }),
@@ -720,6 +724,63 @@ async function main() {
     if (!select) throw new Error("the total length is no longer chosen before the plan");
     if (!ctx.text().includes("Total video length")) {
       throw new Error("the length control has no label");
+    }
+  });
+
+  // Every segment past the first is a separate paid render, and no
+  // studio-eligible model covers 20s in one pass. A 20s default therefore
+  // spends two renders before the founder has learned the flow -- and worse,
+  // it is the length the plan's beat timeline is written to by default. The
+  // option label and the helper both have to say so, because the alternative
+  // is the founder discovering the segment count at the extend button.
+  await check("a length that costs more than one render says so up front", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await mount(CreateVideo, {})(ctx);
+    const pill = stepPill(ctx, "Audience & goal");
+    await act(async () => {
+      pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => {});
+    const select = ctx.container.querySelector("select#duration");
+    if (!select) throw new Error("no length control to read");
+
+    const options = [...select.querySelectorAll("option")].map((o) => o.textContent);
+    // The seeded facets stub reports 15s as the single-pass ceiling, so 20s
+    // and 30s are two segments and 10s/15s are not.
+    const multi = options.filter((o) => /segments/.test(o));
+    const single = options.filter((o) => /one pass/.test(o));
+    if (multi.length === 0) throw new Error("no option states a multi-pass segment count");
+    if (single.length === 0) throw new Error("no option distinguishes a single-pass length");
+    if (multi.some((o) => !/\d+ segments/.test(o))) {
+      throw new Error("a multi-pass option does not state how many: " + JSON.stringify(multi));
+    }
+    // And the selected one is explained, not just listed.
+    await selectOption(ctx, select, "20");
+    if (!/segments/.test(ctx.text())) {
+      throw new Error("picking a multi-pass length says nothing about the extra renders");
+    }
+    if (!/paid render/.test(ctx.text())) {
+      throw new Error("the multi-pass note never says the extra segments cost money");
+    }
+  });
+
+  // The seeded default must be a length the default model can actually do in
+  // one pass. A default that is impossible to finish in a single render is the
+  // single most expensive default the product can ship.
+  await check("a fresh wizard starts on a single-pass length", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await mount(CreateVideo, {})(ctx);
+    const pill = stepPill(ctx, "Audience & goal");
+    await act(async () => {
+      pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => {});
+    const select = ctx.container.querySelector("select#duration");
+    const chosen = String(select.value);
+    if (chosen !== "10") {
+      throw new Error(
+        `a new wizard starts at ${chosen}s; expected 10s, the shortest single-pass length`
+      );
     }
   });
 

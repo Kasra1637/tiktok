@@ -253,6 +253,27 @@ class TestTemplateListing:
         assert facets["supported_durations"] == [10, 15, 20, 30]
         assert facets["asset_kinds"] == ["character_reference"]
 
+    def test_facets_state_how_many_renders_each_length_costs(self, api):
+        """The length picker labels a multi-pass total before it is chosen.
+
+        Every segment past the first is a separate paid render, and no
+        studio-eligible model covers 20s in one pass, so the founder has to be
+        able to read the cost off the option rather than discover it at the
+        extend button.
+        """
+        import video_providers
+
+        facets = _run(api.template_facets(user_id=ANON))
+        counts = facets["duration_segments"]
+        assert set(counts) == set(facets["supported_durations"])
+
+        max_pass = video_providers.capability()["max_duration"]
+        for d in facets["supported_durations"]:
+            assert counts[d] == max(1, -(-d // max_pass))
+            assert counts[d] >= 1
+        # No supported total is ever free, whatever the model turns out to be.
+        assert all(v >= 1 for v in counts.values())
+
     def test_unknown_category_filter_returns_empty_not_error(self, api):
         # Scoped to curated: "nonsense" normalizes to "other", which matches
         # other tests' leftover custom rows in this shared database.

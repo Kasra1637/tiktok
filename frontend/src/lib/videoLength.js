@@ -22,6 +22,21 @@
 export const DEFAULT_HOOK = 5;
 
 /**
+ * The length a fresh wizard starts on.
+ *
+ * 10s, not the template library's DEFAULT_DURATION of 20s. Every segment past
+ * the first is a separate paid render, and no studio-eligible model can cover
+ * 20s in one pass (minimax-h3 caps at 15s), so a 20s default spends two renders
+ * before the founder has learned the flow. 10s is one pass and a finished
+ * video, which is the right first run.
+ *
+ * The backend default is deliberately NOT changed to match: it also sets the
+ * length of a project created with no explicit request, and the wizard always
+ * sends duration_seconds, so matching them is unnecessary coupling.
+ */
+export const DEFAULT_DURATION = 10;
+
+/**
  * The locked extension length for the next segment.
  *
  * Computed, recommended, locked: the next uncovered planned beat's seconds,
