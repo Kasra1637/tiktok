@@ -37,6 +37,12 @@ IDENTITY_MARKERS = (
     "copyrighted song", "that song", "the beat from",
 )
 
+# How many observations a mechanic needs before its performance is treated as a
+# finding. Below this, build_evidence reports no signal regardless of the numbers
+# -- one video is not a pattern, and a system that says otherwise teaches a
+# founder to trust a coincidence.
+MIN_SAMPLE = 5
+
 # Fields a draft may contain. Anything else from the model is discarded.
 DRAFT_FIELDS = (
     "name", "category", "hook_mechanic", "opening_structure",
@@ -177,6 +183,135 @@ def parse_drafts(response) -> tuple:
         drafts.append(cleaned)
 
     return drafts, rejected
+
+
+def _band(value, thresholds, labels):
+    """
+    Map a number onto a coarse label.
+
+    Bands rather than exact numbers, deliberately. A precise view count attached
+    to an abstracted mechanic is a fingerprint: it points back at one specific
+    video and, through it, one specific creator. What the model actually needs
+    is the order of magnitude, and a band carries that without carrying the
+    source.
+    """
+    for threshold, label in zip(thresholds, labels):
+        if value >= threshold:
+            return label
+    return labels[-1]
+
+
+def build_evidence(videos: list) -> dict:
+    """
+    Aggregate performance evidence for a mechanic, with no source attached.
+
+    This is the only trend signal that reaches generation, and it reaches it
+    anonymously. No video id, URL, creator handle, caption, title or retention
+    curve is read, stored, or prompted -- only bands derived from public
+    engagement counts, plus how many observations the bands came from.
+
+    `sample_size` is the load-bearing field. A mechanic abstracted from one
+    video is not evidence of anything, and a system that reports a single
+    observation with the same confidence as thirty is how a founder ends up
+    treating a coincidence as a proven format. Below MIN_SAMPLE the whole
+    evidence block reports no_signal, because "we saw this once" is not a finding.
+    """
+    rows = [v for v in (videos or []) if isinstance(v, dict)]
+    if len(rows) < MIN_SAMPLE:
+        return {
+            "has_signal": False,
+            "sample_size": len(rows),
+            "median_view_band": "unknown",
+            "median_engagement_band": "unknown",
+            "recency_band": "unknown",
+        }
+
+    def _views(v):
+        return max(int(v.get("view_count") or 0), 0)
+
+    def _engagement_rate(v):
+        views = _views(v)
+        if not views:
+            return 0.0
+        engaged = (
+            int(v.get("like_count") or 0) + int(v.get("comment_count") or 0)
+            + int(v.get("share_count") or 0) + int(v.get("bookmark_count") or 0)
+        )
+        return engaged / views
+
+    # Median, not mean: one 40M outlier would otherwise define the whole band
+    # and make an ordinary mechanic look exceptional.
+    ordered = sorted(_views(v) for v in rows)
+    median_views = ordered[len(ordered) // 2]
+    rates = sorted(_engagement_rate(v) for v in rows)
+    median_engagement = rates[len(rates) // 2]
+
+    ages = sorted(_age_hours(v) for v in rows)
+    median_age = ages[len(ages) // 2]
+
+    return {
+        "has_signal": True,
+        "sample_size": len(rows),
+        "median_view_band": _band(
+            median_views,
+            (1_000_000, 100_000, 10_000, 1_000),
+            ("1M+", "100K-1M", "10K-100K", "1K-10K", "under 1K"),
+        ),
+        "median_engagement_band": _band(
+            median_engagement,
+            (0.10, 0.05, 0.02),
+            ("high (10%+ of views)", "typical (5-10%)", "moderate (2-5%)", "low (under 2%)"),
+        ),
+        "recency_band": _band(
+            # Reversed: newer is better, so the thresholds count down.
+            -median_age,
+            (-48, -24 * 7, -24 * 30),
+            ("under 48h", "under a week", "under a month", "older than a month"),
+        ),
+    }
+
+
+def _age_hours(video: dict) -> float:
+    """Best-effort age of an observation in hours. Unknown sorts as old."""
+    for field in ("age_hours", "hours_old"):
+        raw = video.get(field)
+        try:
+            if raw is not None:
+                return max(float(raw), 0.0)
+        except (TypeError, ValueError):
+            pass
+    created = video.get("created_at") or video.get("published_at")
+    if isinstance(created, str) and created:
+        try:
+            from datetime import datetime, timezone
+            stamp = datetime.fromisoformat(created.replace("Z", "+00:00"))
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=timezone.utc)
+            return max(
+                (datetime.now(timezone.utc) - stamp).total_seconds() / 3600.0, 0.0
+            )
+        except (ValueError, TypeError):
+            pass
+    return 24.0 * 60.0
+
+
+def build_evidence_sentence(evidence: dict) -> str:
+    """
+    Render the aggregate as one sentence for a prompt.
+
+    Never claims a mechanic is proven. The wording is "openings of this shape
+    have carried", which is an observation about a sample, not a guarantee about
+    the founder's video.
+    """
+    if not evidence or not evidence.get("has_signal"):
+        return ""
+    sample = evidence.get("sample_size") or 0
+    return (
+        f"Across {sample} public openings of this shape in the last scan, the median one had "
+        f"{evidence.get('median_view_band')} views and {evidence.get('median_engagement_band')} "
+        f"engagement ({evidence.get('recency_band')}). This is what similar shapes have "
+        f"carried, not a promise about any single video."
+    )
 
 
 def summarize_observations(videos: list) -> list:

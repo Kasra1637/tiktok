@@ -310,9 +310,19 @@ class TestStrategyBudget:
                 "opening_structure": "Name the mistake.", "hook_seconds": 5,
                 "continuation_structure": "Then the fix.", "cta_pattern": "Try it",
                 "visual_style": "Talking head.", "camera_pacing": "Steady.",
-                "content_slots": {f"slot{i}": f"value{i}" for i in range(1, 9)},
-                "required_assets": ["character_reference"],
-            },
+            "content_slots": {f"slot{i}": f"value{i}" for i in range(1, 9)},
+            "required_assets": ["character_reference"],
+            # The anonymous trend aggregate a research-published template
+            # carries. Part of the worst case: it is a prompt section, and its
+            # absence from this fixture would understate the real maximum.
+            "trend_evidence": json.dumps({
+                "has_signal": True,
+                "sample_size": 40,
+                "median_view_band": "100K-1M",
+                "median_engagement_band": "typical (5-10%)",
+                "recency_band": "under 48h",
+            }),
+        },
             angle={
                 "kind": "problem", "label": "Too many lists",
                 "target_audience": "nurses", "user_problem": "paperwork",
@@ -348,17 +358,20 @@ class TestStrategyBudget:
         ))
 
         prompt = captured["prompt"]
-        # Measured worst case is 15,226 chars, with every list at its cap
-        # including six viewer objections. The ceiling sits just above it at
-        # 17,000, which absorbs one small field but fails on a schema rewrite.
-        # An earlier version used a round 18,000 picked without measuring, and
-        # it let a 15-beat inflation through -- which is the exact failure this
-        # test exists to prevent, so the number is the measurement.
-        CEILING = 17_000
+        # Measured worst case, with every list at its cap, six viewer objections
+        # and the anonymous trend aggregate: 16,150 chars. The ceiling sits just
+        # above at 17,500.
+        #
+        # The number has moved twice now -- 13,692 before the objections, 15,226
+        # after -- and it moved *because* the fixture was corrected, not because
+        # the ceiling was raised. Two earlier versions of this test used a
+        # round number picked without measuring and let a real inflation through,
+        # so the figure quoted in the failure message is the one to trust.
+        CEILING = 17_500
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling (measured "
-            f"worst case 15,226). Every field added here is a value the model must "
+            f"worst case 16,150). Every field added here is a value the model must "
             f"write back, and a truncated strategy is a 502 the founder cannot fix."
         )
 

@@ -737,13 +737,15 @@ class _StrategyCapture:
 
         monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
 
-    def run(self, **profile_overrides):
+    def run(self, *, profile_overrides=None, template_extra=None):
         import ai_service
         profile = {"brand_name": "ShiftLog"}
-        profile.update(profile_overrides)
+        profile.update(profile_overrides or {})
+        template = {"name": "T", "content_slots": {}}
+        template.update(template_extra or {})
         asyncio.run(ai_service.generate_video_strategy(
             profile=profile,
-            template={"name": "T", "content_slots": {}},
+            template=template,
             angle=None, objective="address_user_problem",
             hook_seconds=5, total_duration=20, tone="", brand_voice="",
             profile_feedback={},
@@ -768,9 +770,7 @@ class TestViewerObjections:
     }]
 
     def test_the_triples_reach_the_strategy_prompt(self, monkeypatch):
-        prompt = _StrategyCapture(monkeypatch).run(
-            viewer_objections=self.OBJECTIONS
-        )
+        prompt = _StrategyCapture(monkeypatch).run(profile_overrides={"viewer_objections": self.OBJECTIONS})
         assert "It is just another subscription" in prompt
         assert "Three habit trackers I already pay for" in prompt
         assert "One that costs nothing and works offline" in prompt
@@ -780,9 +780,7 @@ class TestViewerObjections:
         The directive is the point. A list the model may ignore reproduces the
         problem the field was added to solve.
         """
-        prompt = _StrategyCapture(monkeypatch).run(
-            viewer_objections=self.OBJECTIONS
-        )
+        prompt = _StrategyCapture(monkeypatch).run(profile_overrides={"viewer_objections": self.OBJECTIONS})
         assert "viewer_objections are the beats" in prompt
         assert "Give each objection its own beat" in prompt
         assert "Do not stack two objections into one beat" in prompt
@@ -793,9 +791,7 @@ class TestViewerObjections:
         guarantee. That is exactly the copy the claim checker blocks, so the
         prompt has to forbid it before it is written.
         """
-        prompt = _StrategyCapture(monkeypatch).run(
-            viewer_objections=self.OBJECTIONS
-        )
+        prompt = _StrategyCapture(monkeypatch).run(profile_overrides={"viewer_objections": self.OBJECTIONS})
         assert "may not promise a result" in prompt
         assert "leave that beat out rather than inventing one" in prompt
 
@@ -953,3 +949,141 @@ class TestPlanPromptSeesCompetitors:
         prompt = json.dumps(captured["messages"])
         assert "state anything factual about a competitor" in prompt
         assert "never put a competitor's name" in prompt
+
+
+class TestTrendEvidenceIsAnonymous:
+    """
+    The provenance decision: aggregate and anonymous.
+
+    The trend signal is the only route by which real performance data reaches
+    generation, and it reaches it with no source attached. Bands and a sample
+    size only -- no video id, URL, creator handle, caption, title or retention
+    curve. A precise view count on an abstracted mechanic is a fingerprint: it
+    points back at one specific video and through it at one specific creator,
+    and it buys nothing the model needs that a band does not already give.
+    """
+
+    def _videos(self, count, views=250_000, engagement=0.07, age_hours=20):
+        return [
+            {
+                "view_count": views,
+                "like_count": int(views * engagement * 0.8),
+                "comment_count": int(views * engagement * 0.1),
+                "share_count": int(views * engagement * 0.07),
+                "bookmark_count": int(views * engagement * 0.03),
+                "age_hours": age_hours,
+                "id": f"v{i}",
+                "creator": f"creator{i}",
+                "url": f"https://example.test/{i}",
+            }
+            for i in range(count)
+        ]
+
+    def test_it_reports_bands_not_exact_numbers(self):
+        import research_abstraction as ra
+        evidence = ra.build_evidence(self._videos(10))
+        assert evidence["has_signal"] is True
+        assert evidence["median_view_band"] == "100K-1M"
+        assert "250000" not in str(evidence)
+        # Nothing that identifies a source survives.
+        blob = str(evidence)
+        for leak in ("v0", "creator0", "example.test"):
+            assert leak not in blob, leak
+
+    def test_a_small_sample_reports_no_signal(self):
+        """
+        One video is not a pattern. Below MIN_SAMPLE the evidence reports
+        nothing at all, however good the numbers, because a system that reports
+        a single observation confidently is how a founder treats a coincidence
+        as a proven format.
+        """
+        import research_abstraction as ra
+        for count in (0, 1, 4):
+            evidence = ra.build_evidence(self._videos(count))
+            assert evidence["has_signal"] is False, count
+            assert evidence["sample_size"] == count
+        assert ra.build_evidence(self._videos(ra.MIN_SAMPLE))["has_signal"] is True
+
+    def test_one_outlier_does_not_define_the_band(self):
+        """
+        Median, not mean. A single 40M video in a list of ordinary ones would
+        otherwise make an unremarkable mechanic look exceptional.
+        """
+        import research_abstraction as ra
+        rows = self._videos(9, views=8_000)
+        rows.append({
+            "view_count": 40_000_000, "like_count": 0, "comment_count": 0,
+            "share_count": 0, "bookmark_count": 0, "age_hours": 5,
+        })
+        evidence = ra.build_evidence(rows)
+        assert evidence["median_view_band"] == "1K-10K"
+
+    def test_the_sentence_never_claims_proof(self):
+        import research_abstraction as ra
+        sentence = ra.build_evidence_sentence(ra.build_evidence(self._videos(10)))
+        assert "not a promise" in sentence
+        assert "Across 10 public openings" in sentence
+
+    def test_the_sentence_is_empty_without_signal(self):
+        import research_abstraction as ra
+        assert ra.build_evidence_sentence(ra.build_evidence(self._videos(2))) == ""
+        assert ra.build_evidence_sentence(None) == ""
+
+
+class TestTrendEvidenceReachesTheStrategy:
+    """The gap this closes: virality_score reached no generation prompt."""
+
+    def test_the_section_is_present_when_the_template_has_evidence(self, monkeypatch):
+        import ai_service
+        prompt = _StrategyCapture(monkeypatch).run(template_extra={
+            "trend_evidence": {
+                "has_signal": True, "sample_size": 12,
+                "median_view_band": "100K-1M",
+                "median_engagement_band": "typical (5-10%)",
+                "recency_band": "under 48h",
+            },
+        })
+        assert "WHAT OPENINGS OF THIS SHAPE HAVE ACTUALLY CARRIED" in prompt
+        assert "Across 12 public openings" in prompt
+        assert "100K-1M" in prompt
+
+    def test_a_json_string_column_is_parsed(self, monkeypatch):
+        """The stored column arrives as text through paths that skip row_to_dict."""
+        import ai_service
+        prompt = _StrategyCapture(monkeypatch).run(template_extra={
+            "trend_evidence": (
+                '{"has_signal": true, "sample_size": 8, "median_view_band": "10K-100K",'
+                ' "median_engagement_band": "high (10%+ of views)",'
+                ' "recency_band": "under 48h"}'
+            ),
+        })
+        assert "Across 8 public openings" in prompt
+        assert "10K-100K" in prompt
+
+    def test_no_section_without_evidence(self, monkeypatch):
+        """
+        A heading with nothing under it implies a search was run and found
+        nothing, which is a different claim from never having looked.
+        """
+        import ai_service
+        prompt = _StrategyCapture(monkeypatch).run()
+        assert "WHAT OPENINGS OF THIS SHAPE HAVE ACTUALLY CARRIED\n" not in prompt
+        assert "median one had" not in prompt
+
+    def test_the_directive_forbids_chasing_the_number(self, monkeypatch):
+        """
+        The failure this invites: told a shape carried 100K views, a model asked
+        to beat the number will pad the hook or promise a result. The prompt has
+        to say the evidence biases the shape, not the target.
+        """
+        import ai_service
+        prompt = _StrategyCapture(monkeypatch).run(template_extra={
+            "trend_evidence": {
+                "has_signal": True, "sample_size": 12,
+                "median_view_band": "1M+", "median_engagement_band": "high (10%+ of views)",
+                "recency_band": "under 48h",
+            },
+        })
+        assert "Do not chase the number itself" in prompt
+        assert "do not pad the hook to fill time" in prompt
+        assert "do not" in prompt and "state or imply a view" in prompt

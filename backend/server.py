@@ -560,6 +560,7 @@ async def init_db():
                 archived INTEGER DEFAULT 0,
                 is_favorite INTEGER DEFAULT 0,
                 evidence_note TEXT,
+                trend_evidence TEXT,
                 origin TEXT DEFAULT 'bookmark',
                 review_status TEXT DEFAULT 'approved',
                 -- Brand that owns this template, for brand-tailored customs
@@ -993,6 +994,7 @@ async def init_db():
             "app_categories", "audiences", "objective", "opening_structure",
             "continuation_structure", "cta_pattern", "visual_style",
             "camera_pacing", "required_assets", "content_slots", "evidence_note",
+            "trend_evidence",
             "origin", "review_status",
         ):
             if col not in template_cols:
@@ -10009,7 +10011,6 @@ async def run_trend_research(
 
     videos = viral_detection.rank_videos(videos or [])
     observations = research_abstraction.summarize_observations(videos)
-
     try:
         raw_drafts = await _log_model_call(
             "template_abstraction", "text", TEXT_MODEL,
@@ -10028,6 +10029,13 @@ async def run_trend_research(
     drafts, rejected = research_abstraction.parse_drafts(raw_drafts)
 
     created = []
+    # The anonymous performance aggregate for this scan, attached to every draft
+    # the scan produces. Bands and a sample size only: no video id, URL, creator
+    # handle, caption or retention curve, so nothing about a specific published
+    # video is stored on the template row or reaches a prompt. It is what finally
+    # makes a research draft distinguishable from a guess, and it is the only
+    # route by which trend data reaches generation.
+    scan_evidence = research_abstraction.build_evidence(videos)
     for draft in drafts:
         template_id = str(uuid.uuid4())
         await _execute(
@@ -10035,15 +10043,15 @@ async def run_trend_research(
                (id, name, category, app_categories, objective, opening_structure,
                 hook_seconds, continuation_structure, cta_pattern, visual_style,
                 camera_pacing, required_assets, default_duration, content_slots,
-                evidence_note, version, archived, is_favorite, origin,
+                evidence_note, trend_evidence, version, archived, is_favorite, origin,
                 review_status, times_used, created_at, updated_at, user_id)
-               VALUES (?, ?, ?, ?, '', ?, 3, ?, ?, ?, ?, '[]', 20, ?, ?, 1, 0, 0,
+               VALUES (?, ?, ?, ?, '', ?, 3, ?, ?, ?, ?, '[]', 20, ?, ?, ?, 1, 0, 0,
                        'research_draft', 'draft', 0, ?, ?, ?)""",
             (template_id, draft["name"][:80], draft["category"],
              json.dumps(draft.get("suits") or []), draft["opening_structure"],
              draft["continuation_structure"], draft["cta_pattern"],
              "abstracted", draft.get("pacing_note", ""), draft.get("hook_mechanic", ""),
-             draft["evidence_note"], now_iso(), now_iso(), user_id),
+             draft["evidence_note"], json.dumps(scan_evidence), now_iso(), now_iso(), user_id),
         )
         created.append({
             "id": template_id,

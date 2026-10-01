@@ -2327,6 +2327,37 @@ def strategy_text(strategy: dict) -> str:
     return " \n ".join(p for p in parts if p.strip())
 
 
+def trend_evidence_sentence(evidence) -> str:
+    """
+    Render a template's anonymous trend aggregate as one prompt sentence.
+
+    Kept here rather than imported from research_abstraction so the strategy
+    path does not pull in the Apify-facing modules; the format is a small
+    contract between the scan and the prompt, and the two sides assert the same
+    fields in the same way.
+
+    Returns "" when there is no signal, and the caller omits the whole section
+    rather than printing a heading with nothing under it.
+    """
+    if isinstance(evidence, str):
+        try:
+            evidence = json.loads(evidence)
+        except (json.JSONDecodeError, TypeError):
+            return ""
+    if not isinstance(evidence, dict) or not evidence.get("has_signal"):
+        return ""
+    sample = evidence.get("sample_size") or 0
+    if not sample:
+        return ""
+    return (
+        f"Across {sample} public openings of this shape in the last scan, the median one had "
+        f"{evidence.get('median_view_band', 'unknown')} views and "
+        f"{evidence.get('median_engagement_band', 'unknown')} engagement "
+        f"({evidence.get('recency_band', 'unknown')}). This is what similar shapes have "
+        f"carried, not a promise about any single video."
+    )
+
+
 async def generate_video_strategy(
     profile: dict,
     template: dict,
@@ -2417,8 +2448,7 @@ async def generate_video_strategy(
     mechanism = {
         "template_name": template.get("name") or "(no template)",
         "hook_category": template.get("category") or "(unstated)",
-        "objective": objective or "(unstated)",
-        "opening_structure": template.get("opening_structure") or "(unstated)",
+        "objective": objective or "(unstated)",        "opening_structure": template.get("opening_structure") or "(unstated)",
         "hook_seconds": hook_seconds,
         "continuation_structure": template.get("continuation_structure") or "(unstated)",
         "cta_pattern": template.get("cta_pattern") or "(unstated)",
@@ -2495,6 +2525,22 @@ async def generate_video_strategy(
             f"{feedback.build_profile_feedback_section(profile_feedback)}\n"
         )
 
+    # The one route by which real performance data reaches generation, and
+    # deliberately anonymous: bands and a sample size, no source video, creator,
+    # caption or retention. Omitted entirely when a template carries none, so a
+    # curated template does not carry an empty evidence heading implying a
+    # search was run and found nothing.
+    trend_context = ""
+    evidence_sentence = trend_evidence_sentence(template.get("trend_evidence"))
+    if evidence_sentence:
+        trend_context = (
+            "\n\nWHAT OPENINGS OF THIS SHAPE HAVE ACTUALLY CARRIED "
+            "(public trend data, aggregated across a sample; no single video is "
+            "referenced and this is an observation about similar shapes, never a "
+            "promise about yours):\n"
+            f"{evidence_sentence}\n"
+        )
+
     # Always emitted, even when empty. build_proved_hooks_section returns an
     # explicit no-signal sentence for a new app, and that sentence is the
     # instruction that matters: rely on the verified facts, assume nothing is
@@ -2527,6 +2573,7 @@ async def generate_video_strategy(
         f"CLAIM RULES:\n{json.dumps(claim_rules, indent=2)}\n"
         f"{approved_plan_context}"
         f"{feedback_context}"
+        f"{trend_context}"
         f"{proved_context}\n"
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
@@ -2649,6 +2696,14 @@ async def generate_video_strategy(
         "alternative they are leaving behind or the cost of doing nothing, then answer it with "
         "this app's features. Do not stack two objections into one beat and do not repeat an "
         "objection the previous beat already answered.\n"
+        # The trend section, when present. Phrased as a bias toward a shape the
+        # data supports, never as a target: a view count is an observation about
+        # someone else's video, and a model told to "beat 500K" will pad.
+        "- If WHAT OPENINGS OF THIS SHAPE HAVE ACTUALLY CARRIED is present, let it bias the "
+        "opening toward the shape that carried: a fast first line, a direct second, an early "
+        "payoff. Do not chase the number itself, do not pad the hook to fill time, and do not "
+        "state or imply a view, like or follower count. It describes what similar shapes have "
+        "done, not what yours will do.\n"
         "- An honest_answer may not promise a result, a saving, or a guarantee, and may not "
         "claim a rating, count or price. Answer with what the app demonstrably does. If a "
         "recorded objection has no answer the facts support, leave that beat out rather than "

@@ -23,7 +23,7 @@ def row_to_dict(row, columns: list) -> dict:
         "ctas", "video_themes", "research_sources", "pending_research",
         # Hook Template Library (hook_templates) structured fields
         "app_categories", "audiences", "required_assets", "content_slots",
-        "claims_to_respect", "evidence",
+        "claims_to_respect", "evidence", "trend_evidence",
         # Studio projects (structured plan fields)
         "beat_timeline", "overlays", "assets", "safety_report",
         # App-specific influencer strategy + per-generation continuity record
