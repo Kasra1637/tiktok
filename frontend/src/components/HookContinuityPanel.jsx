@@ -13,7 +13,7 @@ import {
 } from "../lib/videoLength";
 import {
   Loader2, Clapperboard, AlertTriangle, Download, RefreshCw, Check,
-  Info, Clock, MapPin, Film, Scissors, ShieldQuestion,
+  Info, Clock, MapPin, Scissors, ShieldQuestion,
   Sparkles, Play, Link2,
 } from "lucide-react";
 
@@ -87,8 +87,13 @@ function StatusBadge({ status }) {
  * Turn a machine key into something readable.
  *
  * The strategy comes back from the model with snake_case keys, and they were
- * being printed verbatim: "facial_features", "body_appearance", "color_palette".
+ * being printed verbatim: "color_palette", "visual_style", "character_positioning".
  * That reads as a debug dump rather than a plan the founder is meant to act on.
+ *
+ * Only the twelve surviving keys are listed. This map used to carry the deleted
+ * "character" block's keys too (age_range, hair_style, body_appearance,
+ * facial_features, facial_expression, styling_details) — the model still cannot
+ * emit them, so those entries could never match anything again.
  *
  * `ACRONYMS` covers the cases where a plain title-case is wrong, and
  * `STRATEGY_LABELS` covers the ones that need real words rather than a
@@ -97,13 +102,7 @@ function StatusBadge({ status }) {
 const STRATEGY_LABELS = {
   camera_angle: "Camera angle",
   visual_style: "Visual style",
-  age_range: "Age range",
   color_palette: "Colour palette",
-  hair_style: "Hair style",
-  body_appearance: "Body and posture",
-  facial_features: "Face",
-  facial_expression: "Expression",
-  styling_details: "Styling details",
   voice_delivery: "Voice delivery",
   character_positioning: "Position in frame",
 };
@@ -260,6 +259,14 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
   const assets = project?.assets || [];
   const hasCharacter = assets.some((a) => a.kind === "character_reference");
   const blocked = project?.safety_report && project.safety_report.passed === false;
+  // The strategy is built from one specific version of the plan. Edit the plan
+  // afterwards and the strategy is describing a video that is no longer the
+  // approved one — the backend refuses the render with a 409 on both the hook
+  // and the extend (server.py, the staleness guards), so this reads the flag it
+  // already computes rather than leaving the founder to spend a click and meet
+  // a raw error body. Only meaningful once a strategy exists; `_public_project`
+  // returns true when either version is 0, which is missing history, not drift.
+  const staleStrategy = Boolean(strategy) && project?.strategy_is_current === false;
 
   useEffect(() => {
     let cancelled = false;
@@ -516,6 +523,18 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
         </Alert>
       )}
 
+      {staleStrategy && (
+        <Alert>
+          <Info className="h-4 w-4 text-[color:var(--brand-indigo)]" />
+          <AlertTitle>Plan edited since this strategy was built</AlertTitle>
+          <AlertDescription>
+            This strategy was built from plan v{project?.strategy_script_version}, and the
+            plan is now v{project?.script_version}. The hook and every extension will be
+            refused until it matches. Rebuild the strategy to render the current plan.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {!hasCharacter && (
         <Alert>
           <ShieldQuestion className="h-4 w-4 text-[color:var(--brand-indigo)]" />
@@ -617,10 +636,18 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
             <div className="space-y-1">
               <span className="eyebrow">Hook concept</span>
               <p className="text-sm">{strategy.hook_concept}</p>
-            </div>
-            <div className="space-y-1">
-              <span className="eyebrow">The line they hear first</span>
-              <p className="font-display text-base font-semibold">&ldquo;{strategy.hook_line}&rdquo;</p>
+              {/* The hook line itself is NOT printed here. It is the same string as
+                  the Review step's "Hook line", verbatim, because the strategy
+                  prompt is told to echo the founder-approved line rather than write
+                  a new one (ai_service.py, the approved-plan rules). Printing it a
+                  second time read as though the two could differ, which is the one
+                  thing they cannot. `strategy.hook_line` still exists on the
+                  strategy and still reaches build_segment_prompt — this is the
+                  duplicate display that was removed, not the field. */}
+              <p className="text-xs text-muted-foreground">
+                What is said is the hook line you approved on the Review step, spoken as
+                written.
+              </p>
             </div>
             <div className="space-y-1">
               <span className="eyebrow">Why this works for this app</span>
@@ -633,22 +660,31 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
                 assets. It read as a description of the person they uploaded, and
                 it was invented. The on-camera person is now copied from the
                 character reference image and nothing is written about them.
-                Scene and performance remain: they are plan-level and conflict
-                with nothing. Both take the full width, since the scene block is
-                the only one of its kind left in this row. */}
+
+                Scene and performance are now ONE block, not two. They were
+                separate headings over four values, and the divider between them
+                implied a boundary that does not exist: `movement` and
+                `voice_delivery` are locked per segment by exactly the same
+                mechanism as camera angle and lighting (character_scene_lock
+                restates every attribute by name), so splitting them made the
+                founder hunt for half the lock in a second box. Rows are ordered
+                scene-then-performance, which is the order
+                STRATEGY_SCENE_FIELDS and STRATEGY_PERFORMANCE_FIELDS declare.
+
+                The description credits the plan, because these twelve slots are
+                the plan's "Visual direction" and "Voice direction" decomposed for
+                the render. Nothing in the prompt obliges the model to transcribe
+                that paragraph into these fields, so the two can drift — saying so
+                is what tells the founder where to fix a disagreement. */}
             <StrategyBlock
               title="The scene"
-              description="Locked for every segment."
+              description="Locked for every segment. Built from the plan's visual and voice direction, which you edit on the Review step."
               icon={MapPin}
-              rows={Object.entries(strategy.scene || {})}
+              rows={[
+                ...Object.entries(strategy.scene || {}),
+                ...Object.entries(strategy.performance || {}),
+              ]}
             />
-            <div className="border-t border-[color:var(--indigo-35)] pt-3">
-              <StrategyBlock
-                title="Performance"
-                icon={Film}
-                rows={Object.entries(strategy.performance || {})}
-              />
-            </div>
             <div className="space-y-1.5">
               <span className="eyebrow">Segments planned</span>
               <ol className="space-y-1.5 text-sm">
