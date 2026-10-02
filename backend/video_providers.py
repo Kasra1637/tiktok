@@ -48,6 +48,21 @@ _CAPABILITY_NOTES = {
             "above 15s need a second job."
         ),
     },
+    "minimax-h3-max": {
+        "vertical": True,
+        "max_reference_images": 9,
+        "max_reference_videos": 3,
+        "max_reference_audio": 3,
+        "supports_first_frame": True,
+        "supports_last_frame": True,
+        "notes": (
+            "768p (not 2K), 5-15s per generation. Faster than Hailuo 3 with "
+            "tighter prompt adherence, which makes it useful for testing a "
+            "script quickly. Picture is softer, and native audio is not "
+            "requested because the provider does not document the flag for "
+            "this model. Opt-in: Hailuo 3 is still the default."
+        ),
+    },
     "aleph-2": {
         "vertical": True,
         "max_reference_images": 0,
@@ -66,9 +81,15 @@ _CAPABILITY_NOTES = {
 
 # Providers the template workflow can actually drive. Aleph is excluded
 # because it edits an existing clip, which is exactly the dependency the
-# template workflow removed. MiniMax H3 is currently the only entry: any
-# other configured key resolves back to the default with a logged reason.
-STUDIO_ELIGIBLE = ("minimax-h3",)
+# template workflow removed. Any other configured key resolves back to the
+# default with a logged reason.
+#
+# H3 Max sits alongside H3 rather than replacing it: both are generative and
+# both take the same face reference, so the founder can render the same script
+# on either and compare. Order here does not decide the default — that is
+# ai_service.DEFAULT_VIDEO_MODEL, and it stays Hailuo 3. Listing a second model
+# only makes it selectable in the studio's model dropdown.
+STUDIO_ELIGIBLE = ("minimax-h3", "minimax-h3-max")
 
 # The hook length used when nothing states one. 5s is the lowest length the
 # current provider can render, so it needs no trim; a template's own

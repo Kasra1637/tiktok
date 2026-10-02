@@ -76,6 +76,39 @@ VIDEO_MODELS = {
         "resolution": "2K",
         "supports_combined_refs": False,  # Cannot combine frame_images with input_references
     },
+    # Hailuo 3 Max: H3 post-trained by fal.ai for speed and prompt adherence,
+    # served on the same OpenRouter key and the same /videos endpoint. Kept
+    # alongside H3 rather than replacing it so the two can be compared on the
+    # same script; H3 stays the default (DEFAULT_VIDEO_MODEL below).
+    #
+    # The one field that must NOT be copied from the H3 entry is resolution.
+    # OpenRouter lists H3 Max as "768p" | "480p" only and rejects an unlisted
+    # value, so a verbatim copy would 400 on every render. 2K is the one thing
+    # this model gives up; 768x1366 is still above TikTok's 720x1280 floor, but
+    # it is a visible downgrade once the founder attaches their demo and
+    # re-exports at 1080x1920.
+    #
+    # supports_native_audio is False because OpenRouter does NOT list
+    # generate_audio among H3 Max's accepted fields, and an unlisted field is a
+    # 400. False makes the studio omit the field entirely and let the provider
+    # apply its own default. If a real clip comes back silent, that is the flag
+    # to flip.
+    "minimax-h3-max": {
+        "id": "minimax/hailuo-3-max",
+        "name": "MiniMax H3 Max",
+        "description": (
+            "Hailuo 3 Max: Hailuo 3 post-trained by fal.ai for speed and prompt "
+            "adherence. Up to 15s, 768p (not 2K). Opt-in: the studio defaults to "
+            "Hailuo 3."
+        ),
+        "max_duration": 15,
+        "min_duration": 5,
+        "supports_references": True,
+        "supports_native_audio": False,  # generate_audio unlisted for this model
+        "supports_v2v_motion": False,  # not documented for H3 Max on OpenRouter
+        "resolution": "768p",
+        "supports_combined_refs": False,
+    },
 }
 # Default for new template-studio generations. The provider remains
 # configurable through VIDEO_MODEL_DEFAULT and VIDEO_MODEL_ALLOWLIST, but
@@ -1198,8 +1231,21 @@ async def generate_video(
     # Only include generate_audio when explicitly requested. Sending False for
     # models that don't support the parameter causes a 400. Omitting it lets
     # the provider use its own default.
+    #
+    # The request is also gated on the model documenting the field, not just on
+    # the caller asking. OpenRouter omits generate_audio from the accepted
+    # parameters for some models (Hailuo 3 Max), and an unlisted parameter is a
+    # 400 — so a caller asking for audio on such a model is refused its audio
+    # rather than its whole render. This is what lets the studio default the
+    # flag off from capability and still survive a caller that asks directly.
     if generate_audio:
-        payload["generate_audio"] = True
+        if model_config.get("supports_native_audio", False):
+            payload["generate_audio"] = True
+        else:
+            logger.warning(
+                f"{model_config['name']} does not document generate_audio; sending the "
+                f"request without it so the provider applies its own audio default."
+            )
 
     # Determine whether to use V2V motion mode.
     use_v2v_mode = prefer_v2v_motion and reference_video_url and reference_image_path and reference_image_path.exists()

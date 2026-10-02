@@ -87,9 +87,17 @@ class TestCapabilities:
         for cap in vp.list_capabilities():
             assert cap["vertical"] is True
 
-    def test_minimax_is_the_only_studio_provider(self):
+    def test_only_minimax_models_are_studio_providers(self):
+        """
+        The point of this list is that every entry can generate a video from a
+        prompt, so no in-context editor is ever offered. H3 Max is a second
+        MiniMax generative model, added for side-by-side comparison.
+        """
         keys = [c["key"] for c in vp.list_capabilities()]
-        assert keys == ["minimax-h3"]
+        assert keys == ["minimax-h3", "minimax-h3-max"]
+        assert "aleph-2" not in keys
+        for cap in vp.list_capabilities():
+            assert cap["is_video_editor"] is False
 
     def test_minimax_is_capped_at_15s(self):
         cap = vp.capability("minimax-h3")
@@ -112,6 +120,217 @@ class TestCapabilities:
             "supports_first_frame", "supports_last_frame", "notes",
         ):
             assert field in cap
+
+
+class TestHailuo3MaxIsOptIn:
+    """
+    H3 Max is offered alongside Hailuo 3 so the two can be compared on the same
+    script. These tests pin the two halves of that promise: adding it must not
+    change Hailuo 3, and it must never become the model a render uses unless it
+    was asked for by name.
+    """
+
+    def test_hailuo_3_entry_is_untouched(self):
+        """
+        The founder's working model is the baseline for every comparison, so its
+        recorded capabilities are pinned. A change here is a deliberate product
+        decision, not a side effect of adding another provider.
+        """
+        from ai_service import VIDEO_MODELS
+
+        assert VIDEO_MODELS["minimax-h3"] == {
+            "id": "minimax/hailuo-3",
+            "name": "MiniMax H3",
+            "description": (
+                "Omni-modal video generation. Native audio, V2V motion transfer, "
+                "2K resolution, up to 15s."
+            ),
+            "max_duration": 15,
+            "min_duration": 5,
+            "supports_references": True,
+            "supports_native_audio": True,
+            "supports_v2v_motion": True,
+            "resolution": "2K",
+            "supports_combined_refs": False,
+        }
+
+    def test_h3_max_is_registered_at_its_real_id(self):
+        cap = vp.capability("minimax-h3-max")
+        assert cap["id"] == "minimax/hailuo-3-max"
+        assert cap["max_duration"] == 15
+        assert cap["min_duration"] == 5
+        # The whole point of adding it: a second rendering of the same script.
+        assert cap["supports_references"] is True
+
+    def test_h3_max_is_768p_not_2k(self):
+        """
+        OpenRouter accepts only "768p" or "480p" for this model and rejects an
+        unlisted value, so 2K would 400 on every render. This is the one field
+        that cannot be copied from the Hailuo 3 entry.
+        """
+        assert vp.capability("minimax-h3-max")["resolution"] == "768p"
+        assert vp.capability("minimax-h3")["resolution"] == "2K"
+
+    def test_h3_max_does_not_request_native_audio(self):
+        """
+        generate_audio is absent from OpenRouter's accepted fields for H3 Max,
+        so the studio must omit it rather than send it and risk a 400. If a real
+        clip comes back silent, this flag is the thing to flip.
+        """
+        assert vp.capability("minimax-h3-max")["supports_native_audio"] is False
+
+    def test_h3_max_is_offered_in_the_studio(self):
+        assert vp.is_studio_eligible("minimax-h3-max")
+        assert "minimax-h3-max" in [c["key"] for c in vp.list_capabilities()]
+
+    def test_hailuo_3_remains_the_default(self):
+        """
+        Listing a second model must not change which one a render uses when the
+        caller does not name one — otherwise adding a test provider would
+        silently move production spend onto a 768p model.
+        """
+        assert vp.default_model_key() == "minimax-h3"
+        assert vp.resolve(None)[0] == "minimax-h3"
+        assert vp.resolve("") [0] == "minimax-h3"
+
+    def test_named_h3_max_is_honoured(self):
+        key, _reason = vp.resolve("minimax-h3-max")
+        assert key == "minimax-h3-max"
+
+    def test_h3_max_takes_a_face_reference(self):
+        assert vp.accepts_identity_reference("minimax-h3-max")
+
+    def test_allowlisting_hailuo_3_alone_still_excludes_h3_max(self, monkeypatch):
+        """
+        The env allowlist is the existing lever for restricting spend. It must
+        keep working now that there is a second model, so a deployment that only
+        trusts one provider can still pin itself to it.
+        """
+        monkeypatch.setenv("VIDEO_MODEL_ALLOWLIST", "minimax-h3")
+        assert vp.is_allowed("minimax-h3") is True
+        assert vp.is_allowed("minimax-h3-max") is False
+        assert vp.is_studio_eligible("minimax-h3-max") is False
+        assert [c["key"] for c in vp.list_capabilities()] == ["minimax-h3"]
+
+    def test_allowlisting_h3_max_alone_makes_it_the_default(self, monkeypatch):
+        """The documented switch for making H3 Max the production model."""
+        monkeypatch.setenv("VIDEO_MODEL_ALLOWLIST", "minimax-h3-max")
+        assert vp.default_model_key() == "minimax-h3-max"
+
+
+class TestHailuo3MaxPayload:
+    """
+    What actually goes over the wire for an H3 Max render.
+
+    The capability record is only half the answer; these assert the request
+    body, because the failure this guards against is a 400 from the provider on
+    a parameter the docs say it does not accept.
+    """
+
+    @staticmethod
+    def _capture(monkeypatch):
+        import ai_service
+
+        seen = []
+
+        class _Resp:
+            status_code = 202
+            text = '{"id": "job-1", "status": "queued"}'
+
+            def json(self):
+                return {"id": "job-1", "status": "queued"}
+
+        class _Client:
+            def __init__(self, *a, **k):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+            async def post(self, url, headers=None, json=None):
+                seen.append(json)
+                return _Resp()
+
+        monkeypatch.setattr(ai_service.httpx, "AsyncClient", _Client)
+        monkeypatch.setattr(ai_service, "OPENROUTER_API_KEY", "test")
+        return seen
+
+    def test_sends_the_model_id_and_768p(self, monkeypatch):
+        import asyncio
+
+        import ai_service
+
+        seen = self._capture(monkeypatch)
+        asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
+                                             duration=10, model="minimax-h3-max"))
+        assert len(seen) == 1
+        assert seen[0]["model"] == "minimax/hailuo-3-max"
+        assert seen[0]["resolution"] == "768p"
+        assert seen[0]["aspect_ratio"] == "9:16"
+        assert seen[0]["duration"] == 10
+
+    def test_never_sends_generate_audio(self, monkeypatch):
+        """
+        OpenRouter does not list generate_audio for this model. The studio also
+        defaults the flag off via supports_native_audio, but the payload layer
+        must not add it just because a caller passes True — an unlisted field is
+        a 400 and the founder pays nothing for the attempt, but loses the run.
+        """
+        import asyncio
+
+        import ai_service
+
+        seen = self._capture(monkeypatch)
+        asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
+                                             duration=10, model="minimax-h3-max",
+                                             generate_audio=True))
+        assert "generate_audio" not in seen[0]
+
+    def test_hailuo_3_still_sends_2k_and_audio(self, monkeypatch):
+        """The comparison only means something if the baseline is unchanged."""
+        import asyncio
+
+        import ai_service
+
+        seen = self._capture(monkeypatch)
+        asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
+                                             duration=10, model="minimax-h3",
+                                             generate_audio=True))
+        assert seen[0]["model"] == "minimax/hailuo-3"
+        assert seen[0]["resolution"] == "2K"
+        assert seen[0]["generate_audio"] is True
+
+    def test_carries_the_face_reference(self, monkeypatch):
+        """One image, unchanged: the same reference path serves both models."""
+        import asyncio
+
+        import ai_service
+
+        seen = self._capture(monkeypatch)
+        refs = [{"type": "image_url",
+                 "image_url": {"url": "data:image/png;base64,AAAA"}}]
+        asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
+                                             duration=10, model="minimax-h3-max",
+                                             input_references=refs))
+        assert seen[0]["input_references"] == refs
+
+    def test_unknown_key_still_falls_back_inside_the_provider(self, monkeypatch):
+        """
+        The 400 for an unknown key lives at the API boundary, not here. This
+        records that generate_video itself remains a last-resort guard, so a
+        direct caller cannot reach the provider with a nonsense model.
+        """
+        import asyncio
+
+        import ai_service
+
+        seen = self._capture(monkeypatch)
+        asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
+                                             duration=10, model="not-a-real-model"))
+        assert seen[0]["model"] == "minimax/hailuo-3"
 
 
 class TestDurationPlanning:

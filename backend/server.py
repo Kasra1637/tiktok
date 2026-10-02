@@ -7948,6 +7948,24 @@ async def submit_project_generation(
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
+    # An unrecognised model key is refused rather than quietly rendered on the
+    # default. video_providers.resolve() falls back to Hailuo 3 with a reason
+    # string, but the reason is informational: without this guard a stale key
+    # would still spend a real render on a model the founder did not choose, and
+    # the returned clip would not match the model on the row. A key that is
+    # known but not allowed (an editor, or one outside the allowlist) still
+    # falls back with its reason, because that is a configuration outcome the
+    # studio already reports, not a typo.
+    if payload.model and not video_providers.is_known(payload.model):
+        usable = ", ".join(c["key"] for c in video_providers.list_capabilities())
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unknown video model {payload.model!r}. Choose one of: {usable}. "
+                "Leave the model unset to use the default."
+            ),
+        )
+
     # The strategy, when the project has one, is what makes the render
     # app-specific. It is optional: a project whose strategy was never built
     # still renders from the plan alone.

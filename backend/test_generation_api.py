@@ -529,7 +529,7 @@ class TestListingAndCapabilities:
     def test_capability_endpoint_reports_studio_models(self, api):
         result = _run(api.list_studio_video_models())
         keys = [m["key"] for m in result["models"]]
-        assert keys == ["minimax-h3"]
+        assert keys == ["minimax-h3", "minimax-h3-max"]
         assert "aleph-2" not in keys
         assert result["default"] == "minimax-h3"
 
@@ -683,3 +683,75 @@ class TestStudioIdentityReference:
             project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
         archived = _run(api.archive_generation(gen["id"], ANON))
         assert archived["status"] == "archived"
+
+
+class TestModelSelectionAtTheApiBoundary:
+    """
+    Which provider a render actually uses.
+
+    video_providers.resolve() falls back to the default with a reason string, and
+    on its own that is not enough: the founder is charged for a real render and
+    handed a clip from a model they did not pick. These tests pin the boundary
+    behaviour — an unrecognised key is refused, an omitted key is the default,
+    and both generative models work by name.
+    """
+
+    def test_unknown_model_is_refused_before_spending(self, api, monkeypatch):
+        from models import StudioGenerationRequest
+        calls = _mock_submit(api, monkeypatch)
+        project, _, _ = _ready_project(api, "Bad Model", duration=10)
+        with pytest.raises(HTTPException) as err:
+            _run(api.submit_project_generation(
+                project_id=project["id"],
+                payload=StudioGenerationRequest(model="minimax-hailuo-4"),
+                user_id=ANON))
+        assert err.value.status_code == 400
+        assert "minimax-hailuo-4" in str(err.value.detail)
+        # The message has to say what IS available, or the founder cannot recover.
+        assert "minimax-h3" in str(err.value.detail)
+        assert "minimax-h3-max" in str(err.value.detail)
+        assert not calls, "a render was submitted for an unknown model"
+
+    def test_omitted_model_uses_hailuo_3(self, api, monkeypatch):
+        from models import StudioGenerationRequest
+        calls = _mock_submit(api, monkeypatch)
+        project, _, _ = _ready_project(api, "Default Model", duration=10)
+        gen = _run(api.submit_project_generation(
+            project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        assert gen["model"] == "minimax-h3"
+        assert len(calls) == 1
+
+    def test_h3_max_is_honoured_when_named(self, api, monkeypatch):
+        """
+        The A/B path: the same script renders on the model the founder picked,
+        so the comparison is meaningful.
+        """
+        from models import StudioGenerationRequest
+        calls = _mock_submit(api, monkeypatch)
+        project, _, _ = _ready_project(api, "Max Model", duration=10)
+        gen = _run(api.submit_project_generation(
+            project_id=project["id"],
+            payload=StudioGenerationRequest(model="minimax-h3-max"),
+            user_id=ANON))
+        assert gen["model"] == "minimax-h3-max"
+        assert len(calls) == 1
+
+    def test_h3_max_carries_the_same_face_reference(self, api, monkeypatch):
+        """
+        Adding a provider must not change what the founder uploaded. One image
+        goes on the request exactly as it does for Hailuo 3.
+        """
+        from models import StudioGenerationRequest
+        calls = _mock_submit(api, monkeypatch)
+        project, _, _ = _ready_project(api, "Max Face", duration=10)
+        _run(api.submit_project_generation(
+            project_id=project["id"],
+            payload=StudioGenerationRequest(model="minimax-h3-max"),
+            user_id=ANON))
+        assert len(calls) == 1
+        refs = calls[0].get("input_references") or []
+        assert len(refs) == 1
+        assert refs[0]["type"] == "image_url"
+        # ...and the two-section prompt is identical on both models.
+        assert "The person on camera is the person in the attached character reference" in (
+            calls[0]["prompt"])
