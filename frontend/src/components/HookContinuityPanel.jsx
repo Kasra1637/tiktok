@@ -231,8 +231,8 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           <AlertTitle>Plan edited since this strategy was built</AlertTitle>
           <AlertDescription>
             This strategy was built from plan v{project?.strategy_script_version}, and the plan is
-            now v{project?.script_version}. Generating will still work, but it renders the words
-            and directions you approved on the older plan. Rebuild to render the current one.
+            now v{project?.script_version}. Generating is blocked until you rebuild, because the
+            render would otherwise follow the words and directions you approved on the older plan.
           </AlertDescription>
         </Alert>
       )}
@@ -242,7 +242,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           <ShieldQuestion className="h-4 w-4 text-[color:var(--brand-indigo)]" />
           <AlertTitle>No character reference attached</AlertTitle>
           <AlertDescription>
-            Attach a <code>character_reference</code> image in the Assets step, or the
+            Attach a <code>character_reference</code> image on the Template &amp; photo step, or the
             presenter will be invented by the model rather than being you.
           </AlertDescription>
         </Alert>

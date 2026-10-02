@@ -682,7 +682,20 @@ async function main() {
     await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
       mount(GenerationPanel, { project: { ...BASE_PROJECT } })(ctx)
     );
-    expectText(ctx, "Mark the project ready for generation", "the ready gate did not render");
+expectText(ctx, "Mark the project ready for generation", "the ready gate did not render");
+  });
+
+  await check("GenerationPanel explains an un-ready project that already rendered", async (ctx) => {
+    // Saving a content edit on an approved project now returns it to draft, so
+    // the "already rendered once" case is reachable rather than theoretical. The
+    // hint used to be suppressed whenever a generation existed, which left a
+    // dead Generate button with no explanation for exactly that founder.
+    await mount(GenerationPanel, { project: { ...BASE_PROJECT } })(ctx);
+    expectText(
+      ctx,
+      "Mark the project ready for generation",
+      "the ready gate was hidden behind an existing generation"
+    );
   });
 
   await check("GenerationPanel blocks generation while a claim is prohibited", async (ctx) => {
@@ -1028,13 +1041,13 @@ async function main() {
     }
   });
 
-  await check("generating builds the strategy first, then renders", async (ctx) => {
+  await check("generating is blocked until a strategy is built and read", async (ctx) => {
     // Without a strategy the render falls back to a generic take with a name in
-    // it. It used to be a button the founder could skip, so paying for the
-    // generic version was one missed click away and nothing on screen said the
-    // specific one existed.
+    // it. This used to build the strategy AND render inside one click, which made
+    // the panel's "read the strategy" copy cosmetic: the founder never saw it
+    // before the money went. The button is now dead until a current strategy
+    // exists, and building one is a separate free action on the panel above.
     global.__SMOKE_PARAMS = "?project=p1";
-    const order = [];
     let renderCalls = 0;
     try {
       await withApi(
@@ -1044,12 +1057,8 @@ async function main() {
             strategy: {},
             strategy_version: 0,
           }),
-          generateStrategy: async () => {
-            order.push("strategy");
-            return PROJECT_WITH_STRATEGY;
-          },
+          generateStrategy: async () => PROJECT_WITH_STRATEGY,
           generateVideo: async () => {
-            order.push("render");
             renderCalls += 1;
             return { ...SEGMENT, status: "submitted" };
           },
@@ -1058,6 +1067,9 @@ async function main() {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Hook & middle");
           const btn = renderButton(ctx);
+          if (!btn.disabled) {
+            throw new Error("the generate button is live with no strategy to render from");
+          }
           await act(async () => {
             btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
           });
@@ -1068,9 +1080,13 @@ async function main() {
     } finally {
       global.__SMOKE_PARAMS = "";
     }
-    if (renderCalls !== 1) throw new Error(`expected one render, got ${renderCalls}`);
-    if (order.length !== 2 || order[0] !== "strategy") {
-      throw new Error(`the strategy must be built before the render, got ${JSON.stringify(order)}`);
+    if (renderCalls !== 0) {
+      throw new Error(`a render went out with no strategy, ${renderCalls} call(s)`);
+    }
+    // A dead button with no explanation strands the founder, so the panel has to
+    // say what to do next.
+    if (!ctx.text().includes("Build the strategy above")) {
+      throw new Error("the blocked generate button does not explain the next step");
     }
   });
 
@@ -1107,10 +1123,11 @@ async function main() {
     }
   });
 
-  await check("a strategy build that fails stops the render and is reported", async (ctx) => {
-    // The whole reason the strategy is built on this path is so the founder does
-    // not pay for a generic take believing it was the app-specific one. A
-    // fallback here would restore the exact dishonesty the step removes.
+  await check("a failed strategy build leaves nothing generated and says so", async (ctx) => {
+    // The build is its own action on the panel above, so its failure is reported
+    // there. What matters from this panel's side is the guarantee that no render
+    // went out: nothing is charged for a video that does not exist, and the
+    // founder is told why rather than left with a dead button.
     global.__SMOKE_PARAMS = "?project=p1";
     let renderCalls = 0;
     try {
@@ -1132,42 +1149,41 @@ async function main() {
         async () => {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Hook & middle");
-          const btn = renderButton(ctx);
+          const build = buttonByText(ctx, /Build the app-specific strategy|Rebuild strategy/);
           await act(async () => {
-            btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+            build.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
           });
           await act(async () => {});
           await act(async () => {});
+          // Whatever the panel does with the failure, the render button must not
+          // become live as a side effect of it.
+          const btn = renderButton(ctx);
+          if (!btn.disabled) {
+            throw new Error("a failed strategy build left the generate button live");
+          }
         }
       );
     } finally {
       global.__SMOKE_PARAMS = "";
     }
     if (renderCalls !== 0) {
-      throw new Error("the render proceeded after the strategy build failed");
+      throw new Error("a render went out with no strategy to render from");
     }
-    const text = ctx.text();
-    if (!text.includes("Nothing was generated")) {
-      throw new Error("a failed strategy build is not reported as having stopped the render");
-    }
-    // The founder must be able to tell nothing was spent. Without this they
-    // cannot tell a stopped render from a failed one, and would reasonably
-    // assume they were charged.
-    if (!text.includes("nothing was charged")) {
-      throw new Error("the failure does not say that no render was charged");
-    }
-    // The reason itself is interpolated, but this harness stubs
-    // getErrorMessage to a constant, so only the wiring is observable here: the
-    // alert must render, not just the render call being skipped.
-    if (!text.includes("could not be built")) {
-      throw new Error("the failure does not name the strategy as the thing that failed");
+    // The harness stubs getErrorMessage() to a fixed string, so assert that the
+    // panel shows an error at all rather than the provider's wording: what is
+    // under test is that the failure reaches the screen and no render escaped.
+    if (!/Something went wrong|error/i.test(ctx.text())) {
+      throw new Error("the failure is not surfaced anywhere the founder can see");
     }
   });
 
-  await check("the stale-plan warning does not claim the render will be refused", async (ctx) => {
-    // It claimed "will be refused until they match". Nothing refuses: the 409
-    // that did lived only on the two deleted segmented endpoints, so the panel
-    // was promising a guarantee the server does not make.
+  await check("the stale-plan warning matches the server and blocks the click", async (ctx) => {
+    // This check used to insist the warning NOT promise a refusal, because the
+    // 409 that enforced it "lived only on the two deleted segmented endpoints".
+    // It lives on the single-render generate endpoint now: a stale strategy is
+    // refused, because a warning that arrives before the money still spends the
+    // money on the plan the founder had already moved away from. The warning has
+    // to tell the truth about that, and the button has to be dead.
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await withApi(
@@ -1192,21 +1208,26 @@ async function main() {
     if (!text.includes("Plan edited since this strategy was built")) {
       throw new Error("the drift warning is missing entirely");
     }
-    if (/will be refused/i.test(text)) {
-      throw new Error("the drift warning promises a refusal the server does not perform");
+    // No longer promising a render on the older plan.
+    if (/will still work/i.test(text)) {
+      throw new Error("the drift warning still says the render will proceed on the older plan");
     }
-    // It has to say what actually happens instead, or the founder still cannot
-    // tell that generating will go ahead on the older plan.
-    if (!text.includes("will still work")) {
-      throw new Error("the drift warning does not say the render will proceed on the older plan");
+    if (!/blocked until you rebuild/i.test(text)) {
+      throw new Error("the drift warning does not say the render is blocked");
     }
-    // And it must name both versions, so "the older plan" is specific rather
-    // than a warning with nothing to act on.
-    // ...and it must name both versions, so "the older plan" is specific rather
-    // than a warning with nothing to act on. The copy reads "built from plan v1"
-    // and "the plan is now v3".
+    // It has to name both versions, so "the older plan" is specific rather than
+    // a warning with nothing to act on. The copy reads "built from plan v1" and
+    // "the plan is now v3".
     if (!/plan v1/.test(text) || !/now v3/.test(text)) {
       throw new Error("the drift warning does not name the plan versions involved");
+    }
+    // And the click has to match the promise.
+    const btn = renderButton(ctx);
+    if (!btn.disabled) {
+      throw new Error("the generate button is live against a stale strategy");
+    }
+    if (!text.includes("Rebuild the strategy above")) {
+      throw new Error("the drift warning does not say what to do about it");
     }
   });
 
@@ -2330,6 +2351,19 @@ function stepPill(ctx, label) {
  * family rather than one string, or it silently fails to find a button that is
  * right there.
  */
+/** Find a button by its visible label, with the failure listing what was there. */
+function buttonByText(ctx, pattern) {
+  const btn = [...ctx.container.querySelectorAll("button")].find((b) =>
+    pattern.test((b.textContent || "").trim())
+  );
+  if (!btn) {
+    const seen = [...ctx.container.querySelectorAll("button")]
+      .map((b) => (b.textContent || "").trim().slice(0, 45));
+    throw new Error(`no button matching ${pattern}; saw ${JSON.stringify(seen)}`);
+  }
+  return btn;
+}
+
 function renderButton(ctx) {
   const btn = [...ctx.container.querySelectorAll("button")].find((b) =>
     /Generate the video|Generate another/.test((b.textContent || "").trim())

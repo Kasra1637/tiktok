@@ -44,9 +44,11 @@ FACE_SWAP_MODEL = "google/gemini-3.1-flash-image"  # Gemini 3.1 Flash Image — 
 TEXT_MODEL = "google/gemini-2.5-flash"
 
 # Video generation models.
-# MiniMax H3 is the template studio's only provider: 2K picture, native
-# audio, V2V motion transfer, up to 15s per pass. Anything longer needs a
-# second job, which the studio plans for rather than truncating.
+# The template studio's providers. MiniMax H3 is the default: 2K picture,
+# native audio, V2V motion transfer, up to 15s per pass. Hailuo 3 Max sits
+# alongside it for comparison and gives up 2K for prompt adherence; see its
+# entry below. A video is ONE render either way, so a request longer than
+# the model's single-pass ceiling is refused rather than truncated.
 VIDEO_MODELS = {
     "aleph-2": {
         "id": "runway/aleph-2",

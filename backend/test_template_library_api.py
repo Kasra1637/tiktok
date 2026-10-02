@@ -59,6 +59,8 @@ def _make_profile(server, user_id, name="Testly", category="Productivity"):
             brand_name=name,
             app_category=category,
             core_features=["Task timer", "Reminders"],
+            usage_moments=["Starting a task they have been avoiding"],
+            brand_description="A focus timer for people who stall on starting.",
             icp_segments=["Busy students — need structure"],
         ),
         user_id=user_id,

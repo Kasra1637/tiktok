@@ -60,13 +60,50 @@ def _run(coro):
     return asyncio.run(coro)
 
 
+# A minimal but structurally real strategy: the fields build_segment_prompt
+# reads. Written straight to the row so these tests assert our gates rather than
+# the strategy builder's output.
+FAKE_STRATEGY = {
+    "strategy_summary": "Stop opening a blank page.",
+    "audience_problem": "Starting is harder than doing.",
+    "emotional_triggers": ["frustration"],
+    "hook_concept": "Name the blank page",
+    "hook_line": "You do not have a writing problem.",
+    "hook_promise": "One prompt gets you going.",
+    "hook_action": "Look straight down the lens.",
+    "messaging_pillars": ["one prompt at a time"],
+    "primary_feature": "Task timer",
+    "desired_outcome": "A finished page",
+    "differentiation_beat": "It works offline.",
+    "cta_strategy": "Try it free",
+    "scene": {"environment": "kitchen"},
+    "performance": {"movement": "still"},
+    "segments": [{
+        "index": 0, "role": "hook", "seconds": 5,
+        "goal": "name the problem", "script": "You do not have a writing problem.",
+        "action": "hold the look",
+    }],
+    "continuity_contract": {
+        "established": ["kitchen"],
+        "must_not_change": ["shirt"],
+        "do_not_repeat": ["the opening line"],
+    },
+}
+
+
 def _ready_project(api, name="Gen App", template_query="Stop Doing This",
-                   duration=20, model_note=None, with_character=True):
+                   duration=20, model_note=None, with_character=True,
+                   user_id=ANON):
     """An approved profile, a face-anchored template, and a project marked ready.
 
     Face-only library: every template puts a person on camera, so the fixture
     attaches a real character_reference unless a test explicitly opts out to
     exercise the refusal.
+
+    The project also carries a strategy stamped against its current
+    script_version. Rendering without one is now refused server-side, because a
+    video built from the plan alone is a generic take with the app's name in it
+    -- so a fixture that omitted it was testing a path no founder can reach.
     """
     from models import (
         BrandProfileCreateRequest, ApproveAppProfileRequest,
@@ -75,18 +112,22 @@ def _ready_project(api, name="Gen App", template_query="Stop Doing This",
     profile = _run(api.create_brand(payload=BrandProfileCreateRequest(
         brand_name=name,
         app_category="Productivity",
+        brand_description="A focus timer for people who stall on starting.",
         core_features=["Task timer"],
+        usage_moments=["Starting a task they have been avoiding"],
         claims_approved=["3-day free trial"],
         claims_banned=["cures anxiety"],
-    ), user_id=ANON))
+    ), user_id=user_id))
     _run(api.approve_app_profile(
-        profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=ANON))
-    template = _run(api.list_templates(q=template_query, user_id=ANON))["templates"][0]
+        profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=user_id))
+    template = _run(api.list_templates(q=template_query, user_id=user_id))["templates"][0]
     project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
         brand_profile_id=profile["id"],
         template_id=template["id"],
         duration_seconds=duration,
-    ), user_id=ANON))
+        # Marking ready now requires a stated objective; see mark_project_ready.
+        objective="demonstrate_feature",
+    ), user_id=user_id))
     from models import now_iso
     assets = []
     if with_character:
@@ -101,16 +142,19 @@ def _ready_project(api, name="Gen App", template_query="Stop Doing This",
             "INSERT INTO assets (id, brand_profile_id, kind, name, file_path, label,"
             " created_at, updated_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (asset_id, profile["id"], "character_reference", "Founder face",
-             str(face), "Founder face", now, now, ANON)))
+             str(face), "Founder face", now, now, user_id)))
         assets = [{
             "asset_id": asset_id, "kind": "character_reference",
             "label": "Founder face", "file_path": str(face),
         }]
     _run(api._execute(
-        """UPDATE studio_projects SET assets = ?, hook_line = ?, script = ?, status = 'ready_for_generation'
+        """UPDATE studio_projects SET assets = ?, hook_line = ?, script = ?,
+              status = 'ready_for_generation', script_version = 1,
+              strategy = ?, strategy_version = 1, strategy_script_version = 1
            WHERE id = ?""",
-        (json.dumps(assets), "Stop writing empty pages", "A short script for the app.", project["id"])))
-    return _run(api.get_studio_project(project["id"], ANON)), profile, template
+        (json.dumps(assets), "Stop writing empty pages", "A short script for the app.",
+         json.dumps(FAKE_STRATEGY), project["id"])))
+    return _run(api.get_studio_project(project["id"], user_id)), profile, template
 
 
 def _mock_submit(api, monkeypatch, response=None, raises=None):
@@ -158,8 +202,12 @@ class TestSinglePassGeneration:
             project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
         assert len(calls) == 1
         prompt = calls[0]["prompt"]
-        assert "Stop writing empty pages" in prompt
-        assert "single coherent take" in prompt.lower()
+        # The strategy's hook line is what the video opens on, NOT the plan's
+        # hook_line. They are two different fields and the strategy is the one
+        # the founder reviewed as the video's own words -- build_single_pass_prompt
+        # read the plan's copy, which is the generic path this no longer takes.
+        assert FAKE_STRATEGY["hook_line"] in prompt
+        assert "ONE continuous" in prompt
 
     def test_generation_records_provenance(self, api, monkeypatch):
         _mock_submit(api, monkeypatch)
@@ -192,13 +240,87 @@ class TestSinglePassGeneration:
         assert result["openrouter_job_id"]
 
 
+class TestIdempotency:
+    """
+    One click, one paid render.
+
+    The generate endpoint had no key and no in-flight check, so a double-tap, a
+    client retry of the same request, or the same project in two tabs could each
+    create a real billed job. The provider is mocked throughout, so these assert
+    how many jobs were SUBMITTED rather than what came back.
+    """
+
+    def _submit(self, api, key, **kw):
+        from models import StudioGenerationRequest
+        return _run(api.submit_project_generation(
+            project_id=kw["project_id"],
+            payload=StudioGenerationRequest(idempotency_key=key),
+            user_id=kw.get("user_id", ANON),
+        ))
+
+    def test_the_same_key_returns_the_first_generation(self, api, monkeypatch):
+        calls = _mock_submit(api, monkeypatch)
+        project, _, _ = _ready_project(api, "Idem Repeat")
+        first = self._submit(api, "key-one", project_id=project["id"])
+        second = self._submit(api, "key-one", project_id=project["id"])
+        assert first["id"] == second["id"]
+        # The whole point: one provider submit, not two billed jobs.
+        assert len(calls) == 1
+        rows = _run(api.list_generations(studio_project_id=project["id"], user_id=ANON))
+        assert len(rows["generations"]) == 1
+
+    def test_a_fresh_key_is_a_fresh_render(self, api, monkeypatch):
+        """Reuses must not become a way to make "Generate another" free."""
+        calls = _mock_submit(api, monkeypatch)
+        project, _, _ = _ready_project(api, "Idem Fresh")
+        first = self._submit(api, "key-a", project_id=project["id"])
+        second = self._submit(api, "key-b", project_id=project["id"])
+        assert first["id"] != second["id"]
+        assert len(calls) == 2
+
+    def test_no_key_keeps_the_old_behaviour(self, api, monkeypatch):
+        """A caller that sends no key is unaffected -- twice is still twice."""
+        calls = _mock_submit(api, monkeypatch)
+        project, _, _ = _ready_project(api, "Idem None")
+        first = self._submit(api, None, project_id=project["id"])
+        second = self._submit(api, "", project_id=project["id"])
+        assert first["id"] != second["id"]
+        assert len(calls) == 2
+
+    def test_one_users_key_does_not_silence_another(self, api, monkeypatch):
+        """
+        The lookup is (user_id, idempotency_key), so a key is not a
+        cross-tenant suppressor: two founders whose clients happened to pick the
+        same key each get their own render.
+        """
+        calls = _mock_submit(api, monkeypatch)
+        mine, _, _ = _ready_project(api, "Idem Tenant A")
+        theirs, _, _ = _ready_project(api, "Idem Tenant B", user_id=OTHER_USER)
+        first = self._submit(api, "shared-key", project_id=mine["id"])
+        second = self._submit(
+            api, "shared-key", project_id=theirs["id"], user_id=OTHER_USER)
+        assert first["id"] != second["id"]
+        assert len(calls) == 2
+
+    def test_a_replay_is_flagged_so_the_ui_can_tell(self, api, monkeypatch):
+        _mock_submit(api, monkeypatch)
+        project, _, _ = _ready_project(api, "Idem Flagged")
+        self._submit(api, "key-flag", project_id=project["id"])
+        replay = self._submit(api, "key-flag", project_id=project["id"])
+        assert replay.get("idempotent_replay") is True
+
+
 class TestGenerationGates:
     def test_unready_project_is_blocked(self, api, monkeypatch):
         _mock_submit(api, monkeypatch)
         from models import CreateStudioProjectRequest, StudioGenerationRequest
         from models import BrandProfileCreateRequest, ApproveAppProfileRequest
         profile = _run(api.create_brand(payload=BrandProfileCreateRequest(
-            brand_name="Not Ready"), user_id=ANON))
+            brand_name="Not Ready",
+            brand_description="A focus timer for people who stall on starting.",
+            core_features=["Task timer"],
+            usage_moments=["Starting a task they have been avoiding"],
+        ), user_id=ANON))
         _run(api.approve_app_profile(
             profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=ANON))
         template = _run(api.list_templates(user_id=ANON))["templates"][0]
@@ -213,9 +335,14 @@ class TestGenerationGates:
         calls = _mock_submit(api, monkeypatch)
         from models import StudioGenerationRequest
         project, _, _ = _ready_project(api, "Blocked Claim")
+        # Put the banned claim in the SCRIPT rather than in the stored report.
+        # The gate used to read safety_report straight off the row, so a test
+        # could make it fail by writing that column. It is now recomputed from
+        # the project and the live profile, so the claim has to be real for the
+        # verdict to be real.
         _run(api._execute(
-            """UPDATE studio_projects SET safety_report = ? WHERE id = ?""",
-            ('{"passed": false, "blocking": [{"claim": "cures anxiety"}]}', project["id"])))
+            "UPDATE studio_projects SET script = ? WHERE id = ?",
+            ("Taskly cures anxiety for good.", project["id"])))
         with pytest.raises(HTTPException) as err:
             _run(api.submit_project_generation(
                 project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
@@ -223,6 +350,60 @@ class TestGenerationGates:
         assert "cures anxiety" in str(err.value.detail)
         # Crucially, no provider call was made.
         assert calls == []
+
+    def test_a_claim_banned_after_approval_still_blocks(self, api, monkeypatch):
+        """
+        The safety report stored on the project is a cache, and must not be able
+        to wave through a claim the App Profile now bans.
+
+        App Profile edits deliberately do NOT revoke approval, so this is an
+        ordinary sequence: research, approve, mark the plan ready, then go back
+        and ban a claim on the profile. The cached "passed" verdict written at
+        ready-time is still on the project row, and reading it would render the
+        newly-banned claim for money.
+        """
+        from models import BrandProfileUpdateRequest, StudioGenerationRequest
+        calls = _mock_submit(api, monkeypatch)
+        project, profile, _ = _ready_project(api, "Late Ban")
+        _run(api._execute(
+            "UPDATE studio_projects SET script = ? WHERE id = ?",
+            ("Taskly cures anxiety for good.", project["id"])))
+
+        # Banned after the project was approved and marked ready. The profile
+        # still reads as approved, which is the point.
+        _run(api.update_app_profile(
+            profile_id=profile["id"],
+            payload=BrandProfileUpdateRequest(claims_banned=["cures anxiety"]),
+            user_id=ANON))
+        assert _run(api.get_app_profile(profile["id"], ANON))["status"] == "approved"
+
+        with pytest.raises(HTTPException) as err:
+            _run(api.submit_project_generation(
+                project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        assert err.value.status_code == 409
+        assert "cures anxiety" in str(err.value.detail)
+        assert calls == []
+
+    def test_mark_ready_recomputes_the_verdict_it_stores(self, api, monkeypatch):
+        """
+        The panel the founder approves against must be the same verdict the
+        render is checked against.
+
+        Otherwise approving shows a green SafetyPanel from a stale cache and the
+        Generate button then refuses, which reads as a bug rather than a rule.
+        """
+        from models import BrandProfileUpdateRequest
+        project, profile, _ = _ready_project(api, "Stale Panel")
+        _run(api._execute(
+            "UPDATE studio_projects SET script = ? WHERE id = ?",
+            ("Taskly cures anxiety for good.", project["id"])))
+        _run(api.update_app_profile(
+            profile_id=profile["id"],
+            payload=BrandProfileUpdateRequest(claims_banned=["cures anxiety"]),
+            user_id=ANON))
+        with pytest.raises(HTTPException) as err:
+            _run(api.mark_project_ready(project_id=project["id"], user_id=ANON))
+        assert err.value.status_code == 409
 
     def test_missing_script_is_blocked(self, api, monkeypatch):
         _mock_submit(api, monkeypatch)
@@ -429,6 +610,79 @@ class TestRetry:
             _run(api.retry_generation(gen["id"], ANON))
         assert err.value.status_code == 409
 
+    def test_retry_is_refused_when_the_project_is_no_longer_ready(self, api, monkeypatch):
+        """
+        A retry is the same render, so it obeys the same readiness gate.
+
+        This path used to load the project and call _submit_generation directly,
+        inheriting none of the submit checks. Editing a project back to draft and
+        then retrying an old failure still spent real money.
+        """
+        from models import StudioGenerationRequest, UpdateStudioProjectRequest
+        gen, calls = self._failed(api, monkeypatch, "Retry Not Ready")
+        _run(api.update_studio_project(
+            project_id=gen["studio_project_id"],
+            payload=UpdateStudioProjectRequest(hook_line="Rewritten after the failure"),
+            user_id=ANON,
+        ))
+        with pytest.raises(HTTPException) as err:
+            _run(api.retry_generation(gen["id"], ANON))
+        assert err.value.status_code == 409
+        # Refused before the provider was called, so nothing was spent.
+        assert len(calls) == 1
+
+    def test_retry_is_refused_when_the_profile_is_no_longer_approved(self, api, monkeypatch):
+        """
+        Retry used to load the App Profile by id and render against whatever
+        state it happened to be in, skipping the approval requirement entirely.
+
+        Note that editing a profile deliberately does NOT revoke approval, so
+        the unapproved state is reached the way it is reached in the product: the
+        row is a draft that was never approved.
+        """
+        gen, calls = self._failed(api, monkeypatch, "Retry Unapproved")
+        project = _run(api.get_studio_project(gen["studio_project_id"], ANON))
+        _run(api._execute(
+            "UPDATE brand_profiles SET status = 'draft' WHERE id = ?",
+            (project["brand_profile_id"],)))
+        with pytest.raises(HTTPException) as err:
+            _run(api.retry_generation(gen["id"], ANON))
+        assert err.value.status_code == 409
+        assert len(calls) == 1
+
+    def test_retry_refuses_a_length_the_model_can_no_longer_fill(self, api, monkeypatch):
+        """
+        A recorded length past the current model's ceiling used to be silently
+        clamped, so the founder paid for one render and received a shorter clip
+        than the plan describes.
+        """
+        gen, calls = self._failed(api, monkeypatch, "Retry Long")
+        _run(api._execute(
+            "UPDATE generations SET duration = ? WHERE id = ?", (9999, gen["id"])))
+        with pytest.raises(HTTPException) as err:
+            _run(api.retry_generation(gen["id"], ANON))
+        assert err.value.status_code == 400
+        assert len(calls) == 1
+
+    def test_retry_refuses_a_model_that_has_left_the_allowlist(self, api, monkeypatch):
+        """
+        resolve() falls back to the default for a model that is no longer
+        allowed, which on the retry path meant paying for one model and getting
+        another with no error. The refusal is what makes the retry trustworthy.
+        """
+        import video_providers
+        gen, calls = self._failed(api, monkeypatch, "Retry Model Drift")
+        real_allowlist = video_providers._allowlist
+
+        def empty_allowlist():
+            return [k for k in real_allowlist() if k != gen["model"]]
+
+        monkeypatch.setattr(video_providers, "_allowlist", empty_allowlist)
+        with pytest.raises(HTTPException) as err:
+            _run(api.retry_generation(gen["id"], ANON))
+        assert err.value.status_code == 409
+        assert len(calls) == 1
+
     def test_failed_submission_is_recorded(self, api, monkeypatch):
         from models import StudioGenerationRequest
         _mock_submit(api, monkeypatch, raises=RuntimeError("HTTP 429 rate limit"))
@@ -514,7 +768,7 @@ class TestListingAndCapabilities:
         gen = _run(api.submit_project_generation(
             project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
         detail = _run(api.get_generation(gen["id"], ANON))
-        assert "single coherent take" in detail["prompt_used"]
+        assert FAKE_STRATEGY["hook_line"] in detail["prompt_used"]
 
     def test_another_users_generation_is_404(self, api, monkeypatch):
         from models import StudioGenerationRequest
@@ -547,6 +801,9 @@ class TestStudioIdentityReference:
         )
         profile = _run(api.create_brand(payload=BrandProfileCreateRequest(
             brand_name=name, app_category="Productivity",
+            brand_description="A focus timer for people who stall on starting.",
+            core_features=["Task timer"],
+            usage_moments=["Starting a task they have been avoiding"],
         ), user_id=ANON))
         _run(api.approve_app_profile(
             profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=ANON))
@@ -569,12 +826,15 @@ class TestStudioIdentityReference:
              str(face), "Founder face", now, now, ANON)))
         _run(api._execute(
             "UPDATE studio_projects SET assets = ?, hook_line = ?, script = ?,"
-            " status = 'ready_for_generation' WHERE id = ?",
+            " status = 'ready_for_generation', script_version = 1,"
+            " strategy = ?, strategy_version = 1, strategy_script_version = 1"
+            " WHERE id = ?",
             (json.dumps([{
                 "asset_id": asset_id, "kind": "character_reference",
                 "label": "Founder face", "file_path": str(face),
             }]),
-             "Stop writing empty pages", "A short script for the app.", project["id"])))
+             "Stop writing empty pages", "A short script for the app.",
+             json.dumps(FAKE_STRATEGY), project["id"])))
         return _run(api.get_studio_project(project["id"], ANON))
 
     def test_identity_reference_rides_along(self, api, monkeypatch):

@@ -48,7 +48,6 @@ function AssetRow({
   attached,
   attachDisabled,
   attachBusy,
-  projectDuration,
   busy,
 }) {
   const isVideo = asset.kind === "screen_recording" || asset.kind === "background_video";
@@ -125,13 +124,15 @@ function AssetRow({
               size="sm"
               disabled={!usable || attachDisabled || attachBusy || busy}
               title={
-                asset.status !== "active"
-                  ? "Restore this asset before attaching it."
-                  : !asset.rights_confirmed
-                    ? "Confirm rights before using this asset in a project."
-                    : "Attach this asset to the current project"
+                attachDisabled && !busy && asset.kind === "character_reference"
+                  ? "This project already has the character reference it will render from. Detach that one first."
+                  : asset.status !== "active"
+                    ? "Restore this asset before attaching it."
+                    : !asset.rights_confirmed
+                      ? "Confirm rights before using this asset in a project."
+                      : "Attach this asset to the current project"
               }
-              onClick={() => onAttach(asset, {})}
+              onClick={() => onAttach(asset)}
             >
               <Link2 className="h-3.5 w-3.5" /> Attach
             </Button>
@@ -245,7 +246,6 @@ export default function AssetLibrary({
   profileId,
   projectId,
   projectAssets,
-  projectDuration,
   onProjectChanged,
   onChanged,
   /**
@@ -300,6 +300,14 @@ export default function AssetLibrary({
   const attachedIds = new Set(
     (projectAssets || []).map((a) => a?.asset_id).filter(Boolean)
   );
+  // One project carries exactly one character reference: the server refuses a
+  // render with two rather than guess which face is on camera. Offering a
+  // second Attach button would only produce a 409 at the expensive moment, so
+  // the control is disabled and says which photo already holds the slot.
+  const attachedCharacterCount = (projectAssets || []).filter(
+    (a) => a?.kind === "character_reference"
+  ).length;
+  const characterSlotTaken = attachedCharacterCount >= 1;
 
   const load = useCallback(async () => {
     if (!activeProfileId) return;
@@ -410,19 +418,17 @@ export default function AssetLibrary({
     }
   };
 
-  const handleAttach = async (asset, options = {}) => {
+  // No options. The old builder forwarded start/end/audio_role/audio_gain from
+  // the retired time-range controls; no caller set them and the server had
+  // stopped reading them, so keeping the loop implied an attachment could carry
+  // a trim or a mix that would be silently dropped.
+  const handleAttach = async (asset) => {
     if (!projectId) return;
     setAttachBusyId(asset.id);
     setError(null);
     setNotice(null);
     try {
-      const payload = { asset_id: asset.id };
-      for (const key of ["start", "end", "audio_role", "audio_gain"]) {
-        if (options[key] !== undefined && options[key] !== "") {
-          payload[key] = options[key];
-        }
-      }
-      await api.attachAsset(projectId, payload);
+      await api.attachAsset(projectId, { asset_id: asset.id });
       setNotice(`Attached ${humanize(asset.kind)} "${asset.label || asset.name || asset.kind}".`);
       await load();
       onProjectChanged?.();
@@ -690,9 +696,8 @@ export default function AssetLibrary({
               onAttach={handleAttach}
               projectId={projectId}
               attached={attachedIds.has(a.id)}
-              attachDisabled={busy}
+              attachDisabled={busy || (characterSlotTaken && a.kind === "character_reference")}
               attachBusy={attachBusyId === a.id}
-              projectDuration={projectDuration}
               busy={busy}
             />
           ))}

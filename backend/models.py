@@ -415,10 +415,18 @@ class StudioGenerationRequest(BaseModel):
         ceiling — it is not shortened, and not split into a second job. A
         shorter-than-one-pass video is not a thing this workflow can finish.
     generate_audio: request native audio where the provider supports it.
+    idempotency_key: optional caller-supplied key identifying ONE intent to
+        render. A repeat of the same key returns the generation already created
+        for it instead of submitting a second paid job. The studio sends a key
+        that survives a retried request but is fresh for "Generate another", so
+        a double-tap or a network retry cannot bill twice while a deliberate
+        re-roll still can. Omitted by any other caller, which is the same
+        one-key-one-render behaviour as before.
     """
     model: Optional[str] = None
     duration_seconds: Optional[int] = None
     generate_audio: Optional[bool] = None
+    idempotency_key: Optional[str] = None
 
 
 class UpdateAssetRequest(BaseModel):

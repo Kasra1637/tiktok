@@ -54,7 +54,12 @@ def _run(coro):
 
 def _profile(api, name):
     from models import BrandProfileCreateRequest, ApproveAppProfileRequest
-    p = _run(api.create_brand(payload=BrandProfileCreateRequest(brand_name=name), user_id=ANON))
+    p = _run(api.create_brand(payload=BrandProfileCreateRequest(
+        brand_name=name,
+        brand_description="A focus timer for people who stall on starting.",
+        core_features=["Task timer", "Reminders"],
+        usage_moments=["Starting a task they have been avoiding"],
+    ), user_id=ANON))
     _run(api.approve_app_profile(
         profile_id=p["id"], payload=ApproveAppProfileRequest(), user_id=ANON))
     return p
@@ -129,7 +134,12 @@ class TestApproveAppProfile:
         # while the row stays a draft — and data appears to vanish on relogin.
         from models import BrandProfileCreateRequest, ApproveAppProfileRequest
         profile = _run(api.create_brand(
-            payload=BrandProfileCreateRequest(brand_name="No Pending"), user_id=ANON))
+            payload=BrandProfileCreateRequest(
+        brand_name="No Pending",
+        brand_description="A focus timer for people who stall on starting.",
+        core_features=["Task timer", "Reminders"],
+        usage_moments=["Starting a task they have been avoiding"],
+    ), user_id=ANON))
         assert profile["status"] == "draft"
         approved = _run(api.approve_app_profile(
             profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=ANON))
@@ -657,7 +667,11 @@ class TestResearchDraftPublication:
     def test_unpublished_drafts_are_excluded_from_recommendations(self, api):
         from models import CreateStudioProjectRequest, BrandProfileCreateRequest, ApproveAppProfileRequest
         profile = _run(api.create_brand(payload=BrandProfileCreateRequest(
-            brand_name="Draft Exclusion"), user_id=ANON))
+            brand_name="Draft Exclusion",
+            brand_description="A focus timer for people who stall on starting.",
+            core_features=["Task timer", "Reminders"],
+            usage_moments=["Starting a task they have been avoiding"],
+        ), user_id=ANON))
         _run(api.approve_app_profile(
             profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=ANON))
         tpl_id = str(uuid.uuid4())
@@ -673,7 +687,11 @@ class TestResearchDraftPublication:
     def test_creating_a_project_with_a_draft_template_is_refused(self, api):
         from models import CreateStudioProjectRequest, BrandProfileCreateRequest, ApproveAppProfileRequest
         profile = _run(api.create_brand(payload=BrandProfileCreateRequest(
-            brand_name="Draft Project"), user_id=ANON))
+            brand_name="Draft Project",
+            brand_description="A focus timer for people who stall on starting.",
+            core_features=["Task timer", "Reminders"],
+            usage_moments=["Starting a task they have been avoiding"],
+        ), user_id=ANON))
         _run(api.approve_app_profile(
             profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=ANON))
         tpl_id = str(uuid.uuid4())
@@ -752,3 +770,66 @@ class TestNoPlatformAutomation:
     # check on a sentence is worth nothing next to the three structural tests
     # above it, which prove there is no code path that can post a video at all.
     # The user-facing statement now lives on the Assets and Review screens.
+
+
+class TestResearchRecordsOnlyWhatItRead:
+    """
+    A source that fails should not be recorded as one that was read.
+
+    Only an all-sources-failed research raises, so a profile built from one of
+    five URLs was stored with all five listed in research_sources. A founder
+    reading that list had no way to know the other four were empty, and the
+    detail view renders the list as though it were provenance.
+    """
+
+    def _research(self, api, monkeypatch, *, website=True, appstore=True):
+        from models import AppProfileResearchRequest
+
+        async def fake_fetch(url, max_chars):
+            # Only the website resolves. The store listing is behind a bot check.
+            if url.startswith("https://apps.apple.com"):
+                return ""
+            return "ShiftLog logs a shift in one tap. Built for night-shift nurses."
+
+        async def fake_analyze(sources, notes):
+            seen.append(dict(sources))
+            return {
+                "brand_name": "ShiftLog",
+                "brand_description": "Shift logging for healthcare workers.",
+                "app_category": "Productivity",
+                "core_features": ["One-tap shift logging"],
+                "usage_moments": ["Clocking on and off between shifts"],
+                "target_audience": "hospital nurses",
+                "tone_voice": "Warm",
+                "claims_approved": ["Logs a shift in one tap"],
+            }
+
+        seen = []
+        monkeypatch.setattr(api, "_fetch_url_text", fake_fetch)
+        monkeypatch.setattr(api, "analyze_app_profile", fake_analyze)
+        return _run(api.research_app_profile(payload=AppProfileResearchRequest(
+            website_url="https://shiftlog.example" if website else "",
+            appstore_url="https://apps.apple.com/x" if appstore else "",
+        ), user_id=ANON)), seen
+
+    def test_a_failed_source_is_not_recorded_as_read(self, api, monkeypatch):
+        profile, seen = self._research(api, monkeypatch)
+        # Already decoded by the row factory; only a hand-written or older row
+        # arrives as a string.
+        recorded = profile["research_sources"]
+        if isinstance(recorded, str):
+            import json as _json
+            recorded = _json.loads(recorded or "[]")
+        assert recorded == ["website"]
+        # And the model was not handed an empty entry labelled as a source.
+        assert list(seen[0]) == ["website"]
+        assert all((v or "").strip() for v in seen[0].values())
+
+    def test_a_partially_failed_research_still_succeeds(self, api, monkeypatch):
+        """
+        Losing one source is not losing the profile. The point is that the gap
+        is recorded, not that partial research is refused.
+        """
+        profile, _ = self._research(api, monkeypatch, appstore=False)
+        assert profile["brand_name"] == "ShiftLog"
+        assert profile["status"] == "draft"

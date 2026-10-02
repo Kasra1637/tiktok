@@ -395,8 +395,14 @@ function nextStepMessage(stepStates, step) {
     }
   }
   if (step === 0) return "Nothing is spent until the last step.";
-  if (stepStates.every((s) => s.state === "done")) {
-    return "Everything is ready. Open Hook & middle to render — that is the only step that costs money.";
+  // "Everything is ready" has to be measured against the steps that CAN be
+  // ready. The render step is deliberately never marked done -- it has no
+  // completion state, because a project stays renderable and gets re-rendered
+  // -- so `every(s => s.state === "done")` was permanently false and this line
+  // was unreachable. Comparing only the steps before it makes the message
+  // reachable, and says it at the point where it is true.
+  if (stepStates.slice(0, step).every((s) => s.state === "done")) {
+    return "Everything before this is ready. This is the only step that costs money.";
   }
   const first = stepStates.findIndex((s) => s.state !== "done");
   if (first > step) {
@@ -616,6 +622,14 @@ export default function CreateVideo() {
     // the switch and the new profile's recommendations would then see a
     // selection already made and decline to preselect theirs.
     setTemplateId("");
+    // The objective and tone were left behind, which is the same bug for a
+    // different field: both are creative direction chosen against the PREVIOUS
+    // app, and both are written onto the next project in createProject. Carrying
+    // them over means the new app's plan is built toward another app's goal,
+    // and the Audience & goal step shows a choice the founder already made for
+    // a product they just switched away from.
+    setObjective("");
+    setTone("");
     // The latch is per-app, not per-session: a deliberate pick for one app says
     // nothing about the next one, so the new app starts from its own top pick.
     templateChosenByHand.current = false;

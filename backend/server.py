@@ -1234,6 +1234,11 @@ async def init_db():
             # used to receive. Additive: existing rows get NULL, which reads as
             # "no brief recorded" and simply shows an empty field on Review.
             ("studio_projects", "demo_brief", "TEXT"),
+            # Idempotency for the one paid render. A repeated key returns the
+            # generation already created for it instead of billing a second
+            # job. Existing rows get NULL, which means "no key supplied" and
+            # keeps every historical render re-submittable exactly as before.
+            ("generations", "idempotency_key", "TEXT"),
         ]
         for table, column, decl in influencer_migrations:
             cursor = await conn.execute(f"PRAGMA table_info({table})")
@@ -1248,6 +1253,17 @@ async def init_db():
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_generations_chain "
             "ON generations (studio_project_id, segment_index)"
+        )
+        # And a UNIQUE index on (user_id, idempotency_key) for callers that
+        # supply one. Partial, so the many NULL keys of keyless callers are
+        # untouched -- SQLite treats NULLs as distinct in a unique index, so
+        # this constrains only the rows that actually claim an intent. This is
+        # what makes the guarantee hold under two genuinely concurrent requests
+        # rather than only when they are politely sequential.
+        await conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_generations_idempotency "
+            "ON generations (user_id, idempotency_key) "
+            "WHERE idempotency_key IS NOT NULL AND idempotency_key != ''"
         )
         await conn.commit()
 
@@ -5506,9 +5522,15 @@ async def analyze_brand_url(payload: AnalyzeBrandUrlRequest, user_id: str = Depe
     # inserting another row. Previously every re-analysis created a duplicate,
     # which orphaned the user's manual edits and left stale profiles behind
     # competing to be the "active" one.
+    #
+    # The lookup is scoped to the caller. Matching on website_url alone meant two
+    # founders who research the same site shared one row: the second request
+    # overwrote the first's name, audience, claims and raw text, and then
+    # returned that row -- including the other user's id. Refresh-in-place is a
+    # per-user convenience, not a per-URL one.
     now = now_iso()
     existing = await _fetch_one(
-        "SELECT id FROM brand_profiles WHERE website_url = ?", (url,)
+        "SELECT id FROM brand_profiles WHERE website_url = ? AND user_id = ?", (url, user_id)
     )
     values = (
         extracted.get("brand_name"), extracted.get("brand_description"),
@@ -5523,8 +5545,8 @@ async def analyze_brand_url(payload: AnalyzeBrandUrlRequest, user_id: str = Depe
                SET brand_name = ?, brand_description = ?, niche = ?,
                    target_audience = ?, ideal_customer_profile = ?, differentiation = ?,
                    tone_voice = ?, raw_extracted_text = ?, updated_at = ?
-               WHERE id = ?""",
-             values + (now, brand_id),
+               WHERE id = ? AND user_id = ?""",
+             values + (now, brand_id, user_id),
         )
         logger.info(f"Refreshed existing brand profile {brand_id} from {url}")
     else:
@@ -5538,7 +5560,9 @@ async def analyze_brand_url(payload: AnalyzeBrandUrlRequest, user_id: str = Depe
             (brand_id, url) + values + (now, now, user_id),
         )
         logger.info(f"Created brand profile {brand_id} from {url}")
-    return await _fetch_one("SELECT * FROM brand_profiles WHERE id = ?", (brand_id,))
+    return await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (brand_id, user_id)
+    )
 
 
 @api_router.post("/brand", status_code=201)
@@ -5638,7 +5662,14 @@ async def get_active_brand(user_id: str = Depends(get_current_user_id)):
 
 @api_router.get("/brand/{brand_id}")
 async def get_brand(brand_id: str, user_id: str = Depends(get_current_user_id)):
-    brand = await _fetch_one("SELECT * FROM brand_profiles WHERE id = ?", (brand_id,))
+    # Scoped to the caller. This endpoint predates the App Profile routes and
+    # used to look the row up by id alone, which let any authenticated user read
+    # (or, via the PATCH below, rewrite) someone else's profile -- including the
+    # scraped raw_extracted_text. A miss is a 404 rather than a 403 so a
+    # stranger cannot probe for which profile ids exist.
+    brand = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (brand_id, user_id)
+    )
     if not brand:
         raise HTTPException(status_code=404, detail="Brand profile not found")
     return brand
@@ -5646,7 +5677,13 @@ async def get_brand(brand_id: str, user_id: str = Depends(get_current_user_id)):
 
 @api_router.patch("/brand/{brand_id}")
 async def update_brand(brand_id: str, payload: BrandProfileUpdateRequest, user_id: str = Depends(get_current_user_id)):
-    existing = await _fetch_one("SELECT * FROM brand_profiles WHERE id = ?", (brand_id,))
+    # Scoped to the caller for the same reason as the GET above: an id-only
+    # lookup let one user edit another user's profile. Both the read and the
+    # UPDATE carry the predicate so the write can never land on a row the caller
+    # does not own.
+    existing = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (brand_id, user_id)
+    )
     if not existing:
         raise HTTPException(status_code=404, detail="Brand profile not found")
 
@@ -5664,13 +5701,14 @@ async def update_brand(brand_id: str, payload: BrandProfileUpdateRequest, user_i
     set_clauses, values = _brand_update_parts(updates)
     set_clauses.append("updated_at = ?")
     values.append(now_iso())
-    values.append(brand_id)
 
     await _execute(
-        f"UPDATE brand_profiles SET {', '.join(set_clauses)} WHERE id = ?",
-        tuple(values),
+        f"UPDATE brand_profiles SET {', '.join(set_clauses)} WHERE id = ? AND user_id = ?",
+        tuple(values) + (brand_id, user_id),
     )
-    return await _fetch_one("SELECT * FROM brand_profiles WHERE id = ?", (brand_id,))
+    return await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (brand_id, user_id)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -5714,25 +5752,50 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
         )
 
     sources: dict = {}
+    # What was asked for, and what actually came back. A source can fail --
+    # a store listing behind a bot check, a support page that 404s -- and the
+    # only all-failed case raises. research_sources used to record every
+    # SUPPLIED url, so a profile built from one of five sources claimed five,
+    # and a founder reading the list had no way to know the rest were empty.
+    requested_sources: list = []
+    source_failures: list = []
     if website:
+        requested_sources.append("website")
         sources["website"] = await _fetch_url_text(website, APP_RESEARCH_CAPS["website"])
     if appstore:
+        requested_sources.append("app_store")
         sources["app_store"] = await _fetch_url_text(appstore, APP_RESEARCH_CAPS["app_store"])
     if play:
+        requested_sources.append("google_play")
         sources["google_play"] = await _fetch_url_text(play, APP_RESEARCH_CAPS["google_play"])
     for i, u in enumerate(support):
-        sources[f"support_{i + 1} ({u})"] = await _fetch_url_text(u, APP_RESEARCH_CAPS["support"])
-    if not any((v or "").strip() for v in sources.values()):
+        label = f"support_{i + 1} ({u})"
+        requested_sources.append(label)
+        sources[label] = await _fetch_url_text(u, APP_RESEARCH_CAPS["support"])
+    read_sources = {k: v for k, v in sources.items() if (v or "").strip()}
+    source_failures = [k for k in sources if k not in read_sources]
+    if not read_sources:
         raise HTTPException(
             status_code=400,
             detail="Could not extract readable text from any URL. Check the links and try again, "
                    "or create the profile manually.",
         )
+    if source_failures:
+        # Loud, not silent. A partial profile built from the sources that did
+        # load is still worth having; pretending it came from all of them is
+        # not.
+        logger.warning(
+            "App research read %d of %d source(s); unreadable: %s",
+            len(read_sources), len(sources), ", ".join(source_failures),
+        )
 
     try:
         profile = await _log_model_call(
             "app_profile_research", "text", TEXT_MODEL,
-            lambda: analyze_app_profile(sources, payload.notes or ""),
+            # Only the sources that returned text. Passing the full dict handed
+            # the model empty entries labelled as sources, which invites it to
+            # write as though it had read a page it never saw.
+            lambda: analyze_app_profile(read_sources, payload.notes or ""),
             user_id,
         )
     except Exception as e:
@@ -5742,7 +5805,7 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
     now = now_iso()
     brand_id = str(uuid.uuid4())
     combined_raw = "\n\n".join(
-        f"[{label}]\n{(text or '')[:2000]}" for label, text in sources.items() if (text or "").strip()
+        f"[{label}]\n{text[:2000]}" for label, text in read_sources.items()
     )[:BRAND_URL_TEXT_MAX_CHARS]
     await _execute(
         """INSERT INTO brand_profiles
@@ -5781,9 +5844,15 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
          json.dumps(profile.get("claims_approved") or []),
          json.dumps(profile.get("claims_review") or []),
          json.dumps(profile.get("claims_banned") or []),
-         "draft", 1, now, json.dumps(sorted(sources.keys()))),
+         # Only the sources that actually returned text. `combined_raw` above is
+    # already built from the same set, so the recorded list and the text the
+    # model saw now agree.
+    "draft", 1, now, json.dumps(sorted(read_sources))),
     )
-    logger.info(f"Researched app profile {brand_id} from {len(sources)} source(s)")
+    logger.info(
+        "Researched app profile %s from %d of %d requested source(s)",
+        brand_id, len(read_sources), len(requested_sources),
+    )
     return await _fetch_one("SELECT * FROM brand_profiles WHERE id = ?", (brand_id,))
 
 
@@ -5954,6 +6023,61 @@ async def _ensure_objective_templates(
     return drafts
 
 
+def _approval_gaps(profile: dict, pending: Optional[dict] = None) -> list:
+    """
+    What this App Profile is missing that a founder must fill before approving.
+
+    Approval is the only thing standing between unreviewed AI research and a
+    paid render, so it has to mean something. It used to flip the status on a
+    bare request: a profile whose research had failed, or had only populated a
+    couple of fields, could be approved and then steer the plan and strategy --
+    with the gaps invisible, because AppProfileDetail renders only the fields
+    that have values, so "not researched" and "intentionally blank" look alike.
+
+    Website autofill made this reachable in ordinary use rather than as an edge
+    case: it fills a handful of fields and reports success, so the profile looks
+    researched and is approvable while most of what a plan needs is absent.
+
+    Only the fields a plan actually depends on are required. Not requiring
+    everything keeps a legitimate sparse profile -- an app with no stated
+    competitors, say -- approvable instead of forcing invented filler.
+    """
+    merged = dict(profile or {})
+    for key, value in (pending or {}).items():
+        if value not in (None, "", []):
+            merged[key] = value
+
+    def _text(key: str) -> bool:
+        return bool(str(merged.get(key) or "").strip())
+
+    def _list(key: str) -> bool:
+        value = merged.get(key)
+        if isinstance(value, str):
+            value = [value]
+        return bool(value and [v for v in value if str(v or "").strip()])
+
+    def _any_list(*keys: str) -> bool:
+        for key in keys:
+            if _list(key):
+                return True
+        return False
+
+    checks = (
+        ("a one-line description of what the app does", _text("brand_description")),
+        ("at least one core feature", _list("core_features")),
+        # Any of the three counts. usage_moments is the field the research
+        # fills, but a founder writing the profile by hand describes what an app
+        # is for under primary_use_cases or problems_solved just as naturally,
+        # and refusing those would train them to type filler into the one field
+        # the check happens to read.
+        (
+            "at least one thing people use it for",
+            _any_list("usage_moments", "primary_use_cases", "problems_solved"),
+        ),
+    )
+    return [label for label, ok in checks if not ok]
+
+
 @api_router.post("/app-profiles/{profile_id}/approve")
 async def approve_app_profile(
     profile_id: str, payload: ApproveAppProfileRequest, user_id: str = Depends(get_current_user_id)
@@ -5963,6 +6087,9 @@ async def approve_app_profile(
     When a refresh proposal is pending it is applied to the live fields by
     default and the version bumps — approval is the only path that mutates
     approved data, so refreshes can never silently overwrite it.
+
+    Refused while the profile is too empty to approve, and the response names
+    the gaps. See _approval_gaps for why a bare status flip was not enough.
     """
     existing = await _fetch_one(
         "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
@@ -5976,6 +6103,18 @@ async def approve_app_profile(
             pending = json.loads(pending)
         except (json.JSONDecodeError, TypeError):
             pending = None
+
+    gaps = _approval_gaps(existing, pending)
+    if gaps:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Fill in a few things before approving this App Profile: "
+                + "; ".join(gaps)
+                + ". It steers the plan and the video, so approving it half-filled "
+                "means the render fills the blanks itself."
+            ),
+        )
 
     now = now_iso()
     if pending and isinstance(pending, dict) and payload.apply_pending is not False:
@@ -7328,6 +7467,25 @@ async def update_studio_project(
     if content_edited:
         set_clauses.append("script_version = ?")
         values.append(int(row.get("script_version") or 0) + 1)
+        # A content edit un-readies the project.
+        #
+        # Without this, a founder who had already marked a project ready could
+        # rewrite the hook line, beat timeline or strategy, save, and spend again
+        # immediately -- the studio never asked them to look at the revision they
+        # had just written. It also left the Mark-ready button permanently
+        # disabled, because the status never left ready_for_generation, so there
+        # was no way to re-review at all.
+        #
+        # The approval being withdrawn is the one the founder gave to the PREVIOUS
+        # text. The edit is not the review step: plan regeneration and Mark-ready
+        # are, and both are still available from the studio.
+        if row.get("status") == "ready_for_generation":
+            set_clauses.append("status = ?")
+            values.append("draft")
+            logger.info(
+                "Project %s was ready for generation; a content edit returned it to draft",
+                project_id,
+            )
     set_clauses.append("updated_at = ?")
     values.append(now_iso())
     values.extend([project_id, user_id])
@@ -7467,6 +7625,13 @@ async def mark_project_ready(project_id: str, user_id: str = Depends(get_current
 
     Refuses while the claim-safety report is failing, so a prohibited claim
     cannot be waved through. This is the last gate before Phase 5 spends money.
+
+    The verdict is recomputed against the live App Profile and written back,
+    rather than read from the row. The stored copy was computed when the plan was
+    written; if the founder has since added a claim to claims_banned, approving
+    on the stale "passed" would show them a green SafetyPanel and then block at
+    the generate button, which reads as a bug rather than a rule. Recomputing
+    here keeps the panel and the spend gate telling the same story.
     """
     row = await _fetch_one(
         "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?", (project_id, user_id)
@@ -7480,23 +7645,29 @@ async def mark_project_ready(project_id: str, user_id: str = Depends(get_current
     if not row.get("template_id"):
         raise HTTPException(status_code=400, detail="Choose a hook template first.")
 
-    report = row.get("safety_report") or {}
-    if isinstance(report, str):
-        try:
-            report = json.loads(report)
-        except (json.JSONDecodeError, TypeError):
-            report = {}
-    if report and not report.get("passed", True):
-        blocking = [b.get("claim") for b in report.get("blocking", []) if b.get("claim")]
+    # The objective is what the whole creative job is for, and it steers the
+    # plan, the strategy and which templates even rank. The wizard requires it,
+    # but that was a client-side check only: a direct caller could approve and
+    # spend on a project with no stated objective, and the plan fell back to
+    # whatever the template scored. Enforced here so it holds for every path
+    # that can spend, not just the one the browser takes.
+    if not template_library.normalize_objective(row.get("objective")):
         raise HTTPException(
-            status_code=409,
-            detail="Fix prohibited claims before generating: " + ", ".join(blocking[:3]),
+            status_code=400,
+            detail=(
+                "Choose what this video is for on the Audience & goal step before "
+                "marking it ready. It decides the hook, the plan and which templates "
+                "fit."
+            ),
         )
 
+    profile = await _require_profile_for_studio(row.get("brand_profile_id"), user_id)
+    report = _require_claims_clear(row, profile)
+
     await _execute(
-        "UPDATE studio_projects SET status = 'ready_for_generation', updated_at = ? "
-        "WHERE id = ? AND user_id = ?",
-        (now_iso(), project_id, user_id),
+        "UPDATE studio_projects SET status = 'ready_for_generation', safety_report = ?, "
+        "safety_summary = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+        (json.dumps(report), claim_safety.summarize(report), now_iso(), project_id, user_id),
     )
     return _public_project(
         await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,))
@@ -7552,7 +7723,7 @@ def _refuse_retired_project_assets(assets: list) -> None:
     """
     Loud 409 for projects still holding retired uploads (screenshots,
     recordings, logos, photos, audio). The founder chose hard-error over
-    silent-ignore: these must be detached on the Assets step before the
+    silent-ignore: these must be detached on the Template & photo step before the
     project can move again, so a generation never silently drops inputs the
     founder thought were in play.
     """
@@ -7565,7 +7736,7 @@ def _refuse_retired_project_assets(assets: list) -> None:
         detail=(
             f"This project still holds {', '.join(kinds)} from before uploads "
             "went face-only, and nothing but the character reference can be "
-            "used anymore. Detach them on the Assets step and try again."
+            "used anymore. Detach them on the Template & photo step and try again."
         ),
     )
 
@@ -7590,7 +7761,11 @@ async def _studio_identity_references(
       rendered as "Needs character reference" in the studio and on the
       template, but nothing enforced it, so a paid render could go out with
       no identity input at all and the model free to invent a presenter.
-    - Only the first character_reference asset is used.
+    - Exactly one character_reference asset may be attached, and it is the one
+      used. Several used to be allowed and the first in JSON order silently
+      won, which is the worst of both: the founder saw every photo listed as
+      attached and had no way to tell which face the render would use. Refusing
+      is the only answer that cannot be wrong about someone's face.
     - The asset row must exist, belong to this user, and point at a real
       file on disk; otherwise the submission fails with a 409, never with a
       quietly invented lookalike.
@@ -7598,14 +7773,26 @@ async def _studio_identity_references(
       video_providers.accepts_identity_reference, before any spend.
     """
     _refuse_retired_project_assets(assets)
-    anchor = None
-    for asset in assets or []:
-        if not isinstance(asset, dict):
-            continue
-        if str(asset.get("kind") or "").strip().lower() != "character_reference":
-            continue
-        anchor = asset
-        break
+    anchors = [
+        a for a in (assets or [])
+        if isinstance(a, dict)
+        and str(a.get("kind") or "").strip().lower() == "character_reference"
+    ]
+    if len(anchors) > 1:
+        labels = ", ".join(
+            f"{(a.get('label') or a.get('name') or a.get('asset_id') or 'photo').strip()}"
+            for a in anchors[:3]
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"This project has {len(anchors)} character references attached "
+                f"({labels}). The render uses exactly one, and guessing which would "
+                "mean you could pay for a video of the wrong person. Detach all but "
+                "the photo you want on camera, then generate again."
+            ),
+        )
+    anchor = anchors[0] if anchors else None
     if anchor is None:
         required = [
             str(a or "").strip().lower()
@@ -7618,7 +7805,7 @@ async def _studio_identity_references(
                     "This template puts a person on camera, so it needs a character "
                     "reference. The video is generated from your photograph, so "
                     "without one the model would invent someone who looks nothing "
-                    "like you. Attach a character reference on the Assets step and "
+                    "like you. Attach a character reference on the Template & photo step and "
                     "try again."
                 ),
             )
@@ -7695,6 +7882,7 @@ async def _submit_generation(
     continuity_video_url: str = "",
     previous_summary: str = "",
     hook_trim: int = 0,
+    idempotency_key: str = "",
 ) -> dict:
     """
     Submit ONE video generation job. This is the only render path.
@@ -7739,6 +7927,14 @@ async def _submit_generation(
     # described chaining a second render onto a first, and a video is one
     # render: the rows still record segment_role and parent_generation_id so
     # existing history stays readable, and nothing sets them but "primary".
+    #
+    # Resolve the project's own strategy when the caller did not hand one over.
+    # The retry path passes none, and without this a retry of an app-specific
+    # video silently fell through to build_single_pass_prompt and spent a real
+    # render on a generic take with the app's name in it -- the one outcome the
+    # strategy exists to prevent, bought precisely when something had already
+    # gone wrong once.
+    strategy = strategy or _project_strategy(project)
     if strategy:
         prompt = generation_planning.build_segment_prompt(
             strategy=strategy,
@@ -7795,15 +7991,43 @@ async def _submit_generation(
     # the post-render cut in poll are kept because generations recorded before
     # this change still carry a non-zero value and must still be trimmed.
     trim_to_seconds = 0
-    await _execute(
-        """INSERT INTO generations
+
+    # Idempotency: ONE key means ONE paid render.
+    #
+    # The generate endpoint had no key and no in-flight check, so a double-tap,
+    # a client-level retry of the same request, or the same project opened in two
+    # tabs could each create a real billed job. Two lookups make that safe: the
+    # first turns a plain repeat into the generation that already exists, and
+    # the unique index catches the genuinely concurrent case that a check-then-
+    # insert cannot, so the loser adopts the winner's row instead of billing.
+    #
+    # This runs AFTER the gates and the prompt build but BEFORE the provider is
+    # called, so a repeat costs no money and reaches no provider.
+    claim_key = (idempotency_key or "").strip()[:120]
+    if claim_key:
+        already = await _fetch_one(
+            "SELECT * FROM generations WHERE user_id = ? AND idempotency_key = ?",
+            (user_id, claim_key),
+        )
+        if already:
+            logger.info(
+                "Idempotent repeat of generation %s (key %s): no second render",
+                already.get("id"), claim_key,
+            )
+            existing = _public_generation(already)
+            existing["idempotent_replay"] = True
+            return existing
+
+    try:
+        await _execute(
+            """INSERT INTO generations
            (id, studio_project_id, brand_profile_id, template_id, template_version,
             script_version, model, model_id, requested_duration, duration, status,
             segment_role, segment_index, strategy_version, continuity, trim_to_seconds,
             attempt, parent_generation_id, variation_kind, variation_params,
             cost_source, prompt_used, adjustments, retryable, approved,
-            requested_at, created_at, updated_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?)""",
+            requested_at, created_at, updated_at, user_id, idempotency_key)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?)""",
         (generation_id, project["id"], project.get("brand_profile_id"),
          project.get("template_id"), project.get("template_version"),
          project.get("script_version"), model_key, cap["id"],
@@ -7811,8 +8035,30 @@ async def _submit_generation(
          json.dumps(continuity) if continuity else None, trim_to_seconds,
          attempt, parent_generation_id or None,
          variation_kind or None, json.dumps(variation_params or {}),
-          "pending", prompt, json.dumps([]), now, now, now, user_id),
-    )
+          "pending", prompt, json.dumps([]), now, now, now, user_id,
+         claim_key or None),
+        )
+    except Exception as exc:
+        # The unique index refused this row, which means a concurrent request
+        # with the same key won the race between our SELECT and this INSERT.
+        # That request is already paying for this render, so adopting its row is
+        # the correct outcome: the founder asked once and gets one video. Any
+        # other failure is a real error and must not be swallowed here.
+        if claim_key and "UNIQUE" in str(exc).upper():
+            winner = await _fetch_one(
+                "SELECT * FROM generations WHERE user_id = ? AND idempotency_key = ?",
+                (user_id, claim_key),
+            )
+            if winner:
+                logger.info(
+                    "Concurrent idempotent request lost the race for key %s: "
+                    "returning generation %s, no second render",
+                    claim_key, winner.get("id"),
+                )
+                adopted = _public_generation(winner)
+                adopted["idempotent_replay"] = True
+                return adopted
+        raise
 
     try:
         submitted = await _log_model_call(
@@ -7941,6 +8187,167 @@ async def get_generation(generation_id: str, user_id: str = Depends(get_current_
     return _public_generation_detail(row)
 
 
+def _safety_report_for(project: dict, profile: dict) -> dict:
+    """
+    The claim verdict for this project as it stands RIGHT NOW.
+
+    Every stored safety_report is a cache: it was computed at plan time, at
+    strategy time, or at edit time, against the profile as it was then.
+    App Profile edits deliberately do not revoke approval, so a founder can ban a
+    claim on the profile months later and every previously-approved project keeps
+    its old "passed" verdict cached. Reading that cache at the spend boundary
+    renders the banned claim for money.
+
+    Recomputing is deterministic and cheap, and it walks the project dict, so it
+    also picks up a hook line that arrived in the strategy after the cached
+    report was written.
+    """
+    return claim_safety.build_safety_report(project or {}, profile or {})
+
+
+def _require_claims_clear(project: dict, profile: dict) -> dict:
+    """Refuse a render whose live claim verdict is failing. Returns the report."""
+    report = _safety_report_for(project, profile)
+    if report and not report.get("passed", True):
+        blocking = [b.get("claim") for b in report.get("blocking", []) if b.get("claim")]
+        raise HTTPException(
+            status_code=409,
+            detail="Fix prohibited claims before generating: " + ", ".join(blocking[:3]),
+        )
+    return report
+
+
+def _require_current_strategy(project: dict) -> dict:
+    """
+    Refuse a render that has no app-specific strategy, or one built from a plan
+    that has since been edited. Returns the strategy.
+
+    Both used to be silent. The studio built a strategy in the browser before
+    the first render, so the server never checked for one and a direct caller,
+    a stale bundle, or the retry path could buy a generic take. And a plan edit
+    bumped script_version without invalidating the strategy, so a founder could
+    approve one plan and pay to render another -- the strategy carried the old
+    hook line, the messaging and the scene lock.
+
+    Refusing is what makes the strategy a real part of the workflow rather than
+    a suggestion. Both messages name the fix, because the founder's next action
+    is one click away.
+    """
+    strategy = _project_strategy(project)
+    if not strategy:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This project has no video strategy yet. Build the strategy on the "
+                "Hook & middle step, then generate."
+            ),
+        )
+    built_from = int(project.get("strategy_script_version") or 0)
+    current = int(project.get("script_version") or 0)
+    # Both sides zero means one predates the other. That is missing history, not
+    # a mismatch, and the founder is not blocked for it -- matching
+    # _public_project's own reading of the same two columns.
+    if built_from and current and built_from != current:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "The plan changed after this strategy was built, so the strategy no "
+                "longer describes what you reviewed. Rebuild it on the Hook & middle "
+                "step, then generate."
+            ),
+        )
+    return strategy
+
+
+async def _require_renderable_project(project_id: str, user_id: str) -> tuple:
+    """
+    Prove a project may be rendered RIGHT NOW, and return (project, profile, template).
+
+    Shared by the fresh-submit path and the retry path. Retry used to load the
+    project, profile and template and call _submit_generation directly, which
+    meant it inherited none of the checks below. A retry could therefore spend
+    real money on a project that had been edited back to draft since, on an App
+    Profile that was no longer approved, and past a claim block the founder had
+    been shown. Retrying is not a cheaper way around the gates; it is the same
+    render, so it answers to the same questions.
+
+    The claim verdict is recomputed here rather than read from the row, because
+    the row's copy is a cache computed against the profile as it was when the
+    plan was last written, and App Profile edits do not revoke approval.
+    """
+    project = await _fetch_one(
+        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?", (project_id, user_id)
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Studio project not found")
+    if project.get("status") != "ready_for_generation":
+        raise HTTPException(
+            status_code=409,
+            detail="Review the plan and mark this project ready for generation first.",
+        )
+    if not (project.get("script") or "").strip():
+        raise HTTPException(status_code=400, detail="This project has no script to generate.")
+
+    # _require_profile_for_studio also enforces that the profile is APPROVED,
+    # which the retry path skipped entirely: it loaded the profile by id and
+    # rendered against whatever state the profile happened to be in.
+    profile = await _require_profile_for_studio(project.get("brand_profile_id"), user_id)
+    _require_claims_clear(project, profile)
+
+    template = await _fetch_one(
+        "SELECT * FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",
+        (project.get("template_id"), user_id),
+    )
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    _require_current_strategy(project)
+    return project, profile, template
+
+
+def _assert_model_usable(model_key: str) -> str:
+    """
+    Refuse an unrecognised model key instead of quietly rendering on the default.
+
+    video_providers.resolve() falls back to Hailuo 3 with a reason string, but the
+    reason is informational: without this guard a stale key would still spend a
+    real render on a model the founder did not choose, and the returned clip
+    would not match the model on the row. A key that is known but not allowed
+    (an editor, or one outside the allowlist) still falls back with its reason,
+    because that is a configuration outcome the studio already reports, not a typo.
+    """
+    if model_key and not video_providers.is_known(model_key):
+        usable = ", ".join(c["key"] for c in video_providers.list_capabilities())
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unknown video model {model_key!r}. Choose one of: {usable}. "
+                "Leave the model unset to use the default."
+            ),
+        )
+    return model_key
+
+
+def _assert_within_single_pass_cap(model_key: str, wanted: int) -> None:
+    """
+    Refuse a one-pass request the model cannot fill rather than shortening it.
+
+    The generated piece is a hook and a middle; anything longer is the founder's
+    own demo, recorded separately. Silently clamping here would hand back a file
+    that is not the video the plan describes, on a spend the founder approved for
+    a different length.
+    """
+    cap = video_providers.capability(model_key)
+    if int(wanted or 0) > int(cap["max_duration"]):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{cap['name']} produces at most {cap['max_duration']}s in one pass, and this "
+                f"video is {int(wanted)}s. The generated piece is a hook and a middle — record "
+                "anything longer as your own demo and attach it afterwards."
+            ),
+        )
+
+
 @api_router.post("/studio/projects/{project_id}/generate", status_code=202)
 async def submit_project_generation(
     project_id: str, payload: StudioGenerationRequest, user_id: str = Depends(get_current_user_id)
@@ -7956,83 +8363,24 @@ async def submit_project_generation(
     refused outright rather than split or silently shortened.
     """
     require_ai_configured()
-    project = await _fetch_one(
-        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?", (project_id, user_id)
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Studio project not found")
-    if project.get("status") != "ready_for_generation":
-        raise HTTPException(
-            status_code=409,
-            detail="Review the plan and mark this project ready for generation first.",
-        )
-    if not (project.get("script") or "").strip():
-        raise HTTPException(status_code=400, detail="This project has no script to generate.")
-
-    report = project.get("safety_report") or {}
-    if isinstance(report, str):
-        try:
-            report = json.loads(report)
-        except (json.JSONDecodeError, TypeError):
-            report = {}
-    if report and not report.get("passed", True):
-        blocking = [b.get("claim") for b in report.get("blocking", []) if b.get("claim")]
-        raise HTTPException(
-            status_code=409,
-            detail="Fix prohibited claims before generating: " + ", ".join(blocking[:3]),
-        )
-
-    profile = await _require_profile_for_studio(project.get("brand_profile_id"), user_id)
-    template = await _fetch_one(
-        "SELECT * FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",
-        (project.get("template_id"), user_id),
-    )
-    if not template:
-        raise HTTPException(status_code=404, detail="Template not found")
+    project, profile, template = await _require_renderable_project(project_id, user_id)
 
     # An unrecognised model key is refused rather than quietly rendered on the
-    # default. video_providers.resolve() falls back to Hailuo 3 with a reason
-    # string, but the reason is informational: without this guard a stale key
-    # would still spend a real render on a model the founder did not choose, and
-    # the returned clip would not match the model on the row. A key that is
-    # known but not allowed (an editor, or one outside the allowlist) still
-    # falls back with its reason, because that is a configuration outcome the
-    # studio already reports, not a typo.
-    if payload.model and not video_providers.is_known(payload.model):
-        usable = ", ".join(c["key"] for c in video_providers.list_capabilities())
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Unknown video model {payload.model!r}. Choose one of: {usable}. "
-                "Leave the model unset to use the default."
-            ),
-        )
+    # default. See _assert_model_usable for why resolve()'s fallback reason is
+    # not enough on its own.
+    _assert_model_usable(payload.model or "")
 
-    # The strategy, when the project has one, is what makes the render
-    # app-specific. It is optional: a project whose strategy was never built
-    # still renders from the plan alone.
-    strategy = _project_strategy(project)
-    if not strategy:
-        logger.info(
-            f"Project {project_id}: no strategy on file, rendering from the plan alone. "
-            "The video will be less specific to this app."
-        )
+    # _require_renderable_project already proved a current strategy exists, so
+    # this can only fail if the row changed underneath us. Resolving it through
+    # the same helper keeps the prompt and the gate reading the same object.
+    strategy = _require_current_strategy(project)
 
     # Computed, not requested. The template declares a length its mechanic
     # suits and the founder does not pick one, so a request longer than a single
     # pass is refused rather than quietly shortened — the founder would be
     # handed a file that is not the video the plan describes.
-    cap = video_providers.capability(video_providers.resolve(payload.model or None)[0])
     wanted = payload.duration_seconds or project.get("duration_seconds") or 0
-    if int(wanted or 0) > int(cap["max_duration"]):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"{cap['name']} produces at most {cap['max_duration']}s in one pass, and this "
-                f"video is {int(wanted)}s. The generated piece is a hook and a middle — record "
-                f"anything longer as your own demo and attach it afterwards."
-            ),
-        )
+    _assert_within_single_pass_cap(video_providers.resolve(payload.model or None)[0], wanted)
 
     generation = await _submit_generation(
         project=project,
@@ -8043,6 +8391,7 @@ async def submit_project_generation(
         duration=int(wanted or 0) or None,
         generate_audio=payload.generate_audio,
         strategy=strategy or None,
+        idempotency_key=payload.idempotency_key or "",
     )
     generation["provider_reason"] = video_providers.resolve(payload.model or None)[1]
     return generation
@@ -8278,20 +8627,44 @@ async def retry_generation(generation_id: str, user_id: str = Depends(get_curren
             detail="This failure is not retryable: " + str(row.get("error") or "")[:200],
         )
 
-    project = await _fetch_one(
-        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?",
-        (row.get("studio_project_id"), user_id),
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="The studio project for this generation is gone")
-    profile = await _fetch_one(
-        "SELECT * FROM brand_profiles WHERE id = ?", (project.get("brand_profile_id"),)
-    )
-    template = await _fetch_one(
-        "SELECT * FROM hook_templates WHERE id = ?", (project.get("template_id"),)
-    )
-    if not profile or not template:
-        raise HTTPException(status_code=409, detail="Cannot retry: profile or template is missing")
+    project_id = row.get("studio_project_id")
+    if not project_id:
+        raise HTTPException(
+            status_code=409, detail="Cannot retry: this generation is not tied to a studio project."
+        )
+
+    # Same gates as a fresh render, and for the same reason. This path used to
+    # load the project, profile and template by id and call _submit_generation
+    # directly, so it inherited none of the submit checks: a project edited back
+    # to draft, or an App Profile no longer approved, still spent real money.
+    # A retry is the same render, so it answers to the same questions.
+    project, profile, template = await _require_renderable_project(project_id, user_id)
+
+    # The retry reuses the recorded model and length rather than accepting new
+    # ones, so the question is whether those choices are still valid. Both used
+    # to drift silently: _submit_generation clamps a length past the model's cap
+    # and video_providers.resolve() falls back to the default for a model that
+    # has left the allowlist. Either way the founder paid for one render and got
+    # another -- a different model, or a shorter clip than the plan describes.
+    # Refusing is cheaper than a surprise.
+    model_key = row.get("model") or ""
+    if model_key:
+        resolved, reason = video_providers.resolve(model_key)
+        if resolved != model_key:
+            # video_providers.capability() falls back to the default for an
+            # unknown key, so it would name the wrong model here. Use the
+            # recorded key verbatim and let resolve() explain the substitution.
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"This retry was recorded on {model_key!r}, which is no longer usable "
+                    f"({reason}). Pick a model and generate again rather than retrying, "
+                    "so you know what the render will use."
+                ),
+            )
+    wanted = row.get("duration")
+    if wanted:
+        _assert_within_single_pass_cap(model_key or video_providers.default_model_key(), int(wanted))
 
     return await _submit_generation(
         project=project,

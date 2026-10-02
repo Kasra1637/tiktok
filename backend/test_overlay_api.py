@@ -117,7 +117,12 @@ def tmp_root():
 
 def _profile(api, name="Asset App"):
     from models import BrandProfileCreateRequest, ApproveAppProfileRequest
-    p = _run(api.create_brand(payload=BrandProfileCreateRequest(brand_name=name), user_id=ANON))
+    p = _run(api.create_brand(payload=BrandProfileCreateRequest(
+        brand_name=name,
+        brand_description="A focus timer for people who stall on starting.",
+        core_features=["Task timer", "Reminders"],
+        usage_moments=["Starting a task they have been avoiding"],
+    ), user_id=ANON))
     _run(api.approve_app_profile(
         profile_id=p["id"], payload=ApproveAppProfileRequest(), user_id=ANON))
     return _run(api.get_app_profile(p["id"], ANON))

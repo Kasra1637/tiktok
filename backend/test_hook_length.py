@@ -275,7 +275,17 @@ def _ready_project_with_strategy(api, spec, hook_seconds=0):
     from ai_service import normalize_strategy
 
     profile = _run(api.create_brand(
-        payload=BrandProfileCreateRequest(brand_name=spec["name"], **spec["profile"]),
+        payload=BrandProfileCreateRequest(**{
+            "brand_name": spec["name"],
+            # Defaults the case does not override. Approval now refuses a profile
+            # with no description, features or usage moments, so a helper that
+            # only forwarded the case's own fields would build a profile the
+            # product will not let anyone approve.
+            "brand_description": "A focus timer for people who stall on starting.",
+            "core_features": ["Task timer", "Reminders"],
+            "usage_moments": ["Starting a task they have been avoiding"],
+            **spec["profile"],
+        }),
         user_id=ANON))
     _run(api.approve_app_profile(
         profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=ANON))

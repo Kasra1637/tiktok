@@ -446,7 +446,11 @@ class TestStrategyEndpointError:
             CreateStudioProjectRequest,
         )
         profile = _run(api.create_brand(payload=BrandProfileCreateRequest(
-            brand_name="Truncation", app_category="Productivity"), user_id="anonymous"))
+            brand_name="Truncation", app_category="Productivity",
+            brand_description="A focus timer for people who stall on starting.",
+            core_features=["Task timer", "Reminders"],
+            usage_moments=["Starting a task they have been avoiding"],
+        ), user_id="anonymous"))
         _run(api.approve_app_profile(
             profile_id=profile["id"], payload=ApproveAppProfileRequest(),
             user_id="anonymous"))

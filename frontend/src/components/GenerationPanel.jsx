@@ -69,12 +69,33 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
   const [composing, setComposing] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
-  const [strategyError, setStrategyError] = useState(null);
   const timer = useRef(null);
 
   const projectId = project?.id;
   const ready = project?.status === "ready_for_generation";
   const blocked = project?.safety_report && project.safety_report.passed === false;
+  // A render follows the strategy, so one must exist and must match the plan it
+  // was built from. Both checks are the same ones the server makes, so the
+  // button is disabled for the real reason instead of letting the founder click
+  // into a 409 and wondering what they did wrong.
+  //
+  // Presence is judged by CONTENT, not by the object's truthiness: the server
+  // sends an empty object rather than null for a project with no strategy, and
+  // {} is truthy in JS, so `!project.strategy` is false for exactly the
+  // projects that need one.
+  const hasStrategy = Boolean(project?.strategy?.hook_line);
+  const staleStrategy = hasStrategy && project?.strategy_is_current === false;
+  const strategyReady = hasStrategy && !staleStrategy;
+
+  // One click, one render. The key identifies a single INTENT to render and is
+  // reused for every retry of that intent, then cleared the moment a render
+  // lands so "Generate another" gets a fresh one and can still bill.
+  //
+  // This is the half that matters: the server refusing a repeat only helps if
+  // the repeat carries the same key. Minting a new one per click would close the
+  // network-retry hole and leave the double-tap wide open, which is the one a
+  // founder actually hits.
+  const intentKey = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -141,55 +162,40 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
   }, [projectId, schedulePoll]);
 
 
-  const handleGenerate = async () => {
+const handleGenerate = async () => {
     setBusy(true);
     setError(null);
     setNotice(null);
-    setStrategyError(null);
     // "Generate another" re-rolls a video the founder has already seen, which
     // is the rework signal. A first generation is not rework, and a retry is a
     // recovery from a failure rather than a judgment about the result, so
     // neither is recorded.
     const isReroll = Boolean(generation);
     try {
-      // The strategy decides what the presenter physically does in each section
-      // and pins the scene so the hook and the middle cannot disagree about the
-      // room. It is free and it takes seconds, so it is built here rather than
-      // asked for: a button the founder might skip turns a specific render into
-      // a generic one, and they cannot tell the difference until they have paid.
-      //
-      // Already present? Leave it alone. Rebuilding would bump
-      // strategy_version and silently replace whatever they reviewed.
-      //
-      // Presence is judged by CONTENT, not by the object's truthiness: the
-      // server sends an empty object rather than null when a project has no
-      // strategy (server.py, _public_project), and {} is truthy in JS, so
-      // `!project.strategy` is false for exactly the projects that need one.
-      // The same test HookContinuityPanel uses: a strategy exists once it has a
-      // hook line.
-      let current = project;
-      if (!current?.strategy?.hook_line) {
-        try {
-          current = await api.generateStrategy(projectId, {});
-          onProjectChange?.(current);
-          setNotice(
-            `Strategy v${current.strategy_version} built from this app's profile and the plan ` +
-            `you approved. It is above, next to the video.`
-          );
-        } catch (err) {
-          // Deliberately NOT rendering anyway. Without a strategy the render
-          // falls back to a generic take, and the founder would pay for it
-          // believing it was the app-specific one. Stopping here is the whole
-          // point of building the strategy on this path.
-          setStrategyError(getErrorMessage(err));
-          return;
-        }
+      if (!intentKey.current) {
+        intentKey.current =
+          typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+            ? crypto.randomUUID()
+            : `render-${projectId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       }
+      // No strategy is built here. This path used to build one and spend in the
+      // same click, which made the "read the strategy" copy above cosmetic: the
+      // founder never got a chance to see it before the money went. Building is
+      // a free, separate action on HookContinuityPanel directly above this one,
+      // and the button below stays disabled until a current strategy exists, so
+      // the review is a real step rather than a race the founder loses.
+      //
       // No duration is sent. The length is computed from the template, the
       // project carries it, and the response has no plan to return because
-      // there is no second pass to arrange — so there is nothing here to
+      // there is no second pass to arrange - so there is nothing here to
       // reconcile afterwards and nothing to warn about.
-      const created = await api.generateVideo(projectId, { model: selectedModel || undefined });
+      const created = await api.generateVideo(projectId, {
+        model: selectedModel || undefined,
+        idempotency_key: intentKey.current,
+      });
+      // The intent is spent. A later deliberate re-roll mints its own key, so
+      // this only ever suppresses a genuine duplicate of THIS render.
+      intentKey.current = null;
       setGeneration(created);
       onGenerationChange?.(created);
       if (isReroll) {
@@ -287,7 +293,7 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
         </Alert>
       )}
 
-      {!ready && !generation && (
+      {!ready && (
         <p className="text-sm text-muted-foreground">
           Mark the project ready for generation to enable production.
         </p>
@@ -345,35 +351,26 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
         </Alert>
       )}
 
-      {/* A strategy build that failed is reported on its own, apart from any
-          render error, because it stopped the render rather than failing one.
-          The founder needs to know nothing was spent and why. */}
-      {strategyError && (
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Nothing was generated</AlertTitle>
-          <AlertDescription>
-            The app-specific strategy could not be built, so the render was stopped rather than
-            spent on a generic version: {strategyError} Fix it above and generate again — nothing
-            was charged.
-          </AlertDescription>
-        </Alert>
-      )}
-
       <Button
         variant="brand"
         onClick={handleGenerate}
-        disabled={busy || inFlight || !ready || blocked || tooLong || !projectId}
+        disabled={busy || inFlight || !ready || blocked || tooLong || !projectId || !strategyReady}
       >
         {busy || inFlight ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
         {inFlight
           ? "Generating..."
-          : busy && !project?.strategy?.hook_line
-            ? "Building the strategy..."
-            : generation
-              ? "Generate another"
-              : "Generate the video"}
+          : generation
+            ? "Generate another"
+            : "Generate the video"}
       </Button>
+
+      {!strategyReady && (
+        <p className="text-sm text-muted-foreground">
+          {staleStrategy
+            ? "Rebuild the strategy above so it matches the plan you edited, then generate."
+            : "Build the strategy above, read it, then generate. It is free and it is what makes the paid render about this app."}
+        </p>
+      )}
 
       {generation && (
         <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3 text-sm">

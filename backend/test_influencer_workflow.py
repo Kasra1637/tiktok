@@ -513,31 +513,32 @@ class TestAppSpecificity:
         assert "The person on camera is the person in the attached character reference" in prompt
         assert "The image is the only authority on who they are" in prompt
 
-    def test_a_project_with_no_strategy_still_renders(self, api, monkeypatch):
+    def test_a_project_with_no_strategy_is_refused(self, api, monkeypatch):
         """
-        Was `test_hook_requires_a_strategy`, which asserted the opposite: that a
-        paid render was refused without a strategy.
+        A render without an app-specific strategy is refused.
 
-        The strategy is optional now, deliberately. The endpoint logs that the
-        video will be less specific to this app and renders from the reviewed
-        plan alone, which is the honest fallback for a project whose strategy was
-        never built — refusing outright would mean a founder could never get a
-        video out of a plan they had already approved.
+        This was once `test_hook_requires_a_strategy`, which asserted the same
+        thing, then was inverted to assert the opposite -- that the endpoint
+        logs "less specific to this app" and renders from the plan alone. That
+        inversion is what let a direct API caller, a stale client bundle, and
+        the retry path each buy a generic take with the app's name in it, and it
+        contradicted build_single_pass_prompt's own description of the fallback.
 
-        What is NOT optional is that it reaches the provider with the person's
-        photograph attached and the app's own words in it.
+        Refusing costs nothing real: the studio builds the strategy for the
+        founder one click earlier in the same flow, so the reachable case is only
+        a caller that skipped it.
         """
         from models import StudioGenerationRequest
         project, _profile, _template = _make_project(api, NURSE_APP)
         _mark_ready(api, project["id"],
                     script="I clocked out at 11:40. Every single night.")
         calls = _mock_submit(api, monkeypatch)
-        generation = _run(api.submit_project_generation(
-            project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
-        assert generation["status"] in ("submitted", "generating")
-        prompt = calls[0]["prompt"]
-        assert "I clocked out at 11:40. Every single night." in prompt
-        assert "the person in the attached character reference" in prompt
+        with pytest.raises(HTTPException) as err:
+            _run(api.submit_project_generation(
+                project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        assert err.value.status_code == 409
+        # Nothing reached the provider, so nothing was spent.
+        assert calls == []
 
 
 class TestMustNotShowIsEnforced:
@@ -708,7 +709,13 @@ class TestWorkflowGates:
             CreateStudioProjectRequest, GenerateStrategyRequest,
         )
         profile = _run(api.create_brand(
-            payload=BrandProfileCreateRequest(brand_name="Revoked"), user_id=ANON))
+            payload=BrandProfileCreateRequest(
+                brand_name="Revoked",
+                brand_description="Shift logging for healthcare workers.",
+                core_features=["One-tap shift logging"],
+                usage_moments=["Clocking on and off between shifts"],
+            ),
+            user_id=ANON))
         _run(api.approve_app_profile(
             profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=ANON))
         template = _run(api.list_templates(user_id=ANON))["templates"][0]
@@ -1438,15 +1445,18 @@ class TestStrategyGoesStaleWhenTheScriptIsEdited:
         assert edited["script_version"] == 3
         assert edited["strategy_is_current"] is False
 
-    def test_a_generation_reads_the_stale_strategy_and_the_studio_is_told(self, api, monkeypatch):
+    def test_a_generation_refuses_a_stale_strategy(self, api, monkeypatch):
         """
-        The mismatch is still detected where it matters. The render goes ahead —
-        the studio warns before spending, it does not refuse — but the project
-        payload the studio reads carries `strategy_is_current: False`, so the
-        warning is on the screen before the button, not after the result.
+        A plan edit invalidates the strategy, and the spend is refused until the
+        founder rebuilds it.
 
-        Asserting the flag rather than a refusal: a hard 409 lived on the two
-        endpoints that no longer exist.
+        This was `test_a_generation_reads_the_stale_strategy_and_the_studio_is_
+        told`, which asserted the render still went ahead on the strength of a
+        warning the studio displayed. The reasoning was that a hard 409 "lived
+        on the two endpoints that no longer exist" -- but the single-render
+        generate endpoint is exactly where that protection belongs. Warning
+        before spending still spends: the founder approved one hook line while
+        the strategy carried another, so what rendered was not what they read.
         """
         from models import StudioGenerationRequest, UpdateStudioProjectRequest
         import server
@@ -1459,10 +1469,18 @@ class TestStrategyGoesStaleWhenTheScriptIsEdited:
             payload=UpdateStudioProjectRequest(hook_line="A completely new hook line."),
             user_id=ANON))
         _mark_ready(api, project_id)
-        _mock_submit(api, monkeypatch)
+        calls = _mock_submit(api, monkeypatch)
 
-        _run(api.submit_project_generation(
-            project_id=project_id, payload=StudioGenerationRequest(), user_id=ANON))
+        with pytest.raises(HTTPException) as err:
+            _run(api.submit_project_generation(
+                project_id=project_id, payload=StudioGenerationRequest(), user_id=ANON))
+        assert err.value.status_code == 409
+        assert "Rebuild it" in str(err.value.detail)
+        # Nothing reached the provider, so nothing was spent.
+        assert calls == []
+
+        # The staleness is still visible on the project payload, so the studio can
+        # explain the refusal rather than only surfacing a 409.
         stale = _run(api.get_studio_project(project_id, ANON))
         assert stale["strategy_is_current"] is False
         assert stale["strategy"]["hook_line"] == "You do not have a focus problem."

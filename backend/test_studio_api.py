@@ -50,7 +50,9 @@ def _approved_profile(api, name="Studio App", **kwargs):
     profile = _run(api.create_brand(payload=BrandProfileCreateRequest(
         brand_name=name,
         app_category=kwargs.get("app_category", "Productivity"),
+        brand_description="A focus timer for people who stall on starting.",
         core_features=kwargs.get("core_features", ["Task timer", "Reminders"]),
+        usage_moments=["Starting a task they have been avoiding"],
         claims_approved=kwargs.get("claims_approved", ["works offline"]),
         claims_review=kwargs.get("claims_review", ["4.8 star rating"]),
         claims_banned=kwargs.get("claims_banned", ["cures anxiety", "guaranteed results"]),
@@ -828,6 +830,55 @@ class TestReadyGate:
             project_id=project["id"], payload=GenerateStrategyRequest(), user_id=ANON))
         assert after["status"] == "ready_for_generation"
 
+    def test_a_content_edit_un_readies_an_approved_project(self, api, monkeypatch):
+        """
+        Editing an approved project must withdraw the approval.
+
+        update_studio_project used to leave status alone, so a founder who had
+        marked a project ready could rewrite the hook line, save, and spend
+        again immediately -- and because the status never moved off
+        ready_for_generation, the "Mark ready for generation" button stayed
+        disabled, so there was no way to review the revision at all. The
+        approval was for the PREVIOUS text.
+        """
+        from models import UpdateStudioProjectRequest, StudioGenerationRequest
+        project = self._with_plan(api, monkeypatch, FAKE_PLAN, "Ready Then Edited")
+        _run(api.mark_project_ready(project_id=project["id"], user_id=ANON))
+        assert _run(api.get_studio_project(project["id"], ANON))["status"] == "ready_for_generation"
+
+        after = _run(api.update_studio_project(
+            project_id=project["id"],
+            payload=UpdateStudioProjectRequest(hook_line="A completely different hook"),
+            user_id=ANON,
+        ))
+        assert after["status"] == "draft"
+        # And the spend gate follows the status, rather than only the button.
+        with pytest.raises(HTTPException) as err:
+            _run(api.submit_project_generation(
+                project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        assert err.value.status_code == 409
+
+    def test_a_preference_edit_leaves_readiness_alone(self, api, monkeypatch):
+        """
+        Only a CONTENT edit withdraws approval.
+
+        The same endpoint carries preferences (hook length, extend intent).
+        Bumping script_version on those made a project the founder had already
+        approved look rewritten, which is the mirror image of the bug above --
+        and re-enabling the review gate for a change nobody read would teach
+        founders the gate is noise.
+        """
+        from models import UpdateStudioProjectRequest
+        project = self._with_plan(api, monkeypatch, FAKE_PLAN, "Ready Then Preference")
+        _run(api.mark_project_ready(project_id=project["id"], user_id=ANON))
+
+        after = _run(api.update_studio_project(
+            project_id=project["id"],
+            payload=UpdateStudioProjectRequest(hook_seconds=4),
+            user_id=ANON,
+        ))
+        assert after["status"] == "ready_for_generation"
+
     def test_banned_claim_blocks_ready(self, api, monkeypatch):
         project = self._with_plan(api, monkeypatch, BANNED_PLAN, "Ready Banned")
         with pytest.raises(HTTPException) as err:
@@ -847,6 +898,28 @@ class TestReadyGate:
         with pytest.raises(HTTPException) as err:
             _run(api.mark_project_ready(project_id=project["id"], user_id=ANON))
         assert err.value.status_code == 400
+
+    def test_ready_requires_an_objective(self, api, monkeypatch):
+        """
+        The objective is what the video is FOR, and the wizard required it
+        client-side only.
+
+        A direct caller could approve and spend on a project with no stated
+        objective, and the plan fell back to whatever the template scored. The
+        gate belongs on the one review step that gates every later spend.
+        """
+        _patch_plan(monkeypatch, api, FAKE_PLAN)
+        from models import CreateStudioProjectRequest, GeneratePlanRequest
+        profile = _approved_profile(api, "Ready No Objective")
+        template = _a_template(api)
+        project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
+            brand_profile_id=profile["id"], template_id=template["id"]), user_id=ANON))
+        _run(api.generate_plan(project_id=project["id"],
+                               payload=GeneratePlanRequest(), user_id=ANON))
+        with pytest.raises(HTTPException) as err:
+            _run(api.mark_project_ready(project_id=project["id"], user_id=ANON))
+        assert err.value.status_code == 400
+        assert "Audience & goal" in str(err.value.detail)
 
     def test_ready_requires_a_template(self, api):
         from models import CreateStudioProjectRequest
