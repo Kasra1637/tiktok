@@ -1,123 +1,163 @@
 /**
- * Pure helpers for the influencer hook/extension lengths.
+ * Pure helpers for the length of the generated piece and its two sections.
  *
- * Extracted from the panel because these were the exact decisions that broke:
- * a `=== 0` against a boolean that made a toggle inert, and a
- * `Number("target")` that turned "fill to target" into a silent 5s request.
- * Neither was caught by the Python suite or by the build, because both only
- * type-check and lint — nothing evaluated the comparison at runtime.
+ * A video here is ONE render containing exactly two sections: a hook, and a
+ * middle that develops it and stops at the moment the presenter would reach
+ * for their phone. The founder records the product demo themselves and adds the
+ * call to action in their own editor. So there is no chain to extend, nothing
+ * to approve per segment, and nothing to join — and with those gone there is
+ * also no total length for the founder to choose. A template declares a
+ * `default_duration`, the project seeds from it, and the render is that long.
+ *
+ * What is left is the arithmetic the UI has to get right before it lets anyone
+ * spend, which is the same reason these helpers existed when the workflow was a
+ * chain. `npm run build` type-checks and lints but never evaluates a comparison
+ * at runtime, and the backend suite cannot see frontend code at all. That gap
+ * is exactly how `project.extend_intent === 0` survived against a boolean return
+ * (the toggle could never turn off) and how a length longer than one render
+ * used to be discovered at the extend button rather than before it.
  *
  * So the rules live here, with no React and no DOM, and are asserted directly
  * by scripts/check-frontend-logic.cjs against this real source file.
  *
- * The length rules mirror video_providers.resolve_length() on the backend. The
- * backend still decides; this only predicts, so the UI can label an option
- * honestly before the render is paid for.
+ * The rules mirror template_library.clamp_duration(), the hook clamp in
+ * update_studio_project, and the single-pass ceiling the backend refuses a
+ * generate request over. The backend still decides; this only predicts, so the
+ * UI can say what will happen before the render is paid for.
  */
 
-// The hook length is computed from the strategy, recommended and locked —
-// there is no selector and therefore no list of choices. DEFAULT_HOOK is
-// the provisional value before any strategy exists: 5s renders natively on
-// the provider's floor, so it needs no trim.
-export const DEFAULT_HOOK = 5;
-
 /**
- * The length a fresh wizard starts on.
+ * How long a fresh project is when nothing states a length.
  *
- * 10s, not the template library's DEFAULT_DURATION of 20s. Every segment past
- * the first is a separate paid render, and no studio-eligible model can cover
- * 20s in one pass (minimax-h3 caps at 15s), so a 20s default spends two renders
- * before the founder has learned the flow. 10s is one pass and a finished
- * video, which is the right first run.
- *
- * The backend default is deliberately NOT changed to match: it also sets the
- * length of a project created with no explicit request, and the wizard always
- * sends duration_seconds, so matching them is unnecessary coupling.
+ * 10s is a real choice, not a round number: it is the middle of the supported
+ * set, it is the library's DEFAULT_DURATION, and it is comfortably inside the
+ * single-pass ceiling of the one studio-eligible model (minimax-h3 caps at
+ * 15s). A longer default would be refused outright rather than split, so a
+ * default that could not be rendered would make the very first click fail.
  */
 export const DEFAULT_DURATION = 10;
 
-/**
- * The locked extension length for the next segment.
- *
- * Computed, recommended, locked: the next uncovered planned beat's seconds,
- * resolved against the provider floor/ceiling so the delivered number is
- * honest. When the remaining target is smaller than the planned beat, the
- * remainder wins — that is the fill case, reached automatically rather than
- * offered as a choice. Returns null when there is nothing to extend by, so
- * the caller disables the button instead of sending a request the server
- * will refuse. A remainder beyond one pass is likewise null: it needs two
- * steps, not a guess.
- */
+// The hook is a boundary, not a render length. The whole piece is rendered at
+// one duration and the hook is simply where the middle begins, so these are
+// the same 2-4s the backend clamps `hook_seconds` to: a hook that needs longer
+// to land is not a hook. DEFAULT_HOOK_SECONDS is the value a project carries
+// before any template has spoken, matching the fallback in create_studio_project.
+export const MIN_HOOK_SECONDS = 2;
+export const MAX_HOOK_SECONDS = 4;
+export const DEFAULT_HOOK_SECONDS = 3;
 
 /**
- * Whether the founder has declared they intend to extend.
+ * Clamp a hook boundary the way the PATCH endpoint now does.
  *
- * The API returns a real boolean, so this must compare against `false` and NOT
- * against 0: `false === 0` is false, so an `=== 0` check silently reads "off"
- * as "on" and the toggle can never be turned off.
- *
- * Both shapes are accepted defensively. Every project endpoint currently
- * normalises through _public_project, so a row is always a boolean — but SQLite
- * has no boolean type, and a raw integer leaking through a future endpoint or a
- * cached payload would otherwise read as "on" no matter what the founder chose.
+ * Clamping rather than raising is the point: an out-of-range value moves the
+ * boundary to a length a hook can actually land in instead of failing the whole
+ * save, because a 9s "hook" would leave the middle with nothing to film. Zero
+ * is preserved as zero rather than clamped up — zero means "follow the
+ * template", which is a real answer and not a boundary of MIN_HOOK_SECONDS.
  */
-export function readExtendIntent(project) {
-  if (!project) return true;
-  const value = project.extend_intent;
-  if (value === false || value === 0 || value === "0" || value === "false") return false;
-  return true;
+export function clampHookSeconds(value) {
+  const want = Number(value) || 0;
+  if (want <= 0) return 0;
+  return Math.max(MIN_HOOK_SECONDS, Math.min(MAX_HOOK_SECONDS, Math.round(want)));
 }
 
 /**
- * Resolve a wanted length against a provider's floor and ceiling.
+ * The length of the generated piece, as far as the client can know it.
  *
- * A wanted length below the floor is rendered at the floor and cut down, so it
- * is still delivered at the length asked for. A wanted length above the ceiling
- * cannot be recovered that way, which is why the backend refuses it instead.
+ * The project is the authority once one exists — it is the number the plan's
+ * beat timeline was written to, and the number the render is asked for. Before
+ * that, the selected template's `default_duration` is what the project WILL be
+ * seeded from, so showing it is a prediction of the same value rather than a
+ * separate choice. Anything unusable falls back to the library default instead
+ * of rendering "NaN seconds" or leaving a hole in the copy.
  */
-export function resolveLength(target, capability) {
-  const floor = Number(capability?.min_duration ?? 4);
-  const ceiling = Number(capability?.max_duration ?? 30);
-  const want = Number(target) || 0;
-  if (want < 1) return { target: want, render: floor, trimTo: 0 };
-  const clamped = Math.min(want, ceiling);
-  const render = Math.max(clamped, floor);
-  return {
-    target: clamped,
-    render,
-    trimTo: render > clamped ? clamped : 0,
-  };
+export function readPieceSeconds(project, template) {
+  const fromProject = Number(project?.duration_seconds);
+  if (Number.isFinite(fromProject) && fromProject > 0) return fromProject;
+  const fromTemplate = Number(template?.default_duration);
+  if (Number.isFinite(fromTemplate) && fromTemplate > 0) return fromTemplate;
+  return DEFAULT_DURATION;
 }
 
-export function resolveExtendLock(plannedSeconds, remainingToTarget, capability) {
-  const planned = Number(plannedSeconds) || 0;
-  const remaining = Number(remainingToTarget) || 0;
-  const ceiling = Number(capability?.max_duration ?? 30);
-  const want = planned > 0
-    ? (remaining > 0 ? Math.min(planned, remaining) : planned)
-    : remaining;
-  if (want <= 0) return null;
-  if (want > ceiling) return null;
-  const plan = resolveLength(want, capability);
-  return {
-    seconds: plan.trimTo || plan.render,
-    planned: want,
-    render: plan.render,
-    trimTo: plan.trimTo,
-  };
+/**
+ * Split the piece into its two sections.
+ *
+ * Before a strategy exists the only numbers available are the total and the
+ * hook boundary, so the middle is whatever is left. The middle is never
+ * allowed to go negative: a hand-edited boundary longer than the piece would
+ * otherwise produce a middle of -2s that reads as though the product had
+ * already filmed a section it does not have.
+ */
+export function sectionSplit(pieceSeconds, hookSeconds) {
+  const piece = Math.max(0, Number(pieceSeconds) || 0);
+  const hook = Math.max(0, Math.min(Number(hookSeconds) || 0, piece));
+  return { hookSeconds: hook, middleSeconds: Math.max(0, piece - hook) };
 }
 
-/** The highest segment index already produced, or 0 when there are none. */
-export function highestSegmentIndex(segments) {
-  return (segments || []).reduce(
-    (max, s) => Math.max(max, Number(s?.segment_index) || 0),
-    0
-  );
+/**
+ * The longest single render the selected model can produce, or 0 for unknown.
+ *
+ * 0 rather than a guess on purpose. A hard-coded fallback would let the UI
+ * refuse a render the model would in fact accept, which is the worse of the two
+ * mistakes: the founder is told their video is impossible when it is not. The
+ * backend has the same number and is the authority; this only has to stay out
+ * of the way until the capability list has loaded.
+ */
+export function singlePassCeiling(capability) {
+  const max = Number(capability?.max_duration);
+  return Number.isFinite(max) && max > 0 ? max : 0;
 }
 
-/** How many more beats the plan can still produce, or null if unknown. */
-export function plannedCoverage(segments, strategy) {
-  const maxIndex = Number(strategy?.max_planned_index);
-  if (!Number.isFinite(maxIndex) || maxIndex < 0) return null;
-  return Math.max(0, maxIndex - highestSegmentIndex(segments));
+/**
+ * Whether a length is longer than the model can render in one pass.
+ *
+ * This is the check that replaced the extend lock. The lock used to answer
+ * "how much is left, and can one pass cover it" and returned null past the
+ * ceiling, so a founder was told to extend in two steps. There is no second
+ * step now: one render is the whole product, and
+ * `POST /studio/projects/{id}/generate` answers 400 for anything past the
+ * ceiling rather than splitting or quietly shortening it. So the honest place
+ * for the same knowledge is "this will be refused", shown before the click,
+ * with the failure still belonging to the endpoint.
+ *
+ * Fails open on an unknown ceiling, for the reason above: the one thing this
+ * must never do is block a render that would have worked.
+ */
+export function exceedsSinglePass(seconds, capability) {
+  const ceiling = singlePassCeiling(capability);
+  if (ceiling <= 0) return false;
+  const want = Number(seconds) || 0;
+  return want > ceiling;
+}
+
+// The two generated sections, in the order they are rendered. The role is
+// assigned by POSITION and never read off the model, exactly as
+// ai_service._normalize_sections does: a strategy written by a model that
+// remembered the old eight-beat shape would otherwise hand back a "cta" role,
+// and the render prompt reads the role.
+export const SECTION_ROLES = ["hook", "middle"];
+
+/**
+ * The strategy's two sections, normalised.
+ *
+ * Roles come from position and the list is truncated to two, so a strategy
+ * saved before this change — or one where a model ignored the schema and
+ * returned eight beats ending in a call to action — reads as the hook and the
+ * middle it actually becomes instead of as a beat list the founder would read
+ * as a promise of a chain. Missing sections come back present and empty rather
+ * than absent, so the review surface never has a branch that renders one row.
+ */
+export function plannedSections(strategy) {
+  const raw = Array.isArray(strategy?.segments) ? strategy.segments : [];
+  return SECTION_ROLES.map((role, index) => {
+    const section = raw[index] && typeof raw[index] === "object" ? raw[index] : {};
+    return {
+      index,
+      role,
+      seconds: Math.max(0, Number(section.seconds) || 0),
+      goal: String(section.goal || ""),
+      script: String(section.script || ""),
+      action: String(section.action || ""),
+    };
+  });
 }

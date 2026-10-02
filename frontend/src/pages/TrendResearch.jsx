@@ -145,8 +145,15 @@ export default function TrendResearch() {
                     <dl className="mt-3 space-y-2 text-sm">
                       {[
                         ["Opening", d.opening_structure],
-                        ["Continuation", d.continuation_structure],
-                        ["CTA pattern", d.cta_pattern],
+                        // `middle_structure` replaced `continuation_structure`
+                        // and a separate `cta_pattern`: a research draft used
+                        // to describe a chain with a closing beat, and the
+                        // middle is now where the story goes — up to the moment
+                        // the viewer reaches for the app. The retired name is
+                        // read as a fallback for drafts written before the
+                        // change, and the CTA pattern is not shown at all
+                        // because this product does not generate a close.
+                        ["Middle", d.middle_structure || d.continuation_structure],
                         ["Hook mechanic", d.hook_mechanic],
                       ].map(([label, value]) => value ? (
                         <div key={label}>

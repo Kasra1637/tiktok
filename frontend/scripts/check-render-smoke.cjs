@@ -15,14 +15,20 @@
  * component. So this file does.
  *
  * It uses a real DOM (`jsdom`) and `createRoot` rather than
- * `renderToStaticMarkup`, because two of the branches that matter are
- * effect-driven: the panel loads its segments from the API before the coverage
- * warning can render, and server rendering never runs an effect, so a static
- * render would silently skip exactly the code that was broken.
+ * `renderToStaticMarkup`, because the branches that matter are effect-driven:
+ * both panels load from the API before their content can render, and server
+ * rendering never runs an effect, so a static render would silently skip
+ * exactly the code that was broken.
  *
  * `api` is stubbed with fixtures shaped from the server's real responses (see
- * `_public_project` and `video_providers.capability`), so no network call is
- * made and every branch is reachable.
+ * `_public_project`, `_public_library_template` and `video_providers.capability`
+ * in server.py), so no network call is made and every branch is reachable. The
+ * fixtures were reshaped when a video became one render: a strategy is two
+ * sections rather than eight beats, a template declares `middle_structure` and a
+ * `default_duration` rather than `continuation_structure` + `cta_pattern`, and a
+ * project carries `demo_brief` rather than `cta` + `feature_emphasis`. A fixture
+ * that still carried the old shape would make every assertion below pass without
+ * touching the product, which is the failure mode this file exists to prevent.
  *
  * Run: node scripts/check-render-smoke.cjs
  */
@@ -92,8 +98,16 @@ const CAPABILITY = {
   aspect_ratio: "9:16",
   supports_references: true,
   supports_native_audio: true,
+  supports_last_frame: false,
+  notes: "One render of up to 15s. A longer request is refused rather than split.",
 };
 
+// ai_service.normalize_strategy() guarantees exactly two sections with roles
+// "hook" and "middle", assigned by position. `cta_strategy`,
+// `continuity_contract`, `max_planned_index` and `planned_segments` are all gone
+// and are deliberately absent: a fixture that carried them would let a component
+// still reading them render a chain and pass, which is the exact regression the
+// strategy-review checks below exist to catch.
 const STRATEGY = {
   hook_line: "You do not have a focus problem.",
   hook_concept: "Name the thing they already know.",
@@ -105,44 +119,28 @@ const STRATEGY = {
   primary_feature: "Task timer",
   desired_outcome: "A finished day.",
   differentiation_beat: "Others track time; this finishes tasks.",
-  cta_strategy: "Name the free trial.",
-  scene: "Desk, morning light, one task visible.",
-  performance: "Direct to camera, unhurried.",
+  scene: { camera_angle: "eye level", lighting: "morning window" },
+  performance: { movement: "still", voice_delivery: "unhurried" },
   segments: [
-    { segment_index: 0, goal: "hook", action: "look up", script: "You do not have a focus problem.", seconds: 5 },
-    { segment_index: 1, goal: "problem", action: "count on fingers", script: "You have too many lists.", seconds: 6 },
-    { segment_index: 2, goal: "fix", action: "tap the timer", script: "So make it one task.", seconds: 7 },
-    { segment_index: 3, goal: "cta", action: "point at screen", script: "Try it free.", seconds: 4 },
+    { index: 0, role: "hook", seconds: 3, goal: "stop the scroll", script: "You do not have a focus problem.", action: "look up" },
+    { index: 1, role: "middle", seconds: 7, goal: "develop it, stop at the reach", script: "You have too many lists.", action: "count on fingers" },
   ],
-  continuity_contract: {
-    established: ["desk", "morning light"],
-    must_not_change: ["shirt", "framing"],
-    do_not_repeat: ["the opening line"],
-  },
-  // Stamped on the project by generate_project_strategy, read by
-  // plannedCoverage() to say how many more beats the finite plan can produce.
-  max_planned_index: 3,
   objective: "address_user_problem",
 };
 
 const SEGMENT = {
   id: "gen-1",
   segment_index: 0,
+  segment_role: "primary",
   status: "completed",
-  duration: 5,
+  duration: 10,
   trim_to_seconds: 0,
-  approved: true,
+  approved: 0,
   video_url: "/media/gen-1.mp4",
   r2_url: null,
   cost_usd: 0.42,
   retryable: true,
-  continuity: {
-    guarantee: "frame_exact",
-    use_frame: true,
-    use_clip_reference: false,
-    use_identity_reference: true,
-    dropped_anchors: [],
-  },
+  performance: null,
 };
 
 // The key is `asset_id`, not `id`: AttachmentRow slices attachment.asset_id for
@@ -155,6 +153,10 @@ const ASSETS = [
 // `profileId && templateId`: without them every step correctly refuses to open
 // the paid path, which would make the "paid controls exist" assertions prove
 // nothing.
+//
+// `cta` and `feature_emphasis` are absent for the same reason the components no
+// longer read them: the server stopped writing them, and a fixture that carried
+// them would keep a dead input rendering as though it still saved.
 const BASE_PROJECT = {
   id: "p1",
   brand_profile_id: "b1",
@@ -163,13 +165,14 @@ const BASE_PROJECT = {
   objective: "address_user_problem",
   status: "draft",
   script_version: 0,
-  duration_seconds: 20,
-  extend_intent: true,
+  duration_seconds: 10,
+  hook_seconds: 3,
   assets: ASSETS,
   safety_report: { passed: true, blocking: [], unverified: [] },
-  strategy: null,
+  strategy: {},
   script: "",
   hook_line: "",
+  demo_brief: "",
 };
 
 const PROJECT_WITH_STRATEGY = {
@@ -178,11 +181,13 @@ const PROJECT_WITH_STRATEGY = {
   script_version: 1,
   strategy: STRATEGY,
   hook_line: STRATEGY.hook_line,
-  script: "You do not have a focus problem.",
-  cta: "Try it free",
-  feature_emphasis: "Task timer",
+  script: "You do not have a focus problem. You have too many lists.",
+  // The founder's own note about what to record. It is editable on the review
+  // step and is never passed to a render, so the panel that must NOT show a CTA
+  // has something honest to show instead.
+  demo_brief: "Record yourself clearing one list by hand, hands only.",
   visual_direction: "Close, 9:16, desk.",
-  beat_timeline: [{ start: 0, end: 5, beat: "hook" }],
+  beat_timeline: [{ start: 0, end: 10, label: "hook", text: "You do not have a focus problem." }],
   overlays: [],
   voice_direction: "Calm.",
   sound_direction: "Room tone.",
@@ -197,20 +202,24 @@ const PROFILE = {
   target_audience: "people with too many lists",
 };
 
+// middle_structure replaced continuation_structure + cta_pattern, and
+// default_duration is now the length of the whole piece rather than a library
+// default of 20 or 30. The retired names are deliberately absent for the same
+// reason as on the strategy: a component reading them must fail loudly here
+// rather than be quietly satisfied.
 const TEMPLATE = {
   id: "t1",
   name: "Name the misdiagnosis",
   category: "pain-point-question",
   objective: "address_user_problem",
   opening_structure: "Open by naming what they think is wrong.",
-  continuation_structure: "Then correct it.",
-  cta_pattern: "Try it free.",
+  middle_structure: "Then correct it, and stop at the reach for the phone.",
   visual_style: "Talking head.",
   camera_pacing: "Steady.",
-  content_slots: { app_feature: "Task timer", cta: "Try it free" },
+  content_slots: { app_feature: "Task timer" },
   required_assets: ["character_reference"],
-  default_duration: 20,
-  hook_seconds: 5,
+  default_duration: 10,
+  hook_seconds: 3,
   is_usable: true,
 };
 
@@ -222,6 +231,11 @@ const ANGLE = {
   target_audience: "busy professionals",
 };
 
+// template_library.SUPPORTED_DURATIONS. Every one of them is a single render on
+// the only studio-eligible model, which is why the length control is gone: there
+// is nothing for the founder to choose that would not cost a second paid pass.
+const SUPPORTED_DURATIONS = [8, 10, 12, 15];
+
 const apiStub = {
   getStudioVideoModels: async () => ({ default: "minimax-h3", models: [CAPABILITY] }),
   getGenerations: async () => ({ generations: [SEGMENT] }),
@@ -229,11 +243,11 @@ const apiStub = {
   getTemplates: async () => ({ templates: [TEMPLATE] }),
   getTemplateFacets: async () => ({
     objectives: ["address_user_problem", "demonstrate_feature"],
-    supported_durations: [10, 15, 20, 30],
+    supported_durations: SUPPORTED_DURATIONS,
     // Shaped like the real server response, which derives the per-duration
     // render count from the default studio model's single-pass ceiling
-    // (CAPABILITY.max_duration above). 20s and 30s are two paid renders.
-    duration_segments: { 10: 1, 15: 1, 20: 2, 30: 2 },
+    // (CAPABILITY.max_duration above). All four are one render.
+    duration_segments: { 8: 1, 10: 1, 12: 1, 15: 1 },
   }),
   getAppProfiles: async () => ({ profiles: [PROFILE] }),
   getContentAngles: async () => ({ angles: [ANGLE] }),
@@ -241,6 +255,9 @@ const apiStub = {
     recommendations: [{
       template: { ...TEMPLATE, brand_profile_id: "b1" },
       score: 9.5,
+      // The template's declared length, server-side. It is the length the
+      // project will be seeded from, not a suggestion.
+      suggested_duration: TEMPLATE.default_duration,
       why_it_fits: ["Tailored for Taskly", "Matches this angle"],
       limitations: [],
     }],
@@ -260,17 +277,52 @@ const apiStub = {
   uploadAsset: async () => ({ asset: null }),
   generatePlan: async () => PROJECT_WITH_STRATEGY,
   generateStrategy: async () => PROJECT_WITH_STRATEGY,
-  generateHook: async () => SEGMENT,
-  approveGeneration: async () => SEGMENT,
-  extendGeneration: async () => SEGMENT,
-  assembleChain: async () => ({ generation: SEGMENT, skipped: [] }),
   generateVideo: async () => SEGMENT,
   retryGeneration: async () => SEGMENT,
   composeOverlays: async () => ({ composition: null }),
   markProjectReady: async () => PROJECT_WITH_STRATEGY,
-  setProjectExtendIntent: async () => PROJECT_WITH_STRATEGY,
   recordSignal: () => {},
 };
+
+/**
+ * Every API method the UI called, and every retired one it tried to call.
+ *
+ * Two separate lists because they defend different things. `apiCalls` is a
+ * record: it lets a check assert that a branch fired the request it was supposed
+ * to. `retiredCalls` is a trap: the five methods the server deleted are not on
+ * the stub at all, so a component that still called one would throw a
+ * TypeError — and a TypeError inside a `try` with a `catch` that renders
+ * `getErrorMessage` would be swallowed and shown as an ordinary failure message.
+ * Recording the attempt first means the check sees it either way.
+ */
+const apiCalls = [];
+const retiredCalls = [];
+const RETIRED_API_METHODS = [
+  "generateHook",
+  "approveGeneration",
+  "extendGeneration",
+  "assembleChain",
+  "getGenerationContinuity",
+  "setProjectExtendIntent",
+  "setProjectHookLength",
+];
+for (const [name, impl] of Object.entries(apiStub)) {
+  apiStub[name] = (...args) => {
+    apiCalls.push(name);
+    return impl(...args);
+  };
+}
+for (const name of RETIRED_API_METHODS) {
+  // Belt and braces: the stub never had these, so a stray call throws anyway.
+  // Declaring them as throwing traps is what makes the swallow harmless.
+  Object.defineProperty(apiStub, name, {
+    get() {
+      retiredCalls.push(name);
+      return () => Promise.reject(new Error(`retired endpoint: ${name}`));
+    },
+    configurable: true,
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Transpile + stub loader
@@ -421,6 +473,10 @@ function expectAbsent(ctx, needle, why) {
   }
 }
 
+function expectNone(ctx, needles, why) {
+  for (const needle of needles) expectAbsent(ctx, needle, why);
+}
+
 /**
  * Asserts two string lists are within `tolerance` characters per row.
  *
@@ -448,6 +504,33 @@ function expectBalanced(left, right, tolerance, label) {
   }
 }
 
+/** Every .js/.jsx under src, as [absolutePath, source] pairs. */
+function sourceFiles(dir = SRC, out = []) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const abs = path.join(dir, entry.name);
+    if (entry.isDirectory()) sourceFiles(abs, out);
+    else if (/\.(js|jsx)$/.test(entry.name)) out.push(abs);
+  }
+  return out;
+}
+
+/**
+ * Blank out comments while preserving line numbering, so a scan for a retired
+ * field only sees executable code.
+ *
+ * This matters more than it looks. The files explaining WHY a field was removed
+ * have to name it — the record of the decision is the point of those comments —
+ * so a naive text scan fails on the very files that did the work. Newlines are
+ * kept so a hit can still be reported at the right line.
+ */
+function stripComments(src) {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, " "))
+    // A `//` preceded by a colon is a protocol separator (https://), not a
+    // comment, so the character before it is required to not be one.
+    .replace(/(^|[^:])\/\/[^\n]*/g, (line, before) => before);
+}
+
 console.log("Mounting every wizard step and panel...");
 
 const { GenerationPanel } = load("components/GenerationPanel.jsx");
@@ -457,7 +540,12 @@ const CreateVideo = load("pages/CreateVideo.jsx").default;
 // The shipped order, in the order the founder walks it. Asserted as a whole
 // sequence rather than a set: the point of the reorder is that the free, claim-
 // checked plan comes before the step that spends money, and a set comparison
-// would pass just as happily if the hook went back to fourth.
+// would pass just as happily if the render went back to fourth.
+//
+// The last step is "Hook & middle" rather than "Influencer hook" because that is
+// what it produces: one render with two sections. The old label named the first
+// beat of a chain, and a step called "Influencer hook" whose output is a hook
+// plus a middle is a step that under-describes the thing being paid for.
 const STEP_LABELS = [
   "App Profile",
   "Audience & goal",
@@ -465,8 +553,11 @@ const STEP_LABELS = [
   "Assets",
   "Creative plan",
   "Review",
-  "Influencer hook",
+  "Hook & middle",
 ];
+
+// The one length every step must be able to state without a control anywhere.
+const PIECE_SECONDS = String(TEMPLATE.default_duration);
 
 const stepSource = fs.readFileSync(path.join(SRC, "pages", "CreateVideo.jsx"), "utf8");
 
@@ -480,7 +571,7 @@ async function main() {
 
   await check("GenerationPanel shows the completed generation", async (ctx) => {
     await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
-    expectText(ctx, "Completed", "the segment status did not render");
+    expectText(ctx, "Completed", "the generation status did not render");
     expectText(ctx, "Download MP4", "the download control did not render");
   });
 
@@ -493,30 +584,104 @@ async function main() {
     expectText(ctx, "Mark the project ready for generation", "the ready gate did not render");
   });
 
-  // -------------------------------------------------------------------------
-  // The undefined-symbol crash, on the branch that renders while extending
-  // toward a target — the panel's main path, and effect-driven, so a static
-  // render would skip the code that was broken.
-  // -------------------------------------------------------------------------
-  await check("HookContinuityPanel renders the extend-coverage warning", async (ctx) => {
-    await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
-    // Guarded by extendIntent && completedSegments.length && targetTotal &&
-    // plannedCoverage !== null && remainingToTarget > 0. Reaching it proves the
-    // panel loaded its segments, read the plan, and resolved the next lock.
-    expectText(ctx, "The strategy plans", "the coverage warning did not render");
-    expectText(ctx, "s of", "the running total did not render");
-  });
-
-  await check("HookContinuityPanel reports the target as reached", async (ctx) => {
-    await mount(HookContinuityPanel, {
-      project: { ...PROJECT_WITH_STRATEGY, duration_seconds: 5 },
+  await check("GenerationPanel blocks generation while a claim is prohibited", async (ctx) => {
+    await mount(GenerationPanel, {
+      project: {
+        ...PROJECT_WITH_STRATEGY,
+        safety_report: { passed: false, blocking: [{ claim: "cures anxiety" }], unverified: [] },
+      },
     })(ctx);
-    expectText(ctx, "Target reached", "the reached-target state did not render");
+    expectText(ctx, "Prohibited claim present", "the claim gate did not render");
+    // The render panel is where the click is stopped, so the button has to be
+    // dead here even though the project is marked ready.
+    const generate = [...ctx.container.querySelectorAll("button")]
+      .find((b) => /Generate/.test(b.textContent || ""));
+    if (!generate) throw new Error("the generate control is missing");
+    if (!generate.disabled) {
+      throw new Error("a prohibited claim leaves the generate button enabled");
+    }
   });
 
-  await check("HookContinuityPanel mounts with no strategy", mount(HookContinuityPanel, { project: BASE_PROJECT }));
+  // -------------------------------------------------------------------------
+  // The replacement for the extend-coverage warning.
+  //
+  // The old check drove the branch that rendered while extending toward a
+  // target and asserted "The strategy plans N more segments" — the finite-plan
+  // warning. There is no chain to run out of, so that branch and its warning are
+  // gone. What replaced it is the thing the founder actually has to read before
+  // spending: the two sections, named as the two sections, with the model's own
+  // goal for each.
+  // -------------------------------------------------------------------------
+  await check("the strategy review presents the two sections and what they are", async (ctx) => {
+    await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+    expectText(ctx, "The two sections", "the section list did not render");
+    expectText(ctx, "hook", "the hook section did not render");
+    expectText(ctx, "middle", "the middle section did not render");
+    // The goal, straight from the strategy — this is the review surface's
+    // reason to exist, so it has to reach the screen and not just be fetched.
+    expectText(ctx, "stop the scroll", "the hook's goal did not render");
+    expectText(ctx, "develop it, stop at the reach", "the middle's goal did not render");
+  });
 
-  await check("HookContinuityPanel surfaces a blocking claim", async (ctx) => {
+  await check("the strategy review shows the hook boundary from the plan", async (ctx) => {
+    await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+    // The strategy plans its opening beat at 3s, so the boundary between the two
+    // sections renders as a 3s badge on the hook row.
+    expectText(ctx, "3s", "the hook boundary did not render");
+  });
+
+  // The property the running-total and coverage checks used to protect: nothing
+  // on this panel can start a second paid job, approve anything, or join
+  // anything. It is a review surface, and "no controls" is the whole contract.
+  await check("the strategy review renders no paid or chain control", async (ctx) => {
+    await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+    const labels = [...ctx.container.querySelectorAll("button")]
+      .map((b) => (b.textContent || "").trim());
+    const forbidden = ["Extend", "Approve", "Join", "Assemble", "Generate", "Render", "Try it free"];
+    for (const label of labels) {
+      for (const word of forbidden) {
+        if (label.toLowerCase().includes(word.toLowerCase())) {
+          throw new Error(`the review surface renders a control labelled ${JSON.stringify(label)}`);
+        }
+      }
+    }
+    // The retired vocabulary, as rendered text rather than as button labels:
+    // a coverage count, a progress bar, a beat list and a close are all things
+    // this panel used to describe and none of which has a referent now.
+    for (const phrase of [
+      "Segments planned",
+      "Target reached",
+      "of 10s",
+      "to go",
+      "more segment",
+      "the strategy plans",
+      "approved segment",
+      "Segments planned",
+      "One continuous video",
+      "end card",
+      "CTA",
+    ]) {
+      expectAbsent(ctx, phrase, "the review surface still describes a chain");
+    }
+    // A progress bar is a coverage meter whatever its label says.
+    if (ctx.container.querySelector('[role="progressbar"]')) {
+      throw new Error("the review surface still renders a coverage progress bar");
+    }
+    // Exactly one button: build the strategy. It is free, and the strategy is
+    // what makes the one paid render about this app.
+    const onlyFree = labels.filter((l) => l);
+    if (onlyFree.length !== 1 || !/strategy/i.test(onlyFree[0])) {
+      throw new Error(`expected only the free strategy button, found: ${JSON.stringify(onlyFree)}`);
+    }
+  });
+
+  await check("the strategy review mounts with no strategy", async (ctx) => {
+    await mount(HookContinuityPanel, { project: BASE_PROJECT })(ctx);
+    expectText(ctx, "Build the app-specific strategy", "the free strategy button did not render");
+    expectAbsent(ctx, "The two sections", "sections rendered for a project with no strategy");
+  });
+
+  await check("the strategy review names a blocking claim", async (ctx) => {
     await mount(HookContinuityPanel, {
       project: {
         ...PROJECT_WITH_STRATEGY,
@@ -528,18 +693,137 @@ async function main() {
     expectText(ctx, "cures anxiety", "the blocking claim was not named");
   });
 
-  await check("HookContinuityPanel warns when no character reference is attached", async (ctx) => {
+  await check("the strategy review warns when no character reference is attached", async (ctx) => {
     await mount(HookContinuityPanel, {
       project: { ...PROJECT_WITH_STRATEGY, assets: [] },
     })(ctx);
     expectText(ctx, "No character reference", "the missing-face warning did not render");
   });
 
-  await check("HookContinuityPanel shows the locked hook length from the plan", async (ctx) => {
-    await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
-    // The strategy plans segment 0 at 5s, the provider floor, so it renders
-    // natively with no trim.
-    expectText(ctx, "5s", "the locked hook length did not render");
+  // -------------------------------------------------------------------------
+  // GenerationPanel is the only render UI, and it reflects one render.
+  // -------------------------------------------------------------------------
+  await check("GenerationPanel offers no second render, approval or join", async (ctx) => {
+    await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+    // The Extend button went with the endpoint. The remaining controls are the
+    // one generate, the download, the caption compose and the retry, and a
+    // re-render of the SAME single job.
+    for (const phrase of ["Extend", "Approve", "Join", "end card", "CTA", "in two passes", "second pass"]) {
+      expectAbsent(ctx, phrase, "GenerationPanel still offers a chain affordance");
+    }
+    const labels = [...ctx.container.querySelectorAll("button")]
+      .map((b) => (b.textContent || "").trim())
+      .filter(Boolean);
+    for (const label of labels) {
+      if (/extend|approve|join|assemble/i.test(label)) {
+        throw new Error(`GenerationPanel renders a chain control: ${JSON.stringify(label)}`);
+      }
+    }
+  });
+
+  // The replacement for "a length beyond one pass is refused" at the panel
+  // level. The old property lived in the extend lock, which returned null past
+  // the ceiling so the button was disabled; the refusal itself has moved to the
+  // endpoint, which answers 400. The panel's job is now to say so before the
+  // click, and to disable the button rather than spend one to find out.
+  await check("GenerationPanel warns that a length past one pass will be refused", async (ctx) => {
+    await mount(GenerationPanel, {
+      // A project whose declared length is longer than the model's ceiling. A
+      // real one cannot be created from the current library, which is exactly
+      // why this is a fixture rather than a happy path.
+      project: { ...PROJECT_WITH_STRATEGY, duration_seconds: 20 },
+    })(ctx);
+    expectText(ctx, "cannot render 20s in one pass", "the refusal warning did not render");
+    const generate = [...ctx.container.querySelectorAll("button")]
+      .find((b) => /Generate/.test(b.textContent || ""));
+    if (!generate) throw new Error("the generate control is missing");
+    if (!generate.disabled) {
+      throw new Error("a length past the model's single pass leaves the generate button enabled");
+    }
+  });
+
+  await check("GenerationPanel tells the founder the demo and the close are theirs", async (ctx) => {
+    await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+    // This is the sentence that makes the product honest. Without it the
+    // download looks like a finished video, which is precisely what it is not:
+    // the middle is built to stop where the presenter reaches for their phone.
+    expectText(ctx, "Attach your own demo", "the founder's own demo is not described");
+    expectText(ctx, "add your own call to action", "the founder's own close is not described");
+  });
+
+  // -------------------------------------------------------------------------
+  // No UI path calls a deleted endpoint.
+  //
+  // Five endpoints went with the chain: /studio/projects/{id}/hook,
+  // /generations/{id}/extend, /approve, /assemble and /continuity. Calling one is
+  // a 404 that renders as an ordinary error message, so nothing about a founder
+  // clicking through would make it obviously wrong — the button just does
+  // nothing useful. So this is asserted two ways: statically, because a call
+  // sitting in an unreachable branch is still a call, and at runtime, through the
+  // recorder above.
+  // -------------------------------------------------------------------------
+  await check("no source file builds a request for a deleted endpoint", async (ctx) => {
+    // Matched on the path tail next to the resource prefix, so the live
+    // /app-profiles/{id}/approve is not caught by the word "approve".
+    const retiredRoutes = [
+      { re: /\/generations\/\$\{[^}]*\}\/(extend|approve|assemble|continuity)\b/, what: "a retired /generations/{id} route" },
+      { re: /\/studio\/projects\/\$\{[^}]*\}\/hook\b/, what: "the retired /studio/projects/{id}/hook route" },
+    ];
+    const retiredFields = [
+      "cta_pattern",
+      "cta_strategy",
+      "continuity_contract",
+      "max_planned_index",
+      "planned_segments",
+      "feature_emphasis",
+      "extend_intent",
+    ];
+    const problems = [];
+    for (const abs of sourceFiles()) {
+      const rel = path.relative(SRC, abs);
+      const src = stripComments(fs.readFileSync(abs, "utf8"));
+      src.split("\n").forEach((line, i) => {
+        for (const { re, what } of retiredRoutes) {
+          if (re.test(line)) problems.push(`${rel}:${i + 1} builds ${what}`);
+        }
+        for (const field of retiredFields) {
+          // A property READ counts too: `strategy.cta_strategy` is a field the
+          // server deleted, so reading it yields undefined and silently
+          // disables whatever it was guarding.
+          if (new RegExp(`[.\\[\\s"'\`]${field}\\b`).test(line)) {
+            problems.push(`${rel}:${i + 1} still reads the retired field ${field}`);
+          }
+        }
+      });
+    }
+    if (problems.length) throw new Error(problems.join("\n        "));
+  });
+
+  await check("no mounted path calls a deleted endpoint", async (ctx) => {
+    retiredCalls.length = 0;
+    // Drive every surface that could plausibly have kept a chain call: both
+    // panels directly, and every step of the wizard with a drafted project
+    // behind it so the render step actually mounts both.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+      await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+      await mount(CreateVideo, {})(ctx);
+      for (const label of STEP_LABELS.slice(1)) {
+        const pill = stepPill(ctx, label);
+        await act(async () => {
+          pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+      }
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+    if (retiredCalls.length) {
+      throw new Error(
+        `the UI called a deleted endpoint: ${[...new Set(retiredCalls)].join(", ")}`
+      );
+    }
   });
 
   // -------------------------------------------------------------------------
@@ -579,8 +863,8 @@ async function main() {
   }
 
   // Nothing that costs money may render before the plan has been read. This is
-  // the reorder's whole point, and it is invisible to a type-check: both panels
-  // are still imported and still reachable, just on a later step.
+  // the reorder's whole point, and it is invisible to a type-check: the render
+  // panel is still imported and still reachable, just on a later step.
   await check("no paid control renders before the plan step", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     for (const label of ["App Profile", "Audience & goal", "Hook template", "Assets", "Creative plan"]) {
@@ -591,7 +875,7 @@ async function main() {
       });
       await act(async () => {});
       const text = ctx.text();
-      for (const paid of ["Generate video", "Generate the 5s hook", "Build the app-specific strategy"]) {
+      for (const paid of ["Generate the video", "Build the app-specific strategy"]) {
         if (text.includes(paid)) {
           throw new Error(`step ${JSON.stringify(label)} renders a paid control: ${JSON.stringify(paid)}`);
         }
@@ -599,7 +883,7 @@ async function main() {
     }
   });
 
-  await check("the hook step holds the paid controls once a plan exists", async (ctx) => {
+  await check("the render step holds the paid controls once a plan exists", async (ctx) => {
     // A plan reviewed, no strategy yet: the state the reorder puts the founder
     // in when they arrive here. Deep-linked so the wizard has that draft.
     global.__SMOKE_PARAMS = "?project=p1";
@@ -608,13 +892,13 @@ async function main() {
         {
           getStudioProject: async () => ({
             ...PROJECT_WITH_STRATEGY,
-            strategy: null,
+            strategy: {},
             strategy_version: 0,
           }),
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          const pill = stepPill(ctx, "Influencer hook");
+          const pill = stepPill(ctx, "Hook & middle");
           await act(async () => {
             pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
           });
@@ -622,23 +906,23 @@ async function main() {
         }
       );
       if (!ctx.text().includes("Build the app-specific strategy")) {
-        throw new Error("the hook step no longer offers the strategy button");
+        throw new Error("the render step no longer offers the strategy button");
       }
     } finally {
       global.__SMOKE_PARAMS = "";
     }
   });
 
-  await check("the hook step refuses to spend without an approved plan", async (ctx) => {
+  await check("the render step refuses to spend without an approved plan", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
-      // A draft that exists but has no plan: the strategy, the hook render and
-      // the one-pass generation must all stay out of reach.
+      // A draft that exists but has no plan: the strategy and the one render
+      // must both stay out of reach.
       await withApi(
         { getStudioProject: async () => ({ ...BASE_PROJECT, script_version: 0, script: "" }) },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          const pill = stepPill(ctx, "Influencer hook");
+          const pill = stepPill(ctx, "Hook & middle");
           await act(async () => {
             pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
           });
@@ -651,14 +935,14 @@ async function main() {
     const text = ctx.text();
     if (!text.includes("no plan yet")) {
       throw new Error(
-        `the hook step does not explain that a plan comes first; it rendered: ${JSON.stringify(
+        `the render step does not explain that a plan comes first; it rendered: ${JSON.stringify(
           text.slice(300, 800)
         )}`
       );
     }
-    for (const paid of ["Build the app-specific strategy", "Generate the 5s hook", "Generate video"]) {
+    for (const paid of ["Build the app-specific strategy", "Generate the video", "Extend"]) {
       if (text.includes(paid)) {
-        throw new Error(`the hook step offers ${JSON.stringify(paid)} with no approved plan`);
+        throw new Error(`the render step offers ${JSON.stringify(paid)} with no approved plan`);
       }
     }
   });
@@ -674,14 +958,17 @@ async function main() {
     }
   });
 
-  // Tailoring only fires once an objective exists, so this drives the real
-  // order: pick the goal, then the tailored request runs and its attached error
-  // has to appear on the template step.
-  // Length is chosen on the Audience & goal step and consumed by the plan
-  // step, so it must not be an editable control on Review: the beat timeline is
-  // built for the length the plan was generated at and beats are clamped to it,
-  // so changing the number there leaves a timeline that no longer adds up.
-  await check("Review shows the length but does not offer editing it", async (ctx) => {
+  // -------------------------------------------------------------------------
+  // The length is computed. These three checks replace "Review shows the length
+  // but does not offer editing it", "the length selector lives on the step
+  // before the plan" and "a length that costs more than one render says so up
+  // front" — none of whose properties survived, because there is no longer a
+  // picker, no step that owns the choice, and no length that costs two renders.
+  // The properties that did survive are re-asserted below: the length is stated
+  // wherever the founder needs it, nothing anywhere can change it, and the UI
+  // never implies a length exists that one render cannot produce.
+  // -------------------------------------------------------------------------
+  await check("Review states the length and offers no way to change it", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await mount(CreateVideo, {})(ctx);
@@ -691,17 +978,19 @@ async function main() {
       });
       await act(async () => {});
       const text = ctx.text();
-      if (!text.includes("Total video length")) {
-        throw new Error("Review no longer states the total length");
+      if (!text.includes("Length of the generated piece")) {
+        throw new Error("Review no longer states the length of the piece");
       }
       if (!text.includes("written to this length")) {
         throw new Error("Review does not explain that the timeline is tied to this length");
       }
-      // The stale-timeline affordance: an editable length select with a
-      // "regenerating the plan will use Ns" note is what has to be gone.
-      if (text.includes("Regenerating the plan will use")) {
-        throw new Error("Review still offers an editable length that invalidates the beat timeline");
-      }
+      // The stale-timeline affordance and its two former relatives: an editable
+      // length select, and a "regenerating the plan will use Ns" note.
+      expectNone(ctx, [
+        "Regenerating the plan will use",
+        "Total video length",
+        "written to this length. To change it, change the length",
+      ], "Review still offers an editable total-length control");
       const durationSelect = [...ctx.container.querySelectorAll("select")]
         .find((s) => s.id === "review-duration");
       if (durationSelect) {
@@ -712,28 +1001,54 @@ async function main() {
     }
   });
 
-  await check("the length selector lives on the step before the plan", async (ctx) => {
-    global.__SMOKE_PARAMS = "";
-    await mount(CreateVideo, {})(ctx);
-    const pill = stepPill(ctx, "Audience & goal");
-    await act(async () => {
-      pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-    });
-    await act(async () => {});
-    const select = ctx.container.querySelector("select#duration");
-    if (!select) throw new Error("the total length is no longer chosen before the plan");
-    if (!ctx.text().includes("Total video length")) {
-      throw new Error("the length control has no label");
+  // The whole-wizard version of the above. A length control on one step is
+  // enough to re-break the plan's beat timeline, and "which step owns the
+  // number" was a question the old suite answered by pinning it to a step id
+  // rather than by asserting that no step has one.
+  await check("no step in the wizard offers a length control", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await mount(CreateVideo, {})(ctx);
+      for (const label of STEP_LABELS) {
+        const pill = stepPill(ctx, label);
+        await act(async () => {
+          pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+        if (ctx.container.querySelector("select#duration")) {
+          throw new Error(`step ${JSON.stringify(label)} renders a length select`);
+        }
+        if (ctx.container.querySelector("input#duration")) {
+          throw new Error(`step ${JSON.stringify(label)} renders a length input`);
+        }
+        // Any <select> whose options are the supported lengths is a length
+        // control whatever it is called, and any number input whose label talks
+        // about length is one too. The objective select's options are
+        // objectives, so this cannot fire on the wrong control.
+        for (const select of ctx.container.querySelectorAll("select")) {
+          const values = [...select.options].map((o) => o.value);
+          if (values.some((v) => SUPPORTED_DURATIONS.includes(Number(v)))) {
+            throw new Error(`step ${JSON.stringify(label)} offers a length option: ${values.join()}`);
+          }
+        }
+        const body = ctx.text();
+        if (/total video length|video length of|seconds —/.test(body)) {
+          throw new Error(`step ${JSON.stringify(label)} offers a total-length choice`);
+        }
+      }
+    } finally {
+      global.__SMOKE_PARAMS = "";
     }
   });
 
-  // Every segment past the first is a separate paid render, and no
-  // studio-eligible model covers 20s in one pass. A 20s default therefore
-  // spends two renders before the founder has learned the flow -- and worse,
-  // it is the length the plan's beat timeline is written to by default. The
-  // option label and the helper both have to say so, because the alternative
-  // is the founder discovering the segment count at the extend button.
-  await check("a length that costs more than one render says so up front", async (ctx) => {
+  // The replacement for "a fresh wizard starts on a single-pass length" and "the
+  // length selector lives on the step before the plan". The property was always
+  // "the founder is never handed a length the model cannot render". With no
+  // picker that is now a statement about what the step SAYS, and the value it
+  // says has to be the template's, because that is what the project is seeded
+  // from — a number that disagreed with the template would be a second, hidden
+  // length.
+  await check("the Audience step states the template's length, read-only", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await mount(CreateVideo, {})(ctx);
     const pill = stepPill(ctx, "Audience & goal");
@@ -741,46 +1056,120 @@ async function main() {
       pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
     });
     await act(async () => {});
-    const select = ctx.container.querySelector("select#duration");
-    if (!select) throw new Error("no length control to read");
-
-    const options = [...select.querySelectorAll("option")].map((o) => o.textContent);
-    // The seeded facets stub reports 15s as the single-pass ceiling, so 20s
-    // and 30s are two segments and 10s/15s are not.
-    const multi = options.filter((o) => /segments/.test(o));
-    const single = options.filter((o) => /one pass/.test(o));
-    if (multi.length === 0) throw new Error("no option states a multi-pass segment count");
-    if (single.length === 0) throw new Error("no option distinguishes a single-pass length");
-    if (multi.some((o) => !/\d+ segments/.test(o))) {
-      throw new Error("a multi-pass option does not state how many: " + JSON.stringify(multi));
-    }
-    // And the selected one is explained, not just listed.
-    await selectOption(ctx, select, "20");
-    if (!/segments/.test(ctx.text())) {
-      throw new Error("picking a multi-pass length says nothing about the extra renders");
-    }
-    if (!/paid render/.test(ctx.text())) {
-      throw new Error("the multi-pass note never says the extra segments cost money");
-    }
-  });
-
-  // The seeded default must be a length the default model can actually do in
-  // one pass. A default that is impossible to finish in a single render is the
-  // single most expensive default the product can ship.
-  await check("a fresh wizard starts on a single-pass length", async (ctx) => {
-    global.__SMOKE_PARAMS = "";
-    await mount(CreateVideo, {})(ctx);
-    const pill = stepPill(ctx, "Audience & goal");
-    await act(async () => {
-      pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-    });
-    await act(async () => {});
-    const select = ctx.container.querySelector("select#duration");
-    const chosen = String(select.value);
-    if (chosen !== "10") {
+    const text = ctx.text();
+    if (!text.includes(`One render of ${PIECE_SECONDS}s`)) {
       throw new Error(
-        `a new wizard starts at ${chosen}s; expected 10s, the shortest single-pass length`
+        `the Audience step does not state the piece length; it rendered: ${JSON.stringify(
+          text.slice(0, 400)
+        )}`
       );
+    }
+    // The two sections, with the remainder spelled out. A hook boundary that did
+    // not add up to the piece would be a plan that does not add up either.
+    if (!new RegExp(`a 3s hook,\\s*then a 7s middle`).test(text)) {
+      throw new Error("the Audience step does not split the piece into its two sections");
+    }
+    // Why there is nothing to choose.
+    if (!text.includes("not a choice")) {
+      throw new Error("the Audience step does not say the length is not the founder's to pick");
+    }
+  });
+
+  await check("the Audience step says the demo and the close are the founder's own", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await mount(CreateVideo, {})(ctx);
+    const pill = stepPill(ctx, "Audience & goal");
+    await act(async () => {
+      pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => {});
+    const text = ctx.text();
+    if (!text.includes("you record the demo yourself")) {
+      throw new Error("the Audience step does not tell the founder the demo is theirs to record");
+    }
+    if (!text.includes("add your own call to action")) {
+      throw new Error("the Audience step does not tell the founder the close is theirs to add");
+    }
+  });
+
+  // Every offered length is one render, and the UI never implies otherwise.
+  // The backend refuses a longer request with a 400 rather than splitting it, so
+  // a length that needed two passes would be a length the product cannot make.
+  // The old check asserted the multi-pass option LABEL said so; there is no
+  // option any more, so the invariant moves up a level and is asserted against
+  // the facet contract the code is written against.
+  await check("every length the studio offers is a single render", async (ctx) => {
+    const facets = await apiStub.getTemplateFacets();
+    const counts = facets.duration_segments;
+    const missing = facets.supported_durations.filter((d) => !counts[d]);
+    if (missing.length) {
+      throw new Error(`durations with no render count: ${missing.join()}`);
+    }
+    const multi = facets.supported_durations.filter((d) => counts[d] > 1);
+    if (multi.length) {
+      throw new Error(
+        `a supported duration needs more than one render, which the endpoint would refuse: ${multi.join()}`
+      );
+    }
+    for (const d of facets.supported_durations) {
+      if (d > CAPABILITY.max_duration) {
+        throw new Error(`${d}s is offered but past the model's ${CAPABILITY.max_duration}s ceiling`);
+      }
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // The CTA is not offered anywhere, and the demo is not generated either.
+  //
+  // There is no product demo and no call to action in the generated footage: the
+  // middle ends at the moment the presenter would reach for their phone, and the
+  // founder attaches their own demo and close. That makes every CTA affordance
+  // a lie — a field labelled CTA that is no longer writable, an end card the
+  // server no longer composes — and every promise of a finished file a
+  // founder would post without the part that makes it convert.
+  // -------------------------------------------------------------------------
+  await check("the studio never offers a call to action or a product demo", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await mount(CreateVideo, {})(ctx);
+      for (const label of STEP_LABELS) {
+        const pill = stepPill(ctx, label);
+        await act(async () => {
+          pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+        const text = ctx.text();
+        // The acronym is the affordance: a field labelled "CTA", a "CTA pattern"
+        // row, a "CTA end card" badge. Prose that spells the phrase out to say
+        // the close is the founder's own is honest and is allowed to stay.
+        if (/\bCTA\b/.test(text)) {
+          throw new Error(`step ${JSON.stringify(label)} offers a CTA affordance`);
+        }
+        if (text.includes("end card")) {
+          throw new Error(`step ${JSON.stringify(label)} promises an end card`);
+        }
+        // The retired field labels, in case one is ever restored as a heading.
+        if (text.includes("Feature emphasis")) {
+          throw new Error(`step ${JSON.stringify(label)} offers a feature instruction to render`);
+        }
+      }
+      // And the field that replaced the second: the founder's own note about
+      // what to record, editable, and clearly not an instruction to the model.
+      const reviewPill = stepPill(ctx, "Review");
+      await act(async () => {
+        reviewPill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      });
+      await act(async () => {});
+      const demo = ctx.container.querySelector("textarea#review-demo-brief");
+      if (!demo) throw new Error("Review no longer offers the demo brief field");
+      if (demo.value !== PROJECT_WITH_STRATEGY.demo_brief) {
+        throw new Error(`the demo brief field is empty: ${JSON.stringify(demo.value)}`);
+      }
+      if (!ctx.text().includes("never reaches the render")) {
+        throw new Error("the demo brief field does not say it is a note to the founder, not the model");
+      }
+    } finally {
+      global.__SMOKE_PARAMS = "";
     }
   });
 
@@ -825,6 +1214,15 @@ async function main() {
     }
     if (!text.includes("Suggested")) {
       throw new Error("a preselected template is not labelled as a suggestion");
+    }
+    // The chosen template's declared length and curated middle, on the card.
+    // This is where the founder learns the piece is not 20s and not their
+    // choice, which used to be a separate picker two steps later.
+    if (!text.includes(`${TEMPLATE.default_duration}s piece`)) {
+      throw new Error("the template card does not state the length this template produces");
+    }
+    if (!text.includes(TEMPLATE.middle_structure)) {
+      throw new Error("the template card does not show the template's middle structure");
     }
   });
 
@@ -949,6 +1347,83 @@ async function main() {
     }
   });
 
+  // The project write is where the retired fields would have gone back in. The
+  // server still accepts `extend_intent` on the create request and still accepts
+  // `duration_seconds` on the patch, so a client that sends them gets a 2xx and
+  // a discarded value — the silent-write failure mode this whole harness exists
+  // to catch, and the one that made the old intent toggle look like it worked.
+  //
+  // Both write paths are driven, because they are different code and the old bug
+  // lived in both: the create sent a length the server would override from the
+  // template, and the plan request sent one the server would refuse once a plan
+  // existed.
+  await check("no project write sends a length or an extend intent", async (ctx) => {
+    const creates = [];
+    const updates = [];
+    const plans = [];
+    await withApi(
+      {
+        createStudioProject: async (payload) => {
+          creates.push(payload);
+          return PROJECT_WITH_STRATEGY;
+        },
+        updateStudioProject: async (id, payload) => {
+          updates.push(payload);
+          return PROJECT_WITH_STRATEGY;
+        },
+        generatePlan: async (id, payload) => {
+          plans.push(payload);
+          return PROJECT_WITH_STRATEGY;
+        },
+      },
+      async () => {
+        // The create path: the Assets step's "Create the draft now" button, which
+        // is the only route to a POST before a project exists.
+        global.__SMOKE_PARAMS = "";
+        await mount(CreateVideo, {})(ctx);
+        await openStep(ctx, "Assets");
+        const create = [...ctx.container.querySelectorAll("button")]
+          .find((b) => /Create the draft now/.test(b.textContent || ""));
+        if (!create) throw new Error("the Assets step offers no way to create the draft");
+        await act(async () => {
+          create.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+
+        // The update path: with a project already in hand, the plan step writes
+        // the draft again before generating the plan.
+        global.__SMOKE_PARAMS = "?project=p1";
+        await mount(CreateVideo, {})(ctx);
+        await openStep(ctx, "Creative plan");
+        const generate = [...ctx.container.querySelectorAll("button")]
+          .find((b) => /(Generate|Regenerate) plan/.test(b.textContent || ""));
+        if (!generate) throw new Error("the plan step offers no generate control");
+        await act(async () => {
+          generate.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+        global.__SMOKE_PARAMS = "";
+      }
+    );
+    if (creates.length === 0) throw new Error("no project was created along the way");
+    if (updates.length === 0) throw new Error("no project was updated along the way");
+    if (plans.length === 0) throw new Error("no plan was generated along the way");
+    const retired = ["duration_seconds", "extend_intent"];
+    for (const [what, payloads] of [
+      ["createStudioProject", creates],
+      ["updateStudioProject", updates],
+      ["generatePlan", plans],
+    ]) {
+      for (const payload of payloads) {
+        for (const field of retired) {
+          if (field in payload) {
+            throw new Error(`${what} still sends ${field}: ${JSON.stringify(payload)}`);
+          }
+        }
+      }
+    }
+  });
+
   // -------------------------------------------------------------------------
   // Landing page
   // -------------------------------------------------------------------------
@@ -972,8 +1447,12 @@ async function main() {
     // Pricing left the App Profile, and its claim check was deleted outright.
     expectAbsent(ctx, "pricing", "pricing is not in the product any more");
     expectAbsent(ctx, "prices your profile", "the price check was deleted");
-    // There is no hook-length selector: the plan computes one and locks it.
+    // There is no hook-length selector and no total length: the template
+    // declares one and the render is that long in a single pass.
     expectAbsent(ctx, "Hooks run 2 to 6", "no hook length is chosen by hand");
+    expectAbsent(ctx, "10, 15, 20 or 30 seconds", "no length picker is offered");
+    expectAbsent(ctx, "one pass", "no render is described as a pass of a multi-pass plan");
+    expectAbsent(ctx, "segment by segment", "a video is no longer built from segments");
     // The template library redirects to /create and has no favourite toggle.
     expectAbsent(ctx, "Favourite", "no favourite UI exists");
     // Rejection is recorded on swap; there is no reject control anywhere.
@@ -981,18 +1460,44 @@ async function main() {
     // Trend aggregates now steer the strategy prompt, not only the research tab.
     expectAbsent(ctx, "Trend Research tab only", "trend data reaches generation now");
 
-    // Frame continuity. The only studio-eligible provider reports
-    // supports_last_frame: False, so video_providers.continuity_plan forces
-    // guarantee "text_only" and server.py nulls the seam frame — every
-    // extension really is held to a written scene description. The app says so
-    // honestly in GUARANTEE_COPY; these two landing strings used to promise the
-    // opposite, and one of them sits in FLOW_STEPS, a screen above PIPELINE, so
-    // correcting only the pipeline block would have left the lie on screen.
+    // The chain. "One Continuous Clip" claimed a single clip carrying a hook
+    // AND an ending, and the continuity block claimed each extension picked up
+    // from the last. Both described a workflow with several separately-rendered
+    // pieces and a seam between them; there is one render and no seam. One of
+    // these strings sits in FLOW_STEPS, a screen above PIPELINE, so correcting
+    // only the pipeline block would have left the claim on screen.
+    expectAbsent(ctx, "Hook and ending arrive in a single vertical clip", "there is no generated ending");
+    expectAbsent(ctx, "A second pass", "there is no second pass to stretch or replace a segment");
+    expectAbsent(ctx, "Each Piece Picks Up the Last", "there are no separate pieces to pick up from");
     expectAbsent(ctx, "last frame becomes the next first frame", "the seam frame is not sent");
     expectAbsent(ctx, "picks up from the last frame", "the seam frame is not sent");
-    // The honest replacement has to actually be there, or a future edit could
-    // satisfy the two checks above by deleting the claim outright.
-    expectText(ctx, "written description of the scene", "continuity is disclosed, not hidden");
+    expectAbsent(ctx, "written description of the scene", "there is no seam to describe around");
+    expectAbsent(ctx, "may drift", "no clip can drift from another, because there is only one");
+    // The honest replacements have to actually be there, or a future edit could
+    // satisfy the checks above by deleting the claims outright. The handoff is
+    // the disclosure that replaces the continuity claim: the generated video
+    // stops on purpose, and what follows it is the founder's own footage.
+    expectText(ctx, "The Middle Is Built to Stop", "the handoff is disclosed, not hidden");
+    expectText(ctx, "You attach the demo", "the demo is described as the founder's own recording");
+  });
+
+  // The call to action and the product demo are the two things the generated
+  // video does not contain, and both used to be advertised as features of it.
+  await check("Landing does not promise a call to action or a generated demo", async (ctx) => {
+    await mount(Landing)(ctx);
+    // The acronym was the affordance on screen: an end-card badge, a "CTA
+    // pattern" row, a close written into the copy. Spelling the phrase out to
+    // say the close is the founder's own is honest and stays.
+    expectAbsent(ctx, "CTA", "the acronym still appears as an offered capability");
+    expectAbsent(ctx, "end card", "the server no longer composes an end card");
+    expectAbsent(ctx, "end-card", "the server no longer composes an end card");
+    expectAbsent(ctx, "ready to post", "the render is not a finished, postable video");
+    expectAbsent(ctx, "No camera, no editor, no source footage", "the founder records the demo");
+    expectAbsent(ctx, "skip the shoot", "the founder records the demo");
+    // What the product actually delivers, and the handoff.
+    expectText(ctx, "A hook, and a middle", "the two sections are not described as features");
+    expectText(ctx, "You finish the video", "the assembly step is not described as the founder's");
+    expectText(ctx, "Record your demo", "the demo is described as the founder's own recording");
   });
 
   // An onboarding tour is invisible when its targets are missing, because
@@ -1124,12 +1629,24 @@ function stepPill(ctx, label) {
   return pill;
 }
 
+/** Click through to a wizard step the way a founder would, then settle. */
+async function openStep(ctx, label) {
+  const pill = stepPill(ctx, label);
+  await act(async () => {
+    pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+  });
+  await act(async () => {});
+}
+
 /** Swap api stub methods for the duration of one check, then restore them. */
 async function withApi(overrides, fn) {
   const originals = {};
   for (const [name, impl] of Object.entries(overrides)) {
     originals[name] = apiStub[name];
-    apiStub[name] = impl;
+    apiStub[name] = (...args) => {
+      apiCalls.push(name);
+      return impl(...args);
+    };
   }
   try {
     await fn();

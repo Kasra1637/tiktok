@@ -12,6 +12,12 @@
  * frontend package is CommonJS to Node and the module uses ESM exports.
  * Evaluating the real file means the assertions cannot drift from what ships.
  *
+ * The videoLength section was rewritten when a video became one render: the
+ * extend lock, the coverage counter and the multi-pass trim math it asserted are
+ * gone from the product, and the checks that protected real properties were
+ * re-pointed at the checks that protect the same properties now. The specific
+ * substitutions are called out where they are made.
+ *
  * Run: node scripts/check-frontend-logic.cjs
  */
 const fs = require("fs");
@@ -53,9 +59,11 @@ function loadModule(src = SRC) {
 }
 
 const L = loadModule();
-// MiniMax H3 is the only provider: 5s floor, 15s ceiling. WIDE is a generic
-// wide-range capability kept so the floor/trim math is still asserted against
-// two shapes instead of one.
+// MiniMax H3 is the only studio-eligible model, and it is the only one these
+// helpers are predicting against. WIDE is a hypothetical longer-range
+// capability, kept so the ceiling math is asserted against two shapes instead
+// of one — which is the point: the helpers must read the ceiling off the
+// capability rather than hard-code 15.
 const WIDE = { min_duration: 4, max_duration: 30 };
 const MINIMAX = { min_duration: 5, max_duration: 15 };
 
@@ -63,70 +71,257 @@ console.log("=".repeat(70));
 console.log("frontend/src/lib/videoLength.js");
 console.log("=".repeat(70));
 
-console.log("\nreadExtendIntent — the toggle that could never turn off");
-// The API returns a real boolean (server.py _public_project -> != 0).
-check("true stays on", L.readExtendIntent({ extend_intent: true }) === true);
-check("false reads as OFF", L.readExtendIntent({ extend_intent: false }) === false);
-// The regression, stated as a test: the old code was `=== 0 ? false : true`.
-check("false is not mistaken for 0", L.readExtendIntent({ extend_intent: false }) !== true);
-check("unset defaults to on", L.readExtendIntent({}) === true);
-check("null project defaults to on", L.readExtendIntent(null) === true);
-// A legacy row that somehow still carries an int must also read correctly.
-check("legacy integer 0 reads as OFF", L.readExtendIntent({ extend_intent: 0 }) === false);
-check("legacy integer 1 reads as ON", L.readExtendIntent({ extend_intent: 1 }) === true);
+// ---------------------------------------------------------------------------
+// DEFAULT_DURATION
+// ---------------------------------------------------------------------------
+// The property the old `a fresh wizard starts on a single-pass length` check
+// protected, at the level it now lives. The founder no longer picks a length, so
+// there is no "default the user starts on" — there is a fallback the product
+// uses when neither the project nor the template states one, and it has to be a
+// length the one eligible model can actually render in a single pass.
+console.log("\nDEFAULT_DURATION - the fallback, not a user choice");
+check("it is 10s", L.DEFAULT_DURATION === 10, L.DEFAULT_DURATION);
+check("the fallback is inside the only eligible model's single pass",
+  !L.exceedsSinglePass(L.DEFAULT_DURATION, MINIMAX), L.DEFAULT_DURATION);
+check("the fallback is also inside a longer model's single pass",
+  !L.exceedsSinglePass(L.DEFAULT_DURATION, WIDE), L.DEFAULT_DURATION);
+check("it is a real number, not a string the template math would swallow",
+  Number.isFinite(L.DEFAULT_DURATION), typeof L.DEFAULT_DURATION);
 
-console.log("\nresolveExtendLock — computed, recommended, locked");
-check("next planned beat resolves straight through",
-  JSON.stringify(L.resolveExtendLock(6, 20, WIDE)) === JSON.stringify({ seconds: 6, planned: 6, render: 6, trimTo: 0 }),
-  L.resolveExtendLock(6, 20, WIDE));
-check("a remainder smaller than the beat wins (automatic fill)",
-  JSON.stringify(L.resolveExtendLock(8, 3, WIDE)) === JSON.stringify({ seconds: 3, planned: 3, render: 4, trimTo: 3 }),
-  L.resolveExtendLock(8, 3, WIDE));
-check("a 3s beat on Seedance records its trim",
-  JSON.stringify(L.resolveExtendLock(3, 0, WIDE)) === JSON.stringify({ seconds: 3, planned: 3, render: 4, trimTo: 3 }),
-  L.resolveExtendLock(3, 0, WIDE));
-check("no plan and no remainder is null, never NaN",
-  L.resolveExtendLock(0, 0, WIDE) === null,
-  L.resolveExtendLock(0, 0, WIDE));
-check("a remainder beyond one pass is null, not guessed",
-  L.resolveExtendLock(0, 20, MINIMAX) === null,
-  L.resolveExtendLock(0, 20, MINIMAX));
-check("garbage inputs are null, never NaN",
-  L.resolveExtendLock("junk", null, WIDE) === null,
-  L.resolveExtendLock("junk", null, WIDE));
-// Whatever comes out must survive JSON, or the server silently substitutes.
-for (const args of [[6, 20], [8, 3], [3, 0]]) {
-  const r = L.resolveExtendLock(args[0], args[1], WIDE);
-  const round = JSON.parse(JSON.stringify(r));
-  check(`[${args}] survives a JSON round trip`,
-    round !== null && Number.isFinite(round.seconds), round);
+console.log("\nDEFAULT_DURATION - the old helper it replaced is really gone");
+// Not a style rule. `resolveExtendLock` and `plannedCoverage` were the two
+// exports that only existed to govern repeated extension, and both read fields
+// the server deleted. Left in place they would be callable, and the first person
+// to call one would get a confident null or a number computed from
+// `max_planned_index`, which no longer exists on any strategy.
+for (const retired of ["resolveExtendLock", "plannedCoverage", "readExtendIntent", "highestSegmentIndex"]) {
+  check(`${retired} is no longer exported`, L[retired] === undefined, L[retired]);
 }
 
-console.log("\nresolveLength");
-check("3s on Seedance renders 4 and trims to 3",
-  JSON.stringify(L.resolveLength(3, WIDE)) === JSON.stringify({ target: 3, render: 4, trimTo: 3 }),
-  L.resolveLength(3, WIDE));
-check("4s on Seedance needs no trim",
-  JSON.stringify(L.resolveLength(4, WIDE)) === JSON.stringify({ target: 4, render: 4, trimTo: 0 }),
-  L.resolveLength(4, WIDE));
-check("4s on MiniMax renders 5 and trims to 4",
-  JSON.stringify(L.resolveLength(4, MINIMAX)) === JSON.stringify({ target: 4, render: 5, trimTo: 4 }),
-  L.resolveLength(4, MINIMAX));
-check("a 0 or missing target never becomes a 1s clip",
-  L.resolveLength(0, WIDE).render === 4, L.resolveLength(0, WIDE));
+console.log("\n" + "-".repeat(70));
+console.log("The hook is a boundary, not a clip");
+console.log("-".repeat(70));
 
-console.log("\nplannedCoverage");
-check("a fresh 8-beat plan with 1 segment reports 7",
-  L.plannedCoverage([{ segment_index: 0 }], { max_planned_index: 7 }) === 7,
-  L.plannedCoverage([{ segment_index: 0 }], { max_planned_index: 7 }));
-check("3 segments used of 8 reports 5",
-  L.plannedCoverage([{ segment_index: 0 }, { segment_index: 1 }, { segment_index: 2 }],
-    { max_planned_index: 7 }) === 5);
-check("an old strategy with no coverage field is unknown, not zero",
-  L.plannedCoverage([{ segment_index: 0 }], {}) === null,
-  L.plannedCoverage([{ segment_index: 0 }], {}));
-check("never goes negative",
-  L.plannedCoverage([{ segment_index: 0 }], { max_planned_index: 2 }) === 2);
+// The replacement for `readExtendIntent`, which read a field the server deleted.
+// Same failure shape it was written for — a raw SQLite integer leaking through
+// where a boolean was expected — except the field is now a length, and the
+// server's answer to an out-of-range value is to CLAMP it rather than reject
+// the save. A UI that trusted its own stored number could therefore display a
+// 9s hook the server had already moved to 4s, and nothing downstream would
+// catch it.
+console.log("\nclampHookSeconds - the boundary the backend will actually use");
+check("3s is left alone", L.clampHookSeconds(3) === 3, L.clampHookSeconds(3));
+check("2s is left alone", L.clampHookSeconds(2) === 2, L.clampHookSeconds(2));
+check("4s is left alone", L.clampHookSeconds(4) === 4, L.clampHookSeconds(4));
+check("5s is pulled down to the ceiling", L.clampHookSeconds(5) === 4, L.clampHookSeconds(5));
+check("9s is pulled down to the ceiling, not refused",
+  L.clampHookSeconds(9) === 4, L.clampHookSeconds(9));
+check("1s is pulled up to the floor", L.clampHookSeconds(1) === 2, L.clampHookSeconds(1));
+check("a negative length becomes 0, which means 'follow the template'",
+  L.clampHookSeconds(-4) === 0, L.clampHookSeconds(-4));
+// Zero is the sentinel that means "decide from the template", so it must not be
+// clamped UP to the floor. A 2 would silently override every template's own
+// hook length, which is the one thing the field is allowed to defer on.
+check("0 stays 0 rather than becoming the floor",
+  L.clampHookSeconds(0) === 0, L.clampHookSeconds(0));
+check("a missing value is 0, not NaN", L.clampHookSeconds(undefined) === 0);
+check("null is 0, not NaN", L.clampHookSeconds(null) === 0);
+check("garbage is 0, not NaN", L.clampHookSeconds("junk") === 0, L.clampHookSeconds("junk"));
+check("a legacy string integer still clamps",
+  L.clampHookSeconds("9") === 4, L.clampHookSeconds("9"));
+check("a 2.6s boundary rounds to a whole second",
+  L.clampHookSeconds(2.6) === 3, L.clampHookSeconds(2.6));
+check("the floor and ceiling are the numbers the server uses",
+  L.MIN_HOOK_SECONDS === 2 && L.MAX_HOOK_SECONDS === 4,
+  { min: L.MIN_HOOK_SECONDS, max: L.MAX_HOOK_SECONDS });
+check("the default boundary is inside the range",
+  L.clampHookSeconds(L.DEFAULT_HOOK_SECONDS) === L.DEFAULT_HOOK_SECONDS,
+  L.DEFAULT_HOOK_SECONDS);
+
+console.log("\n" + "-".repeat(70));
+console.log("The length is computed, so it is read rather than chosen");
+console.log("-".repeat(70));
+
+// New surface: this is the read-only statement the "Audience & goal" step
+// renders. The property it has to hold is that every branch produces a usable
+// number, because a NaN here does not fail a render — it prints "NaN seconds" in
+// the one sentence telling the founder what they are about to get.
+console.log("\nreadPieceSeconds - the project's own number wins");
+const TEMPLATE_T = { id: "t1", default_duration: 12 };
+check("a project at 10s reads 10s", L.readPieceSeconds({ duration_seconds: 10 }, TEMPLATE_T) === 10);
+check("a project at 15s reads 15s even against a 12s template",
+  L.readPieceSeconds({ duration_seconds: 15 }, TEMPLATE_T) === 15);
+// Before a project exists the template's declared length is not a guess, it is
+// literally what create_studio_project will seed the project from.
+check("with no project the template's declared length is used",
+  L.readPieceSeconds(null, TEMPLATE_T) === 12, L.readPieceSeconds(null, TEMPLATE_T));
+check("with neither, the library default is used",
+  L.readPieceSeconds(null, null) === L.DEFAULT_DURATION);
+check("a project with no length yet falls through to the template",
+  L.readPieceSeconds({ duration_seconds: 0 }, TEMPLATE_T) === 12);
+check("a template with no declared length falls through to the default",
+  L.readPieceSeconds(null, { id: "t1" }) === L.DEFAULT_DURATION);
+check("a null project and a null template are safe",
+  L.readPieceSeconds(null, null) === L.DEFAULT_DURATION);
+check("no arguments at all is safe", L.readPieceSeconds() === L.DEFAULT_DURATION);
+check("a string length is coerced, not concatenated",
+  L.readPieceSeconds({ duration_seconds: "12" }, null) === 12,
+  L.readPieceSeconds({ duration_seconds: "12" }, null));
+check("garbage lengths never reach the copy",
+  L.readPieceSeconds({ duration_seconds: "junk" }, TEMPLATE_T) === 12,
+  L.readPieceSeconds({ duration_seconds: "junk" }, TEMPLATE_T));
+for (const bad of [null, 0, -5, "x", undefined, NaN]) {
+  const got = L.readPieceSeconds({ duration_seconds: bad }, TEMPLATE_T);
+  check(`a length of ${JSON.stringify(bad)} still yields a positive number`,
+    Number.isFinite(got) && got > 0, got);
+}
+
+console.log("\n" + "-".repeat(70));
+console.log("The replacement for the extend lock");
+console.log("-".repeat(70));
+
+// The property `resolveExtendLock` was asserting — "a remainder beyond one pass
+// is null, not guessed" — is real and still load-bearing. What changed is who
+// enforces it: the extend lock refused to offer a second step, and there is no
+// second step, so the endpoint refuses the whole request with a 400. The UI's
+// job is now to say so before the click rather than to compute a step.
+console.log("\nsinglePassCeiling - read off the model, never assumed");
+check("15s on MiniMax", L.singlePassCeiling(MINIMAX) === 15, L.singlePassCeiling(MINIMAX));
+check("30s on a longer model", L.singlePassCeiling(WIDE) === 30, L.singlePassCeiling(WIDE));
+check("an unknown capability is 0, not a hard-coded 15",
+  L.singlePassCeiling(null) === 0, L.singlePassCeiling(null));
+check("a missing capability is 0", L.singlePassCeiling({}) === 0);
+check("a non-numeric ceiling is 0", L.singlePassCeiling({ max_duration: "lots" }) === 0);
+check("a zero or negative ceiling is 0", L.singlePassCeiling({ max_duration: 0 }) === 0);
+
+console.log("\nexceedsSinglePass - the refusal the endpoint will make");
+check("10s on MiniMax fits", L.exceedsSinglePass(10, MINIMAX) === false);
+check("15s on MiniMax is exactly the ceiling and still fits",
+  L.exceedsSinglePass(15, MINIMAX) === false);
+check("16s on MiniMax does not fit", L.exceedsSinglePass(16, MINIMAX) === true);
+check("30s on MiniMax does not fit", L.exceedsSinglePass(30, MINIMAX) === true);
+check("30s on a 30s model fits", L.exceedsSinglePass(30, WIDE) === false);
+check("31s on a 30s model does not", L.exceedsSinglePass(31, WIDE) === true);
+// Every length the facets endpoint offers is one render, which is the invariant
+// that replaced the old "a length that costs more than one render says so up
+// front" label check. A new supported length that needs two passes would break
+// the product, so it is asserted here against the real set.
+for (const d of [8, 10, 12, 15]) {
+  check(`${d}s is one render on the only eligible model`,
+    L.exceedsSinglePass(d, MINIMAX) === false, d);
+}
+// Fail OPEN on an unknown ceiling. The one thing this must never do is block a
+// render the model would have accepted: a hard-coded fallback would tell a
+// founder their 20s video is impossible when the only studio-eligible model was
+// swapped for a longer one, which is a false refusal, and the server is the
+// authority anyway.
+check("an unknown ceiling never blocks a render",
+  L.exceedsSinglePass(60, null) === false, L.exceedsSinglePass(60, null));
+check("garbage against an unknown ceiling never blocks",
+  L.exceedsSinglePass("junk", {}) === false);
+check("a zero length never trips the guard", L.exceedsSinglePass(0, MINIMAX) === false);
+check("a negative length never trips the guard", L.exceedsSinglePass(-9, MINIMAX) === false);
+
+console.log("\n" + "-".repeat(70));
+console.log("Two sections, in render order");
+console.log("-".repeat(70));
+
+console.log("\nsectionSplit - the two numbers the founder is shown");
+const split = L.sectionSplit(10, 3);
+check("a 10s piece with a 3s hook splits 3 / 7",
+  JSON.stringify(split) === JSON.stringify({ hookSeconds: 3, middleSeconds: 7 }), split);
+check("the two sections always add up to the piece",
+  split.hookSeconds + split.middleSeconds === 10, split);
+// The regression a naive subtraction would ship: a hand-edited or legacy
+// boundary longer than the piece produces a negative middle, which reads on
+// screen as though the product had already filmed footage it does not have.
+check("a boundary longer than the piece never yields a negative middle",
+  L.sectionSplit(8, 12).middleSeconds === 0, L.sectionSplit(8, 12));
+check("a boundary longer than the piece is itself pulled back to it",
+  L.sectionSplit(8, 12).hookSeconds === 8, L.sectionSplit(8, 12));
+check("a zero boundary leaves the whole piece as middle",
+  JSON.stringify(L.sectionSplit(10, 0)) === JSON.stringify({ hookSeconds: 0, middleSeconds: 10 }),
+  L.sectionSplit(10, 0));
+check("a piece with no boundary is all middle, not NaN",
+  L.sectionSplit(10, null).middleSeconds === 10, L.sectionSplit(10, null));
+check("a missing piece is all zeroes, never NaN",
+  JSON.stringify(L.sectionSplit(null, 3)) === JSON.stringify({ hookSeconds: 0, middleSeconds: 0 }),
+  L.sectionSplit(null, 3));
+check("garbage on both sides is all zeroes, never NaN",
+  JSON.stringify(L.sectionSplit("x", "y")) === JSON.stringify({ hookSeconds: 0, middleSeconds: 0 }),
+  L.sectionSplit("x", "y"));
+for (const [piece, hook] of [[10, 3], [8, 2], [15, 4], [8, 12], [10, 0]]) {
+  const s = L.sectionSplit(piece, hook);
+  check(`[${piece}, ${hook}] survives a JSON round trip`,
+    Number.isFinite(s.hookSeconds) && Number.isFinite(s.middleSeconds), s);
+}
+
+console.log("\n" + "-".repeat(70));
+console.log("plannedSections - the two the render actually produces");
+console.log("-".repeat(70));
+
+// The replacement for the `plannedCoverage` checks. Those answered "how many more
+// beats can this finite plan produce", which was a question about a chain. The
+// property that still matters is sharper: whatever the strategy says, the review
+// surface shows exactly two sections, in render order, and never a role the
+// product does not generate.
+const TWO = [
+  { index: 0, role: "hook", seconds: 3, goal: "stop the scroll", script: "You do not have a focus problem.", action: "look up" },
+  { index: 1, role: "middle", seconds: 7, goal: "develop it, stop at the reach", script: "You have too many lists.", action: "count on fingers" },
+];
+const shown = L.plannedSections({ segments: TWO });
+check("a well-formed strategy shows two sections", shown.length === 2, shown.length);
+check("the first is the hook", shown[0].role === "hook", shown[0].role);
+check("the second is the middle", shown[1].role === "middle", shown[1].role);
+check("the seconds survive", shown[0].seconds === 3 && shown[1].seconds === 7, shown);
+check("the goal, script and action survive",
+  shown[1].goal === "develop it, stop at the reach" && shown[1].action === "count on fingers",
+  shown[1]);
+check("the roles come from position, not from the model",
+  L.plannedSections({ segments: [{ role: "cta" }, { role: "fix" }] }).map((s) => s.role).join() === "hook,middle",
+  L.plannedSections({ segments: [{ role: "cta" }, { role: "fix" }] }).map((s) => s.role));
+// A strategy saved by a model that remembered the old eight-beat shape is the
+// case that matters. Truncating alone is not enough — the eighth beat's role is
+// "cta", and the render prompt reads the role.
+const LEGACY = [
+  { role: "hook", seconds: 5, goal: "hook it" },
+  { role: "problem", seconds: 6, goal: "state it" },
+  { role: "fix", seconds: 7, goal: "solve it" },
+  { role: "cta", seconds: 4, goal: "close it" },
+  { role: "cta", seconds: 4, goal: "close harder" },
+];
+const fromLegacy = L.plannedSections({ segments: LEGACY });
+check("an old eight-beat strategy is shown as two sections", fromLegacy.length === 2, fromLegacy.length);
+check("no retired role survives", fromLegacy.every((s) => s.role === "hook" || s.role === "middle"),
+  fromLegacy.map((s) => s.role));
+check("a legacy 'cta' goal is not rendered as a close of its own",
+  !fromLegacy.some((s) => s.role === "cta"), fromLegacy.map((s) => s.role));
+check("the two sections take the first two beats, in order",
+  fromLegacy[0].goal === "hook it" && fromLegacy[1].goal === "state it",
+  fromLegacy.map((s) => s.goal));
+check("no strategy at all still renders two rows",
+  L.plannedSections({}).length === 2, L.plannedSections({}));
+check("a null strategy still renders two rows", L.plannedSections(null).length === 2);
+check("no arguments at all still renders two rows", L.plannedSections().length === 2);
+check("a non-array segments value is safe",
+  L.plannedSections({ segments: "junk" }).length === 2, L.plannedSections({ segments: "junk" }));
+check("a shorter list is padded, not truncated to one",
+  L.plannedSections({ segments: [{ role: "hook", seconds: 3 }] }).length === 2);
+check("the padded middle is empty rather than undefined",
+  L.plannedSections({ segments: [{ role: "hook", seconds: 3 }] })[1].goal === "");
+check("a missing middle is present with zero seconds",
+  L.plannedSections({ segments: [{ role: "hook", seconds: 3 }] })[1].seconds === 0);
+check("a non-dict beat does not throw",
+  L.plannedSections({ segments: [null, "junk"] }).length === 2);
+check("missing seconds are 0, not NaN",
+  L.plannedSections({ segments: [{}, {}] }).every((s) => Number.isFinite(s.seconds) &&
+    Number.isFinite(s.seconds)),
+  L.plannedSections({ segments: [{}, {}] }).map((s) => s.seconds));
+check("garbage seconds are 0, not NaN",
+  L.plannedSections({ segments: [{ seconds: "junk" }] })[0].seconds === 0,
+  L.plannedSections({ segments: [{ seconds: "junk" }] })[0].seconds);
+check("every section is index-labelled in render order",
+  shown[0].index === 0 && shown[1].index === 1, shown.map((s) => s.index));
 
 console.log("\n" + "=".repeat(70));
 console.log("frontend/src/lib/profileSelection.js");
@@ -355,7 +550,7 @@ check("a non-array requirement never blocks",
 
 console.log("\n" + "=".repeat(70));
 if (failures.length === 0) {
-  console.log("All frontend length/intent logic behaves correctly.");
+  console.log("All frontend length/section logic behaves correctly.");
 } else {
   console.log(`${failures.length} FAILURE(S):`);
   failures.forEach((f) => console.log(`  - ${f}`));

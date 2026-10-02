@@ -23,7 +23,12 @@ import {
   requiredAssetStatus,
   blockingRequirements,
 } from "../lib/templateRequirements";
-import { DEFAULT_HOOK, DEFAULT_DURATION } from "../lib/videoLength";
+import {
+  readPieceSeconds,
+  sectionSplit,
+  clampHookSeconds,
+  DEFAULT_HOOK_SECONDS,
+} from "../lib/videoLength";
 import {
   Clapperboard, Loader2, AlertTriangle, Briefcase, Target, LayoutTemplate,
   Image as ImageIcon, FileText, Check, Sparkles, RefreshCw,
@@ -33,10 +38,10 @@ import { toast } from "sonner";
 
 // The order is the product, and it is deliberate.
 //
-//   profile -> angle -> template -> assets -> plan -> review -> hook
+//   profile -> angle -> template -> assets -> plan -> review -> hook & middle
 //
 // The script is written, checked for banned claims and read by the founder
-// BEFORE any video is paid for. The hook step then renders the video that
+// BEFORE any video is paid for. The last step then renders the piece that
 // script describes: the strategy is built from the approved plan, so the words
 // the founder read are the words that get rendered.
 //
@@ -53,7 +58,11 @@ const STEPS = [
   { key: "review", label: "Review", icon: CheckCircle2 },
   // Last, because this is the only step that spends money. The plan above is
   // free text, and it is what this step renders.
-  { key: "hook", label: "Influencer hook", icon: Sparkles },
+  //
+  // Named for what it produces rather than for the old hook-first workflow: one
+  // render containing a hook and a middle. The demo and the close are the
+  // founder's own footage, added afterwards in their editor.
+  { key: "hook", label: "Hook & middle", icon: Sparkles },
 ];
 
 function formatTemplateUse(n) {
@@ -150,6 +159,47 @@ function RecommendationCard({ r, selected, onSelect }) {
 
 function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * The middle's curated structure, under whichever name the row still carries.
+ *
+ * `middle_structure` replaced `continuation_structure` and a separate
+ * `cta_pattern`: the old pair described a chain with a closing beat, which is
+ * not what a template declares any more. Rows seeded before the change still
+ * carry the retired name, and the backend reads it as a fallback for the same
+ * reason. Reading only the new name would leave those templates showing a blank
+ * where the curated middle lives, which reads as a template with nothing after
+ * its opening.
+ */
+function middleStructure(template) {
+  return String(template?.middle_structure || template?.continuation_structure || "");
+}
+
+/**
+ * The shape of the piece a template produces: its length, its two section
+ * lengths, and the curated middle.
+ *
+ * Shown on the template card because the template is where the length comes
+ * from. A founder choosing between two openings is also choosing between two
+ * lengths, and a picker on the step after this used to make that look
+ * independent. The numbers are the ones the project will be seeded with, so
+ * nothing on the later steps can quietly disagree.
+ */
+function TemplateShape({ template }) {
+  const total = readPieceSeconds(null, template);
+  const hook = clampHookSeconds(template?.hook_seconds) || DEFAULT_HOOK_SECONDS;
+  const split = sectionSplit(total, hook);
+  const middle = middleStructure(template);
+  return (
+    <div className="mt-2 space-y-1">
+      <p className="text-xs">
+        <span className="font-medium">{total}s piece</span>: a {split.hookSeconds}s hook, then a{" "}
+        {split.middleSeconds}s middle.
+      </p>
+      {middle && <p className="text-xs text-muted-foreground">{middle}</p>}
+    </div>
+  );
 }
 
 /**
@@ -347,19 +397,12 @@ export default function CreateVideo() {
   const [angleId, setAngleId] = useState(params.get("angle") || "");
   const [templateId, setTemplateId] = useState(params.get("template") || "");
   const [objective, setObjective] = useState("");
-  // Seeded to the shortest supported length, not the library default of 20s:
-  // every segment past the first is another paid render, and no studio-eligible
-  // model can do 20s in one pass today. Ten seconds is a first video that costs
-  // one render and is actually finishable, so the founder can learn the flow
-  // before spending on a two-pass target. The library default is left alone --
-  // it also sets the length of a project created with no explicit request.
-  const [duration, setDuration] = useState(DEFAULT_DURATION);
-  // Whether this video is only the opening hook or a hook plus an extension.
-  // Declared here, on the step that sets the target, because the total length
-  // below only means something once this is answered. Seeded to true to match
-  // readExtendIntent() on the server and in lib/videoLength.js, so a fresh
-  // wizard and an existing draft agree on what "unset" means.
-  const [extendIntent, setExtendIntent] = useState(true);
+  // There is no length state and no intent state any more, and that is the
+  // whole point of this step's current shape. Duration is computed: a template
+  // declares the length its mechanic suits, the project seeds from it, and the
+  // render is that long in one pass. `extendIntent` ("hook only" versus "extend
+  // into a full video") asked a question about a chain that no longer exists —
+  // there is no hook-only render to choose between.
   const [tone, setTone] = useState("");
   const [edits, setEdits] = useState({});
 
@@ -399,7 +442,6 @@ export default function CreateVideo() {
             setAngleId(draft.content_angle_id || "");
             setTemplateId(draft.template_id || "");
             setObjective(draft.objective || "");
-            setDuration(draft.duration_seconds || 20);
             setTone(draft.tone || "");
             setRecommendations([]);
             setEdits({});
@@ -556,9 +598,16 @@ export default function CreateVideo() {
     setBusy(true);
     setError(null);
     try {
-      // On the update path duration_seconds is left to the plan step, which
-      // writes it together with the beat timeline built for it. Sending it here
-      // would be refused once a plan exists.
+      // Neither duration_seconds nor extend_intent is sent, on either path.
+      //
+      // The length is the template's: create_studio_project reads
+      // `default_duration` off the template the founder just picked and seeds
+      // the project from it, so sending a number here could only be a stale
+      // copy of a decision the founder is not making. The two columns this used
+      // to write are still in the SQLite schema and are still accepted on the
+      // request model, so an old payload would be accepted and silently
+      // discarded — which is exactly the kind of write that looks like it did
+      // something and did nothing.
       const created = project?.id
         ? await api.updateStudioProject(project.id, {
             content_angle_id: angleId || "",
@@ -572,8 +621,6 @@ export default function CreateVideo() {
             content_angle_id: angleId || "",
             template_id: templateId || "",
             objective,
-            duration_seconds: duration,
-            extend_intent: extendIntent,
             tone,
           });
       setProject(created);
@@ -587,27 +634,10 @@ export default function CreateVideo() {
   };
 
   /**
-   * Hook only, or hook plus an extension.
-   *
-   * The draft usually does not exist yet on this step, so the choice is held
-   * locally and written when the project is created. Once a draft does exist the
-   * local value is only a prediction, so it is PATCHed straight through — the
-   * hook step reads the same field and must not disagree with this screen.
-   */
-  const handleExtendIntent = (value) => {
-    setExtendIntent(value);
-    if (!project?.id) return;
-    api
-      .setProjectExtendIntent(project.id, value)
-      .then(setProject)
-      .catch((err) => setError(getErrorMessage(err)));
-  };
-
-  /**
    * Make sure a draft exists without the founder having to ask.
    *
-   * The Influencer hook step writes to a studio project, and the hook is meant
-   * to be validated BEFORE the plan is written. Previously the project was only
+   * The render step writes to a studio project, and the plan is meant to be
+   * validated BEFORE anything is paid for. Previously the project was only
    * created by the plan step, which forced the Assets step to carry a manual
    * "Create draft" button purely to get out of the way.
    *
@@ -629,11 +659,12 @@ export default function CreateVideo() {
         ) {
           return project;
         }
-        // duration_seconds is deliberately NOT sent here. The plan step passes
-        // it to generatePlan, which writes it in the same statement as the beat
-        // timeline it clamped to that length. Patching it separately would
-        // either be refused (the plan already exists) or land a length the
-        // timeline does not match.
+        // duration_seconds is deliberately NOT sent here, and neither is
+        // anything else that would move the length. The project already carries
+        // the length it was seeded with, and once a plan exists the server
+        // refuses a change to it outright — the beats in the shot timeline were
+        // clamped to that number, so a separate write could only produce a
+        // timeline that no longer adds up.
         const updated = await api.updateStudioProject(project.id, {
           content_angle_id: angleId || "",
           template_id: templateId || "",
@@ -648,8 +679,6 @@ export default function CreateVideo() {
         content_angle_id: angleId || "",
         template_id: templateId || "",
         objective,
-        duration_seconds: duration,
-        extend_intent: extendIntent,
         tone,
       });
       setProject(created);
@@ -657,11 +686,11 @@ export default function CreateVideo() {
     } catch (err) {
       // A failure here is not fatal: the plan step still creates the draft and
       // surfaces the error properly. Swallowing it here would just show an
-      // empty hook step with no explanation.
+      // empty render step with no explanation.
       setError(getErrorMessage(err));
       return null;
     }
-  }, [profileId, templateId, angleId, objective, duration, extendIntent, tone, project]);
+  }, [profileId, templateId, angleId, objective, tone, project]);
 
   const handleGeneratePlan = async () => {
     const ready = await createProject();
@@ -682,12 +711,11 @@ export default function CreateVideo() {
       }
       const updated = await api.generatePlan(ready.id, {
         objective,
-        duration_seconds: duration,
         tone,
       });
       setProject(updated);
       setEdits({});
-      // Straight to Review: the plan is the thing to read, and the hook step
+      // Straight to Review: the plan is the thing to read, and the render step
       // below it is the first one that spends money.
       setStep(5);
     } catch (err) {
@@ -758,11 +786,22 @@ export default function CreateVideo() {
   // into canGenerate, because "you have not chosen a template yet" and "you
   // still owe this template a photograph" are different problems.
   const blockedOnAssets = Boolean(template) && missingIdentity.length > 0;
-  // How many paid renders the chosen total length costs. The server sends the
-  // real per-duration count in the facets payload, derived from the default
-  // studio model's single-pass ceiling; 1 is the fallback for an older response
-  // that predates the field.
-  const extendPasses = facets?.duration_segments?.[duration] || 1;
+  // What the generated piece is and how long it will be — a statement, not a
+  // control. Once a project exists its own number is the authority, because
+  // that is the length the plan's beat timeline was written to and the length
+  // the render is asked for. Before that, the selected template's declared
+  // length is what the project will be seeded from, so showing it predicts the
+  // same value rather than offering a second one.
+  //
+  // The hook is a boundary inside the piece, not a separate clip: it is where
+  // the middle begins, clamped to 2-4s because a hook that needs longer to land
+  // is not a hook. The middle gets whatever is left, which is why the two
+  // numbers below always add up to the piece.
+  const pieceSeconds = readPieceSeconds(project, template);
+  const hookBoundary = clampHookSeconds(
+    project?.hook_seconds || template?.hook_seconds || DEFAULT_HOOK_SECONDS
+  );
+  const pieceSplit = sectionSplit(pieceSeconds, hookBoundary);
 
   const editValue = (key, fallback) =>
     edits[key] !== undefined ? edits[key] : project?.[key] ?? fallback;
@@ -770,9 +809,8 @@ export default function CreateVideo() {
 
   // Tone is editable here and also seeds the plan, so a change has to move
   // both or going back and regenerating would silently reinstate the old value.
-  // Duration is deliberately NOT editable here: the plan's beat timeline is
-  // built for the length it was generated at, so the number belongs to the step
-  // that chooses it, before the plan exists.
+  // Length has no editor on this step at all, editable or otherwise: it is the
+  // template's number, and the plan's beat timeline is built to it.
   const editTone = (value) => {
     setTone(value);
     setEdits((prev) => ({ ...prev, tone: value }));
@@ -920,105 +958,48 @@ export default function CreateVideo() {
               )}
             </div>
 
-            {/* Declared intent, moved here from the hook step. It sits directly
-                above the target because it decides whether a total length is a
-                real choice or a number that would be ignored. */}
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">What happens after the hook</label>
-              <div className="grid gap-1.5 sm:grid-cols-2">
-                {[
-                  { value: true, label: "Extend into a full video", hint: "Sets a total length the video works up to." },
-                  { value: false, label: "Just the hook for now", hint: "The hook length is the whole video. You can extend later." },
-                ].map((option) => (
-                  <button
-                    key={String(option.value)}
-                    type="button"
-                    onClick={() => handleExtendIntent(option.value)}
-                    disabled={Boolean(busy)}
-                    aria-pressed={extendIntent === option.value}
-                    className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
-                      extendIntent === option.value
-                        ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
-                        : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
-                    }`}
-                  >
-                    <span className="block font-medium">{option.label}</span>
-                    <span className="mt-0.5 block text-muted-foreground">{option.hint}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* One column until there is a total length to sit beside, so a
-                hook-only video does not leave a hole next to the objective. */}
-            <div
-              className={`grid grid-cols-1 gap-4 ${extendIntent ? "sm:grid-cols-2" : ""}`}
-            >
-              <div className="space-y-1.5">
-                <label htmlFor="objective" className="text-sm font-medium">Objective</label>
-                <select
-                  id="objective"
-                  value={objective}
-                  onChange={(e) => setObjective(e.target.value)}
-                  className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
-                >
-                  <option value="">Choose an objective</option>
-                  {(facets?.objectives || []).map((o) => (
-                    <option key={o} value={o}>{humanize(o)}</option>
-                  ))}
-                </select>
-              </div>
-              {extendIntent && (
-                <div className="space-y-1.5">
-                  <label htmlFor="duration" className="text-sm font-medium">Total video length</label>
-                  <select
-                    id="duration"
-                    value={duration}
-                    onChange={(e) => setDuration(Number(e.target.value))}
-                    className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
-                  >
-                    {(facets?.supported_durations || [10, 15, 20, 30]).map((d) => {
-                      const passes = facets?.duration_segments?.[d] || 1;
-                      return (
-                        <option key={d} value={d}>
-                          {passes > 1
-                            ? `${d} seconds — ${passes} segments`
-                            : `${d} seconds — one pass`}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  {/* Each segment past the first is another paid render, so the
-                      count is stated at the point of choosing rather than left
-                      for the founder to discover at the extend button. */}
-                  {extendPasses > 1 && (
-                    <p className="text-xs text-muted-foreground">
-                      {duration}s is {extendPasses} segments, so {extendPasses} paid renders:
-                      the opening, then one per extension. The plan may run out of
-                      beats before you reach the target.
-                    </p>
-                  )}
-                  {/* Changing this after a plan exists makes the plan's beat
-                      timeline wrong rather than the plan's text, so it is said
-                      out loud instead of leaving a founder to save an edit that
-                      silently does nothing. */}
-                  {project?.script_version > 0 && duration !== editValue("duration_seconds", DEFAULT_DURATION) && (
-                    <p className="text-xs text-muted-foreground">
-                      A plan already exists at {editValue("duration_seconds", DEFAULT_DURATION)}s. Regenerate it
-                      on the Creative plan step to write the shot timeline to {duration}s.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {!extendIntent && (
-              <p className="text-xs text-muted-foreground">
-                You are making a {DEFAULT_HOOK}s hook and nothing more, so there is no total
-                length to choose — the hook length is the whole video. You can switch to a full
-                video above at any point, and the hook you have already made carries over.
+            {/* What gets generated, stated rather than chosen.
+                The two controls this used to sit between — a "what happens
+                after the hook" toggle and a total-length picker — are both gone,
+                and neither had anything left to decide. There is no hook-only
+                render to choose against a full one, and the length is the
+                template's: a template declares the length its mechanic suits, the
+                project seeds from it, and the render is that long in one pass.
+                A picker here would also have been a trap, because the plan's
+                beat timeline is written to whatever number was showing, so
+                changing it after the plan existed would leave a timeline that no
+                longer added up. */}
+            <div className="space-y-1.5 rounded-xl border border-[color:var(--hairline)] p-4">
+              <span className="text-sm font-medium">What you get</span>
+              <p className="text-sm">
+                One render of {pieceSeconds}s in two sections: a {pieceSplit.hookSeconds}s hook,
+                then a {pieceSplit.middleSeconds}s middle that develops it and stops at the moment
+                you would reach for your phone.
               </p>
-            )}
+              <p className="text-xs text-muted-foreground">
+                {template
+                  ? `The length comes from ${template.name} and is not a choice — pick a different template for a different one.`
+                  : "Choose a hook template and its length is used."}{" "}
+                There is no product demo in the generated video and no closing
+                card: you record the demo yourself, add your own call to action
+                after it, then post the result.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="objective" className="text-sm font-medium">Objective</label>
+              <select
+                id="objective"
+                value={objective}
+                onChange={(e) => setObjective(e.target.value)}
+                className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
+              >
+                <option value="">Choose an objective</option>
+                {(facets?.objectives || []).map((o) => (
+                  <option key={o} value={o}>{humanize(o)}</option>
+                ))}
+              </select>
+            </div>
 
             <div className="space-y-1.5">
               <label htmlFor="tone" className="text-sm font-medium">Tone (optional)</label>
@@ -1101,6 +1082,7 @@ export default function CreateVideo() {
                   )}
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">{template.opening_structure}</p>
+                <TemplateShape template={template} />
                 {template.required_assets?.length > 0 && (
                   <div className="mt-2 space-y-1.5">
                     <span className="eyebrow block">Needs from you</span>
@@ -1168,7 +1150,7 @@ export default function CreateVideo() {
               profileId={profileId}
               projectId={project?.id}
               projectAssets={project?.assets}
-              projectDuration={project?.duration_seconds || duration}
+              projectDuration={pieceSeconds}
               onProjectChanged={() => {
                 if (!project?.id) return;
                 api.getStudioProject(project.id).then(setProject).catch(() => {});
@@ -1199,7 +1181,7 @@ export default function CreateVideo() {
                     key={`${a.asset_id}-${a.start ?? 0}-${a.end ?? "end"}-${a.audio_role || "none"}-${a.audio_gain ?? "default"}`}
                     project={project}
                     attachment={a}
-                    duration={project?.duration_seconds || duration}
+                    duration={pieceSeconds}
                     onChanged={setProject}
                   />
                 ))}
@@ -1214,15 +1196,15 @@ export default function CreateVideo() {
       return (
         <StepShell
           icon={Sparkles}
-          title="Influencer hook"
-          description="Build the strategy from the plan you approved, render a short hook with your uploaded person in it, then extend it while the same character and scene carry through. The hook follows your script rather than replacing it."
+          title="Hook and middle"
+          description="Read the strategy built from the plan you approved, then render the piece: a hook, then a middle that stops where you would reach for your phone. The demo and the close are yours to record and add afterwards."
         >
           <div className="space-y-3">
             {!canGenerate ? (
               <div className="rounded-xl border border-[color:var(--hairline)] p-4">
                 <p className="text-sm text-muted-foreground">
                   Pick an App Profile and a hook template first — the strategy is built from
-                  both, so the hook has to serve the mechanism you picked.
+                  both, so the piece has to serve the mechanism you picked.
                 </p>
               </div>
             ) : blockedOnAssets ? (
@@ -1234,7 +1216,7 @@ export default function CreateVideo() {
               <div className="rounded-xl border border-[color:var(--hairline)] p-4">
                 <p className="text-sm text-muted-foreground">
                   A free draft is created from your profile, angle, and template so the
-                  strategy and hook have somewhere to live. Drafts cost nothing; only a
+                  strategy and the piece have somewhere to live. Drafts cost nothing; only a
                   marked-ready generation spends money.
                 </p>
                 <Button
@@ -1272,12 +1254,11 @@ export default function CreateVideo() {
                     <HookContinuityPanel
                       project={project}
                       onProjectChange={setProject}
-                      onGenerationChange={() => {}}
                     />
-                    {/* The one-pass render of the same approved script, for a
-                        founder who does not want the segmented chain. It was on
-                        the review step, where it let money be spent on text the
-                        founder had not read yet. */}
+                    {/* The one and only render. It used to sit on the review
+                        step, where it let money be spent on text the founder had
+                        not read yet, and it sat BELOW the segmented chain, which
+                        made the chain look like the product. */}
                     <GenerationPanel
                       project={project}
                       onGenerationChange={() => {}}
@@ -1296,7 +1277,7 @@ export default function CreateVideo() {
         <StepShell
           icon={FileText}
           title="Generate the creative plan"
-          description="This writes your hook, script, shot timeline, overlays, and CTA, and checks every claim in it. Free — no video is generated until you have read it on the next step."
+          description="This writes your hook, script, shot timeline, overlays, and a note on what to record for your own demo, then checks every claim in it. Free — no video is generated until you have read it on the next step."
         >
           <div className="space-y-3">
             <Button
@@ -1329,7 +1310,7 @@ export default function CreateVideo() {
         <StepShell
           icon={CheckCircle2}
           title="Review and edit"
-          description="Everything is editable. The claim check re-runs on every edit, and the hook step below renders this script rather than replacing it."
+          description="Everything is editable. The claim check re-runs on every edit, and the render step below turns this script into a hook and a middle rather than replacing it."
         >
         {!project?.script_version ? (
           <EmptyState
@@ -1359,21 +1340,34 @@ export default function CreateVideo() {
                 className="min-h-[160px]"
               />
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">CTA</label>
-                <Input
-                  value={editValue("cta", "")}
-                  onChange={(e) => setEdits({ ...edits, cta: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Feature emphasis</label>
-                <Input
-                  value={editValue("feature_emphasis", "")}
-                  onChange={(e) => setEdits({ ...edits, feature_emphasis: e.target.value })}
-                />
-              </div>
+            {/* `cta` and `feature_emphasis` used to sit here as two editable
+                fields. Neither is writable any more and neither is returned, so
+                leaving the inputs would have looked like editing something and
+                silently thrown it away — the exact class of write that let
+                `extend_intent` appear to be toggled while the server ignored it.
+                A call to action is the founder's own, added in their editor after
+                the demo they record, and an editable feature instruction is a
+                product demo being planned, which is footage this product does not
+                generate. `demo_brief` replaced the second: the plan works out what
+                the founder should record, and it is deliberately never passed to
+                the render, so correcting it here cannot smuggle a feature
+                instruction back into the video. */}
+            <div className="space-y-1.5 rounded-xl border border-[color:var(--hairline)] p-4">
+              <label htmlFor="review-demo-brief" className="text-sm font-medium">
+                What you record for the demo
+              </label>
+              <Textarea
+                id="review-demo-brief"
+                value={editValue("demo_brief", "")}
+                onChange={(e) => setEdits({ ...edits, demo_brief: e.target.value })}
+                className="min-h-[70px]"
+                placeholder="e.g. Record yourself tapping the timer once, hands only"
+              />
+              <p className="text-xs text-muted-foreground">
+                A note to you, not to the model. The generated video ends where you would reach
+                for your phone, and this is what happens next — so it never reaches the render,
+                and the demo is your own footage attached afterwards.
+              </p>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Visual direction</label>
@@ -1400,22 +1394,22 @@ export default function CreateVideo() {
               </div>
             )}
 
-            {/* Total length is shown, not edited. The plan's beat timeline is
-                built for the length it was generated at, and beats are clamped
-                to it, so changing the number here would leave a timeline that no
-                longer adds up to the stated duration. It is chosen on the
-                Audience & goal step and consumed by the plan step; changing it
-                means regenerating the plan, which is what the note says. */}
+            {/* Length is shown, not edited, and it is not a founder choice at
+                all. The template declares it, the project seeds from it, and the
+                shot timeline above is written to it. The server refuses a
+                duration change once a plan exists precisely because the beats
+                were clamped to that number, so the only way to a different
+                length is a different template and a regenerated plan. */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <span className="text-sm font-medium">Total video length</span>
+                <span className="text-sm font-medium">Length of the generated piece</span>
                 <p className="rounded-lg border border-[color:var(--hairline)] px-3 py-2 text-sm">
-                  {editValue("duration_seconds", DEFAULT_DURATION)} seconds
+                  {pieceSeconds} seconds
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {project?.script_version
-                    ? "The shot timeline above is written to this length. To change it, change the length on the Audience & goal step and regenerate the plan."
-                    : "Set this on the Audience & goal step before generating the plan."}
+                    ? "The shot timeline above is written to this length, and it is rendered in one pass. To change it, pick a different template on the Hook template step and regenerate the plan."
+                    : "Set by the hook template you pick. There is no length to choose."}
                 </p>
               </div>
               <div className="space-y-1.5">
@@ -1538,11 +1532,11 @@ export default function CreateVideo() {
             />
 
             {/* Nothing that spends money renders on this step. GenerationPanel
-                and the segment chain both live on the hook step below, so the
-                claim check above has been read before any render is paid for. */}
+                lives on the step below, so the claim check above has been read
+                before any render is paid for. */}
             <p className="text-sm text-muted-foreground">
-              Read the script and the claim check above, then open the Influencer hook step to
-              render it. Nothing is generated from this page.
+              Read the script, the demo note and the claim check above, then open the Hook &amp;
+              middle step to render it. Nothing is generated from this page.
             </p>
           </div>
         )}
@@ -1550,15 +1544,15 @@ export default function CreateVideo() {
       );
     }
 
-    // The hook step is the last one, and the only one that spends money. A
+    // The render step is the last one, and the only one that spends money. A
     // founder cannot reach it by falling through from Review; the explicit
     // `step === 6` above handles it, and this guards against a step index that
     // is out of range rendering nothing at all.
     return (
       <StepShell
         icon={Sparkles}
-        title="Influencer hook"
-        description="Build the strategy from the plan you approved, then render it."
+        title="Hook and middle"
+        description="Read the strategy, then render the piece."
       >
         <p className="text-sm text-muted-foreground">This step is unavailable.</p>
       </StepShell>
@@ -1578,7 +1572,7 @@ export default function CreateVideo() {
       <PageHeader
         icon={Clapperboard}
         title="Create Video"
-        description="Build a short-form promo from an approved App Profile and a hook template. Nothing is published — you download the MP4 and post it yourself."
+        description="Build a short-form promo from an approved App Profile and a hook template. It renders a hook and a middle for you; you record the demo, add the close, and post it. Nothing is published."
         actions={
           project ? (
             <Badge variant="secondary" className="text-xs">
@@ -1647,10 +1641,14 @@ export default function CreateVideo() {
           place in the app that tells the founder their finished video is never
           posted for them, so it moved here — the studio, at the moment they are
           actually making the video — rather than being dropped. The structural
-          TestNoPlatformAutomation proves it; this says so where it is read. */}
+          TestNoPlatformAutomation proves it; this says so where it is read.
+          It also names the half of the job that never leaves this page: the
+          demo and the close are footage the founder records, not something a
+          render can supply. */}
       <p className="text-xs text-muted-foreground">
-        Videos are generated here and posted by hand. This tool never publishes to any
-        platform and never asks for platform credentials.
+        Videos are generated here and posted by hand. The render gives you the hook and the
+        middle; the demo and the call to action are yours to record and attach. This tool never
+        publishes to any platform and never asks for platform credentials.
       </p>
     </div>
   );

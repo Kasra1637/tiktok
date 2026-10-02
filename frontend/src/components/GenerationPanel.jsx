@@ -6,17 +6,28 @@ import { api, getErrorMessage, mediaUrl } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
 import { RecordResultsNudge } from "./RecordResultsNudge";
 import {
-  Loader2, Clapperboard, AlertTriangle, Download, RefreshCw, RotateCcw,
+  exceedsSinglePass, readPieceSeconds, singlePassCeiling,
+} from "../lib/videoLength";
+import {
+  Loader2, Clapperboard, AlertTriangle, Download, RotateCcw,
   Play, Info, Clock, Layers,
 } from "lucide-react";
 
 /**
- * Produce and follow one complete video.
+ * The render. One request, one job, one file.
  *
- * The normal case is a single generation covering the hook and its
- * continuation. A second call is only ever made for the three justified
- * reasons the backend allows: a duration beyond the provider's single-pass
- * limit, an explicit extension, or a failed-segment replacement.
+ * A video is a hook and a middle in a single pass. There is no second job, no
+ * extension and nothing to join, so this panel has one button and one output —
+ * where it used to offer a second paid call for a length the model could not
+ * reach in one pass. That call is gone from the server as well: a request past
+ * the ceiling is refused with a 400 rather than split, because handing back a
+ * file that is not the video the plan describes is worse than refusing it.
+ * What is left for the founder is the demo they record and the close they add,
+ * and saying so is part of this panel's job.
+ *
+ * The claim gate and the ready gate both stay. They are the two things standing
+ * between an unreviewed plan and a paid render, and nothing about making the
+ * render a single job weakened either one.
  */
 const POLL_INTERVAL_MS = 6000;
 
@@ -127,6 +138,10 @@ export function GenerationPanel({ project, onGenerationChange }) {
     // neither is recorded.
     const isReroll = Boolean(generation);
     try {
+      // No duration is sent. The length is computed from the template, the
+      // project carries it, and the response has no plan to return because
+      // there is no second pass to arrange — so there is nothing here to
+      // reconcile afterwards and nothing to warn about.
       const created = await api.generateVideo(projectId, { model: selectedModel || undefined });
       setGeneration(created);
       onGenerationChange?.(created);
@@ -137,13 +152,6 @@ export function GenerationPanel({ project, onGenerationChange }) {
           template_id: created.template_id,
           brand_profile_id: created.brand_profile_id,
         });
-      }
-      if (created.duration_plan?.needs_extension) {
-        setNotice(
-          `${created.model} produces at most ${created.duration_plan.primary_seconds}s in one ` +
-          `pass, so this video covers ${created.duration_plan.primary_seconds}s of your ` +
-          `${created.duration_plan.requested_seconds}s. Extend it once it completes.`
-        );
       }
       schedulePoll(created.id);
     } catch (err) {
@@ -168,21 +176,6 @@ export function GenerationPanel({ project, onGenerationChange }) {
     }
   };
 
-  const handleExtend = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const created = await api.extendGeneration(generation.id, { duration_seconds: 5 });
-      setGeneration(created);
-      onGenerationChange?.(created);
-      schedulePoll(created.id);
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const handleCompose = async () => {
     setComposing(true);
     setError(null);
@@ -190,11 +183,13 @@ export function GenerationPanel({ project, onGenerationChange }) {
       const result = await api.composeOverlays(generation.id);
       setComposition(result);
       if (result.status === "completed") {
+        // No end card. The server stopped building one: a card closing this
+        // file would overwrite the handoff frame the middle is built to end on,
+        // and the close belongs to the founder after their own demo.
         setNotice(
           `Composed ${result.applied?.captions || 0} caption(s), ` +
           `${result.applied?.images || 0} image(s), ${result.applied?.videos || 0} video layer(s), ` +
-          `${result.applied?.audios || 0} audio track(s)` +
-          `${result.applied?.end_card ? ", and a CTA end card" : ""}.`
+          `${result.applied?.audios || 0} audio track(s).`
         );
       } else {
         setError(
@@ -213,13 +208,21 @@ export function GenerationPanel({ project, onGenerationChange }) {
   const inFlight = generation && (generation.status === "submitted" || generation.status === "generating");
   const cost = generation ? money(generation.cost_usd) : null;
   const downloadUrl = generation ? mediaUrl(generation.r2_url || generation.video_url) : null;
+  // The length this project will render at, and whether the selected model can
+  // do it in one pass. Shown before the click because the endpoint refuses
+  // anything longer with a 400: the founder should read that here rather than
+  // spend a click to meet a raw error body. It is a prediction, not the
+  // guarantee — the endpoint still decides.
+  const pieceSeconds = readPieceSeconds(project, null);
+  const ceiling = singlePassCeiling(capability);
+  const tooLong = exceedsSinglePass(pieceSeconds, capability);
 
   return (
     <div className="space-y-3 rounded-2xl border border-[color:var(--hairline)] p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="flex items-center gap-2 font-display text-sm font-semibold">
           <Clapperboard className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-          Produce the video
+          Render the hook and the middle
         </span>
         {generation && <StatusBadge status={generation.status} />}
       </div>
@@ -264,7 +267,7 @@ export function GenerationPanel({ project, onGenerationChange }) {
           >
             {models.models.map((m) => (
               <option key={m.key} value={m.key}>
-                {m.name} — up to {m.max_duration}s per pass{m.key === models.default ? " (default)" : ""}
+                {m.name} — one render, up to {m.max_duration}s{m.key === models.default ? " (default)" : ""}
               </option>
             ))}
           </select>
@@ -276,13 +279,32 @@ export function GenerationPanel({ project, onGenerationChange }) {
         </div>
       )}
 
+      {/* One render, one job. There is no second pass to arrange afterwards, so
+          the length is a statement rather than a plan: what it is, and whether
+          the chosen model can produce it at all. */}
+      <p className="text-xs text-muted-foreground">
+        One render of {pieceSeconds}s, in two sections: a short hook, then a middle that develops
+        it and stops where you would reach for your phone.
+        {ceiling > 0 && ` ${capability?.name || "This model"} produces at most ${ceiling}s in one pass.`}
+      </p>
+      {tooLong && (
+        <Alert>
+          <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
+          <AlertDescription>
+            {capability?.name || "This model"} cannot render {pieceSeconds}s in one pass, so the
+            request will be refused. Pick a different template — each one declares its own length —
+            or a model that reaches {pieceSeconds}s.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Button
         variant="brand"
         onClick={handleGenerate}
-        disabled={busy || inFlight || !ready || blocked || !projectId}
+        disabled={busy || inFlight || !ready || blocked || tooLong || !projectId}
       >
         {busy || inFlight ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-        {inFlight ? "Generating..." : generation ? "Generate another" : "Generate video"}
+        {inFlight ? "Generating..." : generation ? "Generate another" : "Generate the video"}
       </Button>
 
       {generation && (
@@ -305,7 +327,7 @@ export function GenerationPanel({ project, onGenerationChange }) {
 
           {/* A storage failure used to be invisible here, so a video that would
               not load later looked like a playback bug rather than a failed
-              upload. HookContinuityPanel already showed this. */}
+              upload. */}
           {generation.storage_error && (
             <p className="text-xs text-muted-foreground">{generation.storage_error}</p>
           )}
@@ -333,9 +355,6 @@ export function GenerationPanel({ project, onGenerationChange }) {
                     <Download className="h-3.5 w-3.5" /> Download MP4
                   </a>
                 </Button>
-                <Button variant="ghost" size="sm" onClick={handleExtend} disabled={busy}>
-                  <RefreshCw className="h-3.5 w-3.5" /> Extend
-                </Button>
                 <Button variant="brand" size="sm" onClick={handleCompose} disabled={composing}>
                   {composing ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -347,7 +366,7 @@ export function GenerationPanel({ project, onGenerationChange }) {
               </div>
               {composition?.status === "completed" && composition.output_url && (
                 <div className="space-y-1.5 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-3">
-                  <span className="eyebrow block">With captions and end card</span>
+                  <span className="eyebrow block">With captions</span>
                   <video
                     src={mediaUrl(composition.r2_url || composition.output_url)}
                     controls
@@ -365,15 +384,25 @@ export function GenerationPanel({ project, onGenerationChange }) {
                         template_id: generation?.template_id || "",
                       })}
                     >
-                      <Download className="h-3.5 w-3.5" /> Download composited MP4
+                      <Download className="h-3.5 w-3.5" /> Download captioned MP4
                     </a>
                   </Button>
                 </div>
               )}
-              <p className="text-xs text-muted-foreground">
-                Captions and the end card come from your approved script, so names
-                and calls to action stay accurate. Post it yourself — nothing is published.
-              </p>
+              {/* What they got, and what is still theirs to do. The old copy here
+                  promised a call to action on an end card, which made this file
+                  look finished. It is not: the middle deliberately ends where
+                  the presenter would reach for their phone, so the demo and the
+                  close are both outside it. */}
+              <div className="space-y-1 rounded-xl border border-[color:var(--hairline)] p-3">
+                <span className="eyebrow block">What you have, and what is left</span>
+                <p className="text-xs text-muted-foreground">
+                  The file above is the hook and the middle. It ends where you would reach for your
+                  phone. Attach your own demo next, add your own call to action after that, then
+                  post it — captions, if you want them, come from the script you approved, and
+                  nothing is ever published for you.
+                </p>
+              </div>
               <RecordResultsNudge
                 generationId={generation?.id}
                 recorded={Boolean(generation?.performance)}
@@ -386,7 +415,7 @@ export function GenerationPanel({ project, onGenerationChange }) {
               <p className="text-xs text-destructive">{generation.error}</p>
               {generation.retryable ? (
                 <Button variant="secondary" size="sm" onClick={handleRetry} disabled={busy}>
-                  <RotateCcw className="h-3.5 w-3.5" /> Replace failed segment
+                  <RotateCcw className="h-3.5 w-3.5" /> Render it again
                 </Button>
               ) : (
                 <p className="text-xs text-muted-foreground">

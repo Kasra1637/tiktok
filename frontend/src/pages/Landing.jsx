@@ -10,7 +10,7 @@ import {
   Sparkles, Search, Clapperboard, Globe, Film,
   TrendingUp, ArrowRight, Zap, Target, Layers,
   FileText, BadgeAlert, MessageSquareQuote, ChartLine,
-  X, Check, Wand2, Briefcase, LayoutTemplate, ShieldCheck, Download,
+  X, Check, Wand2, Briefcase, LayoutTemplate, ShieldCheck, Video,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 
@@ -25,7 +25,7 @@ const FEATURES = [
     icon: Target,
     title: "You decide who, and what",
     description:
-      "One choice about your audience and your goal. It shapes the hook, the promise and the close.",
+      "One choice about your audience and your goal. It shapes the hook, the promise and the middle.",
   },
   {
     icon: LayoutTemplate,
@@ -47,33 +47,33 @@ const FEATURES = [
   },
   {
     icon: Clapperboard,
-    title: "Your length, the hook worked out",
+    title: "A hook, and a middle",
     description:
-      "10, 15, 20 or 30 seconds, vertical. The hook is planned and locked for you, so extensions still land on script.",
+      "One render, two sections. The hook is the first few seconds; the middle develops it and stops where you'd reach for your phone.",
   },
   {
     icon: MessageSquareQuote,
     title: "It argues the case",
     description:
-      "Each beat answers one reason a viewer hasn't downloaded yet: doubt it works, the effort to switch. One at a time, not crammed into one breath.",
+      "The middle works through why a viewer hasn't downloaded yet: doubt it works, the effort to switch. One at a time, not crammed into one breath.",
   },
   {
     icon: Film,
     title: "It never invents your screens",
     description:
-      "No drawn interfaces, no made-up numbers. Captions and the end card come from the script you approved.",
+      "No drawn interfaces, no made-up numbers, and no product demo. Captions come from the script you approved.",
   },
   {
     icon: ShieldCheck,
     title: "Checked by something other than the AI",
     description:
-      "It re-reads your script on every edit. Anything on your never-use list blocks the render, and stays blocked through every extension.",
+      "It re-reads your script on every edit. Anything on your never-use list blocks the render, and there is only one render to block.",
   },
   {
     icon: Layers,
     title: "One photo, and that's you",
     description:
-      "Attach it once and your face is in every clip after it. No avatar, no voice clone, no stand-in.",
+      "Attach it once and your face is in the piece. No avatar, no voice clone, no stand-in.",
   },
   {
     icon: ChartLine,
@@ -91,7 +91,7 @@ const FEATURES = [
     icon: Check,
     title: "It learns what you didn't like",
     description:
-      "Swap away from an opening and it slides down the list. Approve one and it keeps climbing.",
+      "Swap away from an opening and it slides down the list. Use one and it keeps climbing.",
   },
   {
     icon: BadgeAlert,
@@ -106,13 +106,12 @@ const FEATURES = [
       "Paste a TikTok link. It reads the first three seconds — pacing, cuts, face, on-screen text — and scores the opening.",
   },
   {
-    icon: Download,
-    title: "You post it",
+    icon: Video,
+    title: "You finish the video",
     description:
-      "Download it, post wherever. It never touches your accounts.",
+      "Download the hook and the middle. Record your demo, add your close, post it. It never touches your accounts.",
   },
 ];
-
 
 
 
@@ -140,14 +139,13 @@ const FLOW_STEPS = [
     step: "4",
     label: "Render",
     icon: Layers,
-    detail:
-      "Approve the opening, then extend it. The person and scene are re-stated for each segment, and the panel tells you when a clip may drift.",
+    detail: "One clip: the hook, then a middle that ends where you'd reach for your phone.",
   },
   {
     step: "5",
-    label: "Post",
-    icon: Download,
-    detail: "Download and post it wherever your audience already is. Nothing is posted for you.",
+    label: "Finish",
+    icon: Video,
+    detail: "Record your demo, add your close, post it wherever your audience already is.",
   },
 ];
 
@@ -174,10 +172,11 @@ const WEEK_WITH = [
   "Paste the link. It reads your app and writes a profile for you.",
   "Pick who is watching. It writes six openings, you take the best one.",
   "Read it, change any line you like, and nothing is charged.",
-  "Render the hook, then extend it out to the length you really wanted.",
+  "Render the hook and the middle, then add your own demo and a close.",
   "Post it, log the views, and let them shape the very next one.",
   "Next week it's three clicks, and it already knows what worked.",
 ];
+
 
 const NAV_LINKS = [
   { href: "#how-it-works", label: "How it works" },
@@ -241,25 +240,25 @@ const PIPELINE_BLOCKS = [
     icon: Clapperboard,
     tone: "coral",
     kicker: "Generation",
-    title: "One Continuous Clip",
+    title: "Two Sections, One Render",
     body: (
       <>
-        Hook and ending arrive in a single vertical clip, with sound where the model supports
-        it. A second pass only stretches the length or replaces a weak segment.
+        The hook is the first few seconds. The middle develops it and ends at the moment the
+        presenter would reach for their phone — which is exactly where your own demo picks up.
+        One job, one file, sound included where the model supports it.
       </>
     ),
   },
   {
     icon: Layers,
     tone: "coral",
-    kicker: "Continuity",
-    title: "Each Piece Picks Up the Last",
+    kicker: "The Handoff",
+    title: "The Middle Is Built to Stop",
     body: (
       <>
-        Every extension is held to a written description of the scene, so the person and the
-        room are restated for each segment rather than cut from the previous clip. When the
-        model can't be given the previous frame, the panel says so on every segment instead of
-        pretending otherwise.
+        There is no product demo and no closing card in the generated footage, on purpose: the
+        plan works out what you should record and hands it to you as a note, and the video ends
+        on the frame your demo continues from. You attach the demo, add your close, and post it.
       </>
     ),
   },
@@ -270,9 +269,9 @@ const PIPELINE_BLOCKS = [
     title: "The Scene Is Built Around You",
     body: (
       <>
-        Shot in the moment your app is actually used, and built to show the one moment that
-        proves it. Captions and the end card layer on afterwards, taken from the script you
-        approved.
+        Your photograph is the only visual input, and the room, the light and the framing are
+        locked once for the whole piece — so the hook and the middle cannot disagree about where
+        this is happening. Captions layer on afterwards, taken from the script you approved.
       </>
     ),
   },
@@ -295,8 +294,8 @@ const PIPELINE_BLOCKS = [
 
 const MODELS = [
   { label: "Words & analysis", value: "Gemini 2.5 Flash — research, profiles, angles, scripts and shot plans" },
-  { label: "Video", value: "MiniMax H3 — 2K picture, native sound, 5 to 15 seconds per pass; longer videos are built segment by segment" },
-  { label: "Finishing touches", value: "Captions and end card, layered on precisely" },
+  { label: "Video", value: "MiniMax H3 — 2K picture, native sound, one render of up to 15 seconds; each template declares the length its mechanic suits" },
+  { label: "Finishing touches", value: "Captions, layered on precisely" },
   { label: "Trend data", value: "Public TikTok metadata via a research API key — aggregated with no source attached, and it steers the openings we suggest" },
 ];
 
@@ -391,7 +390,7 @@ export default function Landing() {
             <br />
             <span className="text-gradient-brand">You built it to be used.</span>
             <br />
-            <span className="text-shine">So put your face on it, and do it in an afternoon.</span>
+            <span className="text-shine">So write the first part, and film the part only you can.</span>
           </h1>
 
           <p
@@ -399,8 +398,9 @@ export default function Landing() {
             style={{ animationDelay: "120ms" }}
           >
             Here's the thing nobody tells you about launch week: a stranger talking about your
-            app converts like wallpaper. You talking about it converts. Point a camera at
-            yourself, skip the shoot, and post it tonight.
+            app converts like wallpaper. You talking about it converts. Paste your link, get a
+            hook and a middle in your own voice and your own face, then record the thirty
+            seconds of demo that proves it and post the whole thing tonight.
           </p>
 
           <div
@@ -468,7 +468,7 @@ export default function Landing() {
           id="how-it-works"
           eyebrow="How it works"
           title="From your link to a posted video"
-          lede="Five steps. No camera, no editor, no source footage."
+          lede="Five steps. One of them is you, on camera, filming the demo — because that's the part no model can do for you."
         />
 
         <div className="relative">
@@ -545,7 +545,7 @@ export default function Landing() {
           id="features"
           eyebrow="Everything in between"
           title="You bring a link and a photo"
-          lede="Every step from there is handled, and every one of them is yours to change."
+          lede="It writes and renders everything up to the moment you would reach for your phone. Every one of those steps is yours to change."
         />
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -650,8 +650,8 @@ export default function Landing() {
                 Your next promo is one photo away.
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">
-                Paste your link. Approve the profile. Pick the opening. Get a video with you
-                in it, ready to post.
+                Paste your link. Approve the profile. Pick the opening. Get a hook and a middle
+                with you in it — then record the demo, add the close, and post the lot.
               </p>
               <div className="mt-9 flex flex-col items-center justify-center gap-3.5 sm:flex-row">
                 <UnauthedOnly>
@@ -710,7 +710,8 @@ export default function Landing() {
                 <span className="font-display text-base font-bold tracking-tight">HookForge</span>
               </div>
               <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted-foreground">
-                Promos with you in them, made from a link. You post them yourself.
+                The hook and the middle, made from a link and a photo. You film the demo, add
+                the close, and post it yourself.
               </p>
             </div>
 

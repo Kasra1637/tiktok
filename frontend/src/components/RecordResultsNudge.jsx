@@ -20,10 +20,10 @@ import { TrendingUp } from "lucide-react";
  * straight to the row that carries the result. `recorded` suppresses it the
  * moment the numbers exist, so it never nags someone who already logged them.
  *
- * Both download paths render it: the one-shot GenerationPanel and the
- * segmented HookContinuityPanel. The `generationId` must be a real generation
- * id — never the synthesized `chain-` id the assembler produces, which is not
- * a row in /history.
+ * `generationId` must be a real generation id. That used to matter twice, because
+ * the segmented panel could produce a synthesized `chain-` id from the join step
+ * which was not a row in /history; there is one render and one id now, so the
+ * caveat is simply that this must never be handed a constructed string.
  */
 export function RecordResultsNudge({ generationId, recorded }) {
   if (!generationId || recorded) return null;

@@ -126,7 +126,7 @@ export default function Analytics() {
           ["Failure rate", pct(t.failure_rate), "of finished attempts"],
           ["Avg generation", t.avg_generation_seconds != null ? `${t.avg_generation_seconds}s` : "—", "submit to completion"],
           ["Known spend", money(t.total_usd) || "$0.00", `${t.priced_runs ?? 0} priced runs`],
-          ["Regenerated", rework.regenerated ?? 0, "failed segments replaced"],
+          ["Regenerated", rework.regenerated ?? 0, "the same setup, rendered again"],
           ["Variations", rework.variations ?? 0, `max ${rework.max_variations_of_one_video ?? 0} of one video`],
           ["Approved videos", feedback.by_event?.video_approved ?? 0, "approved at review"],
         ].map(([label, value, hint]) => (

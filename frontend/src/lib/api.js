@@ -203,12 +203,23 @@ export const api = {
   updateStudioProject: (id, payload) => client.patch(`/studio/projects/${id}`, payload).then((r) => r.data),
   generatePlan: (id, payload = {}) => client.post(`/studio/projects/${id}/plan`, payload).then((r) => r.data),
   markProjectReady: (id) => client.post(`/studio/projects/${id}/ready`).then((r) => r.data),
-  setProjectHookLength: (id, hookSeconds) =>
-    client.patch(`/studio/projects/${id}`, { hook_seconds: hookSeconds }).then((r) => r.data),
-  setProjectExtendIntent: (id, extendIntent) =>
-    client.patch(`/studio/projects/${id}`, { extend_intent: extendIntent }).then((r) => r.data),
+  // `duration_seconds` is not sent from here. The length is computed — a template
+  // declares a `default_duration` and the project seeds from it — and the plan
+  // step clamps the beats it writes to whatever the project already holds.
+  // `setProjectExtendIntent` used to sit beside this: the column survives in
+  // SQLite but is written nowhere and read by nothing, so a method that patched
+  // it would look like it did something and change nothing.
+  //
+  // `setProjectHookLength` went for a different reason. It was already dead, and
+  // the hook boundary is the template's call: the clamp behind it is a safety
+  // net for a hand-typed value, not a control the product offers.
 
-  // Video generation (single-pass)
+  // Video generation. ONE request renders the whole piece — a hook and a middle
+  // — in a single pass, and the server answers 400 for a duration past the
+  // model's single-pass ceiling rather than splitting or shortening it. There is
+  // no `duration_plan` in the response any more, because there is no plan to
+  // return: nothing is left to do after this render except the founder's own
+  // demo and call to action.
   getStudioVideoModels: () => client.get("/studio/video-models").then((r) => r.data),
   generateVideo: (projectId, payload = {}) =>
     client.post(`/studio/projects/${projectId}/generate`, payload).then((r) => r.data),
@@ -217,22 +228,20 @@ export const api = {
   pollGeneration: (id) => client.post(`/generations/${id}/poll`).then((r) => r.data),
   retryGeneration: (id) => client.post(`/generations/${id}/retry`).then((r) => r.data),
   retryGenerationStorage: (id) => client.post(`/generations/${id}/storage/retry`).then((r) => r.data),
-  extendGeneration: (id, payload = {}) =>
-    client.post(`/generations/${id}/extend`, payload).then((r) => r.data),
   archiveGeneration: (id) => client.post(`/generations/${id}/archive`).then((r) => r.data),
 
-  // App-specific influencer workflow:
-  // strategy -> hook -> approve -> extend (repeatable) -> assemble
+  // App-specific creative direction for the one render.
+  //
+  // Free — text only, no video. What is left of the old
+  // strategy -> hook -> approve -> extend -> assemble chain is this and the
+  // single generate above. `generateHook`, `approveGeneration`,
+  // `extendGeneration`, `assembleChain` and `getGenerationContinuity` are gone
+  // from the server and gone here: a hook-only render, a per-segment approval
+  // gate, a repeatable extension, a join, and a seam-continuity readout were
+  // five ways of describing a workflow that no longer exists, and every one of
+  // them was a button a founder could spend money on.
   generateStrategy: (id, payload = {}) =>
     client.post(`/studio/projects/${id}/strategy`, payload).then((r) => r.data),
-  generateHook: (id, payload = {}) =>
-    client.post(`/studio/projects/${id}/hook`, payload).then((r) => r.data),
-  approveGeneration: (id, payload = {}) =>
-    client.post(`/generations/${id}/approve`, payload).then((r) => r.data),
-  getGenerationContinuity: (id) =>
-    client.get(`/generations/${id}/continuity`).then((r) => r.data),
-  assembleChain: (id, payload = {}) =>
-    client.post(`/generations/${id}/assemble`, payload).then((r) => r.data),
 
   // Asset library (per App Profile)
   getAssets: (profileId, params = {}) =>
