@@ -60,15 +60,20 @@ function StatusBadge({ status }) {
   return <Badge variant={variant} className="text-xs">{label}</Badge>;
 }
 
+/** localStorage key holding one project's chosen video model. */
+function modelStorageKey(projectId) {
+  return `studio-video-model:${projectId}`;
+}
+
 export function GenerationPanel({ project, onGenerationChange, onProjectChange }) {
   const [models, setModels] = useState(null);
-  const [selectedModel, setSelectedModel] = useState("");
-  const [generation, setGeneration] = useState(null);
+  const [selectedModel, setSelectedModel] = useState("");  const [generation, setGeneration] = useState(null);
   const [composition, setComposition] = useState(null);
   const [busy, setBusy] = useState(false);
   const [composing, setComposing] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [retryingStorage, setRetryingStorage] = useState(false);
   const timer = useRef(null);
 
   const projectId = project?.id;
@@ -104,7 +109,19 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
       .then((data) => {
         if (cancelled) return;
         setModels(data);
-        setSelectedModel(data.default || "");
+        // The choice survives a reload, per project. A comparison run on H3 Max
+        // used to revert to the H3 default on refresh, so the founder could pay
+        // for a clip on a model they had already switched away from. A saved
+        // key the server no longer offers falls back to the default rather than
+        // sticking the select on a model that cannot render.
+        let saved = "";
+        try {
+          saved = projectId ? window.localStorage.getItem(modelStorageKey(projectId)) || "" : "";
+        } catch {
+          saved = "";
+        }
+        const offered = (data.models || []).some((m) => m.key === saved);
+        setSelectedModel(offered ? saved : data.default || "");
       })
       .catch(() => {
         if (!cancelled) setModels(null);
@@ -112,7 +129,7 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [projectId]);
 
   // schedulePoll is declared BEFORE the effect that depends on it. A dependency
   // array is evaluated during render, so listing this effect above the `const`
@@ -163,6 +180,21 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
 
 
 const handleGenerate = async () => {
+    // "Generate another" spends a second paid render on a video the founder has
+    // already seen. Idempotency stops accidental duplicates of one click, not a
+    // deliberate click the founder did not mean, so a re-roll asks first. Same
+    // window.confirm pattern as the strategy rebuild: one click when there is
+    // nothing to lose, two when there is money on it.
+    if (Boolean(generation)) {
+      const ok =
+        typeof window === "undefined" || typeof window.confirm !== "function"
+          ? true
+          : window.confirm(
+              "Generate another video from this plan? This spends a second paid render. " +
+              "The video you already have stays in history."
+            );
+      if (!ok) return;
+    }
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -226,6 +258,25 @@ const handleGenerate = async () => {
       setError(getErrorMessage(err));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleRetryStorage = async () => {
+    if (!generation) return;
+    setRetryingStorage(true);
+    setError(null);
+    try {
+      await api.retryGenerationStorage(generation.id);
+      // The endpoint returns only the save result, so re-read the row: the
+      // alert above keys off storage_error, and only a fresh read clears it.
+      const fresh = await api.getGeneration(generation.id);
+      setGeneration(fresh);
+      onGenerationChange?.(fresh);
+      setNotice("Durable copy saved.");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setRetryingStorage(false);
     }
   };
 
@@ -314,7 +365,15 @@ const handleGenerate = async () => {
           <select
             id="gen-model"
             value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              setSelectedModel(next);
+              try {
+                if (projectId) window.localStorage.setItem(modelStorageKey(projectId), next);
+              } catch {
+                /* a choice that does not persist is still a choice for this render */
+              }
+            }}
             disabled={inFlight}
             className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
           >
@@ -390,11 +449,35 @@ const handleGenerate = async () => {
             )}
           </div>
 
-          {/* A storage failure used to be invisible here, so a video that would
+          {/* A storage failure used to be a muted line here, so a video that would
               not load later looked like a playback bug rather than a failed
-              upload. */}
+              upload. It is now the loudest thing on the panel, because the
+              stakes are expiry: the clip above is the provider's temporary
+              copy, and once it lapses with no durable copy the paid render is
+              gone. The retry endpoint existed but no UI called it, so the only
+              recovery was one the founder could not reach. */}
           {generation.storage_error && (
-            <p className="text-xs text-muted-foreground">{generation.storage_error}</p>
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Durable copy missing — download this video now</AlertTitle>
+              <AlertDescription>
+                The render finished, but saving a permanent copy failed
+                ({generation.storage_error}). What plays above is the
+                provider's temporary copy and it expires — download it now so
+                you keep the video either way, then retry the durable save.
+                <div className="mt-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleRetryStorage}
+                    disabled={retryingStorage}
+                  >
+                    {retryingStorage && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                    Retry durable save
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
           )}
 
           {generation.status === "completed" && downloadUrl && (

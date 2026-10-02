@@ -698,6 +698,45 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     );
   });
 
+  await check("a storage failure is loud, offers the retry, and clears on success", async (ctx) => {
+    // The durable copy is the only copy that survives the provider URL
+    // expiring, so a failed save rendered as muted small text taught the
+    // founder nothing until the video would not load. It is now a destructive
+    // alert with the recovery action attached -- and the retry endpoint
+    // existed with no UI calling it, so the button is the fix, not the alert.
+    let saved = { ...SEGMENT, storage_error: "R2 upload failed" };
+    try {
+      await withApi(
+        {
+          getGenerations: async () => ({ generations: [saved] }),
+          pollGeneration: async () => saved,
+          retryGenerationStorage: async () => {
+            saved = { ...SEGMENT, storage_error: null };
+            return { id: saved.id, r2_url: "/media/gen-1.mp4", storage_error: null };
+          },
+          getGeneration: async () => saved,
+        },
+        async () => {
+          await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+          expectText(ctx, "Durable copy missing", "the storage failure is not escalated");
+          expectText(ctx, "download this video now", "the alert does not say what is at stake");
+          const retry = buttonByText(ctx, /Retry durable save/);
+          await act(async () => {
+            retry.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {});
+          await act(async () => {});
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+    if (ctx.text().includes("Durable copy missing")) {
+      throw new Error("a successful storage retry left the alert on screen");
+    }
+    expectText(ctx, "Durable copy saved", "a successful storage retry is not confirmed");
+  });
+
   await check("GenerationPanel blocks generation while a claim is prohibited", async (ctx) => {
     await mount(GenerationPanel, {
       project: {
@@ -1120,6 +1159,55 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     }
     if (strategyCalls !== 0) {
       throw new Error("generating replaced a strategy the founder had already reviewed");
+    }
+  });
+
+  await check("generating another video asks first, and a no spends nothing", async (ctx) => {
+    // Idempotency stops a duplicated click, not a deliberate one the founder
+    // did not mean. A re-roll is a second paid render, so it asks first, and a
+    // "no" must leave everything exactly as it was.
+    global.__SMOKE_PARAMS = "?project=p1";
+    const originalConfirm = dom.window.confirm;
+    let renderCalls = 0;
+    try {
+      await withApi(
+        {
+          generateVideo: async () => {
+            renderCalls += 1;
+            return { ...SEGMENT, status: "submitted" };
+          },
+        },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Hook & middle");
+          const btn = renderButton(ctx);
+          if (!/Generate another/.test((btn.textContent || "").trim())) {
+            throw new Error("expected a re-roll button when a generation already exists");
+          }
+          dom.window.confirm = () => false;
+          await act(async () => {
+            btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {});
+          await act(async () => {});
+          if (renderCalls !== 0) {
+            throw new Error("a declined re-roll still spent a render");
+          }
+          // And a "yes" still renders, so the gate asks rather than blocks.
+          dom.window.confirm = () => true;
+          await act(async () => {
+            btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {});
+          await act(async () => {});
+          if (renderCalls !== 1) {
+            throw new Error(`an accepted re-roll rendered ${renderCalls} time(s), expected 1`);
+          }
+        }
+      );
+    } finally {
+      dom.window.confirm = originalConfirm;
+      global.__SMOKE_PARAMS = "";
     }
   });
 

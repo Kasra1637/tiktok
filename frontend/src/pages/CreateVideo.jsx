@@ -420,6 +420,7 @@ export default function CreateVideo() {
   const [angles, setAngles] = useState([]);
   const [facets, setFacets] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
+  const [recError, setRecError] = useState(null);
   const [templates, setTemplates] = useState([]);
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -477,6 +478,7 @@ export default function CreateVideo() {
             setObjective(draft.objective || "");
             setTone(draft.tone || "");
             setRecommendations([]);
+            setRecError(null);
             setEdits({});
             // A duplicate always arrives with its plan intact, so it opens on
             // Review; an unplanned draft still needs a photo before a plan can
@@ -546,6 +548,7 @@ export default function CreateVideo() {
         });
         const rows = rec.recommendations || [];
         setRecommendations(rows);
+        setRecError(null);
         // Preselect the top pick when the founder has not chosen for
         // themselves. Deliberately not "on every reload": a reload must never
         // move a selection the founder made, so the only condition is that
@@ -561,8 +564,13 @@ export default function CreateVideo() {
             return rows[0].template.id;
           });
         }
-      } catch {
+      } catch (err) {
+        // An empty list used to mean three different things: nothing ranked,
+        // nothing compatible, or the request failed. The third one stranded the
+        // founder in front of a step that looked merely thin, so the reason is
+        // shown rather than absorbed.
         setRecommendations([]);
+        setRecError(getErrorMessage(err));
       }
     },
     [objective]
@@ -614,6 +622,7 @@ export default function CreateVideo() {
     setAngles([]);
     setAngleId("");
     setRecommendations([]);
+    setRecError(null);
     setEdits({});
     setProject(null);
     // The template is cleared with everything else, because it was chosen
@@ -1190,9 +1199,9 @@ export default function CreateVideo() {
               <div className="rounded-xl border border-[color:var(--hairline)] p-4">
                 <p className="text-sm">No templates recommended for this app yet.</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Nothing was ranked for this profile and goal — the request may have failed, or
-                  this app has no compatible templates. You can still pick one below if the library
-                  has anything.
+                  {recError
+                    ? `The ranking request failed (${recError}) — nothing was ranked, so this is not a verdict on the app. You can still pick one below if the library has anything.`
+                    : "Nothing was ranked for this profile and goal — the request may have failed, or this app has no compatible templates. You can still pick one below if the library has anything."}
                 </p>
               </div>
             )}

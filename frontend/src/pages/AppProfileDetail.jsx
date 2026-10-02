@@ -151,6 +151,7 @@ export default function AppProfileDetail() {
   const [profile, setProfile] = useState(null);
   const [angles, setAngles] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
+  const [recError, setRecError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -190,17 +191,29 @@ export default function AppProfileDetail() {
 
   const loadRecommendations = useCallback(
     async (angleId) => {
+      // Drafts are not ranked at all now: the endpoint refuses them, and the
+      // page already says recommendations appear after approval. Requesting
+      // anyway would only produce a 409 that then has to be hidden again.
+      if (profile?.status !== "approved") {
+        setRecommendations([]);
+        return;
+      }
       try {
         const rec = await api.getTemplateRecommendations(profileId, {
           angle_id: angleId || undefined,
           limit: 6,
         });
         setRecommendations(rec.recommendations || []);
-      } catch {
+        setRecError(null);
+      } catch (err) {
+        // Same rule as the wizard: an empty list must not absorb a failure.
+        // Drafts never reach this branch (they return above), so anything
+        // caught here is a real error worth naming.
         setRecommendations([]);
+        setRecError(getErrorMessage(err));
       }
     },
-    [profileId]
+    [profileId, profile?.status]
   );
 
   useEffect(() => {
@@ -510,6 +523,11 @@ export default function AppProfileDetail() {
 
           <div className="surface space-y-3 rounded-2xl p-5">
             <h3 className="font-display text-base font-semibold">Suggested templates</h3>
+            {recError && (
+              <p className="text-xs text-muted-foreground">
+                Could not load suggestions ({recError}).
+              </p>
+            )}
             {recommendations.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 Recommendations appear once the profile is approved.

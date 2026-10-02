@@ -408,8 +408,11 @@ class StudioGenerationRequest(BaseModel):
     image ids and an edited prompt for the exact-match flow.
 
     model: optional provider key. When omitted the configured default is
-        used. Unknown, disallowed, or editor-only models fall back with a
-        stated reason rather than being honoured.
+        used. An unknown key is refused with a 400 rather than quietly rendered
+        on the default, which would bill a model the founder did not choose. A
+        known but unusable key (an editor, or one outside the allowlist) still
+        falls back with a stated reason, because that is a configuration
+        outcome the studio already reports, not a typo.
     duration_seconds: the length of the whole generated piece. A value beyond
         the provider's single-pass limit is REFUSED with a 400 naming the
         ceiling — it is not shortened, and not split into a second job. A

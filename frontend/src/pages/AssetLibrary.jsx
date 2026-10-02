@@ -409,6 +409,16 @@ export default function AssetLibrary({
         }
       }
       setNotice(`Added ${humanize(created.kind)} "${created.label || created.name}".${attachedNote}`);
+// The server counts faces on upload and warns when the photo will not work
+// as a reference -- no face at all, or a group shot. That warning used to die
+// in the response object: the row badges only appear after the list reloads,
+// and nothing at the moment of upload said the photo was wrong. It rides on
+// the notice rather than the error because the upload itself succeeded; the
+// 0-face case is still the one to read carefully, since the provider is
+// likely to refuse a render built on it and that refusal costs a paid attempt.
+      if (created?.face_warning) {
+        setNotice((current) => `${current || ""} ${created.face_warning}`.trim());
+      }
       load();
       onChanged?.();
     } catch (err) {

@@ -52,9 +52,9 @@ def _run(coro):
     return asyncio.run(coro)
 
 
-def _make_profile(server, user_id, name="Testly", category="Productivity"):
-    from models import BrandProfileCreateRequest
-    return _run(server.create_brand(
+def _make_profile(server, user_id, name="Testly", category="Productivity", approve=False):
+    from models import BrandProfileCreateRequest, ApproveAppProfileRequest
+    profile = _run(server.create_brand(
         payload=BrandProfileCreateRequest(
             brand_name=name,
             app_category=category,
@@ -65,6 +65,13 @@ def _make_profile(server, user_id, name="Testly", category="Productivity"):
         ),
         user_id=user_id,
     ))
+    # Recommendations (like every other studio step) require an approved
+    # profile, so fixtures approve unless the test is about the draft state.
+    if approve:
+        _run(server.approve_app_profile(
+            profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=user_id))
+        profile = _run(server.get_app_profile(profile["id"], user_id))
+    return profile
 
 
 class TestLibrarySeeding:
@@ -515,7 +522,7 @@ class TestContentAngles:
 
 class TestRecommendations:
     def test_recommendations_returned_for_profile(self, api):
-        profile = _make_profile(api, ANON, name="Reco App")
+        profile = _approve_profile(api, name="Reco App")
         result = _run(api.recommend_templates(profile_id=profile["id"], user_id=ANON))
         assert result["recommendations"]
         top = result["recommendations"][0]
@@ -524,7 +531,7 @@ class TestRecommendations:
             assert key in top
 
     def test_only_usable_templates_recommended(self, api):
-        profile = _make_profile(api, ANON, name="Reco App 2")
+        profile = _approve_profile(api, name="Reco App 2")
         result = _run(api.recommend_templates(profile_id=profile["id"], user_id=ANON))
         assert all(r["template"]["is_usable"] for r in result["recommendations"])
 
@@ -536,7 +543,7 @@ class TestRecommendations:
             "archived, created_at, updated_at, user_id) VALUES (?, 'Archived QA', 'other', "
             "'custom', ?, 1, '', '', ?)",
             (archived_id, '["character_reference"]', ANON)))
-        profile = _make_profile(api, ANON, name="Reco App 3")
+        profile = _approve_profile(api, name="Reco App 3")
         result = _run(api.recommend_templates(profile_id=profile["id"], user_id=ANON))
         assert archived_id not in [r["template"]["id"] for r in result["recommendations"]]
         _run(api._execute("DELETE FROM hook_templates WHERE id = ?", (archived_id,)))
@@ -549,7 +556,7 @@ class TestRecommendations:
         no limitation names a retired upload.
         """
         from models import CreateContentAngleRequest
-        profile = _make_profile(api, ANON, name="Reco App 4")
+        profile = _approve_profile(api, name="Reco App 4")
         angle = _run(api.create_manual_content_angle(
             profile_id=profile["id"],
             payload=CreateContentAngleRequest(
@@ -579,22 +586,37 @@ class TestRecommendations:
         assert top["app_feature"] == "Task timer"
 
     def test_recommendations_sorted_by_score_desc(self, api):
-        profile = _make_profile(api, ANON, name="Reco App 5")
+        profile = _approve_profile(api, name="Reco App 5")
         result = _run(api.recommend_templates(profile_id=profile["id"], user_id=ANON))
         scores = [r["score"] for r in result["recommendations"]]
         assert scores == sorted(scores, reverse=True)
 
     def test_limit_respected(self, api):
-        profile = _make_profile(api, ANON, name="Reco App 6")
+        profile = _approve_profile(api, name="Reco App 6")
         result = _run(api.recommend_templates(profile_id=profile["id"], limit=3, user_id=ANON))
         assert len(result["recommendations"]) <= 3
 
     def test_unknown_angle_is_404(self, api):
-        profile = _make_profile(api, ANON, name="Reco App 7")
+        import uuid as _uuid
+        profile = _approve_profile(api, name="Reco App 7")
         with pytest.raises(HTTPException) as err:
             _run(api.recommend_templates(
-                profile_id=profile["id"], angle_id=str(uuid.uuid4()), user_id=ANON))
+                profile_id=profile["id"], angle_id=str(_uuid.uuid4()), user_id=ANON))
         assert err.value.status_code == 404
+
+    def test_draft_profile_is_refused(self, api):
+        """
+        Ranking templates against unreviewed research would steer the founder's
+        pick with claims nobody has verified -- the same reason every other
+        studio step requires approval. The wizard only offers approved profiles
+        and the profile page already says recommendations appear after approval,
+        so the refusal names the fix instead of stranding anyone.
+        """
+        profile = _make_profile(api, ANON, name="Reco Draft")
+        with pytest.raises(HTTPException) as err:
+            _run(api.recommend_templates(profile_id=profile["id"], user_id=ANON))
+        assert err.value.status_code == 409
+        assert "approve" in str(err.value.detail).lower()
 
 
 class TestFeedbackInfluence:
@@ -625,7 +647,7 @@ class TestFeedbackInfluence:
         return next(r for r in after["recommendations"] if r["template"]["id"] == template_id)
 
     def test_repeated_template_rejection_lowers_score_and_names_it(self, api):
-        profile = _make_profile(api, ANON, name="Feedback Penalty")
+        profile = _approve_profile(api, name="Feedback Penalty")
         _, template_id, before = self._target(api, profile)
         self._record(api, profile, template_id, "template_rejected", reason="hook_too_weak")
         self._record(api, profile, template_id, "template_rejected", reason="hook_too_weak")
@@ -636,7 +658,7 @@ class TestFeedbackInfluence:
         assert updated["feedback"]["delta"] == pytest.approx(-4.0)
 
     def test_automatic_change_counts_less_than_an_explicit_rejection(self, api):
-        profile = _make_profile(api, ANON, name="Feedback Signal")
+        profile = _approve_profile(api, name="Feedback Signal")
         _, template_id, before = self._target(api, profile)
         self._record(api, profile, template_id, "template_rejected", signal="template_changed")
         updated = self._after(api, profile, template_id)
@@ -644,7 +666,7 @@ class TestFeedbackInfluence:
         assert updated["feedback"]["automatic_changes"] == 1
 
     def test_success_marks_raise_score_and_name_it(self, api):
-        profile = _make_profile(api, ANON, name="Feedback Success")
+        profile = _approve_profile(api, name="Feedback Success")
         _, template_id, before = self._target(api, profile)
         self._record(api, profile, template_id, "marked_successful", reason="good_performance")
         updated = self._after(api, profile, template_id)
@@ -653,7 +675,7 @@ class TestFeedbackInfluence:
 
     def test_feedback_is_capped_and_template_scoped(self, api):
         import feedback as feedback_mod
-        profile = _make_profile(api, ANON, name="Feedback Cap")
+        profile = _approve_profile(api, name="Feedback Cap")
         _, template_id, _ = self._target(api, profile)
         rows = [
             {

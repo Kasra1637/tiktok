@@ -6900,12 +6900,25 @@ async def recommend_templates(
     The founder can always ignore this and pick any compatible template
     manually — recommendations are a starting point, not a gate. Only usable
     (approved, non-archived) library templates are returned.
+
+    The App Profile itself must be approved. Ranking templates against
+    unreviewed research would steer the founder's pick with claims nobody has
+    verified, which is the same reason every other studio step funnels through
+    the approval check. The studio only offers approved profiles in its picker,
+    and the profile page already explains that recommendations appear after
+    approval, so this is unreachable from the normal flow rather than a new
+    dead end in it.
     """
     profile = await _fetch_one(
         "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
     )
     if not profile:
         raise HTTPException(status_code=404, detail="App Profile not found")
+    if profile.get("status") != "approved":
+        raise HTTPException(
+            status_code=409,
+            detail="Review and approve this App Profile before ranking templates against it.",
+        )
 
     angle = None
     if angle_id.strip():
