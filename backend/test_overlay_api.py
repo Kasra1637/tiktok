@@ -745,7 +745,21 @@ class TestOverlayRendering:
         _, inputs, _ = overlays.build_filter_graph(spec, 12, overlays.resolve_font())
         assert str(rec) in inputs
 
-    def test_full_render_with_caption_and_end_card(self, api, tmp_root):
+    def test_full_render_with_captions_and_no_end_card(self, api, tmp_root):
+        """
+        Was `test_full_render_with_caption_and_end_card`.
+
+        The composition still renders a real caption over real footage, and it
+        must STILL render with no end card even though the project row carries a
+        populated `cta` column — the column survives in the schema for rows
+        written before a call to action stopped being generated, so this is the
+        end-to-end proof that a stale one cannot become a generated close burnt
+        into a file the founder already recorded their own CTA for.
+
+        A caller may still send `end_card_text` (the schema accepts it for
+        compatibility); what matters is that it cannot put a close on the video,
+        which is asserted last.
+        """
         from models import OverlayCompositionRequest
         profile = _profile(api, "Render Full")
         base = _make_base_clip(tmp_root / "full_base.mp4", seconds=12)
@@ -756,11 +770,11 @@ class TestOverlayRendering:
                overlays = ? WHERE id = ?""",
             ('[{"start":0,"end":3,"text":"Stop scrolling"}]', project["id"])))
         result = _run(api.create_overlay_composition(
-            gen["id"], OverlayCompositionRequest(), ANON))
+            gen["id"], OverlayCompositionRequest(end_card_text="Try it free"), ANON))
         assert result["status"] == "completed", result.get("error")
         applied = result["applied"]
         assert applied["captions"] == 1
-        assert applied["end_card"] is True
+        assert applied["end_card"] is False
 
     def test_captions_can_be_suppressed(self, api, tmp_root):
         from models import OverlayCompositionRequest

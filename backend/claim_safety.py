@@ -105,13 +105,16 @@ def _plan_fields(plan: dict):
     """Yield every human-readable leaf value of a creative plan.
 
     Claim checking must cover what is actually SAID and SHOWN, so this
-    includes overlays, beats, and CTA — not just the spoken script body.
+    includes overlays and both beats — not just the spoken script body. `cta`
+    and `feature_emphasis` are gone: there is no call to action in a generated
+    piece, and `demo_brief` is a note to the founder that never reaches a
+    render, so neither is text a viewer could read.
 
-    `strategy` is included because in the influencer workflow the spoken words
-    live there: the hook line, the per-segment scripts and the outcome promise
-    are generated into the strategy, and that text reaches the video model
-    verbatim. A banned claim that only appears in the strategy is still a
-    banned claim, so the whole nested structure is walked.
+    `strategy` is included because the spoken words live there: the hook line,
+    the two section scripts and the outcome promise are generated into the
+    strategy, and that text reaches the video model verbatim. A banned claim
+    that only appears in the strategy is still a banned claim, so the whole
+    nested structure is walked.
     """
     def walk(value):
         if isinstance(value, str):
@@ -124,8 +127,8 @@ def _plan_fields(plan: dict):
                 yield from walk(v)
 
     for key in (
-        "hook_line", "script", "cta", "visual_direction",
-        "voice_direction", "sound_direction", "feature_emphasis",
+        "hook_line", "script", "visual_direction",
+        "voice_direction", "sound_direction",
         "beat_timeline", "overlays", "strategy",
     ):
         yield from walk(plan.get(key))

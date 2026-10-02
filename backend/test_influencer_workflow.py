@@ -1,11 +1,16 @@
 """
 Tests for the app-specific AI influencer workflow.
 
-The claim under test is specific and falsifiable: a hook generated for one app
-must be strategically different from a hook for another app, the uploaded
-person must be carried through the hook AND every extension, an extension must
-preserve the scene and continue the same message, and any continuity the
-provider cannot actually deliver must be reported rather than silently dropped.
+The claim under test is specific and falsifiable: a video generated for one app
+must be strategically different from one generated for another app, the uploaded
+person must be carried into the render, both of the two generated sections must
+be present and distinct, and any rule the App Profile records as absolute must
+reach the prompt that could break it.
+
+A video is now ONE render with exactly TWO sections — a hook and a middle that
+develops it and ends at the moment the presenter reaches for their phone. There
+is no per-segment approval gate and no chain, so what used to be "the hook" and
+"every extension" is one prompt for the whole piece.
 
 OpenRouter is fully mocked, so these assert OUR rules and the exact requests we
 build — not the quality of any model's output.
@@ -155,14 +160,53 @@ def _approved_project(api, script="", hook_line="", version=1):
     project, _profile, _template = _make_project(api, NURSE_APP)
     _run(api._execute(
         "UPDATE studio_projects SET script = ?, hook_line = ?, script_version = ?,"
-        " cta = ?, beat_timeline = ? WHERE id = ?",
-        (script, hook_line, version, "Start your 3-day trial", "[]", project["id"]),
+        " beat_timeline = ?, safety_report = ? WHERE id = ?",
+        (script, hook_line, version, "[]", json.dumps(_CLEAN_REPORT), project["id"]),
     ))
     return project["id"]
 
 
+# What a passing claim-safety report looks like on the row. generate_plan writes
+# the real one; tests that only need to get past the gate write this.
+_CLEAN_REPORT = {"passed": True, "blocking": [], "claims_used": [],
+                 "risk_warnings": [], "sources_used": []}
+
+
+def _mark_ready(api, project_id, script="A plain line about the shift, no promises."):
+    """
+    Put a project in the state the single generation endpoint requires.
+
+    The hook used to be its own endpoint and its own, cheaper gate — a project
+    could reach a paid render of the opening without a script at all. There is
+    one render now, so the piece goes through the same ready gate as any
+    generation: a script on the project, and a claim report that passes.
+
+    A clean report is written only when there is none. A project whose strategy
+    was stored with a banned claim already has a FAILING report, and replacing
+    it with a clean one would quietly disarm the gate this fixture exists to
+    exercise.
+    """
+    _run(api._execute(
+        "UPDATE studio_projects SET script = ?, status = 'ready_for_generation',"
+        " safety_report = COALESCE(NULLIF(safety_report, ''), ?) WHERE id = ?",
+        (script, json.dumps(_CLEAN_REPORT), project_id),
+    ))
+    return project_id
+
+
 def _store_strategy(api, project_id, hook_line, persona, scene, *, problem, feature, cta):
-    """Write a strategy shaped like a real one from two different apps."""
+    """Write a strategy shaped like a real one from two different apps.
+
+    `cta` is still accepted and ignored: it was a required strategy key when this
+    fixture was written, and callers pass it. A generated video has no call to
+    action now, so `normalize_strategy` drops the field.
+
+    The claim-safety report is written in the same statement, which is what
+    generate_project_strategy does — the strategy carries the words that will
+    actually be spoken, so a banned claim in it has to be stored as failing or
+    the generation gate would never see it.
+    """
+    import claim_safety
     from ai_service import normalize_strategy
     strategy = normalize_strategy({
         "strategy_summary": f"{feature} for {persona['who']}.",
@@ -177,7 +221,6 @@ def _store_strategy(api, project_id, hook_line, persona, scene, *, problem, feat
         "primary_feature": feature,
         "desired_outcome": persona["outcome"],
         "differentiation_beat": persona["diff"],
-        "cta_strategy": cta,
         "character": {
             "appearance": persona["who"],
             "facial_features": persona["face"],
@@ -204,44 +247,30 @@ def _store_strategy(api, project_id, hook_line, persona, scene, *, problem, feat
             "movement": persona["movement"],
             "voice_delivery": persona["voice"],
         },
-        # A full planned arc, as generate_video_strategy now emits: the hook
-        # plus seven continuations, the last landing the CTA. An earlier version
-        # of this fixture planned only one continuation, which is exactly the
-        # shape that made repeat extensions replay the same beat.
+        # Exactly two sections, as generate_video_strategy now emits: the hook,
+        # then the middle that develops it and ends at the reach. The middle's
+        # action deliberately stops at picking the phone up, because filming the
+        # app working is the founder's own recording, not ours.
         "segments": [
             {"index": 0, "role": "hook", "seconds": 4, "goal": persona["promise"],
              "script": hook_line, "action": persona["action"]},
-        ] + [
-            {
-                "index": i,
-                "role": "cta" if i == 7 else "continuation",
-                "seconds": 6,
-                "goal": f"beat {i}: {persona['payoff'] if i == 1 else f'continue the story, step {i}'}",
-                "script": persona["payoff"] if i == 1 else f"Beat {i}: {feature}, continued.",
-                "action": persona["payoff_action"] if i == 1 else f"action for beat {i}",
-            }
-            for i in range(1, 8)
+            {"index": 1, "role": "middle", "seconds": 6, "goal": persona["payoff"],
+             "script": persona["payoff"], "action": persona["payoff_action"]},
         ],
-        "continuity_contract": {
-            # Scene and delivery only. The contract used to list the presenter's
-            # face, hair and wardrobe, which the strategy generator invents
-            # because it never sees the photograph — so the contract was a third
-            # channel carrying the same fabrication as the character block and
-            # the prose fields.
-            "established": [
-                scene["environment"], scene["lighting"], scene["props"],
-                persona["action"],
-            ],
-            "must_not_change": [
-                scene["background"], scene["framing"],
-            ],
-            "do_not_repeat": [hook_line, persona["concept"]],
-        },
     })
+    report = claim_safety.build_safety_report(
+        {"strategy": strategy},
+        _run(api._fetch_one(
+            "SELECT * FROM brand_profiles WHERE id = ("
+            "  SELECT brand_profile_id FROM studio_projects WHERE id = ?)",
+            (project_id,))),
+    )
     _run(api._execute(
-        "UPDATE studio_projects SET strategy = ?, strategy_version = 1, status = 'draft'"
-        " WHERE id = ?",
-        (json.dumps(strategy), project_id)))
+        "UPDATE studio_projects SET strategy = ?, strategy_version = 1,"
+        " strategy_script_version = script_version, safety_report = ?,"
+        " safety_summary = ?, status = 'draft' WHERE id = ?",
+        (json.dumps(strategy), json.dumps(report), claim_safety.summarize(report),
+         project_id)))
     return strategy
 
 
@@ -324,44 +353,49 @@ BUDGET_SCENE = {
 # 1. The hooks are strategically different for two different apps
 # ---------------------------------------------------------------------------
 class TestAppSpecificity:
-    def _hook_prompt(self, api, monkeypatch, spec, persona, scene, problem, feature, cta, hook_line):
-        from models import GenerateHookRequest
+    def _render_prompt(self, api, monkeypatch, spec, persona, scene,
+                       problem, feature, cta, hook_line):
+        """
+        The prompt the video model is actually given, captured off a real
+        submit. There is no separate hook endpoint any more: the piece is one
+        render, so this goes through the same gate as any generation.
+        """
+        from models import StudioGenerationRequest
         project, _profile, _template = _make_project(api, spec)
         _store_strategy(api, project["id"], hook_line, persona, scene,
                         problem=problem, feature=feature, cta=cta)
+        _mark_ready(api, project["id"])
         calls = _mock_submit(api, monkeypatch)
-        _run(api.generate_project_hook(
-            project_id=project["id"], payload=GenerateHookRequest(), user_id=ANON))
-        assert calls, "the hook generation never reached the provider"
+        _run(api.submit_project_generation(
+            project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        assert calls, "the generation never reached the provider"
         return calls[0]["prompt"]
 
-    def test_two_apps_produce_strategically_different_hooks(self, api, monkeypatch):
+    def test_two_apps_produce_strategically_different_videos(self, api, monkeypatch):
         """
-        The core product claim: the hook is built FOR the app.
+        The core product claim: the video is built FOR the app.
 
         A generic talking-head template with the app name swapped in would
         share almost all of its prompt. These two must not.
         """
-        nurse = self._hook_prompt(
+        nurse = self._render_prompt(
             api, monkeypatch, NURSE_APP, NURSE_PERSONA, NURSE_SCENE,
             problem="Shift paperwork eats the end of a long shift",
             feature="One-tap shift logging", cta="Try it free",
             hook_line="I clocked out at 11:40. Every single night. Fixed it in one tap.")
-        budget = self._hook_prompt(
+        budget = self._render_prompt(
             api, monkeypatch, BUDGET_APP, BUDGET_PERSONA, BUDGET_SCENE,
             problem="Money disappears before payday with nothing to show for it",
             feature="Automatic envelope splits", cta="Check what it finds",
             hook_line="Three subscriptions had been eating my account since March.")
 
-        # The app's own problem, feature and CTA reach the hook prompt.
+        # The app's own problem and feature reach the render prompt.
         assert "Shift paperwork eats the end of a long shift" in nurse
         assert "One-tap shift logging" in nurse
-        assert "Try it free" in nurse
         assert "Shift paperwork" not in budget
 
         assert "Money disappears before payday" in budget
         assert "Automatic envelope splits" in budget
-        assert "Check what it finds" in budget
         assert "One-tap shift logging" not in budget
 
         # Different scene, different visual strategy. The persona's appearance
@@ -379,14 +413,58 @@ class TestAppSpecificity:
         overlap = nurse_lines & budget_lines
         shared_fraction = len(overlap) / max(len(nurse_lines), len(budget_lines))
         assert shared_fraction < 0.6, (
-            f"hooks share {shared_fraction:.0%} of their lines — that reads as one "
-            f"template with the app name swapped in, not an app-specific hook. "
+            f"prompts share {shared_fraction:.0%} of their lines — that reads as one "
+            f"template with the app name swapped in, not an app-specific video. "
             f"Shared: {sorted(overlap)[:6]}"
         )
 
-    def test_hook_prompt_locks_the_scene_but_never_the_appearance(self, api, monkeypatch):
+    def test_the_render_tells_the_model_not_to_show_the_app_working(self, api, monkeypatch):
         """
-        The hook must establish the scene and the delivery, but the on-camera
+        The one directive the whole two-section architecture exists to enforce:
+        the generated footage stops at the reach, because the product demo and
+        the call to action are the founder's own.
+
+        Stated up front rather than left to the beat list, since a video model has
+        a strong prior towards resolving a promo on camera.
+        """
+        prompt = self._render_prompt(
+            api, monkeypatch, NURSE_APP, NURSE_PERSONA, NURSE_SCENE,
+            problem="Shift paperwork eats the end of a long shift",
+            feature="One-tap shift logging", cta="Try it free",
+            hook_line="I clocked out at 11:40. Every single night.")
+        lowered = prompt.lower()
+        assert "do not film the app being used" in lowered
+        assert "do not show a screen or interface" in lowered
+        assert "do not ask the viewer to download" in lowered
+        assert "reaches for their phone" in lowered
+
+    def test_the_two_sections_are_present_and_distinct(self, api, monkeypatch):
+        """
+        Both, in order, and doing different work. The middle is not the hook
+        restated with more words — a strategy whose middle could be cut without
+        losing the hook has not written a middle.
+        """
+        prompt = self._render_prompt(
+            api, monkeypatch, NURSE_APP, NURSE_PERSONA, NURSE_SCENE,
+            problem="Shift paperwork eats the end of a long shift",
+            feature="One-tap shift logging", cta="Try it free",
+            hook_line="I clocked out at 11:40. Every single night.")
+        assert "exactly TWO sections" in prompt
+        # Each heading states its own job as a full clause. The phrasing is
+        # asserted because these are instructions, not labels: a malformed one
+        # ("its job is to stops the scroll") is read as a broken instruction
+        # rather than a short one.
+        assert "HOOK — 3s, and its job is to stop the scroll" in prompt
+        assert "MIDDLE — 12s, and its job is to develop the hook and end at the reach" in prompt
+        # The hook's own words and the middle's own words are both present, and
+        # they are not the same line.
+        assert "I clocked out at 11:40. Every single night." in prompt
+        assert NURSE_PERSONA["payoff"] in prompt
+        assert NURSE_PERSONA["payoff"] not in NURSE_PERSONA["action"]
+
+    def test_render_prompt_locks_the_scene_but_never_the_appearance(self, api, monkeypatch):
+        """
+        The video must establish the scene and the delivery, but the on-camera
         person is copied from the founder's photograph.
 
         The appearance attributes used to be asserted as PRESENT. They were a
@@ -398,7 +476,7 @@ class TestAppSpecificity:
         else's. The test asserted the opposite of what its own comment claimed,
         which is why it survived.
         """
-        prompt = self._hook_prompt(
+        prompt = self._render_prompt(
             api, monkeypatch, NURSE_APP, NURSE_PERSONA, NURSE_SCENE,
             problem="Shift paperwork eats the end of a long shift",
             feature="One-tap shift logging", cta="Try it free",
@@ -417,7 +495,7 @@ class TestAppSpecificity:
             "holds up a phone to camera",   # movement / action
             "low, quick, tired but warm",   # voice delivery
         ):
-            assert attribute in prompt, f"hook prompt is missing: {attribute}"
+            assert attribute in prompt, f"render prompt is missing: {attribute}"
 
         # The invented appearance is not, under any wording.
         for invented in (
@@ -428,331 +506,38 @@ class TestAppSpecificity:
             "tired half-smile",             # facial expression
         ):
             assert invented not in prompt, (
-                f"hook prompt invents the person's appearance: {invented}"
+                f"render prompt invents the person's appearance: {invented}"
             )
 
         # And the photograph is named as the only authority on who they are.
         assert "The person on camera is the person in the attached character reference" in prompt
         assert "The image is the only authority on who they are" in prompt
 
+    def test_a_project_with_no_strategy_still_renders(self, api, monkeypatch):
+        """
+        Was `test_hook_requires_a_strategy`, which asserted the opposite: that a
+        paid render was refused without a strategy.
 
-# ---------------------------------------------------------------------------
-# 2. The uploaded influencer is the same person across hook and extensions
-# ---------------------------------------------------------------------------
-class TestIdentityContinuity:
-    def _chain(self, api, monkeypatch, model="minimax-h3", with_bridge_frame=True):
-        """Generate a hook, approve it, extend it. Returns every submit call."""
-        from models import ApproveSegmentRequest, GenerateHookRequest, StudioGenerationRequest
+        The strategy is optional now, deliberately. The endpoint logs that the
+        video will be less specific to this app and renders from the reviewed
+        plan alone, which is the honest fallback for a project whose strategy was
+        never built — refusing outright would mean a founder could never get a
+        video out of a plan they had already approved.
+
+        What is NOT optional is that it reaches the provider with the person's
+        photograph attached and the app's own words in it.
+        """
+        from models import StudioGenerationRequest
         project, _profile, _template = _make_project(api, NURSE_APP)
-        _store_strategy(api, project["id"],
-                        "I clocked out at 11:40. Every single night.",
-                        NURSE_PERSONA, NURSE_SCENE,
-                        problem="Shift paperwork eats the end of a long shift",
-                        feature="One-tap shift logging", cta="Try it free")
-
+        _mark_ready(api, project["id"],
+                    script="I clocked out at 11:40. Every single night.")
         calls = _mock_submit(api, monkeypatch)
-        hook = _run(api.generate_project_hook(
-            project_id=project["id"],
-            payload=GenerateHookRequest(model=model), user_id=ANON))
-        # A completed hook with a durable copy: poll normally downloads the
-        # clip and records its URL, and the extension needs both to build the
-        # strongest possible continuity request.
-        _run(api._execute(
-            "UPDATE generations SET status = 'completed', video_url = ? WHERE id = ?",
-            ("https://provider.test/hook.mp4", hook["id"])))
-        api.pipeline.VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
-        (api.pipeline.VIDEOS_DIR / f"{hook['id']}.mp4").write_bytes(_TINY_PNG)
-
-        if with_bridge_frame:
-            # Stand in for the extracted final frame of the approved hook.
-            bridge = Path(tempfile.mkdtemp(prefix="tiktok-bridge-")) / "bridge.png"
-            bridge.write_bytes(_TINY_PNG)
-            api.pipeline.extract_last_frame = _async_return(bridge)
-        else:
-            api.pipeline.extract_last_frame = _async_return(None)
-
-        _run(api.approve_generation(hook["id"], ApproveSegmentRequest(), ANON))
-        extension = _run(api.extend_generation(
-            hook["id"], StudioGenerationRequest(duration_seconds=6), ANON))
-        return project, hook, extension, calls
-
-    def test_character_reference_rides_along_on_the_hook(self, api, monkeypatch):
-        _project, _hook, _ext, calls = self._chain(api, monkeypatch)
-        refs = calls[0].get("input_references") or []
-        assert len(refs) == 1
-        assert refs[0]["type"] == "image_url"
-        assert refs[0]["image_url"]["url"].startswith("data:image/png;base64,")
-
-    def test_extension_carries_the_clip_and_reports_the_dropped_face(
-        self, api, monkeypatch
-    ):
-        """
-        MiniMax cannot combine a first frame with references: it cannot take
-        the seam frame at all, so the extension carries the previous clip and
-        the founder's face is recorded as lost — loudly, with a reason, never
-        silently.
-        """
-        _project, _hook, _ext, calls = self._chain(api, monkeypatch)
-        assert calls[0].get("continuity_frame_path") is None, "the hook has nothing to continue from"
-        assert calls[1].get("continuity_frame_path") is None, "this provider cannot take the frame"
-        refs = calls[1].get("input_references") or []
-        # The previous clip (for motion) — and only the clip.
-        assert any(r.get("type") == "video_url" for r in refs)
-        assert not any(r.get("type") == "image_url" for r in refs)
-        dropped = {d["anchor"]: d["reason"] for d in _ext["continuity"]["degraded"]}
-        assert "identity" in dropped and dropped["identity"]
-
-    def test_retired_attachment_is_refused_at_strategy_time(
-        self, api, monkeypatch
-    ):
-        """
-        The hard-error choice applies at every pipeline stage, strategy
-        included: a project still holding a screenshot cannot even be
-        planned until it is detached. No model call happens — the refusal
-        precedes it, so no AI mock is needed.
-        """
-        from models import GenerateStrategyRequest
-        project, _profile, _template = _make_project(api, NURSE_APP)
-        _run(api._execute(
-            "UPDATE studio_projects SET assets = ? WHERE id = ?",
-            (json.dumps([{
-                "asset_id": "old-shot", "kind": "screenshot",
-                "label": "Old screenshot", "file_path": "gone.png",
-            }]), project["id"])))
-        with pytest.raises(HTTPException) as err:
-            _run(api.generate_project_strategy(
-                project_id=project["id"], payload=GenerateStrategyRequest(), user_id=ANON))
-        assert err.value.status_code == 409
-        assert "face-only" in str(err.value.detail)
-
-    def test_missing_character_reference_is_refused_not_silently_anonymous(
-        self, api, monkeypatch
-    ):
-        """
-        A project without an uploaded face must not silently produce an
-        anonymous influencer. Every template puts a person on camera, so the
-        hook refuses loudly before the provider is called.
-        """
-        from models import GenerateHookRequest
-        project, _profile, _template = _make_project(api, NURSE_APP, with_character=False)
-        _store_strategy(api, project["id"], "I clocked out at 11:40.",
-                        NURSE_PERSONA, NURSE_SCENE,
-                        problem="Shift paperwork", feature="One-tap shift logging",
-                        cta="Try it free")
-        calls = _mock_submit(api, monkeypatch)
-        with pytest.raises(HTTPException) as err:
-            _run(api.generate_project_hook(
-                project_id=project["id"], payload=GenerateHookRequest(), user_id=ANON))
-        assert err.value.status_code == 409
-        assert "character reference" in str(err.value.detail)
-        assert not calls, "the provider was called despite the refusal"
-
-
-# ---------------------------------------------------------------------------
-# 3. Extensions preserve the scene and continue the same app message
-# ---------------------------------------------------------------------------
-class TestExtensionPreservesTheVideo:
-    def test_extension_reproduces_environment_and_background(self, api, monkeypatch):
-        """
-        The scene and the delivery are restated as a lock, because a video
-        model has no memory of the previous segment.
-
-        Wardrobe, hair and identity used to be asserted here too. They came from
-        the fabricated `character` block and are now supplied by the photograph
-        and by the previous clip, both of which ride along in the same request
-        as real visual inputs — so restating them as text was not continuity,
-        it was a second, invented source of truth.
-        """
-        _project, _hook, _ext, calls = TestIdentityContinuity()._chain(api, monkeypatch)
-        prompt = calls[1]["prompt"]
-        for locked in (
-            "a hospital staff corridor outside a break room",   # environment
-            "grey vinyl floor, beige wall, a fire door",        # background
-            "flat overhead corridor fluorescents, cool",        # lighting
-            "medium close-up, head and shoulders",              # framing
-            "a phone only, no coffee cup",                      # props
-        ):
-            assert locked in prompt, f"extension dropped the locked detail: {locked}"
-
-        # Stated as a lock, not a suggestion.
-        assert "THE SCENE AND THE DELIVERY ARE LOCKED" in prompt
-        assert "not suggestions" in prompt
-
-        # ...and the invented appearance is not restated as one.
-        for invented in (
-            "teal scrubs, silver badge, small hoop earrings",   # wardrobe
-            "low bun",                                          # hairstyle
-            "late-20s night-shift nurse in teal scrubs",        # appearance
-        ):
-            assert invented not in prompt, f"extension invented an appearance: {invented}"
-
-        # The real continuity inputs are carried in the request, not described.
-        refs = calls[1].get("input_references") or []
-        assert any(r.get("type") == "video_url" for r in refs), "the previous clip carries the look"
-        assert not any(r.get("type") == "image_url" for r in refs), (
-            "MiniMax cannot combine the frame with references, so the face rides "
-            "the written lock instead of the request"
-        )
-
-    def test_extension_continues_the_app_specific_message(self, api, monkeypatch):
-        _project, _hook, _ext, calls = TestIdentityContinuity()._chain(api, monkeypatch)
-        prompt = calls[1]["prompt"]
-        assert "Shift paperwork eats the end of a long shift" in prompt
-        assert "One-tap shift logging" in prompt
-        assert "Try it free" in prompt
-        assert "One tap and it is logged" in prompt
-        assert "THIS APP-SPECIFIC STRATEGY" in prompt
-
-    def test_extension_does_not_restart_the_video(self, api, monkeypatch):
-        """It must know what came before, and must not replay it."""
-        _project, _hook, _ext, calls = TestIdentityContinuity()._chain(api, monkeypatch)
-        prompt = calls[1]["prompt"]
-        assert "CONTINUITY — what came before" in prompt
-        assert "opening segment already established" in prompt
-        assert "Do NOT repeat" in prompt
-        assert "Do not re-introduce the app" in prompt
-        assert "do not restart the opening framing" in prompt
-        # The hook line is listed as already-delivered, not as the opening line.
-        hook_line = "I clocked out at 11:40. Every single night."
-        assert f"already seen or heard it: {hook_line}" in prompt
-
-    def test_three_extensions_chain_in_order(self, api, monkeypatch):
-        """Repeat extension keeps advancing the chain rather than forking it."""
-        from models import ApproveSegmentRequest, GenerateHookRequest, StudioGenerationRequest
-        project, _profile, _template = _make_project(api, NURSE_APP)
-        _store_strategy(api, project["id"], "I clocked out at 11:40.",
-                        NURSE_PERSONA, NURSE_SCENE,
-                        problem="Shift paperwork", feature="One-tap shift logging",
-                        cta="Try it free")
-        _mock_submit(api, monkeypatch)
-        hook = _run(api.generate_project_hook(
-            project_id=project["id"], payload=GenerateHookRequest(), user_id=ANON))
-        bridge = Path(tempfile.mkdtemp(prefix="tiktok-bridge-")) / "bridge.png"
-        bridge.write_bytes(_TINY_PNG)
-        api.pipeline.extract_last_frame = _async_return(bridge)
-        api.pipeline.VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
-
-        parent = hook
-        indices = []
-        for _ in range(3):
-            _run(api._execute(
-                "UPDATE generations SET status = 'completed', video_url = ? WHERE id = ?",
-                ("https://provider.test/seg.mp4", parent["id"])))
-            (api.pipeline.VIDEOS_DIR / f"{parent['id']}.mp4").write_bytes(_TINY_PNG)
-            _run(api.approve_generation(parent["id"], ApproveSegmentRequest(), ANON))
-            parent = _run(api.extend_generation(
-                parent["id"], StudioGenerationRequest(duration_seconds=6), ANON))
-            indices.append(parent["segment_index"])
-        assert indices == [1, 2, 3]
-
-
-# ---------------------------------------------------------------------------
-# 4. Unsupported continuity is reported, never silently accepted
-# ---------------------------------------------------------------------------
-class TestSeamState:
-    """
-    What the previous clip ENDS on is the most important sentence in a
-    continuation prompt.
-
-    It was `strategy["hook_line"]` — the line the video OPENED with. So every
-    extension past the first handed the model a description of segment 0 at the
-    seam of segment 2 or 3, and the model was told to continue from a moment the
-    viewer had been watching for five seconds already. The bridge frame carries
-    the pixels; nothing carried the moment.
-    """
-
-    def _strategy(self):
-        from ai_service import normalize_strategy
-        return normalize_strategy({
-            "strategy_summary": "s", "audience_problem": "p",
-            "emotional_triggers": ["t"], "hook_concept": "c",
-            "hook_line": "You do not have a clock problem.",
-            "hook_promise": "pr", "hook_action": "a",
-            "messaging_pillars": ["m"], "primary_feature": "f",
-            "desired_outcome": "o", "differentiation_beat": "b",
-            "cta_strategy": "c",
-            "scene": {"environment": "kitchen"},
-            "performance": {"movement": "still"},
-            "segments": [
-                {"index": 0, "role": "hook", "seconds": 4,
-                 "goal": "reframe the problem",
-                 "script": "You do not have a clock problem. You have a paperwork problem.",
-                 "action": "put her phone down and lean in"},
-                {"index": 1, "role": "continuation", "seconds": 6,
-                 "goal": "show the fix",
-                 "script": "Log the shift in one tap. That is the whole job.",
-                 "action": "tap once and hold up the phone"},
-            ],
-            "continuity_contract": {
-                "established": [], "must_not_change": [], "do_not_repeat": [],
-            },
-        })
-
-    def test_the_seam_is_the_end_of_that_beat_not_the_opening_line(self):
-        import generation_planning
-        strategy = self._strategy()
-        # Extending past segment 0.
-        seam = generation_planning.describe_seam_state(strategy, 0)
-        assert "lean in" in seam
-        # The TAIL of that beat's script, not its head: the seam follows the
-        # end of the beat, so its closing sentence is what the viewer last heard.
-        assert "paperwork problem" in seam
-        assert "unresolved" in seam
-
-    def test_a_later_segment_describes_its_own_seam(self):
-        """
-        The regression: segment 1's extension must not be handed segment 0's
-        material. This is the case that was actually broken — hook_line is the
-        same for every extension, so it looked fine for the first one and wrong
-        for all the rest.
-        """
-        import generation_planning
-        strategy = self._strategy()
-        first = generation_planning.describe_seam_state(strategy, 0)
-        second = generation_planning.describe_seam_state(strategy, 1)
-        assert first != second
-        assert "hold up the phone" in second
-        assert "lean in" not in second
-        # The hook line appears in neither, because neither beat ends on it.
-        assert strategy["hook_line"] not in first
-        assert strategy["hook_line"] not in second
-
-    def test_an_unplanned_index_says_nothing_rather_than_inventing(self):
-        import generation_planning
-        assert generation_planning.describe_seam_state(self._strategy(), 9) == ""
-
-    def test_the_prompt_tells_the_model_to_continue_not_restart(self):
-        import generation_planning
-        strategy = self._strategy()
-        prompt = generation_planning.build_segment_prompt(
-            strategy=strategy,
-            profile={"brand_name": "ShiftLog"},
-            segment_index=1,
-            duration=6,
-            is_hook=False,
-            previous_summary=generation_planning.describe_seam_state(strategy, 0),
-        )
-        assert "The previous segment ended like this" in prompt
-        assert "mid-action" in prompt
-        assert "do not reset to a neutral pose" in prompt
-        assert strategy["hook_line"] not in prompt.split("CONTINUITY")[1]
-
-    def test_the_extension_prompt_describes_the_final_moment(self, api, monkeypatch):
-        """
-        The wiring, through the real endpoint. The extension's prompt has to
-        carry the parent segment's own final moment, and must not carry the hook
-        line as if it were that moment.
-        """
-        project, _hook, _ext, calls = TestIdentityContinuity()._chain(api, monkeypatch)
-        prompt = calls[1]["prompt"]
-        hook_line = "I clocked out at 11:40. Every single night."
-        # The hook line still appears in the prompt, but as something already
-        # delivered (do_not_repeat), never as the state of the seam.
-        assert f"already seen or heard it: {hook_line}" in prompt
-        assert f"The previous segment ended like this: {hook_line}" not in prompt
-        # Segment 0's action, which is what the hook's last frame showed.
-        assert "mid-" in prompt
-        assert "unresolved" in prompt
+        generation = _run(api.submit_project_generation(
+            project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        assert generation["status"] in ("submitted", "generating")
+        prompt = calls[0]["prompt"]
+        assert "I clocked out at 11:40. Every single night." in prompt
+        assert "the person in the attached character reference" in prompt
 
 
 class TestMustNotShowIsEnforced:
@@ -787,9 +572,14 @@ class TestMustNotShowIsEnforced:
 
     def test_every_segment_carries_it(self):
         """
-        On every segment, not just the hook. An extension re-imagines the scene
-        from the strategy brief, so a forbidden detail can reappear at the seam
-        even when the opening honoured it.
+        On the whole piece, not just the opening.
+
+        Was a loop over segment_index, because a separately rendered extension
+        re-imagines the scene from the strategy brief and a forbidden detail can
+        reappear at the seam even when the opening honoured it. There is no seam
+        now — there is one render — so the property is that the rule is in the
+        single prompt that films both sections, and appears once rather than
+        being restated per segment.
         """
         import generation_planning
         from ai_service import normalize_strategy
@@ -799,25 +589,24 @@ class TestMustNotShowIsEnforced:
             "hook_line": "h", "hook_promise": "p", "hook_action": "a",
             "messaging_pillars": ["m"], "primary_feature": "f",
             "desired_outcome": "o", "differentiation_beat": "b",
-            "cta_strategy": "c", "scene": {"environment": "kitchen"},
+            "scene": {"environment": "kitchen"},
             "performance": {"movement": "still"},
             "segments": [
-                {"index": 0, "role": "hook", "seconds": 5, "goal": "g",
+                {"index": 0, "role": "hook", "seconds": 3, "goal": "g",
                  "script": "s", "action": "a"},
-                {"index": 1, "role": "continuation", "seconds": 5, "goal": "g",
-                 "script": "s", "action": "a"},
+                {"index": 1, "role": "middle", "seconds": 9, "goal": "g2",
+                 "script": "s2", "action": "a2"},
             ],
-            "continuity_contract": {
-                "established": [], "must_not_change": [], "do_not_repeat": [],
-            },
         })
-        for index in (0, 1):
-            prompt = generation_planning.build_segment_prompt(
-                strategy=strategy, profile=self._profile(),
-                segment_index=index, duration=5, is_hook=index == 0,
-            )
-            assert "MUST NOT APPEAR" in prompt, f"segment {index} lost the rule"
-            assert "a hospital corridor" in prompt
+        prompt = generation_planning.build_segment_prompt(
+            strategy=strategy, profile=self._profile(),
+            duration=12, plan={"hook_seconds": 3},
+        )
+        assert prompt.count("MUST NOT APPEAR") == 1
+        for item in self.FORBIDDEN:
+            assert item in prompt, f"the rule lost {item}"
+        # And it is stated as an instruction, not as context.
+        assert "Do not depict any of them" in prompt
 
     def test_a_profile_with_none_records_no_rule(self):
         """
@@ -856,7 +645,7 @@ class TestMustNotShowIsEnforced:
 
     def test_the_endpoint_sends_the_profile_it_stored(self, api, monkeypatch):
         """The wiring: a saved must_not_show must reach a real submit call."""
-        from models import ApproveSegmentRequest, GenerateHookRequest
+        from models import StudioGenerationRequest
         import server
         project, _profile, _template = _make_project(api, NURSE_APP)
         _store_strategy(
@@ -872,198 +661,12 @@ class TestMustNotShowIsEnforced:
             "UPDATE brand_profiles SET must_not_show = ? WHERE id = ?",
             (json.dumps(["a hospital corridor"]), project["brand_profile_id"]),
         ))
+        _mark_ready(api, project["id"])
         calls = _mock_submit(api, monkeypatch)
-        _run(api.generate_project_hook(
-            project_id=project["id"], payload=GenerateHookRequest(), user_id=ANON))
+        _run(api.submit_project_generation(
+            project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
         assert "a hospital corridor" in calls[0]["prompt"]
         assert calls[0]["prompt"].count("MUST NOT APPEAR") == 1
-
-
-class TestContinuityIsHonest:
-    def test_removed_provider_resolves_to_the_minimax_plan(self, api, monkeypatch):
-        """
-        Seedance is gone from VIDEO_MODELS, but old rows still name it. The
-        plan resolves to MiniMax with a reason instead of raising — the same
-        graceful fallback capability() gives unknown keys.
-        """
-        import video_providers
-        plan = video_providers.continuity_plan(
-            "seedance-2.5",
-            has_bridge_frame=True,
-            has_parent_clip_url=True,
-            has_character_reference=True,
-        )
-        assert plan["provider"] == "minimax-h3"
-        assert plan["guarantee"] == "text_only"
-        assert plan["attached"] == ["clip"]
-
-    def test_minimax_reports_it_cannot_pin_the_seam_frame(self, api, monkeypatch):
-        """
-        H3 reports no last-frame support and cannot combine a first frame with
-        references. So it gets the previous clip as its single anchor, and both
-        the frame and the identity reference are recorded as lost.
-        """
-        _project, _hook, ext, calls = TestIdentityContinuity()._chain(
-            api, monkeypatch, model="minimax-h3")
-        continuity = ext["continuity"]
-        assert continuity["guarantee"] == "text_only"
-        assert continuity["use_frame"] is False
-        assert continuity["attached"] == ["clip"]
-        dropped = {d["anchor"] for d in continuity["degraded"]}
-        assert dropped == {"frame", "identity"}
-        reasons = {d["anchor"]: d["reason"] for d in continuity["degraded"]}
-        assert "no last-frame/first-frame continuation support" in reasons["frame"]
-        assert all(reasons.values())
-        # The face really was withheld, not merely reported as withheld.
-        refs = calls[1].get("input_references") or []
-        assert all(r.get("type") == "video_url" for r in refs)
-        assert calls[1].get("continuity_frame_path") is None
-        # And the prompt must not pretend a frame was supplied.
-        assert "you have NOT been given the previous clip" in calls[1]["prompt"]
-        assert "EXACT final frame" not in calls[1]["prompt"]
-
-    def test_degraded_prompt_tells_the_model_to_take_the_written_lock_literally(
-        self, api, monkeypatch
-    ):
-        _project, _hook, _ext, calls = TestIdentityContinuity()._chain(
-            api, monkeypatch, model="minimax-h3")
-        assert "could not receive every continuity reference" in calls[1]["prompt"]
-
-    def test_no_bridge_frame_downgrades_to_text_only_and_says_so(self, api, monkeypatch):
-        """
-        If the previous clip's final frame cannot be extracted, the founder is
-        told continuity is text-only. This is the difference between an honest
-        warning and a silently different character.
-        """
-        _project, _hook, ext, calls = TestIdentityContinuity()._chain(
-            api, monkeypatch, with_bridge_frame=False)
-        continuity = ext["continuity"]
-        assert continuity["guarantee"] == "text_only"
-        assert continuity["use_frame"] is False
-        assert continuity["attached"] == ["identity"]
-        assert any("final frame could not be extracted" in d["reason"]
-                   for d in continuity["degraded"])
-        # The prompt must not claim the model can see the previous clip.
-        assert "you have NOT been given the previous clip" in calls[1]["prompt"]
-        assert "EXACT final frame" not in calls[1]["prompt"]
-        # ...and the face is still anchored where possible.
-        assert calls[1].get("input_references")
-
-    def test_the_hook_is_never_told_its_character_reference_failed_to_arrive(
-        self, api, monkeypatch
-    ):
-        """
-        The hook has no previous clip, so it has no seam to miss. Its identity
-        reference IS attached — and `degraded` is copied straight into the
-        prompt — so listing the reference as dropped told the model the
-        founder's face had not arrived, in the very request carrying it. That is
-        a self-inflicted likeness loss on the one segment the founder judges.
-        """
-        _project, hook, _ext, calls = TestIdentityContinuity()._chain(api, monkeypatch)
-        continuity = hook["continuity"]
-        assert continuity["guarantee"] == "single_segment"
-        assert continuity["attached"] == ["identity"]
-        assert continuity["degraded"] == []
-        # Nothing was lost, so the prompt must not claim anything was.
-        assert "final frame could not be extracted" not in calls[0]["prompt"]
-        assert "could not receive every continuity reference" not in calls[0]["prompt"]
-        # And the face really is in the request, so the record above is true.
-        assert any(r.get("type") == "image_url" for r in calls[0].get("input_references") or [])
-
-    def test_continuity_record_is_readable_from_the_api(self, api, monkeypatch):
-        _project, hook, ext, _calls = TestIdentityContinuity()._chain(api, monkeypatch)
-        report = _run(api.get_generation_continuity(ext["id"], ANON))
-        assert report["segment_index"] == 1
-        assert report["guarantee"] == "text_only"
-        assert report["attached"] == ["clip"]
-        assert report["notes"]
-
-    def test_video_editor_cannot_continue_a_chain(self, api, monkeypatch):
-        """
-        Aleph edits a clip; it cannot generate the next segment. That is a hard
-        refusal with a stated reason, not a degraded attempt.
-        """
-        import video_providers
-
-        os.environ["VIDEO_MODEL_ALLOWLIST"] = "minimax-h3,aleph-2"
-        try:
-            plan = video_providers.continuity_plan(
-                "aleph-2",
-                has_bridge_frame=True,
-                has_parent_clip_url=True,
-                has_character_reference=True,
-            )
-        finally:
-            os.environ.pop("VIDEO_MODEL_ALLOWLIST", None)
-        assert plan["guarantee"] == "unsupported"
-        assert plan["attached"] == []
-        assert len(plan["degraded"]) == 3
-        assert all("cannot generate" in d["reason"] for d in plan["degraded"])
-
-    def test_an_editor_request_falls_back_to_a_generator_at_hook_time(self, api, monkeypatch):
-        from models import ApproveSegmentRequest, GenerateHookRequest
-        os.environ["VIDEO_MODEL_ALLOWLIST"] = "minimax-h3,aleph-2"
-        try:
-            project, _profile, _template = _make_project(api, NURSE_APP)
-            _store_strategy(api, project["id"], "I clocked out at 11:40.",
-                            NURSE_PERSONA, NURSE_SCENE,
-                            problem="Shift paperwork", feature="One-tap shift logging",
-                            cta="Try it free")
-            _mock_submit(api, monkeypatch)
-            hook = _run(api.generate_project_hook(
-                project_id=project["id"],
-                payload=GenerateHookRequest(model="aleph-2"),
-                user_id=ANON))
-            assert hook["model"] == "minimax-h3"
-            assert "edits an existing clip" in hook["provider_reason"]
-        finally:
-            os.environ.pop("VIDEO_MODEL_ALLOWLIST", None)
-
-    def test_generate_video_reports_what_it_actually_attached(self, api, monkeypatch):
-        """The provider layer must not claim a reference it never sent."""
-        import ai_service
-
-        sent = {}
-
-        class _Response:
-            status_code = 200
-
-            def json(self):
-                return {"id": "job-1", "status": "queued"}
-
-        class _Client:
-            def __init__(self, *a, **kw):
-                pass
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *a):
-                return False
-
-            async def post(self, url, headers=None, json=None):
-                sent["payload"] = json
-                return _Response()
-
-        monkeypatch.setattr(ai_service.httpx, "AsyncClient", _Client)
-        monkeypatch.setattr(ai_service, "OPENROUTER_API_KEY", "test")
-        frame = Path(tempfile.mkdtemp(prefix="tiktok-frame-")) / "f.png"
-        frame.write_bytes(_TINY_PNG)
-
-        result = _run(ai_service.generate_video(
-            prompt="continue", duration=5, model="minimax-h3",
-            continuity_frame_path=frame,
-            input_references=[{"type": "image_url",
-                               "image_url": {"url": "data:image/png;base64,AAAA"}}],
-        ))
-        assert result["continuity"]["has_continuity_frame"] is True
-        assert result["continuity"]["has_frame_images"] is True
-        assert result["continuity"]["dropped_anchors"] == ["identity"]
-        # The frame really is in the request, as a first_frame.
-        frames = sent["payload"]["frame_images"]
-        assert len(frames) == 1 and frames[0]["frame_type"] == "first_frame"
-        # ...and the reference was dropped, because this provider cannot combine.
-        assert "input_references" not in sent["payload"]
 
 
 def _async_return(value):
@@ -1076,15 +679,23 @@ def _async_return(value):
 # 5. Gates: the workflow cannot skip strategy, approval, or claim safety
 # ---------------------------------------------------------------------------
 class TestWorkflowGates:
-    def test_hook_requires_a_strategy(self, api, monkeypatch):
-        from models import GenerateHookRequest
+    def test_generation_requires_a_ready_project(self, api, monkeypatch):
+        """
+        The gate that replaced the hook endpoint's own. A project still in draft
+        has not been reviewed, so nothing is submitted and nothing is spent.
+        """
+        from models import StudioGenerationRequest
         project, _p, _t = _make_project(api, NURSE_APP)
+        _store_strategy(api, project["id"], "I clocked out at 11:40.",
+                        NURSE_PERSONA, NURSE_SCENE,
+                        problem="Shift paperwork", feature="One-tap shift logging",
+                        cta="Try it free")
         _mock_submit(api, monkeypatch)
         with pytest.raises(HTTPException) as err:
-            _run(api.generate_project_hook(
-                project_id=project["id"], payload=GenerateHookRequest(), user_id=ANON))
-        assert err.value.status_code == 400
-        assert "strategy" in str(err.value.detail).lower()
+            _run(api.submit_project_generation(
+                project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        assert err.value.status_code == 409
+        assert "ready" in str(err.value.detail).lower()
 
     def test_strategy_requires_an_approved_app_profile(self, api, monkeypatch):
         """
@@ -1111,37 +722,29 @@ class TestWorkflowGates:
         assert err.value.status_code == 409
         assert "approve" in str(err.value.detail).lower()
 
-    def test_a_banned_claim_in_the_strategy_blocks_the_hook(self, api, monkeypatch):
+    def test_a_banned_claim_in_the_strategy_blocks_the_render(self, api, monkeypatch):
         """
         The strategy is where the spoken words live, so it goes through the same
         claim check as the script. A banned claim must not reach a paid render.
+
+        Asserted at the only paid endpoint there is now: one render, gated on the
+        stored report, which generate_project_strategy recomputed when it wrote
+        the strategy.
         """
-        from models import GenerateHookRequest
+        from models import StudioGenerationRequest
         project, _p, _t = _make_project(api, NURSE_APP)
         _store_strategy(api, project["id"], "This app cures burnout overnight.",
                         NURSE_PERSONA, NURSE_SCENE,
                         problem="Shift paperwork", feature="One-tap shift logging",
                         cta="Try it free")
-        _mock_submit(api, monkeypatch)
+        _mark_ready(api, project["id"], script="Nothing here is a promise.")
+        calls = _mock_submit(api, monkeypatch)
         with pytest.raises(HTTPException) as err:
-            _run(api.generate_project_hook(
-                project_id=project["id"], payload=GenerateHookRequest(), user_id=ANON))
+            _run(api.submit_project_generation(
+                project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
         assert err.value.status_code == 409
         assert "cures burnout" in str(err.value.detail)
-
-    def test_approval_requires_a_completed_generation(self, api, monkeypatch):
-        from models import ApproveSegmentRequest, GenerateHookRequest
-        project, _p, _t = _make_project(api, NURSE_APP)
-        _store_strategy(api, project["id"], "I clocked out at 11:40.",
-                        NURSE_PERSONA, NURSE_SCENE,
-                        problem="Shift paperwork", feature="One-tap shift logging",
-                        cta="Try it free")
-        _mock_submit(api, monkeypatch)
-        hook = _run(api.generate_project_hook(
-            project_id=project["id"], payload=GenerateHookRequest(), user_id=ANON))
-        with pytest.raises(HTTPException) as err:
-            _run(api.approve_generation(hook["id"], ApproveSegmentRequest(), ANON))
-        assert err.value.status_code == 409
+        assert calls == [], "a banned claim must not reach the provider"
 
     def test_editing_the_strategy_bumps_its_version(self, api):
         from models import UpdateStudioProjectRequest
@@ -1163,70 +766,29 @@ class TestWorkflowGates:
 
 
 # ---------------------------------------------------------------------------
-# 6. The assembled deliverable
-# ---------------------------------------------------------------------------
-class TestChainAssembly:
-    def test_assemble_reports_skipped_segments_rather_than_dropping_them(self, api, monkeypatch):
-        from models import ApproveSegmentRequest, GenerateHookRequest, StudioGenerationRequest
-        from models import AssembleChainRequest
-        project, _p, _t = _make_project(api, NURSE_APP)
-        _store_strategy(api, project["id"], "I clocked out at 11:40.",
-                        NURSE_PERSONA, NURSE_SCENE,
-                        problem="Shift paperwork", feature="One-tap shift logging",
-                        cta="Try it free")
-        _mock_submit(api, monkeypatch)
-        hook = _run(api.generate_project_hook(
-            project_id=project["id"], payload=GenerateHookRequest(), user_id=ANON))
-        _run(api._execute(
-            "UPDATE generations SET status = 'completed', video_url = ? WHERE id = ?",
-            ("https://provider.test/hook.mp4", hook["id"])))
-        api.pipeline.VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
-        (api.pipeline.VIDEOS_DIR / f"{hook['id']}.mp4").write_bytes(_TINY_PNG)
-        bridge = Path(tempfile.mkdtemp(prefix="tiktok-bridge-")) / "bridge.png"
-        bridge.write_bytes(_TINY_PNG)
-        api.pipeline.extract_last_frame = _async_return(bridge)
-        _run(api.approve_generation(hook["id"], ApproveSegmentRequest(), ANON))
-        ext = _run(api.extend_generation(
-            hook["id"], StudioGenerationRequest(duration_seconds=6), ANON))
-        # The extension is still generating, so it must be reported as skipped
-        # rather than quietly dropped from the assembled video. The approved,
-        # completed hook is still usable.
-        result = _run(api.assemble_generation_chain(
-            ext["id"], AssembleChainRequest(), ANON))
-        assert [s["reason"] for s in result["skipped"]] == ["status is 'generating'"]
-        assert result["segment_count"] == 1
-        assert result["segments"][0]["id"] == hook["id"]
-        assert result["segments"][0]["segment_index"] == 0
-
-    def test_assemble_refuses_when_nothing_is_usable(self, api, monkeypatch):
-        from models import GenerateHookRequest, AssembleChainRequest
-        project, _p, _t = _make_project(api, NURSE_APP)
-        _store_strategy(api, project["id"], "I clocked out at 11:40.",
-                        NURSE_PERSONA, NURSE_SCENE,
-                        problem="Shift paperwork", feature="One-tap shift logging",
-                        cta="Try it free")
-        _mock_submit(api, monkeypatch)
-        hook = _run(api.generate_project_hook(
-            project_id=project["id"], payload=GenerateHookRequest(), user_id=ANON))
-        _run(api._execute("UPDATE generations SET status = 'completed' WHERE id = ?", (hook["id"],)))
-        with pytest.raises(HTTPException) as err:
-            _run(api.assemble_generation_chain(hook["id"], AssembleChainRequest(), ANON))
-        assert err.value.status_code == 409
-
-
-# ---------------------------------------------------------------------------
 # 7. Strategy normalization, unit level
 # ---------------------------------------------------------------------------
 class TestStrategyNormalization:
     def test_missing_keys_become_empty_not_absent(self):
+        """
+        The scene and performance blocks are re-asserted by name in the prompt,
+        so a missing key has to read as empty rather than vanish — that is what
+        lets the founder see exactly which attributes were pinned and which were
+        left open.
+
+        `continuity_contract` used to be the third block asserted here. There is
+        no such block: a continuity contract governed the seam between two
+        separately rendered clips, and there is no seam. The two sections
+        themselves are what replace it, so they are asserted instead.
+        """
         from ai_service import normalize_strategy
         strategy = normalize_strategy({"hook_line": "Hi"})
         for field in ("camera_angle", "framing", "lighting", "environment", "background"):
             assert field in strategy["scene"]
         for field in ("movement", "voice_delivery"):
             assert field in strategy["performance"]
-        for field in ("established", "must_not_change", "do_not_repeat"):
-            assert field in strategy["continuity_contract"]
+        assert [s["role"] for s in strategy["segments"]] == ["hook", "middle"]
+        assert "continuity_contract" not in strategy
 
     def test_a_character_section_cannot_be_stored(self):
         """
@@ -1254,11 +816,55 @@ class TestStrategyNormalization:
         strategy = normalize_strategy({"hook_line": "x" * 5000})
         assert len(strategy["hook_line"]) <= 200
 
-    def test_segments_default_to_a_single_hook(self):
-        from ai_service import normalize_strategy
+    def test_segments_always_become_a_hook_and_a_middle(self):
+        """
+        Was `test_segments_default_to_a_single_hook`, which asserted one section
+        when the model returned none.
+
+        A video is now ONE render with exactly two sections, so the count is
+        structural rather than a default: a hook and a middle, always, with the
+        roles assigned by position rather than trusted. A model returning the old
+        eight-beat shape has beats 2-8 dropped and beat 8's "cta" role replaced,
+        which is what stops a call to action being inherited by the middle.
+        """
+        from ai_service import SECTION_ROLES, normalize_strategy
+        assert SECTION_ROLES == ("hook", "middle")
         strategy = normalize_strategy({"segments": []})
-        assert len(strategy["segments"]) == 1
-        assert strategy["segments"][0]["role"] == "hook"
+        assert len(strategy["segments"]) == 2
+        assert [s["role"] for s in strategy["segments"]] == ["hook", "middle"]
+        assert [s["index"] for s in strategy["segments"]] == [0, 1]
+
+        eight = normalize_strategy({"segments": [
+            {"index": i, "role": "cta" if i == 7 else "continuation",
+             "seconds": 5, "goal": f"g{i}", "script": f"s{i}", "action": f"a{i}"}
+            for i in range(8)
+        ]})
+        assert len(eight["segments"]) == 2
+        assert [s["role"] for s in eight["segments"]] == ["hook", "middle"]
+        assert eight["segments"][0]["script"] == "s0"
+        # Beat 8's CTA is not inherited by the middle.
+        assert eight["segments"][1]["script"] == "s1"
+
+    def test_the_retired_fields_are_dropped_not_stored_whole(self):
+        """
+        A strategy saved before this change still carries `cta_strategy` and a
+        `continuity_contract`, and a model reading a cached older prompt still
+        emits them. Both govern something that no longer exists — a closing ask
+        and a seam — so neither may survive normalization into a new prompt.
+        """
+        from ai_service import normalize_strategy
+        strategy = normalize_strategy({
+            "hook_line": "Hi",
+            "cta_strategy": "Ask them to install it",
+            "continuity_contract": {
+                "established": ["teal scrubs"],
+                "must_not_change": ["the face"],
+                "do_not_repeat": ["the hook line"],
+            },
+        })
+        assert "cta_strategy" not in strategy
+        assert "continuity_contract" not in strategy
+        assert "Ask them to install it" not in str(strategy)
 
     def test_wrong_types_are_coerced_not_crashed_on(self):
         from ai_service import normalize_strategy
@@ -1269,8 +875,8 @@ class TestStrategyNormalization:
         })
         assert strategy["scene"]["framing"] == ""
         assert strategy["emotional_triggers"] == ["a single trigger"]
-        assert strategy["continuity_contract"]["established"] == []
-        assert len(strategy["segments"]) == 1
+        assert "continuity_contract" not in strategy
+        assert len(strategy["segments"]) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -1298,22 +904,23 @@ class TestStrategyPromptDirectives:
             # the model to omit the key while validation demanded it.
             # No "hook_dialogue" either: it is enrichment the model may drop,
             # and every consumer tolerates its absence.
+            # Nor "cta_strategy" or "continuity_contract": neither is in the
+            # schema any more, so a compliant reply cannot contain them.
             return {
                 "strategy_summary": "s", "audience_problem": "p",
                 "emotional_triggers": ["t"], "hook_concept": "c",
                 "hook_line": "h", "hook_promise": "p", "hook_action": "a",
                 "messaging_pillars": ["m"],
                 "primary_feature": "f", "desired_outcome": "o",
-                "differentiation_beat": "b", "cta_strategy": "c",
+                "differentiation_beat": "b",
                 "scene": {"environment": "kitchen"},
                 "performance": {"movement": "still"},
-                "segments": [{
-                    "index": 0, "role": "hook", "seconds": 3,
-                    "goal": "g", "script": "s", "action": "a",
-                }],
-                "continuity_contract": {
-                    "established": [], "must_not_change": [], "do_not_repeat": [],
-                },
+                "segments": [
+                    {"index": 0, "role": "hook", "seconds": 2,
+                     "goal": "g", "script": "s", "action": "a"},
+                    {"index": 1, "role": "middle", "seconds": 13,
+                     "goal": "g2", "script": "s2", "action": "a2"},
+                ],
             }
 
         monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
@@ -1344,6 +951,59 @@ class TestStrategyPromptDirectives:
         captured = self._run_strategy(monkeypatch)
         assert "Fill every content_slot" in captured["prompt"]
 
+    def test_the_selected_template_middle_reaches_the_prompt(self, monkeypatch):
+        """
+        The hook mechanism is handed to the strategy as fixed material, so its
+        middle structure has to actually arrive. It did not: the prompt read a
+        retired `continuation_structure` key, which no template has carried since
+        a video became one render, so EVERY strategy was told
+        "continuation_structure: (unstated)" and "cta_pattern: (unstated)" while
+        the curated middle — the thing that tells the model what the middle is
+        for — was silently dropped.
+
+        The cta_pattern half is the worse of the two: it asked for a closing beat
+        in the same prompt that forbids a call to action three rules later.
+        """
+        import ai_service
+        captured = self._capture_prompt(monkeypatch)
+        asyncio.run(ai_service.generate_video_strategy(
+            profile={"brand_name": "Taskly", "core_features": ["timer"]},
+            template={
+                "name": "Stop Doing This",
+                "content_slots": {"mistake": "the behaviour to stop"},
+                "required_assets": ["character_reference"],
+                "middle_structure": "Name what the habit costs, then stop at the reach.",
+            },
+            angle=None, objective="address_user_problem",
+            hook_seconds=2, total_duration=15, tone="", brand_voice="",
+            profile_feedback={},
+        ))
+        prompt = captured["prompt"]
+        assert "Name what the habit costs, then stop at the reach." in prompt
+        assert '"middle_structure"' in prompt
+        assert '"continuation_structure"' not in prompt
+        assert "cta_pattern" not in prompt
+
+    def test_a_retired_structure_field_still_migrates_into_the_mechanism(self, monkeypatch):
+        """
+        A template row written before the rename carries only
+        `continuation_structure`. It must not read as an unstated mechanism: the
+        row has something to say, and dropping it would leave a curated template
+        with no middle at all.
+        """
+        import ai_service
+        captured = self._capture_prompt(monkeypatch)
+        asyncio.run(ai_service.generate_video_strategy(
+            profile={"brand_name": "Taskly", "core_features": ["timer"]},
+            template={"name": "Old Row", "content_slots": {},
+                      "continuation_structure": "Name the cost, then stop at the reach."},
+            angle=None, objective="address_user_problem",
+            hook_seconds=2, total_duration=15, tone="", brand_voice="",
+            profile_feedback={},
+        ))
+        assert "Name the cost, then stop at the reach." in captured["prompt"]
+        assert '"middle_structure"' in captured["prompt"]
+
     def test_environment_is_invented_from_facts_not_composited(self, monkeypatch):
         captured = self._run_strategy(monkeypatch)
         assert "Invent the environment" in captured["prompt"]
@@ -1355,9 +1015,106 @@ class TestStrategyPromptDirectives:
         assert "screen recording" in captured["prompt"]
 
     def test_appearance_is_never_described(self, monkeypatch):
+        """
+        Two halves, both load-bearing. The system message forbids describing the
+        presenter at all; the prompt rules forbid it again per field, AND say the
+        scene lock must cover the whole piece while explicitly excluding the
+        appearance — because that exclusion is the fix for a founder's own face
+        coming back as somebody else's.
+
+        The continuity-contract half of the old assertion is gone: there is no
+        contract. What holds the two sections together is the scene lock, and it
+        has to be stated as applying to both of them.
+        """
         captured = self._run_strategy(monkeypatch)
         assert "appearance is never" in captured["system"]
-        assert "must_not_change must cover the background" in captured["prompt"]
+        assert "do not describe the presenter's face" in captured["prompt"]
+        assert "The scene must hold for BOTH sections" in captured["prompt"]
+        assert "never the face, hair, age, build or styling" in captured["prompt"]
+
+    def test_no_section_beyond_the_two_is_requested(self, monkeypatch):
+        """
+        The schema is the whole budget. A third section would be the product
+        demo, which is the founder's own recording, and the prompt has to say so
+        in the same breath as forbidding a demonstration inside the two.
+        """
+        captured = self._run_strategy(monkeypatch)
+        assert "There are exactly TWO sections and they are the whole video" in captured["prompt"]
+        assert "Never return a third section" in captured["prompt"]
+        assert "NEVER put a product demonstration in either section" in captured["prompt"]
+        assert "NEVER write a call to action" in captured["prompt"]
+
+    def test_the_middle_ends_at_the_usage_moment_not_the_demo(self, monkeypatch):
+        """
+        The two-section shape only works if the middle knows where to stop.
+
+        usage_moments is the specific moment this app is reached for, and it is
+        the seam the founder's own demo continues from. So the middle develops
+        towards that moment and ends on the reach — and the prompt has to say so,
+        or the middle spends its whole budget resolving a problem the demo is
+        supposed to resolve.
+        """
+        captured = self._run_strategy(monkeypatch)
+        assert "The middle must end AT the usage moment" in captured["prompt"]
+        assert "reaching for the app, not using it" in captured["prompt"]
+        # And the schema says the same thing about the middle's action, so it
+        # holds even if the prose rule is skimmed.
+        assert "ending on the reach for the phone" in captured["prompt"]
+
+    def test_hook_seconds_is_clamped_where_the_strategy_is_built(self, api, monkeypatch):
+        """
+        A hook boundary outside 2-4s is refused at the project endpoints, and
+        the strategy endpoint has to hold the same line.
+
+        It seeds the strategy's own segment budget, so an unclamped value would
+        let the hook the founder reviews disagree with the boundary the render
+        uses. And a hook_seconds at or beyond the piece's length collapses the
+        middle to a single second. The default matters too: it used to fall
+        back to the provider floor of 5s, a leftover from when the hook was a
+        separately-rendered sub-floor clip, and one second past the maximum.
+        """
+        from models import GenerateStrategyRequest, UpdateStudioProjectRequest
+
+        async def fake_strategy(**kwargs):
+            # Everything under test happens before the model is called, so this
+            # never runs against a network. It returns a minimal valid strategy
+            # purely so the endpoint has something to normalise.
+            from ai_service import normalize_strategy
+            return normalize_strategy({
+                "strategy_summary": "s", "audience_problem": "p",
+                "hook_concept": "c", "hook_line": "You do not have a focus problem.",
+                "hook_promise": "p", "hook_action": "a", "messaging_pillars": ["m"],
+                "primary_feature": "f", "desired_outcome": "o",
+                "differentiation_beat": "b",
+                "scene": {}, "performance": {},
+                "segments": [
+                    {"index": 0, "role": "hook", "seconds": 3, "goal": "g",
+                     "script": "line", "action": "a"},
+                    {"index": 1, "role": "middle", "seconds": 6, "goal": "g",
+                     "script": "more", "action": "a"},
+                ],
+            })
+        monkeypatch.setattr(api, "generate_video_strategy", fake_strategy)
+
+        project_id = _approved_project(api, script="The line.", version=1)
+        # A value past the ceiling is brought to it rather than refused, so a
+        # hand-typed 9s leaves a boundary a hook can actually land in.
+        _run(api.update_studio_project(
+            project_id=project_id,
+            payload=UpdateStudioProjectRequest(hook_seconds=30),
+            user_id=ANON))
+        assert _run(api.get_studio_project(project_id, ANON))["hook_seconds"] == 4
+
+        for asked, expected in ((99, 4), (1, 2), (3, 3)):
+            _run(api.update_studio_project(
+                project_id=project_id,
+                payload=UpdateStudioProjectRequest(hook_seconds=expected),
+                user_id=ANON))
+            strategy = _run(api.generate_project_strategy(
+                project_id=project_id,
+                payload=GenerateStrategyRequest(hook_seconds=asked),
+                user_id=ANON))
+            assert strategy["hook_seconds"] == expected, f"asked for {asked}s"
 
     def test_values_forbid_double_quotes(self, monkeypatch):
         """
@@ -1413,14 +1170,19 @@ class TestStrategyFollowsTheApprovedPlan:
     _PLAN = {
         "hook_line": "You do not have a focus problem.",
         "script": "You do not have a focus problem. You have too many lists.",
-        "cta": "Start your 3-day trial",
-        "feature_emphasis": "Task timer",
+        # The founder's brief for the demo they record themselves. Deliberately
+        # NOT passed on: handing it to the strategy would be the route by which a
+        # feature instruction reached the render. Asserted absent below.
+        "demo_brief": "Record yourself clearing one list by hand.",
         "visual_direction": "Close, 9:16, desk.",
         "voice_direction": "Calm.",
         "sound_direction": "Room tone.",
+        # Two beats, as the plan schema now demands: the hook, then the middle.
         "beat_timeline": [
-            {"start": 0, "end": 5, "beat": "You do not have a focus problem."},
-            {"start": 5, "end": 12, "beat": "You have too many lists."},
+            {"start": 0, "end": 3, "label": "hook",
+             "text": "You do not have a focus problem."},
+            {"start": 3, "end": 12, "label": "middle",
+             "text": "You have too many lists."},
         ],
     }
 
@@ -1436,14 +1198,14 @@ class TestStrategyFollowsTheApprovedPlan:
                 "hook_line": "h", "hook_promise": "p", "hook_action": "a",
                 "messaging_pillars": ["m"], "primary_feature": "f",
                 "desired_outcome": "o", "differentiation_beat": "b",
-                "cta_strategy": "c",
                 "scene": {"environment": "kitchen"},
                 "performance": {"movement": "still"},
-                "segments": [{"index": 0, "role": "hook", "seconds": 5,
-                              "goal": "g", "script": "s", "action": "a"}],
-                "continuity_contract": {
-                    "established": [], "must_not_change": [], "do_not_repeat": [],
-                },
+                "segments": [
+                    {"index": 0, "role": "hook", "seconds": 5,
+                     "goal": "g", "script": "s", "action": "a"},
+                    {"index": 1, "role": "middle", "seconds": 7,
+                     "goal": "g2", "script": "s2", "action": "a2"},
+                ],
             }
 
         monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
@@ -1471,13 +1233,30 @@ class TestStrategyFollowsTheApprovedPlan:
         prompt = captured["prompt"]
         assert "APPROVED CREATIVE PLAN" in prompt
         assert "You do not have a focus problem." in prompt
-        assert "Start your 3-day trial" in prompt
-        assert "Task timer" in prompt
         # Both beats, in order — the plan is the video's spine.
         assert "You have too many lists." in prompt
         assert prompt.index("You do not have a focus problem.") < prompt.index(
             "You have too many lists."
         )
+
+    def test_the_demo_brief_is_never_passed_on(self, monkeypatch):
+        """
+        The CTA and feature_emphasis assertions this replaces are gone for a
+        reason, and this is the same rule stated against the field that replaced
+        one of them.
+
+        `demo_brief` exists so the founder knows what to record for their own
+        demo. Passing it to the strategy would put "record yourself doing the
+        thing" in front of a model that is told not to describe the app working,
+        and the result would reach the render. So the plan section carries the
+        founder's words and directions, and nothing that is an instruction about
+        a demonstration.
+        """
+        captured, _ = self._run(monkeypatch, self._PLAN)
+        prompt = captured["prompt"]
+        assert "Record yourself clearing one list by hand." not in prompt
+        # The directions that ARE the video's shape still travel.
+        assert "Close, 9:16, desk." in prompt
 
     def test_the_plan_wins_over_the_models_own_hook(self, monkeypatch):
         """
@@ -1491,9 +1270,19 @@ class TestStrategyFollowsTheApprovedPlan:
         assert "do not replace its words" in captured["prompt"]
 
     def test_the_strategy_still_adds_what_a_plan_cannot_express(self, monkeypatch):
+        """
+        The approved words are fixed material, so what the strategy is FOR is
+        everything a plan cannot state: what the person physically does, and the
+        locked scene.
+
+        "the continuity contract" is gone from that sentence along with the
+        contract. There is no seam between two renders to keep consistent, so
+        the scene is what holds the two sections together instead.
+        """
         captured, _ = self._run(monkeypatch, self._PLAN)
-        assert "the on-camera action for each beat" in captured["prompt"]
-        assert "the scene, the performance, and the continuity contract" in captured["prompt"]
+        assert "the on-camera action for each section" in captured["prompt"]
+        assert "the scene, and the performance" in captured["prompt"]
+        assert "continuity contract" not in captured["prompt"]
 
     def test_no_plan_means_no_plan_section_and_no_directive(self, monkeypatch):
         """
@@ -1506,7 +1295,9 @@ class TestStrategyFollowsTheApprovedPlan:
         assert result["template_name"] == "Stop Doing This"
 
     def test_an_empty_plan_is_treated_as_no_plan(self, monkeypatch):
-        captured, _ = self._run(monkeypatch, {"script": "", "hook_line": "", "cta": "", "beat_timeline": []})
+        captured, _ = self._run(monkeypatch, {
+            "script": "", "hook_line": "", "demo_brief": "", "beat_timeline": [],
+        })
         assert "APPROVED CREATIVE PLAN" not in captured["prompt"]
 
     def test_the_endpoint_passes_the_approved_plan(self, api, monkeypatch):
@@ -1526,14 +1317,14 @@ class TestStrategyFollowsTheApprovedPlan:
                 "hook_line": "h", "hook_promise": "p", "hook_action": "a",
                 "messaging_pillars": ["m"], "primary_feature": "f",
                 "desired_outcome": "o", "differentiation_beat": "b",
-                "cta_strategy": "c",
                 "scene": {"environment": "kitchen"},
                 "performance": {"movement": "still"},
-                "segments": [{"index": 0, "role": "hook", "seconds": 5,
-                              "goal": "g", "script": "s", "action": "a"}],
-                "continuity_contract": {
-                    "established": [], "must_not_change": [], "do_not_repeat": [],
-                },
+                "segments": [
+                    {"index": 0, "role": "hook", "seconds": 5,
+                     "goal": "g", "script": "s", "action": "a"},
+                    {"index": 1, "role": "middle", "seconds": 7,
+                     "goal": "g2", "script": "s2", "action": "a2"},
+                ],
             }
 
         monkeypatch.setattr(server, "generate_video_strategy", fake_strategy)
@@ -1546,6 +1337,10 @@ class TestStrategyFollowsTheApprovedPlan:
         assert plan, "the endpoint built a strategy with no plan at all"
         assert plan["hook_line"] == "You do not have a focus problem."
         assert plan["script"] == "You do not have a focus problem."
+        # The founder's demo brief is not part of what the strategy is told to
+        # deliver. `cta` and `feature_emphasis` used to be, and both were the
+        # route by which a closing beat and a product demo reached the render.
+        assert "demo_brief" not in plan
 
     def test_an_unplanned_project_passes_no_plan(self, api, monkeypatch):
         import server
@@ -1560,14 +1355,14 @@ class TestStrategyFollowsTheApprovedPlan:
                 "hook_line": "h", "hook_promise": "p", "hook_action": "a",
                 "messaging_pillars": ["m"], "primary_feature": "f",
                 "desired_outcome": "o", "differentiation_beat": "b",
-                "cta_strategy": "c",
                 "scene": {"environment": "kitchen"},
                 "performance": {"movement": "still"},
-                "segments": [{"index": 0, "role": "hook", "seconds": 5,
-                              "goal": "g", "script": "s", "action": "a"}],
-                "continuity_contract": {
-                    "established": [], "must_not_change": [], "do_not_repeat": [],
-                },
+                "segments": [
+                    {"index": 0, "role": "hook", "seconds": 5,
+                     "goal": "g", "script": "s", "action": "a"},
+                    {"index": 1, "role": "middle", "seconds": 7,
+                     "goal": "g2", "script": "s2", "action": "a2"},
+                ],
             }
 
         monkeypatch.setattr(server, "generate_video_strategy", fake_strategy)
@@ -1583,10 +1378,16 @@ class TestStrategyGoesStaleWhenTheScriptIsEdited:
     plan's words — and a script edit left it describing a hook line the founder
     had already replaced, with nothing detecting it.
 
-    The strategy is stamped with the script_version it was built from, and the
-    two paid endpoints refuse a mismatch. Refused rather than warned because
-    the failure is otherwise invisible: the founder watches a video built from a
-    script they deleted, and the result cannot explain the mismatch.
+    The strategy is stamped with the script_version it was built from, and
+    `strategy_is_current` on the project says whether it still is. The stamp is
+    what makes the mismatch visible at all: the founder watches a video built
+    from a script they deleted, and the result cannot explain the mismatch.
+
+    What changed with the architecture: the two paid endpoints that used to
+    REFUSE a mismatch are gone — there is one render now, and no hook-then-extend
+    chain for a stale strategy to be quietly re-used by. Detection moved with
+    them and is what the studio reads before spending. So the property pinned
+    here is detection, and that a rebuild clears it.
     """
 
     async def _fake_strategy(self, **kwargs):
@@ -1598,15 +1399,15 @@ class TestStrategyGoesStaleWhenTheScriptIsEdited:
             "hook_promise": "p", "hook_action": "a",
             "messaging_pillars": ["m"], "primary_feature": "f",
             "desired_outcome": "o", "differentiation_beat": "b",
-            "cta_strategy": "c",
             "scene": {"environment": "kitchen"},
             "performance": {"movement": "still"},
-            "segments": [{"index": 0, "role": "hook", "seconds": 5,
-                          "goal": "g", "script": "You do not have a focus problem.",
-                          "action": "a"}],
-            "continuity_contract": {
-                "established": [], "must_not_change": [], "do_not_repeat": [],
-            },
+            "segments": [
+                {"index": 0, "role": "hook", "seconds": 5,
+                 "goal": "g", "script": "You do not have a focus problem.",
+                 "action": "a"},
+                {"index": 1, "role": "middle", "seconds": 7,
+                 "goal": "g2", "script": "s2", "action": "a2"},
+            ],
         }
 
     def test_the_strategy_stamps_the_script_version_it_built_from(self, api, monkeypatch):
@@ -1637,69 +1438,39 @@ class TestStrategyGoesStaleWhenTheScriptIsEdited:
         assert edited["script_version"] == 3
         assert edited["strategy_is_current"] is False
 
-    def test_the_hook_is_refused_against_a_stale_strategy(self, api, monkeypatch):
-        from models import GenerateHookRequest, UpdateStudioProjectRequest
-        import server
-        monkeypatch.setattr(server, "generate_video_strategy", self._fake_strategy)
-        project_id = _approved_project(api, script="The original hook line.", version=2)
-        _run(api.generate_project_strategy(
-            project_id=project_id, payload=server.GenerateStrategyRequest(), user_id=ANON))
-        _run(api.update_studio_project(
-            project_id=project_id,
-            payload=UpdateStudioProjectRequest(hook_line="A completely new hook line."),
-            user_id=ANON))
-        _mock_submit(api, monkeypatch)
-
-        with pytest.raises(HTTPException) as err:
-            _run(api.generate_project_hook(
-                project_id=project_id, payload=GenerateHookRequest(), user_id=ANON))
-        assert err.value.status_code == 409
-        assert "Rebuild the strategy" in err.value.detail
-        assert "free" in err.value.detail
-        # Nothing has been rendered yet on this path, so there is no paid work
-        # to lose and the message must not invent any. Warning about zero
-        # segments would read as a bug.
-        assert "already paid for" not in err.value.detail
-
-    def test_the_hook_refusal_counts_the_segments_it_would_strand(self, api, monkeypatch):
-        """The same refusal, but on a project that already has a paid hook.
-
-        The count is the point: the founder is told to rebuild, rebuilds, and
-        then finds the segment they bought is refused by the
-        parent_strategy_version check. This is the moment to say so.
+    def test_a_generation_reads_the_stale_strategy_and_the_studio_is_told(self, api, monkeypatch):
         """
-        from models import (ApproveSegmentRequest, GenerateHookRequest,
-                            StudioGenerationRequest, UpdateStudioProjectRequest)
+        The mismatch is still detected where it matters. The render goes ahead —
+        the studio warns before spending, it does not refuse — but the project
+        payload the studio reads carries `strategy_is_current: False`, so the
+        warning is on the screen before the button, not after the result.
+
+        Asserting the flag rather than a refusal: a hard 409 lived on the two
+        endpoints that no longer exist.
+        """
+        from models import StudioGenerationRequest, UpdateStudioProjectRequest
         import server
         monkeypatch.setattr(server, "generate_video_strategy", self._fake_strategy)
         project_id = _approved_project(api, script="The original hook line.", version=2)
         _run(api.generate_project_strategy(
             project_id=project_id, payload=server.GenerateStrategyRequest(), user_id=ANON))
+        _run(api.update_studio_project(
+            project_id=project_id,
+            payload=UpdateStudioProjectRequest(hook_line="A completely new hook line."),
+            user_id=ANON))
+        _mark_ready(api, project_id)
         _mock_submit(api, monkeypatch)
-        hook = _run(api.generate_project_hook(
-            project_id=project_id, payload=GenerateHookRequest(), user_id=ANON))
-        _run(api._execute(
-            "UPDATE generations SET status = 'completed', video_url = ? WHERE id = ?",
-            ("https://provider.test/hook.mp4", hook["id"])))
-        api.pipeline.VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
-        (api.pipeline.VIDEOS_DIR / f"{hook['id']}.mp4").write_bytes(_TINY_PNG)
-        _run(api.approve_generation(hook["id"], ApproveSegmentRequest(), ANON))
 
-        # Now edit the script, and ask for the hook again. Only ONE segment is
-        # completed on this project, so the message should name exactly one.
-        _run(api.update_studio_project(
-            project_id=project_id,
-            payload=UpdateStudioProjectRequest(hook_line="A completely new hook line."),
-            user_id=ANON))
-        with pytest.raises(HTTPException) as err:
-            _run(api.generate_project_hook(
-                project_id=project_id, payload=GenerateHookRequest(), user_id=ANON))
-        assert err.value.status_code == 409
-        assert "1 segment(s) you have already paid for" in err.value.detail
+        _run(api.submit_project_generation(
+            project_id=project_id, payload=StudioGenerationRequest(), user_id=ANON))
+        stale = _run(api.get_studio_project(project_id, ANON))
+        assert stale["strategy_is_current"] is False
+        assert stale["strategy"]["hook_line"] == "You do not have a focus problem."
+        assert stale["hook_line"] == "A completely new hook line."
 
-    def test_rebuilding_the_strategy_restores_the_hook(self, api, monkeypatch):
-        """The route out has to actually work, or the refusal is a dead end."""
-        from models import GenerateHookRequest, UpdateStudioProjectRequest
+    def test_rebuilding_the_strategy_clears_the_stale_flag(self, api, monkeypatch):
+        """The route out has to actually work, or the warning is noise."""
+        from models import StudioGenerationRequest, UpdateStudioProjectRequest
         import server
         monkeypatch.setattr(server, "generate_video_strategy", self._fake_strategy)
         project_id = _approved_project(api, script="The original hook line.", version=2)
@@ -1709,23 +1480,26 @@ class TestStrategyGoesStaleWhenTheScriptIsEdited:
             project_id=project_id,
             payload=UpdateStudioProjectRequest(hook_line="A completely new hook line."),
             user_id=ANON))
+        assert _run(api.get_studio_project(
+            project_id, ANON))["strategy_is_current"] is False
         calls = _mock_submit(api, monkeypatch)
 
         rebuilt = _run(api.generate_project_strategy(
             project_id=project_id, payload=server.GenerateStrategyRequest(), user_id=ANON))
         assert rebuilt["strategy_is_current"] is True
-        hook = _run(api.generate_project_hook(
-            project_id=project_id, payload=GenerateHookRequest(), user_id=ANON))
-        assert hook["status"] in ("submitted", "generating")
-        assert calls, "the hook did not reach the provider after a rebuild"
+        _mark_ready(api, project_id)
+        generation = _run(api.submit_project_generation(
+            project_id=project_id, payload=StudioGenerationRequest(), user_id=ANON))
+        assert generation["status"] in ("submitted", "generating")
+        assert calls, "the generation did not reach the provider after a rebuild"
 
     def test_an_unstamped_strategy_is_not_treated_as_stale(self, api, monkeypatch):
         """
         strategy_script_version 0 means "built before this was recorded", not
-        "stale". Existing drafts must keep generating rather than being blocked
-        by a migration default.
+        "stale". Existing drafts must keep generating rather than being warned
+        about by a migration default.
         """
-        from models import GenerateHookRequest
+        from models import StudioGenerationRequest
         import server
         monkeypatch.setattr(server, "generate_video_strategy", self._fake_strategy)
         project_id = _approved_project(api, script="The original hook line.", version=2)
@@ -1735,10 +1509,13 @@ class TestStrategyGoesStaleWhenTheScriptIsEdited:
         _run(api._execute(
             "UPDATE studio_projects SET strategy_script_version = 0, script_version = 9 "
             "WHERE id = ?", (project_id,)))
+        _mark_ready(api, project_id)
         _mock_submit(api, monkeypatch)
-        hook = _run(api.generate_project_hook(
-            project_id=project_id, payload=GenerateHookRequest(), user_id=ANON))
-        assert hook["status"] in ("submitted", "generating")
+        generation = _run(api.submit_project_generation(
+            project_id=project_id, payload=StudioGenerationRequest(), user_id=ANON))
+        assert generation["status"] in ("submitted", "generating")
+        assert _run(api.get_studio_project(
+            project_id, ANON))["strategy_is_current"] is True
 
     def test_a_strategy_built_from_no_script_is_not_stale(self, api, monkeypatch):
         """
@@ -1753,102 +1530,6 @@ class TestStrategyGoesStaleWhenTheScriptIsEdited:
         assert result["strategy_script_version"] == 0
         assert result["strategy_is_current"] is True
 
-    def test_extending_a_stale_video_is_refused(self, api, monkeypatch):
-        """
-        One level out from the hook: if the script moved on after the hook was
-        rendered, extending spends money compounding a disagreement the founder
-        cannot see in the result.
-        """
-        from models import (ApproveSegmentRequest, GenerateHookRequest,
-                            StudioGenerationRequest, UpdateStudioProjectRequest)
-        import server
-        monkeypatch.setattr(server, "generate_video_strategy", self._fake_strategy)
-        project_id = _approved_project(api, script="The original hook line.", version=2)
-        _run(api.generate_project_strategy(
-            project_id=project_id, payload=server.GenerateStrategyRequest(), user_id=ANON))
-        _mock_submit(api, monkeypatch)
-        hook = _run(api.generate_project_hook(
-            project_id=project_id, payload=GenerateHookRequest(), user_id=ANON))
-        _run(api._execute(
-            "UPDATE generations SET status = 'completed', video_url = ? WHERE id = ?",
-            ("https://provider.test/hook.mp4", hook["id"])))
-        api.pipeline.VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
-        (api.pipeline.VIDEOS_DIR / f"{hook['id']}.mp4").write_bytes(_TINY_PNG)
-        _run(api.approve_generation(hook["id"], ApproveSegmentRequest(), ANON))
-
-        # Only now, with a rendered hook in hand, does the founder edit.
-        _run(api.update_studio_project(
-            project_id=project_id,
-            payload=UpdateStudioProjectRequest(hook_line="A completely new hook line."),
-            user_id=ANON))
-        with pytest.raises(HTTPException) as err:
-            _run(api.extend_generation(
-                hook["id"], StudioGenerationRequest(duration_seconds=6), user_id=ANON))
-        assert err.value.status_code == 409
-        assert "no longer matches the script you approved" in err.value.detail
-        # And it must say what following that instruction costs. The hook was
-        # paid for against the old strategy_version, so the next extend is
-        # refused by the parent_strategy_version check -- a founder who is not
-        # told here finds out only after rebuilding, by losing a segment they
-        # already bought. This segment is excluded from its own count, and it
-        # is the only completed one, so there is nothing else to name.
-        assert "already paid for" not in err.value.detail
-        assert "other segment(s)" not in err.value.detail
-
-    def test_the_extend_refusal_names_the_other_segments_it_would_strand(
-            self, api, monkeypatch
-    ):
-        """Two paid segments, so the extend refusal has something to count.
-
-        The message names OTHER segments -- the one being extended is what the
-        founder is about to regenerate, so counting it would double-report the
-        damage they are already looking at.
-        """
-        from models import (ApproveSegmentRequest, GenerateHookRequest,
-                            StudioGenerationRequest, UpdateStudioProjectRequest)
-        import server
-        monkeypatch.setattr(server, "generate_video_strategy", self._fake_strategy)
-        project_id = _approved_project(api, script="The original hook line.", version=2)
-        _run(api.generate_project_strategy(
-            project_id=project_id, payload=server.GenerateStrategyRequest(), user_id=ANON))
-        _mock_submit(api, monkeypatch)
-
-        def _render_and_approve():
-            gen = _run(api.generate_project_hook(
-                project_id=project_id, payload=GenerateHookRequest(), user_id=ANON))
-            _run(api._execute(
-                "UPDATE generations SET status = 'completed', video_url = ? WHERE id = ?",
-                ("https://provider.test/hook.mp4", gen["id"])))
-            api.pipeline.VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
-            (api.pipeline.VIDEOS_DIR / f"{gen['id']}.mp4").write_bytes(_TINY_PNG)
-            _run(api.approve_generation(gen["id"], ApproveSegmentRequest(), ANON))
-            return gen
-
-        hook = _render_and_approve()
-
-        # A second finished segment, standing in for the approved extension the
-        # founder already paid for. Inserted rather than rendered because this
-        # test is about what the refusal COUNTS, and the single-beat plan would
-        # otherwise be spent before a real extension could complete.
-        _run(api._execute(
-            "INSERT INTO generations (id, user_id, studio_project_id, status, video_url,"
-            " segment_index, segment_role, strategy_version, created_at)"
-            " VALUES (?, ?, ?, 'completed', ?, 1, 'extension', 1, datetime('now'))",
-            ("gen-other", ANON, project_id, "https://provider.test/ext.mp4"),
-        ))
-
-        # The hook and one extension are now completed. Edit the script, then
-        # try to extend the hook again.
-        _run(api.update_studio_project(
-            project_id=project_id,
-            payload=UpdateStudioProjectRequest(hook_line="A completely new hook line."),
-            user_id=ANON))
-        with pytest.raises(HTTPException) as err:
-            _run(api.extend_generation(
-                hook["id"], StudioGenerationRequest(duration_seconds=6), user_id=ANON))
-        assert err.value.status_code == 409
-        # The extension is stranded; the hook being extended is not counted.
-        assert "1 other segment(s)" in err.value.detail
 
 class TestUsageMomentsAndProofMoment:
     """
@@ -1860,6 +1541,10 @@ class TestUsageMomentsAndProofMoment:
     use" with nothing telling it what that looks like. Both are product facts
     the app's own copy usually states, which is why they are research-filled
     rather than founder-entered.
+
+    usage_moments survives into the two-section architecture because the middle
+    needs a setting AND needs an ending. proof_moment does not: filming it would
+    be the product demo, which is the founder's own recording.
     """
 
     def _capture(self, monkeypatch, **overrides):
@@ -1874,13 +1559,14 @@ class TestUsageMomentsAndProofMoment:
                 "hook_line": "h", "hook_promise": "p", "hook_action": "a",
                 "messaging_pillars": ["m"], "primary_feature": "f",
                 "desired_outcome": "o", "differentiation_beat": "b",
-                "cta_strategy": "c", "scene": {"environment": "kitchen"},
+                "scene": {"environment": "kitchen"},
                 "performance": {"movement": "still"},
-                "segments": [{"index": 0, "role": "hook", "seconds": 5,
-                              "goal": "g", "script": "s", "action": "a"}],
-                "continuity_contract": {
-                    "established": [], "must_not_change": [], "do_not_repeat": [],
-                },
+                "segments": [
+                    {"index": 0, "role": "hook", "seconds": 5,
+                     "goal": "g", "script": "s", "action": "a"},
+                    {"index": 1, "role": "middle", "seconds": 10,
+                     "goal": "g2", "script": "s2", "action": "a2"},
+                ],
             }
 
         monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
@@ -1900,20 +1586,50 @@ class TestUsageMomentsAndProofMoment:
         ))
         return captured
 
-    def test_both_reach_the_strategy_prompt(self, monkeypatch):
+    def test_usage_moments_reach_the_strategy_prompt(self, monkeypatch):
+        """
+        Was `test_both_reach_the_strategy_prompt`, which also asserted
+        `proof_moment` did. It does not, and that is the point — see
+        `test_proof_moment_is_not_a_generation_input`.
+
+        usage_moments still grounds the scene, which is why it exists: without it
+        the model invented a setting, a kitchen at 7am, for every app regardless
+        of what the app was.
+        """
         captured = self._capture(monkeypatch)
         assert "End of a night shift" in captured["prompt"]
-        assert "One tap and the shift is on the log" in captured["prompt"]
+        assert "Handover at 7am" in captured["prompt"]
+
+    def test_proof_moment_is_not_a_generation_input(self, monkeypatch):
+        """
+        `proof_moment` is the one moment the camera must film to make the claim
+        believable — which is the product demo, and the demo is recorded by the
+        founder and attached after this footage ends.
+
+        Supplying it here was the route by which "show this happening" reached a
+        prompt that is not allowed to show the app happening. It stays on the App
+        Profile as a brief for that recording, and it must not appear in a
+        generation prompt under any circumstances.
+        """
+        captured = self._capture(monkeypatch)
+        assert "One tap and the shift is on the log" not in captured["prompt"]
+        assert "proof_moment" not in captured["prompt"]
 
     def test_they_are_obligations_not_suggestions(self, monkeypatch):
         """
         The directive matters as much as the data. A field the model may use or
         ignore is the same as no field, and this one exists because the model
         was defaulting to a plausible generic setting.
+
+        usage_moments now does double duty: it grounds the middle's setting AND
+        it is where the piece ends. The middle develops towards one of these
+        moments and stops at the reach — that stop is the seam the founder's own
+        demo picks up from, so it has to be an obligation rather than a hint.
         """
         captured = self._capture(monkeypatch)
         assert "scene.setting must come from usage_moments" in captured["prompt"]
-        assert "proof_moment is the one moment the camera must film" in captured["prompt"]
+        assert "The middle must end AT the usage moment from usage_moments" in captured["prompt"]
+        assert "not using it" in captured["prompt"]
 
     def test_an_empty_profile_does_not_invent_a_setting_silently(self, monkeypatch):
         """
@@ -1925,7 +1641,6 @@ class TestUsageMomentsAndProofMoment:
             monkeypatch, usage_moments=[], proof_moment="",
         )
         assert '"usage_moments": []' in captured["prompt"]
-        assert '"proof_moment": "(unstated)"' in captured["prompt"]
         assert "state that the moment is unspecified" in captured["prompt"]
 
 

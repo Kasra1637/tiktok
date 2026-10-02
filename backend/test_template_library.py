@@ -18,15 +18,47 @@ class TestCuratedSeeds:
         assert len(tl.CURATED_TEMPLATES) == 10
 
     def test_every_template_has_full_structure(self):
-        """A template missing any structural field cannot drive a generation."""
+        """
+        A template missing any structural field cannot drive a generation.
+
+        `continuation_structure` + `cta_pattern` used to be required here. They
+        are replaced by `middle_structure`, one field, and the list below
+        deliberately does NOT ask for a CTA: a template promising a closing
+        action would be describing footage this product does not make.
+        """
         required = (
             "name", "category", "opening_structure", "hook_seconds",
-            "continuation_structure", "cta_pattern", "visual_style",
+            "middle_structure", "visual_style",
             "camera_pacing", "required_assets", "default_duration", "content_slots",
         )
         for tpl in tl.CURATED_TEMPLATES:
             for key in required:
                 assert tpl.get(key), f"{tpl.get('name')} is missing {key}"
+
+    def test_no_template_carries_the_retired_arc_fields(self):
+        """
+        `middle_structure` replaced `continuation_structure` + `cta_pattern`, so
+        a curated row holding either would describe footage this product does not
+        generate — a third beat would be the product demo, and a CTA beat has no
+        ending left to write towards.
+        """
+        for tpl in tl.CURATED_TEMPLATES:
+            assert "continuation_structure" not in tpl, tpl["name"]
+            assert "cta_pattern" not in tpl, tpl["name"]
+
+    def test_the_middle_never_describes_a_demonstration(self):
+        """
+        Each curated middle has to stop at the reach, because the demo and the
+        call to action are the founder's own footage. A template whose middle
+        "shows the app working" would reintroduce the product demo through the
+        template library, which is the one route the plan and strategy prompts
+        cannot police.
+        """
+        for tpl in tl.CURATED_TEMPLATES:
+            middle = tpl["middle_structure"].lower()
+            for banned in ("show the app", "show the feature", "demo the app",
+                           "screen recording", "swipe to", "tap through"):
+                assert banned not in middle, f"{tpl['name']} uses {banned!r}"
 
     def test_categories_are_all_in_vocabulary(self):
         for tpl in tl.CURATED_TEMPLATES:
@@ -46,10 +78,26 @@ class TestCuratedSeeds:
         for tpl in tl.CURATED_TEMPLATES:
             assert tpl["required_assets"] == ["character_reference"], tpl["name"]
 
-    def test_hook_seconds_within_first_three_seconds(self):
-        """A hook that runs long is not a hook."""
+    def test_hook_seconds_land_inside_the_hook_window(self):
+        """
+        Was pinned to the first three seconds, which every curated template
+        happened to satisfy. The window is now named: 2-4 seconds, and 4 is the
+        ceiling because the first four seconds are the only window a viewer
+        decides in. A hook that needs longer to land is not a hook.
+        """
+        assert tl.MIN_HOOK_SECONDS == 2
+        assert tl.MAX_HOOK_SECONDS == 4
         for tpl in tl.CURATED_TEMPLATES:
-            assert 1 <= tpl["hook_seconds"] <= 3, tpl["name"]
+            assert tl.MIN_HOOK_SECONDS <= tpl["hook_seconds"] <= tl.MAX_HOOK_SECONDS, tpl["name"]
+
+    def test_the_hook_fits_inside_its_own_piece(self):
+        """
+        The hook is directorial — where the middle begins — so it can never eat
+        the whole runtime. A 4s hook on a 8s piece still leaves four seconds of
+        middle to film, which is the least this product can produce.
+        """
+        for tpl in tl.CURATED_TEMPLATES:
+            assert tpl["hook_seconds"] < tpl["default_duration"], tpl["name"]
 
     def test_durations_are_supported_values(self):
         for tpl in tl.CURATED_TEMPLATES:
@@ -145,22 +193,39 @@ class TestClampDuration:
     """
     Duration clamping is the guard against silently requesting more than a
     model can produce, which yields a broken file rather than a clear error.
+
+    A video is now ONE render, so this is the whole story: exceeding a single
+    pass is not a longer video, it is a failed one. That is why
+    SUPPORTED_DURATIONS stops at 15 and why `model_max` defaults to asking the
+    provider rather than assuming the old 30s ceiling.
     """
 
+    def test_supported_durations_are_single_pass_lengths(self):
+        assert tl.SUPPORTED_DURATIONS == [8, 10, 12, 15]
+        assert tl.DEFAULT_DURATION == 10
+
     def test_exact_supported_value_passes_through(self):
-        assert tl.clamp_duration(20, model_max=30) == 20
+        assert tl.clamp_duration(12, model_max=30) == 12
         assert tl.clamp_duration(15, model_max=30) == 15
+        assert tl.clamp_duration(8, model_max=30) == 8
 
     def test_clamps_down_to_model_ceiling(self):
-        assert tl.clamp_duration(30, model_max=15) == 15
-        assert tl.clamp_duration(20, model_max=10) == 10
+        assert tl.clamp_duration(15, model_max=15) == 15
+        assert tl.clamp_duration(15, model_max=10) == 10
+        # 20s was the shape of every test in this file before one render; the
+        # ceiling is now a single pass, so it lands on the longest one.
+        assert tl.clamp_duration(20, model_max=30) == 15
 
     def test_rounds_unsupported_values_down(self):
-        assert tl.clamp_duration(7, model_max=30) == 5 or tl.clamp_duration(7, model_max=30) == 10
-        assert tl.clamp_duration(18, model_max=30) == 15
+        assert tl.clamp_duration(14, model_max=30) == 12
+        assert tl.clamp_duration(11, model_max=30) == 10
 
     def test_rounds_up_to_smallest_supported_when_below_all(self):
-        assert tl.clamp_duration(3, model_max=30) == 10
+        # Nothing supported sits under 7 any more — the shortest piece is 8s —
+        # so a shorter request is raised to the smallest length that exists
+        # rather than returned as something unrenderable.
+        assert tl.clamp_duration(7, model_max=30) == 8
+        assert tl.clamp_duration(3, model_max=30) == 8
 
     def test_garbage_input_falls_back_to_default(self):
         assert tl.clamp_duration("banana", model_max=30) == tl.DEFAULT_DURATION
@@ -168,8 +233,23 @@ class TestClampDuration:
 
     def test_never_exceeds_model_max(self):
         for model_max in (5, 10, 15, 20, 30):
-            for want in (1, 5, 10, 15, 20, 30, 99):
+            for want in (1, 5, 8, 10, 15, 20, 30, 99):
                 assert tl.clamp_duration(want, model_max=model_max) <= model_max
+
+    def test_no_model_max_asks_the_provider_for_the_ceiling(self):
+        """
+        `model_max=0` means "ask the model", not "assume 30s". A caller that has
+        not loaded provider capability would otherwise clamp to a 30s ceiling
+        this product can no longer reach — and a video over one pass is a
+        broken file, not a longer one.
+
+        Pinned against video_providers directly so the test states what the
+        fallback is actually consulting.
+        """
+        import video_providers
+        ceiling = int(video_providers.capability()["max_duration"])
+        assert ceiling <= max(tl.SUPPORTED_DURATIONS)
+        assert tl.clamp_duration(99) == min(ceiling, max(tl.SUPPORTED_DURATIONS))
 
 
 class TestRecommendationScorer:
@@ -183,7 +263,7 @@ class TestRecommendationScorer:
             "name": "T", "category": "demo", "objective": "demonstrate_feature",
             "app_categories": ["productivity"], "audiences": ["cold_audience"],
             "required_assets": ["character_reference"], "content_slots": {"app_feature": "the timer"},
-            "continuation_structure": "Then CTA.", "review_status": "approved",
+            "middle_structure": "Then stop at the reach.", "review_status": "approved",
         }
         base.update(overrides)
         return base
@@ -320,9 +400,42 @@ class TestBrandTemplateNormalization:
             "content_slots": {"a": "b", "": "junk", "c": ""},
         })
         assert good["category"] == "other"
-        assert good["hook_seconds"] == 6
-        assert good["default_duration"] == tl.DEFAULT_DURATION
+        # hook_seconds is directorial, not a render length, and a 99s opening is
+        # not a hook: it clamps to the 4s window rather than being trusted.
+        assert good["hook_seconds"] == tl.MAX_HOOK_SECONDS
+        # default_duration IS a render length, and one video is one render, so
+        # 99s clamps to the longest single pass the library supports.
+        assert good["default_duration"] == max(tl.SUPPORTED_DURATIONS)
         assert good["content_slots"] == {"a": "b"}
+
+    def test_a_cta_content_slot_is_dropped(self):
+        """
+        The CTA is added by the founder in their own editor. A template that
+        asks for one is describing footage this product does not make, so the
+        slots are popped rather than relabelled — a model asked for a slot it can
+        only fill with a call to action will invent one.
+        """
+        import ai_service
+        good = ai_service.normalize_brand_template({
+            "name": "T", "opening_structure": "Open.",
+            "content_slots": {"app_feature": "the timer", "cta": "Try it free",
+                              "call_to_action": "Get it", "next_action": "Download"},
+        })
+        assert good["content_slots"] == {"app_feature": "the timer"}
+
+    def test_a_retired_continuation_field_still_migrates(self):
+        """
+        `normalize_brand_template` accepts the old `continuation_structure` as a
+        fallback for `middle_structure`. A template drafted by a model reading a
+        cached older prompt lands with the old key, and dropping it outright
+        would leave a curated row whose middle says nothing at all.
+        """
+        import ai_service
+        good = ai_service.normalize_brand_template({
+            "name": "T", "opening_structure": "Open.",
+            "continuation_structure": "Name the friction, then stop at the reach.",
+        })
+        assert good["middle_structure"] == "Name the friction, then stop at the reach."
 
 
 class TestBrandTemplatePrompt:
@@ -352,12 +465,17 @@ class TestBrandTemplatePrompt:
                 "objective": "address_user_problem",
                 "opening_structure": f"Open on pain {i}.",
                 "hook_seconds": 3,
+                "middle_structure": "Name the cost, then stop at the reach.",
+                # Retired keys, left in deliberately: a model reading a cached
+                # older prompt still emits them, and normalization must fold
+                # them into the middle and refuse the CTA pattern rather than
+                # storing a close this product does not generate.
                 "continuation_structure": "Then the fix.",
                 "cta_pattern": "Try it.",
                 "visual_style": "Talking head.",
                 "camera_pacing": "Steady.",
                 "content_slots": {"app_feature": "Task timer", "cta": "Try it free"},
-                "default_duration": 20,
+                "default_duration": 10,
             }
             for i in range(n)
         ]
@@ -374,6 +492,8 @@ class TestBrandTemplatePrompt:
         ))
         assert len(result) == 3
         assert all(t["category"] == "pain-point-question" for t in result)
+        assert all("cta_pattern" not in t for t in result)
+        assert all(t["content_slots"].get("cta") is None for t in result)
 
     def test_prompt_demands_brand_specific_presenter_led_structures(self, monkeypatch):
         import asyncio

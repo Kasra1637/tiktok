@@ -280,13 +280,22 @@ class UpdateContentAngleRequest(BaseModel):
 # ---------------------------------------------------------------------------
 STUDIO_TEXT_FIELDS = (
     "audience", "tone", "hook_line", "script", "visual_direction",
-    "feature_emphasis", "voice_direction", "sound_direction", "cta",
+    "demo_brief", "voice_direction", "sound_direction",
 )
+# `cta` and `feature_emphasis` used to be here. Neither is any more: a call to
+# action is the founder's own, added in their editor after the demo they
+# record, and a feature instruction in an editable field is a product demo being
+# planned. `demo_brief` replaces the second — the founder still needs to know
+# what to record, so the plan works it out, but it is deliberately never passed
+# to the render.
+#
+# The columns themselves stay in the schema. SQLite cannot cheaply drop a
+# column across every deployment, and leaving two unused TEXT columns costs
+# nothing next to rewriting existing rows to match a shape they were never in.
 
 STUDIO_EDITABLE_FIELDS = STUDIO_TEXT_FIELDS + (
     "content_angle_id", "template_id", "objective", "duration_seconds",
     "beat_timeline", "overlays", "assets", "strategy", "hook_seconds",
-    "extend_intent",
 )
 
 
@@ -306,10 +315,10 @@ class CreateStudioProjectRequest(BaseModel):
     objective: Optional[str] = ""
     duration_seconds: Optional[int] = None
     hook_seconds: Optional[int] = 0
-    # Declared intent to extend the hook into a full video. Defaults to True:
-    # the hook is the opening of a video, not a deliverable. Affects what the
-    # studio offers, not what it renders.
-    extend_intent: Optional[bool] = None
+    # `extend_intent` used to be here — "hook only" versus "extend into a full
+    # video". There is one render now, so the video is always a hook and a
+    # middle and the question cannot be asked. Accepted so an old client is not
+    # rejected with a validation error, and written nowhere.
     tone: Optional[str] = ""
     audience: Optional[str] = ""
 
@@ -321,18 +330,20 @@ class UpdateStudioProjectRequest(BaseModel):
     objective: Optional[str] = None
     duration_seconds: Optional[int] = None
     hook_seconds: Optional[int] = None
-    extend_intent: Optional[bool] = None
     tone: Optional[str] = None
     audience: Optional[str] = None
     hook_line: Optional[str] = None
     script: Optional[str] = None
     beat_timeline: Optional[List[dict]] = None
     visual_direction: Optional[str] = None
-    feature_emphasis: Optional[str] = None
+    # `demo_brief` replaced `feature_emphasis` here as well as on the plan. The
+    # plan writes it and STUDIO_TEXT_FIELDS counts it as content, so a founder
+    # editing the review step could not have corrected the one field that tells
+    # them what to record for their own demo.
+    demo_brief: Optional[str] = None
     overlays: Optional[List[dict]] = None
     voice_direction: Optional[str] = None
     sound_direction: Optional[str] = None
-    cta: Optional[str] = None
     assets: Optional[List[dict]] = None
     # The app-specific strategy is editable so a founder can correct the hook
     # line or tighten the locked persona without paying to regenerate. Edits
@@ -358,9 +369,10 @@ class GenerateStrategyRequest(BaseModel):
     """
     Optional overrides for the app-specific video strategy.
 
-    hook_seconds defaults to the project's own hook length; it is clamped to
-    the provider's single-pass range so a 3-4 second hook can never be asked
-    for as something the model cannot render.
+    hook_seconds defaults to the project's own hook length and is clamped to
+    2-4 seconds: the whole window a hook has to land in. That is the boundary
+    between the hook and the middle within the single render, not a render
+    length — nothing is rendered for exactly this many seconds.
     """
     objective: Optional[str] = None
     duration_seconds: Optional[int] = None
@@ -368,38 +380,21 @@ class GenerateStrategyRequest(BaseModel):
     hook_seconds: Optional[int] = None
 
 
-class GenerateHookRequest(BaseModel):
-    """
-    Submit the opening 3-4 second hook segment.
-
-    The hook is a separate, shorter job from the full video on purpose: it is
-    the cheapest possible place to find out whether the concept works, and
-    approving it is what unlocks extensions.
-    """
-    model: Optional[str] = None
-    duration_seconds: Optional[int] = None
-    generate_audio: Optional[bool] = None
-
-
-class ApproveSegmentRequest(BaseModel):
-    """Approve a generated segment so it can anchor extensions and be assembled."""
-    note: Optional[str] = None
-
-
-class AssembleChainRequest(BaseModel):
-    """
-    Join an approved segment chain into one file.
-
-    Only approved, completed segments are included, in order. Unapproved or
-    still-generating segments are reported as skipped rather than silently
-    dropped, so a partial chain is never presented as the finished video.
-    """
-    include_all: Optional[bool] = False
+# GenerateHookRequest, ApproveSegmentRequest and AssembleChainRequest are gone.
+# They described submitting a hook as its own job, approving it, and joining an
+# approved chain — a segmented workflow in which a video was several renders.
+# A video is one render of a hook and a middle now, so there is nothing to
+# submit separately, approve between renders, or join.
+# AssembleChainRequest follows below and is the same story.
 
 
 class StudioGenerationRequest(BaseModel):
     """
-    Submit or extend a studio video generation.
+    Render the generated piece: one hook and one middle, in one job.
+
+    duration_seconds is the whole piece. It must fit one pass on the chosen
+    model; a longer request is refused rather than split or shortened, because
+    the founder's own demo and call to action are what make a longer video now.
 
     Distinct from the legacy GenerateVideoRequest, which carries face-swap
     image ids and an edited prompt for the exact-match flow.
@@ -407,9 +402,10 @@ class StudioGenerationRequest(BaseModel):
     model: optional provider key. When omitted the configured default is
         used. Unknown, disallowed, or editor-only models fall back with a
         stated reason rather than being honoured.
-    duration_seconds: target length. A value beyond the provider's
-        single-pass limit is reported as needing an extension, never silently
-        shortened.
+    duration_seconds: the length of the whole generated piece. A value beyond
+        the provider's single-pass limit is REFUSED with a 400 naming the
+        ceiling — it is not shortened, and not split into a second job. A
+        shorter-than-one-pass video is not a thing this workflow can finish.
     generate_audio: request native audio where the provider supports it.
     """
     model: Optional[str] = None

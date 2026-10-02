@@ -1,11 +1,26 @@
 """
 Curated Hook Template Library — the creative structures that drive generation.
 
-A template is an ABSTRACT creative structure: an opening mechanic, a
-continuation shape, a CTA pattern, and the assets a generation needs. It is
-deliberately NOT a recording of a specific creator's clip. Nothing here
-requires, references, or reproduces a source video, and no template needs a
-source video to be used.
+A template is an ABSTRACT creative structure: an opening mechanic, a middle
+shape, and the assets a generation needs. It is deliberately NOT a recording of
+a specific creator's clip. Nothing here requires, references, or reproduces a
+source video, and no template needs a source video to be used.
+
+WHAT A GENERATED VIDEO IS
+-------------------------
+Every video this product makes is TWO generated sections and nothing else:
+
+    HOOK  (the first ~4s)  ->  MIDDLE (the rest)
+
+The MIDDLE develops the hook and the situation it sets up. It stops at the
+moment the viewer wants the app in their hand. The product demo and the call to
+action are NOT generated — the founder records the demo and adds the CTA in
+their own editor, so templates describe a video that deliberately ends before
+the payoff.
+
+That is why there is no CTA field and no "paid off by 15s" beat here any more.
+A template that promised a closing action would be describing footage this
+product does not make.
 
 Deliberate wording rule: templates are "curated" and "based on recurring
 high-performing hook mechanics". Nothing is called "proven" because no
@@ -23,6 +38,13 @@ from typing import Optional
 # ---------------------------------------------------------------------------
 
 # Hook categories. These are MECHANISMS (what stops the scroll), not genres.
+#
+# "demo" and "tutorial" stay in the vocabulary but describe the OPENING only —
+# a hook can promise a demonstration without the generated footage containing
+# one. "The five things this app does" is a fine opening for a video whose demo
+# the founder attaches later; what the generated middle must not do is deliver
+# that demonstration itself. See the plan and strategy prompts, which is where
+# the boundary is enforced.
 HOOK_CATEGORIES = [
     "pattern-interrupt",
     "pain-point-question",
@@ -40,6 +62,12 @@ HOOK_CATEGORIES = [
 ]
 
 # Campaign objectives a founder can pick for a video.
+#
+# These describe what the WHOLE video is for, including the demo and CTA the
+# founder attaches. "demonstrate_feature" is therefore still a legitimate
+# goal: the generated sections earn the viewer's attention for a demonstration
+# that happens after the generated footage ends. The generated sections are
+# never asked to perform the demonstration.
 VIDEO_OBJECTIVES = [
     "explain_app",
     "demonstrate_feature",
@@ -89,10 +117,32 @@ _DEFAULT_EVIDENCE_NOTE = (
     "performance data for this template yet."
 )
 
-# Minimum honest duration for each supported generation length. The studio
-# clamps a request to the model's real capability rather than pretending.
-SUPPORTED_DURATIONS = [10, 15, 20, 30]
-DEFAULT_DURATION = 20
+# The length of ONE generated piece. A video is a single render covering a
+# hook and a middle; it is no longer assembled from a chain of segments, so
+# these are the only lengths that exist.
+#
+# The ceiling is 15s because that is the longest single pass the only
+# studio-eligible model can produce. The founder no longer picks a length — a
+# template declares one for its mechanic and the strategy may settle lower, but
+# never higher. See `clamp_duration`.
+SUPPORTED_DURATIONS = [8, 10, 12, 15]
+DEFAULT_DURATION = 10
+
+# The longest piece any supported model can produce in one pass. 15s is
+# minimax-h3's real ceiling, and a piece is one render — so this is a hard
+# product limit rather than the top of a menu. A project saved before the
+# one-render change can still carry 20s or 30s, and those are not longer
+# videos: they are unrenderable, so they are brought down to this on read.
+MAX_SUPPORTED_DURATION = max(SUPPORTED_DURATIONS)
+
+# The opening beat of a piece. DIRECTORIAL, not a render length: nothing is
+# rendered for exactly this many seconds. The whole piece is one render, and
+# this is how much of the opening the hook has to land in.
+#
+# 4s is the ceiling. A hook that needs longer to land is not a hook, and the
+# first four seconds are the only window a viewer decides in.
+MAX_HOOK_SECONDS = 4
+MIN_HOOK_SECONDS = 2
 
 
 # ---------------------------------------------------------------------------
@@ -111,23 +161,23 @@ CURATED_TEMPLATES = [
         "objective": "create_curiosity",
         "opening_structure": (
             "Open mid-motion on something visually unexpected in the first frame, then "
-            "resolve it into the product question by ~1.5s."
+            "resolve it into the product question by ~2s."
         ),
         "hook_seconds": 2,
-        "continuation_structure": (
-            "Cut to the problem the product solves (2-5s), then the presenter living "
-            "the solved state (5s-end), closing on the CTA."
+        "middle_structure": (
+            "The unexpected beat resolves into the situation it came from, and the "
+            "presenter is visibly in it — the problem they have right now, at the moment "
+            "they would first reach for the app. End on them picking the phone up. The "
+            "app is never shown working."
         ),
-        "cta_pattern": "soft_cta",
         "visual_style": "fast_cuts_high_contrast",
         "camera_pacing": "quick handheld, hard cut on the beat, no slow build",
         "required_assets": ["character_reference"],
-        "default_duration": 15,
+        "default_duration": 10,
         "content_slots": {
             "pattern_beat": "the unexpected visual beat",
-            "problem": "the pain the viewer recognises",
-            "app_feature": "what the app does about it",
-            "cta": "the single next action",
+            "situation": "the situation the beat came from",
+            "moment": "the point where they reach for the app",
         },
     },
     {
@@ -141,47 +191,46 @@ CURATED_TEMPLATES = [
             "It must be specific enough that the viewer recognises themselves."
         ),
         "hook_seconds": 3,
-        "continuation_structure": (
-            "Name the cost of leaving it unfixed (3-8s), show the resolved state "
-            "on camera (8-16s), CTA (final seconds)."
+        "middle_structure": (
+            "Answer the question with the reality rather than the app: what the problem "
+            "actually feels like, and what it costs to keep ignoring it. The presenter "
+            "shows the friction, then the small decision to do something about it. Stop "
+            "before the payoff."
         ),
-        "cta_pattern": "problem_to_solution_cta",
         "visual_style": "talking_head_with_broll",
-        "camera_pacing": "steady, eye-level, cut to broll on the answer",
+        "camera_pacing": "steady, eye-level, hold on the presenter's face for the cost",
         "required_assets": ["character_reference"],
-        "default_duration": 20,
+        "default_duration": 12,
         "content_slots": {
             "question": "the pain-point question",
-            "cost": "what it costs to ignore",
-            "app_feature": "the feature that fixes it",
-            "cta": "the single next action",
+            "cost": "what it actually costs to ignore",
+            "moment": "the decision to do something about it",
         },
     },
     {
         "name": "Stop Doing This",
         "category": "contrarian",
         "app_categories": [],
-        "audiences": ["cold_audience", "power_users"],
-        "objective": "address_user_problem",
+        "audiences": ["cold_audience", "scrollers"],
+        "objective": "create_curiosity",
         "opening_structure": (
-            "Direct second-person confrontation: 'Stop doing X.' Deliver it as a "
-            "correction, not a complaint."
+            "Tell the viewer to stop doing the thing they are currently doing, in under "
+            "3 seconds, flatly enough to be worth arguing with."
         ),
         "hook_seconds": 2,
-        "continuation_structure": (
-            "Offer the correct approach and introduce the app as the tool that makes "
-            "it easy, then CTA."
+        "middle_structure": (
+            "Justify the instruction by naming what the habit actually costs, and let the "
+            "presenter be caught inside it rather than describing it. Build to the moment "
+            "they would notice a better way. No correction is delivered on camera."
         ),
-        "cta_pattern": "correction_cta",
-        "visual_style": "talking_head_direct_address",
-        "camera_pacing": "static, slight push-in for emphasis",
+        "visual_style": "direct_to_camera_hard_cut",
+        "camera_pacing": "still frame, one hard cut, no build",
         "required_assets": ["character_reference"],
-        "default_duration": 15,
+        "default_duration": 10,
         "content_slots": {
-            "mistake": "the behaviour to stop",
-            "correction": "what to do instead",
-            "app_feature": "how the app helps",
-            "cta": "the single next action",
+            "instruction": "the thing to stop doing",
+            "cost": "what the habit actually costs",
+            "moment": "where they would notice a better way",
         },
     },
     {
@@ -191,77 +240,77 @@ CURATED_TEMPLATES = [
         "audiences": ["targeted_audience", "existing_users"],
         "objective": "create_curiosity",
         "opening_structure": (
-            "Regret-shaped opener that withholds the payoff: 'I wish I'd known this "
-            "earlier' with the reason held back for a beat."
+            "Regret-shaped opener that withholds the answer: 'I wish I'd known this "
+            "earlier' with the reason held back."
         ),
         "hook_seconds": 3,
-        "continuation_structure": (
-            "Reveal the thing (3-6s), show it working in the presenter's world "
-            "(6-16s), CTA."
+        "middle_structure": (
+            "Stay inside the regret rather than resolving it. Show the version of the "
+            "presenter's day that came before, and the specific thing that was harder "
+            "then. The gap stays open: the answer is what the attached demo is for."
         ),
-        "cta_pattern": "reveal_cta",
-        "visual_style": "talking_head_then_demo",
-        "camera_pacing": "hold the reveal beat, then cut on the reveal",
+        "visual_style": "talking_head_intimate",
+        "camera_pacing": "hold the beat, slow push, no cut on a reveal that isn't coming",
         "required_assets": ["character_reference"],
-        "default_duration": 20,
+        "default_duration": 12,
         "content_slots": {
             "regret": "the regret framing",
-            "reveal": "what was revealed",
-            "app_feature": "the feature being shown",
-            "cta": "the single next action",
+            "before": "the harder version of their day",
+            "moment": "the exact thing that used to be difficult",
         },
     },
     {
         "name": "Three Mistakes",
         "category": "listicle",
         "app_categories": [],
-        "audiences": ["targeted_audience", "power_users"],
+        "audiences": ["cold_audience", "targeted_audience"],
         "objective": "educate_viewers",
         "opening_structure": (
-            "Promise a specific count up front ('3 mistakes') and commit to delivering "
-            "all three. No padding."
+            "Promise a specific count in the first 3 seconds: three mistakes, named, and "
+            "specific enough to be uncomfortable."
         ),
         "hook_seconds": 3,
-        "continuation_structure": (
-            "Mistake 1 (3-8s), 2 (8-13s), 3 (13-18s) with the app as the fix, CTA."
+        "middle_structure": (
+            "Land the first mistake as a recognition — the presenter makes it, or admits "
+            "to it. The count is never completed: the generated piece stops after the "
+            "mistake lands, and the remaining beats belong to whatever the founder "
+            "attaches."
         ),
-        "cta_pattern": "listicle_cta",
-        "visual_style": "presenter_led_listicle",
-        "camera_pacing": "one clear beat per item, count on camera",
+        "visual_style": "talking_head_counted_on_screen_space",
+        "camera_pacing": "one beat per cut, hold each mistake a beat longer than feels right",
         "required_assets": ["character_reference"],
-        "default_duration": 20,
+        "default_duration": 10,
         "content_slots": {
-            "promise": "the numbered promise",
-            "mistakes": "the three mistakes, one per line",
-            "app_feature": "the feature that fixes them",
-            "cta": "the single next action",
+            "count": "how many, stated in the hook",
+            "first_mistake": "the mistake that lands in the middle",
+            "moment": "where the presenter admits it",
         },
     },
     {
         "name": "POV Scenario",
         "category": "pov",
         "app_categories": [],
-        "audiences": ["cold_audience", "niche_enthusiasts"],
-        "objective": "build_awareness",
+        "audiences": ["cold_audience", "scrollers"],
+        "objective": "address_user_problem",
         "opening_structure": (
-            "'POV: you're the person who [specific situation].' Put the viewer inside a "
-            "recognisable moment immediately."
+            "Drop the viewer into second person mid-scenario, in under 3 seconds, with no "
+            "setup and no introduction."
         ),
         "hook_seconds": 3,
-        "continuation_structure": (
-            "Run the scenario (3-10s), reveal the outcome the app made possible "
-            "(10-16s), CTA."
+        "middle_structure": (
+            "Play the scenario out from inside it rather than describing it afterwards. "
+            "The presenter is the viewer, hitting the specific friction the app exists to "
+            "remove. The piece ends mid-scenario, at the moment the alternative is obvious "
+            "but not yet taken."
         ),
-        "cta_pattern": "scenario_cta",
-        "visual_style": "presenter_led_scenario",
-        "camera_pacing": "immersive, handheld, scene-first",
+        "visual_style": "first_person_vlog",
+        "camera_pacing": "handheld, continuous, no establishing shot",
         "required_assets": ["character_reference"],
-        "default_duration": 15,
+        "default_duration": 12,
         "content_slots": {
-            "scenario": "the POV situation",
-            "turn": "the turn that makes it work",
-            "app_feature": "the app's role",
-            "cta": "the single next action",
+            "scenario": "the second-person situation",
+            "friction": "the specific thing that goes wrong in it",
+            "moment": "where the alternative becomes obvious",
         },
     },
     {
@@ -271,78 +320,78 @@ CURATED_TEMPLATES = [
         "audiences": ["cold_audience", "scrollers"],
         "objective": "create_curiosity",
         "opening_structure": (
-            "Show a partial result or a withheld detail and let the gap do the work. "
-            "The gap must be resolvable inside the video."
+            "Open on a claim the video will not support, stated flatly enough that the "
+            "viewer needs to see what happens next. The gap must be answerable by what "
+            "comes AFTER this generated piece."
         ),
         "hook_seconds": 3,
-        "continuation_structure": (
-            "Pay off the gap early (3-7s), then earn the rest of the watch with the "
-            "presenter, CTA."
+        "middle_structure": (
+            "Add pressure to the claim instead of resolving it — show the presenter living "
+            "the thing that makes the claim doubtful. The gap stays deliberately open at "
+            "the cut. The generated footage is not permitted to pay it off."
         ),
-        "cta_pattern": "reveal_cta",
-        "visual_style": "withheld_then_revealed",
-        "camera_pacing": "hold the gap, reveal on a clean cut",
+        "visual_style": "tight_talking_head",
+        "camera_pacing": "no cuts, one long take, framing gets tighter",
         "required_assets": ["character_reference"],
-        "default_duration": 15,
+        "default_duration": 10,
         "content_slots": {
-            "withheld": "what is deliberately not shown",
-            "reveal": "the payoff",
-            "app_feature": "how the app produced it",
-            "cta": "the single next action",
+            "claim": "the unsupported claim",
+            "pressure": "what makes it doubtful",
+            "moment": "the point the viewer needs answered",
         },
     },
     {
         "name": "Contrarian Statement",
         "category": "contrarian",
         "app_categories": [],
-        "audiences": ["cold_audience", "skeptical_viewers"],
-        "objective": "build_awareness",
+        "audiences": ["cold_audience", "scrollers"],
+        "objective": "create_curiosity",
         "opening_structure": (
-            "State a position the category consensus disagrees with, and be specific "
-            "enough to be falsifiable."
+            "State a position the viewer's default assumption contradicts, in under 3 "
+            "seconds, without hedging it."
         ),
         "hook_seconds": 3,
-        "continuation_structure": (
-            "Justify the position with the product's actual behaviour (3-10s), "
-            "acknowledge the honest counterargument (10-15s), CTA."
+        "middle_structure": (
+            "Justify the position with the presenter's own experience rather than the "
+            "app's feature list, and name the honest counterargument out loud. The piece "
+            "stops while the counterargument is still standing, so the demo that follows "
+            "has something left to answer."
         ),
-        "cta_pattern": "agreement_cta",
-        "visual_style": "talking_head_with_evidence",
-        "camera_pacing": "steady, cut to illustrative evidence on the justification",
+        "visual_style": "direct_to_camera",
+        "camera_pacing": "locked frame, one cut, no music swell",
         "required_assets": ["character_reference"],
-        "default_duration": 20,
+        "default_duration": 12,
         "content_slots": {
-            "contrarian_claim": "the disputed position",
-            "justification": "why the product supports it",
-            "concession": "the honest counterargument",
-            "cta": "the single next action",
+            "position": "the contradicted position",
+            "justification": "the presenter's own experience of it",
+            "counterargument": "the honest objection left standing",
         },
     },
     {
         "name": "Short Transformation Story",
-        "category": "story",
+        "category": "before-after",
         "app_categories": [],
-        "audiences": ["cold_audience", "targeted_audience"],
-        "objective": "build_awareness",
+        "audiences": ["targeted_audience", "existing_users"],
+        "objective": "address_user_problem",
         "opening_structure": (
-            "Open on the turning point, not the setup. 'The thing that changed everything "
-            "was...' — a first-person narrative beat."
+            "Open on the present-day presenter and name what changed, in under 3 seconds, "
+            "with the before deliberately withheld."
         ),
         "hook_seconds": 3,
-        "continuation_structure": (
-            "Flash back the friction (3-8s), the app's role (8-15s), the present-day "
-            "result (15-18s), CTA."
+        "middle_structure": (
+            "Go back to the friction: the specific before, filmed as the presenter "
+            "remembers it rather than reconstructed. The after is stated as something "
+            "they will go and do, and the piece ends on the reach for the phone. The "
+            "transformation itself is never shown on camera."
         ),
-        "cta_pattern": "story_cta",
-        "visual_style": "presenter_led_story",
-        "camera_pacing": "measured, cut on the narrative beats",
+        "visual_style": "present_day_then_memory",
+        "camera_pacing": "clean present-tense, then one soft cut back",
         "required_assets": ["character_reference"],
-        "default_duration": 20,
+        "default_duration": 12,
         "content_slots": {
-            "turning_point": "the opening turn",
-            "friction": "what was hard before",
-            "app_role": "what the app did",
-            "cta": "the single next action",
+            "changed": "what changed, stated in the hook",
+            "before": "the specific before",
+            "moment": "the reach for the phone",
         },
     },
     {
@@ -352,23 +401,23 @@ CURATED_TEMPLATES = [
         "audiences": ["targeted_audience", "existing_users"],
         "objective": "build_awareness",
         "opening_structure": (
-            "Drop into a normal moment with the app already in the routine. Mundane "
+            "Drop into an ordinary moment with no setup, in under 3 seconds. Mundane "
             "specificity is the hook."
         ),
         "hook_seconds": 3,
-        "continuation_structure": (
-            "Two or three routine moments (3-14s), show the cumulative effect, CTA."
+        "middle_structure": (
+            "Stay in the routine and let it accumulate — two ordinary moments, filmed as "
+            "they actually happen, with the friction building quietly across them. Stop "
+            "at the moment the routine would be interrupted by something better."
         ),
-        "cta_pattern": "routine_cta",
         "visual_style": "daylight_documentary",
         "camera_pacing": "natural, unpolished, chronological",
         "required_assets": ["character_reference"],
-        "default_duration": 20,
+        "default_duration": 15,
         "content_slots": {
-            "moment": "the routine moment",
-            "app_moment": "where the app fits into it",
-            "cumulative": "what the routine adds up to",
-            "cta": "the single next action",
+            "moment": "the ordinary opening moment",
+            "routine": "the second moment that shows it repeating",
+            "moment_two": "where the routine breaks",
         },
     },
 ]
@@ -412,14 +461,27 @@ def normalize_asset_kind(kind: Optional[str]) -> str:
     return k if k in ASSET_KINDS else ""
 
 
-def clamp_duration(seconds, model_max: int = 30) -> int:
+def clamp_duration(seconds, model_max: int = 0) -> int:
     """
-    Clamp a requested duration to the nearest supported value the model can do.
+    Clamp a requested piece length to what the model can actually produce in one pass.
 
-    Never returns a value above `model_max`: asking for 30s on a model capped
-    at 15s silently produces a broken file rather than a clear error, so the
-    clamp happens here and the caller reports the adjustment.
+    Never returns a value above `model_max`: asking for more than the provider
+    can render in a single pass silently produces a broken file rather than a
+    clear error, so the clamp happens here and the caller reports the
+    adjustment.
+
+    `model_max` defaults to 0, meaning "ask the model". Callers that have not
+    loaded provider capability would otherwise fall back to a 30s ceiling this
+    product can no longer reach — a video is now one render, not a chain, so
+    exceeding a single pass is not a longer video but a failed one.
     """
+    if not model_max:
+        # Imported here rather than at module scope: video_providers imports
+        # nothing from this module, and a top-level import would make the
+        # curated-content module depend on provider config just to seed tests.
+        import video_providers
+
+        model_max = int(video_providers.capability().get("max_duration") or 15)
     try:
         want = int(seconds)
     except (TypeError, ValueError):

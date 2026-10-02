@@ -4,8 +4,14 @@ cannot render under 4-5s.
 
 The claim under test: a founder can ask for a 3-second hook, the request is
 never silently upgraded to the provider's floor, the clip that lands is
-actually the length that was asked for, and an extension continues from the
-TRIMMED clip rather than the full render the viewer never saw.
+actually the length that was asked for, and where the middle begins is a
+choice they control inside a named window.
+
+A hook length is DIRECTORIAL now, not a render length. There is no separately
+rendered hook to trim: the piece is one render, hook and middle together, so
+`hook_seconds` says where the middle starts and nothing is cut. The resolver
+and the frame-exact trim below still exist because generations recorded before
+that change carry a non-zero trim and must still be trimmed on poll.
 """
 import asyncio
 import importlib
@@ -20,7 +26,6 @@ import uuid
 from pathlib import Path
 
 import pytest
-from fastapi import HTTPException
 
 BACKEND_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BACKEND_DIR))
@@ -262,9 +267,6 @@ class TestTrimVideo:
         assert _run(pipeline.replace_with_trimmed(tmp / "nope.mp4", 3)) is None
 
 
-# ---------------------------------------------------------------------------
-# 3. End to end: request a 3s hook, get a 3s hook
-# ---------------------------------------------------------------------------
 def _ready_project_with_strategy(api, spec, hook_seconds=0):
     from models import (
         ApproveAppProfileRequest, BrandProfileCreateRequest,
@@ -312,7 +314,6 @@ def _ready_project_with_strategy(api, spec, hook_seconds=0):
         "primary_feature": "One-tap logging",
         "desired_outcome": "Out on time",
         "differentiation_beat": "Built for shifts.",
-        "cta_strategy": "Try it free",
         "character": {"appearance": "a nurse in teal scrubs", "facial_features": "round face",
                       "hairstyle": "low bun", "wardrobe": "teal scrubs",
                       "body_appearance": "average", "age_range": "late 20s",
@@ -323,22 +324,20 @@ def _ready_project_with_strategy(api, spec, hook_seconds=0):
                   "visual_style": "handheld UGC", "character_positioning": "centred",
                   "props": "a phone", "color_palette": "grey and teal"},
         "performance": {"movement": "one-handed", "voice_delivery": "low, quick"},
-        # Hook plus a planned arc, matching what generate_video_strategy emits.
-        # These tests extend at least once, so a hook-only plan would now be
-        # correctly refused as "past the end of the plan".
+        # Exactly two sections, as generate_video_strategy now emits: the hook,
+        # then the middle that develops it and stops at the reach for the phone.
+        # `cta_strategy`, `continuity_contract` and the seven-beat arc are gone
+        # and normalization drops them — the founder's demo and their call to
+        # action are their own footage.
         "segments": [
             {"index": 0, "role": "hook", "seconds": hook_seconds or 3,
              "goal": "land it", "script": "It was always this one tap.",
              "action": "Taps once"},
-        ] + [
-            {"index": i, "role": "cta" if i == 7 else "continuation", "seconds": 5,
-             "goal": f"beat {i}", "script": f"Beat {i} of the story.",
-             "action": f"action {i}"}
-            for i in range(1, 8)
+            {"index": 1, "role": "middle", "seconds": 8,
+             "goal": "show what it costs to keep doing it by hand",
+             "script": "It used to be four taps and a phone call.",
+             "action": "shows the paperwork, then picks the phone up"},
         ],
-        "continuity_contract": {"established": ["teal scrubs", "a corridor"],
-                                "must_not_change": ["the face", "the scrubs"],
-                                "do_not_repeat": ["the hook line"]},
     })
     _run(api._execute(
         "UPDATE studio_projects SET strategy = ?, strategy_version = 1, status = 'draft'"
@@ -359,241 +358,65 @@ SPEC = {
 }
 
 
-class TestHookEndToEnd:
-    def test_strategy_endpoint_inherits_the_template_hook_seconds(self, api):
-        """
-        The template contract (2-3s) is test-enforced but was never reaching a
-        render. It now must.
-        """
-        from models import GenerateStrategyRequest
-
-        captured = {}
-
-        async def fake_strategy(**kwargs):
-            captured.update(kwargs)
-            raise RuntimeError("stop-after-args")
-
-        # Patch the symbol the endpoint calls through the module namespace.
-        import ai_service
-        original = ai_service.generate_video_strategy
-        api.generate_video_strategy = fake_strategy
-        try:
-            project, _p, _t, _s = _ready_project_with_strategy(api, SPEC)
-            with pytest.raises(HTTPException):
-                _run(api.generate_project_strategy(
-                    project_id=project["id"], payload=GenerateStrategyRequest(),
-                    user_id=ANON))
-            assert captured["hook_seconds"] == int(_tpl_hook(api)), captured
-        finally:
-            api.generate_video_strategy = original
-
-    def test_project_hook_length_defaults_from_the_template(self, api):
-        """A new project inherits its template's declared hook length."""
-        from models import ApproveAppProfileRequest, BrandProfileCreateRequest, CreateStudioProjectRequest
-        profile = _run(api.create_brand(
-            payload=BrandProfileCreateRequest(brand_name="DefaultHook",
-                                             app_category="Productivity"),
-            user_id=ANON))
-        _run(api.approve_app_profile(
-            profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=ANON))
-        template = _run(api.list_templates(user_id=ANON))["templates"][0]
-        project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
-            brand_profile_id=profile["id"], template_id=template["id"]), user_id=ANON))
-        assert project["hook_seconds"] == int(template["hook_seconds"])
-        assert 1 <= project["hook_seconds"] <= 3
-
-    def test_explicit_hook_length_beats_the_template(self, api):
-        from models import ApproveAppProfileRequest, BrandProfileCreateRequest, CreateStudioProjectRequest
-        profile = _run(api.create_brand(
-            payload=BrandProfileCreateRequest(brand_name="ExplicitHook",
-                                             app_category="Productivity"),
-            user_id=ANON))
-        _run(api.approve_app_profile(
-            profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=ANON))
-        template = _run(api.list_templates(user_id=ANON))["templates"][0]
-        project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
-            brand_profile_id=profile["id"], template_id=template["id"],
-            hook_seconds=5), user_id=ANON))
-        assert project["hook_seconds"] == 5
-
-    def test_hook_render_records_the_trim_and_asks_for_the_floor(self, api, monkeypatch):
-        """The request is for the floor; the intent to trim is recorded up front."""
-        from models import GenerateHookRequest
-        project, _p, _t, _s = _ready_project_with_strategy(api, SPEC, hook_seconds=3)
-        calls = _mock_submit(api, monkeypatch)
-        gen = _run(api.generate_project_hook(
-            project_id=project["id"],
-            payload=GenerateHookRequest(model="minimax-h3", duration_seconds=3),
-            user_id=ANON))
-        # Asked the model for 5s, not 3s.
-        assert calls[0]["duration"] == 5
-        assert gen["trim_to_seconds"] == 3
-        assert gen["hook_length"]["target"] == 3
-        assert gen["hook_length"]["render_seconds"] == 5
-        assert gen["hook_length"]["trim_to"] == 3
-        # The response already reports the length the founder will get.
-        assert gen["duration"] == 3
-
-    def test_no_trim_when_the_floor_is_satisfied(self, api, monkeypatch):
-        from models import GenerateHookRequest
-        project, _p, _t, _s = _ready_project_with_strategy(api, SPEC, hook_seconds=5)
-        calls = _mock_submit(api, monkeypatch)
-        gen = _run(api.generate_project_hook(
-            project_id=project["id"],
-            payload=GenerateHookRequest(model="minimax-h3", duration_seconds=5),
-            user_id=ANON))
-        assert calls[0]["duration"] == 5
-        assert gen["trim_to_seconds"] == 0
-        assert gen["hook_length"]["guarantee"] == "as_rendered"
-
-    def test_hook_length_survives_on_the_project_for_later_steps(self, api, monkeypatch):
-        from models import GenerateHookRequest
-        project, _p, _t, _s = _ready_project_with_strategy(api, SPEC, hook_seconds=3)
-        _mock_submit(api, monkeypatch)
-        _run(api.generate_project_hook(
-            project_id=project["id"],
-            payload=GenerateHookRequest(model="minimax-h3"), user_id=ANON))
-        again = _run(api.get_studio_project(project["id"], ANON))
-        assert again["hook_seconds"] == 3
-
-    def test_minimax_request_asks_for_five_seconds(self, api, monkeypatch):
-        from models import GenerateHookRequest
-        project, _p, _t, _s = _ready_project_with_strategy(api, SPEC, hook_seconds=3)
-        calls = _mock_submit(api, monkeypatch)
-        gen = _run(api.generate_project_hook(
-            project_id=project["id"],
-            payload=GenerateHookRequest(model="minimax-h3", duration_seconds=3),
-            user_id=ANON))
-        assert calls[0]["duration"] == 5
-        assert gen["trim_to_seconds"] == 3
-
-
 def _tpl_hook(api):
     templates = _run(api.list_templates(user_id=ANON))["templates"]
     return templates[0]["hook_seconds"]
 
 
 # ---------------------------------------------------------------------------
-# 4. Poll applies the trim, and the extension bridges the trimmed clip
-# ---------------------------------------------------------------------------
-@needs_ffmpeg
-class TestTrimIsApplied:
-    def _complete_with_real_clip(self, api, monkeypatch, trim_to, render_seconds=5):
-        """
-        Drive a real 5s render through submit -> poll with a working local file,
-        so the trim path executes for real rather than being mocked away.
-        """
-        from models import GenerateHookRequest, StudioGenerationRequest
-        project, _p, _t, _s = _ready_project_with_strategy(api, SPEC, hook_seconds=trim_to or 4)
-        _mock_submit(api, monkeypatch)
-
-        gen = _run(api.generate_project_hook(
-            project_id=project["id"],
-            payload=GenerateHookRequest(model="minimax-h3",
-                                        duration_seconds=trim_to or 5),
-            user_id=ANON))
-
-        # Stand in for the provider's finished clip, downloaded by poll.
-        served = _make_clip(api.pipeline.VIDEOS_DIR / f"{gen['id']}-served.mp4", render_seconds)
-        assert served.is_file()
-
-        async def fake_download(url, generation_id):
-            # Copy the served clip to the canonical path, which is where poll
-            # expects the downloaded file to land.
-            target = api.pipeline.VIDEOS_DIR / f"{generation_id}.mp4"
-            shutil.copy2(served, target)
-            return target
-
-        monkeypatch.setattr(api, "_download_generation_video", fake_download)
-        monkeypatch.setattr(api.storage_service, "upload_video", lambda *a, **k: None)
-        monkeypatch.setattr(api.storage_service, "is_configured", lambda: False)
-
-        async def fake_poll(job_id):
-            return {"status": "completed", "unsigned_urls": ["https://provider.test/x.mp4"]}
-
-        monkeypatch.setattr(api, "poll_video_job", fake_poll)
-        _run(api._execute(
-            "UPDATE generations SET openrouter_job_id = 'job-1' WHERE id = ?", (gen["id"],)))
-        return project, gen, _run(api.poll_generation(gen["id"], ANON))
-
-    def test_poll_cuts_the_hook_to_the_requested_length(self, api, monkeypatch):
-        _project, gen, updated = self._complete_with_real_clip(api, monkeypatch, trim_to=3)
-        canonical = api.pipeline.VIDEOS_DIR / f"{gen['id']}.mp4"
-        assert canonical.is_file()
-        assert abs(_duration(canonical) - 3.0) < 0.02, _duration(canonical)
-        # The row reports what was delivered, not what was asked of the model.
-        assert updated["duration"] == 3
-        assert updated["trim_to_seconds"] == 3
-        assert "Cut down to 3s" in (updated.get("storage_error") or "")
-
-    def test_extension_bridges_from_the_trimmed_hook(self, api, monkeypatch):
-        """
-        The regression this whole feature could introduce: if the trim left the
-        full render at the canonical path, every continuation would resume from
-        a frame the viewer never saw.
-
-        The load-bearing assertion is the canonical file's LENGTH. Comparing
-        extracted frame bytes looked equivalent but was flaky: it depended on
-        two independent ffmpeg encodes plus where `-sseof -1` happens to land,
-        so it could pass without proving anything and fail for the wrong reason.
-        The length cannot: 3.0s is only possible if the trimmed file replaced
-        the 5s render at that exact path.
-        """
-        from models import ApproveSegmentRequest, StudioGenerationRequest
-        _project, gen, updated = self._complete_with_real_clip(api, monkeypatch, trim_to=3)
-
-        canonical = api.pipeline.VIDEOS_DIR / f"{gen['id']}.mp4"
-        assert canonical.is_file()
-        delivered = _duration(canonical)
-        assert abs(delivered - 3.0) < 0.02, (
-            f"the canonical file is {delivered:.3f}s, so the trim did NOT replace "
-            f"the render at the path an extension bridges from. "
-            f"storage_error={updated.get('storage_error')!r}"
-        )
-        assert abs(delivered - 5.0) > 0.5, "the full render is still at the canonical path"
-
-        # And the seam frame the extension will use is readable from that file.
-        bridge = api.pipeline.GENERATED_DIR / f"probe-{gen['id']}.png"
-        assert _run(api.pipeline.extract_last_frame(canonical, bridge)) is not None, (
-            "could not read a final frame from the trimmed hook"
-        )
-
-        # The extension proceeds from the approved, trimmed hook.
-        _run(api.approve_generation(gen["id"], ApproveSegmentRequest(), ANON))
-        calls = _mock_submit(api, monkeypatch)
-        _run(api.extend_generation(
-            gen["id"], StudioGenerationRequest(duration_seconds=6), ANON))
-        assert calls, "the extension never reached the provider"
-        # The prompt must not claim continuity it cannot have: the test fakes
-        # the bridge frame, so the important assertion is that a bridge is used.
-        assert calls[0]["prompt"]
-
-
-# ---------------------------------------------------------------------------
-# 5. The project edit path
+# 4. The project edit path
 # ---------------------------------------------------------------------------
 class TestHookLengthEditing:
     def test_patching_hook_length_is_validated(self, api):
+        """
+        The hook length is where the middle begins, inside a named 2-4s window:
+        4s is the ceiling because the first four seconds are the only window a
+        viewer decides in, and 2s is the floor because a hook has to have room
+        to land.
+        """
         from models import UpdateStudioProjectRequest
         project, _p, _t, _s = _ready_project_with_strategy(api, SPEC, hook_seconds=3)
         updated = _run(api.update_studio_project(
             project_id=project["id"],
-            payload=UpdateStudioProjectRequest(hook_seconds=5), user_id=ANON))
-        assert updated["hook_seconds"] == 5
+            payload=UpdateStudioProjectRequest(hook_seconds=4), user_id=ANON))
+        assert updated["hook_seconds"] == 4
 
-    def test_a_length_outside_the_offered_choices_is_refused(self, api):
+    def test_a_length_outside_the_window_is_clamped_not_refused(self, api):
+        """
+        Was `test_a_length_outside_the_offered_choices_is_refused`, and it
+        asserted a 400.
+
+        Clamping, not refusing. hook_seconds is directorial rather than a render
+        length, and the render is one pass either way — so a hand-typed 7s would
+        leave the middle nothing to film and cost the founder the whole video,
+        while refusing would cost them only the one field. Moving the boundary
+        to a length a hook can actually land in is strictly better than either
+        outcome, and 7 is not a mistake worth a dead end.
+
+        The window is asserted at both ends so a clamp can never quietly become
+        "anything goes".
+        """
+        import template_library as tl
         from models import UpdateStudioProjectRequest
         project, _p, _t, _s = _ready_project_with_strategy(api, SPEC)
-        with pytest.raises(HTTPException) as err:
-            _run(api.update_studio_project(
+        for wanted, expected in (
+            (7, tl.MAX_HOOK_SECONDS),
+            (1, tl.MIN_HOOK_SECONDS),
+            (-4, tl.MIN_HOOK_SECONDS),
+        ):
+            updated = _run(api.update_studio_project(
                 project_id=project["id"],
-                payload=UpdateStudioProjectRequest(hook_seconds=7), user_id=ANON))
-        assert err.value.status_code == 400
-        assert "Hook length" in str(err.value.detail)
+                payload=UpdateStudioProjectRequest(hook_seconds=wanted), user_id=ANON))
+            assert updated["hook_seconds"] == expected, wanted
+        assert tl.MIN_HOOK_SECONDS <= expected <= tl.MAX_HOOK_SECONDS
 
     def test_zero_clears_the_choice_back_to_the_template(self, api):
+        """
+        0 still means "follow the template". Clamping must not swallow it, or
+        every project would silently pin a boundary nobody chose.
+        """
         from models import UpdateStudioProjectRequest
-        project, _p, _t, _s = _ready_project_with_strategy(api, SPEC, hook_seconds=5)
+        project, _p, _t, _s = _ready_project_with_strategy(api, SPEC, hook_seconds=4)
         updated = _run(api.update_studio_project(
             project_id=project["id"],
             payload=UpdateStudioProjectRequest(hook_seconds=0), user_id=ANON))
@@ -601,19 +424,28 @@ class TestHookLengthEditing:
 
 
 # ---------------------------------------------------------------------------
-# 6. The two prompt paths now agree about the hook length
+# 5. The two prompt paths now agree about the hook length
 # ---------------------------------------------------------------------------
 class TestPromptAgreement:
     def test_fallback_beat_layout_uses_the_template_hook_length(self):
         """
         generation_planning hardcoded 0-3s while the same prompt carried the
         template's own hook_seconds, so a 2s template was told to hold for 3.
+
+        The fallback no longer says "first N seconds" at all — the whole video
+        is two sections and the second one has to be described too, so the
+        layout names both boundaries. What still has to hold is that it splits
+        at the hook length it was handed rather than at a constant, and that it
+        tells the model not to film the app or ask for anything.
         """
         from generation_planning import _format_beats
         two = _format_beats([], 20, 2)
-        assert "0-2s" in two and "first 2 seconds" in two
+        assert "0-2s" in two and "2-20s" in two
+        assert "the only part of this 20s video with 2s to stop the scroll" in two
+        assert "Do NOT film the app working" in two
+        assert "do not ask for anything" in two
         three = _format_beats([], 20, 3)
-        assert "0-3s" in three
+        assert "0-3s" in three and "3-20s" in three
         # A hook longer than the video must not produce a broken layout.
         assert _format_beats([], 2, 5)
 

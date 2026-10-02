@@ -619,18 +619,22 @@ def describe_command(argv: list) -> str:
     return " ".join(shlex.quote(str(a)) for a in argv)
 
 
-def build_spec_from_plan(
-    plan: dict,
-    cta: str = "",
-    duration: float = 0.0,
-) -> dict:
+def build_spec_from_plan(plan: dict) -> dict:
     """
     Turn a reviewed plan into a composition spec.
 
     Deliberately conservative: text comes only from the plan's already
-    claim-checked overlays, and the end card is derived from the CTA. No new
-    copy is invented here, because anything written at this stage would never
-    have passed the claim check.
+    claim-checked overlays. No new copy is invented here, because anything
+    written at this stage would never have passed the claim check.
+
+    There is no end card, and that is structural rather than a missing feature.
+    A call to action is added by the founder in their own editor, after the
+    product demo they record themselves. The generated piece is a hook and a
+    middle, and it is meant to stop at the moment the viewer reaches for the
+    app — so a three-second card closing the file would overwrite exactly the
+    frame that hands off to their footage. The `cta` and `duration` parameters
+    this function used to take are gone rather than ignored: a caller passing
+    them would otherwise believe it was still compositing a close.
 
     Face-only product: attached assets never enter the spec. The character
     reference rides to the video model as an input reference, never as an
@@ -663,12 +667,4 @@ def build_spec_from_plan(
             "color": "white",
         })
 
-    cta_text = (cta or plan.get("cta") or "").strip()
-    if cta_text and duration:
-        spec["end_card"] = {
-            "start": max(0.0, float(duration) - 3.0),
-            "end": float(duration),
-            "text": cta_text[:40],
-            "color": BRAND_PRIMARY,
-        }
     return spec

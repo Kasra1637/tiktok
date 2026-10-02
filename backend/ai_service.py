@@ -22,6 +22,8 @@ from template_library import (
     HOOK_CATEGORIES,
     SUPPORTED_DURATIONS,
     DEFAULT_DURATION,
+    MAX_HOOK_SECONDS,
+    MIN_HOOK_SECONDS,
     TEMPLATE_NAME_MAX,
     normalize_angle_kind,
     normalize_category,
@@ -1775,20 +1777,32 @@ def normalize_brand_template(raw: dict) -> Optional[dict]:
         } or {}
     else:
         slots = {}
+    # Directorial, not a render length. A hook that needs more than four seconds
+    # to land is not a hook, and the first four seconds are the only window a
+    # viewer decides in.
     try:
-        hook_seconds = max(1, min(6, int(raw.get("hook_seconds") or 3)))
+        hook_seconds = max(
+            MIN_HOOK_SECONDS, min(MAX_HOOK_SECONDS, int(raw.get("hook_seconds") or 3))
+        )
     except (TypeError, ValueError):
         hook_seconds = 3
-    duration = raw.get("default_duration")
-    duration = duration if duration in SUPPORTED_DURATIONS else DEFAULT_DURATION
+    duration = clamp_duration(raw.get("default_duration"))
+    # A "cta" content slot is meaningless now: the CTA is added by the founder in
+    # their own editor, so a template that asks for one is describing footage
+    # this product does not make. Dropped rather than relabelled — a model asked
+    # for a slot it can only fill with a call to action will invent one.
+    slots.pop("cta", None)
+    slots.pop("call_to_action", None)
+    slots.pop("next_action", None)
     return {
         "name": name,
         "category": normalize_category(raw.get("category")),
         "objective": normalize_objective(raw.get("objective")),
         "opening_structure": opening,
         "hook_seconds": hook_seconds,
-        "continuation_structure": str(raw.get("continuation_structure") or "").strip()[:1200],
-        "cta_pattern": str(raw.get("cta_pattern") or "").strip()[:300],
+        "middle_structure": str(
+            raw.get("middle_structure") or raw.get("continuation_structure") or ""
+        ).strip()[:1200],
         "visual_style": str(raw.get("visual_style") or "").strip()[:300],
         "camera_pacing": str(raw.get("camera_pacing") or "").strip()[:300],
         "content_slots": slots,
@@ -1882,6 +1896,13 @@ async def generate_brand_templates(
         f"CONTENT ANGLES:\n{json.dumps(angle_briefs, indent=2)}\n\n"
         f"Categories (use only these): {categories}\n\n"
         f"{brief_line}"
+        "A generated video is exactly TWO sections and nothing else: a HOOK in the first "
+        "4 seconds, then a MIDDLE that develops it. The middle develops the situation, the "
+        "friction or the reaction, and ends at the moment the viewer would reach for the app. "
+        "Design nothing past that moment. The product demo is recorded by the founder and "
+        "attached separately, and the call to action is added by them in their own editor — "
+        "so a structure that pays off, demonstrates the app in use, or closes on an action is "
+        "a wrong answer no matter how well it reads. "
         "Presenter-led throughout: every video stars the founder on camera, so never design around "
         "screenshots, recordings, app footage, or any uploaded asset. Pre-fill every "
         "content slot with this app's concrete specifics, not placeholders. "
@@ -1890,19 +1911,20 @@ async def generate_brand_templates(
         '  "name": "short specific title naming this app\'s angle on the mechanic",\n'
         '  "category": "one of the categories listed above",\n'
         '  "objective": "address_user_problem | create_curiosity | demonstrate_feature | build_awareness | educate_viewers",\n'
-        '  "opening_structure": "what the first seconds do, concretely for THIS app",\n'
-        '  "hook_seconds": 2,\n'
-        '  "continuation_structure": "how the rest unfolds, concretely for THIS app",\n'
-        '  "cta_pattern": "the closing action pattern",\n'
+        '  "opening_structure": "what the first 4 seconds do, concretely for THIS app",\n'
+        '  "hook_seconds": 3,\n'
+        '  "middle_structure": "how the rest of the GENERATED piece develops that hook, concretely for THIS app. It must stop at the moment the viewer would reach for the app.",\n'
         '  "visual_style": "the look, presenter-led",\n'
         '  "camera_pacing": "camera behaviour",\n'
-        '  "content_slots": {"app_feature": "the concrete feature", "cta": "the concrete next action"},\n'
-        '  "default_duration": 20\n'
+        '  "content_slots": {"the_concrete_beat": "the concrete beat this structure turns on", "the_moment": "where the viewer would reach for the app"},\n'
+        '  "default_duration": 10\n'
         "}\n"
         "Rules: use ONLY facts present above. Never invent a feature, price, rating, "
         "review, testimonial, or guaranteed outcome. Never use a banned claim. Vary "
         "the categories and objectives — not ten variations of one idea. "
-        "hook_seconds is 1-6; default_duration is one of 10, 15, 20, 30. "
+        f"hook_seconds is {MIN_HOOK_SECONDS}-{MAX_HOOK_SECONDS}; default_duration is one of "
+        f"{', '.join(str(d) for d in SUPPORTED_DURATIONS)} seconds, and it is the length of the "
+        "whole generated piece, not of a video the viewer finishes. "
         "Never use double-quote characters inside any string value. Return ONLY valid JSON."
     )
 
@@ -1935,10 +1957,21 @@ async def generate_brand_templates(
     return templates
 
 
+# The plan covers two generated sections and nothing else. `demo_brief` replaces
+# the old `feature_emphasis`: the founder needs to know what to record for their
+# own demo, so the plan still works it out — but it is a note FOR THE FOUNDER and
+# is deliberately excluded from every video prompt. A feature instruction that
+# reaches the render is a product demo being generated, which is the one thing
+# this workflow does not do.
 REQUIRED_PLAN_KEYS = {
     "hook_line", "script", "beat_timeline", "visual_direction",
-    "feature_emphasis", "overlays", "voice_direction", "sound_direction", "cta",
+    "demo_brief", "overlays", "voice_direction", "sound_direction",
 }
+
+# The two sections a plan's beat timeline is made of. Enforced, not suggested:
+# a third label means the model has started planning footage this product does
+# not generate.
+PLAN_SECTION_LABELS = ("hook", "middle")
 
 
 async def generate_creative_plan(
@@ -1957,16 +1990,18 @@ async def generate_creative_plan(
     The plan is what the founder reviews and edits BEFORE any video generation
     is submitted, so nothing here costs a video call.
 
-    Timeline shape follows the product spec: 0-3s hook, 3-8s problem or
-    transition, 8-20s demonstration or payoff, final seconds CTA. Beats are
-    scaled to the requested duration rather than hardcoded.
+    Timeline shape is exactly two sections: a hook occupying the opening
+    seconds, then a middle that develops it and ends at the moment the viewer
+    would reach for the app. There is no demonstration beat and no closing beat.
+    The demo is recorded by the founder and attached afterwards; the call to
+    action is added in their own editor.
 
     The prompt directs the model to render the full scene itself — environment,
     setting, props and on-screen context invented concretely from the verified
-    facts — because nothing is composited over the footage except captions and
-    the end card. On-screen text stays out of the model's hands (captions are
-    added afterwards), and anything the viewer could read as a factual claim
-    about the app must come from verified facts or stay out of frame.
+    facts — because nothing is composited over the footage except captions. On-
+    screen text stays out of the model's hands (captions are added afterwards),
+    and anything the viewer could read as a factual claim about the app must
+    come from verified facts or stay out of frame.
 
     Returns a dict matching REQUIRED_PLAN_KEYS plus `claims_used` (the model's
     own account of which approved claims it used, reconciled by claim_safety).
@@ -1998,13 +2033,19 @@ async def generate_creative_plan(
         "known_limitations": profile.get("known_limitations") or "(none recorded)",
     }
 
+    # The template's own opening length wins over the 3s default, so the beat
+    # layout the model is asked for and the mechanism it was given agree. Clamped
+    # here because this is the number the prompt states in seconds.
+    hook_seconds = max(
+        MIN_HOOK_SECONDS, min(MAX_HOOK_SECONDS, int(template.get("hook_seconds") or 3))
+    )
+
     structure = {
         "template_name": template.get("name") or "(no template)",
         "hook_category": template.get("category") or "(unstated)",
         "opening_structure": template.get("opening_structure") or "(unstated)",
-        "hook_seconds": template.get("hook_seconds") or 3,
-        "continuation_structure": template.get("continuation_structure") or "(unstated)",
-        "cta_pattern": template.get("cta_pattern") or "(unstated)",
+        "hook_seconds": hook_seconds,
+        "middle_structure": template.get("middle_structure") or "(unstated)",
         "visual_style": template.get("visual_style") or "(unstated)",
         "camera_pacing": template.get("camera_pacing") or "(unstated)",
         "content_slots": template.get("content_slots") or {},
@@ -2039,6 +2080,10 @@ async def generate_creative_plan(
     system_message = (
         "You are a short-form video creative director for mobile app promotions. "
         "You write concrete, filmable plans grounded ONLY in verified product facts. "
+        "A plan covers exactly TWO generated sections — a HOOK in the first few seconds, "
+        "then a MIDDLE that develops it — and stops at the moment the viewer would reach "
+        "for the app. The product demo and the call to action are recorded and added by "
+        "the founder separately, so you never plan either. "
         "Describe viewers by functional need, never by sensitive traits or diagnoses. "
         "Respond with STRICT JSON only, no markdown fences."
     )
@@ -2052,29 +2097,43 @@ async def generate_creative_plan(
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
         '  "hook_line": "the single spoken/typed hook line, max 12 words",\n'
-        '  "script": "the full spoken script, plain text, no stage directions",\n'
-        '  "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "what happens and what is said"}],\n'
-        '  "visual_direction": "what the camera shows, as one paragraph",\n'
-        '  "feature_emphasis": "the single app feature this video demonstrates and where it appears",\n'
+        '  "script": "the full spoken script for BOTH sections, plain text, no stage directions",\n'
+        '  "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "what happens and what is said"}, {"start": 3, "end": 10, "label": "middle", "text": "what happens and what is said"}],\n'
+        '  "visual_direction": "what the camera shows across both sections, as one paragraph",\n'
+        '  "demo_brief": "ONE sentence telling the FOUNDER what to record for their own demo. This never reaches the generated video.",\n'
         '  "overlays": [{"start": 0, "end": 3, "text": "on-screen text, max 6 words"}],\n'
         '  "voice_direction": "delivery direction for the voiceover or on-camera talent",\n'
         '  "sound_direction": "sound and music direction, rights-safe (no named commercial tracks)",\n'
-        '  "cta": "the single call to action",\n'
         '  "claims_used": ["exact strings from claims.approved that appear in the script"]\n'
         "}\n"
         "Rules:\n"
-        f"- beat_timeline MUST follow 0-3s hook, 3-8s problem/transition, 8-{max(8, duration_seconds - 3)}s "
-        "demonstration or payoff, and the final seconds CTA. Scale the beats to "
-        f"{duration_seconds} seconds total; the hook stays under 3 seconds.\n"
+        "- beat_timeline MUST have EXACTLY TWO beats, labelled \"hook\" then \"middle\", and "
+        f"they must cover 0-{hook_seconds}s and {hook_seconds}-{duration_seconds}s of a "
+        f"{duration_seconds}-second generated piece. There is no third beat.\n"
+        "- The hook stops the scroll in its opening seconds. The middle develops it: the "
+        "situation, the pain, the reaction, the action, or the transition that naturally "
+        f"leads into the product. It ends at the moment the viewer would reach for the app, "
+        f"and not one beat later. The generated piece is {duration_seconds} seconds; anything "
+        "after it is the founder's own footage.\n"
+        "- NEVER write a product demonstration into either beat. Do not film the app in use, "
+        "do not show a screen, and do not narrate what the app does while something unrelated "
+        "happens on camera. Showing the working product is the founder's recording, attached "
+        "afterwards.\n"
+        "- NEVER write a call to action. There is no closing beat and no request to download, "
+        "install, sign up or try anything — the founder adds that in their own editor.\n"
+        "- demo_brief is the ONLY place the app's feature may be named, and even there it is "
+        "an instruction to the founder about what to record themselves. Keep it to one "
+        "sentence, and never write it as dialogue or as something the presenter says.\n"
         "- Fill every content_slot in the template with a concrete value for THIS app.\n"
-        "- CRITICAL: nothing is composited over the footage except captions and the end "
-        "card. Describe the full scene — environment, setting, props and any on-screen "
+        "- CRITICAL: nothing is composited over the footage except "
+        "captions. Describe the full scene — environment, setting, props and any on-screen "
         "context — concretely from the verified facts above, and keep overlay text to "
         "short phrases. Never invent interface text, button labels, prices, ratings, "
         "logos, testimonials, or anything the viewer could read as a factual claim "
-        "about the app. The generated scene is illustrative: the script and CTA must "
-        "never claim it shows real app footage or a screen recording.\n"
-        "- Use ONLY the features and claims present above. Never invent a feature, a rating, "
+        "about the app. The generated scene is illustrative: the script must never claim "
+        "it shows real app footage or a screen recording.\n"
+        "- Use ONLY the features and claims present above, and only in the middle's framing of "
+        "the situation. Never invent a feature, a rating, "
         "a review, a download count, or a user testimonial, and never state a price: no "
         "price is on record for this app, so a quote could not be checked.\n"
         # The reason competitors is in this prompt at all. Without the rule the
@@ -2119,24 +2178,98 @@ async def generate_creative_plan(
     result["hook_line"] = (result.get("hook_line") or "").strip()[:200]
     result["script"] = (result.get("script") or "").strip()[:6000]
     for key in (
-        "visual_direction", "feature_emphasis", "voice_direction",
-        "sound_direction", "cta",
+        "visual_direction", "demo_brief", "voice_direction", "sound_direction",
     ):
         result[key] = (result.get(key) or "").strip()[:1200]
 
     result["beat_timeline"] = _normalize_beats(result.get("beat_timeline"), duration_seconds)
+    result["beat_timeline"] = _enforce_two_sections(result["beat_timeline"], hook_seconds)
+    # The middle runs to the end of the piece: it is the last thing this
+    # workflow generates, and the founder's demo starts after it.
+    if result["beat_timeline"]:
+        result["beat_timeline"][-1]["end"] = duration_seconds
     result["overlays"] = _normalize_overlays(result.get("overlays"), duration_seconds)
     result["claims_used"] = [str(c).strip() for c in (result.get("claims_used") or []) if str(c).strip()][:8]
     result["duration_seconds"] = duration_seconds
     return result
 
 
+def _enforce_two_sections(beats: list, hook_seconds: int) -> list:
+    """
+    Force a plan's beat timeline down to exactly two beats: hook, then middle.
+
+    The prompt asks for two beats and the schema names only those two labels,
+    but a model that returns four — the old hook/problem/demo/cta shape is
+    strongly represented in its training — produces a plan whose timeline says
+    to film a demonstration and end on a call to action. Nothing downstream
+    would stop that: both are read straight into the render prompt. So it is
+    corrected here, where the shape is known, rather than trusted.
+
+    Anything after the middle is dropped, and the middle absorbs the remaining
+    time, because the founder attaches their own demo and CTA to whatever this
+    returns — a plan that reserved seconds for them would render footage that
+    runs out mid-thought.
+    """
+    cleaned = [b for b in (beats or []) if isinstance(b, dict)]
+    hook = next((b for b in cleaned if str(b.get("label", "")).lower() == "hook"), None)
+    middle = next((b for b in cleaned if str(b.get("label", "")).lower() == "middle"), None)
+
+    # A beat whose label is a demo or a call to action is dropped on the FLOOR,
+    # not folded in below. Dropping the label while keeping its prose is the
+    # difference between a plan with the right shape and a plan that still says
+    # "show the timer" and "try it free" as middle copy — and that text goes
+    # verbatim into the render prompt, which is how a demonstration gets
+    # generated by a workflow that must not generate one.
+    def _is_droppable(beat: dict) -> bool:
+        label = str(beat.get("label", "")).strip().lower()
+        return any(
+            word in label
+            for word in ("demo", "cta", "call to action", "payoff", "conversion", "close")
+        )
+
+    # A hook is never droppable, so it is looked up again in the kept set rather
+    # than being subject to the same filter.
+    hook = next((b for b in cleaned if str(b.get("label", "")).lower() == "hook"), None)
+    kept = [b for b in cleaned if b is hook or not _is_droppable(b)]
+    if hook is None and kept:
+        hook = kept[0]
+
+    if middle is None:
+        extras = [b for b in kept if b is not hook and b.get("text")]
+        if extras:
+            # The model wrote a multi-beat arc without labelling a middle, so
+            # what it actually described is the story. Fold the SURVIVING beats
+            # into one middle rather than borrowing the hook's words.
+            middle = {
+                "label": "middle",
+                "text": " ".join(str(b.get("text") or "").strip() for b in extras).strip(),
+            }
+    if hook is None:
+        return []
+    hook = {**hook, "label": "hook", "start": 0, "end": min(hook_seconds, max(1, int(hook_seconds)))}
+    if middle is None:
+        return [hook]
+    middle = {**middle, "label": "middle", "start": hook["end"]}
+    return [hook, middle]
+
+
 REQUIRED_STRATEGY_KEYS = {
     "strategy_summary", "audience_problem", "emotional_triggers", "hook_concept",
     "hook_line", "hook_promise", "hook_action", "messaging_pillars",
-    "primary_feature", "desired_outcome", "differentiation_beat", "cta_strategy",
-    "scene", "performance", "segments", "continuity_contract",
+    "primary_feature", "desired_outcome", "differentiation_beat",
+    "scene", "performance", "segments",
 }
+# What is missing on purpose, beyond hook_dialogue and character below:
+#
+# "cta_strategy". A call to action is added by the founder in their own editor
+# and is not part of the generated footage, so a strategy that must "deliver the
+# plan's CTA" was asking the model to write a closing beat for a video that has
+# no closing beat. It was also load-bearing in the wrong direction: it reached
+# every segment prompt via strategy_brief, so it was steering the middle toward
+# a conversion beat instead of toward the moment the viewer reaches for the app.
+#
+# "continuity_contract". There is no longer a chain to keep consistent: a video
+# is one render, so there is no seam between segments for a contract to govern.
 # Note what else is missing on purpose: "hook_dialogue". It is enrichment —
 # the exact words or delivery direction for the hook beat — and every
 # consumer already tolerates its absence (normalize defaults it to "",
@@ -2161,35 +2294,44 @@ REQUIRED_STRATEGY_KEYS = {
 # Planning exactly one continuation and then falling back to it for every later
 # index made extensions 2, 3, 4... replay extension 1 verbatim — the same
 # words, the same action — so "extend again" produced the same beat twice.
+# A generated video is TWO sections, always. The hook is the opening beat; the
+# middle develops it and ends at the moment the viewer would reach for the app.
 #
-# Seven continuations (eight segments, the normalize cap) is comfortably more
-# than the product needs: the longest total is 30s and a single "extend to
-# target" costs one or two segments, so the arc is exhausted only by a founder
-# deliberately padding the video with minimum-length segments.
-CONTINUATION_BEATS = 7
+# This used to be 7 continuation beats (8 segments) with the last one reserved
+# for the CTA, so a founder could extend a chain to reach a 30s target. There is
+# no chain and no CTA now: one render, one file, and the demo plus the close are
+# the founder's own footage attached afterwards. So the count is structural
+# rather than a budget — a third section would be a product demo, which this
+# workflow does not generate.
+GENERATED_SECTIONS = 2
+SECTION_ROLES = ("hook", "middle")
 
 
-def _continuation_segment_schema(plan_seconds: int) -> str:
+def _two_section_schema(middle_seconds: int) -> str:
     """
-    Emit the planned continuation segments as JSON schema text.
+    Emit the two generated sections as JSON schema text.
 
-    Each beat is a distinct point in the story, not a restatement: the last one
-    always lands the CTA so the arc is complete at any stopping point, which is
-    what makes stopping early a legitimate choice rather than a truncated video.
+    Exactly two segments, roles "hook" and "middle". The middle is the last
+    thing this product generates, so it carries the whole remainder of the piece
+    and its only obligation is to bring the viewer to the edge of wanting the
+    app — not to satisfy them.
     """
-    parts = []
-    for index in range(1, CONTINUATION_BEATS + 1):
-        role = "cta" if index == CONTINUATION_BEATS else "continuation"
-        parts.append(
-            f',\n    {{"index": {index}, "role": "{role}", "seconds": {plan_seconds}, '
-            f'"goal": "what this beat must achieve", '
-            f'"script": "the words spoken in THIS beat - different from every other beat", '
-            f'"action": "what they do in THIS beat"}}'
-        )
-    return "".join(parts)
+    return (
+        ',\n    {"index": 0, "role": "hook", "seconds": 3, '
+        '"goal": "what the opening beat must achieve to stop the scroll", '
+        '"script": "the exact words spoken in the opening - the plan\'s hook line", '
+        '"action": "what they do in the opening seconds"}'
+        f',\n    {{"index": 1, "role": "middle", "seconds": {middle_seconds}, '
+        '"goal": "what the middle must achieve: develop the hook and end at the moment the viewer reaches for the app", '
+        '"script": "the words spoken in the middle - different from the hook", '
+        '"action": "what they do through the middle, ending on the reach for the phone"}}'
+    )
 
-# The sub-objects are where continuity actually lives, so each one is required
-# with its own field list rather than being trusted as a free-form blob.
+# The scene is where the single render's consistency lives: it is locked for
+# the whole piece, so the hook and the middle cannot disagree about the room,
+# the light or the framing. There is deliberately no continuity contract any
+# more — that governed the seam between two separately-rendered segments, and
+# there is no seam now.
 #
 # There is deliberately no STRATEGY_CHARACTER_FIELDS. The on-camera person is
 # copied from the founder's uploaded character reference image, so a written
@@ -2204,7 +2346,6 @@ STRATEGY_SCENE_FIELDS = (
     "setting", "visual_style", "character_positioning", "props", "color_palette",
 )
 STRATEGY_PERFORMANCE_FIELDS = ("movement", "voice_delivery")
-STRATEGY_CONTRACT_FIELDS = ("established", "must_not_change", "do_not_repeat")
 
 _STRATEGY_TEXT_LIMITS = {
     "strategy_summary": 900,
@@ -2217,7 +2358,6 @@ _STRATEGY_TEXT_LIMITS = {
     "primary_feature": 400,
     "desired_outcome": 400,
     "differentiation_beat": 400,
-    "cta_strategy": 400,
 }
 
 
@@ -2256,7 +2396,7 @@ def normalize_strategy(raw: dict) -> dict:
         for key in (
             "strategy_summary", "audience_problem", "hook_concept", "hook_line",
             "hook_promise", "hook_action", "hook_dialogue", "primary_feature",
-            "desired_outcome", "differentiation_beat", "cta_strategy",
+            "desired_outcome", "differentiation_beat",
         )
     }
     result["emotional_triggers"] = _clean_strategy_list(raw.get("emotional_triggers"), 200)
@@ -2268,35 +2408,45 @@ def normalize_strategy(raw: dict) -> dict:
     result["scene"] = _normalize_strategy_section(raw.get("scene"), STRATEGY_SCENE_FIELDS)
     result["performance"] = _normalize_strategy_section(raw.get("performance"), STRATEGY_PERFORMANCE_FIELDS)
 
-    contract = raw.get("continuity_contract") if isinstance(raw.get("continuity_contract"), dict) else {}
-    result["continuity_contract"] = {
-        field: _clean_strategy_list(contract.get(field), 260, cap=8)
-        for field in STRATEGY_CONTRACT_FIELDS
-    }
+    # An old strategy may still carry a contract; it is dropped rather than
+    # trusted, because a seam contract describes a chain that no longer exists.
+    result["segments"] = _normalize_sections(raw.get("segments"))
+    return result
 
-    segments = []
-    for index, item in enumerate(raw.get("segments") or []):
+
+def _normalize_sections(raw) -> list:
+    """
+    Coerce the model's segments down to exactly two: the hook and the middle.
+
+    Truncation alone is not enough. A model returning the old eight-beat shape
+    would keep beats 2-8, and beat 8's role is "cta" — so the middle would
+    inherit a call to action, and that role is read by the render prompt. Roles
+    are therefore reassigned by position rather than trusted, and a third
+    section is dropped entirely: the product demo that a third beat would hold
+    is the founder's own recording.
+    """
+    cleaned = []
+    for item in raw if isinstance(raw, list) else []:
         if not isinstance(item, dict):
             continue
         try:
             seconds = int(item.get("seconds") or 0)
         except (TypeError, ValueError):
             seconds = 0
-        role = _clean_strategy_text(item.get("role") or ("hook" if index == 0 else "continuation"), 40)
-        segments.append({
-            "index": index,
-            "role": role,
+        cleaned.append({
             "seconds": max(1, min(seconds or 0, 30)),
             "goal": _clean_strategy_text(item.get("goal"), 400),
             "script": _clean_strategy_text(item.get("script"), 900),
             "action": _clean_strategy_text(item.get("action"), 400),
         })
-        if len(segments) >= 8:
+        if len(cleaned) >= GENERATED_SECTIONS:
             break
-    if not segments:
-        segments = [{"index": 0, "role": "hook", "seconds": 4, "goal": "", "script": "", "action": ""}]
-    result["segments"] = segments
-    return result
+
+    sections = []
+    for index, role in enumerate(SECTION_ROLES):
+        item = cleaned[index] if index < len(cleaned) else {"seconds": 3, "goal": "", "script": "", "action": ""}
+        sections.append({"index": index, "role": role, **item})
+    return sections
 
 
 def strategy_text(strategy: dict) -> str:
@@ -2374,29 +2524,27 @@ async def generate_video_strategy(
     """
     Turn an App Profile into a video strategy specific to THIS app.
 
-    This is the step that stops the influencer workflow from producing a
-    generic talking-head video with an app name stapled on. It decides the
-    hook concept, the messaging, the words, the action and the whole look of
-    the scene BEFORE any video is generated, and it writes
-    a continuity contract that every later segment is held to.
+    This is the step that stops the workflow from producing a generic
+    talking-head video with an app name stapled on. It decides the hook concept,
+    the messaging, the words, the on-camera action and the whole look of the
+    scene BEFORE any video is generated.
 
-    The scene section is the continuity contract in concrete form: once the
-    first segment locks a background, a light, a camera angle and the
-    delivery, the same values are restated for every extension so the
-    provider is told what must not change rather than asked to keep it in
-    mind. The face is never described anywhere in the strategy — it comes
-    from the founder's photograph, which rides along as a model input.
+    A strategy describes exactly TWO sections — a hook and a middle — because
+    that is what one render produces. The scene is what holds the two together:
+    once a background, a light, a camera angle and the delivery are locked, the
+    middle is held to the same values, so the piece reads as one take. The face
+    is never described anywhere in the strategy — it comes from the founder's
+    photograph, which rides along as a model input.
 
     Returns a normalized strategy dict (see normalize_strategy). Never invents
     features, prices, ratings or outcomes; uncertain claims are pushed to the
     profile's own review tier instead.
 
     `plan` is the founder-approved creative plan, when one exists. The founder
-    writes the script, the CTA and the visual direction there and then spends
-    money on the hook; a strategy that ignored it would render a different video
-    than the one they approved, so the approved words win and this only fills in
-    what a plan cannot express: the segment arc, the on-camera action per beat,
-    and the locked scene.
+    writes the script and the visual direction there and then spends money on
+    the video; a strategy that ignored it would render a different video than the
+    one they approved, so the approved words win and this only fills in what a
+    plan cannot express: the on-camera action per section and the locked scene.
     """
     def _list(name):
         val = profile.get(name)
@@ -2406,15 +2554,10 @@ async def generate_video_strategy(
             return [str(val)]
         return []
 
-    # A planning hint for how long each continuation beat is expected to run.
-    # It is a HINT, not the render length: the founder picks the real length per
-    # extension, and a beat's own `seconds` only describes the shape of the
-    # arc. Spread across the planned beats so a 20s total with a 4s hook does
-    # not plan two-second beats.
+    # The middle covers everything after the hook, because it is the last thing
+    # this product generates. The founder's demo and CTA attach after it.
     _remaining = max(0, int(total_duration or 0) - int(hook_seconds or 0))
-    plan_seconds = (
-        max(1, round(_remaining / CONTINUATION_BEATS)) if _remaining else int(hook_seconds or 4)
-    )
+    plan_seconds = _remaining or int(hook_seconds or 4)
 
     facts = {
         "app_name": profile.get("brand_name") or "(unnamed app)",
@@ -2430,28 +2573,44 @@ async def generate_video_strategy(
         "differentiators": profile.get("differentiation") or "(unstated)",
         "competitors": _list("competitors"),
         "limitations": profile.get("known_limitations") or "(none recorded)",
-        # These two exist because the strategy schema asks for a scene and a
-        # hook action, and until now no profile field supplied either. The model
-        # had to invent a setting (a kitchen at 7am, regardless of the app) and
-        # a demonstration (whatever "show it in use" meant to it). Both are
-        # product facts the app's own copy usually states.
+        # usage_moments exists because the schema asks for a scene and a hook
+        # action, and without it the model invents a setting (a kitchen at 7am,
+        # regardless of the app). It now does more: the middle develops towards
+        # one of these moments and stops there, which is the seam the founder's
+        # own demo continues from.
         "usage_moments": _list("usage_moments"),
-        "proof_moment": str(profile.get("proof_moment") or "").strip() or "(unstated)",
-        # The arc's material. The seven continuation beats previously had no
-        # argument to make, so the middle of every video was another feature.
-        # Each entry is a reason this viewer would not download, what they use
-        # instead, and the honest reply -- so a beat can turn rather than
-        # accumulate.
+        # proof_moment is DELIBERATELY NOT PASSED. It is the one moment the
+        # camera must film to make the claim believable, which is the product
+        # demo — and the demo is recorded by the founder and attached after this
+        # footage. It stays on the App Profile as a brief for that recording.
+        # Supplying it here was the route by which "show this happening" reached
+        # a prompt that is not allowed to show the app happening.
+        #
+        # viewer_objections are the middle's material. With one section to work
+        # in, an objection is answered by the situation shown rather than by
+        # another feature: each entry is why this viewer would not download,
+        # what they use instead, and the honest reply.
         "viewer_objections": profile.get("viewer_objections") or [],
     }
 
     mechanism = {
         "template_name": template.get("name") or "(no template)",
         "hook_category": template.get("category") or "(unstated)",
-        "objective": objective or "(unstated)",        "opening_structure": template.get("opening_structure") or "(unstated)",
+        "objective": objective or "(unstated)",
+        "opening_structure": template.get("opening_structure") or "(unstated)",
         "hook_seconds": hook_seconds,
-        "continuation_structure": template.get("continuation_structure") or "(unstated)",
-        "cta_pattern": template.get("cta_pattern") or "(unstated)",
+        # `middle_structure` replaced `continuation_structure` + `cta_pattern`
+        # when a video became one render with a hook and a middle. Reading the
+        # retired names here meant this block printed
+        # "continuation_structure": "(unstated)" and "cta_pattern": "(unstated)"
+        # for EVERY strategy: the curated middle never reached the prompt at all,
+        # and the one field still being asked for described a closing beat the
+        # rules below this one forbid. The retired key is read as a fallback so a
+        # template row written before the migration still says something.
+        "middle_structure": (
+            template.get("middle_structure") or template.get("continuation_structure")
+            or "(unstated)"
+        ),
         "visual_style": template.get("visual_style") or "(unstated)",
         "camera_pacing": template.get("camera_pacing") or "(unstated)",
         "required_assets": _list_of(template, "required_assets"),
@@ -2489,25 +2648,28 @@ async def generate_video_strategy(
         beats = plan.get("beat_timeline")
         approved_plan = {
             "hook_line": str(plan.get("hook_line") or "").strip(),
-            "cta": str(plan.get("cta") or "").strip(),
-            "feature_emphasis": str(plan.get("feature_emphasis") or "").strip(),
             "visual_direction": str(plan.get("visual_direction") or "").strip(),
             "voice_direction": str(plan.get("voice_direction") or "").strip(),
             "sound_direction": str(plan.get("sound_direction") or "").strip(),
             "beats": [
                 {
+                    "label": str(b.get("label") or "").strip(),
                     "start": b.get("start"),
                     "end": b.get("end"),
                     "text": str(b.get("beat") or b.get("text") or "").strip(),
                 }
                 for b in (beats if isinstance(beats, list) else [])
                 if isinstance(b, dict)
-            ][:24],
+            ][:4],
         }
         # The plan's full script is the spine of the video. It is not echoed
         # here: the beats above already carry its content beat by beat, and
         # repeating it would crowd the prompt the strategy has to fit in.
-        if not any(approved_plan[k] for k in ("hook_line", "cta")) and not approved_plan["beats"]:
+        #
+        # Note what is NOT passed: `demo_brief`. It exists so the founder knows
+        # what to record for their own demo, and handing it to the strategy
+        # would be the route by which a feature instruction reached the render.
+        if not any(approved_plan[k] for k in ("hook_line",)) and not approved_plan["beats"]:
             approved_plan = {}
 
     approved_plan_context = ""
@@ -2588,8 +2750,7 @@ async def generate_video_strategy(
         '  "messaging_pillars": ["2-4 things the video must land, derived from this app\'s real features"],\n'
         f'  "primary_feature": "the ONE feature this video shows, from the facts above",\n'
         '  "desired_outcome": "the viewer outcome, described as a change the app supports, never a guarantee",\n'
-        '  "differentiation_beat": "how to use this app\'s stated differentiation against its competitors",\n'
-        '  "cta_strategy": "the single next action, and why it suits this audience",\n'
+        '  "differentiation_beat": "how this app differs from what the viewer would otherwise reach for",\n'
         '  "scene": {\n'
         f'    "camera_angle": "the exact camera position and angle, e.g. eye-level handheld 1m away",\n'
         f'    "framing": "framing and shot size, e.g. medium close-up, head and shoulders",\n'
@@ -2609,48 +2770,45 @@ async def generate_video_strategy(
         '  "segments": [\n'
         f'    {{"index": 0, "role": "hook", "seconds": {hook_seconds}, "goal": "what these seconds must achieve",'
         ' "script": "words spoken in this segment", "action": "what they do in this segment"}'
-        + _continuation_segment_schema(plan_seconds)
-        + '\n  ],\n'
-        '  "continuity_contract": {\n'
-        '    "established": ["what the opening segment fixes for the rest of the video — 4-6 items. '
-        'Setting, lighting, framing, props and action only. Never the presenter\'s face, hair, '
-        'skin, age, build, wardrobe or styling: those come from the founder\'s photograph, not '
-        'from anything written here."],\n'
-        '    "must_not_change": ["setting, lighting, framing, props and wardrobe-that-is-'
-        'already-on-screen-in-the-photograph that every later segment must reproduce exactly. '
-        'Do NOT list the person\'s face, hair, age, build or styling -- an invented description '
-        'of them here contradicts the photograph they are supposed to match."],\n'
-        '    "do_not_repeat": ["what the opening already said or showed, so later segments do not say it again"]\n'
-        '  }\n'
+        + _two_section_schema(plan_seconds)
+        + '\n  ]\n'
         "}\n"
         "Rules:\n"
         + (
             "- An APPROVED CREATIVE PLAN is supplied above. The founder wrote it and reviewed it "
             "before this video cost anything, so it is the video: hook_line must be that hook line, "
-            "the opening segment's script must be the plan's first beat, every later beat must be "
-            "delivered in the plan's order, and cta_strategy must deliver the plan's CTA. Do not "
+            "and the two sections must deliver the plan's two beats in that order. Do not "
             "improve on it, do not reorder it, and do not replace its words with a different hook "
             "just because you would have written it differently. What you add is what a plan cannot "
-            "express: the on-camera action for each beat, the scene, the performance, and the "
-            "continuity contract.\n"
+            "express: the on-camera action for each section, the scene, and the performance.\n"
             if approved_plan
             else ""
         )
-        + f"- The opening segment lasts {hook_seconds} seconds and must be the strongest {hook_seconds} seconds "
+        + "- There are exactly TWO sections and they are the whole video. Segment 0 is the hook. "
+        f"Segment 1 is the middle and runs {plan_seconds} seconds to the end. Never return a third "
+        "section.\n"
+        "- The middle develops the hook — the situation, the pain, the reaction, the action, the "
+        "transition — and its job is to end at the moment the viewer would reach for the app. It "
+        "does NOT satisfy them, and it does not continue past that point.\n"
+        "- NEVER put a product demonstration in either section. Do not film the app being used, do "
+        "not show a screen, do not describe the app working while something unrelated happens on "
+        "camera. The founder records the demo themselves and attaches it after this footage ends.\n"
+        "- NEVER write a call to action, a request to download, or any closing beat. The founder "
+        "adds the call to action in their own editor. There is no ending to write towards beyond "
+        "the moment they reach for the phone.\n"
+        +         f"- The opening section lasts {hook_seconds} seconds and must be the strongest {hook_seconds} seconds "
         f"for THIS app. Write a real hook for this app's real audience, not a generic influencer opening with "
         "the app name dropped in.\n"
         "- The hook must serve the selected hook mechanism. If the mechanism is a question, the hook is a "
         "question; if it is a contrarian correction, the hook corrects something.\n"
-        f"- After the hook, plan {CONTINUATION_BEATS} further beats. The founder decides where to stop, so the "
-        "beats must work as a sequence AND the last one must land the call to action on its own — a viewer "
-        "who sees only the hook and the final beat still gets a complete video.\n"
-        "- Give every beat a genuinely different goal, script and action. Beat 1 is not beat 2 restated, and "
-        "no two beats may share a script. A repeated beat is worse than a missing one, because it plays the "
-        "same clip twice.\n"
+        "- The two sections must do genuinely different work. The hook earns attention; the middle "
+        "is not the hook restated with more words. If the middle could be cut without losing the "
+        "hook, it is not doing its job.\n"
         "- Fill every content_slot in the hook mechanism with a concrete value for THIS app, "
-        "drawn from the verified facts and the brief above — the feature slot names an actual "
-        "feature from core_features, the problem slot the actual audience problem. An unfilled "
-        "slot is a generic video.\n"
+        "drawn from the verified facts and the brief above. A slot that names a specific "
+        "feature of THIS app still describes it rather than filming it: what the middle "
+        "shows is the situation that feature belongs to, not the feature working. An "
+        "unfilled slot is a generic video.\n"
         "- There is no \"character\" key in this schema and none is wanted: do not add one, "
         "and do not describe the presenter's face, hair, age, build, wardrobe or styling in "
         "any field — not in strategy_summary, not in hook_concept, nowhere. The on-camera "
@@ -2659,55 +2817,66 @@ async def generate_video_strategy(
         "- Invent the environment, setting, props and on-screen context concretely from the "
         "verified facts (features, use cases, problems, audience, platforms) — a kitchen "
         "counter at 7am for an evening-reflection app, not \"a nice room\". Nothing is "
-        "composited over the footage except captions and the end card, so what the camera "
+        "composited over the footage except captions, so what the camera "
         "must show has to be written here, in scene, segments and hook_action.\n"
-        "- The generated scene is illustrative, never documentary: the script, captions and "
-        "CTA must never claim it shows real app footage or a screen recording. Anything the "
+        "- The generated scene is illustrative, never documentary: the script and captions "
+        "must never claim it shows real app footage or a screen recording. Anything the "
         "viewer could read as a factual claim about the app — interface text, button labels, "
         "prices, ratings, logos — must come from the verified facts or stay out of frame.\n"
         "- Make the scene so specific that a second video with the same strategy would be "
         "recognisably the same place. The person's sameness is the photograph's job, not the "
         "text's — never describe them to achieve it. Vague terms like \"casual\" or \"a nice "
         "room\" are not acceptable.\n"
-        "- must_not_change must cover the background, the lighting, the framing, the props "
-        "and the delivery — the scene attributes a video model will otherwise silently "
-        "reinvent. Never the face, hair, age, build or styling: those come from the "
-        "founder's photograph, not from anything written here.\n"
-        "- Every segment must be satisfiable using only the verified facts above. Put anything that would need a "
-        "claim from needs_review into do_not_repeat or omit it entirely.\n"
-        # The two fields that close the gaps the schema otherwise leaves to
-        # invention. Phrased as obligations, not suggestions: a field the model
-        # may use or ignore is the same as no field at all.
+        "- The scene must hold for BOTH sections. The hook and the middle are one render, so "
+        "the background, lighting, framing, props and delivery it locks apply to the whole "
+        "piece — never the face, hair, age, build or styling, which come from the founder's "
+        "photograph rather than from anything written here.\n"
+        "- Every section must be satisfiable using only the verified facts above. Put anything "
+        "that would need a claim from needs_review nowhere, or omit it entirely.\n"
+        # The one field that closes the gap the schema otherwise leaves to
+        # invention, now doing double duty. Phrased as an obligation, not a
+        # suggestion: a field the model may use or ignore is the same as no
+        # field at all.
+        #
+        # usage_moments sets the middle's setting AND is where the piece ends:
+        # the app is reached for at a specific moment, so the middle develops
+        # towards that moment and stops there. That stop is the seam the
+        # founder's own demo picks up from.
         "- scene.setting must come from usage_moments. Those are the specific moments this app "
         "is reached for, and they are the only evidence of when and where a viewer would use "
         "it. Do not default to a generic kitchen, desk or morning routine. If usage_moments is "
         "empty, state that the moment is unspecified in the setting rather than inventing a "
         "plausible one.\n"
-        "- proof_moment is the one moment the camera must film that makes the main claim "
-        "believable, and at least one segment must show it happening rather than describing it "
-        "while something unrelated occurs on screen. If proof_moment is unstated, show the "
-        "earliest visible result of the primary feature instead.\n"
-        # The arc. Seven beats with nothing to argue about is seven restatements
-        # of the hook, so this is the difference between a video that persuades
-        # and one that lists features.
-        "- viewer_objections are the beats. Each is an objection, what the viewer does today "
-        "instead, and an honest answer that is true from the verified facts. Give each "
-        "objection its own beat: name the objection in the viewer's own terms, show the "
-        "alternative they are leaving behind or the cost of doing nothing, then answer it with "
-        "this app's features. Do not stack two objections into one beat and do not repeat an "
-        "objection the previous beat already answered.\n"
+        "- The middle must end AT the usage moment from usage_moments — the presenter reaching "
+        "for the app, not using it. The demo is the founder's own recording, attached after "
+        "this footage, so the last frame of your video should be the moment before it.\n"
+        # proof_moment is deliberately NOT a generation input any more. It is the one moment
+        # the camera must film to make the claim believable — which is the product demo, and
+        # the demo is recorded by the founder. It stays on the App Profile as a brief for that
+        # recording; passing it here was how a "show the app working" instruction reached a
+        # prompt that is not allowed to show the app working.
+        #
+        # viewer_objections now shape the middle rather than a chain of beats. With one
+        # section to work in, an objection is answered by the situation being shown, not by
+        # a feature list.
+        "- viewer_objections are what the middle has to answer. Each is an objection, what the "
+        "viewer does today instead, and an honest answer that is true from the verified facts. "
+        "Weave the objections that matter into the middle in the viewer's own terms: show the "
+        "alternative they are living with or the cost of doing nothing, so the objection is "
+        "answered by the situation on screen rather than by a list of features. Two sections "
+        "cannot carry every objection, so use the ones this audience would actually have.\n"
         # The trend section, when present. Phrased as a bias toward a shape the
         # data supports, never as a target: a view count is an observation about
         # someone else's video, and a model told to "beat 500K" will pad.
         "- If WHAT OPENINGS OF THIS SHAPE HAVE ACTUALLY CARRIED is present, let it bias the "
-        "opening toward the shape that carried: a fast first line, a direct second, an early "
-        "payoff. Do not chase the number itself, do not pad the hook to fill time, and do not "
+        "opening toward the shape that carried: a fast first line and a direct second. Do not "
+        "chase the number itself, do not pad the hook to fill time, and do not "
         "state or imply a view, like or follower count. It describes what similar shapes have "
         "done, not what yours will do.\n"
         "- An honest_answer may not promise a result, a saving, or a guarantee, and may not "
         "claim a rating, count or price. Answer with what the app demonstrably does. If a "
-        "recorded objection has no answer the facts support, leave that beat out rather than "
-        "inventing one — the arc is better short than dishonest.\n"
+        "recorded objection has no answer the facts support, leave it out rather than "
+        "inventing one — the middle is better short than dishonest.\n"
         "- Never promise a guaranteed outcome, never invent a testimonial, a rating or a "
         "review, and never state a price, plan name or trial term — the App Profile carries "
         "none, so nothing could verify it.\n"

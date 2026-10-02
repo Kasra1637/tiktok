@@ -219,10 +219,49 @@ class TestReportShape:
 
 
 class TestScriptTextCoverage:
-    def test_includes_voice_and_cta(self):
-        text = cs.script_text(plan(voice_direction="warm and low", cta="Download now"))
+    def test_includes_voice_and_sound_direction(self):
+        """
+        Was `test_includes_voice_and_cta`: it asserted the plan's `cta` was part
+        of the text claim checking walks.
+
+        It no longer is, and neither is `feature_emphasis` — a generated piece
+        is a hook and a middle with no closing beat and no demonstration, and
+        `demo_brief` is a note to the founder about what to record themselves.
+        None of those is text a viewer could read, so checking them would fail a
+        plan over copy that cannot reach a frame.
+
+        The property that matters is unchanged and now stated directly: a banned
+        claim has to be caught in whatever text DOES reach the video.
+        """
+        text = cs.script_text(plan(
+            voice_direction="warm and low",
+            sound_direction="acoustic bed under the whole thing",
+            cta="Download now",
+            demo_brief="record yourself tapping the timer",
+        ))
         assert "warm and low" in text
-        assert "download now" in text
+        # script_text normalizes punctuation away for phrase matching, so the
+        # comma in the source string never survives.
+        assert "acoustic bed under the whole thing" in text
+        # Not text a viewer sees, so deliberately outside the check.
+        assert "download now" not in text
+        assert "record yourself tapping the timer" not in text
+
+    def test_a_banned_claim_is_still_caught_in_what_is_said(self):
+        report = cs.build_safety_report(
+            plan(voice_direction="cures anxiety"), PROFILE)
+        assert report["passed"] is False
+        assert any(
+            b["claim"] == "cures anxiety" for b in report["blocking"]
+        ), report["blocking"]
+
+    def test_a_banned_claim_is_still_caught_in_what_is_shown(self):
+        report = cs.build_safety_report(
+            plan(overlays=[{"start": 0, "end": 3, "text": "clinically proven"}]), PROFILE)
+        assert report["passed"] is False
+        assert any(
+            b["claim"] == "clinically proven" for b in report["blocking"]
+        ), report["blocking"]
 
     def test_includes_beat_text(self):
         text = cs.script_text(plan(beat_timeline=[

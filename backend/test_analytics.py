@@ -244,13 +244,37 @@ class TestResearchAbstraction:
         """
         The guard runs over the whole draft, not one field, because a creator
         reference can hide in any of them.
+
+        The reference hides in `middle_structure` — the field that replaced
+        `continuation_structure` + `cta_pattern`. A draft describing a
+        three-beat arc that paid off and closed on a call to action could put
+        "same as @realcreator" in either of those, and both halves were read
+        into the render prompts, so one field now has to carry the same guard.
         """
         drafts, rejected = ra.parse_drafts([
             {"name": "Copy me", "hook_mechanic": "m", "opening_structure": "s",
-             "contribution": "x", "continuation_structure": "same as @realcreator"},
+             "contribution": "x", "middle_structure": "same as @realcreator"},
         ])
         assert drafts == []
         assert rejected[0]["reason"] == "described a specific creator or copyrighted audio, not a mechanic"
+
+    def test_a_retired_structure_field_cannot_carry_a_creator_reference(self):
+        """
+        The guard scans the fields a draft KEEPS. `continuation_structure` and
+        `cta_pattern` are no longer kept, so a reference in either is dropped
+        with them rather than surviving on the template — the field-scoped
+        guard cannot be the only thing keeping a named creator out of the
+        library.
+        """
+        drafts, rejected = ra.parse_drafts([
+            {"name": "Retired fields", "hook_mechanic": "m", "opening_structure": "s",
+             "continuation_structure": "same as @realcreator", "cta_pattern": "like @realcreator"},
+        ])
+        assert rejected == []
+        blob = " ".join(str(v) for v in drafts[0].values())
+        assert "@realcreator" not in blob
+        assert "continuation_structure" not in drafts[0]
+        assert "cta_pattern" not in drafts[0]
 
     def test_incomplete_draft_is_rejected_with_a_reason(self):
         drafts, rejected = ra.parse_drafts([
@@ -264,14 +288,15 @@ class TestResearchAbstraction:
             {"name": "Pain point question", "category": "PAIN_POINT_QUESTION",
              "hook_mechanic": "ask the problem aloud",
              "opening_structure": "name the problem in 2s",
-             "continuation_structure": "offer the fix",
-             "cta_pattern": "soft ask", "pacing_note": "fast",
+             "middle_structure": "name the cost of ignoring it",
+             "pacing_note": "fast",
              "why_it_repeats": "self-recognition", "suits": ["Productivity"]},
         ])
         assert rejected == []
         assert drafts[0]["category"] == "pain-point-question"
         assert drafts[0]["origin"] == "research_draft"
         assert drafts[0]["review_status"] == "draft"
+        assert drafts[0]["middle_structure"] == "name the cost of ignoring it"
 
     def test_drafts_are_never_usable_before_publication(self):
         drafts, _ = ra.parse_drafts([

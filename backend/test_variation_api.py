@@ -63,12 +63,17 @@ def _generation(api, profile, name, status="completed", with_plan=True):
     project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
         brand_profile_id=profile["id"], template_id=template["id"]), user_id=ANON))
     if with_plan:
+        # `demo_brief` replaced `feature_emphasis`: the founder's note about what
+        # to record for their own demo. `cta` is still written because the column
+        # survives in the schema — a stale value that the copy paths must drop,
+        # which is what the assertions below check.
         _run(api._execute(
             """UPDATE studio_projects SET hook_line = ?, script = ?, cta = ?,
-               visual_direction = ?, feature_emphasis = ?, audience = ?, tone = ?,
+               visual_direction = ?, demo_brief = ?, audience = ?, tone = ?,
                script_version = 1, status = 'ready_for_generation' WHERE id = ?""",
             ("Old hook", "Old spoken script.", "Old CTA", "Close on hands.",
-             "The timer", "Busy parents", "calm", project["id"])))
+             "Record yourself tapping the timer once.", "Busy parents", "calm",
+             project["id"])))
     gen_id = str(uuid.uuid4())
     now = now_iso()
     _run(api._execute(
@@ -126,18 +131,28 @@ class TestCreateVariation:
         derived = result["project"]
         assert derived["template_id"] == other["id"]
         assert derived["template_version"] == other["version"]
-        # Hook, script, CTA, assets and audience carry over untouched.
+        # Hook, script, demo brief, assets and audience carry over untouched.
         assert derived["hook_line"] == project["hook_line"]
         assert derived["script"] == project["script"]
-        assert derived["cta"] == project["cta"]
+        assert derived["demo_brief"] == project["demo_brief"]
+        # The retired cta column does not: there is no call to action in a
+        # generated piece, and carrying a stale one into the copy would put a
+        # closing beat into footage meant to stop at the reach.
+        assert derived["cta"] is None
 
     def test_duration_variation_clamps_to_supported(self, api):
+        """
+        A length is one render, so a variation that asks for 7s gets the
+        shortest supported piece (8s) rather than something no single pass can
+        produce. 7 was below every supported length when 10 was the floor.
+        """
+        import template_library as tl
         from models import CreateVariationRequest
         profile = _profile(api, "Var Duration")
         gen, _, _ = _generation(api, profile, "Var Duration")
         result = _run(api.create_variation(
             gen["id"], CreateVariationRequest(kind="duration", value="7"), ANON))
-        assert result["project"]["duration_seconds"] == 10
+        assert result["project"]["duration_seconds"] == tl.SUPPORTED_DURATIONS[0] == 8
 
     def test_audience_variation_changes_only_the_audience(self, api):
         from models import CreateVariationRequest
@@ -291,13 +306,18 @@ class TestDuplicate:
         copy = result["project"]
         assert copy["hook_line"] == project["hook_line"]
         assert copy["script"] == project["script"]
-        assert copy["cta"] == project["cta"]
+        assert copy["demo_brief"] == project["demo_brief"]
         assert copy["template_id"] == project["template_id"]
         assert copy["template_version"] == project["template_version"]
         assert copy["duration_seconds"] == project["duration_seconds"]
         assert copy["tone"] == project["tone"]
         assert copy["audience"] == project["audience"]
         assert copy["assets"] == project["assets"]
+        # Deliberately NOT copied, and the reason it is still here in the
+        # fixture: a generated piece has no call to action. A duplicate that
+        # carried a stale cta forward would close a video that is supposed to
+        # stop at the moment the presenter reaches for their phone.
+        assert copy["cta"] is None
 
     def test_the_plan_survives_so_no_text_call_is_needed(self, api):
         """
@@ -387,15 +407,24 @@ class TestDuplicate:
         assert err.value.status_code == 409
 
     def test_duplicate_is_distinct_from_a_variation(self, api):
-        """A variation changes one field; a duplicate changes none."""
+        """
+        A variation changes one field; a duplicate changes none.
+
+        Pinned on `hook_line` rather than `cta`. The `cta` axis still exists in
+        the catalogue, but the field it used to write is no longer part of a
+        generated piece, so it can no longer evidence "one field changed" —
+        both would have read None and the test would pass vacuously.
+        """
         from models import CreateVariationRequest
         profile = _profile(api, "Dup Distinct")
         gen, project, _ = _generation(api, profile, "Dup Distinct")
         varied = _run(api.create_variation(
-            gen["id"], CreateVariationRequest(kind="cta", value="Totally different"), ANON))
+            gen["id"],
+            CreateVariationRequest(kind="hook_line", value="Totally different"), ANON))
         copied = _run(api.duplicate_generation(gen["id"], ANON))
-        assert varied["project"]["cta"] != project["cta"]
-        assert copied["project"]["cta"] == project["cta"]
+        assert varied["project"]["hook_line"] == "Totally different"
+        assert varied["project"]["hook_line"] != project["hook_line"]
+        assert copied["project"]["hook_line"] == project["hook_line"]
 
 
 class TestHistory:

@@ -244,35 +244,59 @@ class TestGenerationGates:
         assert err.value.status_code == 404
 
 
-class TestDurationSplitting:
-    def test_over_limit_reports_the_split_rather_than_truncating(self, api, monkeypatch):
-        """
-        A 20s request on a 15s model must not silently produce a 15s video:
-        the response has to say an extension is required.
-        """
-        _mock_submit(api, monkeypatch)
-        from models import StudioGenerationRequest
-        project, _, _ = _ready_project(api, "Split", duration=20)
-        result = _run(api.submit_project_generation(
-            project_id=project["id"],
-            payload=StudioGenerationRequest(model="minimax-h3"),
-            user_id=ANON))
-        plan = result["duration_plan"]
-        assert plan["needs_extension"] is True
-        assert plan["extension_seconds"] > 0
-        # The job itself covers only what one pass can do.
-        assert result["duration"] == plan["primary_seconds"]
+class TestDurationIsOnePass:
+    """
+    A video is ONE render now: a hook and a middle in a single pass.
 
-    def test_within_limit_needs_no_extension(self, api, monkeypatch):
+    There is no split across jobs, so `duration_plan` is gone from the response.
+    What replaced the old "report the split" behaviour is a refusal: a request
+    longer than one pass is not a longer video, it is a video the workflow cannot
+    make, and the founder's own demo and CTA are what they attach afterwards.
+    """
+
+    def test_over_limit_is_refused_rather_than_truncated_or_split(self, api, monkeypatch):
+        """
+        A 20s request on a 15s model must not silently produce a 15s video, and
+        must not quietly become a two-job chain either. It is refused, and the
+        message says why and what to do instead.
+        """
+        calls = _mock_submit(api, monkeypatch)
+        from models import StudioGenerationRequest
+        project, _, _ = _ready_project(api, "Too Long", duration=20)
+        with pytest.raises(HTTPException) as err:
+            _run(api.submit_project_generation(
+                project_id=project["id"],
+                payload=StudioGenerationRequest(model="minimax-h3", duration_seconds=20),
+                user_id=ANON))
+        assert err.value.status_code == 400
+        assert "one pass" in str(err.value.detail)
+        # The founder's own demo is the answer, so the message points at it
+        # rather than at an extend button that no longer exists.
+        assert "demo" in str(err.value.detail).lower()
+        # Nothing was spent on a video we cannot deliver.
+        assert calls == []
+
+    def test_within_limit_renders_at_the_requested_length(self, api, monkeypatch):
         _mock_submit(api, monkeypatch)
         from models import StudioGenerationRequest
-        project, _, _ = _ready_project(api, "No Split", duration=10)
+        project, _, _ = _ready_project(api, "One Pass", duration=10)
         result = _run(api.submit_project_generation(
             project_id=project["id"],
             payload=StudioGenerationRequest(model="minimax-h3"),
             user_id=ANON))
-        assert result["duration_plan"]["needs_extension"] is False
+        assert "duration_plan" not in result
         assert result["duration"] == 10
+
+    def test_exactly_the_ceiling_is_allowed(self, api, monkeypatch):
+        """The boundary itself must not be refused: 15s on a 15s model is one pass."""
+        _mock_submit(api, monkeypatch)
+        from models import StudioGenerationRequest
+        project, _, _ = _ready_project(api, "At Ceiling", duration=15)
+        result = _run(api.submit_project_generation(
+            project_id=project["id"],
+            payload=StudioGenerationRequest(model="minimax-h3", duration_seconds=15),
+            user_id=ANON))
+        assert result["duration"] == 15
 
     def test_editor_model_is_refused_for_the_studio(self, api, monkeypatch):
         """Aleph needs a source clip, which the template flow does not have."""
@@ -418,209 +442,41 @@ class TestRetry:
         assert rows["generations"][0]["retryable"] is True
 
 
-class TestExtension:
+class TestOneRenderHasNoChain:
     """
-    The segmented influencer extension contract.
+    The chain endpoints are gone, and something must say so.
 
-    An extension is only allowed to continue an APPROVED take produced from the
-    project's app-specific STRATEGY, and it must carry that strategy forward.
-    These tests pin that contract: the approval gate, the strategy-version
-    match, and the prompt actually containing the app-specific brief rather
-    than replaying the whole original timeline.
+    A video is one render now. `extend_generation` and `approve_generation`
+    were deleted rather than left answering calls nothing makes, so this pins
+    that they are gone — otherwise a stale frontend build would keep calling
+    them and get an opaque 405 instead of an explanation.
+
+    Their columns stay (segment_index, parent_generation_id, approved), so a
+    chain recorded before this change still lists its children in history.
     """
 
-    @staticmethod
-    def _strategy(api, project_id, hook_line="I was tracking this at midnight"):
-        """Give a project a minimal valid app-specific strategy."""
-        from ai_service import normalize_strategy
-        strategy = normalize_strategy({
-            "strategy_summary": "Show a night-shift nurse logging a shift in 20 seconds.",
-            "audience_problem": "Shift paperwork eats the end of a long shift.",
-            "emotional_triggers": ["relief", "being seen"],
-            "hook_concept": "Open on the tired laugh of someone who just realised they logged the shift.",
-            "hook_line": hook_line,
-            "hook_promise": "Show how the last 20 seconds of a shift get done.",
-            "hook_action": "Holds up a phone to camera, already logging.",
-            "hook_dialogue": "Delivered low and quick, mid-laugh.",
-            "messaging_pillars": ["Logs in under 20 seconds"],
-            "primary_feature": "One-tap shift logging",
-            "desired_outcome": "Leaving work on time",
-            "differentiation_beat": "No timesheet gymnastics.",
-            "cta_strategy": "Try it free",
-            "character": {
-                "appearance": "late-20s healthcare worker, scrubs",
-                "facial_features": "round face, dark brows",
-                "hairstyle": "shoulder-length dark hair in a low bun",
-                "wardrobe": "teal scrubs, silver badge, small hoop earrings",
-                "body_appearance": "average height, upright but tired posture",
-                "age_range": "late 20s",
-                "facial_expression": "tired half-smile that breaks into a real grin",
-                "styling_details": "no glasses, no visible tattoos",
-            },
-            "scene": {
-                "camera_angle": "eye-level, phone held at arm's length",
-                "framing": "medium close-up, head and shoulders",
-                "lighting": "flat overhead corridor fluorescents, cool",
-                "environment": "hospital staff corridor outside a break room",
-                "background": "grey vinyl floor, beige wall, a fire door",
-                "setting": "late shift, 11pm",
-                "visual_style": "authentic handheld UGC",
-                "character_positioning": "centred, phone at chest height",
-                "props": "phone only, no coffee cup",
-                "color_palette": "cool greys with teal scrubs",
-            },
-            "performance": {
-                "movement": "one-handed, small gestures, phone stays in frame",
-                "voice_delivery": "low, quick, tired but warm",
-            },
-            # Hook plus a planned arc, as generate_video_strategy now emits.
-            "segments": [
-                {"index": 0, "role": "hook", "seconds": 4, "goal": "land the exhaustion",
-                 "script": hook_line, "action": "holds up the phone"},
-                {"index": 1, "role": "continuation", "seconds": 5, "goal": "show the log",
-                 "script": "One tap and it's done.", "action": "taps the phone once"},
-            ] + [
-                {"index": i, "role": "cta" if i == 7 else "continuation", "seconds": 5,
-                 "goal": f"beat {i}", "script": f"Beat {i}.",
-                 "action": f"action {i}"}
-                for i in range(2, 8)
-            ],
-            "continuity_contract": {
-                "established": [
-                    "the same person in teal scrubs",
-                    "a hospital staff corridor",
-                    "cool overhead lighting",
-                    "a phone held at chest height",
-                ],
-                "must_not_change": [
-                    "the face",
-                    "the low bun",
-                    "the teal scrubs and silver badge",
-                    "the corridor background",
-                    "the eye-level medium close-up framing",
-                ],
-                "do_not_repeat": [
-                    "the hook line about logging at midnight",
-                    "the opening laugh",
-                ],
-            },
-        })
-        _run(api._execute(
-            "UPDATE studio_projects SET strategy = ?, strategy_version = 1 WHERE id = ?",
-            (json.dumps(strategy), project_id)))
-        return strategy
+    def test_the_chain_endpoints_are_not_registered(self, api):
+        paths = {r.path for r in api.app.routes if hasattr(r, "path")}
+        for gone in (
+            "/api/generations/{generation_id}/extend",
+            "/api/generations/{generation_id}/approve",
+            "/api/generations/{generation_id}/assemble",
+            "/api/generations/{generation_id}/continuity",
+            "/api/studio/projects/{project_id}/hook",
+        ):
+            assert gone not in paths, f"{gone} still exists; a video is one render"
+            assert not hasattr(api, gone.rsplit("/", 1)[-1]), gone
 
-    def _completed(self, api, monkeypatch, name="Extend App", model="minimax-h3",
-                   approve=True, with_strategy=True):
-        from models import StudioGenerationRequest
-        _mock_submit(api, monkeypatch, response={"id": "j", "usage": {"cost": 0.3}})
-        project, _, _ = _ready_project(api, name)
-        if with_strategy:
-            self._strategy(api, project["id"])
-        gen = _run(api.submit_project_generation(
-            project_id=project["id"],
-            payload=StudioGenerationRequest(model=model), user_id=ANON))
-        _run(api._execute(
-            "UPDATE generations SET status = 'completed', video_url = 'https://x/y.mp4' WHERE id = ?",
-            (gen["id"],)))
-        if approve:
-            _run(api.approve_generation(
-                gen["id"], __import__("models").ApproveSegmentRequest(), ANON))
-        return _run(api.get_generation(gen["id"], ANON))
-
-    def test_extend_creates_a_linked_second_job(self, api, monkeypatch):
-        gen = self._completed(api, monkeypatch, "Extend OK")
-        from models import StudioGenerationRequest
-        extension = _run(api.extend_generation(
-            gen["id"], StudioGenerationRequest(duration_seconds=5), ANON))
-        assert extension["segment_role"] == "extension"
-        assert extension["parent_generation_id"] == gen["id"]
-        assert extension["extension_of"] == gen["id"]
-        # The chain is positional, so the assembler can order it.
-        assert extension["segment_index"] == 1
-        assert extension["strategy_version"] == 1
-
-    def test_unapproved_segment_cannot_be_extended(self, api, monkeypatch):
-        """A rejected take must never become the opening of the final video."""
-        gen = self._completed(api, monkeypatch, "Extend Unapproved", approve=False)
-        from models import StudioGenerationRequest
-        with pytest.raises(HTTPException) as err:
-            _run(api.extend_generation(gen["id"], StudioGenerationRequest(duration_seconds=5), ANON))
-        assert err.value.status_code == 409
-        assert "Approve" in str(err.value.detail)
-
-    def test_project_without_a_strategy_keeps_the_legacy_extension(self, api, monkeypatch):
-        """
-        A project with no strategy stays on the original one-shot flow, and its
-        Extend button must keep working exactly as before. The segmented
-        contract below only applies once a strategy exists.
-        """
-        gen = self._completed(api, monkeypatch, "Extend No Strategy", with_strategy=False)
-        from models import StudioGenerationRequest
-        calls = _mock_submit(api, monkeypatch, response={"id": "j2"})
-        extension = _run(api.extend_generation(
-            gen["id"], StudioGenerationRequest(duration_seconds=5), ANON))
-        assert extension["segment_role"] == "extension"
-        assert extension["segment_index"] == 0
-        assert not extension.get("continuity")
-        assert "CONTINUES an existing video" in calls[0]["prompt"]
-
-    def test_extension_refuses_a_stale_strategy_version(self, api, monkeypatch):
-        """A hook made under strategy v1 must not be extended under v2."""
-        gen = self._completed(api, monkeypatch, "Extend Stale Strategy")
-        _run(api._execute(
-            "UPDATE studio_projects SET strategy_version = 2 WHERE id = ?",
-            (gen["studio_project_id"],)))
-        from models import StudioGenerationRequest
-        with pytest.raises(HTTPException) as err:
-            _run(api.extend_generation(gen["id"], StudioGenerationRequest(duration_seconds=5), ANON))
-        assert err.value.status_code == 409
-        assert "strategy v1" in str(err.value.detail)
-
-    def test_extension_prompt_carries_the_app_strategy_and_continuity(self, api, monkeypatch):
-        """
-        The extension must not replay the hook with a new face.
-
-        It has to carry the app-specific brief, the locked persona and scene,
-        and an explicit statement of what the opening already established.
-        """
-        from models import StudioGenerationRequest
-        gen = self._completed(api, monkeypatch, "Extend Prompt")
-        calls = _mock_submit(api, monkeypatch, response={"id": "j2", "usage": {"cost": 0.1}})
-        _run(api.extend_generation(gen["id"], StudioGenerationRequest(duration_seconds=5), ANON))
-        prompt = calls[0]["prompt"]
-
-        # App-specific messaging survives the extension.
-        assert "Shift paperwork eats the end of a long shift" in prompt
-        assert "One-tap shift logging" in prompt
-        assert "Try it free" in prompt
-        # The locked persona is restated, not assumed.
-        assert "teal scrubs" in prompt
-        assert "hospital staff corridor" in prompt
-        assert "low bun" in prompt
-        # Continuity, in both directions: what is fixed, and what not to repeat.
-        assert "opening segment already established" in prompt
-        assert "Do NOT repeat" in prompt
-        assert "Do not re-introduce the app" in prompt
-        # And it must NOT regenerate the whole video from the top.
-        assert "One continuous 5-second take" in prompt
-
-    def test_extension_beyond_provider_max_is_refused(self, api, monkeypatch):
-        gen = self._completed(api, monkeypatch, "Extend Too Long", model="minimax-h3")
-        from models import StudioGenerationRequest
-        with pytest.raises(HTTPException) as err:
-            _run(api.extend_generation(gen["id"], StudioGenerationRequest(duration_seconds=30), ANON))
-        assert err.value.status_code == 400
-
-    def test_incomplete_generation_cannot_be_extended(self, api, monkeypatch):
+    def test_a_generation_records_no_parent_and_no_approval(self, api, monkeypatch):
         from models import StudioGenerationRequest
         _mock_submit(api, monkeypatch, response={"id": "j"})
-        project, _, _ = _ready_project(api, "Extend Pending")
+        project, _, _ = _ready_project(api, "One Render")
         gen = _run(api.submit_project_generation(
             project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
-        with pytest.raises(HTTPException) as err:
-            _run(api.extend_generation(gen["id"], StudioGenerationRequest(duration_seconds=5), ANON))
-        assert err.value.status_code == 409
+        # The columns are still written, so the row shape is unchanged for
+        # history -- they just carry their defaults forever now.
+        assert gen["segment_index"] == 0
+        assert gen["approved"] is False
 
 
 class TestListingAndCapabilities:

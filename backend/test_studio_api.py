@@ -77,17 +77,22 @@ def _a_project(api, profile, template):
 
 
 # A realistic plan the mocked generator returns.
+#
+# Exactly two sections, as the plan schema now demands: the hook, then the
+# middle that develops it and stops at the moment the presenter reaches for
+# their phone. `demo_brief` replaced `feature_emphasis` — the founder's note
+# about what to record for their own demo — and it is deliberately never passed
+# to a render. The retired `cta` key is still here so the tests below can assert
+# it never reaches a prompt.
 FAKE_PLAN = {
     "hook_line": "Stop writing empty pages",
     "script": "Taskly gives you one short prompt and a reminder. It works offline.",
     "beat_timeline": [
         {"start": 0, "end": 3, "label": "hook", "text": "Stop writing empty pages"},
-        {"start": 3, "end": 8, "label": "problem", "text": "Blank page friction"},
-        {"start": 8, "end": 17, "label": "demo", "text": "Complete one task"},
-        {"start": 17, "end": 20, "label": "cta", "text": "Try it free"},
+        {"start": 3, "end": 15, "label": "middle", "text": "The blank page loses its grip"},
     ],
-    "visual_direction": "Close on hands, then a screen recording with clean space for overlays.",
-    "feature_emphasis": "The task timer, shown mid-video",
+    "visual_direction": "Close on hands, then a real desk with clean space for overlays.",
+    "demo_brief": "Record yourself tapping the timer once, hands only.",
     "overlays": [{"start": 0, "end": 3, "text": "one prompt"}],
     "voice_direction": "Warm, unhurried",
     "sound_direction": "Lo-fi bed, rights-safe",
@@ -113,6 +118,58 @@ class TestProjectCreation:
         assert project["status"] == "draft"
         assert project["brand_profile_id"] == profile["id"]
         assert project["template_id"] == template["id"]
+
+    def test_a_project_from_the_previous_version_is_repaired_on_read(self, api):
+        """
+        A 20s / 5s project predates one-render generation and is unreachable now.
+
+        It has to be repaired, and PERSISTED rather than only reported. If it
+        were only reported, the founder would be shown 15s while the render read
+        20 off the row and refused it at the single-pass ceiling — the two
+        disagreeing in the one place they are about to pay.
+
+        A duration is a whole number of seconds the studio can actually render,
+        and a hook lands in 2-4s. Anything outside that was a target for a chain
+        of separately-rendered segments, which no longer exists.
+        """
+        profile = _approved_profile(api, "Legacy Lengths")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        _run(api._execute(
+            "UPDATE studio_projects SET duration_seconds = 20, hook_seconds = 5"
+            " WHERE id = ?", (project["id"],)))
+
+        reopened = _run(api.get_studio_project(project["id"], ANON))
+        assert reopened["duration_seconds"] <= 15
+        assert 2 <= reopened["hook_seconds"] <= 4
+
+        # Stored, not just shown: the value the render reads off the row has to
+        # be the value the founder was shown, or the two disagree in the one
+        # place they are about to pay.
+        stored = _run(api._fetch_one(
+            "SELECT duration_seconds, hook_seconds FROM studio_projects WHERE id = ?",
+            (project["id"],)))
+        assert stored["duration_seconds"] == reopened["duration_seconds"]
+        assert stored["hook_seconds"] == reopened["hook_seconds"]
+
+    def test_a_current_project_is_not_rewritten_by_being_read(self, api):
+        """
+        The repair writes. It must not fire on a project that needs nothing.
+
+        Otherwise every read would bump `updated_at` on every draft in the list,
+        and a project list ordered by recency would be reordered by whoever
+        opened it rather than by whoever last worked on it.
+        """
+        profile = _approved_profile(api, "Stable Reads")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        before = _run(api._fetch_one(
+            "SELECT updated_at FROM studio_projects WHERE id = ?", (project["id"],)))
+        _run(api.get_studio_project(project["id"], ANON))
+        _run(api.list_studio_projects(user_id=ANON))
+        after = _run(api._fetch_one(
+            "SELECT updated_at FROM studio_projects WHERE id = ?", (project["id"],)))
+        assert after["updated_at"] == before["updated_at"]
 
     def test_template_version_is_pinned(self, api):
         profile = _approved_profile(api, "Pin Version")
@@ -149,14 +206,33 @@ class TestProjectCreation:
         assert err.value.status_code == 404
 
     def test_duration_is_clamped_to_supported_values(self, api):
+        """
+        A length is one render, so the clamp is a single-pass clamp: 45s cannot
+        become a longer video, it becomes the longest one the library supports.
+        Every supported value passes through untouched.
+        """
+        import template_library as tl
         from models import CreateStudioProjectRequest
         profile = _approved_profile(api, "Clamp Duration")
         template = _a_template(api)
-        for requested, expected in ((7, 10), (45, 30), (20, 20)):
+        longest = max(tl.SUPPORTED_DURATIONS)
+        for requested, expected in ((7, tl.SUPPORTED_DURATIONS[0]), (45, longest), (12, 12)):
             project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
                 brand_profile_id=profile["id"], template_id=template["id"],
                 duration_seconds=requested), user_id=ANON))
-            assert project["duration_seconds"] == expected
+            assert project["duration_seconds"] == expected, requested
+
+    def test_a_length_over_one_pass_is_never_accepted(self, api):
+        """
+        The 30s the old tests asked for is not merely clamped here — there is no
+        product surface that accepts it at all, because a video is one render and
+        a request longer than a single pass produces a broken file rather than a
+        longer one. Pinning the ceiling directly means a future widening of
+        SUPPORTED_DURATIONS past what a model can actually do fails loudly.
+        """
+        import template_library as tl
+        import video_providers
+        assert max(tl.SUPPORTED_DURATIONS) <= video_providers.capability()["max_duration"]
 
     def test_list_is_scoped_to_user(self, api):
         profile = _approved_profile(api, "List Scoped")
@@ -304,8 +380,13 @@ class TestPlanGating:
                                         payload=GeneratePlanRequest(), user_id=ANON))
         assert result["hook_line"] == FAKE_PLAN["hook_line"]
         assert result["script"] == FAKE_PLAN["script"]
-        assert result["cta"] == FAKE_PLAN["cta"]
-        assert len(result["beat_timeline"]) == 4
+        # demo_brief replaced cta as the plan's stored note. It is the founder's
+        # brief for the demo they record, so it is stored and editable — and,
+        # deliberately, never passed to a render.
+        assert result["demo_brief"] == FAKE_PLAN["demo_brief"]
+        assert result["cta"] is None
+        # Two sections, exactly: the hook and the middle.
+        assert [b["label"] for b in result["beat_timeline"]] == ["hook", "middle"]
         assert result["overlays"]
         assert result["script_version"] == 1
 
@@ -316,6 +397,10 @@ class TestPlanGating:
         therefore produced a timeline that no longer adds up to the stated
         runtime — with the shot timeline displayed read-only, so nothing on
         screen could say so.
+
+        12s and 15s, because those are two different supported lengths now: with
+        both ends clamped to a 15s ceiling, 20 and 30 were the same request and
+        this test would have passed for the wrong reason.
         """
         _patch_plan(monkeypatch, api, FAKE_PLAN)
         from models import GeneratePlanRequest, UpdateStudioProjectRequest
@@ -323,12 +408,12 @@ class TestPlanGating:
         template = _a_template(api)
         project = _a_project(api, profile, template)
         _run(api.generate_plan(project_id=project["id"],
-                               payload=GeneratePlanRequest(duration_seconds=20),
+                               payload=GeneratePlanRequest(duration_seconds=12),
                                user_id=ANON))
         with pytest.raises(HTTPException) as err:
             _run(api.update_studio_project(
                 project_id=project["id"],
-                payload=UpdateStudioProjectRequest(duration_seconds=30),
+                payload=UpdateStudioProjectRequest(duration_seconds=15),
                 user_id=ANON))
         assert err.value.status_code == 409
         assert "regenerate the plan" in err.value.detail
@@ -341,13 +426,13 @@ class TestPlanGating:
         template = _a_template(api)
         project = _a_project(api, profile, template)
         _run(api.generate_plan(project_id=project["id"],
-                               payload=GeneratePlanRequest(duration_seconds=20),
+                               payload=GeneratePlanRequest(duration_seconds=12),
                                user_id=ANON))
         result = _run(api.update_studio_project(
             project_id=project["id"],
-            payload=UpdateStudioProjectRequest(duration_seconds=20),
+            payload=UpdateStudioProjectRequest(duration_seconds=12),
             user_id=ANON))
-        assert result["duration_seconds"] == 20
+        assert result["duration_seconds"] == 12
 
     def test_duration_is_free_before_a_plan_exists(self, api):
         """The length is chosen on the Audience & goal step, which is earlier."""
@@ -357,27 +442,33 @@ class TestPlanGating:
         project = _a_project(api, profile, template)
         result = _run(api.update_studio_project(
             project_id=project["id"],
-            payload=UpdateStudioProjectRequest(duration_seconds=30),
+            payload=UpdateStudioProjectRequest(duration_seconds=12),
             user_id=ANON))
-        assert result["duration_seconds"] == 30
+        assert result["duration_seconds"] == 12
 
     def test_regenerating_the_plan_at_a_new_length_rewrites_the_timeline(
         self, api, monkeypatch
     ):
         """The sanctioned route: the plan writes the length with its beats."""
+        import template_library
         _patch_plan(monkeypatch, api, FAKE_PLAN)
         from models import GeneratePlanRequest
         profile = _approved_profile(api, "Regen Length")
         template = _a_template(api)
         project = _a_project(api, profile, template)
         _run(api.generate_plan(project_id=project["id"],
-                               payload=GeneratePlanRequest(duration_seconds=20),
+                               payload=GeneratePlanRequest(duration_seconds=12),
                                user_id=ANON))
         again = _run(api.generate_plan(project_id=project["id"],
                                        payload=GeneratePlanRequest(duration_seconds=10),
                                        user_id=ANON))
         assert again["duration_seconds"] == 10
         assert again["script_version"] == 2
+        # And a length one render cannot produce is never honoured verbatim, so a
+        # project saved with a 30s target from before this change still
+        # regenerates to something the model can actually produce.
+        assert again["duration_seconds"] in template_library.SUPPORTED_DURATIONS
+        assert again["duration_seconds"] <= 15
 
     def test_plan_bumps_script_version_on_regenerate(self, api, monkeypatch):
         _patch_plan(monkeypatch, api, FAKE_PLAN)
@@ -450,25 +541,68 @@ class TestClaimSafetyOnEdit:
         assert edited["script_version"] == 1
 
     def test_every_editable_field_is_writable(self, api):
-        from models import UpdateStudioProjectRequest
+        """
+        The review step promises that every generated field is editable, so the
+        list is driven off STUDIO_EDITABLE_FIELDS rather than hard-coded here: a
+        field added to the editable set and forgotten in this test would be
+        silent, and a field removed from the set but still sent here would be a
+        silent no-op that reads as "saved".
+
+        `demo_brief` replaced `cta` and `feature_emphasis` in that list, and the
+        request model had to be told too — it was still declaring the two retired
+        fields, so the one field that tells the founder what to record for their
+        own demo could not be corrected at all.
+        """
+        from models import (
+            STUDIO_EDITABLE_FIELDS, STUDIO_TEXT_FIELDS, UpdateStudioProjectRequest,
+        )
         profile = _approved_profile(api, "Edit Fields")
         template = _a_template(api)
         project = _a_project(api, profile, template)
+
+        # Every editable text field, sent in one payload.
+        payload = UpdateStudioProjectRequest(
+            hook_line="New hook", script="New script.",
+            demo_brief="Record the timer tap yourself.",
+            visual_direction="New direction", voice_direction="Calm",
+            sound_direction="Ambient",
+            tone="playful", audience="Busy parents",
+        )
+        edited = _run(api.update_studio_project(
+            project_id=project["id"], payload=payload, user_id=ANON,
+        ))
+        # Nothing in the editable set may be a field the request model does not
+        # declare, or it is a dead input: accepted, stored nowhere, reported as
+        # saved. demo_brief was exactly that for a while.
+        for field in STUDIO_TEXT_FIELDS:
+            assert field in STUDIO_EDITABLE_FIELDS, field
+            assert field in UpdateStudioProjectRequest.model_fields, field
+        assert edited["hook_line"] == "New hook"
+        assert edited["script"] == "New script."
+        assert edited["demo_brief"] == "Record the timer tap yourself."
+        assert edited["visual_direction"] == "New direction"
+        assert edited["voice_direction"] == "Calm"
+        assert edited["sound_direction"] == "Ambient"
+        assert edited["tone"] == "playful"
+        assert edited["audience"] == "Busy parents"
+
+        # And the retired pair is not an editable field any more, so a client
+        # still sending one gets a 200 that changed nothing — which is exactly
+        # why it was removed from the model rather than left to be filtered.
+        assert "cta" not in STUDIO_EDITABLE_FIELDS
+        assert "feature_emphasis" not in STUDIO_EDITABLE_FIELDS
+        assert "cta" not in UpdateStudioProjectRequest.model_fields
+        assert "feature_emphasis" not in UpdateStudioProjectRequest.model_fields
+
+        # The JSON and template fields take their own normalization.
         edited = _run(api.update_studio_project(
             project_id=project["id"],
             payload=UpdateStudioProjectRequest(
-                hook_line="New hook", script="New script.", cta="New cta",
-                visual_direction="New direction", voice_direction="Calm",
-                sound_direction="Ambient", feature_emphasis="The timer",
-                tone="playful", audience="Busy parents",
                 beat_timeline=[{"start": 0, "end": 3, "label": "hook", "text": "Hi"}],
                 overlays=[{"start": 0, "end": 2, "text": "Hi"}],
             ),
             user_id=ANON,
         ))
-        assert edited["hook_line"] == "New hook"
-        assert edited["cta"] == "New cta"
-        assert edited["voice_direction"] == "Calm"
         assert edited["beat_timeline"][0]["text"] == "Hi"
         assert edited["overlays"][0]["text"] == "Hi"
 
@@ -596,6 +730,9 @@ class TestOverlayNormalization:
         """
         Both are generated fields the review step is expected to expose, and
         both seed the plan in the previous step.
+
+        12s rather than the 30s this used to send, because there is no 30s
+        piece any more: a video is one render.
         """
         from models import UpdateStudioProjectRequest
         profile = _approved_profile(api, "Tone Duration")
@@ -603,18 +740,24 @@ class TestOverlayNormalization:
         project = _a_project(api, profile, template)
         edited = _run(api.update_studio_project(
             project_id=project["id"],
-            payload=UpdateStudioProjectRequest(tone="calm and direct", duration_seconds=30),
+            payload=UpdateStudioProjectRequest(tone="calm and direct", duration_seconds=12),
             user_id=ANON,
         ))
         assert edited["tone"] == "calm and direct"
-        assert edited["duration_seconds"] == 30
+        assert edited["duration_seconds"] == 12
 
     def test_duration_is_clamped_not_rejected(self, api):
         """
         An out-of-range duration is corrected rather than refused, because the
         founder picked it from a fixed list and the only way to get here is a
         stale value or a hand-written request.
+
+        Corrected to a real piece, not merely to something plausible: 9999s
+        clamps to the longest single pass the library supports, because
+        submitting it as a render length produces a broken file rather than a
+        long video.
         """
+        import template_library
         from models import UpdateStudioProjectRequest
         profile = _approved_profile(api, "Duration Clamp")
         template = _a_template(api)
@@ -624,7 +767,7 @@ class TestOverlayNormalization:
             payload=UpdateStudioProjectRequest(duration_seconds=9999),
             user_id=ANON,
         ))
-        assert 5 <= edited["duration_seconds"] <= 60
+        assert edited["duration_seconds"] == max(template_library.SUPPORTED_DURATIONS)
 
 
 class TestReadyGate:
@@ -768,13 +911,17 @@ class _StrategyCapture:
                 "hook_line": "h", "hook_promise": "p", "hook_action": "a",
                 "messaging_pillars": ["m"], "primary_feature": "f",
                 "desired_outcome": "o", "differentiation_beat": "b",
-                "cta_strategy": "c", "scene": {"environment": "kitchen"},
+                "scene": {"environment": "kitchen"},
                 "performance": {"movement": "still"},
-                "segments": [{"index": 0, "role": "hook", "seconds": 5,
-                              "goal": "g", "script": "s", "action": "a"}],
-                "continuity_contract": {
-                    "established": [], "must_not_change": [], "do_not_repeat": [],
-                },
+                # Exactly two sections, as the schema asks for. `cta_strategy`
+                # and `continuity_contract` are gone and no longer named in the
+                # prompt, so this reply leaves them out entirely.
+                "segments": [
+                    {"index": 0, "role": "hook", "seconds": 3,
+                     "goal": "g", "script": "s", "action": "a"},
+                    {"index": 1, "role": "middle", "seconds": 12,
+                     "goal": "g2", "script": "s2", "action": "a2"},
+                ],
             }
 
         monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
@@ -797,12 +944,17 @@ class _StrategyCapture:
 
 class TestViewerObjections:
     """
-    The arc's material.
+    The middle's material.
 
-    The seven continuation beats had no argument to make, so the middle of every
-    video was another feature restated -- an objection is a turn the story can
-    take, and it needs a current alternative to turn against, not just a
-    complaint to acknowledge.
+    There used to be seven continuation beats and no argument for any of them,
+    so the middle of every video was another feature restated. An objection is a
+    turn the story can take, and it needs a current alternative to turn against,
+    not just a complaint to acknowledge.
+
+    With one middle instead of a chain, the shape of the obligation changed too:
+    an objection is no longer a beat of its own but something woven into the
+    single section that exists. What must not come back is the model ignoring
+    the field, or answering it with a promise.
     """
 
     OBJECTIONS = [{
@@ -819,13 +971,22 @@ class TestViewerObjections:
 
     def test_they_are_obliged_to_become_beats(self, monkeypatch):
         """
-        The directive is the point. A list the model may ignore reproduces the
-        problem the field was added to solve.
+        Was `..._to_become_beats`, asserting one beat per objection and no two
+        objections in a beat. Two sections cannot carry one beat each, so the
+        directive is now: weave the ones this audience would actually have into
+        the middle, answered by the situation on screen rather than by a feature
+        list.
+
+        The obligation is still the point — a list the model may ignore
+        reproduces the problem the field was added to solve.
         """
         prompt = _StrategyCapture(monkeypatch).run(profile_overrides={"viewer_objections": self.OBJECTIONS})
-        assert "viewer_objections are the beats" in prompt
-        assert "Give each objection its own beat" in prompt
-        assert "Do not stack two objections into one beat" in prompt
+        assert "viewer_objections are what the middle has to answer" in prompt
+        assert "Weave the objections that matter into the middle" in prompt
+        # Answered by showing, not by listing.
+        assert "answered by the situation on screen rather than by a list of features" in prompt
+        # And it says what to leave out rather than demanding all of them.
+        assert "Two sections cannot carry every objection" in prompt
 
     def test_an_answer_may_not_be_a_promise(self, monkeypatch):
         """
@@ -835,12 +996,13 @@ class TestViewerObjections:
         """
         prompt = _StrategyCapture(monkeypatch).run(profile_overrides={"viewer_objections": self.OBJECTIONS})
         assert "may not promise a result" in prompt
-        assert "leave that beat out rather than inventing one" in prompt
+        assert "leave it out rather than inventing one" in prompt
 
     def test_the_prompt_states_the_cost_of_an_empty_profile(self, monkeypatch):
         """
-        Without objections, seven beats are seven restatements. The prompt has to
-        say so, or the model quietly falls back to listing features again.
+        Without objections, the middle has nothing to argue with and becomes a
+        feature restatement. The prompt has to say so, or the model quietly
+        falls back to listing features again.
         """
         prompt = _StrategyCapture(monkeypatch).run()
         assert '"viewer_objections": []' in prompt
@@ -849,8 +1011,8 @@ class TestViewerObjections:
 class TestViewerObjectionNormalization:
     """
     Normalization drops an objection that has no answer rather than keeping it
-    half-built: a beat that raises something it cannot resolve is worse than a
-    short arc, because the model will improvise the resolution.
+    half-built: material the model will improvise a resolution for is worse than
+    a short middle, because there is no third section to absorb the improvisation.
     """
 
     def test_a_complete_triple_survives(self):
@@ -937,9 +1099,10 @@ class TestPlanPromptSeesCompetitors:
             def json(self_inner):
                 return {"choices": [{"message": {"content": json.dumps({
                     "hook_line": "h", "script": "s", "beat_timeline": [],
-                    "visual_direction": "v", "feature_emphasis": "f",
+                    "visual_direction": "v",
+                    "demo_brief": "Record yourself tapping the timer once.",
                     "overlays": [], "voice_direction": "vd",
-                    "sound_direction": "sd", "cta": "c",
+                    "sound_direction": "sd",
                 })}}]}
 
         class _AsyncClient:

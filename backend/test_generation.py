@@ -163,16 +163,24 @@ class TestDurationPlanning:
 PLAN = {
     "hook_line": "Stop writing empty pages",
     "script": "Taskly gives you one prompt and a reminder.",
+    # Exactly two sections, as the plan schema now demands: the hook, then the
+    # middle that develops it and stops at the moment the presenter reaches for
+    # their phone. There is no demonstration beat and no closing beat — the
+    # founder records the demo and adds their own call to action.
     "beat_timeline": [
         {"start": 0, "end": 3, "label": "hook", "text": "Stop writing empty pages"},
-        {"start": 3, "end": 8, "label": "problem", "text": "Blank page friction"},
-        {"start": 8, "end": 17, "label": "demo", "text": "Complete one task"},
-        {"start": 17, "end": 20, "label": "cta", "text": "Try it free"},
+        {"start": 3, "end": 20, "label": "middle", "text": "The blank page loses its grip"},
     ],
     "overlays": [{"start": 0, "end": 3, "text": "one prompt"}],
     "visual_direction": "Close on hands, then a screen recording.",
     "voice_direction": "Warm and unhurried",
     "sound_direction": "Lo-fi bed",
+    # A note to the founder about what to record themselves. It is stored on the
+    # project and read in their studio, and it must never reach a render.
+    "demo_brief": "Record yourself tapping the timer once.",
+    # The two retired fields are left in deliberately. Their columns survive in
+    # the schema for rows written before they were dropped, so this fixture is
+    # what proves a stale one cannot reach a prompt.
     "feature_emphasis": "The task timer",
     "cta": "Try the free trial",
 }
@@ -181,17 +189,52 @@ TEMPLATE = {
     "name": "Quick App Demonstration",
     "visual_style": "screen_recording_first",
     "camera_pacing": "follows the interaction",
+    "middle_structure": "Name the friction, then stop at the reach.",
     "continuation_structure": "Complete one task, then CTA.",
 }
 
 
 class TestSinglePassPrompt:
-    def test_one_prompt_covers_hook_and_continuation(self):
+    def test_one_prompt_covers_the_hook_and_the_middle(self):
+        """
+        Was `test_one_prompt_covers_hook_and_continuation`, and it asserted the
+        plan's CTA reached the prompt.
+
+        A video is now ONE render with exactly two sections: a hook and a
+        middle. There is no continuation in the old sense — it is not a second
+        clip — and no CTA, because the founder adds their own after the demo they
+        record. So the third assertion became the property that matters more:
+        nothing from the retired CTA column can reach the render.
+        """
         prompt = gp.build_single_pass_prompt(PLAN, PROFILE, TEMPLATE, 20)
         # The whole timeline must be described in a single generation.
         assert "Stop writing empty pages" in prompt
-        assert "Complete one task" in prompt
-        assert "Try the free trial" in prompt
+        assert "The blank page loses its grip" in prompt
+        assert "Try the free trial" not in prompt
+        # And the founder's demo brief is a note to them, not to the model.
+        assert "Record yourself tapping the timer once." not in prompt
+
+    def test_the_prompt_says_the_demo_and_close_are_not_generated(self):
+        """
+        The strongest form of "no CTA reaches the render": the prompt does not
+        merely omit one, it forbids the model from inventing a demonstration or
+        a request, and says where the video stops.
+        """
+        prompt = gp.build_single_pass_prompt(PLAN, PROFILE, TEMPLATE, 20)
+        lowered = prompt.lower()
+        assert "do not film the app being used" in lowered
+        assert "do not ask the viewer to do anything" in lowered
+        assert "reaches for their phone" in lowered
+        assert "adds their own call to action" in lowered
+
+    def test_the_middle_boundary_comes_from_the_hook_length(self):
+        """
+        The two sections are split at the hook's own length, so the plan and the
+        render agree on where the hook ends instead of each re-deriving it.
+        """
+        prompt = gp.build_single_pass_prompt(PLAN, PROFILE, TEMPLATE, 20)
+        assert "The first 3 seconds are the hook" in prompt
+        assert "The rest of the 20 seconds are the middle" in prompt
 
     def test_demands_a_single_coherent_take(self):
         prompt = gp.build_single_pass_prompt(PLAN, PROFILE, TEMPLATE, 20)
@@ -212,7 +255,7 @@ class TestSinglePassPrompt:
     def test_includes_beat_timings(self):
         prompt = gp.build_single_pass_prompt(PLAN, PROFILE, TEMPLATE, 20)
         assert "0-3s" in prompt
-        assert "17-20s" in prompt
+        assert "3-20s" in prompt
 
     def test_overlay_text_is_handed_over_not_drawn(self):
         prompt = gp.build_single_pass_prompt(PLAN, PROFILE, TEMPLATE, 20)

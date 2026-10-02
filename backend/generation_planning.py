@@ -26,13 +26,13 @@ from typing import Optional
 # explicit rather than relying on the model inferring "don't fake the facts".
 # Note what is NOT here: the environment, setting, lighting and props ARE
 # invented by the model from the verified app facts — nothing is composited
-# over the footage except captions and the end card, so the scene has to be
-# rendered, not reserved.
+# over the footage except captions now, so the scene has to be rendered, not
+# reserved.
 _UI_RENDERING_WARNING = (
     "Do NOT draw or render: app interface elements, app screenshots, button "
     "labels, prices, ratings, review counts, download counts, logos, or any "
     "small on-screen text. Nothing is composited over this footage except "
-    "captions and the end card, so invent the environment, setting, lighting "
+    "captions, so invent the environment, setting, lighting "
     "and props concretely from the verified app facts — but anything the "
     "viewer could read as a factual claim about the app must come from those "
     "facts, never from invention. Leave clean, uncluttered space for the captions."
@@ -81,11 +81,18 @@ def _format_beats(beats, duration: int, hook_seconds: int = 3) -> str:
     """
     hook = max(1, min(int(hook_seconds or 3), max(1, duration - 1)))
     if not beats:
+        # Two sections, because two sections is the whole video. The middle
+        # carries everything after the hook and ends at the moment the viewer
+        # reaches for the app. There is no demonstration beat and no closing
+        # beat: the founder's own recording supplies both, and a plan that
+        # reserved seconds for them would render footage that runs out
+        # mid-thought.
         return (
-            f"- 0-{hook}s: hook — {duration}s total video, hook in the first {hook} seconds\n"
-            f"- {hook}-{hook + 5}s: problem or transition\n"
-            f"- {hook + 5}-{max(hook + 5, duration - 3)}s: app demonstration and payoff\n"
-            f"- final {max(2, min(4, duration // 6))}s: call to action"
+            f"- 0-{hook}s: hook — the only part of this {duration}s video with {hook}s "
+            f"to stop the scroll\n"
+            f"- {hook}-{duration}s: middle — develops the hook through the situation and "
+            f"ends on them reaching for the app. Do NOT film the app working, and do not "
+            f"ask for anything: the demo and the call to action are attached afterwards."
         )
     lines = []
     for beat in beats[:10]:
@@ -146,13 +153,18 @@ def build_single_pass_prompt(
     app_name = (profile or {}).get("brand_name") or "the app"
     hook = (plan.get("hook_line") or "").strip()
     script = (plan.get("script") or "").strip()
-    cta = (plan.get("cta") or "").strip()
     visual = (plan.get("visual_direction") or "").strip()
     voice = (plan.get("voice_direction") or "").strip()
     sound = (plan.get("sound_direction") or "").strip()
-    feature = (plan.get("feature_emphasis") or "").strip()
     tpl = template or {}
     tone = (plan.get("tone") or tpl.get("tone") or "").strip()
+
+    # The template's own opening length, clamped. This is directorial — how much
+    # of the opening the hook has to land in — and NOT a render length: the whole
+    # piece is this one render.
+    hook_seconds = max(
+        2, min(4, int(tpl.get("hook_seconds") or plan.get("hook_seconds") or 3))
+    )
 
     sections = []
 
@@ -164,27 +176,35 @@ def build_single_pass_prompt(
     )
 
     if is_extension:
+        # Unreachable in the shipped flow: a video is one render, so nothing
+        # extends anything. Kept so an old project saved with extend_intent set
+        # cannot produce a prompt that instructs a model to continue a chain that
+        # no longer exists.
         sections.append(
             "This clip CONTINUES an existing video. Open exactly as the previous clip "
             "ended, matching its subject, framing, lighting, and motion. Do not re-introduce "
-            "the app or repeat the hook; move straight into the payoff and the call to action."
+            "the app or repeat the hook; move straight into developing the situation."
         )
     else:
-        # Match the template's own hook length rather than asserting 3s, so this
-        # line agrees with the beat layout below and with the mechanism the
-        # founder selected.
-        hook_len = int((template or {}).get("hook_seconds") or plan.get("hook_seconds") or 3)
+        # Match the template's own opening length rather than asserting a
+        # constant, so this line agrees with the beat layout below and with the
+        # mechanism the founder selected.
         sections.append(
-            f"The first {hook_len} seconds are the hook and must land immediately: "
+            f"The first {hook_seconds} seconds are the hook and must land immediately: "
             f"{hook or 'open on the strongest visual beat'}."
+        )
+        sections.append(
+            f"The rest of the {duration} seconds are the middle: they develop the hook through "
+            f"the situation, the friction, or the reaction, and they end on the moment the "
+            f"presenter reaches for their phone. This is the last thing in the video — the "
+            f"founder records their own product demo and adds their own call to action after "
+            f"it, so do not film the app being used, do not show a screen, and do not ask the "
+            f"viewer to do anything."
         )
 
     if script:
         sections.append(f"Spoken script, performed naturally on camera or as voiceover:\n\"{script}\"")
 
-    # The template's declared hook length wins over the 3s default, so the
-    # fallback beat layout and the mechanism in the same prompt agree.
-    hook_seconds = int(tpl.get("hook_seconds") or plan.get("hook_seconds") or 3)
     sections.append(
         "Beat-by-beat timeline — follow these timings:\n"
         + _format_beats(plan.get("beat_timeline"), duration, hook_seconds)
@@ -197,12 +217,12 @@ def build_single_pass_prompt(
 
     if visual:
         sections.append(f"Visual direction: {visual}")
-    if feature:
-        sections.append(f"The single feature being demonstrated: {feature}. Show it in use, not described.")
     if tpl.get("visual_style"):
         sections.append(f"Visual style: {tpl['visual_style']}")
-    if tpl.get("camera_pacing") or tpl.get("continuation_structure"):
-        pacing = " ".join(p for p in (tpl.get("camera_pacing"), tpl.get("continuation_structure")) if p)
+    if tpl.get("camera_pacing") or tpl.get("middle_structure"):
+        pacing = " ".join(
+            p for p in (tpl.get("camera_pacing"), tpl.get("middle_structure")) if p
+        )
         sections.append(f"Camera and pacing: {pacing}")
     if voice:
         sections.append(f"Voice direction: {voice}")
@@ -213,8 +233,11 @@ def build_single_pass_prompt(
             f"Sound direction: {sound}. Use only original or licensed audio; "
             f"do not reference or imitate a specific commercial recording."
         )
-    if cta:
-        sections.append(f"End on the call to action: {cta}")
+    # No call to action is appended, deliberately. The plan no longer carries a
+    # `cta` field and the strategy no longer carries `cta_strategy`; the founder
+    # adds their own in their editor. Reading a stale value here would put a
+    # closing instruction into a video that is supposed to stop at the moment
+    # the viewer reaches for the app.
 
     sections.append(_UI_RENDERING_WARNING)
 
@@ -452,12 +475,22 @@ def character_scene_lock(strategy: dict) -> str:
 
 def strategy_brief(strategy: dict) -> str:
     """
-    The app-specific messaging the segment must keep communicating.
+    Render the app-specific strategy into prompt text.
 
-    Present on the opening segment AND every extension, so the continuation
-    cannot drift into a generic advertisement. The app's problem, feature,
-    outcome, differentiation and CTA are restated each time rather than
-    assumed to have been absorbed by the previous segment.
+    What is NOT here matters as much as what is. There is no cta line: a call to
+    action is added by the founder in their own editor, and instructing the
+    render to end on one would put a closing beat into footage that is supposed
+    to stop at the moment the viewer reaches for the app. There is no
+    "the one feature shown" line either, for the same reason the plan carries a
+    demo_brief rather than a feature_emphasis: a feature instruction that
+    reaches the render is a product demo being generated, and this workflow does
+    not generate one. The differentiation and desired-outcome lines stay — they
+    are how the middle frames the situation, not what it demonstrates.
+
+    The problem, outcome and differentiation are restated rather than assumed to
+    have been absorbed, so a single render cannot drift into a generic
+    advertisement. The feature is named as subject matter only: what this app is
+    about is what the middle is set in, not an instruction to film it working.
     """
     strategy = strategy or {}
     parts = []
@@ -479,7 +512,13 @@ def strategy_brief(strategy: dict) -> str:
 
     feature = str(strategy.get("primary_feature") or "").strip()
     if feature:
-        parts.append(f"The one feature shown: {feature}")
+        # Subject matter, not an instruction. The old wording ("The one feature
+        # shown: {feature}. Show it in use, not described.") was a direct
+        # product-demo order reaching the render prompt on every generation.
+        parts.append(
+            f"What this app is about (the situation the middle is set in, never filmed "
+            f"working): {feature}"
+        )
 
     outcome = str(strategy.get("desired_outcome") or "").strip()
     if outcome:
@@ -489,102 +528,10 @@ def strategy_brief(strategy: dict) -> str:
     if diff:
         parts.append(f"How this app is different: {diff}")
 
-    cta = str(strategy.get("cta_strategy") or "").strip()
-    if cta:
-        parts.append(f"Call-to-action strategy: {cta}")
-
     if not parts:
         return ""
-    return "THIS APP-SPECIFIC STRATEGY — it governs every segment of this video:\n" + "\n".join(
+    return "THIS APP-SPECIFIC STRATEGY — it governs this whole video:\n" + "\n".join(
         f"  {p}" for p in parts
-    )
-
-
-def _segment_for(strategy: dict, index: int) -> dict:
-    """
-    The strategy's plan for segment `index`.
-
-    Returns {} for an index the strategy does not plan. It deliberately does NOT
-    fall back to the last planned segment: doing so made every extension past
-    the end of the plan replay the final beat verbatim - the same words and the
-    same action - so "extend again" produced the same clip twice. The endpoint
-    refuses to extend past the plan at all, so this is a backstop rather than
-    the main guard, and an unplanned segment is stated as unplanned instead of
-    quietly borrowing another beat's content.
-    """
-    for segment in (strategy.get("segments") or []):
-        if not isinstance(segment, dict):
-            continue
-        try:
-            if int(segment.get("index", -1)) == index:
-                return segment
-        except (TypeError, ValueError):
-            continue
-    return {}
-
-
-def _contract_list(strategy: dict, field: str, limit: int = 6) -> list:
-    contract = strategy.get("continuity_contract")
-    if not isinstance(contract, dict):
-        return []
-    return [str(v).strip() for v in (contract.get(field) or []) if str(v).strip()][:limit]
-
-
-def describe_seam_state(strategy: dict, previous_index: int) -> str:
-    """
-    Describe the state the viewer is looking at as the previous clip ends.
-
-    This is the single most important sentence in a continuation prompt, and it
-    used to be `strategy["hook_line"]` — the line the video OPENED with. So
-    every extension past the first was told it had been handed a video whose
-    last moment was the opening line: it described segment 0 again, at the seam
-    of segment 2 or 3. The bridge frame (the previous clip's literal last frame)
-    says what the pixels look like; this says what the moment MEANT, which a
-    frame cannot carry.
-
-    Built from the strategy's own plan for the segment that was just rendered, so
-    it is the beat that exists rather than an invention:
-      - the action in progress, because that is where the body and hands are
-      - the closing words of that beat's script, because that is what the viewer
-        just heard and must not hear again
-      - the beat's goal, so the continuation knows what has already been argued
-    The last clause restates it as unfinished on purpose: a mid-action beats a
-    settled one, because a settled action invites the model to start something
-    new instead of continuing the one in progress.
-
-    Returns "" when the strategy does not plan that segment, so the prompt's
-    existing "this beat was unplanned" path handles it rather than inventing a
-    seam.
-    """
-    segment = _segment_for(strategy, previous_index)
-    if not segment:
-        return ""
-
-    action = str(segment.get("action") or "").strip()
-    script = str(segment.get("script") or "").strip()
-    goal = str(segment.get("goal") or "").strip()
-
-    # The tail of the script, not the head: the seam follows the END of the
-    # beat, and leading with its opening words would reintroduce the segment.
-    closing = ""
-    if script:
-        sentences = [s.strip() for s in script.replace("!", ".").replace("?", ".").split(".") if s.strip()]
-        closing = sentences[-1] if sentences else script
-
-    parts = []
-    if action:
-        parts.append(f"mid-{action.rstrip('.')}" if not action.lower().startswith("mid-") else action)
-    if closing:
-        parts.append(f"finishing on the words {closing}")
-    if goal:
-        parts.append(f"having already established: {goal.rstrip('.')}")
-
-    if not parts:
-        return ""
-    return (
-        "; ".join(parts)
-        + ". This action is still in progress and this moment is unresolved — the next "
-        "segment picks it up from here rather than beginning a new scene."
     )
 
 
@@ -592,21 +539,22 @@ def build_segment_prompt(
     strategy: dict,
     profile: dict,
     template: Optional[dict] = None,
-    segment_index: int = 0,
     duration: int = 4,
     assets: Optional[list] = None,
-    continuity: Optional[dict] = None,
-    is_hook: bool = False,
-    previous_summary: str = "",
+    plan: Optional[dict] = None,
 ) -> str:
     """
-    Build the prompt for ONE segment of the app-specific influencer video.
+    Build the prompt for the whole generated piece: a hook and a middle.
 
-    Segment 0 is the hook: it establishes the person and the scene. Every
-    segment after it is a continuation, and the difference is not cosmetic —
-    a continuation is told what the previous segment already delivered and what
-    it must therefore NOT repeat, and it is told the same locked persona and
-    the same app strategy so the story cannot drift generic.
+    The name is historical. A video used to be assembled from separately
+    rendered segments, one per beat, and this built the prompt for whichever
+    one was being made. Now the hook and the middle are a single render, so
+    this builds the whole thing. There is no `segment_index`, `continuity`,
+    `is_hook` or `previous_summary` argument: all four described a seam between
+    two clips, and there is no seam.
+
+    What holds the two sections together now is the scene lock plus the
+    app-specific brief, both of which apply to the whole piece.
 
     Args:
         strategy: the normalized app-specific strategy (see
@@ -614,71 +562,58 @@ def build_segment_prompt(
             app specificity to preserve.
         profile: the approved App Profile, for the accurate product name.
         template: the hook template, for mechanism and pacing language.
-        segment_index: 0 for the hook, 1+ for extensions.
-        duration: seconds this segment must cover.
+        duration: seconds the whole piece must cover.
         assets: the project's attached assets (character_reference etc).
-        continuity: the video_providers.continuity_plan() record for this
-            request. Read, never re-decided — this prompt must not claim more
-            continuity than the submission will actually deliver.
-        is_hook: True for the opening segment.
-        previous_summary: the state the previous clip ENDS on — see
-            describe_seam_state(), which builds it from the strategy's plan for
-            that segment. It must describe the final moment, not the opening.
+        plan: the reviewed creative plan, read only for `hook_seconds` so the
+            two sections are split at the boundary the plan and the strategy
+            both agreed on. Nothing else is taken from it: the strategy already
+            carries the approved words.
     """
     strategy = strategy or {}
     tpl = template or {}
+    plan = plan or {}
     app_name = (profile or {}).get("brand_name") or "the app"
-    segment = _segment_for(strategy, segment_index)
-    continuity = continuity or {}
-    guarantee = str(continuity.get("guarantee") or "")
-    degraded = continuity.get("degraded") or []
     seconds = max(1, int(duration or 0))
-    is_continuation = not is_hook and int(segment_index or 0) > 0
 
     sections = []
 
-    if is_continuation:
-        # State the seam in the terms the model can act on. When a real frame
-        # was attached, say so, because that is the difference between
-        # "continue this" and "make something like this".
-        if continuity.get("use_frame"):
-            sections.append(
-                f"You are continuing an existing video. The image supplied as the first frame is the "
-                f"EXACT final frame of the clip the viewer has already seen. Start from those pixels: "
-                f"the same pose, framing, focus and light, with motion continuing naturally forward. "
-                f"Begin mid-action. Do not re-open the scene, do not re-establish the shot, do not "
-                f"restart the performance, and do not show any title card, black frame or fade."
-            )
-        else:
-            # No visual anchor. Say that plainly in the prompt as well as in
-            # the report, so the model aims at the written lock rather than
-            # assuming it can see the previous clip.
-            sections.append(
-                "You are continuing an existing video, but you have NOT been given the previous "
-                "clip or any frame from it. Reproduce the locked person and scene below from the "
-                "written description alone, as exactly as possible. Treat the description as "
-                "authoritative: do not reinterpret, restyle or re-invent any part of it."
-            )
-    else:
-        sections.append(
-            f"Create a {seconds}-second vertical (9:16) promotional video for the mobile app "
-            f"{app_name}. This is the OPENING HOOK and it has {seconds} seconds to land."
-        )
-        hook_line = str(strategy.get("hook_line") or "").strip()
-        hook_concept = str(strategy.get("hook_concept") or "").strip()
-        hook_action = str(strategy.get("hook_action") or "").strip()
-        hook_dialogue = str(strategy.get("hook_dialogue") or "").strip()
-        promise = str(strategy.get("hook_promise") or "").strip()
-        if hook_concept:
-            sections.append(f"What these {seconds} seconds must DO: {hook_concept}")
-        if hook_line:
-            sections.append(f"The spoken hook line, delivered on camera: \"{hook_line}\"")
-        if hook_action:
-            sections.append(f"What the person physically does: {hook_action}")
-        if hook_dialogue:
-            sections.append(f"Dialogue and delivery: {hook_dialogue}")
-        if promise:
-            sections.append(f"What the hook promises: {promise}")
+    # The whole piece is one render with two sections, so both are always
+    # described: index 0 is the hook and index 1 is the middle. Which is which
+    # comes from the section's role, not its position, so a strategy whose
+    # middle is missing still renders the hook and says plainly that it has no
+    # middle to film rather than stretching the hook over the whole runtime.
+    sections.append(
+        f"Create ONE continuous {seconds}-second vertical (9:16) promotional video for the "
+        f"mobile app {app_name}, containing exactly TWO sections: a HOOK in the opening "
+        f"seconds, then a MIDDLE that develops it. It must read as a single take — no visible "
+        f"cut to a separate clip, no black frames, no title card."
+    )
+    # Stated up front rather than left to the beat list, because this is the
+    # single most important constraint on the render and the model has a strong
+    # prior towards resolving a promo on camera.
+    sections.append(
+        "This video ends before the product is shown. The founder records their own demo and "
+        "attaches it after this footage, and adds their own call to action. So: do NOT film the "
+        "app being used, do NOT show a screen or interface, do NOT describe the app working "
+        "while something unrelated happens on camera, and do NOT ask the viewer to download, "
+        "install or try anything. End on the moment the presenter reaches for their phone."
+    )
+
+    hook_line = str(strategy.get("hook_line") or "").strip()
+    hook_concept = str(strategy.get("hook_concept") or "").strip()
+    hook_action = str(strategy.get("hook_action") or "").strip()
+    hook_dialogue = str(strategy.get("hook_dialogue") or "").strip()
+    promise = str(strategy.get("hook_promise") or "").strip()
+    if hook_concept:
+        sections.append(f"What the opening must DO: {hook_concept}")
+    if hook_line:
+        sections.append(f"The spoken hook line, delivered on camera: \"{hook_line}\"")
+    if hook_action:
+        sections.append(f"What the person physically does in the opening: {hook_action}")
+    if hook_dialogue:
+        sections.append(f"Dialogue and delivery: {hook_dialogue}")
+    if promise:
+        sections.append(f"What the hook promises: {promise}")
 
     lock = character_scene_lock(strategy)
     if lock:
@@ -688,70 +623,62 @@ def build_segment_prompt(
     if brief:
         sections.append(brief)
 
-    # What the previous segment already delivered. This is the mechanism that
-    # stops an extension from restarting the video: the model is told what the
-    # viewer has already seen and heard, so it moves forward instead of
-    # re-introducing the app.
-    if is_continuation:
-        established = _contract_list(strategy, "established")
-        must_not_change = _contract_list(strategy, "must_not_change")
-        do_not_repeat = _contract_list(strategy, "do_not_repeat")
-        parts = []
-        if previous_summary:
-            # "Ended on" is right but too weak on its own: the model reads a
-            # past-tense fact and starts a fresh beat. Saying the moment is
-            # unresolved is what makes it continue rather than restart.
-            parts.append(f"The previous segment ended like this: {previous_summary}")
-            parts.append(
-                "That is the exact frame you are continuing from, and it is mid-action. Pick "
-                "it up from there — do not reset to a neutral pose, do not re-open the shot, and "
-                "do not re-state what that segment already said."
-            )
-        if established:
-            parts.append(
-                "The opening segment already established: " + "; ".join(established[:6])
-            )
-        if must_not_change:
-            parts.append(
-                "Carry these forward unchanged: " + "; ".join(must_not_change[:6])
-            )
-        if do_not_repeat:
-            parts.append(
-                "Do NOT repeat any of this — the viewer has already seen or heard it: "
-                + "; ".join(do_not_repeat[:6])
-            )
-        parts.append(
-            "Move the story forward from the seam: deliver this segment's goal, then the "
-            "app benefit, then the call to action. Do not re-introduce the app or the "
-            "person, do not repeat the hook line, and do not restart the opening framing."
-        )
-        sections.append("CONTINUITY — what came before:\n" + "\n".join(f"  {p}" for p in parts))
+    # The seam block that used to live here is gone. It described carrying a
+    # previous clip's frame, its established facts and its do-not-repeat list
+    # into a continuation — all of which presupposed a second render. One
+    # render has no previous clip, so the only thing that has to hold the two
+    # sections together is the scene lock above.
 
-    goal = str(segment.get("goal") or "").strip()
-    script = str(segment.get("script") or "").strip()
-    action = str(segment.get("action") or "").strip()
-    if goal:
-        sections.append(f"What these {seconds} seconds must achieve: {goal}")
-    if action:
-        sections.append(f"What happens in this segment: {action}")
-    if script:
-        sections.append(f"Spoken script for this segment, performed naturally on camera:\n\"{script}\"")
-    if is_continuation and not (goal or script or action):
-        # The strategy did not plan this beat. The endpoint normally refuses
-        # this outright, so reaching here means a plan gap rather than the end
-        # of the arc. Say what still has to happen instead of borrowing another
-        # beat's content, which is what used to happen here.
-        sections.append(
-            f"The strategy did not plan a specific beat for this moment. Continue the "
-            f"same story from the seam: advance the argument rather than restating what "
-            f"has already been said, and land the call to action if the video is ending. "
-            f"Do not replay any earlier moment."
-        )
+    # Both sections, in order, so the model has the whole piece in front of it
+    # rather than one beat at a time. Roles are read rather than assumed, so a
+    # strategy that names them out of order still films the hook first.
+    sections_by_role = {
+        str(s.get("role") or "").strip().lower(): s
+        for s in (strategy.get("segments") or []) if isinstance(s, dict)
+    }
+    # The section boundary. The plan's own hook length wins, because the founder
+    # approved a plan whose two beats start and end at that second, and the
+    # strategy's schema echoes the template's. Clamped to 2-4s because that is
+    # the window a hook has to land in.
+    hook_seconds = max(
+        2, min(4, int(plan.get("hook_seconds") or tpl.get("hook_seconds") or 3))
+    )
+    middle_seconds = max(1, seconds - hook_seconds)
 
-    if tpl.get("opening_structure") and is_hook:
+    # The purpose is a full clause, because these headings are read as
+    # instructions: "its job is to stops the scroll" is a visible grammar fault
+    # in a prompt someone may have to debug, and the model reads it as a
+    # malformed instruction rather than a shorter one.
+    for role, label, budget, purpose in (
+        ("hook", "HOOK", hook_seconds, "stop the scroll"),
+        ("middle", "MIDDLE", middle_seconds, "develop the hook and end at the reach"),
+    ):
+        section = sections_by_role.get(role) or {}
+        goal = str(section.get("goal") or "").strip()
+        script = str(section.get("script") or "").strip()
+        action = str(section.get("action") or "").strip()
+        block = [f"{label} — {budget}s, and its job is to {purpose}:"]
+        if goal:
+            block.append(f"  what it must achieve: {goal}")
+        if action:
+            block.append(f"  what happens on camera: {action}")
+        if script:
+            block.append(f"  spoken, performed naturally: \"{script}\"")
+        if not (goal or action or script):
+            # A strategy missing a section is a real gap — a model that returned
+            # one beat. Say what the section is for rather than borrowing the
+            # other one's content, which is how the hook used to be restated.
+            block.append(
+                f"  the strategy did not plan this section in detail. Write it so it "
+                f"{purpose}, in this same scene, and keep it distinct from the other "
+                f"section."
+            )
+        sections.append("\n".join(block))
+
+    if tpl.get("opening_structure"):
         sections.append(f"Hook mechanism to honour: {tpl['opening_structure']}")
-    if tpl.get("continuation_structure") and is_continuation:
-        sections.append(f"Continuation structure to honour: {tpl['continuation_structure']}")
+    if tpl.get("middle_structure"):
+        sections.append(f"Middle structure to honour: {tpl['middle_structure']}")
     if tpl.get("visual_style"):
         sections.append(f"Visual style: {tpl['visual_style']}")
     if tpl.get("camera_pacing"):
@@ -763,9 +690,6 @@ def build_segment_prompt(
     )
     sections.append(_UI_RENDERING_WARNING)
 
-    # On every segment, not just the first: an extension re-imagines the scene
-    # from the strategy brief, so a forbidden detail can reappear at the seam
-    # even when the hook honoured it.
     forbidden = must_not_show_section(profile)
     if forbidden:
         sections.append(forbidden)
@@ -777,29 +701,10 @@ def build_segment_prompt(
     if person_anchor:
         sections.append(person_anchor)
 
-    if degraded:
-        # Never let the prompt imply a guarantee the request could not make.
-        # The founder sees the same list on the generation record.
-        reasons = "; ".join(
-            str(d.get("reason") or "").strip() for d in degraded if str(d.get("reason") or "").strip()
-        )
-        if reasons:
-            sections.append(
-                "This provider could not receive every continuity reference: " + reasons +
-                " Honour the written lock above with particular care, and treat the described "
-                "person and scene as exacting requirements rather than suggestions."
-            )
-
     sections.append(
         f"Vertical 9:16 throughout. One continuous {seconds}-second take with no cut, no "
         f"black frame, and no title card. The person on camera is the same individual in "
-        f"every frame of this segment."
+        f"every frame, in the same clothes, in the same place, under the same light."
     )
-    if is_continuation and guarantee in ("text_only",):
-        sections.append(
-            "Because this request carries no visual reference from the previous clip, "
-            "reproduce the locked description as precisely as possible — the same person "
-            "in the same clothes in the same place under the same light."
-        )
 
     return "\n\n".join(section for section in sections if section)

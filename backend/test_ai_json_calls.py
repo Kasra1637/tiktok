@@ -379,20 +379,41 @@ class TestStrategyBudget:
         """
         The same concern counted directly rather than through prompt length.
 
-        The continuation beats are the one part of the schema that scales with a
-        constant, so pinning it is what stops a future edit from quietly asking
-        for twenty beats and paying for it in truncation retries.
+        Was pinned on CONTINUATION_BEATS, which was the one part of the schema
+        that scaled with a constant: pinning it is what stopped a future edit
+        from quietly asking for twenty beats and paying for it in truncation
+        retries.
+
+        That constant is gone. A video is ONE render with exactly TWO sections —
+        the hook and the middle — so the number is structural rather than a
+        budget: a third section would be the product demo, which this workflow
+        does not generate. What still has to hold is that the count is exactly
+        two, that the two roles are the ones everything downstream reads, and
+        that normalization cannot hand back more than the schema asked for.
         """
         import ai_service
-        assert ai_service.CONTINUATION_BEATS <= 7, (
-            f"CONTINUATION_BEATS is {ai_service.CONTINUATION_BEATS}; each one is a "
-            f"full segment object in the reply, and the completion budget is shared "
-            f"with Gemini's thinking tokens"
+        assert ai_service.GENERATED_SECTIONS == 2, (
+            f"GENERATED_SECTIONS is {ai_service.GENERATED_SECTIONS}. It used to be "
+            f"CONTINUATION_BEATS, a tunable budget; it is now structural — a third "
+            f"generated section is a product demo, and the demo is the founder's own "
+            f"recording attached afterwards."
         )
-        assert ai_service.CONTINUATION_BEATS >= 5, (
-            "fewer than five continuation beats leaves the arc without room for a "
-            "problem, a turn and a close"
-        )
+        assert ai_service.SECTION_ROLES == ("hook", "middle")
+        # Truncation cannot rescue an over-long reply either: anything past the
+        # second section is dropped rather than written out.
+        assert ai_service.normalize_strategy({
+            "hook_line": "h",
+            "segments": [
+                {"index": i, "role": "hook", "seconds": 3,
+                 "goal": f"g{i}", "script": f"s{i}", "action": f"a{i}"}
+                for i in range(9)
+            ],
+        })["segments"] == [
+            {"index": 0, "role": "hook", "seconds": 3,
+             "goal": "g0", "script": "s0", "action": "a0"},
+            {"index": 1, "role": "middle", "seconds": 3,
+             "goal": "g1", "script": "s1", "action": "a1"},
+        ]
 
 
 class TestStrategyEndpointError:
@@ -496,6 +517,92 @@ class TestStrategyEndpointError:
                 project_id=project_id, payload=GenerateStrategyRequest(),
                 user_id="anonymous"))
         assert "missing required fields" in str(err.value.detail)
+
+
+class TestPlanIsForcedToTwoSections:
+    """
+    The plan's beat timeline is the video's spine, and it is read straight into
+    the render prompt. A video is ONE render with exactly two sections — a hook
+    and a middle — so a four-beat hook/problem/demo/cta timeline would render a
+    product demonstration and a closing ask in footage that is supposed to stop
+    at the moment the presenter reaches for their phone.
+
+    The prompt asks for two beats and the schema names only those two labels.
+    This pins that the correction actually happens where the shape is known,
+    because a model returning the old four-beat shape is strongly represented in
+    its training and nothing downstream would stop it.
+    """
+
+    def _plan(self, beats, hook_seconds=3, duration=15):
+        import ai_service
+        return ai_service._enforce_two_sections(beats, hook_seconds)
+
+    def test_the_old_four_beat_shape_is_folded_down_to_two(self):
+        """
+        The four-beat hook/problem/demo/cta arc a model returns from habit comes
+        back as two sections, so there is no third beat for the render to film
+        and no timeline whose length reserves seconds for a demo or a close.
+
+        The SHAPE is corrected, and so are the WORDS of the two beats that were
+        only ever a demonstration and a close. Correcting the labels while
+        keeping their prose was the earlier behaviour, and it left "Show the
+        timer" and "Try it free" sitting in the middle's text — which goes
+        verbatim into the render prompt. So a demo gets dropped on the floor
+        even while the story beats are kept, because a workflow that must not
+        generate a product demo cannot inherit one from a beat's text.
+        """
+        import ai_service
+        beats = ai_service._normalize_beats([
+            {"start": 0, "end": 3, "label": "hook", "text": "Open hard"},
+            {"start": 3, "end": 7, "label": "problem", "text": "The friction"},
+            {"start": 7, "end": 13, "label": "demo", "text": "Show the timer"},
+            {"start": 13, "end": 15, "label": "cta", "text": "Try it free"},
+        ], 15)
+        out = self._plan(beats)
+        assert [b["label"] for b in out] == ["hook", "middle"]
+        assert out[0]["text"] == "Open hard"
+        assert out[0]["start"] == 0 and out[0]["end"] == 3
+        assert out[1]["start"] == 3
+        # Nothing survives as a separately-timed third or fourth beat.
+        assert len(out) == 2
+        # The story the model actually told is kept.
+        assert "The friction" in out[1]["text"]
+        # The demonstration and the call to action are not, in any form.
+        blob = " ".join(str(b.get("text") or "") for b in out)
+        assert "Show the timer" not in blob
+        assert "Try it free" not in blob
+
+    def test_the_middle_absorbs_the_remainder(self):
+        out = self._plan([
+            {"start": 0, "end": 3, "label": "hook", "text": "h"},
+            {"start": 3, "end": 8, "label": "middle", "text": "m"},
+            {"start": 8, "end": 15, "label": "extra", "text": "e"},
+        ])
+        assert len(out) == 2
+        assert out[0]["end"] == 3
+        assert out[1]["start"] == 3
+
+    def test_a_hook_only_plan_is_left_alone_rather_than_invented(self):
+        """
+        One section is a real possibility — a model that returned a hook and
+        nothing else has said less, not more. Padding the middle with invented
+        text would be worse than letting the prompt state what is missing.
+        """
+        out = self._plan([{"start": 0, "end": 3, "label": "hook", "text": "h"}])
+        assert [b["label"] for b in out] == ["hook"]
+
+    def test_an_unlabelled_arc_is_not_thrown_away(self):
+        out = self._plan([
+            {"start": 0, "end": 2, "label": "", "text": "first"},
+            {"start": 2, "end": 15, "label": "", "text": "then this"},
+        ])
+        assert [b["label"] for b in out] == ["hook", "middle"]
+        assert out[1]["text"] == "then this"
+
+    def test_junk_is_survivable(self):
+        assert self._plan([]) == []
+        assert self._plan(None) == []
+        assert self._plan(["not a dict", None]) == []
 
 
 def _run(coro):

@@ -44,9 +44,15 @@ IDENTITY_MARKERS = (
 MIN_SAMPLE = 5
 
 # Fields a draft may contain. Anything else from the model is discarded.
+#
+# `middle_structure` replaced `continuation_structure` + `cta_pattern`. A draft
+# used to describe a three-beat arc that paid off and closed on a call to
+# action, and both halves were read into the render prompts — which is how a
+# research draft could reintroduce a product demo into a workflow that does not
+# generate one. One field now, describing the middle and stopping at the reach.
 DRAFT_FIELDS = (
     "name", "category", "hook_mechanic", "opening_structure",
-    "continuation_structure", "cta_pattern", "pacing_note",
+    "middle_structure", "pacing_note",
     "why_it_repeats", "suits",
 )
 
@@ -108,8 +114,8 @@ def build_abstract_prompt(observations: list, app_context: str = "") -> str:
         '  "category": "one of: ' + ", ".join(MECHANIC_CATEGORIES) + '",\n'
         '  "hook_mechanic": "the abstract trigger, e.g. asking the viewer\'s problem out loud",\n'
         '  "opening_structure": "how an opening using this mechanic is built, generically",\n'
-        '  "continuation_structure": "how it pays off, generically",\n'
-        '  "cta_pattern": "how it closes, generically",\n'
+        '  "middle_structure": "how the middle develops that opening, generically, up to the '
+        'moment the viewer would reach for the app",\n'
         '  "pacing_note": "how fast it moves and where it cuts",\n'
         '  "why_it_repeats": "the structural reason this mechanic recurs",\n'
         '  "suits": ["app categories this would work for"]\n'
@@ -121,6 +127,12 @@ def build_abstract_prompt(observations: list, app_context: str = "") -> str:
         "- Do NOT reference, name, or request any specific song, sound, or copyrighted audio.\n"
         "- Do NOT copy captions or scripts verbatim; describe the pattern, not the words.\n"
         "- Every draft must be usable by ANY creator for ANY app with no source video.\n"
+        "- A generated video is a HOOK and a MIDDLE, and nothing else. The middle develops "
+        "the opening and stops at the moment the viewer would reach for the app: the product "
+        "demo is recorded by the founder and attached afterwards, and they add their own call "
+        "to action. So a draft must NOT describe a demonstration, a payoff that shows the app "
+        "working, or a closing beat. middle_structure is where the story goes, not where it "
+        "resolves.\n"
         "- If the observations do not support a clear recurring mechanic, return fewer "
         "drafts rather than inventing one.\n"
         "Return ONLY valid JSON."

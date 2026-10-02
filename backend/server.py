@@ -55,8 +55,7 @@ from models import (
     StudioGenerationRequest,     UpdateAssetRequest, AttachAssetRequest,
     OverlayCompositionRequest, CreateVariationRequest, PerformanceEntryRequest,
     ResearchScanRequest, FeedbackRequest,
-    GenerateStrategyRequest, GenerateHookRequest, ApproveSegmentRequest,
-    AssembleChainRequest,
+    GenerateStrategyRequest,
     APP_PROFILE_LIST_FIELDS, APP_PROFILE_EDITABLE_FIELDS,
     STUDIO_EDITABLE_FIELDS, STUDIO_TEXT_FIELDS,
     now_iso, row_to_dict,
@@ -548,6 +547,12 @@ async def init_db():
                 objective TEXT,
                 opening_structure TEXT,
                 hook_seconds INTEGER,
+                -- continuation_structure and cta_pattern are retired: a
+                -- generated video is a hook and a middle, and the CTA is the
+                -- founder's own. middle_structure replaces the first; nothing
+                -- needs the second. Both stay in the schema because SQLite
+                -- cannot cheaply drop a column across deployments.
+                middle_structure TEXT,
                 continuation_structure TEXT,
                 cta_pattern TEXT,
                 visual_style TEXT,
@@ -628,6 +633,15 @@ async def init_db():
                 beat_timeline TEXT,
                 visual_direction TEXT,
                 feature_emphasis TEXT,
+                -- Replaces feature_emphasis: one sentence telling the founder what
+                -- to record for their own demo. Stored on the project and shown on
+                -- the Review step, and deliberately never passed to a render -- a
+                -- feature instruction that reaches the prompt is a product demo
+                -- being generated, and this workflow generates a hook and a middle
+                -- only. feature_emphasis and cta stay in the schema because SQLite
+                -- cannot cheaply drop a column across deployments; nothing reads
+                -- or writes them.
+                demo_brief TEXT,
                 overlays TEXT,
                 voice_direction TEXT,
                 sound_direction TEXT,
@@ -992,7 +1006,11 @@ async def init_db():
         template_cols = {row[1] for row in await cursor.fetchall()}
         for col in (
             "app_categories", "audiences", "objective", "opening_structure",
-            "continuation_structure", "cta_pattern", "visual_style",
+            # middle_structure replaces continuation_structure. The retired pair
+            # stay in the ADD list too: a database created before this change
+            # has neither, and the seeding and listing queries below still name
+            # both columns, so a fresh one has to match.
+            "middle_structure", "continuation_structure", "cta_pattern", "visual_style",
             "camera_pacing", "required_assets", "content_slots", "evidence_note",
             "trend_evidence",
             "origin", "review_status",
@@ -1210,6 +1228,11 @@ async def init_db():
             ("generations", "approved", "INTEGER DEFAULT 0"),
             ("generations", "approved_at", "TEXT"),
             ("generations", "trim_to_seconds", "INTEGER DEFAULT 0"),
+            # A video is a hook and a middle, so the plan carries a brief for the
+            # founder's own demo instead of the feature instruction the render
+            # used to receive. Additive: existing rows get NULL, which reads as
+            # "no brief recorded" and simply shows an empty field on Review.
+            ("studio_projects", "demo_brief", "TEXT"),
         ]
         for table, column, decl in influencer_migrations:
             cursor = await conn.execute(f"PRAGMA table_info({table})")
@@ -1238,14 +1261,18 @@ async def init_db():
             if tpl["name"].strip().lower() in seeded_names:
                 continue
             now = now_iso()
+            # Seeded by name, so an existing database keeps its rows and their
+            # pinned versions. That means a database seeded before this change
+            # still holds the old three-beat-arcs-with-a-CTA rows; they are
+            # updated in place below so the library is not half old-shape.
             await conn.execute(
                 """INSERT INTO hook_templates
                    (id, name, category, notes, app_categories, audiences, objective,
-                    opening_structure, hook_seconds, continuation_structure, cta_pattern,
-                    visual_style, camera_pacing, required_assets, default_duration,
-                    content_slots, evidence_note, version, archived, is_favorite,
-                    origin, review_status, times_used, created_at, updated_at, user_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                     opening_structure, hook_seconds, middle_structure, visual_style,
+                     camera_pacing, required_assets, default_duration,
+                     content_slots, evidence_note, version, archived, is_favorite,
+                     origin, review_status, times_used, created_at, updated_at, user_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     str(uuid.uuid4()), tpl["name"],
                     template_library.normalize_category(tpl["category"]), "",
@@ -1253,9 +1280,9 @@ async def init_db():
                     json.dumps(tpl.get("audiences") or []),
                     template_library.normalize_objective(tpl.get("objective")),
                     tpl["opening_structure"], int(tpl["hook_seconds"] or 3),
-                    tpl["continuation_structure"], tpl["cta_pattern"], tpl["visual_style"],
+                    tpl["middle_structure"], tpl["visual_style"],
                     tpl["camera_pacing"], json.dumps(tpl.get("required_assets") or []),
-                    int(tpl["default_duration"] or 20),
+                    int(tpl["default_duration"] or 10),
                     json.dumps(tpl.get("content_slots") or {}), tpl.get("evidence_note") or "",
                     1, 0, 0, "curated", "approved", 0, now, now, "system",
                 ),
@@ -1263,6 +1290,69 @@ async def init_db():
             seeded += 1
         if seeded:
             logger.info("Seeded %d curated hook template(s)", seeded)
+
+        # Curated rows are seeded by name and never re-seeded, so a database that
+        # predates the two-section change keeps its old rows: a three-beat arc
+        # ending in a CTA, a `cta_pattern`, and a default_duration of 20 or 30.
+        # Those descriptions are read straight into the plan and render prompts,
+        # so leaving them would have the prompts contradicting the two-section
+        # model. Rewritten in place, ONCE, by name — which is stable, unlike the
+        # generated ids. Version is bumped so a project pinned to the old row
+        # can be identified as built against a different structure.
+        #
+        # An operator's own templates and every research draft are untouched:
+        # this only touches rows this module authored.
+        #
+        # The rewrite is guarded on the row actually differing from the curated
+        # definition. Unconditionally rewriting here meant every deploy bumped
+        # every curated template's version by one forever, so the very signal the
+        # bump exists to carry — "this project was built against a different
+        # structure" — was destroyed by any restart, and a redeploy with no
+        # schema change still looked like a content change to every project.
+        now = now_iso()
+        for tpl in template_library.CURATED_TEMPLATES:
+            desired_slots = json.dumps(tpl.get("content_slots") or {})
+            cursor = await conn.execute(
+                """SELECT opening_structure, hook_seconds, middle_structure,
+                          visual_style, camera_pacing, content_slots, default_duration
+                     FROM hook_templates
+                    WHERE origin = 'curated' AND LOWER(TRIM(name)) = ?""",
+                (tpl["name"].strip().lower(),),
+            )
+            current = await cursor.fetchone()
+            if current is not None:
+                stored_slots = current[5]
+                if isinstance(stored_slots, str):
+                    try:
+                        stored_slots = json.loads(stored_slots)
+                    except (json.JSONDecodeError, TypeError):
+                        stored_slots = None
+                already_current = (
+                    current[0] == tpl["opening_structure"]
+                    and int(current[1] or 0) == int(tpl["hook_seconds"] or 3)
+                    and (current[2] or "") == tpl["middle_structure"]
+                    and (current[3] or "") == tpl["visual_style"]
+                    and (current[4] or "") == tpl["camera_pacing"]
+                    and stored_slots == (tpl.get("content_slots") or {})
+                    and int(current[6] or 0) == int(tpl["default_duration"] or 10)
+                )
+                if already_current:
+                    continue
+            await conn.execute(
+                """UPDATE hook_templates
+                   SET opening_structure = ?, hook_seconds = ?, middle_structure = ?,
+                       visual_style = ?, camera_pacing = ?, content_slots = ?,
+                       default_duration = ?, version = COALESCE(version, 1) + 1,
+                       updated_at = ?
+                   WHERE origin = 'curated' AND LOWER(TRIM(name)) = ?""",
+                (
+                    tpl["opening_structure"], int(tpl["hook_seconds"] or 3),
+                    tpl["middle_structure"], tpl["visual_style"], tpl["camera_pacing"],
+                    desired_slots,
+                    int(tpl["default_duration"] or 10),
+                    now, tpl["name"].strip().lower(),
+                ),
+            )
 
         # Face-only library. Every curated template requires exactly
         # ["character_reference"] — the face that anchors every video — and
@@ -5797,19 +5887,19 @@ async def _ensure_objective_templates(
         await _execute(
             """INSERT INTO hook_templates
                (id, name, category, app_categories, audiences, objective,
-                opening_structure, hook_seconds, continuation_structure,
-                cta_pattern, visual_style, camera_pacing, required_assets,
+                opening_structure, hook_seconds, middle_structure,
+                visual_style, camera_pacing, required_assets,
                 default_duration, content_slots, evidence_note, version,
                 archived, is_favorite, origin, review_status, times_used,
                 brand_profile_id, created_at, updated_at, user_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0,
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0,
                        'custom', 'approved', 0, ?, ?, ?, ?)""",
             (str(uuid.uuid4()), draft["name"], draft["category"],
              json.dumps([profile.get("app_category") or ""] if profile.get("app_category") else []),
              json.dumps([profile.get("target_audience") or ""] if profile.get("target_audience") else []),
              want_objective, draft["opening_structure"],
-             draft.get("hook_seconds") or 3, draft.get("continuation_structure") or "",
-             draft.get("cta_pattern") or "", draft.get("visual_style") or "",
+             draft.get("hook_seconds") or 3, draft.get("middle_structure") or "",
+             draft.get("visual_style") or "",
              draft.get("camera_pacing") or "", json.dumps(["character_reference"]),
              draft.get("default_duration") or template_library.DEFAULT_DURATION,
              json.dumps(draft.get("content_slots") or {}),
@@ -6498,11 +6588,15 @@ def _score_template_for_angle(
         problem_text = "; ".join(recommendation_tags.text_list(profile.get("problems_solved")))
     app_problem_tags = set(recommendation_tags.problem_tags(problem_text)) if problem_text else set()
     if app_problem_tags:
+        # cta_pattern is gone and continuation_structure is only read as a
+        # fallback for a row seeded before middle_structure existed. Matching
+        # against a retired CTA string would let a template be recommended for
+        # containing the words of a call to action it no longer has.
         template_blob = " ".join(
             [str(template.get("name") or ""), str(template.get("category") or ""),
              str(tpl_objective), str(template.get("opening_structure") or ""),
-             str(template.get("continuation_structure") or ""),
-             str(template.get("cta_pattern") or "")]
+             str(template.get("middle_structure")
+                 or template.get("continuation_structure") or "")]
             + [f"{k} {v}" for k, v in (template.get("content_slots") or {}).items()]
         )
         overlap = sorted(app_problem_tags & set(recommendation_tags.problem_tags(template_blob)))
@@ -6574,8 +6668,8 @@ def _score_template_for_angle(
         limitations.append(
             "Needs " + ", ".join(a.replace("_", " ") for a in required_assets) + "."
         )
-    if not template.get("continuation_structure"):
-        limitations.append("No continuation structure recorded; the studio will infer one.")
+    if not (template.get("middle_structure") or template.get("continuation_structure")):
+        limitations.append("No middle structure recorded; the studio will infer one.")
     if (template.get("review_status") or "approved") != "approved":
         limitations.append("Unpublished research draft - review before using.")
 
@@ -6749,6 +6843,34 @@ async def ensure_objective_templates(
 # ---------------------------------------------------------------------------
 # Studio projects (guided creation workflow)
 # ---------------------------------------------------------------------------
+def _two_section_repairs(row: dict) -> dict:
+    """
+    The columns on a project that predate one-render generation, brought into range.
+
+    A project saved by the previous version can carry a 20s or 30s target and a
+    hook length of 5. Neither is reachable now: a piece is one render, so a 20s
+    target cannot be produced at all and would be refused at the generate
+    endpoint, and 5s is a second past the longest a hook has to land in.
+
+    Returns only the keys that need moving, so a caller can tell "nothing to do"
+    from "a length was clamped", and can write just the column that changed. A
+    project within range returns {}.
+    """
+    repairs: dict = {}
+    stored_duration = int(row.get("duration_seconds") or 0)
+    if stored_duration > template_library.MAX_SUPPORTED_DURATION:
+        repairs["duration_seconds"] = template_library.clamp_duration(stored_duration)
+    stored_hook = int(row.get("hook_seconds") or 0)
+    if stored_hook and not (
+        template_library.MIN_HOOK_SECONDS <= stored_hook <= template_library.MAX_HOOK_SECONDS
+    ):
+        repairs["hook_seconds"] = max(
+            template_library.MIN_HOOK_SECONDS,
+            min(template_library.MAX_HOOK_SECONDS, stored_hook),
+        )
+    return repairs
+
+
 def _public_project(row: dict) -> dict:
     """Serialize a studio project with its structured fields parsed."""
     out = dict(row)
@@ -6769,12 +6891,50 @@ def _public_project(row: dict) -> dict:
     current_script = int(out.get("script_version") or 0)
     out["strategy_script_version"] = built_from
     out["strategy_is_current"] = not (built_from and current_script and built_from != current_script)
-    # SQLite has no boolean type, so this arrives as 0/1. Returned as a real
-    # bool so the studio can branch on it directly instead of comparing ints.
-    # Unset means yes: the hook is the opening of a video, so extending is the
-    # default path unless the founder says otherwise.
-    out["extend_intent"] = out.get("extend_intent") != 0
+    # Bring a pre-two-section project forward on read, so an old draft is not
+    # silently unrenderable.
+    #
+    # A project saved by the previous version can carry a 20s or 30s target and a
+    # hook length of 5. Both are now out of range: the piece is one render, so a
+    # 20s target cannot be produced at all and would be refused at the generate
+    # endpoint, and 5 is a second past the longest a hook has to land in. Reporting
+    # the stored value would show the founder a length the studio will refuse, so
+    # the clamped value is written back and returned. Persisted, not just
+    # recomputed per response, so the plan they already approved and the value the
+    # render reads agree.
+    out.update(_two_section_repairs(row))
+    # A strategy parsed out of its JSON column, or {} when the project has none.
+    # The render reads this to decide whether the video is app-specific or falls
+    # back to the plan alone.
+    strategy = out.get("strategy")
+    if isinstance(strategy, str):
+        try:
+            strategy = json.loads(strategy)
+        except (json.JSONDecodeError, TypeError):
+            strategy = {}
+    out["strategy"] = strategy if isinstance(strategy, dict) else {}
     return out
+
+
+def _project_strategy(project: dict) -> dict:
+    """The project's strategy dict, parsed, or {} when it has none.
+
+    A project row carries `strategy` as a JSON string, so every reader would
+    otherwise repeat the same parse-and-discard-on-error. An unparseable value
+    is treated as no strategy rather than crashing a paid render: the fallback
+    path produces a working video from the plan, and a hard failure here would
+    strand a project the founder has already paid to review.
+    """
+    strategy = (project or {}).get("strategy")
+    if isinstance(strategy, dict):
+        return strategy
+    if not strategy:
+        return {}
+    try:
+        parsed = json.loads(strategy)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
 
 
 async def _require_profile_for_studio(profile_id: str, user_id: str) -> dict:
@@ -6813,7 +6973,45 @@ async def list_studio_projects(
             ORDER BY updated_at DESC LIMIT ?""",
         tuple(params) + (max(1, min(int(limit or 50), 200)),),
     )
+    await _backfill_two_section_projects(rows)
     return {"projects": [_public_project(r) for r in rows]}
+
+
+async def _backfill_two_section_projects(rows: list) -> None:
+    """
+    Persist the clamp `_public_project` reports, for rows a previous version wrote.
+
+    `_public_project` already returns a clamped `duration_seconds` and
+    `hook_seconds` for a project that predates one-render generation, and sets a
+    private flag when it had to. This writes those values back, so a 20s project
+    is stored as the 12s it can actually be rendered at.
+
+    Without the write, the clamp is cosmetic: the founder sees 15s, the plan's
+    beat timeline was written to 20s, and the render reads 20 off the row and is
+    refused by the single-pass ceiling. The two would disagree in the one place
+    a founder is about to pay.
+
+    Each row is repaired in place as well as written, because the caller's row
+    object is what gets serialized afterwards — patching only the database would
+    leave the response showing the unrepaired values.
+    """
+    for row in rows:
+        repairs = _two_section_repairs(row)
+        if not repairs:
+            continue
+        await _execute(
+            "UPDATE studio_projects SET duration_seconds = ?, hook_seconds = ?,"
+            " updated_at = ? WHERE id = ? AND user_id = ?",
+            (
+                int(repairs.get("duration_seconds", row.get("duration_seconds")) or 0),
+                int(repairs.get("hook_seconds", row.get("hook_seconds")) or 0),
+                now_iso(),
+                row.get("id"),
+                row.get("user_id"),
+            ),
+        )
+        # Keep the caller's row consistent with what was just written.
+        row.update(repairs)
 
 
 @api_router.post("/studio/projects", status_code=201)
@@ -6852,19 +7050,21 @@ async def create_studio_project(
 
     project_id = str(uuid.uuid4())
     now = now_iso()
-    # The opening segment's length, defaulted from the template's own declared
-    # hook_seconds (2-3s for every curated template). 0 on the request means
-    # "follow the template", which is the common case; an explicit value wins.
-    hook_seconds = 0
-    if payload.hook_seconds:
-        hook_seconds = int(payload.hook_seconds)
-    elif template_id and template:
+    # The opening section's length, from the template. DIRECTORIAL, not a render
+    # length: the whole piece is one render, and this is where the hook stops and
+    # the middle begins. Clamped to 2-4s because a hook that needs longer to land
+    # is not a hook.
+    hook_seconds = int(payload.hook_seconds or 0)
+    if not hook_seconds and template:
         hook_seconds = int(template.get("hook_seconds") or 0)
-    if hook_seconds and hook_seconds not in video_providers.HOOK_LENGTH_CHOICES:
-        hook_seconds = video_providers.DEFAULT_HOOK_SECONDS
-    # Unset means "yes, I intend to extend": the hook is the opening of a
-    # video, so extending is the expected path unless the founder says otherwise.
-    extend_intent = 1 if payload.extend_intent is None else (1 if payload.extend_intent else 0)
+    hook_seconds = max(
+        template_library.MIN_HOOK_SECONDS,
+        min(template_library.MAX_HOOK_SECONDS, hook_seconds or 3),
+    )
+
+    # extend_intent is gone. The column stays (SQLite cannot cheaply drop it and
+    # existing rows carry a value) but is written as 1 and read by nothing: a
+    # video is one render, so there is no "hook only" mode to record.
 
     await _execute(
         """INSERT INTO studio_projects
@@ -6876,7 +7076,7 @@ async def create_studio_project(
          template_id or None, template_version,
          template_library.normalize_objective(payload.objective),
          (payload.audience or profile.get("target_audience") or "").strip() or None,
-         duration, hook_seconds, extend_intent, (payload.tone or "").strip() or None,
+         duration, hook_seconds, 1, (payload.tone or "").strip() or None,
          json.dumps([]), 0, "draft", now, now, user_id),
     )
     logger.info(f"Created studio project {project_id} for profile {profile['id']}")
@@ -6892,6 +7092,9 @@ async def get_studio_project(project_id: str, user_id: str = Depends(get_current
     )
     if not row:
         raise HTTPException(status_code=404, detail="Studio project not found")
+    # A project from before one-render generation is brought forward here, so
+    # reopening it is what repairs it — see _backfill_two_section_projects.
+    await _backfill_two_section_projects([row])
     return _public_project(row)
 
 
@@ -7014,25 +7217,23 @@ async def update_studio_project(
                     ),
                 )
         elif key == "hook_seconds":
-            # The opening segment's length. 0 clears the choice so the template
-            # decides again. Clamped to the offered choices so a hand-typed
-            # value cannot ask for a length nothing will ever honour.
+            # Where the middle begins. Directorial, not a render length: the whole
+            # piece is one render. 0 means "follow the template", and anything out
+            # of range is clamped rather than refused — a hand-typed 9s here would
+            # leave the middle with nothing to film, which is a worse outcome than
+            # moving the boundary to a length a hook can actually land in.
             try:
                 want = int(value or 0)
             except (TypeError, ValueError):
                 want = 0
-            if want and want not in video_providers.HOOK_LENGTH_CHOICES:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Hook length must be one of: "
-                           + ", ".join(f"{c}s" for c in video_providers.HOOK_LENGTH_CHOICES)
-                           + " seconds, or 0 to follow the template.",
+            value = (
+                max(
+                    template_library.MIN_HOOK_SECONDS,
+                    min(template_library.MAX_HOOK_SECONDS, want),
                 )
-            value = max(0, want)
-        elif key == "extend_intent":
-            # Deliberately not load-bearing: this records what the founder
-            # intends, and must never invalidate a strategy or a plan.
-            value = 1 if (value in (True, 1, "1", "true")) else 0
+                if want
+                else 0
+            )
         elif value is not None:
             value = str(value).strip()
         set_clauses.append(f"{key} = ?")
@@ -7190,17 +7391,22 @@ async def generate_plan(
     summary = claim_safety.summarize(report)
 
     now = now_iso()
+    # `cta` is no longer written: a call to action is the founder's own, added in
+    # their editor after the demo they record. `feature_emphasis` is replaced by
+    # `demo_brief` — the founder still needs to know what to record for their own
+    # demo, so the plan works it out, but it is deliberately never passed to a
+    # render. Both old columns stay in the schema; nothing reads them.
     await _execute(
         """UPDATE studio_projects SET
              hook_line = ?, script = ?, beat_timeline = ?, visual_direction = ?,
-             feature_emphasis = ?, overlays = ?, voice_direction = ?, sound_direction = ?,
-             cta = ?, safety_report = ?, safety_summary = ?, objective = ?,
+             demo_brief = ?, overlays = ?, voice_direction = ?, sound_direction = ?,
+             safety_report = ?, safety_summary = ?, objective = ?,
              duration_seconds = ?, tone = ?, script_version = script_version + 1,
              status = 'draft', updated_at = ?
            WHERE id = ? AND user_id = ?""",
         (plan["hook_line"], plan["script"], json.dumps(plan["beat_timeline"]),
-         plan["visual_direction"], plan["feature_emphasis"], json.dumps(plan["overlays"]),
-         plan["voice_direction"], plan["sound_direction"], plan["cta"],
+         plan["visual_direction"], plan["demo_brief"], json.dumps(plan["overlays"]),
+         plan["voice_direction"], plan["sound_direction"],
          json.dumps(report), summary, objective, duration, tone or None, now,
          project_id, user_id),
     )
@@ -7449,43 +7655,56 @@ async def _submit_generation(
     hook_trim: int = 0,
 ) -> dict:
     """
-    Submit ONE video generation job.
+    Submit ONE video generation job. This is the only render path.
 
-    Two prompt paths, chosen by what the caller is doing:
+    A video is a hook and a middle in a single pass. It is never assembled from
+    a chain: there is no extend call, no approval gate between segments, and no
+    join step, so the duration is clamped to one pass and the founder attaches
+    their own demo and call to action to the result.
 
-    - A segmented influencer segment (a strategy is supplied) uses
-      build_segment_prompt, which carries the app-specific strategy, the
-      locked persona and scene, and — for a continuation — an explicit record
-      of what the previous segment already established. It is also told, via
-      `continuity`, exactly which visual anchors are riding along, so it never
-      claims a level of continuity the request will not deliver.
-    - Everything else uses build_single_pass_prompt, which is unchanged.
+    Two prompt paths, chosen by whether a strategy exists:
 
-    A second job is created only when the caller passes segment_role
-    'extension', which the endpoints do exclusively for the justified
-    reasons: the duration exceeds the provider's single-pass limit, the
-    founder explicitly asked to extend an approved take, or a segment is
-    being replaced after a recoverable failure.
+    - With a strategy (the normal case) it is build_segment_prompt, carrying the
+      app-specific messaging, the locked scene and the two sections. Used even
+      though there are no segments to build individually: the strategy is what
+      makes the video about THIS app rather than a generic take with a name in
+      it, and index 0 renders the whole piece.
+    - Without one, build_single_pass_prompt, which works from the plan alone.
+      That is the fallback for a project whose strategy was never built.
     """
-    requested = duration or project.get("duration_seconds") or 20
-    plan = video_providers.plan_duration(model, requested)
-    model_key = plan["model"]
-    cap = video_providers.capability(model_key)
-    seconds = plan["primary_seconds"] if not is_extension else min(
-        plan["primary_seconds"], max(1, requested)
+    # One video is one render, so the piece is clamped to what one pass can
+    # actually produce rather than split across jobs. `plan_duration` used to
+    # return a primary/extension pair for a long request; that pair is the chain
+    # this workflow no longer builds, and honouring it here would spend a second
+    # generation for footage the founder is attaching themselves.
+    requested = template_library.clamp_duration(
+        duration or project.get("duration_seconds") or 0
     )
+    model_key = video_providers.resolve(model)[0]
+    cap = video_providers.capability(model_key)
+    if requested > cap["max_duration"]:
+        requested = int(cap["max_duration"])
+    seconds = requested
 
+    # A strategy, when present, describes the same single piece the plan does:
+    # a hook and a middle. build_segment_prompt is therefore the whole-piece
+    # builder now, not a per-beat one — the two-section brief and scene lock are
+    # what make the video app-specific, and a video without a strategy is a
+    # generic take with a name in it.
+    #
+    # `segment_role`, `parent_generation_id`, `is_extension`, `continuity_frame`
+    # and `previous_summary` are accepted and ignored. Every one of them
+    # described chaining a second render onto a first, and a video is one
+    # render: the rows still record segment_role and parent_generation_id so
+    # existing history stays readable, and nothing sets them but "primary".
     if strategy:
         prompt = generation_planning.build_segment_prompt(
             strategy=strategy,
             profile=profile,
             template=template,
-            segment_index=int(segment_index or 0),
             duration=seconds,
             assets=project.get("assets") or [],
-            continuity=continuity,
-            is_hook=bool(is_hook) or int(segment_index or 0) == 0,
-            previous_summary=previous_summary,
+            plan=project,
         )
     else:
         prompt = generation_planning.build_single_pass_prompt(
@@ -7506,46 +7725,34 @@ async def _submit_generation(
     studio_references = await _studio_identity_references(
         project.get("assets") or [], model_key, user_id, template
     )
-    # A continuity plan that decided not to send the identity reference (because
-    # the seam frame already carries the face) must not have it smuggled in
-    # behind its back, or the provider would be asked to carry two anchors it
-    # cannot take.
-    if continuity and not continuity.get("use_identity_reference", True):
-        studio_references = []
-    # The seam frame is gated by the same plan that decided it. Without this the
-    # request would carry a first frame on a provider that rejects one, or on a
-    # plan that reported text-only continuity — the prompt would then promise a
-    # visual seam the request does not contain.
-    if continuity and not continuity.get("use_frame", True):
-        continuity_frame = None
-    if continuity and continuity.get("use_clip_reference"):
-        studio_references = [
-            {"type": "video_url", "video_url": {"url": continuity_video_url}},
-            *studio_references,
-        ]
+    # No seam frame, no clip reference, no continuity plan to honour: there is
+    # only ever one render, so there is never a previous clip to anchor to. The
+    # founder's photograph is the single visual anchor, and it is attached above
+    # on its own terms.
+    continuity_frame = None
 
     generation_id = str(uuid.uuid4())
     now = now_iso()
-    # Stamp the strategy version whenever the project HAS one, not only when a
-    # strategy was passed in. The one-shot single-pass generation is still
-    # segment 0 of this project's chain, so it must record which strategy it
-    # belongs to — otherwise the staleness check on an extension has nothing
-    # to compare against and a re-strategised project would happily extend a
-    # hook built under a superseded strategy.
-    project_strategy = project.get("strategy") or {}
-    if isinstance(project_strategy, str):
-        try:
-            project_strategy = json.loads(project_strategy)
-        except (json.JSONDecodeError, TypeError):
-            project_strategy = {}
+    # `adjustments` recorded how a long request was split across passes. There is
+    # one pass now, so the list is always empty; the column stays because
+    # generations from before this change still carry a record of how they were
+    # built.
+    #
+    # Stamp the strategy version whenever the project has one, not only when a
+    # strategy was passed in, so the generation record says which strategy it
+    # was rendered under.
+    project_strategy = _project_strategy(project)
     has_strategy = bool((strategy or project_strategy or {}).get("hook_line"))
     strategy_version = int(project.get("strategy_version") or 0) if has_strategy else 0
-    # How long the clip will be cut down to once it lands, 0 for no trim. A
-    # length below the provider's floor is rendered at the floor and cut in poll,
-    # so this is recorded up front and drives the post-render cut. Applies to
-    # extensions too, not only the hook: "extend by 3s" is a legitimate choice
-    # and every provider's floor is 4s or more.
-    trim_to_seconds = int(hook_trim or 0)
+    # How long the clip will be cut down to once it lands, 0 for no trim.
+    #
+    # Always 0 now. The trim existed so a sub-floor HOOK could be rendered at
+    # the provider's floor and cut down to the 2-3s the template asked for. There
+    # is no separately-rendered hook any more: the piece is one render at one
+    # length, already at or above the floor, so nothing is cut. The column and
+    # the post-render cut in poll are kept because generations recorded before
+    # this change still carry a non-zero value and must still be trimmed.
+    trim_to_seconds = 0
     await _execute(
         """INSERT INTO generations
            (id, studio_project_id, brand_profile_id, template_id, template_version,
@@ -7562,7 +7769,7 @@ async def _submit_generation(
          json.dumps(continuity) if continuity else None, trim_to_seconds,
          attempt, parent_generation_id or None,
          variation_kind or None, json.dumps(variation_params or {}),
-         "pending", prompt, json.dumps(plan["adjustments"]), now, now, now, user_id),
+          "pending", prompt, json.dumps([]), now, now, now, user_id),
     )
 
     try:
@@ -7701,9 +7908,10 @@ async def submit_project_generation(
 
     Refuses unless the project is reviewed and ready, and unless the claim
     check passes, so a prohibited claim cannot reach a paid generation.
-    A duration beyond the provider's single-pass limit is accepted but the
-    response reports that an extension is needed; it is never silently
-    truncated to a shorter video.
+
+    The result is ONE clip: a hook and a middle. There is no extension, no
+    per-segment approval and no join, so a request longer than a single pass is
+    refused outright rather than split or silently shortened.
     """
     require_ai_configured()
     project = await _fetch_one(
@@ -7740,26 +7948,43 @@ async def submit_project_generation(
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    requested = payload.duration_seconds or project.get("duration_seconds") or 20
-    model_key, reason = video_providers.resolve(payload.model or None)
-    plan = video_providers.plan_duration(model_key, requested)
+    # The strategy, when the project has one, is what makes the render
+    # app-specific. It is optional: a project whose strategy was never built
+    # still renders from the plan alone.
+    strategy = _project_strategy(project)
+    if not strategy:
+        logger.info(
+            f"Project {project_id}: no strategy on file, rendering from the plan alone. "
+            "The video will be less specific to this app."
+        )
+
+    # Computed, not requested. The template declares a length its mechanic
+    # suits and the founder does not pick one, so a request longer than a single
+    # pass is refused rather than quietly shortened — the founder would be
+    # handed a file that is not the video the plan describes.
+    cap = video_providers.capability(video_providers.resolve(payload.model or None)[0])
+    wanted = payload.duration_seconds or project.get("duration_seconds") or 0
+    if int(wanted or 0) > int(cap["max_duration"]):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{cap['name']} produces at most {cap['max_duration']}s in one pass, and this "
+                f"video is {int(wanted)}s. The generated piece is a hook and a middle — record "
+                f"anything longer as your own demo and attach it afterwards."
+            ),
+        )
 
     generation = await _submit_generation(
         project=project,
         profile=profile,
         template=template,
         user_id=user_id,
-        model=model_key,
-        duration=requested,
+        model=payload.model or "",
+        duration=int(wanted or 0) or None,
         generate_audio=payload.generate_audio,
+        strategy=strategy or None,
     )
-    generation["duration_plan"] = plan
-    generation["provider_reason"] = reason
-    if plan["needs_extension"]:
-        logger.info(
-            f"Project {project_id}: {requested}s exceeds one pass on {model_key}; "
-            f"primary {plan['primary_seconds']}s + extension {plan['extension_seconds']}s"
-        )
+    generation["provider_reason"] = video_providers.resolve(payload.model or None)[1]
     return generation
 
 
@@ -8106,17 +8331,33 @@ async def generate_project_strategy(
     # which is what makes a "Stop Doing This" template and a "Pain-Point
     # Question" template produce differently-paced hooks.
     #
-    # Deliberately NOT raised to the provider's minimum here. The strategy
-    # describes the hook the founder asked for; the render is asked for at the
-    # provider floor and cut down afterwards, and that is recorded on the
-    # generation so the delivered length is never a surprise.
+    # Clamped to 2-4s, which is the whole window a hook has to land in, and the
+    # same clamp create_studio_project and update_studio_project apply. Without
+    # it a client could put anything here: the value seeds the strategy's own
+    # segment budget, so the hook the founder is shown reviewing would disagree
+    # with the boundary the render actually uses — and a hook_seconds at or
+    # beyond the piece's length would collapse the middle to a second.
+    #
+    # The fallback is 3, NOT video_providers.DEFAULT_HOOK_SECONDS. That constant
+    # is 5, left over from when the hook was a separately-rendered clip that had
+    # to clear the provider's 5s floor before being trimmed down — a
+    # sub-floor-hook problem this no longer has, and a value one second above
+    # MAX_HOOK_SECONDS. Every curated template declares its own hook_seconds, so
+    # the fallback only fires on a template saved with a NULL one.
     requested_hook = (
         payload.hook_seconds
         or row.get("hook_seconds")
         or template.get("hook_seconds")
-        or video_providers.DEFAULT_HOOK_SECONDS
+        or 3
     )
-    hook_seconds = int(requested_hook or video_providers.DEFAULT_HOOK_SECONDS)
+    try:
+        hook_seconds = int(requested_hook)
+    except (TypeError, ValueError):
+        hook_seconds = 3
+    hook_seconds = max(
+        template_library.MIN_HOOK_SECONDS,
+        min(template_library.MAX_HOOK_SECONDS, hook_seconds),
+    )
 
     profile_feedback = feedback_mod.summarize_profile_feedback(
         await _fetch_all(
@@ -8148,14 +8389,18 @@ async def generate_project_strategy(
     # The founder-approved creative plan, when one exists. The plan is written
     # and reviewed before the first paid render, so the strategy has to produce
     # THAT video. Without this the founder approved a script and then paid for a
-    # different one, and neither the plan's CTA nor its beats reached the hook.
+    # different one.
+    #
+    # `cta` and `feature_emphasis` are not read. Both used to be here, and both
+    # were the route by which a closing beat and a product demo reached the render
+    # prompt. `demo_brief` is the replacement for the second: the founder needs to
+    # know what to record, and passing it on would put a feature instruction back
+    # into a video that is not allowed to demonstrate anything.
     approved_plan = None
     if int(row.get("script_version") or 0) > 0 and str(row.get("script") or "").strip():
         approved_plan = {
             "hook_line": row.get("hook_line") or "",
             "script": row.get("script") or "",
-            "cta": row.get("cta") or "",
-            "feature_emphasis": row.get("feature_emphasis") or "",
             "visual_direction": row.get("visual_direction") or "",
             "voice_direction": row.get("voice_direction") or "",
             "sound_direction": row.get("sound_direction") or "",
@@ -8224,20 +8469,12 @@ async def generate_project_strategy(
 
     version = int(row.get("strategy_version") or 0) + 1
     now = now_iso()
-    # Coverage is recorded ON the strategy before it is serialized. The studio
-    # needs to say "the plan covers N more segments" before the founder commits
-    # to a length, and a founder extending by 3s could otherwise run the plan
-    # out at segment 8 with no warning.
-    planned_segments = len(strategy.get("segments") or [])
-    strategy["planned_segments"] = planned_segments
-    strategy["max_planned_index"] = max(
-        (int(s.get("index", -1)) for s in (strategy.get("segments") or [])
-         if isinstance(s, dict)),
-        default=0,
-    )
-    # hook_seconds is written back so the hook render and any later segment
-    # planning read the SAME length, rather than each re-deriving it from the
-    # template and risking the two disagreeing.
+    # Coverage used to be recorded here so the studio could say "the plan covers
+    # N more segments" and warn before a founder extended past the end. There is
+    # no extending: one render, two sections, and the founder attaches the rest
+    # themselves. `planned_segments` and `max_planned_index` are no longer
+    # written, and the length below is the whole piece rather than a hook that
+    # has to be reconciled with later segments.
     # The script version this strategy was built from. The strategy is generated
     # from the founder's approved plan, so it is only true of that plan's words:
     # stamping the version is what lets a later script edit be detected instead
@@ -8250,11 +8487,11 @@ async def generate_project_strategy(
     # send the project back to draft. Demoting it here made the "Mark ready for
     # generation" button on the Review step spring back into existence, so a
     # founder who built their strategy was bounced a step to re-approve a
-    # project they had not changed. The segmented path never reads status at all
-    # (only submit_project_generation does, at its own guard), and a rebuilt
-    # strategy is still protected from being paid for twice: it bumps
-    # strategy_version, so extending an old segment is refused by the
-    # parent_strategy_version check in extend_generation.
+    # project they had not changed.
+    #
+    # `hook_seconds` is written back so the render splits the piece at the same
+    # boundary the plan and strategy both agreed on, rather than each
+    # re-deriving it from the template and risking a disagreement.
     script_version_at_build = int(row.get("script_version") or 0)
     await _execute(
         """UPDATE studio_projects SET strategy = ?, strategy_version = ?,
@@ -8267,613 +8504,12 @@ async def generate_project_strategy(
     )
     logger.info(
         f"Generated strategy for project {project_id} (v{version}) — hook "
-        f"{hook_seconds}s, {planned_segments} planned segment(s) — {summary}"
+        f"{hook_seconds}s, middle {total_duration - hook_seconds}s, "
+        f"{len(strategy.get('segments') or [])} section(s) — {summary}"
     )
     return _public_project(
         await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,))
     )
-
-
-@api_router.post("/generations/{generation_id}/approve")
-async def approve_generation(
-    generation_id: str, payload: ApproveSegmentRequest, user_id: str = Depends(get_current_user_id)
-):
-    """
-    Approve a completed segment.
-
-    Approval is the gate the whole influencer workflow turns on: only an
-    approved segment may anchor an extension, and only approved segments are
-    joined into the final video. A rejected segment is simply never approved,
-    so the founder keeps control over which take continues the story.
-    """
-    row = await _fetch_one(
-        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Generation not found")
-    if row.get("status") != "completed":
-        raise HTTPException(
-            status_code=409,
-            detail=f"Only a completed video can be approved. This one is '{row.get('status')}'.",
-        )
-    await _execute(
-        "UPDATE generations SET approved = 1, approved_at = ?, updated_at = ? WHERE id = ?",
-        (now_iso(), now_iso(), generation_id),
-    )
-    return _public_generation_detail(
-        await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
-    )
-
-
-@api_router.get("/generations/{generation_id}/continuity")
-async def get_generation_continuity(
-    generation_id: str, user_id: str = Depends(get_current_user_id)
-):
-    """
-    What the provider was actually given for this segment, and what it was not.
-
-    The honest continuity report for one segment: which anchors were attached,
-    which were dropped, why, and what the founder should therefore expect to
-    see. Exposed separately because "did the model get the previous clip?" is
-    the question a founder asks when an extension looks wrong, and the answer
-    should be a record rather than an inference from the prompt.
-    """
-    row = await _fetch_one(
-        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Generation not found")
-    continuity = row.get("continuity") or {}
-    if isinstance(continuity, str):
-        try:
-            continuity = json.loads(continuity)
-        except (json.JSONDecodeError, TypeError):
-            continuity = {}
-    guarantee = str(continuity.get("guarantee") or "")
-    return {
-        "generation_id": generation_id,
-        "segment_index": int(row.get("segment_index") or 0),
-        "segment_role": row.get("segment_role") or "primary",
-        "continuity": continuity,
-        "guarantee": guarantee,
-        "attached": continuity.get("attached") or [],
-        "degraded": continuity.get("degraded") or [],
-        "notes": continuity.get("notes") or "",
-        "strategy_version": int(row.get("strategy_version") or 0),
-    }
-
-
-async def _completed_segment_count(
-    project_id: str, user_id: str, exclude_id: str = ""
-) -> int:
-    """
-    How many finished segments a project has, for the staleness refusals.
-
-    Both staleness guards tell the founder to rebuild the strategy, which is
-    free -- but they do not mention that the segments they already paid for
-    were made against the old strategy_version and are refused by the extend
-    path afterwards. So the cost of following the instruction is only discovered
-    on the next click, after the rebuild.
-
-    Counts `completed` rather than every row, because that is what
-    assemble_generation_chain would actually fail to join: a failed or
-    in-flight segment costs nothing to have lost, and counting it would
-    overstate the damage. `exclude_id` drops the segment the founder is
-    currently looking at, since that is the one they are about to regenerate.
-
-    Deliberately not a COUNT(*) with a join: this runs on the error path of
-    two paid endpoints, and the table is small and per-user.
-    """
-    clauses = ["studio_project_id = ?", "user_id = ?", "status = 'completed'"]
-    params: list = [project_id, user_id]
-    if exclude_id:
-        clauses.append("id != ?")
-        params.append(exclude_id)
-    rows = await _fetch_all(
-        f"SELECT id FROM generations WHERE {' AND '.join(clauses)}", tuple(params)
-    )
-    return len(rows)
-
-
-@api_router.post("/studio/projects/{project_id}/hook", status_code=202)
-async def generate_project_hook(
-    project_id: str, payload: GenerateHookRequest, user_id: str = Depends(get_current_user_id)
-):
-    """
-    Generate the opening 3-4 second hook from the project's strategy.
-
-    Deliberately its own short job rather than a full-length generation: the
-    hook is the cheapest possible test of whether the concept works, and it is
-    what the founder approves before any extension is allowed.
-
-    Refuses without an approved App Profile, a strategy, and a passing claim
-    check — the hook is the part of the video most likely to overpromise, and
-    it is the part a viewer decides in under two seconds.
-    """
-    require_ai_configured()
-    project = await _fetch_one(
-        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?", (project_id, user_id)
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Studio project not found")
-
-    profile = await _require_profile_for_studio(project.get("brand_profile_id"), user_id)
-
-    strategy = project.get("strategy") or {}
-    if isinstance(strategy, str):
-        try:
-            strategy = json.loads(strategy)
-        except (json.JSONDecodeError, TypeError):
-            strategy = {}
-    if not strategy.get("hook_line"):
-        raise HTTPException(
-            status_code=400,
-            detail="Create the video strategy first — the hook is generated from it.",
-        )
-
-    # The strategy is built from the approved script, so it describes THAT
-    # script's hook line. Editing the script afterwards bumps script_version and
-    # leaves the strategy quoting words the founder has since replaced — and the
-    # hook is the render, so it would be paid for.
-    #
-    # Refused rather than warned, because the cost of being wrong here is
-    # silent: the founder would watch a video built from a script they deleted,
-    # and nothing in the result would explain the mismatch. Rebuilding the
-    # strategy is free (text only).
-    built_from = int(project.get("strategy_script_version") or 0)
-    current_script = int(project.get("script_version") or 0)
-    if built_from and current_script and built_from != current_script:
-        # Say what this costs the founder beyond the click. Rebuilding the
-        # strategy is free, but if segments were already rendered they were paid
-        # for against the OLD strategy_version, and the extend path refuses them
-        # (parent_strategy_version). So the founder is told to rebuild, rebuilds,
-        # and only discovers the paid work is stranded on the next extend -- by
-        # which point the number matters. Guarded on a non-zero count: the hook
-        # is usually the first render, and warning about zero segments reads as
-        # a bug.
-        stranded = await _completed_segment_count(project_id, user_id)
-        cost_note = (
-            f" {stranded} segment(s) you have already paid for were made against the old "
-            f"strategy and will need regenerating."
-            if stranded
-            else ""
-        )
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"You have edited the script since this strategy was built (the strategy "
-                f"was built from script v{built_from}, the script is now v{current_script}), "
-                f"so the strategy still describes the old words. Rebuild the strategy to "
-                f"generate a hook from your current script. It is free — no video is "
-                f"generated until you ask.{cost_note}"
-            ),
-        )
-
-    report = _current_safety_report(project, profile)
-    if report and not report.get("passed", True):
-        blocking = [b.get("claim") for b in report.get("blocking", []) if b.get("claim")]
-        raise HTTPException(
-            status_code=409,
-            detail="Fix prohibited claims before generating: " + ", ".join(blocking[:3]),
-        )
-
-    template = await _fetch_one(
-        "SELECT * FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",
-        (project.get("template_id"), user_id),
-    )
-    if not template:
-        raise HTTPException(status_code=404, detail="Template not found")
-
-    model_key, reason = video_providers.resolve(payload.model or None)
-
-    # The wanted hook length, then what the provider can actually render, then
-    # the cut in between. A 3s hook is not something a model can render here —
-    # every provider's floor is 4s or more — so it is rendered at the floor and
-    # trimmed, and the difference is recorded rather than absorbed.
-    wanted = (
-        payload.duration_seconds
-        or project.get("hook_seconds")
-        or strategy.get("hook_seconds")
-        or video_providers.DEFAULT_HOOK_SECONDS
-    )
-    length_plan = video_providers.resolve_hook_length(int(wanted), model_key)
-    seconds = length_plan["render_seconds"]
-    if length_plan["guarantee"] == "trim_unavailable":
-        # Said before the render is paid for, not discovered afterwards.
-        raise HTTPException(status_code=409, detail=length_plan["note"])
-
-    generation = await _submit_generation(
-        project=project,
-        profile=profile,
-        template=template,
-        user_id=user_id,
-        model=model_key,
-        duration=seconds,
-        segment_role="primary",
-        segment_index=0,
-        is_hook=True,
-        strategy=strategy,
-        # A hook is the opening segment, so there is nothing to continue from.
-        # It still carries the character reference, and the continuity record
-        # says so explicitly rather than leaving "attached" empty.
-        continuity=video_providers.continuity_plan(
-            model_key,
-            has_bridge_frame=False,
-            has_parent_clip_url=False,
-            has_character_reference=any(
-                isinstance(a, dict)
-                and str(a.get("kind") or "").strip().lower() == "character_reference"
-                for a in (project.get("assets") or [])
-            ),
-        ),
-        hook_trim=length_plan["trim_to"],
-    )
-    generation["provider_reason"] = reason
-    generation["hook_length"] = length_plan
-    generation["duration"] = length_plan["trim_to"] or length_plan["render_seconds"]
-    return generation
-
-
-@api_router.post("/generations/{generation_id}/extend", status_code=202)
-async def extend_generation(
-    generation_id: str, payload: StudioGenerationRequest, user_id: str = Depends(get_current_user_id)
-):
-    """
-    Continue an approved video, preserving the person and the scene.
-
-    This is the request the influencer workflow depends on, and it works
-    differently from the generic "make it longer" extension:
-
-    1. The parent must be APPROVED. An unapproved take is never continued,
-       so a rejected hook cannot quietly become the first 4 seconds of the
-       final video.
-    2. The parent's final frame is extracted and sent as this segment's first
-       frame. That is the provider's own continuation mechanism, and it is
-       what makes the seam frame-identical rather than merely similar.
-    3. The parent clip and the original character reference ride along as
-       references when the provider can carry them, so identity, wardrobe and
-       motion are all anchored rather than re-described.
-    4. The prompt is rebuilt from the project's STRATEGY, not from the whole
-       original timeline, so the extension carries only its own beats plus an
-       explicit "the opening already established X, do not repeat it".
-    5. Whatever the provider cannot accept is returned as a recorded
-       degradation rather than being dropped silently.
-
-    The prompt is NOT regenerated from the full script, which is what used to
-    make an extension replay the hook with a new face.
-
-    Projects WITHOUT a strategy keep the original single-pass behaviour
-    unchanged, so the existing one-shot flow and its Extend button are
-    unaffected. The segmented contract above applies once a strategy exists,
-    which is what opts a project into the influencer workflow.
-    """
-    require_ai_configured()
-    row = await _fetch_one(
-        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Generation not found")
-    if row.get("status") != "completed":
-        raise HTTPException(
-            status_code=409, detail="Only a completed video can be extended."
-        )
-
-    project = await _fetch_one(
-        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?",
-        (row.get("studio_project_id"), user_id),
-    )
-    if not project:
-        raise HTTPException(status_code=409, detail="The studio project for this generation is gone")
-    profile = await _require_profile_for_studio(project.get("brand_profile_id"), user_id)
-    template = await _fetch_one(
-        "SELECT * FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",
-        (project.get("template_id"), user_id),
-    )
-    if not template:
-        raise HTTPException(status_code=409, detail="Template not found")
-
-    strategy = project.get("strategy") or {}
-    if isinstance(strategy, str):
-        try:
-            strategy = json.loads(strategy)
-        except (json.JSONDecodeError, TypeError):
-            strategy = {}
-
-    model_key, _reason = video_providers.resolve(row.get("model") or None)
-    cap = video_providers.capability(model_key)
-    # The founder picks how much to add. Resolve it against the provider the same
-    # way the hook's length is resolved: a length below the provider's floor is
-    # rendered at the floor and cut down, rather than silently becoming longer
-    # than asked for.
-    #
-    # A length ABOVE the ceiling is refused rather than clamped. Clamping is
-    # right for the floor (a trim can recover the exact length asked for) but
-    # wrong for the ceiling: asking for 60s on a 15s provider and receiving 15s
-    # is a different video, not a rounding difference.
-    requested_extra = int(payload.duration_seconds or DEFAULT_EXTENSION_SECONDS)
-    if requested_extra > cap["max_duration"]:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"{cap['name']} can add at most {cap['max_duration']}s in one pass, and "
-                f"you asked for {requested_extra}s. Extend more than once, or use a "
-                f"provider with a longer single-pass limit."
-            ),
-        )
-    length_plan = video_providers.resolve_length(requested_extra, model_key)
-    if length_plan["guarantee"] == "trim_unavailable":
-        raise HTTPException(status_code=409, detail=length_plan["note"])
-    extra = length_plan["render_seconds"]
-    trim_to = length_plan["trim_to"]
-
-    if not strategy:
-        # No strategy: this project is on the original one-shot flow, so keep
-        # its Extend behaviour exactly as it was — no approval gate, no
-        # continuity anchoring, and the same single-pass continuation prompt.
-        legacy = await _submit_generation(
-            project=project,
-            profile=profile,
-            template=template,
-            user_id=user_id,
-            model=model_key,
-            duration=extra,
-            segment_role="extension",
-            segment_index=0,
-            parent_generation_id=generation_id,
-            is_extension=True,
-            variation_kind="extension",
-            variation_params={"extra_seconds": extra, "source_model": row.get("model")},
-        )
-        legacy["extension_of"] = generation_id
-        return legacy
-
-    # Segmented influencer workflow. From here the contract is strict: only an
-    # approved take continues, and only under the strategy it was made with.
-    if not row.get("approved"):
-        raise HTTPException(
-            status_code=409,
-            detail="Approve this segment before extending it — only an approved take "
-                   "should continue the video.",
-        )
-
-    # Refuse to extend a segment that was built against a different strategy:
-    # an extension whose strategy disagrees with the approved hook would
-    # produce a video that contradicts itself halfway through.
-    parent_strategy_version = int(row.get("strategy_version") or 0)
-    project_strategy_version = int(project.get("strategy_version") or 0)
-    if parent_strategy_version and parent_strategy_version != project_strategy_version:
-        raise HTTPException(
-            status_code=409,
-            detail=f"This segment was made with strategy v{parent_strategy_version}, but the "
-                   f"project is now on v{project_strategy_version}. Regenerate the hook against "
-                   f"the current strategy before extending.",
-        )
-
-    # The same staleness check one level out: if the script has moved on since
-    # this strategy was built, the approved hook already disagrees with the
-    # approved script, so extending it would spend money compounding the
-    # disagreement. The hook render refuses this too, so reaching it means the
-    # script was edited after the hook was already made.
-    strategy_built_from = int(project.get("strategy_script_version") or 0)
-    current_script = int(project.get("script_version") or 0)
-    if strategy_built_from and current_script and strategy_built_from != current_script:
-        # Here the founder is already holding a segment they paid for, so the
-        # stranded count is the whole point of the message. `exclude_id` keeps
-        # this segment out of it: it is the one they are trying to extend, and
-        # it is the one that will actually regenerate.
-        stranded = await _completed_segment_count(
-            project["id"], user_id, exclude_id=generation_id
-        )
-        cost_note = (
-            f" {stranded} other segment(s) on this project were made against the old strategy "
-            f"and will need regenerating too."
-            if stranded
-            else ""
-        )
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"Your script has been edited since this video's strategy was built "
-                f"(script v{strategy_built_from} then, v{current_script} now), so this video "
-                f"no longer matches the script you approved. Rebuild the strategy and "
-                f"regenerate the hook. It is free to rebuild.{cost_note}"
-            ),
-        )
-
-    # Which segment is this? The chain is the approved ancestry plus this one.
-    segment_index = await _next_segment_index(row, user_id)
-
-    # Refuse to extend past the end of the planned arc.
-    #
-    # The strategy plans a sequence of beats precisely so each extension is a
-    # NEW beat. Past the last one there is nothing left to continue, and the old
-    # behaviour — silently falling back to the final planned beat — made every
-    # extra extension replay the previous one verbatim: same words, same action,
-    # the same clip twice. Improvising instead would be worse, because this
-    # workflow's whole premise is that an extension continues the ORIGINAL
-    # app-specific strategy. Rebuilding the strategy is free (text only).
-    planned = [
-        int(s.get("index", -1))
-        for s in (strategy.get("segments") or [])
-        if isinstance(s, dict)
-    ]
-    if planned and segment_index > max(planned):
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"The strategy plans {len(planned)} segments, and you have used all of "
-                f"them. Extending further would repeat a beat you have already made. "
-                f"Rebuild the strategy to plan a longer video, or join what you have."
-            ),
-        )
-
-    # The continuity anchors. The bridge frame is the whole point: it is the
-    # previous clip's last real frame, and it becomes this clip's first frame.
-    bridge_frame = None
-    parent_local = pipeline.VIDEOS_DIR / f"{generation_id}.mp4"
-    parent_public_url = row.get("r2_url") or row.get("video_url") or ""
-    if parent_local.is_file():
-        bridge_path = pipeline.GENERATED_DIR / f"bridge-{generation_id}.png"
-        bridge_frame = await pipeline.extract_last_frame(parent_local, bridge_path)
-        if not bridge_frame:
-            logger.warning(
-                f"Extension {generation_id}: the previous clip's final frame could not be "
-                f"extracted, so continuity will be text-only. The scene may be re-imagined."
-            )
-
-    assets = project.get("assets") or []
-    has_character = any(
-        isinstance(a, dict) and str(a.get("kind") or "").strip().lower() == "character_reference"
-        for a in assets
-    )
-    continuity = video_providers.continuity_plan(
-        model_key,
-        has_bridge_frame=bool(bridge_frame),
-        has_parent_clip_url=bool(parent_public_url),
-        has_character_reference=has_character,
-    )
-    if continuity.get("guarantee") == "unsupported":
-        raise HTTPException(status_code=409, detail=continuity.get("notes") or
-                            "This provider cannot generate a continuation segment.")
-
-    extension = await _submit_generation(
-        project=project,
-        profile=profile,
-        template=template,
-        user_id=user_id,
-        model=model_key,
-        duration=extra,
-        segment_role="extension",
-        segment_index=segment_index,
-        parent_generation_id=generation_id,
-        is_extension=True,
-        strategy=strategy,
-        continuity=continuity,
-        continuity_frame=bridge_frame,
-        continuity_video_url=parent_public_url if continuity.get("use_clip_reference") else "",
-        # The state the previous clip ENDS on, built from the strategy's own
-        # plan for the segment just rendered. This was `hook_line`, which is the
-        # line the video OPENED with, so every extension past the first was
-        # handed a description of segment 0 at the seam of segment 2 or 3. The
-        # bridge frame carries the pixels; this carries the moment.
-        previous_summary=generation_planning.describe_seam_state(
-            strategy, int(row.get("segment_index") or 0)
-        ),
-        hook_trim=trim_to,
-    )
-    extension["extension_of"] = generation_id
-    extension["continuity"] = continuity
-    extension["length_plan"] = length_plan
-    extension["duration"] = length_plan["trim_to"] or length_plan["render_seconds"]
-    return extension
-
-
-async def _next_segment_index(parent: dict, user_id: str) -> int:
-    """
-    The next position in the chain after a parent segment.
-
-    Walks the approved ancestry rather than counting rows, so a re-generated or
-    abandoned attempt cannot make two segments claim the same slot.
-    """
-    depth = 0
-    current = parent
-    seen = set()
-    while current and current.get("parent_generation_id") and depth < 20:
-        parent_id = current.get("parent_generation_id")
-        if parent_id in seen:
-            break
-        seen.add(parent_id)
-        current = await _fetch_one(
-            "SELECT * FROM generations WHERE id = ? AND user_id = ?", (parent_id, user_id)
-        )
-        depth += 1
-    return int(parent.get("segment_index") or 0) + 1
-
-
-@api_router.post("/generations/{generation_id}/assemble")
-async def assemble_generation_chain(
-    generation_id: str, payload: AssembleChainRequest, user_id: str = Depends(get_current_user_id)
-):
-    """
-    Join the approved segment chain into one downloadable MP4.
-
-    Only completed segments on this lineage are used, in order. Anything still
-    generating or not approved is reported as skipped, so a partial chain is
-    never quietly presented as the finished video.
-    """
-    tip = await _fetch_one(
-        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
-    )
-    if not tip:
-        raise HTTPException(status_code=404, detail="Generation not found")
-
-    # Walk back to the hook, then forward in order.
-    lineage = []
-    current = tip
-    seen = set()
-    while current and current.get("id") not in seen:
-        seen.add(current.get("id"))
-        lineage.append(current)
-        parent_id = current.get("parent_generation_id")
-        current = await _fetch_one(
-            "SELECT * FROM generations WHERE id = ? AND user_id = ?", (parent_id, user_id)
-        ) if parent_id else None
-    lineage.reverse()
-
-    include_all = bool(payload.include_all)
-    used, skipped = [], []
-    paths = []
-    for segment in lineage:
-        if segment.get("status") != "completed":
-            skipped.append({"id": segment.get("id"), "reason": f"status is '{segment.get('status')}'"})
-            continue
-        if not include_all and not segment.get("approved"):
-            skipped.append({"id": segment.get("id"), "reason": "not approved"})
-            continue
-        local = pipeline.VIDEOS_DIR / f"{segment.get('id')}.mp4"
-        if not local.is_file():
-            skipped.append({"id": segment.get("id"), "reason": "local clip is no longer available"})
-            continue
-        paths.append(local)
-        used.append({
-            "id": segment.get("id"),
-            "segment_index": int(segment.get("segment_index") or 0),
-            "duration": segment.get("duration"),
-        })
-
-    if not paths:
-        raise HTTPException(
-            status_code=409,
-            detail="No completed segments are available to assemble yet."
-                   + (f" Skipped: {len(skipped)}." if skipped else ""),
-        )
-
-    out_path = pipeline.VIDEOS_DIR / f"chain-{generation_id}.mp4"
-    assembled = await pipeline.concat_videos(paths, out_path)
-    if not assembled:
-        raise HTTPException(
-            status_code=502,
-            detail="The segments could not be joined into one file. Each segment is still "
-                   "available to download on its own.",
-        )
-
-    stored_url = None
-    try:
-        if storage_service.is_configured():
-            stored_url = storage_service.upload_video(user_id, f"chain-{generation_id}", assembled)
-    except Exception as e:  # storage is best-effort; the local file still exists
-        logger.warning(f"Chain assembly storage step failed: {e}")
-
-    return {
-        "id": f"chain-{generation_id}",
-        "output_path": str(assembled),
-        "r2_url": stored_url or "",
-        "video_url": stored_url or "",
-        "segments": used,
-        "skipped": skipped,
-        "segment_count": len(used),
-        "storage_error": None if stored_url else "R2 is not configured; the joined file is available locally only.",
-    }
 
 
 @api_router.post("/generations/{generation_id}/archive")
@@ -9414,10 +9050,11 @@ async def create_overlay_composition(
     Compose verified text onto a generated clip.
 
     This is the step that keeps on-screen text honest: the model supplies a
-    person and a scene, and the captions plus the CTA end card — both from
-    the claim-checked plan — are composited deterministically here. Nothing
-    else is composited: the character reference rides to the video model as
-    an input reference, and retired uploads are refused before composition.
+    person and a scene, and the captions — from the claim-checked plan — are
+    composited deterministically here. Nothing else is composited: no end card
+    (the call to action is the founder's own, added in their editor), the
+    character reference rides to the video model as an input reference, and
+    retired uploads are refused before composition.
 
     The composition is recorded separately from the generation so the exact
     composite can be re-rendered or audited without paying for another
@@ -9472,11 +9109,13 @@ async def create_overlay_composition(
     # retired uploads are refused before composition. Resolution still runs
     # so granular rejections (wrong profile, missing file, unconfirmed
     # rights) are reported rather than silently dropped.
-    spec = overlays.build_spec_from_plan(
-        plan=project,
-        cta=payload.end_card_text or project.get("cta") or "",
-        duration=float(generation.get("duration") or project.get("duration_seconds") or 0),
-    )
+    # Captions only. There is no end card: a call to action is added by the
+    # founder in their own editor, after the demo they record, and a card
+    # closing this file would overwrite the handoff frame the generated middle
+    # is built to end on. A caller passing end_card_text or include_end_card
+    # still gets them accepted by the schema for compatibility, but they can no
+    # longer put a close on the video.
+    spec = overlays.build_spec_from_plan(plan=project)
     if payload.captions:
         spec["captions"] = payload.captions[:12]
     if payload.include_captions is False:
@@ -9618,10 +9257,14 @@ async def list_generation_variations(generation_id: str, user_id: str = Depends(
     )
     if not parent:
         raise HTTPException(status_code=404, detail="Generation not found")
+    # parent_generation_id is historical: a variation is a fresh render, not an
+    # extension, so nothing new sets it. The query is kept so a chain recorded
+    # before this change still lists its children. `project_cta` is gone — a
+    # generated piece carries no call to action.
     rows = await _fetch_all(
         """SELECT g.id, g.status, g.model, g.duration, g.cost_usd, g.variation_kind,
                   g.variation_params, g.created_at, g.script_version, g.template_version,
-                  p.hook_line AS project_hook, p.cta AS project_cta
+                  p.hook_line AS project_hook, p.demo_brief AS project_demo_brief
            FROM generations g
            LEFT JOIN studio_projects p ON p.id = g.studio_project_id
            WHERE g.parent_generation_id = ? AND g.user_id = ?
@@ -9699,31 +9342,35 @@ async def create_variation(
     duration = template_library.clamp_duration(
         updates.get("duration_seconds", project.get("duration_seconds"))
     )
+    # A variation copies the plan's words and direction so the founder edits a
+    # near-identical video rather than writing one from scratch. `cta` is not
+    # copied — there is no call to action in a generated piece — and
+    # `feature_emphasis` is not copied either; `demo_brief` is what the founder
+    # needs when they record their own demo, so that carries over.
     await _execute(
         """INSERT INTO studio_projects
            (id, brand_profile_id, content_angle_id, template_id, template_version,
-            objective, audience, duration_seconds, tone, hook_line, script,
-            beat_timeline, visual_direction, feature_emphasis, overlays,
-            voice_direction, sound_direction, cta, assets, script_version,
-            status, created_at, updated_at, user_id)
+             objective, audience, duration_seconds, tone, hook_line, script,
+             beat_timeline, visual_direction, demo_brief, overlays,
+             voice_direction, sound_direction, assets, hook_seconds, script_version,
+             status, created_at, updated_at, user_id)
            SELECT ?, brand_profile_id, content_angle_id, ?, ?,
                   objective, ?, ?, ?,
                   COALESCE(?, hook_line), COALESCE(?, script),
                   beat_timeline, COALESCE(?, visual_direction),
-                  COALESCE(?, feature_emphasis), overlays,
-                  voice_direction, sound_direction, COALESCE(?, cta), assets,
+                  COALESCE(?, demo_brief), overlays,
+                  voice_direction, sound_direction, assets, hook_seconds,
                   0, 'draft', ?, ?, ?
            FROM studio_projects WHERE id = ?""",
         # Order MUST match the SELECT placeholder order: id, template_id,
         # template_version, audience, duration, tone, hook_line, script,
-        # visual_direction, feature_emphasis, cta, created, updated, user, src.
+        # visual_direction, demo_brief, created, updated, user, src.
         (new_id,
          updates.get("template_id", project.get("template_id")), template_version,
          updates.get("audience", project.get("audience")), duration,
          updates.get("tone", project.get("tone")),
          updates.get("hook_line"), updates.get("script"),
-         updates.get("visual_direction"), updates.get("feature_emphasis"),
-         updates.get("cta"),
+         updates.get("visual_direction"), updates.get("demo_brief"),
          now, now, user_id, project["id"]),
     )
 
@@ -9803,20 +9450,28 @@ async def duplicate_generation(
 
     new_id = str(uuid.uuid4())
     now = now_iso()
+    # Copies the approved plan verbatim so the founder can re-render the same
+    # setup unchanged. `cta` is dropped (a generated piece has no call to action)
+    # and `feature_emphasis` is replaced by `demo_brief`. The duration is
+    # re-clamped, because a project saved before this change may carry a 20s or
+    # 30s target that no single pass can produce.
     await _execute(
         """INSERT INTO studio_projects
            (id, brand_profile_id, content_angle_id, template_id, template_version,
-            objective, audience, duration_seconds, tone, hook_line, script,
-            beat_timeline, visual_direction, feature_emphasis, overlays,
-            voice_direction, sound_direction, cta, assets, safety_report,
-            safety_summary, script_version, status, created_at, updated_at, user_id)
+             objective, audience, duration_seconds, tone, hook_line, script,
+             beat_timeline, visual_direction, demo_brief, overlays,
+             voice_direction, sound_direction, assets, hook_seconds, safety_report,
+             safety_summary, script_version, status, created_at, updated_at, user_id)
            SELECT ?, brand_profile_id, content_angle_id, template_id, template_version,
-                  objective, audience, duration_seconds, tone, hook_line, script,
-                  beat_timeline, visual_direction, feature_emphasis, overlays,
-                  voice_direction, sound_direction, cta, assets, safety_report,
+                  objective, ?, ?, tone, hook_line, script,
+                  beat_timeline, visual_direction, demo_brief, overlays,
+                  voice_direction, sound_direction, assets, ?, safety_report,
                   safety_summary, script_version, 'draft', ?, ?, ?
            FROM studio_projects WHERE id = ?""",
-        (new_id, now, now, user_id, project["id"]),
+        (new_id, project.get("audience"),
+         template_library.clamp_duration(project.get("duration_seconds")),
+         int(project.get("hook_seconds") or 0),
+         now, now, user_id, project["id"]),
     )
 
     # Lineage on the parent, the same channel variations use, so the duplicate
@@ -9870,7 +9525,7 @@ async def generation_history(
                    g.status, g.segment_role, g.attempt, g.parent_generation_id,
                    g.variation_kind, g.cost_usd, g.cost_source, g.video_url,
                    g.r2_url, g.error, g.retryable, g.created_at, g.completed_at,
-                   b.brand_name, p.objective, p.hook_line, p.cta, p.audience
+                   b.brand_name, p.objective, p.hook_line, p.demo_brief, p.audience
             FROM generations g
             LEFT JOIN studio_projects p ON p.id = g.studio_project_id
             LEFT JOIN brand_profiles b ON b.id = g.brand_profile_id
@@ -10121,18 +9776,23 @@ async def run_trend_research(
     for draft in drafts:
         template_id = str(uuid.uuid4())
         await _execute(
+            # default_duration is the library default, not a literal 20: a
+            # generated piece is one render, and 20s is longer than the model
+            # can do in a pass.
             """INSERT INTO hook_templates
                (id, name, category, app_categories, objective, opening_structure,
-                hook_seconds, continuation_structure, cta_pattern, visual_style,
+                hook_seconds, middle_structure, visual_style,
                 camera_pacing, required_assets, default_duration, content_slots,
                 evidence_note, trend_evidence, version, archived, is_favorite, origin,
                 review_status, times_used, created_at, updated_at, user_id)
-               VALUES (?, ?, ?, ?, '', ?, 3, ?, ?, ?, ?, '[]', 20, ?, ?, ?, 1, 0, 0,
+               VALUES (?, ?, ?, ?, '', ?, 3, ?, ?,
+                       '[]', ?, ?, ?, ?, ?, 1, 0, 0,
                        'research_draft', 'draft', 0, ?, ?, ?)""",
             (template_id, draft["name"][:80], draft["category"],
              json.dumps(draft.get("suits") or []), draft["opening_structure"],
-             draft["continuation_structure"], draft["cta_pattern"],
-             "abstracted", draft.get("pacing_note", ""), draft.get("hook_mechanic", ""),
+             draft["middle_structure"],
+             "abstracted", draft.get("hook_mechanic", ""), json.dumps(["character_reference"]),
+             template_library.DEFAULT_DURATION, json.dumps(draft.get("content_slots") or {}),
              draft["evidence_note"], json.dumps(scan_evidence), now_iso(), now_iso(), user_id),
         )
         created.append({
@@ -10142,8 +9802,7 @@ async def run_trend_research(
             # Reviewable inline on the Trend Research page, which is the only
             # review surface now that the library pages are gone.
             "opening_structure": draft["opening_structure"],
-            "continuation_structure": draft["continuation_structure"],
-            "cta_pattern": draft["cta_pattern"],
+            "middle_structure": draft["middle_structure"],
             "hook_mechanic": draft.get("hook_mechanic", ""),
         })
 

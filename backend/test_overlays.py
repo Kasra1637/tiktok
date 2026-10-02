@@ -266,65 +266,104 @@ PLAN = {
         {"start": 0, "end": 3, "text": "one prompt"},
         {"start": 4, "end": 7, "text": "100% offline"},
     ],
+    # Left in deliberately. The plan no longer carries a `cta`, but an old saved
+    # project can still have the column populated, and reading it here would put
+    # a closing beat into footage that is supposed to stop at the reach for the
+    # phone. `test_a_stale_cta_column_is_never_composited` is the assertion that
+    # it cannot.
     "cta": "Try it free",
 }
 
 
 class TestSpecFromPlan:
     def test_captions_come_from_the_plan(self):
-        spec = overlays.build_spec_from_plan(PLAN, duration=12)
+        spec = overlays.build_spec_from_plan(PLAN)
         assert [c["text"] for c in spec["captions"]] == ["one prompt", "100% offline"]
 
-    def test_end_card_uses_the_cta(self):
-        spec = overlays.build_spec_from_plan(PLAN, duration=12)
-        assert spec["end_card"]["text"] == "Try it free"
-        assert spec["end_card"]["end"] == 12
+    def test_there_is_no_end_card(self):
+        """
+        Was `test_end_card_uses_the_cta`: it asserted the end card was built
+        FROM the plan's cta, over a duration passed in by the caller.
 
-    def test_end_card_absent_without_a_cta(self):
-        spec = overlays.build_spec_from_plan({"overlays": []}, duration=12)
+        There is no end card and no cta to build one from. A call to action is
+        the founder's own, added in their editor after the demo they record; the
+        generated piece is a hook and a middle and is meant to stop at the
+        moment the viewer reaches for the app. A three-second card closing the
+        file would overwrite exactly the frame that hands off to their footage.
+
+        So the invariant is stronger than the one it replaced — the spec carries
+        no closing beat under ANY plan, rather than a closing beat built from
+        whatever cta happened to be on file.
+        """
+        spec = overlays.build_spec_from_plan(PLAN)
         assert spec["end_card"] is None
+
+    def test_a_stale_cta_column_is_never_composited(self):
+        """
+        The `cta` column survives in the schema for rows written before it
+        stopped being generated, so `PLAN` above still carries one. It must not
+        become an end card: a founder who has already recorded their own close
+        would get a second, generated one burnt into the footage they paid for.
+        """
+        spec = overlays.build_spec_from_plan({"overlays": [], "cta": "Try it free"})
+        assert spec["end_card"] is None
+        assert "Try it free" not in str(spec)
+
+    def test_the_signature_takes_only_a_plan(self):
+        """
+        `cta` and `duration` used to be parameters. They are gone rather than
+        ignored, so a caller still passing them gets a loud TypeError instead of
+        believing it is still compositing a close — which is what silently
+        accepting them would have looked like.
+        """
+        import inspect
+        params = inspect.signature(overlays.build_spec_from_plan).parameters
+        assert list(params) == ["plan"]
+        with pytest.raises(TypeError):
+            overlays.build_spec_from_plan(PLAN, cta="Try it free", duration=12)
 
     def test_attachments_never_enter_the_spec(self):
         """
         Face-only product: the character reference rides to the video model
         as an input reference, never as an overlay — and retired uploads are
-        refused upstream. The spec carries captions and the end card only,
-        no matter what attachment rows still exist.
+        refused upstream. The spec carries captions only, no matter what
+        attachment rows still exist.
         """
-        spec = overlays.build_spec_from_plan(
-            PLAN,
-            duration=12,
-        )
+        spec = overlays.build_spec_from_plan(PLAN)
         assert spec["images"] == []
         assert spec["videos"] == []
         assert spec["audios"] == []
         assert [c["text"] for c in spec["captions"]] == ["one prompt", "100% offline"]
-        assert spec["end_card"]["text"] == "Try it free"
 
     def test_caption_text_is_length_capped(self):
         long_plan = {"overlays": [{"start": 0, "end": 3, "text": "x" * 500}]}
-        spec = overlays.build_spec_from_plan(long_plan, duration=10)
+        spec = overlays.build_spec_from_plan(long_plan)
         assert len(spec["captions"][0]["text"]) <= 60
 
     def test_blank_overlay_text_is_dropped(self):
         spec = overlays.build_spec_from_plan(
-            {"overlays": [{"start": 0, "end": 3, "text": "   "}]}, duration=10)
+            {"overlays": [{"start": 0, "end": 3, "text": "   "}]})
         assert spec["captions"] == []
 
     def test_no_new_copy_is_invented(self):
         """
         Copy written at composition time never passed the claim check, so the
         spec may only carry text the reviewed plan already contained.
+
+        Was also asserting the cta surfaced in the spec. That text no longer
+        reaches composition at all, so the assertion moved to
+        `test_a_stale_cta_column_is_never_composited`; what is left here is the
+        one-directional property — verified plan copy appears, and the only
+        other thing in the blob is the spec's own skeleton.
         """
         spec = overlays.build_spec_from_plan(
-            {"overlays": [{"start": 0, "end": 3, "text": "verified line"}], "cta": "Verified CTA"},
-            [], duration=10)
+            {"overlays": [{"start": 0, "end": 3, "text": "verified line"}], "cta": "Verified CTA"})
         blob = str(spec)
         assert "verified line" in blob
-        assert "Verified CTA" in blob
+        assert "Verified CTA" not in blob
 
     def test_missing_plan_is_safe(self):
-        spec = overlays.build_spec_from_plan({}, duration=0)
+        spec = overlays.build_spec_from_plan({})
         assert spec["captions"] == [] and spec["end_card"] is None
 
 

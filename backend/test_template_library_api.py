@@ -206,6 +206,72 @@ class TestFaceOnlyMigration:
         assert public["is_usable"] is False
 
 
+class TestTwoSectionTemplateMigration:
+    """
+    A curated row seeded before the two-section change still describes a
+    three-beat arc ending in a CTA, with a `continuation_structure`, a
+    `cta_pattern` and a default_duration of 20 or 30.
+
+    Those descriptions are read straight into the plan and render prompts, so
+    leaving them would have the prompts contradicting the two-section model.
+    Seeding cannot fix it — it matches on name and skips anything already
+    present — so init_db rewrites the row in place, once, by name.
+    """
+
+    def _restore_old_shape(self, api, name="Pattern Interrupt"):
+        _run(api._execute(
+            "UPDATE hook_templates SET middle_structure = NULL, hook_seconds = 7, "
+            "opening_structure = 'Old three-beat opening.', default_duration = 30, "
+            "content_slots = ? WHERE name = ? AND origin = 'curated'",
+            ('{"pattern_beat": "old"}', name),
+        ))
+        _run(api.init_db())
+
+    def test_an_old_shape_row_is_rewritten_to_two_sections(self, api):
+        import template_library as tl
+        curated = next(t for t in tl.CURATED_TEMPLATES if t["name"] == "Pattern Interrupt")
+        self._restore_old_shape(api)
+        row = _run(api._fetch_one(
+            "SELECT opening_structure, hook_seconds, middle_structure, "
+            "content_slots, default_duration FROM hook_templates "
+            "WHERE name = 'Pattern Interrupt' AND origin = 'curated'"))
+        assert row["middle_structure"] == curated["middle_structure"]
+        assert row["opening_structure"] == curated["opening_structure"]
+        assert row["hook_seconds"] == curated["hook_seconds"]
+        assert row["content_slots"] == curated["content_slots"]
+        # 30s is a length no studio-eligible model can produce in one pass, and
+        # a video is one render, so it cannot survive as a template default.
+        assert row["default_duration"] == curated["default_duration"]
+        assert row["default_duration"] in tl.SUPPORTED_DURATIONS
+
+    def test_the_rewrite_happens_once_not_on_every_boot(self, api):
+        """
+        The rewrite is guarded on the row actually differing. Doing it
+        unconditionally meant every deploy bumped every curated template's
+        version by one forever — which destroys the only thing the bump exists
+        to carry, "this project was built against a different structure", and
+        makes a redeploy with no schema change look like a content change to
+        every project pinned to a template.
+        """
+        import template_library as tl
+        self._restore_old_shape(api)
+        after_migration = _run(api._fetch_one(
+            "SELECT version FROM hook_templates "
+            "WHERE name = 'Pattern Interrupt' AND origin = 'curated'"))["version"]
+        assert after_migration > 1, "the stale row should have been rewritten"
+
+        for _ in range(3):
+            _run(api.init_db())
+        settled = _run(api._fetch_one(
+            "SELECT version FROM hook_templates "
+            "WHERE name = 'Pattern Interrupt' AND origin = 'curated'"))["version"]
+        assert settled == after_migration, (
+            "a further boot changed a curated template's version with nothing to "
+            "rewrite, which reads as a content change"
+        )
+        assert len(tl.CURATED_TEMPLATES) == 10
+
+
 class TestTemplateListing:
     def test_lists_curated_templates(self, api):
         # Scoped to origin='curated': other tests in this shared database
@@ -232,9 +298,27 @@ class TestTemplateListing:
         assert "Pattern Interrupt" in [t["name"] for t in result["templates"]]
 
     def test_category_filter(self, api):
+        """
+        Was a bare `len(...) == 2`, which depended on a row some other test in
+        this shared database happened to leave behind. Pinned to the curated
+        library instead: the filter must return the curated template that
+        declares the mechanic and nothing from another category, and the count
+        follows the library rather than the fixtures.
+
+        Exactly one curated template is a story. The other used to be a retired
+        template-led one, so the count fell from two to one when those were
+        archived.
+        """
+        import template_library as tl
+        expected = [t["name"] for t in tl.CURATED_TEMPLATES if t["category"] == "story"]
+        assert expected == ["Day in the Life"]
         result = _run(api.list_templates(category="story", user_id=ANON))
-        assert len(result["templates"]) == 2
         assert all(t["category"] == "story" for t in result["templates"])
+        curated = sorted(
+            t["name"] for t in result["templates"]
+            if t.get("origin") == "curated" and not t.get("archived")
+        )
+        assert curated == expected
 
     def test_objective_filter(self, api):
         result = _run(api.list_templates(objective="educate_viewers", user_id=ANON))
@@ -250,16 +334,24 @@ class TestTemplateListing:
         assert len(facets["hook_categories"]) >= 12
         assert len(facets["objectives"]) == 10
         assert len(facets["content_angle_kinds"]) == 12
-        assert facets["supported_durations"] == [10, 15, 20, 30]
+        # Every supported length is one render now. Was [10, 15, 20, 30], which
+        # offered two lengths no studio-eligible model could produce in a single
+        # pass — a length is a render length, not a plan for several.
+        assert facets["supported_durations"] == [8, 10, 12, 15]
         assert facets["asset_kinds"] == ["character_reference"]
 
     def test_facets_state_how_many_renders_each_length_costs(self, api):
-        """The length picker labels a multi-pass total before it is chosen.
+        """The length picker labels the render cost before the length is chosen.
 
-        Every segment past the first is a separate paid render, and no
-        studio-eligible model covers 20s in one pass, so the founder has to be
-        able to read the cost off the option rather than discover it at the
-        extend button.
+        Every segment past the first is a separate paid render, and the count
+        has to be readable off the option rather than discovered at the extend
+        button.
+
+        Every supported length is now ONE render — that is what the list means —
+        so the count is 1 for all of them, and the invariant worth pinning is
+        that the ceiling is derived from the live model's single-pass limit
+        rather than baked in. Pointing VIDEO_MODEL_DEFAULT at a shorter model
+        would still have to raise a length's count rather than silently lie.
         """
         import video_providers
 
@@ -273,6 +365,9 @@ class TestTemplateListing:
             assert counts[d] >= 1
         # No supported total is ever free, whatever the model turns out to be.
         assert all(v >= 1 for v in counts.values())
+        # And with the current model, one render each.
+        assert max_pass >= max(facets["supported_durations"])
+        assert all(v == 1 for v in counts.values())
 
     def test_unknown_category_filter_returns_empty_not_error(self, api):
         # Scoped to curated: "nonsense" normalizes to "other", which matches
