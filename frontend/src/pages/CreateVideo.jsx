@@ -29,9 +29,11 @@ import {
   clampHookSeconds,
   DEFAULT_HOOK_SECONDS,
 } from "../lib/videoLength";
+// FileText was the "Creative plan" step's icon. That step held nothing but a
+// button and is now the top of Review, so the icon went with it.
 import {
   Clapperboard, Loader2, AlertTriangle, Briefcase, Target, LayoutTemplate,
-  Image as ImageIcon, FileText, Check, Sparkles, RefreshCw,
+  Image as ImageIcon, Check, Sparkles, RefreshCw,
   Save, CheckCircle2, Star, Plus, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -49,19 +51,35 @@ import { toast } from "sonner";
 // strategy on trust, spent money on a render, and only then read a script
 // describing a different video — with the claim check and the SafetyPanel
 // running against text nobody had looked at before the spend.
+/**
+ * The five steps, in order.
+ *
+ * Was seven. "Assets" and "Creative plan" were steps that existed only to hold a
+ * button, and both are now part of the step they belonged to:
+ *
+ *   - Assets was a photo upload. The template step already says what a template
+ *     needs from you and already links to it, so the upload moved there and the
+ *     step went from "pick a template, then leave to attach a photo, then come
+ *     back" to one continuous decision.
+ *   - Creative plan was a "Generate plan" button whose result you immediately had
+ *     to go to the next screen to read. It is now the top of Review, which is
+ *     where the plan is actually read and edited.
+ *
+ * The step count is not a vanity metric; every extra step is a place a founder
+ * can stall with nothing to do, and nothing is spent until the last one.
+ *
+ * Last, because this is the only step that spends money. The plan is free text,
+ * and it is what that step renders.
+ *
+ * Named for what it produces rather than for the old hook-first workflow: one
+ * render containing a hook and a middle. The demo and the close are the
+ * founder's own footage, added afterwards in their editor.
+ */
 const STEPS = [
   { key: "profile", label: "App Profile", icon: Briefcase },
   { key: "angle", label: "Audience & goal", icon: Target },
-  { key: "template", label: "Hook template", icon: LayoutTemplate },
-  { key: "assets", label: "Assets", icon: ImageIcon },
-  { key: "plan", label: "Creative plan", icon: FileText },
+  { key: "template", label: "Template & photo", icon: LayoutTemplate },
   { key: "review", label: "Review", icon: CheckCircle2 },
-  // Last, because this is the only step that spends money. The plan above is
-  // free text, and it is what this step renders.
-  //
-  // Named for what it produces rather than for the old hook-first workflow: one
-  // render containing a hook and a middle. The demo and the close are the
-  // founder's own footage, added afterwards in their editor.
   { key: "hook", label: "Hook & middle", icon: Sparkles },
 ];
 
@@ -229,7 +247,7 @@ function TemplateShape({ template }) {
  * of somebody who looks nothing like them. The server refuses that case
  * before spending, so this is the early warning rather than the guarantee.
  */
-function MissingRequirements({ identity, onGoToAssets }) {
+function MissingRequirements({ identity, onGoToTemplatePhoto }) {
   if (!identity || identity.length === 0) return null;
 
   return (
@@ -242,9 +260,12 @@ function MissingRequirements({ identity, onGoToAssets }) {
         is the person in the reference, and the scene around them is invented
         from the App Profile. Without one the model would invent somebody else.
       </p>
-      {onGoToAssets && (
-        <Button variant="secondary" size="sm" onClick={onGoToAssets}>
-          <ImageIcon className="h-3.5 w-3.5" /> Attach in the Assets step
+      {/* The button says where the upload is, and the upload is on the template
+          step now. It used to point at a step called "Assets" whose only
+          content was this same upload. */}
+      {onGoToTemplatePhoto && (
+        <Button variant="secondary" size="sm" onClick={onGoToTemplatePhoto}>
+          <ImageIcon className="h-3.5 w-3.5" /> Add your photo
         </Button>
       )}
     </div>
@@ -268,48 +289,22 @@ function StepShell({ icon: Icon, title, description, children }) {
   );
 }
 
-function AttachmentRow({ project, attachment, duration, onChanged }) {
-  const isAudio = attachment.kind === "audio";
-  // The face rides to the video model as an input reference for the whole
-  // generation — it has no on-screen timing. Start/end/save exist for legacy
-  // overlay rows only, so a face row is a confirmation plus a Remove button
-  // and nothing that implies unfinished work.
-  const isFace = attachment.kind === "character_reference";
-  const [start, setStart] = useState(String(attachment.start ?? 0));
-  const [end, setEnd] = useState(attachment.end ?? duration ?? "");
-  const [role, setRole] = useState(attachment.audio_role || "background");
-  const [gain, setGain] = useState(String(attachment.audio_gain ?? (role === "voiceover" ? 1 : 0.25)));
-  const [saving, setSaving] = useState(false);
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      const fresh = await api.getStudioProject(project.id);
-      const next = (fresh.assets || []).map((a) => {
-        if (a.asset_id !== attachment.asset_id) return a;
-        const updated = {
-          ...a,
-          start: start === "" ? 0 : Number(start),
-          end: end === "" ? undefined : Number(end),
-        };
-        if (isAudio) {
-          updated.audio_role = role;
-          updated.audio_gain = gain === "" ? undefined : Number(gain);
-        } else {
-          delete updated.audio_role;
-          delete updated.audio_gain;
-        }
-        return updated;
-      });
-      const saved = await api.updateStudioProject(project.id, { assets: next });
-      onChanged(saved);
-    } catch (err) {
-      toast.error(getErrorMessage(err));
-    } finally {
-      setSaving(false);
-    }
-  };
-
+/**
+ * One attached photograph, and a Remove button.
+ *
+ * This used to carry start/end seconds, an audio role and a gain, plus a "Save
+ * timing" button that wrote them back. None of it does anything now. The video
+ * is one render with captions composited over it, so there is no in and out
+ * point for an asset, and audio mixing was never reachable from the studio —
+ * the composition spec is captions only. The controls rendered as though a
+ * founder could place their own face on screen at 4 seconds and hear it at
+ * twice the volume, and none of those writes changed the output.
+ *
+ * The photograph itself has no timing either: it rides to the model as an input
+ * reference for the whole generation. So a row is now a confirmation that it is
+ * attached, and a way to detach it.
+ */
+function AttachedPhoto({ project, attachment, onChanged }) {
   const detach = async () => {
     try {
       await api.detachAsset(project.id, attachment.asset_id);
@@ -321,79 +316,93 @@ function AttachmentRow({ project, attachment, duration, onChanged }) {
   };
 
   return (
-    <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-3">
-      <div className="flex items-center gap-3">
-        <Badge variant="secondary" className="shrink-0 text-[11px]">
-          {humanize(attachment.kind)}
-        </Badge>
-        <span className="min-w-0 flex-1 truncate text-sm">
-          {attachment.label || attachment.asset_id.slice(0, 8)}
-        </span>
-        {!isFace && (
-          <span className="shrink-0 text-xs text-muted-foreground">
-            {attachment.start ?? 0}&ndash;{attachment.end ?? "end"}s
-            {isAudio ? ` · ${attachment.audio_role || "background"}` : ""}
-          </span>
-        )}
-        <Button variant="ghost" size="sm" aria-label="Remove from project" onClick={detach}>
-          Remove
-        </Button>
-      </div>
-      {!isFace && (
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-        <label className="space-y-1">
-          <span className="text-[11px] text-muted-foreground">Start (s)</span>
-          <Input type="number" min="0" value={start} onChange={(e) => setStart(e.target.value)} />
-        </label>
-        <label className="space-y-1">
-          <span className="text-[11px] text-muted-foreground">End (s)</span>
-          <Input
-            type="number"
-            min="0"
-            value={end}
-            onChange={(e) => setEnd(e.target.value)}
-            placeholder={duration ? String(duration) : "End"}
-          />
-        </label>
-        {isAudio && (
-          <>
-            <label className="space-y-1">
-              <span className="text-[11px] text-muted-foreground">Use as</span>
-              <select
-                value={role}
-                onChange={(e) => {
-                  setRole(e.target.value);
-                  setGain(e.target.value === "voiceover" ? "1" : "0.25");
-                }}
-                className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-2 py-1.5 text-xs"
-              >
-                <option value="background">Background</option>
-                <option value="voiceover">Voiceover</option>
-              </select>
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] text-muted-foreground">Gain</span>
-              <Input
-                type="number"
-                min="0"
-                max="2"
-                step="0.05"
-                value={gain}
-                onChange={(e) => setGain(e.target.value)}
-              />
-            </label>
-          </>
-        )}
-        <div className="flex items-end">
-          <Button variant="secondary" size="sm" disabled={saving} onClick={save}>
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-            Save timing
-          </Button>
-        </div>
-      </div>
-      )}
+    <div className="flex items-center gap-3 rounded-xl border border-[color:var(--hairline)] p-3">
+      <Badge variant="secondary" className="shrink-0 text-[11px]">
+        {humanize(attachment.kind)}
+      </Badge>
+      <span className="min-w-0 flex-1 truncate text-sm">
+        {attachment.label || attachment.asset_id.slice(0, 8)}
+      </span>
+      <span className="shrink-0 text-xs text-muted-foreground">
+        used for the whole video
+      </span>
+      <Button variant="ghost" size="sm" aria-label="Remove from project" onClick={detach}>
+        Remove
+      </Button>
     </div>
   );
+}
+
+/** What each progress state means, in words. Used for the pill tooltip and
+ *  the aria-label, because both a tick and a dashed border are shape-only. */
+const STEP_STATE_COPY = {
+  done: "done",
+  todo: "not started",
+  blocked: "needs something from you",
+};
+
+/**
+ * Whether each step is satisfied, in the wizard's own terms.
+ *
+ * Returns one entry per STEPS item in order. `blocked` is not an error state —
+ * it is the only step that can be waiting on the founder, and it is
+ * distinguished from `todo` because the remedy is different: a todo is
+ * downstream of work not yet done, a blocked step is the next thing they must
+ * do.
+ *
+ * Review counts as satisfied once a plan exists. It does NOT require the
+ * plan to be marked ready: that is a deliberate final gate the founder sets
+ * themselves after reading, and ticking the step for it would claim the
+ * workflow is finished when the last read is still ahead of them.
+ */
+function stepCompletion({ profileId, objective, templateId, project, missingIdentity, hasEdits }) {
+  const hasPhoto = missingIdentity.length === 0;
+  return STEPS.map((step) => {
+    let state = "done";
+    if (step.key === "profile") state = profileId ? "done" : "todo";
+    else if (step.key === "angle") state = objective ? "done" : "blocked";
+    else if (step.key === "template") {
+      if (!templateId) state = "blocked";
+      else if (!hasPhoto) state = "blocked";
+    }     else if (step.key === "review") {
+      // A plan with unsaved edits is not reviewed. The step says so itself, and
+      // a tick here would tell the founder they had finished reading a script
+      // they had changed and not stored.
+      if (!project?.script_version) state = "todo";
+      else if (hasEdits) state = "blocked";
+    } else {
+      // The render step has NO completion state, deliberately. A clip can be
+      // generated, but the workflow does not end there - it ends at "attach
+      // your own demo", which happens in the founder's editor and cannot be
+      // observed from here. So this step is never ticked: doing so would claim
+      // the job is finished when the half the founder still has to shoot is not.
+      // It reports what is waiting instead.
+      state = templateId && !hasPhoto ? "blocked" : "todo";
+    }
+    return { step, state };
+  });
+}
+
+/** The one sentence under the pills. Names the first thing actually waiting. */
+function nextStepMessage(stepStates, step) {
+  const current = stepStates[step];
+  if (current.state === "blocked") {
+    if (current.step.key === "angle") {
+      return "Next: choose what this video is for. It is the strongest signal in the template score.";
+    }
+    if (current.step.key === "template" && !stepStates[2].state.startsWith("d")) {
+      return "Next: pick a template and add your photo. Both are needed before anything can be generated.";
+    }
+  }
+  if (step === 0) return "Nothing is spent until the last step.";
+  if (stepStates.every((s) => s.state === "done")) {
+    return "Everything is ready. Open Hook & middle to render — that is the only step that costs money.";
+  }
+  const first = stepStates.findIndex((s) => s.state !== "done");
+  if (first > step) {
+    return `${stepStates[first].step.label} is still ahead of you.`;
+  }
+  return "Nothing is spent until the last step.";
 }
 
 export default function CreateVideo() {
@@ -464,9 +473,16 @@ export default function CreateVideo() {
             setRecommendations([]);
             setEdits({});
             // A duplicate always arrives with its plan intact, so it opens on
-            // Review; an unplanned draft still needs assets before a plan can
-            // be written.
-            setStep(draft.script_version > 0 ? 5 : 3);
+            // Review; an unplanned draft still needs a photo before a plan can
+            // be written. Both indices are looked up by KEY rather than written
+            // as numbers: the wizard was seven steps and is now five, and a
+            // hardcoded index is exactly what silently sent a deep link past
+            // the end of the wizard.
+            setStep(
+              draft.script_version > 0
+                ? STEPS.findIndex((s) => s.key === "review")
+                : STEPS.findIndex((s) => s.key === "template")
+            );
           } catch (err) {
             if (cancelled) return;
             setError(getErrorMessage(err));
@@ -733,14 +749,30 @@ export default function CreateVideo() {
       });
       setProject(updated);
       setEdits({});
-      // Straight to Review: the plan is the thing to read, and the render step
-      // below it is the first one that spends money.
-      setStep(5);
+      // Straight to the top of Review, which is this step now: the plan is the
+      // thing to read, and the render step below it is the first one that
+      // spends money. The old indices were 5 (Review) and 6 (Hook & middle);
+      // merging the plan step into Review moved both down by one.
+      setStep(3);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
       setBusy(false);
     }
+  };
+
+  /* Takes the founder to the photo upload, wherever they currently are.
+     It lives on the template step now, so this both jumps to that step and
+     scrolls to the field — otherwise "Add your photo" would land them on a step
+     with nothing obviously about photographs in view. */
+  const scrollToTemplatePhoto = () => {
+    setStep(2);
+    // After the step renders, not before: the element does not exist yet.
+    requestAnimationFrame(() => {
+      document
+        .getElementById("template-photo")
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
   };
 
   const handleSaveEdits = async () => {
@@ -855,6 +887,20 @@ export default function CreateVideo() {
     }));
   };
 
+  /* Progress state, derived rather than tracked. A founder can reach any step
+     from any other, so nothing here can be a counter that advances — the pills
+     have to be recomputed from what actually exists, or they go stale the moment
+     they change something on an earlier step. */
+  const stepStates = stepCompletion({
+    profileId,
+    objective,
+    templateId,
+    project,
+    missingIdentity,
+    hasEdits,
+  });
+  const nextUp = nextStepMessage(stepStates, step);
+
   const stepContent = renderStep();
 
   function renderStep() {
@@ -936,16 +982,28 @@ export default function CreateVideo() {
         <StepShell
           icon={Target}
           title="Audience and goal"
-          description="Pick the audience segment and what this video is meant to achieve."
+          description="Pick the audience segment, and say what this video is for. Both change which template is recommended."
         >
           <div className="space-y-4">
+            {/* The content angle is optional, and this now says so. It was
+                labelled exactly like the objective and read as required, so a
+                founder who wanted to move fast reasonably skipped it — then had
+                no way to tell that skipping it narrowed the template match. */}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Content angle</label>
+              <label className="text-sm font-medium">
+                Content angle{" "}
+                <span className="font-normal text-muted-foreground">(optional)</span>
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Who this video is for. Your App Profile already describes your audience, so this
+                narrows the match further rather than defining it.
+              </p>
               {angles.length === 0 ? (
                 <Alert>
                   <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
                   <AlertDescription>
-                    No content angles yet. Generate them on the profile page first.
+                    No content angles on this profile yet. Generate them on the profile page if you
+                    want to target one audience — or skip this and pick an objective below.
                   </AlertDescription>
                 </Alert>
               ) : (
@@ -997,19 +1055,36 @@ export default function CreateVideo() {
               <p className="text-xs text-muted-foreground">
                 {template
                   ? `The length comes from ${template.name} and is not a choice — pick a different template for a different one.`
-                  : "Choose a hook template and its length is used."}{" "}
+                  : "Choose a template and its length is used."}{" "}
                 There is no product demo in the generated video and no closing
                 card: you record the demo yourself, add your own call to action
                 after it, then post the result.
               </p>
             </div>
 
+            {/* The objective is REQUIRED, which it was not until now, and it is
+                the heaviest single signal in the template scorer: an exact
+                objective match scores 3.0 where a near-miss scores 0.5, and it is
+                also what generates the templates tailored to this app for this
+                goal. Leaving it optional meant the strongest recommendation
+                input was silently dropped whenever a founder skipped it, and the
+                template step then claimed to be "scored for this app" on
+                materially weaker signal than it said.
+
+                The audience segment is genuinely optional — it narrows the
+                match further, but a profile already describes its audience — so
+                this one is the required one and that one is not. Saying so here
+                is the difference between a rule the founder understands and one
+                they trip over. */}
             <div className="space-y-1.5">
-              <label htmlFor="objective" className="text-sm font-medium">Objective</label>
+              <label htmlFor="objective" className="text-sm font-medium">
+                What is this video for? <span className="text-muted-foreground">(required)</span>
+              </label>
               <select
                 id="objective"
                 value={objective}
                 onChange={(e) => setObjective(e.target.value)}
+                aria-required="true"
                 className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
               >
                 <option value="">Choose an objective</option>
@@ -1017,6 +1092,14 @@ export default function CreateVideo() {
                   <option key={o} value={o}>{humanize(o)}</option>
                 ))}
               </select>
+              {!objective && (
+                <p className="text-xs text-muted-foreground">
+                  Pick one to continue. This is the strongest signal in the
+                  template recommendation — a template built for this goal outranks
+                  one that merely fits — and tailored templates are generated for the
+                  goal you choose here.
+                </p>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -1027,6 +1110,9 @@ export default function CreateVideo() {
                 onChange={(e) => setTone(e.target.value)}
                 placeholder="e.g. calm and direct"
               />
+              <p className="text-xs text-muted-foreground">
+                Seeds the plan, and you can change it on the Review step.
+              </p>
             </div>
           </div>
         </StepShell>
@@ -1037,10 +1123,33 @@ export default function CreateVideo() {
       return (
         <StepShell
           icon={LayoutTemplate}
-          title="Choose a hook template"
-          description="Scored for this app profile and angle — select the one that fits."
+          title="Choose a template and add your photo"
+          description={
+            objective
+              ? `Every template below is scored against ${profile?.brand_name || "this app"} and your goal. Pick one, then attach the photo it is generated from.`
+              : "Pick a goal on the previous step first — the templates are scored against it."
+          }
         >
           <div className="space-y-4">
+            {/* No objective means no honest scoring to show. The card list used
+                to render anyway with the empty rationale the scorer returns, so a
+                founder could pick the top card from reasons that did not mention
+                their goal at all. */}
+            {!objective && (
+              <div className="rounded-xl border border-[color:var(--hairline)] p-4">
+                <p className="text-sm">
+                  Choose what this video is for before picking a template.
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  The objective is the heaviest signal in the score, and tailored templates are
+                  generated for the goal you choose. Without it the list below would be ranked on
+                  much weaker evidence while looking identical.
+                </p>
+                <Button variant="secondary" size="sm" className="mt-3" onClick={() => setStep(1)}>
+                  <Target className="h-3.5 w-3.5" /> Set the goal
+                </Button>
+              </div>
+            )}
             {profileId && objective && (
               <div className="flex flex-wrap items-center gap-2">
                 {tailoring ? (
@@ -1063,7 +1172,17 @@ export default function CreateVideo() {
             {tailorError && !tailoring && (
               <p className="text-xs text-muted-foreground">{tailorError}</p>
             )}
-            {recommendations.length > 0 && (
+            {objective && recommendations.length === 0 && (
+              <div className="rounded-xl border border-[color:var(--hairline)] p-4">
+                <p className="text-sm">No templates recommended for this app yet.</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Nothing was ranked for this profile and goal — the request may have failed, or
+                  this app has no compatible templates. You can still pick one below if the library
+                  has anything.
+                </p>
+              </div>
+            )}
+            {objective && recommendations.length > 0 && (
               <div className="space-y-2">
                 <span className="eyebrow block">Recommended</span>
                 {recommendations.map((r) => (
@@ -1122,99 +1241,98 @@ export default function CreateVideo() {
                       </div>
                     ))}
                     {project && missingIdentity.length > 0 && (
-                      <Button variant="secondary" size="sm" className="mt-1" onClick={() => setStep(3)}>
-                        <ImageIcon className="h-3.5 w-3.5" /> Attach in the Assets step
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="mt-2"
+                        onClick={scrollToTemplatePhoto}
+                      >
+                        <ImageIcon className="h-3.5 w-3.5" /> Attach it below
                       </Button>
                     )}
                   </div>
                 )}
               </div>
             )}
-          </div>
-        </StepShell>
-      );
-    }
 
-    if (step === 3) {
-      return (
-        <StepShell
-          icon={ImageIcon}
-          title="Assets"
-          description="Your photograph. Every video is generated from it — the person on camera is the person in the reference."
-        >
-          {!project ? (
-            <div className="rounded-xl border border-[color:var(--hairline)] p-4">
+            {/* The photo upload lives here now rather than on its own step. It
+                was the only thing on that step, so a founder picked a template,
+                left, uploaded, and came back — and the template step already
+                said what was missing and offered a jump. The draft is created
+                eagerly from the profile and template (see ensureProject), so by
+                the time anyone reaches this there is almost always something to
+                attach to. */}
+            <div id="template-photo" className="space-y-3 border-t border-[color:var(--hairline)] pt-4">
+              <span className="eyebrow block">Your photo</span>
               <p className="text-sm text-muted-foreground">
-                {canGenerate
-                  ? "A free draft from the selected profile, angle, and template is created for you, so assets can be attached straight away. Drafts cost nothing; only a marked-ready generation spends money."
-                  : "Pick an App Profile and a hook template first — a draft is created from those two as soon as they are set, and assets attach to it."}
+                Every video is generated from one photograph — the person on camera is the person in
+                the reference, and the room around them is written from your App Profile. Without
+                one the model invents somebody else.
               </p>
-              {canGenerate && (
-                <Button
-                  variant="brand"
-                  size="sm"
-                  className="mt-3"
-                  disabled={busy}
-                  onClick={() => ensureProject()}
-                >
-                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
-                  Create the draft now
-                </Button>
+              {!templateId ? (
+                <p className="text-sm text-muted-foreground">
+                  Pick a template above first — the draft that holds your photo is created from it.
+                </p>
+              ) : !project ? (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    A free draft from your profile, goal and template is created so your photo has
+                    somewhere to live. Drafts cost nothing; only a marked-ready generation spends
+                    money.
+                  </p>
+                  <Button variant="secondary" size="sm" disabled={busy} onClick={() => ensureProject()}>
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
+                    Create the draft
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <AssetLibrary
+                    embedded
+                    profileId={profileId}
+                    projectId={project.id}
+                    projectAssets={project.assets}
+                    onProjectChanged={(fresh) => setProject(fresh || project)}
+                    onChanged={() => {
+                      // Re-read the project's attached assets so the picker updates.
+                      api.getStudioProject(project.id).then(setProject).catch(() => {});
+                    }}
+                  />
+                  <div className="space-y-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
+                      Attached
+                    </span>
+                    {(project.assets || []).length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Nothing attached yet. Attach your photograph above — the video cannot be
+                        generated without it.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {(project.assets || []).map((a) => (
+                          <AttachedPhoto
+                            key={a.asset_id}
+                            project={project}
+                            attachment={a}
+                            onChanged={setProject}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
-          ) : (
-            <AssetLibrary
-              embedded
-              profileId={profileId}
-              projectId={project?.id}
-              projectAssets={project?.assets}
-              projectDuration={pieceSeconds}
-              onProjectChanged={() => {
-                if (!project?.id) return;
-                api.getStudioProject(project.id).then(setProject).catch(() => {});
-              }}
-              onChanged={() => {
-                // Re-read the project's attached assets so the picker updates.
-                if (!project?.id) return;
-                api.getStudioProject(project.id).then(setProject).catch(() => {});
-              }}
-            />
-          )}
-
-          <div className="space-y-2 border-t border-[color:var(--hairline)] pt-4">
-            <span className="eyebrow block">Attached to this project</span>
-            {!project ? (
-              <p className="text-sm text-muted-foreground">
-                Create a draft above before attaching assets.
-              </p>
-            ) : (project?.assets || []).length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Nothing attached yet. Attach the character reference above — every video is
-                generated from it.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {(project?.assets || []).map((a) => (
-                  <AttachmentRow
-                    key={`${a.asset_id}-${a.start ?? 0}-${a.end ?? "end"}-${a.audio_role || "none"}-${a.audio_gain ?? "default"}`}
-                    project={project}
-                    attachment={a}
-                    duration={pieceSeconds}
-                    onChanged={setProject}
-                  />
-                ))}
-              </div>
-            )}
           </div>
         </StepShell>
       );
     }
 
-    if (step === 6) {
+    if (step === 4) {
       return (
         <StepShell
           icon={Sparkles}
-          title="Hook and middle"
+          title="Hook & middle"
           description="Read the strategy built from the plan you approved, then render the piece: a hook, then a middle that stops where you would reach for your phone. The demo and the close are yours to record and add afterwards."
         >
           <div className="space-y-3">
@@ -1228,7 +1346,7 @@ export default function CreateVideo() {
             ) : blockedOnAssets ? (
               <MissingRequirements
                 identity={missingIdentity}
-                onGoToAssets={() => setStep(3)}
+                onGoToTemplatePhoto={scrollToTemplatePhoto}
               />
             ) : !project ? (
               <div className="rounded-xl border border-[color:var(--hairline)] p-4">
@@ -1253,18 +1371,17 @@ export default function CreateVideo() {
                 {!project?.script_version ? (
                   <div className="rounded-xl border border-[color:var(--hairline)] p-4">
                     <p className="text-sm text-muted-foreground">
-                      There is no plan yet, so there are no approved words to render. Generate
-                      and review a creative plan first — it costs nothing, and it is what the
-                      strategy below is built from.
+                      There is no plan yet, so there are no approved words to render. Generate one
+                      on the Review step first — it costs nothing, and it is what the strategy below
+                      is built from.
                     </p>
                     <Button
                       variant="secondary"
                       size="sm"
                       className="mt-3"
-                      disabled={busy}
-                      onClick={() => setStep(4)}
+                      onClick={() => setStep(3)}
                     >
-                      Go to the plan step
+                      Go to Review
                     </Button>
                   </div>
                 ) : (
@@ -1297,59 +1414,85 @@ export default function CreateVideo() {
       );
     }
 
-    if (step === 4) {
+    if (step === 3) {
       return (
         <StepShell
-          icon={FileText}
-          title="Generate the creative plan"
-          description="This writes your hook, script, shot timeline, overlays, and a note on what to record for your own demo, then checks every claim in it. Free — no video is generated until you have read it on the next step."
+          icon={CheckCircle2}
+          title="Review the plan"
+          description="Write your script here, then check every claim in it. Free — nothing is generated until you open the next step."
         >
-          <div className="space-y-3">
+        {!project?.script_version ? (
+          /* The plan button. This was a step of its own that held nothing but
+             this button, so a founder pressed it and was immediately told to go
+             to the next screen to see the result. It is now the top of the step
+             that reads the result. */
+          <div className="space-y-3 rounded-xl border border-[color:var(--hairline)] p-4">
+            {!templateId && (
+              <p className="text-sm text-muted-foreground">
+                Choose a template first — the plan is written to serve the one you pick.
+              </p>
+            )}
+            <MissingRequirements
+              identity={missingIdentity}
+              onGoToTemplatePhoto={scrollToTemplatePhoto}
+            />
             <Button
               variant="brand"
               onClick={handleGeneratePlan}
               disabled={busy || !canGenerate || blockedOnAssets}
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              {project?.script_version ? "Regenerate plan" : "Generate plan"}
+              Generate the plan
             </Button>
-            {!templateId && (
-              <p className="text-sm text-muted-foreground">Choose a template first.</p>
-            )}
-            <MissingRequirements
-              identity={missingIdentity}
-              onGoToAssets={() => setStep(3)}
-            />
-            {project?.script_version > 0 && (
-              <p className="text-sm text-muted-foreground">
-                Current plan is version {project.script_version}. Regenerating replaces it.
-              </p>
-            )}
+            <p className="text-xs text-muted-foreground">
+              Free, and nothing is charged. It writes the hook line, the script, the shot timeline,
+              your on-screen text, and a note on what to record for your own demo — then checks every
+              claim in it. Everything it produces is editable below.
+            </p>
           </div>
-        </StepShell>
-      );
-    }
-
-    if (step === 5) {
-      return (
-        <StepShell
-          icon={CheckCircle2}
-          title="Review and edit"
-          description="Everything is editable. The claim check re-runs on every edit, and the render step below turns this script into a hook and a middle rather than replacing it."
-        >
-        {!project?.script_version ? (
-          <EmptyState
-            icon={FileText}
-            title="No plan yet"
-            description="Generate a creative plan to review it here."
-            action={
-              <Button variant="brand" onClick={() => setStep(4)}>
-                Go to plan step
-              </Button>
-            }
-          />
         ) : (
           <div className="space-y-4">
+            {/* Regenerating replaces a plan that may have been edited and
+                approved. Stating the version is not enough next to a button
+                that discards it, so it asks — the same rule as the strategy
+                rebuild, and for the same reason. */}
+            {project?.script_version > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => {
+                    if (hasEdits) {
+                      const ok =
+                        typeof window === "undefined" || typeof window.confirm !== "function"
+                          ? false
+                          : window.confirm(
+                              "You have unsaved edits. Generating a new plan replaces this one and " +
+                                "your edits are lost. Generate anyway?"
+                            );
+                      if (!ok) return;
+                    } else {
+                      const ok =
+                        typeof window === "undefined" || typeof window.confirm !== "function"
+                          ? true
+                          : window.confirm(
+                              `Replace plan v${project.script_version} with a new one? The current ` +
+                                `plan is discarded.`
+                            );
+                      if (!ok) return;
+                    }
+                    handleGeneratePlan();
+                  }}
+                >
+                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  Regenerate plan
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Plan v{project.script_version}. Regenerating replaces it and bumps the version.
+                </p>
+              </div>
+            )}
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Hook line</label>
               <Input
@@ -1403,9 +1546,21 @@ export default function CreateVideo() {
               />
             </div>
 
+            {/* Read-only, and labelled as such, because it sits among seven
+                editable fields in the same visual style and founders will
+                otherwise try to type in it. It is also the one block that goes
+                STALE the moment the script above is edited — the beats describe
+                the plan as generated — so the edits warning is repeated here
+                where the damage is visible. */}
             {editValue("beat_timeline", []).length > 0 && (
-              <div className="rounded-xl border border-[color:var(--hairline)] p-4">
-                <span className="eyebrow block">Shot timeline</span>
+              <div
+                className="rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4"
+                data-testid="shot-timeline"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="eyebrow block">Shot timeline</span>
+                  <Badge variant="outline" className="text-[11px]">read-only</Badge>
+                </div>
                 <div className="mt-2 space-y-1.5 text-sm">
                   {editValue("beat_timeline", []).map((b, i) => (
                     <div key={i} className="flex gap-2">
@@ -1416,6 +1571,11 @@ export default function CreateVideo() {
                     </div>
                   ))}
                 </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {hasEdits
+                    ? "This still describes the plan as generated. Edit the script above and regenerate to bring it back in line."
+                    : "Written by the plan to fit this length. Regenerate the plan to rewrite it."}
+                </p>
               </div>
             )}
 
@@ -1433,7 +1593,7 @@ export default function CreateVideo() {
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {project?.script_version
-                    ? "The shot timeline above is written to this length, and it is rendered in one pass. To change it, pick a different template on the Hook template step and regenerate the plan."
+                    ? "The shot timeline above is written to this length, and it is rendered in one pass. To change it, pick a different template on the Template & photo step and regenerate the plan."
                     : "Set by the hook template you pick. There is no length to choose."}
                 </p>
               </div>
@@ -1478,6 +1638,15 @@ export default function CreateVideo() {
                 Added afterwards from your approved script. Without text overlays a
                 video is still the generated video, captioned on demand.
               </p>
+              {/* The placeholder used to read "Try it free for 3 days" — a
+                  pricing and trial-term claim, in a product that deliberately
+                  carries no pricing anywhere, and the exact kind of claim the
+                  check above is designed to flag. As an example on an input it
+                  taught the founder to write precisely what the app refuses. */}
+              <p className="mt-1 text-xs text-muted-foreground">
+                Keep it to what the App Profile has verified. Ratings, counts and
+                trial terms are not yours to state here.
+              </p>
               {editValue("overlays", []).length === 0 ? (
                 <p className="mt-2 text-sm text-muted-foreground">No on-screen text.</p>
               ) : (
@@ -1509,7 +1678,7 @@ export default function CreateVideo() {
                         <Input
                           value={o.text}
                           onChange={(e) => setOverlay(i, { text: e.target.value })}
-                          placeholder="e.g. Try it free for 3 days"
+                          placeholder="e.g. One timer. That's it."
                           aria-label={`Overlay ${i + 1} text`}
                         />
                       </label>
@@ -1553,7 +1722,7 @@ export default function CreateVideo() {
             )}
             <MissingRequirements
               identity={missingIdentity}
-              onGoToAssets={() => setStep(3)}
+              onGoToTemplatePhoto={scrollToTemplatePhoto}
             />
 
             {/* Nothing that spends money renders on this step. GenerationPanel
@@ -1569,19 +1738,10 @@ export default function CreateVideo() {
       );
     }
 
-    // The render step is the last one, and the only one that spends money. A
-    // founder cannot reach it by falling through from Review; the explicit
-    // `step === 6` above handles it, and this guards against a step index that
-    // is out of range rendering nothing at all.
-    return (
-      <StepShell
-        icon={Sparkles}
-        title="Hook and middle"
-        description="Read the strategy, then render the piece."
-      >
-        <p className="text-sm text-muted-foreground">This step is unavailable.</p>
-      </StepShell>
-    );
+    // Unreachable: every index in STEPS has a branch above. This is a guard
+    // against an index out of range rendering an empty page, so it must not
+    // read as a step the founder could have ended up in deliberately.
+    return null;
   }
 
   if (loading) {
@@ -1607,28 +1767,68 @@ export default function CreateVideo() {
         }
       />
 
+      {/* Progress that tracks state rather than position.
+          The tick used to mean "this step is to the left of the one you are on",
+          which is not the same thing at all: jump straight to the last step and
+          all five showed a tick while nothing had been done. A founder reading
+          that has been told they finished the workflow before they started it.
+
+          Each step now declares what makes it satisfied, and the tick means that.
+          The three states are distinct and separately labelled, because the
+          difference between "done" and "needs you" is the whole point of a
+          progress indicator - and a step you can leave is marked as such rather
+          than looking blocked. */}
       <nav aria-label="Progress" className="flex flex-wrap items-center gap-1.5">
-        {STEPS.map((s, i) => {
+        {stepStates.map((s, i) => {
           const active = i === step;
-          const done = i < step;
+          const Icon = s.state === "done" ? Check : s.step.icon;
           return (
             <button
-              key={s.key}
+              key={s.step.key}
               type="button"
               onClick={() => setStep(i)}
-              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                active
-                  ? "bg-primary/15 text-[color:var(--brand-indigo)]"
-                  : "text-muted-foreground hover:bg-[color:var(--indigo-8)] hover:text-foreground"
-              }`}
               aria-current={active ? "step" : undefined}
+              // Announced rather than shown only: a tick and a warning dot are
+              // both shape-only cues, and this is the one place the founder
+              // looks to answer "what is left".
+              aria-label={`${s.step.label}: ${STEP_STATE_COPY[s.state]}`}
+              title={STEP_STATE_COPY[s.state]}
+              data-state={s.state}
+              data-testid={`step-pill-${s.step.key}`}
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                active
+                  ? "border-[color:var(--indigo-35)] bg-primary/15 text-[color:var(--brand-indigo)]"
+                  : s.state === "done"
+                    ? "border-[color:var(--hairline)] text-foreground/80 hover:border-[color:var(--indigo-35)] hover:text-foreground"
+                    : "border-dashed border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--indigo-35)] hover:text-foreground"
+              }`}
             >
-              {done ? <Check className="h-3 w-3" /> : <s.icon className="h-3 w-3" />}
-              {s.label}
+              {s.state === "todo" ? (
+                // A hollow ring, not a tick and not the step icon: it says
+                // "not started" without pretending to be an action waiting here.
+                <span
+                  aria-hidden="true"
+                  className="h-3 w-3 rounded-full border border-current opacity-60"
+                />
+              ) : (
+                <Icon
+                  className={`h-3 w-3 ${s.state === "blocked" ? "text-amber-600 dark:text-amber-500" : ""}`}
+                />
+              )}
+              {s.step.label}
             </button>
           );
         })}
       </nav>
+
+      {/* One sentence saying what is left, rather than making them read the
+          pills. This is the "easy tracking" the pills cannot do on their own:
+          they show state, this says which one needs them. */}
+      {nextUp && (
+        <p className="text-xs text-muted-foreground" data-testid="progress-next-up">
+          {nextUp}
+        </p>
+      )}
 
       {error && (
         <Alert variant="destructive">

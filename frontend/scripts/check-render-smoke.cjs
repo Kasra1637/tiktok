@@ -1,17 +1,17 @@
-/**
+﻿/**
  * Mounts every wizard step and the panels in a real DOM, to catch crashes that
  * a type-check and a build cannot.
  *
  * Why this exists: two live defects shipped with the whole gate green.
  * `GenerationPanel` listed `schedulePoll` in a `useEffect` dep array above its
  * `const` declaration, so evaluating the array threw a TDZ ReferenceError on
- * every mount — and because an ErrorBoundary wraps the app, that took down
+ * every mount â€” and because an ErrorBoundary wraps the app, that took down
  * every route. `HookContinuityPanel` called `resolveExtendRequest` and read
  * `extendBy`, neither of which exists, on the branch that renders while
  * extending toward a target. Neither is a type error: JSX goes through
  * `createElement`, and an undefined identifier inside a state-dependent branch
  * is still a valid module. `npm run build` lints and type-checks, and
- * `check-frontend-logic.cjs` evaluates pure helpers — neither one ever calls a
+ * `check-frontend-logic.cjs` evaluates pure helpers â€” neither one ever calls a
  * component. So this file does.
  *
  * It uses a real DOM (`jsdom`) and `createRoot` rather than
@@ -143,8 +143,15 @@ const SEGMENT = {
   performance: null,
 };
 
-// The key is `asset_id`, not `id`: AttachmentRow slices attachment.asset_id for
-// the label, so a fixture using `id` throws on the Assets step.
+// The key is `asset_id`, not `id`: the attached-photo row slices
+// attachment.asset_id for the label, so a fixture using `id` throws on the
+// template step.
+//
+// No start/end, no audio_role, no audio_gain. Those fields are still accepted
+// on the wire for legacy rows, but the studio no longer renders a control for
+// any of them: the video is one render with captions composited over it, so an
+// asset has no on-screen window and nothing to mix. A fixture carrying them
+// would keep rendering as though the controls still existed.
 const ASSETS = [
   { asset_id: "a1", kind: "character_reference", label: "face.jpg", status: "ready" },
 ];
@@ -291,7 +298,7 @@ const apiStub = {
  * record: it lets a check assert that a branch fired the request it was supposed
  * to. `retiredCalls` is a trap: the five methods the server deleted are not on
  * the stub at all, so a component that still called one would throw a
- * TypeError — and a TypeError inside a `try` with a `catch` that renders
+ * TypeError â€” and a TypeError inside a `try` with a `catch` that renders
  * `getErrorMessage` would be swallowed and shown as an ordinary failure message.
  * Recording the attempt first means the check sees it either way.
  */
@@ -484,7 +491,7 @@ function expectNone(ctx, needles, why) {
  * side by side, so a row that runs long wraps to a second line on one side
  * only and makes that side look busier than the other. Nothing in the build or
  * the type-check can see it, and the copy is exactly the kind that gets edited
- * one line at a time — so the balance has to be asserted or it silently rots.
+ * one line at a time â€” so the balance has to be asserted or it silently rots.
  */
 function expectBalanced(left, right, tolerance, label) {
   if (left.length !== right.length) {
@@ -519,7 +526,7 @@ function sourceFiles(dir = SRC, out = []) {
  * field only sees executable code.
  *
  * This matters more than it looks. The files explaining WHY a field was removed
- * have to name it — the record of the decision is the point of those comments —
+ * have to name it â€” the record of the decision is the point of those comments â€”
  * so a naive text scan fails on the very files that did the work. Newlines are
  * kept so a hit can still be reported at the right line.
  */
@@ -546,12 +553,19 @@ const CreateVideo = load("pages/CreateVideo.jsx").default;
 // what it produces: one render with two sections. The old label named the first
 // beat of a chain, and a step called "Influencer hook" whose output is a hook
 // plus a middle is a step that under-describes the thing being paid for.
+// Five, not seven. "Assets" was a step whose only content was the photo upload,
+// and "Creative plan" was a step whose only content was a button whose result
+// you had to go to the next screen to read. Both are now part of the step they
+// belonged to, so the founder picks a template and attaches the photo without
+// leaving, and presses Generate on the same page that shows the result.
+//
+// The order still matters and is still asserted as a whole sequence: the
+// free, claim-checked plan is read before the step that spends money, and a set
+// comparison would pass just as happily if the render went back to third.
 const STEP_LABELS = [
   "App Profile",
   "Audience & goal",
-  "Hook template",
-  "Assets",
-  "Creative plan",
+  "Template & photo",
   "Review",
   "Hook & middle",
 ];
@@ -562,6 +576,93 @@ const PIECE_SECONDS = String(TEMPLATE.default_duration);
 const stepSource = fs.readFileSync(path.join(SRC, "pages", "CreateVideo.jsx"), "utf8");
 
 async function main() {
+  // -------------------------------------------------------------------------
+  // The wizard is five steps, and every step that existed only to hold a button
+  // has been folded into the step it belonged to. These prove the shape is real
+  // rather than a label change: the photo upload is ON the template step, and
+  // the plan is generated from the Review step that reads it.
+  // -------------------------------------------------------------------------
+  await check("the photo upload lives on the template step, not its own", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await mount(CreateVideo, {})(ctx);
+    await openTemplateStep(ctx);
+    const text = ctx.text();
+    if (!text.includes("Your photo")) {
+      throw new Error("the template step does not offer the photograph upload");
+    }
+    // The draft has to be creatable from here: profile + template is what
+    // ensureProject needs, and both are on this step now.
+    const create = [...ctx.container.querySelectorAll("button")]
+      .find((b) => /Create the draft/.test(b.textContent || ""));
+    if (!create) {
+      throw new Error("the template step cannot create the draft the photo attaches to");
+    }
+    // No step of its own: this is the assertion that the old "Assets" pill is
+    // gone rather than merely renamed.
+    const pills = [...ctx.container.querySelectorAll("[data-testid^='step-pill-']")]
+      .map((el) => el.textContent);
+    if (pills.length !== STEP_LABELS.length) {
+      throw new Error(`expected ${STEP_LABELS.length} steps, saw ${JSON.stringify(pills)}`);
+    }
+    for (const gone of ["Assets", "Creative plan"]) {
+      if (pills.some((p) => p.trim() === gone)) {
+        throw new Error(`the ${JSON.stringify(gone)} step still exists as its own step`);
+      }
+    }
+  });
+
+  await check("no step offers time-range or audio controls for an asset", async (ctx) => {
+    // The video is one render with captions composited over it, so an asset has
+    // no on-screen window and there is nothing to mix. The row used to carry
+    // Start, End, Use as and Gain, and "Save timing" wrote them back - controls
+    // that implied a placement the composition cannot honour.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await mount(CreateVideo, {})(ctx);
+      await openTemplateStep(ctx);
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+    const text = ctx.text();
+    for (const dead of ["Save timing", "Use as", "Gain", "Voiceover", "Background"]) {
+      if (text.includes(dead)) {
+        throw new Error(`the asset row still offers ${JSON.stringify(dead)}`);
+      }
+    }
+    // ...and it still confirms the photograph is attached and offers a way to
+    // remove it, which is the part that did do something.
+    if (!text.includes("face.jpg")) {
+      throw new Error("the attached photograph is not confirmed anywhere");
+    }
+    const remove = [...ctx.container.querySelectorAll("button")]
+      .find((b) => (b.textContent || "").trim() === "Remove");
+    if (!remove) throw new Error("the attached photograph cannot be removed");
+    if (!text.includes("used for the whole video")) {
+      throw new Error("the photograph does not say how it is used");
+    }
+  });
+
+  await check("the plan is generated from the step that reviews it", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await mount(CreateVideo, {})(ctx);
+    await openTemplateStep(ctx);
+    await openStep(ctx, "Review");
+    const text = ctx.text();
+    // With no plan, Review offers the button rather than an empty state that
+    // sends the founder back to a step that held only that button.
+    const generate = [...ctx.container.querySelectorAll("button")]
+      .find((b) => /Generate the plan/.test((b.textContent || "").trim()));
+    if (!generate) throw new Error("Review cannot generate the plan it reviews");
+    if (text.includes("No plan yet")) {
+      throw new Error("Review still bounces to a separate plan step for its own plan");
+    }
+    // And it says the button is free, because that is the only reason to press
+    // a button on the step that is otherwise a reading step.
+    if (!text.includes("Free")) {
+      throw new Error("generating the plan does not say it is free");
+    }
+  });
+
   // -------------------------------------------------------------------------
   // The crash that took the whole app down: a dep array read above its const.
   // -------------------------------------------------------------------------
@@ -606,7 +707,7 @@ async function main() {
   // The replacement for the extend-coverage warning.
   //
   // The old check drove the branch that rendered while extending toward a
-  // target and asserted "The strategy plans N more segments" — the finite-plan
+  // target and asserted "The strategy plans N more segments" â€” the finite-plan
   // warning. There is no chain to run out of, so that branch and its warning are
   // gone. What replaced it is the thing the founder actually has to read before
   // spending: the two sections, named as the two sections, with the model's own
@@ -617,7 +718,7 @@ async function main() {
     expectText(ctx, "The two sections", "the section list did not render");
     expectText(ctx, "hook", "the hook section did not render");
     expectText(ctx, "middle", "the middle section did not render");
-    // The goal, straight from the strategy — this is the review surface's
+    // The goal, straight from the strategy â€” this is the review surface's
     // reason to exist, so it has to reach the screen and not just be fetched.
     expectText(ctx, "stop the scroll", "the hook's goal did not render");
     expectText(ctx, "develop it, stop at the reach", "the middle's goal did not render");
@@ -757,7 +858,7 @@ async function main() {
   // Five endpoints went with the chain: /studio/projects/{id}/hook,
   // /generations/{id}/extend, /approve, /assemble and /continuity. Calling one is
   // a 404 that renders as an ordinary error message, so nothing about a founder
-  // clicking through would make it obviously wrong — the button just does
+  // clicking through would make it obviously wrong â€” the button just does
   // nothing useful. So this is asserted two ways: statically, because a call
   // sitting in an unreachable branch is still a call, and at runtime, through the
   // recorder above.
@@ -867,7 +968,10 @@ async function main() {
   // panel is still imported and still reachable, just on a later step.
   await check("no paid control renders before the plan step", async (ctx) => {
     global.__SMOKE_PARAMS = "";
-    for (const label of ["App Profile", "Audience & goal", "Hook template", "Assets", "Creative plan"]) {
+    // Every step before the last one. STEP_LABELS minus its final entry, so a
+    // step added later is covered here by default rather than silently becoming
+    // an unchecked place to spend money.
+    for (const label of STEP_LABELS.slice(0, -1)) {
       await mount(CreateVideo, {})(ctx);
       const pill = stepPill(ctx, label);
       await act(async () => {
@@ -1261,12 +1365,82 @@ async function main() {
   // The length is computed. These three checks replace "Review shows the length
   // but does not offer editing it", "the length selector lives on the step
   // before the plan" and "a length that costs more than one render says so up
-  // front" — none of whose properties survived, because there is no longer a
+  // front" â€” none of whose properties survived, because there is no longer a
   // picker, no step that owns the choice, and no length that costs two renders.
   // The properties that did survive are re-asserted below: the length is stated
   // wherever the founder needs it, nothing anywhere can change it, and the UI
   // never implies a length exists that one render cannot produce.
   // -------------------------------------------------------------------------
+  await check("the read-only shot timeline says so, and says when it is stale", async (ctx) => {
+    // Seven editable fields sit on this step in the same visual style, so a
+    // founder will try to type into the timeline. It is also the only block
+    // that goes stale the moment the script above changes, so it has to say
+    // that too - otherwise it silently describes a video that is no longer
+    // the one being rendered.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await mount(CreateVideo, {})(ctx);
+      await openStep(ctx, "Review");
+      const timeline = ctx.container.querySelector('[data-testid="shot-timeline"]');
+      if (!timeline) throw new Error("the shot timeline no longer renders");
+      if (!timeline.textContent.includes("read-only")) {
+        throw new Error("the shot timeline is not labelled read-only");
+      }
+      if (timeline.querySelector("input, textarea, select")) {
+        throw new Error("the shot timeline renders an editable control");
+      }
+      // Not yet stale on a freshly loaded plan.
+      if (!timeline.textContent.includes("Regenerate the plan to rewrite it")) {
+        throw new Error("the timeline does not say how it gets rewritten");
+      }
+
+      // Now edit the script and confirm it says it is out of date.
+      const script = [...ctx.container.querySelectorAll("textarea")]
+        .find((t) => (t.value || "").length > 40);
+      const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, "value").set;
+      await act(async () => {
+        setter.call(script, `${script.value} Plus a closing line.`);
+        script.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+      });
+      await act(async () => {});
+      const after = ctx.container.querySelector('[data-testid="shot-timeline"]');
+      if (!after.textContent.includes("still describes the plan as generated")) {
+        throw new Error("the timeline does not flag itself as stale after an edit");
+      }
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("the overlay placeholder does not teach a claim the app forbids", async (ctx) => {
+    // It read "Try it free for 3 days" - a pricing and trial term, in a product
+    // that carries no pricing anywhere and whose claim check exists precisely to
+    // stop those. As an example on an input it invited the founder to write the
+    // one thing the renderer would refuse.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await mount(CreateVideo, {})(ctx);
+      await openStep(ctx, "Review");
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+    const text = ctx.text();
+    expectAbsent(
+      ctx,
+      "Try it free",
+      "the overlay example is still a trial-terms claim the product refuses"
+    );
+    expectAbsent(
+      ctx,
+      "3 days",
+      "the overlay example still states a trial length"
+    );
+    // And it must say what IS allowed, rather than only removing the example.
+    if (!text.includes("Ratings, counts and")) {
+      throw new Error("the overlay editor does not say what may not be stated");
+    }
+  });
+
   await check("Review states the length and offers no way to change it", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
@@ -1331,7 +1505,7 @@ async function main() {
           }
         }
         const body = ctx.text();
-        if (/total video length|video length of|seconds —/.test(body)) {
+        if (/total video length|video length of|seconds â€”/.test(body)) {
           throw new Error(`step ${JSON.stringify(label)} offers a total-length choice`);
         }
       }
@@ -1345,7 +1519,7 @@ async function main() {
   // "the founder is never handed a length the model cannot render". With no
   // picker that is now a statement about what the step SAYS, and the value it
   // says has to be the template's, because that is what the project is seeded
-  // from — a number that disagreed with the template would be a second, hidden
+  // from â€” a number that disagreed with the template would be a second, hidden
   // length.
   await check("the Audience step states the template's length, read-only", async (ctx) => {
     global.__SMOKE_PARAMS = "";
@@ -1423,8 +1597,8 @@ async function main() {
   // There is no product demo and no call to action in the generated footage: the
   // middle ends at the moment the presenter would reach for their phone, and the
   // founder attaches their own demo and close. That makes every CTA affordance
-  // a lie — a field labelled CTA that is no longer writable, an end card the
-  // server no longer composes — and every promise of a finished file a
+  // a lie â€” a field labelled CTA that is no longer writable, an end card the
+  // server no longer composes â€” and every promise of a finished file a
   // founder would post without the part that makes it convert.
   // -------------------------------------------------------------------------
   await check("the studio never offers a call to action or a product demo", async (ctx) => {
@@ -1500,11 +1674,7 @@ async function main() {
       },
       async () => {
         await mount(CreateVideo, {})(ctx);
-        const pill = stepPill(ctx, "Hook template");
-        await act(async () => {
-          pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-        });
-        await act(async () => {});
+        await openTemplateStep(ctx);
       }
     );
     const text = ctx.text();
@@ -1560,11 +1730,7 @@ async function main() {
       },
       async () => {
         await mount(CreateVideo, {})(ctx);
-        const pill = stepPill(ctx, "Hook template");
-        await act(async () => {
-          pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-        });
-        await act(async () => {});
+        await openTemplateStep(ctx);
       }
     );
     const text = ctx.text();
@@ -1623,11 +1789,7 @@ async function main() {
       },
       async () => {
         await mount(CreateVideo, {})(ctx);
-        const pill = stepPill(ctx, "Hook template");
-        await act(async () => {
-          pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-        });
-        await act(async () => {});
+        await openTemplateStep(ctx);
       }
     );
     const text = ctx.text();
@@ -1637,6 +1799,111 @@ async function main() {
     }
     if (!text.includes("Fit 5")) {
       throw new Error("the fit score is missing");
+    }
+  });
+
+  // The objective is the heaviest signal in the template scorer and gates the
+  // tailored templates, so leaving it optional meant the strongest
+  // recommendation input was silently dropped whenever a founder skipped it -
+  // and the step still claimed to be "scored for this app".
+  await check("the template step refuses to rank anything without an objective", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await withApi(
+      {
+        getTemplates: async () => ({ templates: ORDERED_TEMPLATES }),
+        getTemplateRecommendations: async () => ({
+          recommendations: [
+            { template: ORDERED_TEMPLATES[0], score: 9, why_it_fits: ["fits"], limitations: [] },
+          ],
+        }),
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openStep(ctx, "Template & photo");
+      }
+    );
+    const text = ctx.text();
+    // It must not show a ranked card list, because nothing behind it was ranked
+    // against a goal.
+    if (text.includes("Fit 9")) {
+      throw new Error("a fit score is shown for a template ranked with no objective");
+    }
+    // ...and it must say what is missing and how to fix it, rather than
+    // rendering an empty step.
+    if (!text.includes("Choose what this video is for")) {
+      throw new Error("the template step does not explain that the objective is required");
+    }
+    const back = [...ctx.container.querySelectorAll("button")]
+      .find((b) => (b.textContent || "").includes("Set the goal"));
+    if (!back) throw new Error("there is no way from the template step to set the goal");
+  });
+
+  await check("no objective is silently reported as done on the progress pills", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await mount(CreateVideo, {})(ctx);
+    const pill = ctx.container.querySelector('[data-testid="step-pill-angle"]');
+    if (!pill) throw new Error("the progress pills carry no state markers");
+    if (pill.getAttribute("data-state") === "done") {
+      throw new Error("the Audience step is ticked before an objective is chosen");
+    }
+    if (pill.getAttribute("aria-label") !== "Audience & goal: needs something from you") {
+      throw new Error(
+        `the pill does not say it is blocked: ${pill.getAttribute("aria-label")}`
+      );
+    }
+  });
+
+  await check("progress ticks mean done, not merely being to the left", async (ctx) => {
+    // The tick used to mean "this step index is below the current one", so
+    // jumping straight to the last step showed a tick on all five while nothing
+    // had been done - telling the founder they had finished the workflow before
+    // starting it. The state is now derived from what actually exists.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await mount(CreateVideo, {})(ctx);
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+    const states = [...ctx.container.querySelectorAll("[data-testid^='step-pill-']")].map(
+      (el) => `${el.getAttribute("data-testid")}=${el.getAttribute("data-state")}`
+    );
+    // This draft has a plan, so Review is genuinely satisfied. The rest are
+    // decided by the draft's own profile/template/photo.
+    const review = ctx.container.querySelector('[data-testid="step-pill-review"]');
+    if (review?.getAttribute("data-state") !== "done") {
+      throw new Error(`Review should be done for a project with a plan: ${states.join(", ")}`);
+    }
+    const render = ctx.container.querySelector('[data-testid="step-pill-hook"]');
+    // The render step has no completion state by design: the workflow ends at
+    // "attach your own demo", which happens in the founder's editor.
+    if (render?.getAttribute("data-state") === "done") {
+      throw new Error("the render step is ticked although no clip has been generated");
+    }
+  });
+
+  await check("a plan with unsaved edits is not reported as reviewed", async (ctx) => {
+    // The tick has to mean "read and stored", not "a plan exists". Otherwise
+    // the progress indicator tells the founder they finished reading a script
+    // they had changed and not saved.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await mount(CreateVideo, {})(ctx);
+      await openStep(ctx, "Review");
+      const script = [...ctx.container.querySelectorAll("textarea")]
+        .find((t) => (t.value || "").length > 40);
+      if (!script) throw new Error("no script field on Review to edit");
+      const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, "value").set;
+      await act(async () => {
+        setter.call(script, `${script.value} and one more clause`);
+        script.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+      });
+      await act(async () => {});
+      const pill = ctx.container.querySelector('[data-testid="step-pill-review"]');
+      if (pill?.getAttribute("data-state") === "done") {
+        throw new Error("Review is ticked while there are unsaved edits");
+      }
+    } finally {
+      global.__SMOKE_PARAMS = "";
     }
   });
 
@@ -1666,11 +1933,7 @@ async function main() {
       },
       async () => {
         await mount(CreateVideo, {})(ctx);
-        let pill = stepPill(ctx, "Hook template");
-        await act(async () => {
-          pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-        });
-        await act(async () => {});
+        await openTemplateStep(ctx);
 
         // Click the second card by its rendered name.
         const second = [...ctx.container.querySelectorAll("[role=button]")]
@@ -1682,16 +1945,10 @@ async function main() {
         await act(async () => {});
 
         // Leave and come back, which re-runs the load with a flipped order.
-        pill = stepPill(ctx, "Assets");
-        await act(async () => {
-          pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-        });
-        await act(async () => {});
-        pill = stepPill(ctx, "Hook template");
-        await act(async () => {
-          pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-        });
-        await act(async () => {});
+        // Review is the step that follows the template step; it used to be
+        // "Assets", which no longer exists as its own step.
+        await openStep(ctx, "Review");
+        await openStep(ctx, "Template & photo");
       }
     );
     const text = ctx.text();
@@ -1722,7 +1979,7 @@ async function main() {
       async () => {
         await mount(CreateVideo, {})(ctx);
         await selectOption(ctx, selectLabelled(ctx, "objective"), "address_user_problem");
-        const pill = stepPill(ctx, "Hook template");
+        const pill = stepPill(ctx, "Template & photo");
         await act(async () => {
           pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
         });
@@ -1745,7 +2002,7 @@ async function main() {
       async () => {
         await mount(CreateVideo, {})(ctx);
         await selectOption(ctx, selectLabelled(ctx, "objective"), "address_user_problem");
-        const pill = stepPill(ctx, "Hook template");
+        const pill = stepPill(ctx, "Template & photo");
         await act(async () => {
           pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
         });
@@ -1764,7 +2021,7 @@ async function main() {
   // The project write is where the retired fields would have gone back in. The
   // server still accepts `extend_intent` on the create request and still accepts
   // `duration_seconds` on the patch, so a client that sends them gets a 2xx and
-  // a discarded value — the silent-write failure mode this whole harness exists
+  // a discarded value â€” the silent-write failure mode this whole harness exists
   // to catch, and the one that made the old intent toggle look like it worked.
   //
   // Both write paths are driven, because they are different code and the old bug
@@ -1775,6 +2032,12 @@ async function main() {
     const creates = [];
     const updates = [];
     const plans = [];
+    // Regenerating a plan that exists now asks before discarding it. jsdom's
+    // confirm is not implemented and returns undefined, which is falsy — so
+    // without this the click silently does nothing and the check would report
+    // "no project was updated" for the wrong reason.
+    const originalConfirm = dom.window.confirm;
+    dom.window.confirm = () => true;
     await withApi(
       {
         createStudioProject: async (payload) => {
@@ -1795,23 +2058,37 @@ async function main() {
         // is the only route to a POST before a project exists.
         global.__SMOKE_PARAMS = "";
         await mount(CreateVideo, {})(ctx);
-        await openStep(ctx, "Assets");
+        // The draft is created from the profile and the template, and both of
+        // those live on the template step now — the photo upload was folded into
+        // it and the "Create the draft" button moved with it.
+        await openTemplateStep(ctx);
         const create = [...ctx.container.querySelectorAll("button")]
-          .find((b) => /Create the draft now/.test(b.textContent || ""));
-        if (!create) throw new Error("the Assets step offers no way to create the draft");
+          .find((b) => /Create the draft/.test(b.textContent || ""));
+        if (!create) throw new Error("the template step offers no way to create the draft");
         await act(async () => {
           create.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
         });
         await act(async () => {});
 
-        // The update path: with a project already in hand, the plan step writes
-        // the draft again before generating the plan.
+        // The update path: with a project already in hand, generating the plan
+        // writes the draft again first. The plan button is on Review, which is
+        // where the result is read — it was its own step holding one button.
         global.__SMOKE_PARAMS = "?project=p1";
         await mount(CreateVideo, {})(ctx);
-        await openStep(ctx, "Creative plan");
+        // Changing the goal first, so the draft genuinely needs rewriting.
+        // ensureProject short-circuits when nothing the project carries has
+        // moved, and a write that does not happen proves nothing about what it
+        // would have sent.
+        await openStep(ctx, "Audience & goal");
+        const objectiveSelect = ctx.container.querySelector("#objective");
+        const options = Array.from(objectiveSelect.options).filter((o) => o.value);
+        const other = options.find((o) => o.value !== "address_user_problem");
+        if (!other) throw new Error("no second objective to switch to");
+        await selectOption(ctx, objectiveSelect, other.value);
+        await openStep(ctx, "Review");
         const generate = [...ctx.container.querySelectorAll("button")]
-          .find((b) => /(Generate|Regenerate) plan/.test(b.textContent || ""));
-        if (!generate) throw new Error("the plan step offers no generate control");
+          .find((b) => /^(Generate|Regenerate) (the )?plan/.test((b.textContent || "").trim()));
+        if (!generate) throw new Error("Review offers no generate control");
         await act(async () => {
           generate.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
         });
@@ -1819,6 +2096,7 @@ async function main() {
         global.__SMOKE_PARAMS = "";
       }
     );
+    dom.window.confirm = originalConfirm;
     if (creates.length === 0) throw new Error("no project was created along the way");
     if (updates.length === 0) throw new Error("no project was updated along the way");
     if (plans.length === 0) throw new Error("no plan was generated along the way");
@@ -1842,7 +2120,7 @@ async function main() {
   // Landing page
   // -------------------------------------------------------------------------
   // The landing page advertises capabilities, so a claim that quietly stops
-  // being true is the same class of defect as a panel that stops rendering —
+  // being true is the same class of defect as a panel that stops rendering â€”
   // only slower, and it survives every other gate because nothing about the
   // copy is load-bearing. Each string below was live copy at one point and none
   // of them is true of the product now.
@@ -1915,7 +2193,7 @@ async function main() {
   });
 
   // An onboarding tour is invisible when its targets are missing, because
-  // TourOverlay advances silently past a target it cannot find — so a tour
+  // TourOverlay advances silently past a target it cannot find â€” so a tour
   // pointing at a page that no longer exists passes every other gate, shows a
   // first-timer nothing, and still marks itself seen. Two real tours were in
   // exactly that state: /history served GenerationHistory while the history
@@ -1931,7 +2209,7 @@ async function main() {
 
     // The route a tour fires on, and the page component that route serves.
     // Scoping matters: the history tour's testids all still exist in
-    // History.jsx, which is why the bug survived so long — they are real, on a
+    // History.jsx, which is why the bug survived so long â€” they are real, on a
     // page that /history stopped serving. A corpus-wide search would call them
     // fine.
     const ROUTE_PAGE = {
@@ -2073,6 +2351,25 @@ async function openStep(ctx, label) {
   await act(async () => {});
 }
 
+/**
+ * Reach the template step the way the workflow now requires.
+ *
+ * The objective is required, and the template step refuses to show a ranked
+ * list without one - which is correct, since the objective is the heaviest
+ * signal in the score and the list would otherwise look identical while being
+ * ranked on much weaker evidence. So every check about the template cards has to
+ * set one first, exactly as a founder must.
+ */
+async function openTemplateStep(ctx) {
+  await openStep(ctx, "Audience & goal");
+  const select = ctx.container.querySelector("#objective");
+  if (!select) throw new Error("no objective control on the Audience step");
+  const first = select.querySelector("option[value]:not([value=''])");
+  if (!first) throw new Error("the objective control has no objectives to pick");
+  await selectOption(ctx, select, first.value);
+  await openStep(ctx, "Template & photo");
+}
+
 /** Swap api stub methods for the duration of one check, then restore them. */
 async function withApi(overrides, fn) {
   const originals = {};
@@ -2115,7 +2412,7 @@ main()
   .then(async () => {
     // Drain anything still in flight before tearing down. The last checks leave
     // a request resolving, and an update that lands after the last act() prints
-    // a "not wrapped in act" warning — noise in a gate is noise people learn to
+    // a "not wrapped in act" warning â€” noise in a gate is noise people learn to
     // ignore, which is how a real warning gets missed too.
     await act(async () => {});
     // Unmount inside act, one root at a time. Unmounting outside it lets the
@@ -2142,7 +2439,7 @@ main()
     process.exit(0);
   })
   .catch((err) => {
-    // A throw outside a check — a fixture that no longer matches the API, say.
+    // A throw outside a check â€” a fixture that no longer matches the API, say.
     // Must fail loudly: a harness that dies quietly is a gate that is green
     // because it never ran.
     console.log("");
@@ -2150,3 +2447,5 @@ main()
     console.log(`         ${err && err.stack ? err.stack : String(err)}`);
     process.exit(1);
   });
+
+
