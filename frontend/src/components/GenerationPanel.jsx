@@ -28,6 +28,18 @@ import {
  * The claim gate and the ready gate both stay. They are the two things standing
  * between an unreviewed plan and a paid render, and nothing about making the
  * render a single job weakened either one.
+ *
+ * A third thing stands there now, and it is built here rather than asked for:
+ * the strategy. Without one the render falls back to a generic take with a name
+ * in it, and nothing on screen said so — the founder could spend money and only
+ * find out from the log. It is a text call, free, so it is built automatically
+ * on the way to the render they actually asked for, and the panel above shows
+ * the result for reading either before or after.
+ *
+ * If that build fails, the render does NOT proceed. Spending on a less specific
+ * video than the founder believes they are getting, without being told, is the
+ * same dishonesty as silently shortening the piece — which this panel already
+ * refuses to do.
  */
 const POLL_INTERVAL_MS = 6000;
 
@@ -48,7 +60,7 @@ function StatusBadge({ status }) {
   return <Badge variant={variant} className="text-xs">{label}</Badge>;
 }
 
-export function GenerationPanel({ project, onGenerationChange }) {
+export function GenerationPanel({ project, onGenerationChange, onProjectChange }) {
   const [models, setModels] = useState(null);
   const [selectedModel, setSelectedModel] = useState("");
   const [generation, setGeneration] = useState(null);
@@ -57,6 +69,7 @@ export function GenerationPanel({ project, onGenerationChange }) {
   const [composing, setComposing] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [strategyError, setStrategyError] = useState(null);
   const timer = useRef(null);
 
   const projectId = project?.id;
@@ -132,12 +145,46 @@ export function GenerationPanel({ project, onGenerationChange }) {
     setBusy(true);
     setError(null);
     setNotice(null);
+    setStrategyError(null);
     // "Generate another" re-rolls a video the founder has already seen, which
     // is the rework signal. A first generation is not rework, and a retry is a
     // recovery from a failure rather than a judgment about the result, so
     // neither is recorded.
     const isReroll = Boolean(generation);
     try {
+      // The strategy decides what the presenter physically does in each section
+      // and pins the scene so the hook and the middle cannot disagree about the
+      // room. It is free and it takes seconds, so it is built here rather than
+      // asked for: a button the founder might skip turns a specific render into
+      // a generic one, and they cannot tell the difference until they have paid.
+      //
+      // Already present? Leave it alone. Rebuilding would bump
+      // strategy_version and silently replace whatever they reviewed.
+      //
+      // Presence is judged by CONTENT, not by the object's truthiness: the
+      // server sends an empty object rather than null when a project has no
+      // strategy (server.py, _public_project), and {} is truthy in JS, so
+      // `!project.strategy` is false for exactly the projects that need one.
+      // The same test HookContinuityPanel uses: a strategy exists once it has a
+      // hook line.
+      let current = project;
+      if (!current?.strategy?.hook_line) {
+        try {
+          current = await api.generateStrategy(projectId, {});
+          onProjectChange?.(current);
+          setNotice(
+            `Strategy v${current.strategy_version} built from this app's profile and the plan ` +
+            `you approved. It is above, next to the video.`
+          );
+        } catch (err) {
+          // Deliberately NOT rendering anyway. Without a strategy the render
+          // falls back to a generic take, and the founder would pay for it
+          // believing it was the app-specific one. Stopping here is the whole
+          // point of building the strategy on this path.
+          setStrategyError(getErrorMessage(err));
+          return;
+        }
+      }
       // No duration is sent. The length is computed from the template, the
       // project carries it, and the response has no plan to return because
       // there is no second pass to arrange — so there is nothing here to
@@ -298,13 +345,34 @@ export function GenerationPanel({ project, onGenerationChange }) {
         </Alert>
       )}
 
+      {/* A strategy build that failed is reported on its own, apart from any
+          render error, because it stopped the render rather than failing one.
+          The founder needs to know nothing was spent and why. */}
+      {strategyError && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Nothing was generated</AlertTitle>
+          <AlertDescription>
+            The app-specific strategy could not be built, so the render was stopped rather than
+            spent on a generic version: {strategyError} Fix it above and generate again — nothing
+            was charged.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Button
         variant="brand"
         onClick={handleGenerate}
         disabled={busy || inFlight || !ready || blocked || tooLong || !projectId}
       >
         {busy || inFlight ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-        {inFlight ? "Generating..." : generation ? "Generate another" : "Generate the video"}
+        {inFlight
+          ? "Generating..."
+          : busy && !project?.strategy?.hook_line
+            ? "Building the strategy..."
+            : generation
+              ? "Generate another"
+              : "Generate the video"}
       </Button>
 
       {generation && (

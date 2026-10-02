@@ -156,6 +156,22 @@ export function HookContinuityPanel({ project, onProjectChange }) {
   const staleStrategy = Boolean(strategy) && project?.strategy_is_current === false;
 
   const handleGenerateStrategy = async () => {
+    // Confirm only when the plan has moved on. A rebuild then means something
+    // specific — it discards a strategy built against an older plan, and
+    // nothing else on screen says that is what the button does. An ordinary
+    // rebuild of a strategy that is already current is harmless and stays one
+    // click; interrupting that every time would just teach the founder to
+    // dismiss the prompt without reading it.
+    if (hasStrategy && staleStrategy) {
+      const ok = typeof window === "undefined" || typeof window.confirm !== "function"
+        ? true
+        : window.confirm(
+            `Rebuild from plan v${project?.script_version}? This replaces the strategy built ` +
+            `from plan v${project?.strategy_script_version}, and the render will follow the ` +
+            `newer one.`
+          );
+      if (!ok) return;
+    }
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -215,8 +231,8 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           <AlertTitle>Plan edited since this strategy was built</AlertTitle>
           <AlertDescription>
             This strategy was built from plan v{project?.strategy_script_version}, and the plan is
-            now v{project?.script_version}. The render will be refused until they match. Rebuild the
-            strategy to work from the current plan.
+            now v{project?.script_version}. Generating will still work, but it renders the words
+            and directions you approved on the older plan. Rebuild to render the current one.
           </AlertDescription>
         </Alert>
       )}
@@ -269,6 +285,46 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           </p>
         )}
       </div>
+
+      {!hasStrategy && (
+        /* The empty state. Everything above this point used to render nothing
+           until a strategy existed, so the panel was a paragraph and a button
+           with no indication of what either produced — which is why it read as
+           a useless control. These are the two sections and the locked scene,
+           named up front. The content is not knowable before the call, but the
+           SHAPE of what comes back is, and that is what was missing. */
+        <div className="space-y-3 rounded-xl border border-dashed border-[color:var(--hairline)] p-3">
+          <div className="space-y-1">
+            <span className="eyebrow">What you get</span>
+            <ol className="space-y-2 text-sm">
+              {["hook", "middle"].map((role) => (
+                <li key={role} className="space-y-1">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium capitalize">{role}</span>
+                    <span className="text-xs text-muted-foreground">{SECTION_COPY[role]}</span>
+                  </span>
+                  <p className="text-xs text-muted-foreground">
+                    {role === "hook"
+                      ? "The opening concept and the words, from the plan you approved."
+                      : "What the presenter does next, ending where you would reach for your phone."}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          </div>
+          <div className="space-y-1">
+            <span className="eyebrow">The scene</span>
+            <p className="text-xs text-muted-foreground">
+              One locked room and delivery for both sections, taken from the plan's visual and voice
+              direction, so the hook and the middle cannot disagree about where they are.
+            </p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Built automatically when you generate, and shown here before then if you would rather
+            read it first. Text only and free either way.
+          </p>
+        </div>
+      )}
 
       {hasStrategy && (
         <div className="space-y-3 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-3">

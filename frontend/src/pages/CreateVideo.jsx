@@ -1276,10 +1276,17 @@ export default function CreateVideo() {
                     {/* The one and only render. It used to sit on the review
                         step, where it let money be spent on text the founder had
                         not read yet, and it sat BELOW the segmented chain, which
-                        made the chain look like the product. */}
+                        made the chain look like the product.
+
+                        onProjectChange lets the panel build the strategy itself
+                        on the way to a paid render. It was a button above,
+                        which meant a founder could skip it and pay for a
+                        generic take without ever being told the specific one
+                        existed. */}
                     <GenerationPanel
                       project={project}
                       onGenerationChange={() => {}}
+                      onProjectChange={setProject}
                     />
                   </>
                 )}

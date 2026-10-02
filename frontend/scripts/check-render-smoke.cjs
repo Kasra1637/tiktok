@@ -908,8 +908,307 @@ async function main() {
       if (!ctx.text().includes("Build the app-specific strategy")) {
         throw new Error("the render step no longer offers the strategy button");
       }
+      // The button now has an empty state behind it. Previously every panel
+      // detail rendered only once a strategy existed, so this was a paragraph
+      // and a button with nothing visible to indicate what either produced —
+      // which is exactly why it read as a dead control.
+      const text = ctx.text();
+      if (!text.includes("What you get")) {
+        throw new Error("the strategy panel shows no preview of what building it produces");
+      }
+      if (!text.includes("hook") || !text.includes("middle")) {
+        throw new Error("the empty state does not name the two sections it will produce");
+      }
     } finally {
       global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("generating builds the strategy first, then renders", async (ctx) => {
+    // Without a strategy the render falls back to a generic take with a name in
+    // it. It used to be a button the founder could skip, so paying for the
+    // generic version was one missed click away and nothing on screen said the
+    // specific one existed.
+    global.__SMOKE_PARAMS = "?project=p1";
+    const order = [];
+    let renderCalls = 0;
+    try {
+      await withApi(
+        {
+          getStudioProject: async () => ({
+            ...PROJECT_WITH_STRATEGY,
+            strategy: {},
+            strategy_version: 0,
+          }),
+          generateStrategy: async () => {
+            order.push("strategy");
+            return PROJECT_WITH_STRATEGY;
+          },
+          generateVideo: async () => {
+            order.push("render");
+            renderCalls += 1;
+            return { ...SEGMENT, status: "submitted" };
+          },
+        },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Hook & middle");
+          const btn = renderButton(ctx);
+          await act(async () => {
+            btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {});
+          await act(async () => {});
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+    if (renderCalls !== 1) throw new Error(`expected one render, got ${renderCalls}`);
+    if (order.length !== 2 || order[0] !== "strategy") {
+      throw new Error(`the strategy must be built before the render, got ${JSON.stringify(order)}`);
+    }
+  });
+
+  await check("an existing strategy is not rebuilt when generating", async (ctx) => {
+    // Rebuilding bumps strategy_version and silently replaces whatever the
+    // founder reviewed. A re-render must not do that behind their back.
+    global.__SMOKE_PARAMS = "?project=p1";
+    let strategyCalls = 0;
+    try {
+      await withApi(
+        {
+          generateStrategy: async () => {
+            strategyCalls += 1;
+            return PROJECT_WITH_STRATEGY;
+          },
+          generateVideo: async () => ({ ...SEGMENT, status: "submitted" }),
+        },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Hook & middle");
+          const btn = renderButton(ctx);
+          await act(async () => {
+            btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {});
+          await act(async () => {});
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+    if (strategyCalls !== 0) {
+      throw new Error("generating replaced a strategy the founder had already reviewed");
+    }
+  });
+
+  await check("a strategy build that fails stops the render and is reported", async (ctx) => {
+    // The whole reason the strategy is built on this path is so the founder does
+    // not pay for a generic take believing it was the app-specific one. A
+    // fallback here would restore the exact dishonesty the step removes.
+    global.__SMOKE_PARAMS = "?project=p1";
+    let renderCalls = 0;
+    try {
+      await withApi(
+        {
+          getStudioProject: async () => ({
+            ...PROJECT_WITH_STRATEGY,
+            strategy: {},
+            strategy_version: 0,
+          }),
+          generateStrategy: async () => {
+            throw new Error("the model returned a truncated response");
+          },
+          generateVideo: async () => {
+            renderCalls += 1;
+            return { ...SEGMENT, status: "submitted" };
+          },
+        },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Hook & middle");
+          const btn = renderButton(ctx);
+          await act(async () => {
+            btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {});
+          await act(async () => {});
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+    if (renderCalls !== 0) {
+      throw new Error("the render proceeded after the strategy build failed");
+    }
+    const text = ctx.text();
+    if (!text.includes("Nothing was generated")) {
+      throw new Error("a failed strategy build is not reported as having stopped the render");
+    }
+    // The founder must be able to tell nothing was spent. Without this they
+    // cannot tell a stopped render from a failed one, and would reasonably
+    // assume they were charged.
+    if (!text.includes("nothing was charged")) {
+      throw new Error("the failure does not say that no render was charged");
+    }
+    // The reason itself is interpolated, but this harness stubs
+    // getErrorMessage to a constant, so only the wiring is observable here: the
+    // alert must render, not just the render call being skipped.
+    if (!text.includes("could not be built")) {
+      throw new Error("the failure does not name the strategy as the thing that failed");
+    }
+  });
+
+  await check("the stale-plan warning does not claim the render will be refused", async (ctx) => {
+    // It claimed "will be refused until they match". Nothing refuses: the 409
+    // that did lived only on the two deleted segmented endpoints, so the panel
+    // was promising a guarantee the server does not make.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi(
+        {
+          getStudioProject: async () => ({
+            ...PROJECT_WITH_STRATEGY,
+            strategy_version: 2,
+            strategy_script_version: 1,
+            script_version: 3,
+            strategy_is_current: false,
+          }),
+        },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Hook & middle");
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+    const text = ctx.text();
+    if (!text.includes("Plan edited since this strategy was built")) {
+      throw new Error("the drift warning is missing entirely");
+    }
+    if (/will be refused/i.test(text)) {
+      throw new Error("the drift warning promises a refusal the server does not perform");
+    }
+    // It has to say what actually happens instead, or the founder still cannot
+    // tell that generating will go ahead on the older plan.
+    if (!text.includes("will still work")) {
+      throw new Error("the drift warning does not say the render will proceed on the older plan");
+    }
+    // And it must name both versions, so "the older plan" is specific rather
+    // than a warning with nothing to act on.
+    // ...and it must name both versions, so "the older plan" is specific rather
+    // than a warning with nothing to act on. The copy reads "built from plan v1"
+    // and "the plan is now v3".
+    if (!/plan v1/.test(text) || !/now v3/.test(text)) {
+      throw new Error("the drift warning does not name the plan versions involved");
+    }
+  });
+
+  await check("rebuilding a stale strategy asks first", async (ctx) => {
+    // A rebuild bumps strategy_version and replaces what the founder reviewed.
+    // When the plan has moved on, that replacement is the POINT of the click and
+    // nothing else on screen says so - so it asks before overwriting.
+    const asked = [];
+    const originalConfirm = dom.window.confirm;
+    let answer = false;
+    dom.window.confirm = (message) => {
+      asked.push(message);
+      return answer;
+    };
+    apiCalls.length = 0;
+    try {
+      global.__SMOKE_PARAMS = "?project=p1";
+      await withApi(
+        {
+          getStudioProject: async () => ({
+            ...PROJECT_WITH_STRATEGY,
+            strategy_version: 2,
+            strategy_script_version: 1,
+            script_version: 3,
+            strategy_is_current: false,
+          }),
+        },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Hook & middle");
+          const rebuild = [...ctx.container.querySelectorAll("button")]
+            .find((b) => (b.textContent || "").includes("Rebuild strategy"));
+          if (!rebuild) throw new Error("no rebuild control on the last step");
+          await act(async () => {
+            rebuild.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {});
+        }
+      );
+      if (asked.length !== 1) {
+        throw new Error(`a stale rebuild did not confirm (asked ${asked.length} times)`);
+      }
+      // The confirmation has to be specific about what is being replaced, or it
+      // is a speed bump the founder dismisses without reading.
+      if (!/plan v3/.test(asked[0]) || !/plan v1/.test(asked[0])) {
+        throw new Error(`the confirmation does not name the plan versions: ${asked[0]}`);
+      }
+      // Declining must spend nothing. Reads happen on mount and are irrelevant;
+      // the thing that would be wrong here is a write.
+      const writes = apiCalls.filter((n) => /^(generate|update|create|mark|detach|upload)/.test(n));
+      if (writes.length !== 0) {
+        throw new Error(`declining the confirmation still wrote: ${JSON.stringify(writes)}`);
+      }
+    } finally {
+      dom.window.confirm = originalConfirm;
+      global.__SMOKE_PARAMS = "";
+      apiCalls.length = 0;
+    }
+  });
+
+  await check("rebuilding a current strategy does not interrupt", async (ctx) => {
+    // The other half of the same rule. A rebuild of a strategy that already
+    // matches the plan is harmless, and prompting every time would only teach
+    // the founder to dismiss the dialog without reading it - which is how a
+    // confirmation stops working at all.
+    const asked = [];
+    const originalConfirm = dom.window.confirm;
+    dom.window.confirm = (message) => {
+      asked.push(message);
+      return true;
+    };
+    apiCalls.length = 0;
+    try {
+      global.__SMOKE_PARAMS = "?project=p1";
+      await withApi(
+        {
+          getStudioProject: async () => ({
+            ...PROJECT_WITH_STRATEGY,
+            strategy_version: 2,
+            strategy_script_version: 3,
+            script_version: 3,
+            strategy_is_current: true,
+          }),
+        },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Hook & middle");
+          const rebuild = [...ctx.container.querySelectorAll("button")]
+            .find((b) => (b.textContent || "").includes("Rebuild strategy"));
+          if (!rebuild) throw new Error("no rebuild control on the last step");
+          await act(async () => {
+            rebuild.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {});
+        }
+      );
+      if (asked.length !== 0) {
+        throw new Error("a harmless rebuild was interrupted by a confirmation prompt");
+      }
+      if (!apiCalls.includes("generateStrategy")) {
+        throw new Error("an unprompted rebuild did not go through");
+      }
+    } finally {
+      dom.window.confirm = originalConfirm;
+      global.__SMOKE_PARAMS = "";
+      apiCalls.length = 0;
     }
   });
 
@@ -1742,6 +2041,27 @@ function stepPill(ctx, label) {
     .find((b) => (b.textContent || "").trim().includes(label));
   if (!pill) throw new Error(`no step nav control labelled ${JSON.stringify(label)}`);
   return pill;
+}
+
+/**
+ * The one paid render control on the last step.
+ *
+ * Its label depends on whether a previous generation is on file - "Generate the
+ * video" the first time, "Generate another" on a re-render, and "Generating..."
+ * while one is in flight - so a check that clicks the render must match on the
+ * family rather than one string, or it silently fails to find a button that is
+ * right there.
+ */
+function renderButton(ctx) {
+  const btn = [...ctx.container.querySelectorAll("button")].find((b) =>
+    /Generate the video|Generate another/.test((b.textContent || "").trim())
+  );
+  if (!btn) {
+    const seen = [...ctx.container.querySelectorAll("button")]
+      .map((b) => (b.textContent || "").trim().slice(0, 45));
+    throw new Error(`no render control on the last step; saw ${JSON.stringify(seen)}`);
+  }
+  return btn;
 }
 
 /** Click through to a wizard step the way a founder would, then settle. */
