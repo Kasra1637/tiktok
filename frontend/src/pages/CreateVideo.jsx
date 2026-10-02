@@ -71,18 +71,34 @@ function formatTemplateUse(n) {
 }
 
 /**
- * One recommended template. The first fit reason and limitation show inline;
- * the rest — including this app's own recorded feedback, which the engine
- * inserts at position 0 — open on demand so the card stays scannable.
+ * One recommended template.
  *
- * A div with button semantics rather than a <button>: the expand toggle is
- * interactive, and interactive elements cannot nest inside a button.
+ * Every fit reason and every limitation is shown, always. They used to be
+ * collapsed behind a "Show all N more" link, which was wrong twice over: these
+ * ARE the evidence for the choice the founder is making here, and the count
+ * they were hiding behind is not a quality signal. The scorer emits one reason
+ * per matched factor and sorts by weight, so a single "Built for the 'create
+ * curiosity' objective" (3.0) outranks three 1.0 matches — and a miss becomes
+ * a LIMITATION rather than a reason, so a template can match strongly and still
+ * carry a caveat. Four reasons is not better than two.
+ *
+ * The score is therefore the number worth reading, and it is already computed
+ * server-side (and already what the list is sorted by), so it is shown here
+ * rather than left for the founder to infer from ordering.
+ *
+ * Two blocks, not one: a reason is the case FOR this template and a limitation
+ * is the caveat ON it. Rendering them identically made a warning look like
+ * supporting evidence.
+ *
+ * A div with button semantics rather than a <button> because the whole card is
+ * the control. There is no longer a nested toggle — the previous one called
+ * stopPropagation on click but not on keydown, so Enter and Space on the link
+ * selected the template instead of expanding it.
  */
 function RecommendationCard({ r, selected, onSelect }) {
-  const [expanded, setExpanded] = useState(false);
   const reasons = Array.isArray(r.why_it_fits) ? r.why_it_fits : [];
   const limits = Array.isArray(r.limitations) ? r.limitations : [];
-  const hiddenCount = Math.max(0, reasons.length - 1) + Math.max(0, limits.length - 1);
+  const score = Number(r.score);
   const example =
     typeof r.template.example_preview === "string" && r.template.example_preview.trim()
       ? r.template.example_preview.trim()
@@ -111,47 +127,49 @@ function RecommendationCard({ r, selected, onSelect }) {
           <Badge variant="outline" className="text-[11px]">
             {r.suggested_duration}s
           </Badge>
+          {Number.isFinite(score) && (
+            // The sort key. Not a percentage or a rating: a weighted sum of
+            // matched factors, comparable only between these cards.
+            <Badge
+              variant="outline"
+              className="text-[11px]"
+              data-testid="template-fit-score"
+              title="Fit score — a weighted sum of the factors this template matched. Only comparable against the other templates below."
+            >
+              Fit {score}
+            </Badge>
+          )}
           <Badge variant="secondary" className="text-[11px]">
             {formatTemplateUse(r.template.times_used)}
           </Badge>
           {selected && <Check className="h-4 w-4 text-[color:var(--brand-indigo)]" />}
         </span>
       </div>
-      {reasons[0] && (
-        <p className="mt-1 text-xs text-muted-foreground">{reasons[0]}</p>
-      )}
-      {limits[0] && (
-        <p className="mt-0.5 text-[11px] text-muted-foreground/80">
-          {limits[0]}
-        </p>
-      )}
       {example && (
         <p className="mt-1 text-xs text-foreground/80">
           <span className="text-muted-foreground">Sounds like: </span>
           &ldquo;{example}&rdquo;
         </p>
       )}
-      {expanded && (
-        <div className="mt-2 space-y-1 border-t border-[color:var(--hairline)] pt-2">
-          {reasons.slice(1).map((reason, i) => (
+      {reasons.length > 0 && (
+        <div className="mt-2 space-y-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
+            Why it fits
+          </p>
+          {reasons.map((reason, i) => (
             <p key={`r-${i}`} className="text-xs text-muted-foreground">{reason}</p>
-          ))}
-          {limits.slice(1).map((limitation, i) => (
-            <p key={`l-${i}`} className="text-[11px] text-muted-foreground/80">{limitation}</p>
           ))}
         </div>
       )}
-      {hiddenCount > 0 && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setExpanded((v) => !v);
-          }}
-          className="mt-1.5 text-[11px] font-medium text-[color:var(--brand-indigo)] hover:underline"
-        >
-          {expanded ? "Show less" : `Show all ${hiddenCount} more`}
-        </button>
+      {limits.length > 0 && (
+        <div className="mt-2 space-y-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
+            Before you use it
+          </p>
+          {limits.map((limitation, i) => (
+            <p key={`l-${i}`} className="text-[11px] text-muted-foreground/80">{limitation}</p>
+          ))}
+        </div>
       )}
     </div>
   );

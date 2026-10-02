@@ -1072,6 +1072,120 @@ class TestViewerObjectionNormalization:
         ai_service._normalize_objection_list(result)
         assert len(result["viewer_objections"]) == 6
 
+    def test_the_phrase_list_normalizer_leaves_it_alone(self):
+        """
+        The bug this guards: viewer_objections was listed among the phrase lists,
+        so the generic loop str()'d each dict into a repr and the objection
+        normalizer then dropped every one as malformed. The field came out empty
+        100% of the time and "Why they would not download" never rendered.
+
+        Every other test here calls _normalize_objection_list directly, which is
+        why they all passed while the real path was broken. This one asserts the
+        key is genuinely absent from the list that does the damage.
+        """
+        import ai_service
+        assert "viewer_objections" not in ai_service.APP_PROFILE_LIST_KEYS
+
+    def test_survives_the_real_normalization_sequence(self):
+        """
+        Runs the two normalizers in the order analyze_app_profile runs them,
+        rather than only the objection normalizer in isolation.
+        """
+        import ai_service
+
+        result = {"viewer_objections": [dict(TestViewerObjections.OBJECTIONS[0])]}
+        for key in ai_service.APP_PROFILE_LIST_KEYS:
+            val = result.get(key)
+            if isinstance(val, str):
+                val = [val] if val.strip() else []
+            if not isinstance(val, list):
+                val = []
+            result[key] = [str(v).strip() for v in val if str(v).strip()][:8]
+        ai_service._normalize_objection_list(result)
+
+        kept = result["viewer_objections"]
+        assert len(kept) == 1
+        assert kept[0]["objection"]
+        assert kept[0]["honest_answer"]
+        assert isinstance(kept[0], dict)
+
+
+class TestObjectionFieldSurvivesASave:
+    """
+    PATCH /app-profiles/{id} 500'd on any save that carried viewer_objections,
+    because the field was in neither the editable list nor the encoder, so a raw
+    Python list was bound into a TEXT column. The editor always sends the key, so
+    every save on an existing profile failed. No test touched this endpoint.
+    """
+
+    def test_update_parts_encodes_it_as_json(self):
+        import server
+        triples = [{
+            "objection": "Just another subscription",
+            "what_they_do_now": "Three habit trackers I already pay for",
+            "honest_answer": "One app that costs nothing and works offline",
+        }]
+        clauses, values = server._brand_update_parts({"viewer_objections": triples})
+        assert clauses == ["viewer_objections = ?"]
+        # Bound into a TEXT column, so it has to arrive as a JSON string.
+        assert isinstance(values[0], str)
+        decoded = json.loads(values[0])
+        assert decoded[0]["objection"] == "Just another subscription"
+        assert decoded[0]["honest_answer"].startswith("One app")
+
+    def test_update_parts_does_not_flatten_the_dicts(self):
+        """
+        _normalize_str_list turns a dict into its "label"/"name" key, and these
+        triples have neither, so it would store three empty strings.
+        """
+        import server
+        triples = [{
+            "objection": "Too many apps",
+            "what_they_do_now": "Notes",
+            "honest_answer": "It replaces them",
+        }]
+        _clauses, values = server._brand_update_parts({"viewer_objections": triples})
+        assert "Too many apps" in values[0]
+
+    def test_update_parts_accepts_a_json_string(self):
+        """The editor round-trips this field through text, so both shapes arrive."""
+        import server
+        triples = [{
+            "objection": "Not sure it works",
+            "what_they_do_now": "Asking a friend",
+            "honest_answer": "Here is what it does",
+        }]
+        _clauses, values = server._brand_update_parts({
+            "viewer_objections": json.dumps(triples),
+        })
+        assert json.loads(values[0])[0]["honest_answer"] == "Here is what it does"
+
+    def test_update_parts_drops_a_half_built_triple(self):
+        """An objection with no honest reply gives the arc nothing to aim at."""
+        import server
+        _clauses, values = server._brand_update_parts({"viewer_objections": [
+            {"objection": "Too expensive", "what_they_do_now": "Nothing"},
+        ]})
+        assert json.loads(values[0]) == []
+
+    def test_phrase_lists_still_encode_as_before(self):
+        """The new branch must not have changed the existing list fields."""
+        import server
+        _clauses, values = server._brand_update_parts({
+            "core_features": "Timer, Journal",
+        })
+        assert json.loads(values[0]) == ["Timer", "Journal"]
+
+    def test_it_is_editable(self):
+        """Otherwise the field is filtered out before it ever reaches the SQL."""
+        from models import (
+            APP_PROFILE_EDITABLE_FIELDS, APP_PROFILE_LIST_FIELDS,
+            APP_PROFILE_OBJECT_LIST_FIELDS,
+        )
+        assert "viewer_objections" in APP_PROFILE_EDITABLE_FIELDS
+        assert "viewer_objections" in APP_PROFILE_OBJECT_LIST_FIELDS
+        assert "viewer_objections" not in APP_PROFILE_LIST_FIELDS
+
 
 class TestPlanPromptSeesCompetitors:
     """

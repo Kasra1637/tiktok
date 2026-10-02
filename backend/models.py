@@ -99,15 +99,21 @@ class ApproveAppProfileRequest(BaseModel):
     apply_pending: Optional[bool] = True
 
 
-# Fields shared by App Profile create/update payloads. Lists serialize to JSON
-# text columns; the API accepts either a list or a comma-separated string and
-# normalizes server-side.
+# Fields shared by App Profile create/update payloads.
+#
+# Lists of plain phrases. They serialize to JSON text columns, and the API
+# accepts either a list or a comma-separated string.
 APP_PROFILE_LIST_FIELDS = (
     "support_urls", "platforms", "core_features", "primary_use_cases",
     "problems_solved", "icp_segments", "desired_outcomes", "competitors",
     "must_not_show", "usage_moments", "claims_approved",
     "claims_review", "claims_banned",
 )
+
+# Lists of objects. Same JSON text column, but the members cannot go through
+# _normalize_str_list: that flattens a dict to its "label"/"name" key, which
+# these triples do not have, so every entry would serialize to "".
+APP_PROFILE_OBJECT_LIST_FIELDS = ("viewer_objections",)
 
 APP_PROFILE_TEXT_FIELDS = (
     "website_url", "appstore_url", "play_url", "notes", "brand_name",
@@ -116,7 +122,9 @@ APP_PROFILE_TEXT_FIELDS = (
     "known_limitations", "proof_moment", "raw_extracted_text",
 )
 
-APP_PROFILE_EDITABLE_FIELDS = APP_PROFILE_TEXT_FIELDS + APP_PROFILE_LIST_FIELDS
+APP_PROFILE_EDITABLE_FIELDS = (
+    APP_PROFILE_TEXT_FIELDS + APP_PROFILE_LIST_FIELDS + APP_PROFILE_OBJECT_LIST_FIELDS
+)
 
 
 class ViewerObjection(BaseModel):

@@ -152,10 +152,16 @@ REQUIRED_APP_PROFILE_KEYS = {
     "claims_banned",
 }
 
+# Phrase lists, which are lists of strings. viewer_objections is deliberately
+# NOT here: it is a list of objects, so this normalizer would str() each one
+# into an unreadable dict repr and the dedicated _normalize_objection_list below
+# would then discard every entry as malformed — which is exactly what happened
+# for as long as the key was included. It has its own normalizer, called after
+# this loop.
 APP_PROFILE_LIST_KEYS = (
     "platforms", "core_features", "primary_use_cases", "problems_solved",
     "icp_segments", "desired_outcomes", "competitors", "must_not_show",
-    "usage_moments", "viewer_objections", "claims_approved",
+    "usage_moments", "claims_approved",
     "claims_review", "claims_banned",
 )
 
@@ -1609,11 +1615,12 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
             val = []
         result[key] = [str(v).strip() for v in val if str(v).strip()][:8]
 
-    # viewer_objections is a list of objects, so the list normalizer above would
-    # str() them into unreadable dict reprs. Normalized separately and, unlike
-    # the phrase lists, a malformed entry is dropped whole rather than kept as a
-    # half-answer: an objection with a missing honest_answer is worse than no
-    # objection, because the arc has nothing to aim at.
+    # viewer_objections is a list of objects and is NOT in
+    # APP_PROFILE_LIST_KEYS above, so its entries are still dicts by the time we
+    # get here. Normalized separately and, unlike the phrase lists, a malformed
+    # entry is dropped whole rather than kept as a half-answer: an objection
+    # with a missing honest_answer is worse than no objection, because the arc
+    # has nothing to aim at.
     _normalize_objection_list(result)
 
     return result

@@ -1226,6 +1226,121 @@ async function main() {
     }
   });
 
+  await check("every fit reason and limitation is on the card, with no toggle to hide them", async (ctx) => {
+    // The reasons ARE the evidence for the choice this step asks for, and the
+    // count of them is not a quality signal (a 3.0 objective match outranks
+    // three 1.0 matches, and a miss becomes a limitation instead of a reason).
+    // They used to be collapsed behind "Show all N more", which read as dead UI
+    // because opening it only revealed plain text.
+    global.__SMOKE_PARAMS = "";
+    const FOUR_REASONS = [
+      "Built for the 'create curiosity' objective.",
+      "Suited to the 'Health & Fitness' category.",
+      "Tailored for Vocolens - generated from this app's approved profile.",
+      "Matches your audience: anxious, night-owls.",
+    ];
+    const THREE_LIMITS = [
+      "Needs character reference.",
+      "Curated for Productivity rather than Health & Fitness.",
+      "Rejected or replaced 2 time(s) for this app.",
+    ];
+    await withApi(
+      {
+        getTemplates: async () => ({ templates: ORDERED_TEMPLATES }),
+        getTemplateRecommendations: async () => ({
+          recommendations: [
+            {
+              template: ORDERED_TEMPLATES[0],
+              score: 9.5,
+              why_it_fits: FOUR_REASONS,
+              limitations: THREE_LIMITS,
+              suggested_duration: TEMPLATE.default_duration,
+            },
+          ],
+        }),
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        const pill = stepPill(ctx, "Hook template");
+        await act(async () => {
+          pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+      }
+    );
+    const text = ctx.text();
+
+    // Every line, with no click required. The old card showed reasons[0] and
+    // limits[0] and hid the rest behind the link.
+    for (const reason of FOUR_REASONS) {
+      if (!text.includes(reason)) {
+        throw new Error(`a fit reason is hidden behind the old toggle: ${reason}`);
+      }
+    }
+    for (const limit of THREE_LIMITS) {
+      if (!text.includes(limit)) {
+        throw new Error(`a limitation is hidden behind the old toggle: ${limit}`);
+      }
+    }
+
+    // The toggle is gone entirely, in either state.
+    if (/Show all \d+ more/i.test(text) || /Show less/i.test(text)) {
+      throw new Error("the expand toggle is still present; reasons should always be visible");
+    }
+
+    // A reason is the case FOR the template and a limitation is the caveat ON
+    // it. Rendering them identically made a warning look like evidence.
+    if (!text.includes("Why it fits")) {
+      throw new Error("the fit reasons are not labelled");
+    }
+    if (!text.includes("Before you use it")) {
+      throw new Error("the limitations are not labelled as caveats");
+    }
+
+    // The score is the sort key and was already computed server-side; showing it
+    // is what stops "is four reasons better than two" being a reasonable
+    // question for the founder to ask.
+    if (!text.includes("Fit 9.5")) {
+      throw new Error("the fit score is not shown on the card");
+    }
+  });
+
+  await check("a card with no reasons or limitations shows neither block", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await withApi(
+      {
+        getTemplates: async () => ({ templates: ORDERED_TEMPLATES }),
+        getTemplateRecommendations: async () => ({
+          recommendations: [
+            {
+              template: ORDERED_TEMPLATES[1],
+              score: 5,
+              why_it_fits: [],
+              limitations: [],
+              suggested_duration: TEMPLATE.default_duration,
+            },
+          ],
+        }),
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        const pill = stepPill(ctx, "Hook template");
+        await act(async () => {
+          pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+      }
+    );
+    const text = ctx.text();
+    // An empty heading is worse than no heading.
+    if (text.includes("Why it fits") || text.includes("Before you use it")) {
+      throw new Error("an empty reasons or limitations block is still rendered");
+    }
+    if (!text.includes("Fit 5")) {
+      throw new Error("the fit score is missing");
+    }
+  });
+
   // The important half: a reload must not move a pick the founder made. The
   // recommender's order depends on recorded feedback, so a re-rank between
   // visits would otherwise silently replace a deliberate choice.

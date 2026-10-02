@@ -56,7 +56,8 @@ from models import (
     OverlayCompositionRequest, CreateVariationRequest, PerformanceEntryRequest,
     ResearchScanRequest, FeedbackRequest,
     GenerateStrategyRequest,
-    APP_PROFILE_LIST_FIELDS, APP_PROFILE_EDITABLE_FIELDS,
+    APP_PROFILE_LIST_FIELDS, APP_PROFILE_OBJECT_LIST_FIELDS,
+    APP_PROFILE_EDITABLE_FIELDS,
     STUDIO_EDITABLE_FIELDS, STUDIO_TEXT_FIELDS,
     now_iso, row_to_dict,
 )
@@ -2289,12 +2290,53 @@ def _normalize_str_list(value) -> list:
     return []
 
 
+def _normalize_objection_value(value) -> list:
+    """
+    Coerce a client-supplied viewer_objections value into stored triples.
+
+    The API accepts a list of ViewerObjection-shaped dicts, a list of dicts with
+    missing keys, or a JSON string of either (the editor round-trips the field
+    through text, and older clients sent a string). A malformed entry is dropped
+    whole rather than kept as a half-answer, for the same reason the extraction
+    path does: an objection without an honest reply gives the arc nothing to
+    aim at.
+
+    Deliberately NOT _normalize_str_list: that flattens a dict to its
+    "label"/"name" key, which these triples do not have, so every entry would
+    serialize to "".
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return []
+    if not isinstance(value, list):
+        return []
+    kept = []
+    for item in value[:6]:
+        if not isinstance(item, dict):
+            continue
+        triple = {
+            "objection": str(item.get("objection") or "").strip()[:200],
+            "what_they_do_now": str(item.get("what_they_do_now") or "").strip()[:200],
+            "honest_answer": str(item.get("honest_answer") or "").strip()[:300],
+        }
+        if not triple["objection"] or not triple["honest_answer"]:
+            continue
+        kept.append(triple)
+    return kept
+
+
 def _brand_update_parts(updates: dict) -> tuple:
     """Split a profile update dict into (SET clauses, values), JSON-encoding lists."""
     set_clauses = []
     values = []
     for key, value in updates.items():
-        if key in APP_PROFILE_LIST_FIELDS:
+        if key in APP_PROFILE_OBJECT_LIST_FIELDS:
+            value = json.dumps(_normalize_objection_value(value))
+        elif key in APP_PROFILE_LIST_FIELDS:
             value = json.dumps(_normalize_str_list(value))
         set_clauses.append(f"{key} = ?")
         values.append(value)
@@ -5551,7 +5593,7 @@ async def create_brand(payload: BrandProfileCreateRequest, user_id: str = Depend
          json.dumps(_normalize_str_list(payload.must_not_show)),
          json.dumps(_normalize_str_list(payload.usage_moments)),
          payload.proof_moment or "",
-         json.dumps(payload.viewer_objections or []),
+          json.dumps(_normalize_objection_value(payload.viewer_objections)),
          json.dumps(_normalize_str_list(payload.claims_approved)),
          json.dumps(_normalize_str_list(payload.claims_review)),
          json.dumps(_normalize_str_list(payload.claims_banned)),
@@ -5735,7 +5777,7 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
          json.dumps(profile.get("must_not_show") or []),
          json.dumps(profile.get("usage_moments") or []),
          profile.get("proof_moment") or "",
-         json.dumps(profile.get("viewer_objections") or []),
+          json.dumps(_normalize_objection_value(profile.get("viewer_objections"))),
          json.dumps(profile.get("claims_approved") or []),
          json.dumps(profile.get("claims_review") or []),
          json.dumps(profile.get("claims_banned") or []),
