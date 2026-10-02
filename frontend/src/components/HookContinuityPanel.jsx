@@ -3,6 +3,7 @@ import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage, mediaUrl } from "../lib/api";
+import { RecordResultsNudge } from "./RecordResultsNudge";
 import {
   DEFAULT_HOOK,
   readExtendIntent,
@@ -986,6 +987,15 @@ export function HookContinuityPanel({ project, onProjectChange, onGenerationChan
                   {assembled.segment_count} segment(s) joined
                 </Badge>
               </div>
+              {/* Same reasoning as GenerationPanel's nudge: the download is
+                  where the founder knows the views and the app has no idea it
+                  happened. `tip` is the last real segment, so the link lands on
+                  the row that actually carries the result — not on the
+                  synthesized `chain-` id, which is not a generation. */}
+              <RecordResultsNudge
+                generationId={tip?.id}
+                recorded={Boolean(segments.find((s) => s.id === tip?.id)?.performance)}
+              />
               {assembled.skipped?.length > 0 && (
                 <ul className="list-disc space-y-0.5 pl-4 text-xs text-muted-foreground">
                   {assembled.skipped.map((s, i) => (
