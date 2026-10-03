@@ -1797,10 +1797,12 @@ export default function CreateVideo() {
           that has been told they finished the workflow before they started it.
 
           Each step now declares what makes it satisfied, and the tick means that.
-          The three states are distinct and separately labelled, because the
-          difference between "done" and "needs you" is the whole point of a
-          progress indicator - and a step you can leave is marked as such rather
-          than looking blocked. */}
+          Ticks are the only color story here: done steps tick, everything else
+          shows the same hollow ring. A step that is waiting on the founder
+          used to amber its icon, but the amber read as an error and clashed
+          with the rest of the row — and the distinction never needed color,
+          because the sentence underneath already names what is waiting and the
+          pills already announce it. */}
       <nav aria-label="Progress" className="flex flex-wrap items-center gap-1.5">
         {stepStates.map((s, i) => {
           const active = i === step;
@@ -1811,9 +1813,8 @@ export default function CreateVideo() {
               type="button"
               onClick={() => setStep(i)}
               aria-current={active ? "step" : undefined}
-              // Announced rather than shown only: a tick and a warning dot are
-              // both shape-only cues, and this is the one place the founder
-              // looks to answer "what is left".
+              // Announced rather than shown only: the tick is a shape-only cue, and
+              // this is the one place the founder looks to answer "what is left".
               aria-label={`${s.step.label}: ${STEP_STATE_COPY[s.state]}`}
               title={STEP_STATE_COPY[s.state]}
               data-state={s.state}
@@ -1826,17 +1827,17 @@ export default function CreateVideo() {
                     : "border-dashed border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--indigo-35)] hover:text-foreground"
               }`}
             >
-              {s.state === "todo" ? (
-                // A hollow ring, not a tick and not the step icon: it says
-                // "not started" without pretending to be an action waiting here.
+              {s.state === "todo" || s.state === "blocked" ? (
+                // A hollow ring for anything not done — "not started" and
+                // "needs something from you" share it. The difference between
+                // the two lives in the sentence underneath and in the announced
+                // label, not in color: an amber icon read as an error state.
                 <span
                   aria-hidden="true"
                   className="h-3 w-3 rounded-full border border-current opacity-60"
                 />
               ) : (
-                <Icon
-                  className={`h-3 w-3 ${s.state === "blocked" ? "text-amber-600 dark:text-amber-500" : ""}`}
-                />
+                <Icon className="h-3 w-3" />
               )}
               {s.step.label}
             </button>
