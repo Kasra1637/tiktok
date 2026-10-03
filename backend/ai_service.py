@@ -117,37 +117,37 @@ VIDEO_MODELS = {
         "resolution": "768p",
         "supports_combined_refs": False,
     },
-    # HeyGen Avatar IV: a talking-head avatar, not a scene renderer. It
-    # animates the founder photo into a lip-synced performance driven by
-    # vocal tone and rhythm, at 1080p. Opt-in, and deliberately so: it is a
-    # different product and a different request shape.
+    # HeyGen Video 1: a general-purpose prompt-to-video renderer, closest in
+    # shape to the H3 entries. It takes the founder photo as a first-frame
+    # anchor and a text prompt, and synthesizes its own audio (dialogue,
+    # ambience, sound effects) in the same call. Opt-in for cost comparison:
+    # 768p at the reference rate against H3 2K at more than double it.
     #
-    # Three facts from OpenRouter live /videos/models entry drive the
-    # request built below, and none can be inferred from the H3 entries:
-    #   supported_frame_images is null -> the photo CANNOT ride as a
-    #     first_frame anchor, so it goes in input_references instead.
-    #     identity_via_reference records that requirement.
-    #   generate_audio is false -> speech is voiced by HeyGen own
-    #     text-to-speech, so the studio must not request native audio.
-    #   supported_durations is null -> the length is not a fixed menu. The
-    #     studio band is still sent and the provider decides.
-    "heygen-avatar-iv": {
-        "id": "heygen/avatar-iv",
-        "name": "HeyGen Avatar IV",
+    # The one field that must NOT be copied from the H3 entry is resolution:
+    # OpenRouter lists 480p and 768p only and rejects an unlisted value, so a
+    # 2K request would 400 on every render -- the same constraint that shaped
+    # the H3 Max entry.
+    #
+    # supports_native_audio is False because generate_audio is NOT among the
+    # accepted parameters for this model even though it synthesizes audio.
+    # False makes the studio omit the field and let the provider apply its own
+    # default. If a real clip comes back silent, that is the flag to flip.
+    "heygen-video-1": {
+        "id": "heygen/heygen-video-1",
+        "name": "HeyGen Video 1",
         "description": (
-            "Talking-head avatar: animates your photo into a lip-synced "
-            "performance at 1080p, driven by vocal tone and rhythm. The "
-            "photo rides as a reference image, and speech is voiced by "
-            "HeyGen text-to-speech rather than generated natively."
+            "General-purpose prompt-to-video generation with dialogue, "
+            "ambience and sound effects synthesized in one call. 768p, "
+            "5-15s, your photo opening the clip as its first frame. About "
+            "half the price of Hailuo 3 with a softer picture. Opt-in."
         ),
         "max_duration": 15,
         "min_duration": 5,
         "supports_references": True,
-        "supports_native_audio": False,  # speech comes from HeyGen TTS
+        "supports_native_audio": False,  # generate_audio unlisted; audio is synthesized in-call
         "supports_v2v_motion": False,
-        "resolution": "1080p",
+        "resolution": "768p",
         "supports_combined_refs": False,
-        "identity_via_reference": True,  # no frame_images support
     },
 }
 # Default for new template-studio generations. The provider remains
@@ -1327,17 +1327,7 @@ async def generate_video(
             "frame and the previous clip as a reference. V2V motion mode is skipped so "
             "the seam frame is not displaced."
         )
-    # A provider whose identity anchor is a reference BY REQUIREMENT (Avatar
-    # IV declares no supported_frame_images) must never be sent frame_images:
-    # an unlisted field is a 400. Its photo is attached in the reference
-    # block below instead.
-    if (
-        reference_image_path
-        and reference_image_path.exists()
-        and not use_v2v_mode
-        and not bridge_frame
-        and not model_config.get("identity_via_reference")
-    ):
+    if reference_image_path and reference_image_path.exists() and not use_v2v_mode and not bridge_frame:
         payload["frame_images"] = [
             {
                 "type": "image_url",
@@ -1357,20 +1347,6 @@ async def generate_video(
 
     # Build input_references for V2V mode
     refs = list(input_references) if input_references else []
-
-    # Avatar IV: the founder photo is the identity anchor, but it can only
-    # arrive as a reference image. Inserted first so it leads the list, the
-    # same position the frame anchor occupies for every other provider.
-    if (
-        model_config.get("identity_via_reference")
-        and reference_image_path
-        and reference_image_path.exists()
-        and not bridge_frame
-    ):
-        refs.insert(0, {
-            "type": "image_url",
-            "image_url": {"url": image_data_uri(reference_image_path)},
-        })
 
     # V2V mode: put the face-swap image as an image reference so the model uses
     # it for identity guidance while also accepting the video motion reference.

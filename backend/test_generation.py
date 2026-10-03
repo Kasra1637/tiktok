@@ -91,56 +91,79 @@ class TestCapabilities:
         """
         The point of this list is that every entry can generate a video from a
         prompt, so no in-context editor is ever offered. H3 Max is a second
-        MiniMax generative model, and Avatar IV is a talking-head model from
-        HeyGen -- both generative, both offered for comparison against the
-        default. Aleph stays out because it edits a clip rather than making one.
+        MiniMax generative model, and HeyGen Video 1 is a general-purpose
+        prompt-to-video model -- both generative, both offered for comparison
+        against the default. Aleph stays out because it edits a clip rather
+        than making one.
         """
         keys = [c["key"] for c in vp.list_capabilities()]
-        assert keys == ["minimax-h3", "minimax-h3-max", "heygen-avatar-iv"]
+        assert keys == ["minimax-h3", "minimax-h3-max", "heygen-video-1"]
         assert "aleph-2" not in keys
         for cap in vp.list_capabilities():
             assert cap["is_video_editor"] is False
 
-    def test_avatar_iv_is_studio_eligible_but_not_the_default(self):
+    def test_heygen_video_1_is_studio_eligible_but_not_the_default(self):
         """
-        Adding a provider must not move production spend onto it. Avatar IV is
-        opt-in: it appears in the list so it can be picked by name, and the
-        default stays Hailuo 3.
+        Adding a provider must not move production spend onto it. HeyGen
+        Video 1 is opt-in: it appears in the list so it can be picked by
+        name, and the default stays Hailuo 3.
         """
-        assert vp.is_studio_eligible("heygen-avatar-iv") is True
+        assert vp.is_studio_eligible("heygen-video-1") is True
         assert vp.default_model_key() == "minimax-h3"
         assert vp.resolve(None)[0] == "minimax-h3"
 
-    def test_named_avatar_iv_is_honoured(self):
-        key, _reason = vp.resolve("heygen-avatar-iv")
-        assert key == "heygen-avatar-iv"
+    def test_named_heygen_video_1_is_honoured(self):
+        key, _reason = vp.resolve("heygen-video-1")
+        assert key == "heygen-video-1"
 
-    def test_avatar_iv_takes_identity_as_a_reference_not_a_frame(self):
-        """
-        The reason this model needs its own routing: OpenRouter lists
-        supported_frame_images as null for it, so a frame_images request would
-        400. Identity arrives as a reference image instead, which is what
-        identity_via_reference records and what accepts_identity_reference
-        reads through the max_reference_images count.
-        """
-        from ai_service import VIDEO_MODELS
+    def test_heygen_video_1_is_registered_at_its_real_id(self):
+        cap = vp.capability("heygen-video-1")
+        assert cap["id"] == "heygen/heygen-video-1"
+        assert cap["max_duration"] == 15
+        assert cap["min_duration"] == 5
+        assert cap["supports_references"] is True
 
-        entry = VIDEO_MODELS["heygen-avatar-iv"]
-        assert entry["id"] == "heygen/avatar-iv"
-        assert entry["identity_via_reference"] is True
-        assert vp.accepts_identity_reference("heygen-avatar-iv") is True
-        assert vp.capability("heygen-avatar-iv")["supports_first_frame"] is False
-
-    def test_avatar_iv_does_not_request_native_audio(self):
+    def test_heygen_video_1_is_768p_not_2k(self):
         """
-        Speech is voiced by HeyGen text-to-speech and the catalog entry has
-        generate_audio false, so the studio must omit the field rather than
-        send one the provider does not accept.
+        OpenRouter accepts only 480p and 768p for this model and rejects an
+        unlisted value, so 2K would 400 on every render. The same constraint
+        that shaped the H3 Max entry.
         """
-        assert vp.capability("heygen-avatar-iv")["supports_native_audio"] is False
+        assert vp.capability("heygen-video-1")["resolution"] == "768p"
+        assert vp.capability("minimax-h3")["resolution"] == "2K"
 
-    def test_avatar_iv_reports_1080p(self):
-        assert vp.capability("heygen-avatar-iv")["resolution"] == "1080p"
+    def test_heygen_video_1_does_not_request_native_audio(self):
+        """
+        The model synthesizes dialogue, ambience and sound effects in the
+        same call, and generate_audio is false on its catalog entry: the
+        field is not among its accepted parameters, so the studio omits it
+        and the provider default applies. If a real clip comes back silent,
+        this flag is the thing to flip.
+        """
+        assert vp.capability("heygen-video-1")["supports_native_audio"] is False
+
+    def test_heygen_video_1_takes_identity_as_first_frame(self):
+        """
+        The catalog lists first_frame among supported_frame_images, so the
+        founder photo opens the clip -- the H3 treatment, no special routing
+        needed. This is why it replaced Avatar IV as the comparison provider:
+        same request shape as the default, at about half the price.
+        """
+        assert vp.capability("heygen-video-1")["supports_first_frame"] is True
+        assert vp.accepts_identity_reference("heygen-video-1") is True
+
+    def test_removed_avatar_iv_falls_back_to_the_default(self):
+        """
+        Avatar IV was replaced by HeyGen Video 1 as the comparison provider,
+        but old generation rows may still name it. capability() and resolve()
+        must fall back to the default rather than raise.
+        """
+        assert vp.is_known("heygen-avatar-iv") is False
+        assert vp.is_studio_eligible("heygen-avatar-iv") is False
+        assert vp.capability("heygen-avatar-iv")["key"] == vp.default_model_key()
+        key, reason = vp.resolve("heygen-avatar-iv")
+        assert key == vp.default_model_key()
+        assert "unknown provider" in reason
 
     def test_minimax_is_capped_at_15s(self):
         cap = vp.capability("minimax-h3")

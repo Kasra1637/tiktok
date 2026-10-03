@@ -73,24 +73,23 @@ _CAPABILITY_NOTES = {
             "still the default."
         ),
     },
-    "heygen-avatar-iv": {
+    "heygen-video-1": {
         "vertical": True,
-        # One reference image, and it is the ONLY visual anchor this model
-        # takes: OpenRouter lists supported_frame_images as null, so there is
-        # no first_frame path at all. max_reference_images > 0 is what makes
-        # accepts_identity_reference() return True for it.
-        "max_reference_images": 1,
+        # OpenRouter lists no input_references support and prices image-to-video
+        # through reference_duration_seconds SKUs, so the founder photo rides as
+        # the opening frame -- the H3 Max treatment, not a reference list.
+        "max_reference_images": 0,
         "max_reference_videos": 0,
         "max_reference_audio": 0,
-        "supports_first_frame": False,
+        "supports_first_frame": True,
         "supports_last_frame": False,
+        "identity_via_first_frame": True,
         "notes": (
-            "1080p talking-head avatar, 5-15s per generation. Your photo is "
-            "the identity anchor and arrives as a reference image, not as an "
-                "opening frame (this model declares no frame-image support). "
-            "Speech is voiced by HeyGen text-to-speech, so there is no "
-            "native-audio pass and no seam frame to continue from. Opt-in: "
-            "Hailuo 3 is still the default."
+            "768p (not 2K), 5-15s per generation. Prompt-to-video like Hailuo 3, "
+            "with dialogue, ambience and sound effects synthesized in the same "
+            "call and your photo opening the clip as its first frame. About half "
+            "Hailuo 3 price; the trade is picture quality. Opt-in: Hailuo 3 is "
+            "still the default."
         ),
     },
     "aleph-2": {
@@ -119,7 +118,11 @@ _CAPABILITY_NOTES = {
 # on either and compare. Order here does not decide the default — that is
 # ai_service.DEFAULT_VIDEO_MODEL, and it stays Hailuo 3. Listing a second model
 # only makes it selectable in the studio's model dropdown.
-STUDIO_ELIGIBLE = ("minimax-h3", "minimax-h3-max", "heygen-avatar-iv")
+# HeyGen Video 1 is listed here so a founder can compare a cheaper 768p
+# render against Hailuo 3 on the same script. Listing it makes it
+# selectable; it changes neither the default (still Hailuo 3) nor the H3
+# entries.
+STUDIO_ELIGIBLE = ("minimax-h3", "minimax-h3-max", "heygen-video-1")
 
 # The hook length used when nothing states one. 5s is the lowest length the
 # current provider can render, so it needs no trim; a template's own

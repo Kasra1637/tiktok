@@ -783,23 +783,24 @@ class TestListingAndCapabilities:
     def test_capability_endpoint_reports_studio_models(self, api):
         """
         The endpoint must offer every generative provider and no editor.
-        Avatar IV is in the list so it can be picked by name for comparison;
-        the default stays Hailuo 3, so adding it moves no production spend.
+        HeyGen Video 1 is listed so it can be picked by name for a cheaper
+        768p comparison; the default stays Hailuo 3, so adding it moves no
+        production spend.
         """
         result = _run(api.list_studio_video_models())
         keys = [m["key"] for m in result["models"]]
-        assert keys == ["minimax-h3", "minimax-h3-max", "heygen-avatar-iv"]
+        assert keys == ["minimax-h3", "minimax-h3-max", "heygen-video-1"]
         assert "aleph-2" not in keys
         assert result["default"] == "minimax-h3"
 
         by_key = {m["key"]: m for m in result["models"]}
-        avatar = by_key["heygen-avatar-iv"]
-        # The three facts the request builder depends on. A payload built
-        # without them would send frame_images to a model that has none.
-        assert avatar["id"] == "heygen/avatar-iv"
-        assert avatar["supports_first_frame"] is False
-        assert avatar["supports_native_audio"] is False
-        assert avatar["resolution"] == "1080p"
+        v1 = by_key["heygen-video-1"]
+        # The facts the request builder depends on: an unlisted resolution or
+        # audio field is a 400, and the photo rides as the first frame.
+        assert v1["id"] == "heygen/heygen-video-1"
+        assert v1["resolution"] == "768p"
+        assert v1["supports_first_frame"] is True
+        assert v1["supports_native_audio"] is False
 
     def test_capability_endpoint_lists_ineligible_separately(self, api):
         result = _run(api.list_studio_video_models())
