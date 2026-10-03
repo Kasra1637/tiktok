@@ -17,93 +17,93 @@ import { Button } from "../components/ui/button";
 const FEATURES = [
   {
     icon: Briefcase,
-    title: "It learns your app",
+    title: "Every video starts from your app",
     description:
-      "Paste your links once. It reads what your app does and who it's for, and every video after that starts there.",
+      "Paste your links once. It reads what your app does and who it's for — so no video ever starts as a generic template with your name pasted in.",
   },
   {
     icon: Target,
-    title: "You decide who, and what",
+    title: "One choice steers everything",
     description:
-      "One choice about your audience and your goal. It shapes the hook, the promise and the middle.",
+      "Say who you're talking to and what you want them to do. That single choice shapes the hook, the promise and the middle.",
   },
   {
     icon: LayoutTemplate,
-    title: "Never a blank page",
+    title: "Ten proven openings, one already picked",
     description:
-      "Ten proven openings. The best fit for your app is already picked, and swapping takes one click.",
+      "The best fit for your app and goal is preselected. Swap it in one click — every card says why it fits and where it falls short.",
   },
   {
     icon: Wand2,
-    title: "Every pick tells you why",
+    title: "No blind picks",
     description:
-      "A shortlist for this app and this goal, each one saying why it fits and where it falls short.",
+      "Each recommendation shows its score, why it fits your app, and its limitations. Nothing is a black box.",
   },
   {
     icon: FileText,
-    title: "Nothing costs money until you say so",
+    title: "Free until the render",
     description:
-      "The script and shot plan are free. Read them, change any word. The first time you pay is the first time you render.",
+      "The script, the shot plan and the strategy are free. Read all three, change any word — the first paid click is the render, and re-rolls ask first.",
   },
   {
     icon: Clapperboard,
     title: "A hook, and a middle",
     description:
-      "One render, two sections. The hook is the first few seconds; the middle develops it and stops where you'd reach for your phone.",
+      "The first seconds stop the scroll. The middle makes the case and stops where your demo takes over. A single render — no seams, no assembly.",
   },
   {
     icon: MessageSquareQuote,
-    title: "It argues the case",
+    title: "Answers why they haven't downloaded",
     description:
-      "The middle works through why a viewer hasn't downloaded yet: doubt it works, the effort to switch. One at a time, not crammed into one breath.",
+      "The middle works through real objections — doubt it works, the effort to switch — one at a time, never crammed into one breath.",
   },
   {
     icon: Film,
-    title: "It never invents your screens",
+    title: "No fake screenshots. Ever.",
     description:
-      "No drawn interfaces, no made-up numbers, and no product demo. Captions come from the script you approved.",
+      "No drawn interfaces, no made-up numbers, no generated demo. Captions come only from the script you approved.",
   },
   {
     icon: ShieldCheck,
-    title: "Checked by something other than the AI",
+    title: "Your banned list is law",
     description:
-      "It re-reads your script on every edit. Anything on your never-use list blocks the render, and there is only one render to block.",
+      "Your script is re-checked on every edit and again at the render. Anything on your never-use list blocks the paid click — it can't slip through in a revision.",
   },
   {
     icon: Layers,
-    title: "One photo, and that's you",
+    title: "The presenter is you",
     description:
-      "Attach it once and your face is in the piece. No avatar, no voice clone, no stand-in.",
+      "One photo carries the whole piece. No avatar, no voice clone, no stand-in — and exactly one photo, so there's never doubt whose face it renders.",
   },
   {
     icon: ChartLine,
-    title: "It learns your numbers",
+    title: "Every post teaches the next one",
     description:
-      "Record what each video actually did. What worked for this app is shown beside the next opening it recommends.",
+      "Log what each video actually did. What worked for this app shows up beside the next opening it recommends.",
   },
   {
     icon: TrendingUp,
-    title: "The full picture",
+    title: "See what each video cost and earned",
     description:
-      "Success rate, failures, spend and rework, broken down by app, opening, model and audience.",
+      "Success rate, failures, spend and rework — broken down by app, opening, model and audience.",
   },
   {
     icon: Check,
-    title: "It learns what you didn't like",
+    title: "Skip it and it sinks",
     description:
-      "Swap away from an opening and it slides down the list. Use one and it keeps climbing.",
+      "Swap away from an opening and it slides down the list. Use one and it keeps climbing. Your taste becomes the ranking.",
   },
   {
     icon: BadgeAlert,
-    title: "Every video shows its receipts",
+    title: "Receipts on every render",
     description:
-      "The exact prompt sent, the claim check at the time, the model, the cost and where it came from, and any error.",
+      "The exact prompt sent, the claim check at the time, the model, the cost and where it came from, and any error. Audit anything.",
   },
   {
     icon: Search,
-    title: "See why a video worked",
+    title: "Learn from any viral hook",
     description:
-      "Paste a TikTok link. It reads the first three seconds — pacing, cuts, face, on-screen text — and scores the opening.",
+      "Paste a TikTok link. It scores the first three seconds — pacing, cuts, face, on-screen text — and turns the pattern into openings you can use.",
   },
   {
     icon: Video,
@@ -133,7 +133,7 @@ const FLOW_STEPS = [
     step: "3",
     label: "Read",
     icon: FileText,
-    detail: "Add your photo. Get the script and shot plan, then change any line you don't like.",
+    detail: "Add your photo. Read the script, the shot plan and the strategy — change any line, spend nothing.",
   },
   {
     step: "4",
@@ -294,7 +294,7 @@ const PIPELINE_BLOCKS = [
 
 const MODELS = [
   { label: "Words & analysis", value: "Gemini 2.5 Flash — research, profiles, angles, scripts and shot plans" },
-  { label: "Video", value: "MiniMax H3 — 2K picture, native sound, one render of up to 15 seconds; each template declares the length its mechanic suits" },
+  { label: "Video", value: "MiniMax H3 by default — 2K picture, native sound — or H3 Max for sharper prompt adherence at 768p. Either way one render of up to 15 seconds; each template declares the length its mechanic suits. Your pick sticks." },
   { label: "Finishing touches", value: "Captions, layered on precisely" },
   { label: "Trend data", value: "Public TikTok metadata via a research API key — aggregated with no source attached, and it steers the openings we suggest" },
 ];
@@ -397,10 +397,10 @@ export default function Landing() {
             className="animate-fade-up mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl"
             style={{ animationDelay: "120ms" }}
           >
-            Here's the thing nobody tells you about launch week: a stranger talking about your
-            app converts like wallpaper. You talking about it converts. Paste your link, get a
-            hook and a middle in your own voice and your own face, then record the thirty
-            seconds of demo that proves it and post the whole thing tonight.
+            Here's what nobody tells you about launch week: a stranger pitching your
+            app converts like wallpaper. You pitching it converts. Paste your link, get a
+            hook and a middle starring you, then film the demo only you can film and post
+            the whole thing tonight.
           </p>
 
           <div
@@ -650,8 +650,9 @@ export default function Landing() {
                 Your next promo is one photo away.
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">
-                Paste your link. Approve the profile. Pick the opening. Get a hook and a middle
-                with you in it — then record the demo, add the close, and post the lot.
+                Paste your link. Approve the profile. Choose your goal and opening.
+                Get a hook and a middle starring you — then film the demo, add the close,
+                and post it.
               </p>
               <div className="mt-9 flex flex-col items-center justify-center gap-3.5 sm:flex-row">
                 <UnauthedOnly>
