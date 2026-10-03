@@ -6,7 +6,6 @@ import {
   Sparkles,
   Clapperboard,
   Images,
-  Radar,
   BarChart3,
   PenLine,
   History as HistoryIcon,
@@ -20,9 +19,8 @@ import {
  * Sidebar navigation model.
  *
  * Ordering reflects the primary workflow: App Profiles -> Create Video ->
- * History. Trend Research lives under Insight for template research; the
- * retired Discover / Saved Hooks / Research Archive pages are gone, so there
- * is no Research group anymore.
+ * History. The retired Discover / Saved Hooks / Research Archive / Trend
+ * Research pages are gone, so there is no Research group anymore.
  *
  * `testId` values are the canonical ones the rest of the app (and the
  * onboarding tour convention) expects — they must stay on the DESKTOP
@@ -43,7 +41,6 @@ export const NAV_GROUPS = [
   {
     label: "Insight",
     items: [
-      { to: "/research", label: "Trend Research", icon: Radar, testId: "research-nav-link", hint: "Find new mechanics" },
       { to: "/analytics", label: "Analytics", icon: BarChart3, testId: "analytics-nav-link", hint: "Internal metrics" },
     ],
   },

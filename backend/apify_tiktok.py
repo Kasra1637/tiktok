@@ -285,50 +285,6 @@ async def fetch_creator_videos(handle: str, limit: int = 10) -> list:
     return results[:limit]
 
 
-async def fetch_hashtag_videos(hashtag: str, limit: int = 25) -> list:
-    """Fetch videos from a TikTok hashtag."""
-    hashtag = hashtag.lstrip("#").strip()
-    if not hashtag:
-        return []
-
-    effective_limit = max(limit, 10)
-    input_data = {
-        "hashtags": [hashtag],
-        "resultsPerPage": effective_limit,
-    }
-
-    items = await _run_actor(input_data, timeout=75)
-    results = []
-    for item in items:
-        parsed = _parse_apify_video(item)
-        if parsed:
-            parsed["source_hashtag"] = hashtag
-            results.append(parsed)
-    return results[:limit]
-
-
-async def fetch_keyword_videos(keyword: str, limit: int = 25) -> list:
-    """Search TikTok for videos matching a keyword."""
-    keyword = keyword.strip()
-    if not keyword:
-        return []
-
-    effective_limit = max(limit, 10)
-    input_data = {
-        "searchQueries": [keyword],
-        "resultsPerPage": effective_limit,
-    }
-
-    items = await _run_actor(input_data, timeout=75)
-    results = []
-    for item in items:
-        parsed = _parse_apify_video(item)
-        if parsed:
-            parsed["source_keyword"] = keyword
-            results.append(parsed)
-    return results[:limit]
-
-
 async def fetch_subtitles(subtitles_url: str) -> Optional[str]:
     """
     Fetch subtitle/transcript text from a subtitle URL.

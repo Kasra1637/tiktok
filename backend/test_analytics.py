@@ -1,5 +1,5 @@
 """
-Tests for internal analytics and the research abstraction.
+Tests for internal analytics.
 
 analytics is pure arithmetic, so it is tested directly. The numbers that
 matter are the honest ones: cost must not silently average down when a
@@ -7,7 +7,6 @@ provider reported none, and a rate must not count in-flight work as failure.
 """
 import analytics as an
 import pytest
-import research_abstraction as ra
 
 
 def gen(status="completed", cost=0.25, **overrides):
@@ -229,133 +228,3 @@ class TestModelRequestSummary:
         assert summary["unpriced_runs"] == 1
         assert summary["by_modality"]["text"]["completed"] == 1
         assert summary["by_model"]["video-model"]["failed"] == 1
-
-
-class TestResearchAbstraction:
-    def test_identity_copy_is_detected(self):
-        assert ra.looks_like_identity_copy("Do it like @somecreator") is True
-        assert ra.looks_like_identity_copy("use their face and voice") is True
-        assert ra.looks_like_identity_copy("use the beat from that song") is True
-
-    def test_generic_mechanic_passes(self):
-        assert ra.looks_like_identity_copy("Ask the viewer's problem out loud") is False
-
-    def test_creator_reference_anywhere_rejects_the_draft(self):
-        """
-        The guard runs over the whole draft, not one field, because a creator
-        reference can hide in any of them.
-
-        The reference hides in `middle_structure` — the field that replaced
-        `continuation_structure` + `cta_pattern`. A draft describing a
-        three-beat arc that paid off and closed on a call to action could put
-        "same as @realcreator" in either of those, and both halves were read
-        into the render prompts, so one field now has to carry the same guard.
-        """
-        drafts, rejected = ra.parse_drafts([
-            {"name": "Copy me", "hook_mechanic": "m", "opening_structure": "s",
-             "contribution": "x", "middle_structure": "same as @realcreator"},
-        ])
-        assert drafts == []
-        assert rejected[0]["reason"] == "described a specific creator or copyrighted audio, not a mechanic"
-
-    def test_a_retired_structure_field_cannot_carry_a_creator_reference(self):
-        """
-        The guard scans the fields a draft KEEPS. `continuation_structure` and
-        `cta_pattern` are no longer kept, so a reference in either is dropped
-        with them rather than surviving on the template — the field-scoped
-        guard cannot be the only thing keeping a named creator out of the
-        library.
-        """
-        drafts, rejected = ra.parse_drafts([
-            {"name": "Retired fields", "hook_mechanic": "m", "opening_structure": "s",
-             "continuation_structure": "same as @realcreator", "cta_pattern": "like @realcreator"},
-        ])
-        assert rejected == []
-        blob = " ".join(str(v) for v in drafts[0].values())
-        assert "@realcreator" not in blob
-        assert "continuation_structure" not in drafts[0]
-        assert "cta_pattern" not in drafts[0]
-
-    def test_incomplete_draft_is_rejected_with_a_reason(self):
-        drafts, rejected = ra.parse_drafts([
-            {"name": "Half a draft", "hook_mechanic": "m"},
-        ])
-        assert drafts == []
-        assert "missing" in rejected[0]["reason"]
-
-    def test_valid_draft_is_kept_and_normalised(self):
-        drafts, rejected = ra.parse_drafts([
-            {"name": "Pain point question", "category": "PAIN_POINT_QUESTION",
-             "hook_mechanic": "ask the problem aloud",
-             "opening_structure": "name the problem in 2s",
-             "middle_structure": "name the cost of ignoring it",
-             "pacing_note": "fast",
-             "why_it_repeats": "self-recognition", "suits": ["Productivity"]},
-        ])
-        assert rejected == []
-        assert drafts[0]["category"] == "pain-point-question"
-        assert drafts[0]["origin"] == "research_draft"
-        assert drafts[0]["review_status"] == "draft"
-        assert drafts[0]["middle_structure"] == "name the cost of ignoring it"
-
-    def test_drafts_are_never_usable_before_publication(self):
-        drafts, _ = ra.parse_drafts([
-            {"name": "Draft", "hook_mechanic": "m", "opening_structure": "s"},
-        ])
-        assert drafts[0]["review_status"] == "draft"
-
-    def test_draft_carries_no_source_reference(self):
-        """
-        A draft keeps only the structure. A source URL on a template would let
-        exact-match creep back in through the library.
-        """
-        drafts, _ = ra.parse_drafts([
-            {"name": "Draft", "hook_mechanic": "m", "opening_structure": "s",
-             "source_url": "https://tiktok.com/@someone/video/1",
-             "creator": "someone"},
-        ])
-        blob = " ".join(str(v) for v in drafts[0].values())
-        assert "tiktok.com" not in blob
-        assert "@someone" not in blob
-
-    def test_evidence_note_states_no_source_is_retained(self):
-        drafts, _ = ra.parse_drafts([
-            {"name": "Draft", "hook_mechanic": "m", "opening_structure": "s"},
-        ])
-        assert "No source video" in drafts[0]["evidence_note"]
-
-    def test_observations_drop_raw_creator_fields(self):
-        out = ra.summarize_observations([{
-            "title": "A clip", "view_count": 10, "like_count": 2,
-            "creator": "someone", "song_title": "A song",
-            "direct_video_url": "https://cdn/x.mp4", "description": "d",
-        }])
-        assert "creator" not in out[0]
-        assert "song_title" not in out[0]
-        assert "direct_video_url" not in out[0]
-
-    def test_non_list_response_is_reported(self):
-        drafts, rejected = ra.parse_drafts("nonsense")
-        assert drafts == []
-        assert rejected
-
-    def test_dict_response_is_unwrapped(self):
-        drafts, _ = ra.parse_drafts({"drafts": [
-            {"name": "D", "hook_mechanic": "m", "opening_structure": "s"},
-        ]})
-        assert len(drafts) == 1
-
-    def test_unknown_category_falls_back(self):
-        drafts, _ = ra.parse_drafts([
-            {"name": "D", "category": "nonsense", "hook_mechanic": "m", "opening_structure": "s"},
-        ])
-        assert drafts[0]["category"] == "other"
-
-    def test_prompt_states_the_prohibitions(self):
-        prompt = ra.build_abstract_prompt([{"title": "t", "view_count": 1}])
-        lowered = prompt.lower()
-        for phrase in ("creator", "gesture", "voice", "copyrighted audio", "choreography"):
-            assert phrase in lowered
-
-    def test_prompt_forbids_verbatim_copying(self):
-        assert "verbatim" in ra.build_abstract_prompt([]).lower()

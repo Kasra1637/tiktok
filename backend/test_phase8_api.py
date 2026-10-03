@@ -459,7 +459,7 @@ class TestModelRequestLedger:
         assert "unavailable" in rows[1]["error"]
         assert rows[0]["latency_ms"] >= 0
 
-    def test_asset_events_and_research_runs_are_persisted_for_their_owner(self, api):
+    def test_asset_events_are_persisted_for_their_owner(self, api):
         """
         Used to assert this through the Operations page. The page is gone, but
         what it was reading is a real invariant: these ledgers exist, they are
@@ -470,28 +470,14 @@ class TestModelRequestLedger:
             "upload_rejected", "Uploaded file is empty.", self.USER,
             brand_profile_id="profile-1", asset_kind="audio", filename="empty.mp3",
         ))
-        run_id = str(uuid.uuid4())
-        _run(api._execute(
-            """INSERT INTO research_runs
-               (id, kind, query, status, created_at, user_id)
-               VALUES (?, 'keyword', 'journaling app', 'failed', ?, ?)""",
-            (run_id, "2026-01-01T00:00:00+00:00", self.USER),
-        ))
 
         events = _run(api._fetch_all(
             "SELECT kind, reason FROM asset_events WHERE user_id = ?", (self.USER,)))
         assert any(e["kind"] == "upload_rejected" for e in events)
 
-        runs = _run(api._fetch_all(
-            "SELECT id, status FROM research_runs WHERE user_id = ?", (self.USER,)))
-        assert [r["id"] for r in runs] == [run_id]
-        assert runs[0]["status"] == "failed"
-
-        # And they are scoped: another user sees neither.
+        # And they are scoped: another user sees none.
         assert _run(api._fetch_all(
             "SELECT id FROM asset_events WHERE user_id = ?", (OTHER_USER,))) == []
-        assert _run(api._fetch_all(
-            "SELECT id FROM research_runs WHERE user_id = ?", (OTHER_USER,))) == []
 
     def test_model_request_ledger_summarises_by_modality(self, api):
         """
@@ -593,76 +579,8 @@ class TestModelRequestLedger:
 # nothing is stranded and no behaviour depended on the endpoint.
 
 
-class TestResearch:
-    def test_scan_requires_a_target(self, api):
-        from models import ResearchScanRequest
-        with pytest.raises(HTTPException) as err:
-            _run(api.run_trend_research(ResearchScanRequest(kind="keyword"), ANON))
-        assert err.value.status_code == 400
-
-    def test_invalid_kind_is_rejected(self, api):
-        from models import ResearchScanRequest
-        with pytest.raises(HTTPException) as err:
-            _run(api.run_trend_research(
-                ResearchScanRequest(kind="telepathy", query="x"), ANON))
-        assert err.value.status_code == 400
-
-    def test_scan_fails_loudly_without_apify(self, api):
-        """
-        No trend data configured must be an explicit 503, not a silent empty
-        result that reads like "we found nothing interesting".
-        """
-        from models import ResearchScanRequest
-        with pytest.raises(HTTPException) as err:
-            _run(api.run_trend_research(
-                ResearchScanRequest(kind="keyword", query="journaling app"), ANON))
-        assert err.value.status_code == 503
-        assert "APIFY_API_TOKEN" in str(err.value.detail)
-
-    def test_failed_run_is_recorded_for_operations(self, api):
-        runs = _run(api.list_research_runs(user_id=ANON))
-        assert runs["runs"]
-        assert any(r["status"] == "failed" for r in runs["runs"])
-
-    def test_run_detail_is_scoped(self, api):
-        runs = _run(api.list_research_runs(user_id=ANON))
-        run_id = runs["runs"][0]["id"]
-        with pytest.raises(HTTPException) as err:
-            _run(api.get_research_run(run_id, OTHER_USER))
-        assert err.value.status_code == 404
-
-
-class TestResearchDraftPublication:
-    def test_drafts_from_research_are_unusable_until_published(self, api):
-        """
-        A research draft must never be usable in a video, so nothing observed in
-        public data can reach generation unreviewed.
-        """
-        tpl_id = str(uuid.uuid4())
-        _run(api._execute(
-            """INSERT INTO hook_templates (id, name, category, opening_structure,
-               continuation_structure, origin, review_status, archived, version,
-               created_at, updated_at, user_id)
-               VALUES (?, 'Observed Pattern', 'other', 'Opens with a question',
-               'Then the answer', 'research_draft', 'draft', 0, 1, '', '', ?)""",
-            (tpl_id, ANON)))
-        row = _run(api.list_templates(q="Observed Pattern", user_id=ANON))["templates"][0]
-        assert row["id"] == tpl_id
-        assert row["is_usable"] is False
-        assert row["review_status"] == "draft"
-
-    def test_publishing_makes_it_usable(self, api):
-        tpl_id = str(uuid.uuid4())
-        _run(api._execute(
-            """INSERT INTO hook_templates (id, name, category, opening_structure,
-               continuation_structure, origin, review_status, archived, version,
-               created_at, updated_at, user_id)
-               VALUES (?, 'Observed Pattern 2', 'other', 'Opens with a question',
-               'Then the answer', 'research_draft', 'draft', 0, 1, '', '', ?)""",
-            (tpl_id, ANON)))
-        published = _run(api.publish_template(tpl_id, ANON))
-        assert published["is_usable"] is True
-        assert published["review_status"] == "approved"
+class TestLibraryDraftGating:
+    """Unpublished drafts must stay invisible and unusable in the library."""
 
     def test_unpublished_drafts_are_excluded_from_recommendations(self, api):
         from models import CreateStudioProjectRequest, BrandProfileCreateRequest, ApproveAppProfileRequest
@@ -750,11 +668,10 @@ class TestNoPlatformAutomation:
 
     def test_retired_research_routes_are_gone(self, api):
         """
-        The Discover, Saved Hooks, video-analysis, and legacy-history pages
-        were removed along with their backends. Their routes must not be
-        registered anywhere — a leftover route is a live paid-AI endpoint
-        (analysis) or a dead page behind a bookmark. The Trend Research scan
-        that feeds generation stays registered.
+        The Discover, Saved Hooks, video-analysis, Trend Research, and
+        legacy-history pages were removed along with their backends. Their
+        routes must not be registered anywhere — a leftover route is a live
+        paid-AI endpoint (analysis) or a dead page behind a bookmark.
         """
         paths = {getattr(r, "path", "") for r in api.api_router.routes}
         for gone in (
@@ -774,9 +691,12 @@ class TestNoPlatformAutomation:
             "/api/history",
             "/api/video-assets",
             "/api/video-assets/{job_id}",
+            "/api/research/scan",
+            "/api/research/runs",
+            "/api/research/runs/{run_id}",
         ):
             assert gone not in paths, gone
-        for retained in ("/api/research/scan", "/api/studio/video-models"):
+        for retained in ("/api/studio/video-models",):
             assert retained in paths, retained
 
     def test_no_credential_capture_endpoints(self, api):

@@ -22,7 +22,6 @@ from PIL import Image
 from starlette.middleware.cors import CORSMiddleware
 
 import pipeline
-import viral_detection
 import storage_service
 import template_library
 import claim_safety
@@ -33,12 +32,10 @@ import overlays
 import variations
 import analytics
 import feedback as feedback_mod
-import research_abstraction
 from ai_service import (
     analyze_hook, generate_customized_preview, generate_face_swap, generate_video_prompt,
     generate_video, poll_video_job, analyze_brand_from_text, analyze_app_profile,
-    generate_content_angles, generate_creative_plan, generate_remix_script,
-    abstract_template_drafts,
+    generate_content_angles, generate_creative_plan,     generate_remix_script,
     strip_html_to_text, remix_chat_turn, empty_remix_brief, VIDEO_MODELS, DEFAULT_VIDEO_MODEL,
     analyze_image_for_hook, TEXT_MODEL, VISION_MODEL,
     generate_video_strategy, normalize_strategy, generate_brand_templates,
@@ -53,7 +50,7 @@ from models import (
     ObjectiveTemplatesRequest,
     StudioGenerationRequest,     UpdateAssetRequest, AttachAssetRequest,
     OverlayCompositionRequest, CreateVariationRequest, PerformanceEntryRequest,
-    ResearchScanRequest, FeedbackRequest,
+    FeedbackRequest,
     GenerateStrategyRequest,
     APP_PROFILE_LIST_FIELDS, APP_PROFILE_OBJECT_LIST_FIELDS,
     APP_PROFILE_EDITABLE_FIELDS,
@@ -910,25 +907,6 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_feedback_event
                 ON feedback_events (event, reason);
 
-            -- Trend Research runs. A run records what was discovered and what
-            -- was proposed, so template drafts can be traced back to the public
-            -- data that suggested them. No source video is stored for reuse in
-            -- generation: only the abstracted structure is.
-            CREATE TABLE IF NOT EXISTS research_runs (
-                id TEXT PRIMARY KEY,
-                kind TEXT,
-                query TEXT,
-                niche TEXT,
-                sources_found INTEGER DEFAULT 0,
-                findings TEXT,
-                drafts TEXT,
-                status TEXT DEFAULT 'pending',
-                error TEXT,
-                created_at TEXT,
-                completed_at TEXT,
-                user_id TEXT DEFAULT 'anonymous'
-            );
-
             -- Persistent video storage registry. Each row tracks a generated
             -- video uploaded to Cloudflare R2 so it survives container redeploys
             -- and remains accessible in the user's history until they delete it.
@@ -1175,7 +1153,7 @@ async def init_db():
             "face_swap_video_jobs", "hook_templates",
             "studio_projects", "content_angles", "generations",
             "assets", "overlay_compositions", "performance_entries",
-            "feedback_events", "research_runs",
+            "feedback_events",
         ]
         for table in user_id_tables:
             cursor = await conn.execute(f"PRAGMA table_info({table})")
@@ -5788,36 +5766,6 @@ async def template_facets(user_id: str = Depends(get_current_user_id)):
     }
 
 
-@api_router.post("/templates/{template_id}/publish")
-async def publish_template(template_id: str, user_id: str = Depends(get_current_user_id)):
-    """
-    Publish a research draft into the usable library.
-
-    Trend Research produces drafts; they stay unusable until an operator
-    reviews and publishes them. This is the only path that flips
-    review_status to approved.
-    """
-    row = await _fetch_one(
-        "SELECT * FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",
-        (template_id, user_id),
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Template not found")
-    if not row.get("opening_structure"):
-        raise HTTPException(
-            status_code=400,
-            detail="This template has no opening structure, so it cannot be published as a library template.",
-        )
-    await _execute(
-        "UPDATE hook_templates SET review_status = 'approved', archived = 0, updated_at = ? WHERE id = ?",
-        (now_iso(), template_id),
-    )
-    logger.info(f"Published template {template_id}")
-    return _public_library_template(
-        await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
-    )
-
-
 # ---------------------------------------------------------------------------
 # Template recommendation
 # ---------------------------------------------------------------------------
@@ -9291,177 +9239,6 @@ async def record_performance(
     created["source"] = "manual"
     created["verified"] = False
     return created
-
-
-# ---------------------------------------------------------------------------
-# Trend Research (public trend data -> review-gated template drafts)
-# ---------------------------------------------------------------------------
-@api_router.get("/research/runs")
-async def list_research_runs(
-    limit: int = 30, user_id: str = Depends(get_current_user_id)
-):
-    """Previous research runs and how many template drafts each produced."""
-    rows = await _fetch_all(
-        "SELECT id, kind, query, niche, sources_found, status, error, created_at, "
-        "completed_at FROM research_runs WHERE user_id = ? "
-        "ORDER BY created_at DESC LIMIT ?",
-        (user_id, max(1, min(int(limit or 30), 100))),
-    )
-    return {"runs": rows}
-
-
-@api_router.get("/research/runs/{run_id}")
-async def get_research_run(run_id: str, user_id: str = Depends(get_current_user_id)):
-    row = await _fetch_one(
-        "SELECT * FROM research_runs WHERE id = ? AND user_id = ?", (run_id, user_id)
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Research run not found")
-    return row
-
-
-@api_router.post("/research/scan", status_code=201)
-async def run_trend_research(
-    payload: ResearchScanRequest, user_id: str = Depends(get_current_user_id)
-):
-    """
-    Scan public trend data and propose reusable template drafts.
-
-    Reads only public metadata through the existing Apify integration. The
-    output is an ABSTRACT mechanic, and every draft lands as an UNPUBLISHED
-    research draft that an operator must review and publish before it can be
-    used. No source video, creator identity, gesture, or audio is retained or
-    required.
-    """
-    require_ai_configured()
-    kind = (payload.kind or "keyword").strip().lower()
-    query = (payload.query or "").strip()
-    niche = (payload.niche or "").strip()
-    if kind not in ("keyword", "hashtag", "niche"):
-        raise HTTPException(
-            status_code=400, detail="kind must be keyword, hashtag, or niche."
-        )
-    if not query and not niche:
-        raise HTTPException(
-            status_code=400, detail="Provide a keyword, hashtag, or niche to research."
-        )
-
-    run_id = str(uuid.uuid4())
-    now = now_iso()
-    await _execute(
-        """INSERT INTO research_runs (id, kind, query, niche, status, created_at, user_id)
-           VALUES (?, ?, ?, ?, 'pending', ?, ?)""",
-        (run_id, kind, query, niche, now, user_id),
-    )
-
-    limit = max(3, min(int(payload.limit or 15), 30))
-    try:
-        import apify_tiktok
-        if kind == "keyword" and apify_tiktok.is_configured():
-            videos = await apify_tiktok.fetch_keyword_videos(query, limit=limit)
-        elif kind == "hashtag" and apify_tiktok.is_configured():
-            videos = await apify_tiktok.fetch_hashtag_videos(query, limit=limit)
-        elif niche and apify_tiktok.is_configured():
-            videos = await apify_tiktok.fetch_hashtag_videos(niche, limit=limit)
-        else:
-            # Without Apify the scan is honest about having no data rather
-            # than falling back to a creator feed, which is not trend data.
-            await _execute(
-                "UPDATE research_runs SET status = 'failed', error = ?, completed_at = ? WHERE id = ?",
-                ("APIFY_API_TOKEN is not set, so no public trend data could be read.", now_iso(), run_id),
-            )
-            raise HTTPException(
-                status_code=503,
-                detail="Trend research needs APIFY_API_TOKEN. No public trend data was read.",
-            )
-    except HTTPException:
-        raise
-    except Exception as e:
-        await _execute(
-            "UPDATE research_runs SET status = 'failed', error = ?, completed_at = ? WHERE id = ?",
-            (str(e)[:400], now_iso(), run_id),
-        )
-        raise HTTPException(status_code=502, detail=f"Trend research failed: {str(e)[:150]}")
-
-    videos = viral_detection.rank_videos(videos or [])
-    observations = research_abstraction.summarize_observations(videos)
-    try:
-        raw_drafts = await _log_model_call(
-            "template_abstraction", "text", TEXT_MODEL,
-            lambda: abstract_template_drafts(
-                observations, app_context=(payload.app_context or "")[:400]),
-            user_id,
-            research_run_id=run_id,
-        )
-    except Exception as e:
-        await _execute(
-            "UPDATE research_runs SET status = 'failed', error = ?, completed_at = ? WHERE id = ?",
-            (f"Draft abstraction failed: {str(e)[:300]}", now_iso(), run_id),
-        )
-        raise HTTPException(status_code=502, detail=f"Could not abstract drafts: {str(e)[:150]}")
-
-    drafts, rejected = research_abstraction.parse_drafts(raw_drafts)
-
-    created = []
-    # The anonymous performance aggregate for this scan, attached to every draft
-    # the scan produces. Bands and a sample size only: no video id, URL, creator
-    # handle, caption or retention curve, so nothing about a specific published
-    # video is stored on the template row or reaches a prompt. It is what finally
-    # makes a research draft distinguishable from a guess, and it is the only
-    # route by which trend data reaches generation.
-    scan_evidence = research_abstraction.build_evidence(videos)
-    for draft in drafts:
-        template_id = str(uuid.uuid4())
-        await _execute(
-            # default_duration is the library default, not a literal 20: a
-            # generated piece is one render, and 20s is longer than the model
-            # can do in a pass.
-            """INSERT INTO hook_templates
-               (id, name, category, app_categories, objective, opening_structure,
-                hook_seconds, middle_structure, visual_style,
-                camera_pacing, required_assets, default_duration, content_slots,
-                evidence_note, trend_evidence, version, archived, is_favorite, origin,
-                review_status, times_used, created_at, updated_at, user_id)
-               VALUES (?, ?, ?, ?, '', ?, 3, ?, ?,
-                       '[]', ?, ?, ?, ?, ?, 1, 0, 0,
-                       'research_draft', 'draft', 0, ?, ?, ?)""",
-            (template_id, draft["name"][:80], draft["category"],
-             json.dumps(draft.get("suits") or []), draft["opening_structure"],
-             draft["middle_structure"],
-             "abstracted", draft.get("hook_mechanic", ""), json.dumps(["character_reference"]),
-             template_library.DEFAULT_DURATION, json.dumps(draft.get("content_slots") or {}),
-             draft["evidence_note"], json.dumps(scan_evidence), now_iso(), now_iso(), user_id),
-        )
-        created.append({
-            "id": template_id,
-            "name": draft["name"],
-            "category": draft["category"],
-            # Reviewable inline on the Trend Research page, which is the only
-            # review surface now that the library pages are gone.
-            "opening_structure": draft["opening_structure"],
-            "middle_structure": draft["middle_structure"],
-            "hook_mechanic": draft.get("hook_mechanic", ""),
-        })
-
-    await _execute(
-        "UPDATE research_runs SET sources_found = ?, findings = ?, drafts = ?, "
-        "status = 'completed', completed_at = ? WHERE id = ?",
-        (len(videos),
-         json.dumps(observations[:10]),
-         json.dumps({"created": created, "rejected": rejected}),
-         now_iso(), run_id),
-    )
-    logger.info(
-        f"Research run {run_id}: {len(videos)} sources, {len(created)} drafts, "
-        f"{len(rejected)} rejected"
-    )
-    return {
-        "run_id": run_id,
-        "sources_found": len(videos),
-        "drafts": created,
-        "rejected": rejected,
-        "note": "Drafts are unpublished. Review each one and publish it to use it in a video.",
-    }
 
 
 # ---------------------------------------------------------------------------

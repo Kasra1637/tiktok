@@ -481,20 +481,6 @@ class PerformanceEntryRequest(BaseModel):
     outcome: Optional[str] = None  # successful | unsuccessful | ""
 
 
-class ResearchScanRequest(BaseModel):
-    """
-    Scan public trend data for reusable mechanics.
-
-    Reads public metadata only. app_context is an optional hint about the app
-    being promoted so drafts can be biased toward its category.
-    """
-    kind: Optional[str] = "keyword"  # keyword | hashtag | niche
-    query: Optional[str] = ""
-    niche: Optional[str] = ""
-    limit: Optional[int] = 15
-    app_context: Optional[str] = ""
-
-
 class FeedbackRequest(BaseModel):
     """
     Structured feedback captured at the moment something happened.

@@ -152,12 +152,10 @@ export const api = {
     client.delete(`/app-profiles/${profileId}/content-angles/${angleId}`).then((r) => r.data),
 
   // Hook templates. The standalone library is gone: the wizard picks from
-  // profile-scoped recommendations, and research drafts are approved inline
-  // on the Trend Research page. Only the read endpoints the wizard needs
-  // plus publish (the sole draft approver) survive here.
+  // profile-scoped recommendations. Only the read endpoints the wizard needs
+  // survive here.
   getTemplates: (params = {}) => client.get("/templates", { params }).then((r) => r.data),
   getTemplateFacets: () => client.get("/templates/facets").then((r) => r.data),
-  publishTemplate: (id) => client.post(`/templates/${id}/publish`).then((r) => r.data),
 
   // Template recommendations
   getTemplateRecommendations: (profileId, params = {}) =>
@@ -255,10 +253,7 @@ export const api = {
   recordPerformance: (id, payload) =>
     client.post(`/generations/${id}/performance`, payload).then((r) => r.data),
 
-  // Trend research, feedback, analytics
-  runResearchScan: (payload) => client.post("/research/scan", payload).then((r) => r.data),
-  getResearchRuns: (params = {}) => client.get("/research/runs", { params }).then((r) => r.data),
-  getResearchRun: (id) => client.get(`/research/runs/${id}`).then((r) => r.data),
+  // Feedback, analytics
   getFeedbackCatalog: () => client.get("/feedback/catalog").then((r) => r.data),
   recordFeedback: (payload) => client.post("/feedback", payload).then((r) => r.data),
   getFeedback: (params = {}) => client.get("/feedback", { params }).then((r) => r.data),

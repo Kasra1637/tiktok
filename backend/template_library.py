@@ -99,8 +99,8 @@ CONTENT_ANGLE_KINDS = [
 ]
 
 # Where a template row came from. `curated` rows ship with the app; a
-# `research_draft` comes out of Trend Research and must be reviewed before it
-# can be used; `custom` was created by an operator.
+# `research_draft` is a legacy category retained for existing rows; `custom`
+# was created by the wizard or an operator.
 TEMPLATE_ORIGINS = ["curated", "research_draft", "custom"]
 
 # The single asset kind the product accepts. Drives the studio's asset picker

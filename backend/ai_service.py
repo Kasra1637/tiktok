@@ -3064,41 +3064,6 @@ def _normalize_overlays(overlays, duration: int) -> list:
     return [o for o in out if o]
 
 
-async def abstract_template_drafts(observations: list, app_context: str = "") -> list:
-    """
-    Ask the model for reusable hook mechanics distilled from public observation.
-
-    Returns the RAW parsed list; research_abstraction.parse_drafts applies the
-    identity guard and normalises the result. The prompt lives in
-    research_abstraction so the wording sits beside the rules that enforce it.
-    """
-    import research_abstraction as ra
-
-    prompt = ra.build_abstract_prompt(observations, app_context)
-    payload = {
-        "model": TEXT_MODEL,
-        "messages": [
-            {"role": "system", "content": (
-                "You extract reusable short-form video mechanics from public trend data. "
-                "You describe patterns, never people: no creator identity, no gestures, "
-                "no voice, no copyrighted audio, no copied captions. Respond with STRICT "
-                "JSON only."
-            )},
-            {"role": "user", "content": prompt},
-        ],
-        "temperature": 0.4,
-        "max_tokens": 3000,
-    }
-
-    async with httpx.AsyncClient(timeout=120) as client:
-        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-
-    full_text = data["choices"][0]["message"]["content"]
-    return _parse_json_response(full_text, "Template drafts")
-
-
 async def generate_remix_script(analysis: dict, brand_profile: dict, target_duration: int, session_id: str, music_context: dict = None, transcript_text: str = "", hashtags: list = None, use_original_sound: bool = False) -> dict:
     """
     Auto-generate a production-ready video prompt ("Content Remixer") from hook analysis +

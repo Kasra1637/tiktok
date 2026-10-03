@@ -385,36 +385,6 @@ class TestTemplateListing:
         assert result["templates"] == []
 
 
-class TestTemplatePublish:
-    """
-    The only surviving template write endpoint: research drafts stay
-    unusable until an operator reviews and publishes them, now from the
-    Trend Research page instead of the deleted library pages.
-    """
-    def test_publish_makes_draft_usable(self, api):
-        tpl_id = str(uuid.uuid4())
-        _run(api._execute(
-            """INSERT INTO hook_templates (id, name, category, origin, required_assets,
-               opening_structure, review_status, created_at, updated_at, user_id)
-               VALUES (?, 'Research Draft', 'other', 'research_draft',
-               '["character_reference"]', 'Open on the result.', 'draft', '', '', ?)""", (tpl_id, ANON)))
-        listed = [t for t in _run(api.list_templates(user_id=ANON))["templates"]
-                  if t["id"] == tpl_id]
-        assert listed and listed[0]["is_usable"] is False
-        published = _run(api.publish_template(template_id=tpl_id, user_id=ANON))
-        assert published["review_status"] == "approved"
-        assert published["is_usable"] is True
-
-    def test_publish_rejects_template_without_structure(self, api):
-        tpl_id = str(uuid.uuid4())
-        _run(api._execute(
-            """INSERT INTO hook_templates (id, name, category, origin, review_status,
-               created_at, updated_at, user_id) VALUES (?, 'No Structure', 'other',
-               'research_draft', 'draft', '', '', ?)""", (tpl_id, ANON)))
-        with pytest.raises(HTTPException) as err:
-            _run(api.publish_template(template_id=tpl_id, user_id=ANON))
-        assert err.value.status_code == 400
-
 class TestContentAngles:
     def test_manual_angle_requires_label_audience_and_problem(self, api):
         from models import CreateContentAngleRequest
@@ -737,8 +707,20 @@ class TestCrossUserIsolation:
         ))
         theirs = _run(api.list_templates(user_id=ANON))
         assert mine not in [t["id"] for t in theirs["templates"]]
+        # The owner-scoped template lookup in create_studio_project is the
+        # remaining write-path that fetches by id; it must 404 cross-user.
+        from models import BrandProfileCreateRequest, ApproveAppProfileRequest, CreateStudioProjectRequest
+        profile = _run(api.create_brand(payload=BrandProfileCreateRequest(
+            brand_name="Iso Probe",
+            brand_description="A focus timer for people who stall on starting.",
+            core_features=["Task timer"],
+            usage_moments=["Starting a task"],
+        ), user_id=ANON))
+        _run(api.approve_app_profile(
+            profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=ANON))
         with pytest.raises(HTTPException) as err:
-            _run(api.publish_template(template_id=mine, user_id=ANON))
+            _run(api.create_studio_project(payload=CreateStudioProjectRequest(
+                brand_profile_id=profile["id"], template_id=mine), user_id=ANON))
         assert err.value.status_code == 404
         _run(api._execute("DELETE FROM hook_templates WHERE id = ?", (mine,)))
 

@@ -17,7 +17,6 @@ import AppProfileDetail from "./pages/AppProfileDetail";
 import CreateVideo from "./pages/CreateVideo";
 import AssetLibrary from "./pages/AssetLibrary";
 import Analytics from "./pages/Analytics";
-import TrendResearch from "./pages/TrendResearch";
 import { OnboardingProvider } from "./components/onboarding/OnboardingProvider";
 
 function App() {
@@ -65,7 +64,6 @@ function App() {
                             landing page, declared above and unaffected. */}
                         <Route path="/" element={<Navigate to="/create" replace />} />
                         <Route path="/analytics" element={<Analytics />} />
-                        <Route path="/research" element={<TrendResearch />} />
                         {/* The template library is gone: templates are picked
                             per App Profile inside the Create Video wizard, so
                             there is nowhere standalone left to land. Redirects
