@@ -363,9 +363,9 @@ def person_anchor_notes(assets: list) -> str:
     attached character reference, or "" when none is attached.
 
     The reference image itself rides along as a model input (see server.py's
-    _submit_generation, which passes it as an input_references identity
-    guide). This text tells the model what that image IS: the exact person
-    who must appear on camera. First matching character_reference asset wins —
+    _submit_generation, which carries it as an input_references identity guide
+    on Hailuo 3 and as the opening frame on Hailuo 3 Max). This text tells the
+    model what that image IS: the exact person who must appear on camera. First matching character_reference asset wins —
     attach only one per project.
     """
     if not assets:

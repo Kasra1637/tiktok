@@ -50,17 +50,27 @@ _CAPABILITY_NOTES = {
     },
     "minimax-h3-max": {
         "vertical": True,
-        "max_reference_images": 9,
+        # Proven REFUSED live: the serving provider 400s input_references with
+        # "does not support image input references", even though OpenRouter
+        # lists the field for this model. The count below is input_references
+        # capacity specifically, so it is 0 — accepts_identity_reference() must
+        # not read it as permission to send any. Identity rides as the opening
+        # frame instead (documented supported: https URL or base64 data URL),
+        # which _submit_generation selects via identity_via_first_frame.
+        "max_reference_images": 0,
         "max_reference_videos": 3,
         "max_reference_audio": 3,
         "supports_first_frame": True,
         "supports_last_frame": True,
+        "identity_via_first_frame": True,
         "notes": (
             "768p (not 2K), 5-15s per generation. Faster than Hailuo 3 with "
             "tighter prompt adherence, which makes it useful for testing a "
             "script quickly. Picture is softer, and native audio is not "
             "requested because the provider does not document the flag for "
-            "this model. Opt-in: Hailuo 3 is still the default."
+            "this model. Your photo opens the video as its first frame rather "
+            "than riding alongside as a reference image. Opt-in: Hailuo 3 is "
+            "still the default."
         ),
     },
     "aleph-2": {
@@ -168,17 +178,22 @@ def is_studio_eligible(key: str) -> bool:
 
 
 def accepts_identity_reference(key: str) -> bool:
-    """Whether the provider can take an identity image as input_references.
+    """Whether the provider can take the founder's identity image at all.
 
-    MiniMax H3 accepts up to 9 reference images with no source video.
-    Editors (Aleph) need a real clip to edit — the template workflow has
-    none — so they are refused here too.
+    MiniMax H3 accepts up to 9 reference images as input_references with no
+    source video. Hailuo 3 Max refuses input_references outright (proven live:
+    the serving provider 400s it), but takes the photo as the opening frame,
+    so it still accepts the identity — through a different field, selected by
+    identity_via_first_frame. Editors (Aleph) need a real clip to edit — the
+    template workflow has none — so they are refused here too.
     """
     if not is_known(key):
         return False
     cap = capability(key)
     if cap.get("is_video_editor", False):
         return False
+    if cap.get("identity_via_first_frame"):
+        return True
     return int(cap.get("max_reference_images", 0) or 0) > 0
 
 

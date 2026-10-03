@@ -200,6 +200,23 @@ class TestHailuo3MaxIsOptIn:
     def test_h3_max_takes_a_face_reference(self):
         assert vp.accepts_identity_reference("minimax-h3-max")
 
+    def test_h3_max_identity_rides_as_first_frame_not_references(self):
+        """
+        The serving provider 400s input_references for this model ("does not
+        support image input references"), even though OpenRouter lists the
+        field. The capacity count records that refusal so nothing reads it as
+        permission; identity_via_first_frame records where the photo actually
+        goes — the opening frame, which OpenRouter documents as supported.
+        """
+        max_cap = vp.capability("minimax-h3-max")
+        assert max_cap["max_reference_images"] == 0
+        assert max_cap["identity_via_first_frame"] is True
+        # ...while Hailuo 3 keeps the reference-image path, and the editor
+        # keeps refusing both:
+        assert vp.capability("minimax-h3").get("identity_via_first_frame") is not True
+        assert vp.accepts_identity_reference("minimax-h3") is True
+        assert vp.accepts_identity_reference("aleph-2") is False
+
     def test_allowlisting_hailuo_3_alone_still_excludes_h3_max(self, monkeypatch):
         """
         The env allowlist is the existing lever for restricting spend. It must
@@ -303,19 +320,30 @@ class TestHailuo3MaxPayload:
         assert seen[0]["resolution"] == "2K"
         assert seen[0]["generate_audio"] is True
 
-    def test_carries_the_face_reference(self, monkeypatch):
-        """One image, unchanged: the same reference path serves both models."""
+    def test_face_rides_as_first_frame_not_references(self, monkeypatch, tmp_path):
+        """
+        The serving provider 400s input_references for this model, so the
+        photo rides as the opening frame — the one image field OpenRouter
+        documents as supported for it. Same face, different field; the
+        data-URI encoding is unchanged.
+        """
         import asyncio
 
         import ai_service
 
+        face = tmp_path / "face.png"
+        face.write_bytes(bytes.fromhex(
+            "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+            "0000000d49444154789c626001000000ffff0300000600055d3866680000000049454e44ae426082"))
         seen = self._capture(monkeypatch)
-        refs = [{"type": "image_url",
-                 "image_url": {"url": "data:image/png;base64,AAAA"}}]
         asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
                                              duration=10, model="minimax-h3-max",
-                                             input_references=refs))
-        assert seen[0]["input_references"] == refs
+                                             reference_image_path=face))
+        assert "input_references" not in seen[0]
+        frames = seen[0]["frame_images"]
+        assert len(frames) == 1
+        assert frames[0]["frame_type"] == "first_frame"
+        assert frames[0]["image_url"]["url"].startswith("data:image/png;base64,")
 
     def test_unknown_key_still_falls_back_inside_the_provider(self, monkeypatch):
         """

@@ -848,6 +848,9 @@ class TestStudioIdentityReference:
         assert len(refs) == 1
         assert refs[0]["type"] == "image_url"
         assert refs[0]["image_url"]["url"].startswith("data:image/png;base64,")
+        # Hailuo 3 keeps the reference-image field, so nothing goes in the
+        # frame slot — that routing is H3 Max's alone.
+        assert calls[0].get("reference_image_path") is None
         # The photograph is named as the only authority on who the person is.
         assert "The person on camera is the person in the attached character reference" in (
             calls[0]["prompt"]
@@ -996,10 +999,13 @@ class TestModelSelectionAtTheApiBoundary:
         assert gen["model"] == "minimax-h3-max"
         assert len(calls) == 1
 
-    def test_h3_max_carries_the_same_face_reference(self, api, monkeypatch):
+    def test_h3_max_carries_identity_as_first_frame(self, api, monkeypatch):
         """
-        Adding a provider must not change what the founder uploaded. One image
-        goes on the request exactly as it does for Hailuo 3.
+        Hailuo 3 Max refuses input_references outright — proven live, the
+        serving provider 400s the submit. So the same face rides as the opening
+        frame instead, the one image field OpenRouter documents as supported
+        for this model. What the founder uploaded still reaches the render;
+        only the field changes, chosen per model at submit time.
         """
         from models import StudioGenerationRequest
         calls = _mock_submit(api, monkeypatch)
@@ -1009,9 +1015,11 @@ class TestModelSelectionAtTheApiBoundary:
             payload=StudioGenerationRequest(model="minimax-h3-max"),
             user_id=ANON))
         assert len(calls) == 1
-        refs = calls[0].get("input_references") or []
-        assert len(refs) == 1
-        assert refs[0]["type"] == "image_url"
+        assert not calls[0].get("input_references"), \
+            "Max must never send input_references — the provider refuses them"
+        face = calls[0].get("reference_image_path")
+        assert face is not None, "the photo must still ride along, as the first frame"
+        assert Path(str(face)).is_file()
         # ...and the two-section prompt is identical on both models.
         assert "The person on camera is the person in the attached character reference" in (
             calls[0]["prompt"])

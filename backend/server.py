@@ -6909,15 +6909,32 @@ def _refuse_retired_project_assets(assets: list) -> None:
     )
 
 
+def _identity_reference_payload(face_path: Path) -> dict:
+    """One face-cropped photo as an OpenRouter input_references image entry."""
+    from ai_service import image_data_uri
+    return {
+        "type": "image_url",
+        "image_url": {"url": image_data_uri(face_path)},
+    }
+
+
 async def _studio_identity_references(
     assets: list, model_key: str, user_id: str, template: Optional[dict] = None
-) -> list:
-    """Resolve the project's attached character_reference into input_references
-    for the video model, or return [] when none is attached.
+) -> Optional[Path]:
+    """Resolve the project's attached character_reference to a face-cropped
+    photo on disk, or return None when none is attached.
     The reference is the identity guide; the person-anchor prompt section
     (generation_planning.person_anchor_notes) tells the model whose face it
     is and what to do with it. Legacy face-swap mechanics proved the pairing
     works: image reference in, matching person out.
+
+    Returns the cropped face PATH, not a request payload, because different
+    models carry it in different fields: Hailuo 3 takes it as an
+    input_references identity guide, while Hailuo 3 Max refuses
+    input_references outright (proven live) and takes it as the opening frame
+    instead. The caller (_submit_generation) picks the field from the model's
+    identity_via_first_frame capability — this function only proves which
+    photo, loudly.
 
     Guardrails, all loud:
     - A project still holding retired uploads (anything but the character
@@ -6977,7 +6994,7 @@ async def _studio_identity_references(
                     "try again."
                 ),
             )
-        return []
+        return None
 
     if not video_providers.accepts_identity_reference(model_key):
         raise HTTPException(
@@ -7017,15 +7034,17 @@ async def _studio_identity_references(
         logger.warning(f"Character reference crop failed for {path} ({e}); sending original.")
         reference_path = Path(path)
 
+    # Prove the file is a readable image before any spend, even though the
+    # caller — not this function — decides which request field carries it.
     try:
-        data_uri = image_data_uri(reference_path)
+        image_data_uri(reference_path)
     except Exception as e:
         logger.warning(f"Character reference at {path} could not be read: {e}")
         raise HTTPException(
             status_code=409,
             detail="The attached character reference image could not be read. Re-upload it before generating.",
         ) from e
-    return [{"type": "image_url", "image_url": {"url": data_uri}}]
+    return reference_path
 
 
 async def _submit_generation(
@@ -7122,15 +7141,31 @@ async def _submit_generation(
             is_extension=is_extension,
         )
 
-    # Avatar influencer: an attached character_reference rides along as an
-    # input_references identity guide, following the proven legacy face-swap
-    # mechanics (identity image + prompt lock, no V2V video involved). First
-    # matching reference wins — attach only one per project. Anything else
-    # (missing file, a model that refuses references) fails the submission
-    # loudly rather than spending money on a lookalike.
-    studio_references = await _studio_identity_references(
+    # Avatar influencer: the attached character_reference rides along as the
+    # identity guide, following the proven legacy face-swap mechanics (identity
+    # image + prompt lock, no V2V video involved). WHICH request field carries
+    # it depends on the model, because providers differ: Hailuo 3 takes it as
+    # an input_references identity guide, while Hailuo 3 Max refuses
+    # input_references outright (proven live: the serving provider 400s it)
+    # and takes it as the opening frame instead, which OpenRouter documents
+    # as supported for that model. Sending the wrong field spends a failed
+    # submit at best — this branch is what keeps a Max render submittable.
+    # Anything else (missing file, a model that takes no identity image at
+    # all) fails the submission loudly rather than spending money on a
+    # lookalike.
+    face_path = await _studio_identity_references(
         project.get("assets") or [], model_key, user_id, template
     )
+    if face_path is not None and video_providers.capability(model_key).get(
+        "identity_via_first_frame"
+    ):
+        reference_image_path: Optional[Path] = face_path
+        studio_references = None
+    else:
+        reference_image_path = None
+        studio_references = (
+            [_identity_reference_payload(face_path)] if face_path is not None else None
+        )
     # No seam frame, no clip reference, no continuity plan to honour: there is
     # only ever one render, so there is never a previous clip to anchor to. The
     # founder's photograph is the single visual anchor, and it is attached above
@@ -7235,7 +7270,8 @@ async def _submit_generation(
                 prompt=prompt,
                 duration=seconds,
                 model=model_key,
-                input_references=studio_references or None,
+                reference_image_path=reference_image_path,
+                input_references=studio_references,
                 # The previous clip's final frame becomes this clip's first
                 # frame. This is the mechanism that makes the extension read
                 # as a continuation rather than a new scene.

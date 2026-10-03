@@ -105,6 +105,12 @@ VIDEO_MODELS = {
         ),
         "max_duration": 15,
         "min_duration": 5,
+        # "References" here means image conditioning in general, not the
+        # input_references field specifically: the serving provider refuses
+        # input_references outright (proven live with a 400), so the studio
+        # carries the founder's photo as the opening frame instead (see
+        # video_providers.identity_via_first_frame). Flipping this to False
+        # would read as "Max cannot do identity at all", which is wrong.
         "supports_references": True,
         "supports_native_audio": False,  # generate_audio unlisted for this model
         "supports_v2v_motion": False,  # not documented for H3 Max on OpenRouter
