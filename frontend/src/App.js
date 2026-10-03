@@ -11,12 +11,8 @@ import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import SignIn from "./pages/SignIn";
 import SignUp from "./pages/SignUp";
-import NicheFeed from "./pages/NicheFeed";
-import AnalysisDetail from "./pages/AnalysisDetail";
-import History from "./pages/History";
 import GenerationHistory from "./pages/GenerationHistory";
 import BrandSetup from "./pages/BrandSetup";
-import HookTemplates from "./pages/HookTemplates";
 import AppProfileDetail from "./pages/AppProfileDetail";
 import CreateVideo from "./pages/CreateVideo";
 import AssetLibrary from "./pages/AssetLibrary";
@@ -79,18 +75,8 @@ function App() {
                         <Route path="/templates/:templateId" element={<Navigate to="/create" replace />} />
                         <Route path="/create" element={<CreateVideo />} />
                         <Route path="/brand" element={<BrandSetup />} />
-                        {/* Generation History is now the primary /history view;
-                            the legacy exact-match history is kept at
-                            /legacy-history for the research flow. */}
+                        {/* Generation History is the history view. */}
                         <Route path="/history" element={<GenerationHistory />} />
-                        <Route path="/legacy-history" element={<History />} />
-
-                        {/* Research archive: discovery, analysis, bookmarks, and
-                            legacy records remain readable, but exact-match
-                            video creation is disabled. */}
-                        <Route path="/discover" element={<NicheFeed />} />
-                        <Route path="/analysis/:videoId" element={<AnalysisDetail />} />
-                        <Route path="/bookmarks" element={<HookTemplates />} />
                       </Routes>
                     </PageTransition>
                   </AppShell>

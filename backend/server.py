@@ -44,11 +44,10 @@ from ai_service import (
     generate_video_strategy, normalize_strategy, generate_brand_templates,
 )
 from models import (
-    IngestVideoRequest, BrandContextRequest, GenerateVideoRequest,
+    BrandContextRequest, GenerateVideoRequest,
     AnalyzeBrandUrlRequest, AppProfileResearchRequest, ApproveAppProfileRequest,
     BrandProfileCreateRequest, BrandProfileUpdateRequest,
     GenerateRemixScriptRequest, RemixChatMessageRequest,
-    CreateHookTemplateRequest, UpdateHookTemplateRequest,
     CreateContentAngleRequest, UpdateContentAngleRequest,
     CreateStudioProjectRequest, UpdateStudioProjectRequest, GeneratePlanRequest,
     ObjectiveTemplatesRequest,
@@ -61,7 +60,6 @@ from models import (
     STUDIO_EDITABLE_FIELDS, STUDIO_TEXT_FIELDS,
     now_iso, row_to_dict,
 )
-from niches_config import NICHES, NICHE_MAP
 from auth import get_current_user_id, get_optional_user_id
 
 ROOT_DIR = Path(__file__).parent
@@ -78,11 +76,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-NICHE_CACHE_TTL = timedelta(hours=6)
-TRENDING_CACHE_TTL = timedelta(hours=2)
 FRAME_COUNT = 8
 HOOK_DURATION_SECONDS = 3.0
-SEARCH_QUERY_MAX_LENGTH = 100
 BRAND_URL_TEXT_MAX_CHARS = 8000
 
 # How much an extension adds when the request does not say. Chosen to sit at
@@ -356,40 +351,6 @@ async def init_db():
                 created_at TEXT
             );
 
-            CREATE TABLE IF NOT EXISTS curated_videos (
-                tiktok_url TEXT PRIMARY KEY,
-                niche TEXT,
-                video_platform_id TEXT,
-                creator TEXT,
-                creator_display TEXT,
-                title TEXT,
-                view_count INTEGER DEFAULT 0,
-                like_count INTEGER DEFAULT 0,
-                comment_count INTEGER DEFAULT 0,
-                share_count INTEGER DEFAULT 0,
-                bookmark_count INTEGER DEFAULT 0,
-                duration REAL DEFAULT 0,
-                thumbnail_url TEXT,
-                direct_video_url TEXT,
-                hashtags TEXT,
-                song_id TEXT,
-                song_title TEXT,
-                song_artist TEXT,
-                song_cover_url TEXT,
-                subtitles_url TEXT,
-                is_ad INTEGER DEFAULT 0,
-                creator_followers INTEGER DEFAULT 0,
-                creator_verified INTEGER DEFAULT 0,
-                upload_timestamp INTEGER DEFAULT 0,
-                virality_score REAL DEFAULT 0,
-                cached_at TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS niche_cache_meta (
-                niche TEXT PRIMARY KEY,
-                cached_at TEXT
-            );
-
             CREATE TABLE IF NOT EXISTS analyses (
                 id TEXT PRIMARY KEY,
                 video_id TEXT,
@@ -458,41 +419,6 @@ async def init_db():
                 error TEXT,
                 created_at TEXT,
                 requested_at TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS trending_videos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                niche TEXT,
-                tiktok_url TEXT,
-                video_platform_id TEXT,
-                creator TEXT,
-                creator_display TEXT,
-                title TEXT,
-                view_count INTEGER DEFAULT 0,
-                like_count INTEGER DEFAULT 0,
-                comment_count INTEGER DEFAULT 0,
-                share_count INTEGER DEFAULT 0,
-                bookmark_count INTEGER DEFAULT 0,
-                duration REAL DEFAULT 0,
-                thumbnail_url TEXT,
-                direct_video_url TEXT,
-                hashtags TEXT,
-                song_id TEXT,
-                song_title TEXT,
-                song_artist TEXT,
-                song_cover_url TEXT,
-                subtitles_url TEXT,
-                is_ad INTEGER DEFAULT 0,
-                creator_followers INTEGER DEFAULT 0,
-                creator_verified INTEGER DEFAULT 0,
-                upload_timestamp INTEGER DEFAULT 0,
-                virality_score REAL DEFAULT 0,
-                cached_at TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS trending_cache_meta (
-                niche TEXT PRIMARY KEY,
-                cached_at TEXT
             );
 
             CREATE TABLE IF NOT EXISTS brand_profiles (
@@ -1133,8 +1059,10 @@ async def init_db():
             if col not in template_cols:
                 await conn.execute(f"ALTER TABLE hook_templates ADD COLUMN {col} {decl}")
         # Saved bookmarks predate the library, so they are 'bookmark' origin
-        # and stay approved; they are NOT library templates and remain
-        # reachable only through the legacy /api/bookmarks routes.
+        # and stay approved. The Saved Hooks page and its endpoints are gone,
+        # so these rows are dormant — reachable by nothing, deleted by nothing.
+        # They are left in place deliberately: dropping user rows in a
+        # migration is irreversible, and dormant rows cost nothing.
         await conn.execute(
             "UPDATE hook_templates SET origin = 'bookmark' "
             "WHERE origin IS NULL OR origin = ''"
@@ -1146,8 +1074,6 @@ async def init_db():
         cache_tables_to_check = {
             # upload_timestamp is the newest column on these cache tables; if it's
             # missing the table predates publish-date support and is rebuilt.
-            "curated_videos": "upload_timestamp",
-            "trending_videos": "upload_timestamp",
             "videos": "is_ad",
             "video_jobs": "use_original_sound",
         }
@@ -1157,6 +1083,21 @@ async def init_db():
             if cols and required_col not in cols:
                 logger.info(f"Migration: dropping and recreating {table} (missing column '{required_col}')")
                 await conn.execute(f"DROP TABLE IF EXISTS {table}")
+        await conn.commit()
+
+        # Retired feed caches. The Discover feed is gone, so the tables that
+        # fed it (trending/curated video caches and their TTL metadata) have
+        # no readers and no writers. They were pure rebuildable caches — the
+        # codebase already dropped and recreated them on schema drift — so
+        # dropping is data-loss-free by construction. Anything holding user
+        # content (videos, analyses, hook_templates incl. dormant bookmark
+        # rows, face-swap jobs) is deliberately NOT dropped here.
+        for table in (
+            "trending_videos", "trending_cache_meta",
+            "niche_cache_meta", "curated_videos",
+        ):
+            await conn.execute(f"DROP TABLE IF EXISTS {table}")
+            logger.info(f"Migration: dropped retired feed-cache table {table}")
         await conn.commit()
 
         # Recreate any tables that were just dropped
@@ -1198,65 +1139,6 @@ async def init_db():
                 last_analysis_id TEXT,
                 error TEXT,
                 created_at TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS curated_videos (
-                tiktok_url TEXT PRIMARY KEY,
-                niche TEXT,
-                video_platform_id TEXT,
-                creator TEXT,
-                creator_display TEXT,
-                title TEXT,
-                view_count INTEGER DEFAULT 0,
-                like_count INTEGER DEFAULT 0,
-                comment_count INTEGER DEFAULT 0,
-                share_count INTEGER DEFAULT 0,
-                bookmark_count INTEGER DEFAULT 0,
-                duration REAL DEFAULT 0,
-                thumbnail_url TEXT,
-                direct_video_url TEXT,
-                hashtags TEXT,
-                song_id TEXT,
-                song_title TEXT,
-                song_artist TEXT,
-                song_cover_url TEXT,
-                subtitles_url TEXT,
-                is_ad INTEGER DEFAULT 0,
-                creator_followers INTEGER DEFAULT 0,
-                creator_verified INTEGER DEFAULT 0,
-                upload_timestamp INTEGER DEFAULT 0,
-                virality_score REAL DEFAULT 0,
-                cached_at TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS trending_videos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                niche TEXT,
-                tiktok_url TEXT,
-                video_platform_id TEXT,
-                creator TEXT,
-                creator_display TEXT,
-                title TEXT,
-                view_count INTEGER DEFAULT 0,
-                like_count INTEGER DEFAULT 0,
-                comment_count INTEGER DEFAULT 0,
-                share_count INTEGER DEFAULT 0,
-                bookmark_count INTEGER DEFAULT 0,
-                duration REAL DEFAULT 0,
-                thumbnail_url TEXT,
-                direct_video_url TEXT,
-                hashtags TEXT,
-                song_id TEXT,
-                song_title TEXT,
-                song_artist TEXT,
-                song_cover_url TEXT,
-                subtitles_url TEXT,
-                is_ad INTEGER DEFAULT 0,
-                creator_followers INTEGER DEFAULT 0,
-                creator_verified INTEGER DEFAULT 0,
-                upload_timestamp INTEGER DEFAULT 0,
-                virality_score REAL DEFAULT 0,
-                cached_at TEXT
             );
 
             CREATE TABLE IF NOT EXISTS video_jobs (
@@ -1740,13 +1622,6 @@ async def init_db():
                 )
             await conn.commit()
 
-        # Clear stale trending/curated caches (force fresh fetch with more results)
-        await conn.execute("DELETE FROM trending_videos")
-        await conn.execute("DELETE FROM curated_videos")
-        await conn.execute("DELETE FROM trending_cache_meta")
-        await conn.execute("DELETE FROM niche_cache_meta")
-        await conn.commit()
-
 
 async def _fetch_one(query: str, params: tuple = ()) -> Optional[dict]:
     """Fetch one row as a dict, or None."""
@@ -2075,72 +1950,9 @@ async def require_frame_derived_image(image_id: str) -> Path:
     return image_path
 
 
-
 # ---------------------------------------------------------------------------
 # Trending cache helper
 # ---------------------------------------------------------------------------
-async def _refresh_trending_cache(niche_key: str, force: bool = False):
-    cache_meta = await _fetch_one(
-        "SELECT * FROM trending_cache_meta WHERE niche = ?", (niche_key,)
-    )
-    trending_is_stale = True
-    if cache_meta and not force:
-        cached_at = datetime.fromisoformat(cache_meta["cached_at"])
-        trending_is_stale = (datetime.now(timezone.utc) - cached_at) > TRENDING_CACHE_TTL
-
-    if not trending_is_stale:
-        return False
-
-    hashtags = NICHE_MAP[niche_key].get("hashtags", [])
-    # Only fetch the first (most relevant) hashtag to keep response fast
-    hashtags_to_fetch = hashtags[:1]
-    hashtag_results = await asyncio.gather(
-        *[viral_detection.fetch_hashtag_videos(tag, limit=25) for tag in hashtags_to_fetch],
-        return_exceptions=True,
-    )
-    all_videos = []
-    for tag, result in zip(hashtags_to_fetch, hashtag_results):
-        if isinstance(result, Exception):
-            logger.warning(f"Hashtag fetch failed for #{tag}: {result!r}")
-            continue
-        all_videos.extend(result)
-
-    if all_videos:
-        ranked = viral_detection.rank_videos(all_videos)
-        async with get_db() as conn:
-            await conn.execute("DELETE FROM trending_videos WHERE niche = ?", (niche_key,))
-            for v in ranked[:50]:
-                await conn.execute(
-                    """INSERT INTO trending_videos
-                       (niche, tiktok_url, video_platform_id, creator, creator_display,
-                        title, view_count, like_count, comment_count, share_count,
-                        bookmark_count, duration, thumbnail_url, direct_video_url,
-                        hashtags, song_id, song_title, song_artist, song_cover_url,
-                        subtitles_url, is_ad, creator_followers, creator_verified,
-                        upload_timestamp, virality_score, cached_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (niche_key, v.get("tiktok_url"), v.get("video_platform_id"),
-                     v.get("creator"), v.get("creator_display"), v.get("title"),
-                     v.get("view_count", 0), v.get("like_count", 0),
-                     v.get("comment_count", 0), v.get("share_count", 0),
-                     v.get("bookmark_count", 0), v.get("duration", 0),
-                     v.get("thumbnail_url"), v.get("direct_video_url", ""),
-                     json.dumps(v.get("hashtags", [])),
-                     v.get("song_id", ""), v.get("song_title", ""),
-                     v.get("song_artist", ""), v.get("song_cover_url", ""),
-                     v.get("subtitles_url", ""),
-                     1 if v.get("is_ad") else 0,
-                     v.get("creator_followers", 0),
-                     1 if v.get("creator_verified") else 0,
-                     int(v.get("timestamp") or 0),
-                     v.get("virality_score", 0), now_iso()),
-                )
-            await conn.execute(
-                "INSERT OR REPLACE INTO trending_cache_meta (niche, cached_at) VALUES (?, ?)",
-                (niche_key, now_iso()),
-            )
-            await conn.commit()
-    return True
 
 
 # ---------------------------------------------------------------------------
@@ -2295,13 +2107,6 @@ async def _recover_missing_frame(relative_path: str) -> bool:
         return False
 
     return target.is_file() and target.stat().st_size > 1024
-
-
-def filter_ads(videos: list, include_ads: bool) -> list:
-    """Drop ad/sponsored posts from a list of video dicts unless include_ads is True."""
-    if include_ads:
-        return videos
-    return [v for v in videos if not v.get("is_ad")]
 
 
 async def get_video_or_404(video_id: str) -> dict:
@@ -2570,515 +2375,8 @@ def validate_and_normalize_photo(raw_bytes: bytes) -> bytes:
 
 
 # ---------------------------------------------------------------------------
-# Niches + curated/trending feed
-# ---------------------------------------------------------------------------
-@api_router.get("/niches")
-async def list_niches():
-    return [
-        {"key": n["key"], "label": n["label"], "icon": n["icon"], "description": n["description"]}
-        for n in NICHES
-    ]
-
-
-@api_router.get("/niches/{niche_key}/videos")
-async def get_niche_videos(niche_key: str, refresh: bool = False, mode: str = "curated", include_ads: bool = True):
-    if niche_key not in NICHE_MAP:
-        raise HTTPException(status_code=404, detail="Unknown niche")
-
-    if mode not in ("curated", "trending", "mixed"):
-        mode = "curated"
-
-    curated_videos = []
-    trending_videos = []
-
-    # Fetch curated videos
-    if mode in ("curated", "mixed"):
-        cache_meta = await _fetch_one(
-            "SELECT * FROM niche_cache_meta WHERE niche = ?", (niche_key,)
-        )
-        is_stale = True
-        if cache_meta and not refresh:
-            cached_at = datetime.fromisoformat(cache_meta["cached_at"])
-            is_stale = (datetime.now(timezone.utc) - cached_at) > NICHE_CACHE_TTL
-
-        if is_stale:
-            creators = NICHE_MAP[niche_key]["creators"]
-            # Only fetch from the first creator to keep response fast
-            creators_to_fetch = creators[:1]
-            creator_results = await asyncio.gather(
-                *[pipeline.fetch_creator_videos(handle, limit=3) for handle in creators_to_fetch],
-                return_exceptions=True,
-            )
-            fetched_any = False
-            for handle, videos in zip(creators_to_fetch, creator_results):
-                if isinstance(videos, Exception):
-                    logger.warning(f"Creator fetch failed for {handle}: {videos!r}")
-                    continue
-                if not videos:
-                    continue
-                fetched_any = True
-                for v in videos:
-                    if not v.get("tiktok_url"):
-                        continue
-                    async with get_db() as conn:
-                        await conn.execute(
-                            """INSERT OR REPLACE INTO curated_videos
-                               (tiktok_url, niche, video_platform_id, creator,
-                                creator_display, title, view_count, like_count,
-                                comment_count, share_count, bookmark_count, duration,
-                                thumbnail_url, direct_video_url, hashtags,
-                                song_id, song_title, song_artist, song_cover_url,
-                                subtitles_url, is_ad, creator_followers, creator_verified,
-                                upload_timestamp, cached_at)
-                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                            (v["tiktok_url"], niche_key, v.get("video_platform_id"),
-                             v.get("creator"), v.get("creator_display"), v.get("title"),
-                             v.get("view_count", 0), v.get("like_count", 0),
-                             v.get("comment_count", 0), v.get("share_count", 0),
-                             v.get("bookmark_count", 0), v.get("duration", 0),
-                             v.get("thumbnail_url"), v.get("direct_video_url", ""),
-                             json.dumps(v.get("hashtags", [])),
-                             v.get("song_id", ""), v.get("song_title", ""),
-                             v.get("song_artist", ""), v.get("song_cover_url", ""),
-                             v.get("subtitles_url", ""),
-                             1 if v.get("is_ad") else 0,
-                             v.get("creator_followers", 0),
-                             1 if v.get("creator_verified") else 0,
-                             int(v.get("timestamp") or 0),
-                             now_iso()),
-                        )
-                        await conn.commit()
-            if fetched_any or not cache_meta:
-                await _execute(
-                    "INSERT OR REPLACE INTO niche_cache_meta (niche, cached_at) VALUES (?, ?)",
-                    (niche_key, now_iso()),
-                )
-
-        raw_curated = await _fetch_all(
-            "SELECT * FROM curated_videos WHERE niche = ? ORDER BY view_count DESC LIMIT 50",
-            (niche_key,),
-        )
-        for v in raw_curated:
-            # compute_virality_score derives age from `timestamp`; without it the
-            # scorer silently assumes a 48h-old video, which skews the velocity and
-            # recency components. Surface the persisted publish time under both
-            # names so the score is real and the client can sort/filter by date.
-            v["timestamp"] = v.get("upload_timestamp") or 0
-            v["virality_score"] = viral_detection.compute_virality_score(v)
-            v["source"] = "curated"
-        curated_videos = raw_curated
-
-    # Fetch trending videos
-    if mode in ("trending", "mixed"):
-        await _refresh_trending_cache(niche_key, force=refresh)
-        raw_trending = await _fetch_all(
-            "SELECT * FROM trending_videos WHERE niche = ? ORDER BY virality_score DESC LIMIT 50",
-            (niche_key,),
-        )
-        for v in raw_trending:
-            v["source"] = "trending"
-        trending_videos = raw_trending
-
-    if mode == "curated":
-        result = curated_videos
-    elif mode == "trending":
-        result = trending_videos
-    else:  # mixed
-        combined = curated_videos + trending_videos
-        seen_urls = set()
-        unique = []
-        for v in combined:
-            url = v.get("tiktok_url")
-            if url and url not in seen_urls:
-                seen_urls.add(url)
-                unique.append(v)
-            elif not url:
-                unique.append(v)
-        unique.sort(key=lambda v: v.get("virality_score", 0), reverse=True)
-        result = unique[:50]
-
-    return filter_ads(result, include_ads)
-
-
-@api_router.get("/niches/{niche_key}/trending")
-async def get_niche_trending(niche_key: str, refresh: bool = False, include_ads: bool = True):
-    if niche_key not in NICHE_MAP:
-        raise HTTPException(status_code=404, detail="Unknown niche")
-    await _refresh_trending_cache(niche_key, force=refresh)
-    videos = await _fetch_all(
-        "SELECT * FROM trending_videos WHERE niche = ? ORDER BY virality_score DESC LIMIT 50",
-        (niche_key,),
-    )
-    return filter_ads(videos, include_ads)
-
-
-@api_router.get("/trending/search")
-async def trending_search(q: str = "", limit: int = 20, include_ads: bool = True):
-    """Search TikTok for trending videos matching a keyword."""
-    q = q.strip()
-    if not q:
-        raise HTTPException(status_code=400, detail="Query parameter 'q' is required")
-    if len(q) > SEARCH_QUERY_MAX_LENGTH:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Query too long (max {SEARCH_QUERY_MAX_LENGTH} characters)",
-        )
-    limit = max(1, min(50, limit))
-    async with _ytdlp_semaphore:
-        videos = await viral_detection.fetch_keyword_videos(q, limit=limit)
-    ranked = viral_detection.rank_videos(videos)
-    return filter_ads(ranked, include_ads)
-
-
-# ---------------------------------------------------------------------------
-# Video ingestion + analysis
-# ---------------------------------------------------------------------------
-@api_router.post("/videos/ingest")
-async def ingest_video(payload: IngestVideoRequest, user_id: str = Depends(get_current_user_id)):
-    tiktok_url = payload.tiktok_url.strip()
-    if "tiktok.com" not in tiktok_url:
-        raise HTTPException(status_code=400, detail="Please provide a valid TikTok video URL.")
-
-    # Check if THIS user already ingested this URL (not globally — each user
-    # gets their own video record so analyses are isolated per account).
-    existing = await _fetch_one(
-        "SELECT * FROM videos WHERE tiktok_url = ? AND user_id = ?", (tiktok_url, user_id)
-    )
-    if existing:
-        return existing
-
-    curated = await _fetch_one("SELECT * FROM curated_videos WHERE tiktok_url = ?", (tiktok_url,))
-    if curated:
-        meta = {k: curated.get(k) for k in [
-            "video_platform_id", "creator", "creator_display", "title",
-            "view_count", "like_count", "comment_count", "duration", "thumbnail_url",
-            "direct_video_url",
-        ]}
-        niche = curated.get("niche") or payload.niche
-    else:
-        async with _ytdlp_semaphore:
-            try:
-                meta = await pipeline.fetch_video_metadata(tiktok_url)
-            except Exception as e:
-                logger.error(f"Metadata fetch failed for {tiktok_url}: {e}")
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Could not fetch this TikTok video. Please check the URL and try again. ({str(e)[:150]})",
-                )
-        niche = payload.niche
-
-    video_id = str(uuid.uuid4())
-    created_at = now_iso()
-    try:
-        await _execute(
-            """INSERT INTO videos
-               (id, tiktok_url, niche, video_platform_id, creator, creator_display, title,
-                description, view_count, like_count, comment_count, share_count, bookmark_count,
-                duration, thumbnail_url, direct_video_url, hashtags,
-                song_id, song_title, song_artist, song_album, song_duration, song_cover_url,
-                subtitles_url, subtitles_language, is_ad,
-                creator_followers, creator_following, creator_verified, creator_bio, creator_avatar,
-                status, local_video_path, created_at, user_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (video_id, tiktok_url, niche, meta.get("video_platform_id"), meta.get("creator"),
-             meta.get("creator_display"), meta.get("title"), meta.get("description", ""),
-             meta.get("view_count", 0), meta.get("like_count", 0), meta.get("comment_count", 0),
-             meta.get("share_count", 0), meta.get("bookmark_count", 0),
-             meta.get("duration", 0), meta.get("thumbnail_url"),
-             meta.get("direct_video_url", ""), json.dumps(meta.get("hashtags", [])),
-             meta.get("song_id", ""), meta.get("song_title", ""),
-             meta.get("song_artist", ""), meta.get("song_album", ""),
-             meta.get("song_duration", 0), meta.get("song_cover_url", ""),
-             meta.get("subtitles_url", ""), meta.get("subtitles_language", ""),
-             1 if meta.get("is_ad") else 0,
-             meta.get("creator_followers", 0), meta.get("creator_following", 0),
-             1 if meta.get("creator_verified") else 0,
-             meta.get("creator_bio", ""), meta.get("creator_avatar", ""),
-             "metadata_ready", None, created_at, user_id),
-        )
-    except Exception as e:
-        # On older databases with UNIQUE(tiktok_url), a second user ingesting the
-        # same URL hits a constraint violation. Return the existing record for
-        # this user if one exists, otherwise the global one (legacy compat).
-        logger.warning(f"Video insert failed (likely UNIQUE constraint): {e}")
-        fallback = await _fetch_one(
-            "SELECT * FROM videos WHERE tiktok_url = ?", (tiktok_url,)
-        )
-        if fallback:
-            return fallback
-        raise HTTPException(status_code=500, detail="Could not save the video. Please try again.")
-    return await get_video_or_404(video_id)
-
-
-@api_router.get("/videos/{video_id}")
-async def get_video(video_id: str, user_id: str = Depends(get_current_user_id)):
-    return await get_video_or_404(video_id)
-
-
-@api_router.post("/videos/{video_id}/analyze-hook")
-async def analyze_video_hook(video_id: str, user_id: str = Depends(get_current_user_id)):
-    require_ai_configured()
-    video = await get_video_or_404(video_id)
-    tiktok_url = video["tiktok_url"]
-    video_hash = pipeline.url_hash(tiktok_url)
-
-    # When MODAL_FRAME_EXTRACTOR_URL is configured, the memory-heavy
-    # download + ffmpeg decode runs on Modal (dedicated RAM) instead of on
-    # this Render instance — see pipeline.py module docstring for context.
-    direct_video_url = video.get("direct_video_url", "")
-    # Older curated-video ingests dropped the CDN source. Recover and persist
-    # it from the curated record so those existing videos also avoid TikTok's
-    # webpage extraction when an Apify download URL is available.
-    if not direct_video_url:
-        curated = await _fetch_one(
-            "SELECT direct_video_url FROM curated_videos WHERE tiktok_url = ?", (tiktok_url,)
-        )
-        direct_video_url = (curated or {}).get("direct_video_url", "")
-        if direct_video_url:
-            await _execute(
-                "UPDATE videos SET direct_video_url = ? WHERE id = ?", (direct_video_url, video_id)
-            )
-
-    if pipeline.MODAL_FRAME_EXTRACTOR_URL:
-        try:
-            video_path, frame_paths = await pipeline.download_and_extract_via_modal(
-                tiktok_url,
-                direct_video_url=direct_video_url,
-                num_frames=FRAME_COUNT,
-                duration=HOOK_DURATION_SECONDS,
-            )
-        except pipeline.ModalFrameDownloadError as modal_error:
-            # A provider-side TikTok download rejection is recoverable: retry
-            # the already-supported local direct-CDN then yt-dlp path before
-            # marking the analysis as failed. Other Modal failures remain
-            # terminal to avoid moving memory-heavy work off Modal needlessly.
-            logger.warning(f"Modal video download failed for {tiktok_url}; trying local recovery: {modal_error}")
-            try:
-                async with _ytdlp_semaphore:
-                    video_path = await pipeline.download_video(tiktok_url, direct_video_url=direct_video_url)
-                frame_paths = await pipeline.extract_hook_frames(
-                    video_path, num_frames=FRAME_COUNT, duration=HOOK_DURATION_SECONDS
-                )
-            except Exception as local_error:
-                error_detail = f"Modal download failed: {modal_error}; local recovery failed: {local_error}"
-                logger.error(f"Download+extract failed for {tiktok_url}: {error_detail}")
-                await _execute(
-                    "UPDATE videos SET status = ?, error = ? WHERE id = ?",
-                    ("failed", error_detail[:400], video_id),
-                )
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"Failed to download/extract the video. ({error_detail[:150]})",
-                )
-        except Exception as e:
-            logger.error(f"Modal download+extract failed for {tiktok_url}: {e}")
-            await _execute(
-                "UPDATE videos SET status = ?, error = ? WHERE id = ?",
-                ("failed", str(e)[:400], video_id),
-            )
-            raise HTTPException(
-                status_code=502,
-                detail=f"Failed to download/extract the video. ({str(e)[:150]})",
-            )
-    else:
-        try:
-            async with _ytdlp_semaphore:
-                video_path = await pipeline.download_video(tiktok_url, direct_video_url=direct_video_url)
-        except Exception as e:
-            logger.error(f"Download failed for {tiktok_url}: {e}")
-            await _execute(
-                "UPDATE videos SET status = ?, error = ? WHERE id = ?",
-                ("failed", str(e)[:400], video_id),
-            )
-            raise HTTPException(
-                status_code=502,
-                detail=f"Failed to download the video. It may be private or removed. ({str(e)[:150]})",
-            )
-
-        try:
-            frame_paths = await pipeline.extract_hook_frames(
-                video_path, num_frames=FRAME_COUNT, duration=HOOK_DURATION_SECONDS
-            )
-        except Exception as e:
-            logger.error(f"Frame extraction failed for {video_id}: {e}")
-            await _execute(
-                "UPDATE videos SET status = ?, error = ? WHERE id = ?",
-                ("failed", str(e)[:400], video_id),
-            )
-            raise HTTPException(status_code=500, detail=f"Failed to extract frames from the video. ({str(e)[:150]})")
-
-    frame_docs = build_frame_docs(video_hash, frame_paths)
-
-    # Build music context and fetch transcript if available
-    music_context = None
-    transcript_text = ""
-    if video.get("song_title") or video.get("song_artist"):
-        music_context = {
-            "song_title": video.get("song_title", ""),
-            "song_artist": video.get("song_artist", ""),
-            "song_album": video.get("song_album", ""),
-            "song_duration": video.get("song_duration", 0),
-        }
-    if video.get("subtitles_url"):
-        import apify_tiktok
-        raw_vtt = await apify_tiktok.fetch_subtitles(video["subtitles_url"])
-        if raw_vtt:
-            transcript_text = apify_tiktok.parse_webvtt_to_text(raw_vtt)
-
-    try:
-        analysis_result = await _log_model_call(
-            "hook_analysis", "vision", VISION_MODEL,
-            lambda: analyze_hook(
-                frame_paths, session_id=f"hook-{video_id}",
-                music_context=music_context, transcript_text=transcript_text,
-            ),
-            video.get("user_id") or "anonymous",
-        )
-    except Exception as e:
-        logger.error(f"Hook analysis failed for {video_id}: {e}")
-        await _execute(
-            "UPDATE videos SET status = ?, error = ? WHERE id = ?",
-            ("failed", str(e)[:400], video_id),
-        )
-        raise HTTPException(status_code=502, detail=f"AI hook analysis failed. Please try again. ({str(e)[:150]})")
-
-    analysis_id = str(uuid.uuid4())
-    created_at = now_iso()
-    try:
-        # analyses.frames only holds browser-facing URLs. Store the matching
-        # JPEG bytes before publishing that analysis so History can restore
-        # every thumbnail after a clean deploy or on another backend instance.
-        await _record_analysis_frame_assets(video_hash, frame_paths)
-    except Exception as e:
-        logger.error(f"Could not durably preserve frames for {video_id}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to preserve extracted frames. Please retry the analysis.",
-        )
-
-    await _execute(
-        """INSERT INTO analyses
-           (id, video_id, frames, facial_expressions, body_language_gestures, pacing_cuts,
-            text_overlays_timing, audio_cues_inferred, hook_summary, effectiveness_score,
-            key_hook_frame_index, replicable_mechanics, created_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (analysis_id, video_id, json.dumps(frame_docs),
-         analysis_result.get("facial_expressions"), analysis_result.get("body_language_gestures"),
-         analysis_result.get("pacing_cuts"), analysis_result.get("text_overlays_timing"),
-         analysis_result.get("audio_cues_inferred"), analysis_result.get("hook_summary"),
-         analysis_result.get("effectiveness_score"), analysis_result.get("key_hook_frame_index"),
-         json.dumps(analysis_result.get("replicable_mechanics", [])), created_at, user_id),
-    )
-    await _execute(
-        "UPDATE videos SET status = ?, local_video_path = ?, last_analysis_id = ? WHERE id = ?",
-        ("analyzed", str(video_path), analysis_id, video_id),
-    )
-    return await _fetch_one("SELECT * FROM analyses WHERE id = ?", (analysis_id,))
-
-
-@api_router.get("/videos/{video_id}/analysis")
-async def get_video_analysis(video_id: str, user_id: str = Depends(get_current_user_id)):
-    return await get_latest_analysis_or_404(video_id)
-
-
-@api_router.get("/hook-motion-styles")
-async def get_hook_motion_styles():
-    """
-    The selectable motion styles: short summary, the exact prompt text sent to
-    the model, and which hook-energy categories each one overlaps.
-
-    Serving all three from here keeps them from drifting. The card copy and the
-    prompt fragments used to live in two places (FaceSwap.jsx and this module)
-    describing the same motions in different words, so a creator could read one
-    thing while the model received another. `summary` is what the card shows by
-    default and `motion` is available on request, so the UI stays readable
-    without hiding what actually gets sent.
-
-    Unauthenticated and static: presentation metadata with no user data, which
-    changes only when the motion definitions themselves change.
-    """
-    return {"styles": HOOK_MOTION_STYLES}
-
-
-@api_router.get("/videos/{video_id}/hook-engine")
-async def get_hook_engine_availability(video_id: str, user_id: str = Depends(get_current_user_id)):
-    """
-    Report whether Runway Aleph's exact-edit path is structurally available for
-    this video, so the UI can stop inferring it.
-
-    The frontend previously guessed eligibility from "is a video attached?",
-    which can't see the two conditions that actually decide it server-side:
-    whether a hook analysis is obtainable, and whether the source clip is
-    still retrievable. That made the "Exact edit" badge capable of promising
-    something the backend would then silently downgrade.
-
-    This reports only the STRUCTURAL half of the decision. The caller ANDs it
-    with its own inputs (hook energy / custom direction / motion style), which
-    it already knows, keeping the split clean and avoiding a round-trip on
-    every keystroke.
-
-    Deliberately cheap and side-effect free: it never downloads or analyzes,
-    it only checks whether those are possible. Returns 200 with a reason
-    instead of 404 so the client has one code path.
-
-    Note both recovery mechanisms this accounts for:
-      - a missing local file is recoverable when tiktok_url/direct_video_url
-        is on record (the hook endpoint re-downloads on demand)
-      - a missing analysis is recoverable whenever the clip is, since the hook
-        endpoint auto-analyzes on demand
-    So a missing analysis alone is NOT disqualifying — only an unobtainable
-    source clip is.
-    """
-    vid = (video_id or "").strip()
-    video = await _fetch_one("SELECT * FROM videos WHERE id = ?", (vid,))
-    if not video:
-        return {
-            "video_id": vid,
-            "exact_edit_available": False,
-            "reason": "video_not_found",
-            "has_analysis": False,
-            "source_ready": False,
-            "source_recoverable": False,
-        }
-
-    analysis = await _fetch_one(
-        "SELECT id FROM analyses WHERE video_id = ? ORDER BY created_at DESC LIMIT 1",
-        (vid,),
-    )
-
-    local_path = video.get("local_video_path")
-    source_ready = bool(local_path) and Path(local_path).exists()
-    source_recoverable = bool(
-        (video.get("tiktok_url") or "").strip()
-        or (video.get("direct_video_url") or "").strip()
-    )
-
-    available = source_ready or source_recoverable
-    reason = None if available else "source_unavailable"
-
-    return {
-        "video_id": vid,
-        "exact_edit_available": available,
-        "reason": reason,
-        "has_analysis": bool(analysis),
-        "source_ready": source_ready,
-        "source_recoverable": source_recoverable,
-    }
-
-
-# ---------------------------------------------------------------------------
 # Video Models (available for video generation)
 # ---------------------------------------------------------------------------
-@api_router.get("/video-models")
-async def list_video_models():
-    """Return available video generation models with their capabilities."""
-    return {
-        "models": [
-            {"key": k, **{mk: mv for mk, mv in v.items() if mk != "id"}}
-            for k, v in VIDEO_MODELS.items()
-        ],
-        "default": DEFAULT_VIDEO_MODEL,
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -3882,202 +3180,6 @@ def _template_thumbnail_source(video: dict, analysis: dict) -> Optional[Path]:
     return candidate if candidate.exists() else None
 
 
-@api_router.post("/bookmarks", status_code=201)
-async def create_hook_template(payload: CreateHookTemplateRequest, user_id: str = Depends(get_current_user_id)):
-    """
-    Save an already-analyzed hook as a reusable template.
-
-    Costs zero AI calls: this only snapshots the existing analysis, pre-builds the
-    video prompt, and copies the source clip + key frame into template storage so
-    the template stays usable after caches are cleared.
-    """
-    video = await get_video_or_404(payload.video_id)
-    analysis = await get_latest_analysis_or_404(payload.video_id)
-
-    template_id = str(uuid.uuid4())
-
-    # Copy the source clip so V2V motion transfer keeps working for this template.
-    reference_video_path = None
-    if video.get("local_video_path"):
-        src_video = Path(video["local_video_path"])
-        if src_video.exists():
-            dest_video = pipeline.TEMPLATES_DIR / f"{template_id}.mp4"
-            try:
-                shutil.copy2(src_video, dest_video)
-                reference_video_path = str(dest_video)
-            except OSError as e:
-                logger.warning(f"Could not copy motion reference for template {template_id}: {e}")
-
-    # Normalize the key hook frame to JPEG, persist its bytes in the durable
-    # template record, and keep a local copy only as a cache. That keeps the
-    # Bookmarks card renderable after container restarts and across instances.
-    thumbnail_url = None
-    thumbnail_bytes = None
-    src_frame = _template_thumbnail_source(video, analysis)
-    if src_frame:
-        try:
-            thumbnail_bytes = _normalize_template_thumbnail(src_frame.read_bytes())
-            dest_frame = _template_thumbnail_path(template_id)
-            _restore_template_thumbnail(dest_frame, thumbnail_bytes)
-            thumbnail_url = f"/api/media/templates/{template_id}.jpg"
-        except (OSError, ValueError) as e:
-            logger.warning(f"Could not persist thumbnail for template {template_id}: {e}")
-            thumbnail_bytes = None
-    if not thumbnail_url:
-        thumbnail_url = video.get("thumbnail_url")
-
-    # Pre-build the exact prompt a fresh analysis would have produced.
-    prompt_template = build_hook_prompt_from_analysis(
-        analysis, has_reference_video=bool(reference_video_path)
-    )
-
-    name = (payload.name or "").strip()[:HOOK_TEMPLATE_NAME_MAX]
-    if not name:
-        summary = (analysis.get("hook_summary") or "").strip()
-        name = (summary[:60].rstrip(" .,") if summary else f"Hook from @{video.get('creator') or 'unknown'}")
-
-    created_at = now_iso()
-    await _execute(
-        """INSERT INTO hook_templates
-           (id, name, category, notes, source_video_id, source_analysis_id,
-            source_tiktok_url, source_creator, source_title, thumbnail_url,
-            thumbnail_bytes, facial_expressions, body_language_gestures, pacing_cuts,
-            text_overlays_timing, audio_cues_inferred, hook_summary,
-            effectiveness_score, replicable_mechanics, prompt_template,
-            reference_video_path, song_title, song_artist,
-            times_used, last_used_at, created_at, updated_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (template_id, name, _normalize_template_category(payload.category),
-         (payload.notes or "").strip()[:HOOK_TEMPLATE_NOTES_MAX],
-         video["id"], analysis["id"], video.get("tiktok_url"), video.get("creator"),
-         video.get("title"), thumbnail_url, thumbnail_bytes,
-         analysis.get("facial_expressions"), analysis.get("body_language_gestures"),
-         analysis.get("pacing_cuts"), analysis.get("text_overlays_timing"),
-         analysis.get("audio_cues_inferred"), analysis.get("hook_summary"),
-         analysis.get("effectiveness_score"),
-         json.dumps(_coerce_mechanics(analysis.get("replicable_mechanics"))),
-         prompt_template, reference_video_path,
-         video.get("song_title"), video.get("song_artist"),
-         0, None, created_at, created_at, user_id),
-    )
-    logger.info(
-        f"Saved hook template {template_id} ('{name}') from video {video['id']} — "
-        f"motion_reference={bool(reference_video_path)}"
-    )
-    return _public_template(
-        await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
-    )
-
-
-@api_router.get("/bookmarks")
-async def list_hook_templates(category: str = "", source_video_id: str = "", user_id: str = Depends(get_current_user_id)):
-    """List saved hook templates, most recently used first."""
-    clauses = ["user_id = ?"]
-    params = [user_id]
-    if category.strip():
-        clauses.append("category = ?")
-        params.append(_normalize_template_category(category))
-    if source_video_id.strip():
-        clauses.append("source_video_id = ?")
-        params.append(source_video_id.strip())
-    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-    rows = await _fetch_all(
-        f"""SELECT * FROM hook_templates {where}
-            ORDER BY COALESCE(last_used_at, created_at) DESC LIMIT 200""",
-        tuple(params),
-    )
-    for row in rows:
-        row["has_motion_reference"] = bool(
-            row.get("reference_video_path") and Path(row["reference_video_path"]).exists()
-        )
-        expected_local_url = f"/api/media/templates/{row['id']}.jpg"
-        if (
-            row.get("thumbnail_url") == expected_local_url
-            and GENERATED_ID_RE.match(row["id"] or "")
-            and not row.get("thumbnail_bytes")
-            and not _template_thumbnail_path(row["id"]).is_file()
-        ):
-            # Legacy templates created before durable thumbnails may have lost
-            # their local cache in a prior deploy. Keep the card renderable
-            # with its source video's cover, while avoiding a misleading local
-            # target URL that could not seed Face Swap.
-            source_video = await _fetch_one(
-                "SELECT thumbnail_url FROM videos WHERE id = ?", (row.get("source_video_id"),)
-            )
-            if source_video and source_video.get("thumbnail_url"):
-                row["thumbnail_url"] = source_video["thumbnail_url"]
-        row.pop("thumbnail_bytes", None)
-    return rows
-
-
-@api_router.get("/bookmarks/{template_id}")
-async def get_hook_template(template_id: str, user_id: str = Depends(get_current_user_id)):
-    template = await _fetch_one("SELECT * FROM hook_templates WHERE id = ? AND user_id = ?", (template_id, user_id))
-    if not template:
-        raise HTTPException(status_code=404, detail="Hook template not found.")
-    template["has_motion_reference"] = bool(
-        template.get("reference_video_path") and Path(template["reference_video_path"]).exists()
-    )
-    return _public_template(template)
-
-
-@api_router.patch("/bookmarks/{template_id}")
-async def update_hook_template(template_id: str, payload: UpdateHookTemplateRequest, user_id: str = Depends(get_current_user_id)):
-    """Rename, recategorize, or annotate a saved template."""
-    existing = await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
-    if not existing:
-        raise HTTPException(status_code=404, detail="Hook template not found.")
-
-    updates = payload.model_dump(exclude_unset=True)
-    set_clauses = []
-    values = []
-    if "name" in updates:
-        name = (updates["name"] or "").strip()[:HOOK_TEMPLATE_NAME_MAX]
-        if not name:
-            raise HTTPException(status_code=400, detail="Template name cannot be empty.")
-        set_clauses.append("name = ?")
-        values.append(name)
-    if "category" in updates:
-        set_clauses.append("category = ?")
-        values.append(_normalize_template_category(updates["category"]))
-    if "notes" in updates:
-        set_clauses.append("notes = ?")
-        values.append((updates["notes"] or "").strip()[:HOOK_TEMPLATE_NOTES_MAX])
-
-    if not set_clauses:
-        return _public_template(existing)
-
-    set_clauses.append("updated_at = ?")
-    values.append(now_iso())
-    values.append(template_id)
-    await _execute(
-        f"UPDATE hook_templates SET {', '.join(set_clauses)} WHERE id = ?", tuple(values)
-    )
-    return _public_template(
-        await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
-    )
-
-
-@api_router.delete("/bookmarks/{template_id}")
-async def delete_hook_template(template_id: str, user_id: str = Depends(get_current_user_id)):
-    """Delete a template and its copied motion reference / thumbnail."""
-    existing = await _fetch_one("SELECT * FROM hook_templates WHERE id = ?", (template_id,))
-    if not existing:
-        raise HTTPException(status_code=404, detail="Hook template not found.")
-
-    for candidate in (
-        pipeline.TEMPLATES_DIR / f"{template_id}.mp4",
-        pipeline.TEMPLATES_DIR / f"{template_id}.jpg",
-    ):
-        try:
-            candidate.unlink(missing_ok=True)
-        except OSError as e:
-            logger.warning(f"Could not delete template asset {candidate.name}: {e}")
-
-    await _execute("DELETE FROM hook_templates WHERE id = ?", (template_id,))
-    return {"deleted": True, "id": template_id}
-
-
 @api_router.post("/face-swap/generate-hook-video")
 async def face_swap_generate_hook_video(
     image_id: str = Form(...),
@@ -4800,58 +3902,6 @@ async def face_swap_video_status(job_id: str, user_id: str = Depends(get_current
         response["usage"] = result["usage"]
 
     return response
-
-
-# ---------------------------------------------------------------------------
-# Video Assets — persistent history of generated videos stored in R2.
-# Users can list their videos, get a permanent URL, or delete them.
-# ---------------------------------------------------------------------------
-@api_router.get("/video-assets")
-async def list_video_assets(user_id: str = Depends(get_current_user_id)):
-    """List all persisted videos for the current user, newest first."""
-    cursor = await _execute(
-        """SELECT job_id, r2_url, phase, source_video_id,
-                  source_hook_template_id, duration, created_at
-           FROM video_assets
-           WHERE user_id = ?
-           ORDER BY created_at DESC
-           LIMIT 100""",
-        (user_id,),
-    )
-    rows = await cursor.fetchall()
-    cols = [d[0] for d in cursor.description]
-    return [row_to_dict(row, cols) for row in rows]
-
-
-@api_router.delete("/video-assets/{job_id}")
-async def delete_video_asset(job_id: str, user_id: str = Depends(get_current_user_id)):
-    """
-    Delete a persisted video — removes it from R2 and the database.
-    The video is gone permanently. Only the owning user can delete.
-    """
-    asset = await _fetch_one(
-        "SELECT * FROM video_assets WHERE job_id = ? AND user_id = ?",
-        (job_id, user_id),
-    )
-    if not asset:
-        raise HTTPException(status_code=404, detail="Video not found or you don't own it.")
-
-    # Delete from R2
-    storage_service.delete_video(user_id, job_id)
-
-    # Delete from database
-    await _execute("DELETE FROM video_assets WHERE job_id = ? AND user_id = ?", (job_id, user_id))
-
-    # Also clean up the video job record's URL (it's now gone)
-    await _execute(
-        "UPDATE face_swap_video_jobs SET video_url = NULL WHERE id = ?", (job_id,)
-    )
-
-    # Remove local cache if it exists
-    local_path = pipeline.STORAGE_DIR / "videos" / f"{job_id}.mp4"
-    local_path.unlink(missing_ok=True)
-
-    return {"status": "deleted", "job_id": job_id}
 
 
 # ---------------------------------------------------------------------------
@@ -10550,109 +9600,6 @@ async def analytics_report(
 #
 
 
-# ---------------------------------------------------------------------------
-# History
-# ---------------------------------------------------------------------------
-@api_router.delete("/videos/{video_id}")
-async def delete_video(video_id: str, user_id: str = Depends(get_current_user_id)):
-    """Delete a video and all its associated data (analyses, frames, etc.)."""
-    video = await _fetch_one("SELECT * FROM videos WHERE id = ? AND user_id = ?", (video_id, user_id))
-    if not video:
-        raise HTTPException(status_code=404, detail="Video not found.")
-
-    # Delete associated analyses
-    await _execute("DELETE FROM analyses WHERE video_id = ?", (video_id,))
-    # Delete associated customizations
-    await _execute("DELETE FROM customizations WHERE video_id = ?", (video_id,))
-    # Delete associated video jobs
-    await _execute("DELETE FROM video_jobs WHERE video_id = ?", (video_id,))
-    # Delete the video record itself
-    await _execute("DELETE FROM videos WHERE id = ?", (video_id,))
-
-    # Clean up local files if they exist (frames, video)
-    if video.get("tiktok_url"):
-        vhash = pipeline.url_hash(video["tiktok_url"])
-        frame_dir = pipeline.FRAMES_DIR / vhash
-        if frame_dir.exists():
-            import shutil
-            shutil.rmtree(frame_dir, ignore_errors=True)
-        video_file = pipeline.VIDEOS_DIR / f"{vhash}.mp4"
-        video_file.unlink(missing_ok=True)
-
-    return {"deleted": True, "id": video_id}
-
-
-@api_router.get("/history")
-async def get_history(user_id: str = Depends(get_current_user_id)):
-    """
-    Return the user's combined activity: analyzed videos, face-swap jobs,
-    and saved hook templates — everything needed to show a full history page.
-    """
-    videos = await _fetch_all(
-        "SELECT * FROM videos WHERE status IN ('analyzed', 'failed') AND user_id = ? ORDER BY created_at DESC LIMIT 200",
-        (user_id,)
-    )
-    results = []
-    for v in videos:
-        analyses = await _fetch_all("SELECT id FROM analyses WHERE video_id = ?", (v["id"],))
-        customizations = await _fetch_all(
-            "SELECT * FROM customizations WHERE video_id = ? ORDER BY created_at DESC", (v["id"],)
-        )
-        video_jobs = await _fetch_all(
-            "SELECT * FROM video_jobs WHERE video_id = ? ORDER BY created_at DESC", (v["id"],)
-        )
-        results.append({
-            "video": v,
-            "analysis_count": len(analyses),
-            "customizations": customizations,
-            "video_jobs": video_jobs,
-        })
-
-    # Face-swap job history (last 50 completed/failed, with result images)
-    face_swap_jobs = await _fetch_all(
-        """SELECT id, status, target_image_url, source_face_url, result_json,
-                  variants_requested, error, created_at, completed_at
-           FROM face_swap_jobs
-           WHERE user_id = ? AND status IN ('completed', 'failed')
-           ORDER BY created_at DESC LIMIT 50""",
-        (user_id,),
-    )
-    face_swap_history = []
-    for job in face_swap_jobs:
-        entry = {
-            "job_id": job["id"],
-            "status": job["status"],
-            "target_image_url": job.get("target_image_url"),
-            "source_face_url": job.get("source_face_url"),
-            "created_at": job.get("created_at"),
-            "completed_at": job.get("completed_at"),
-            "error": job.get("error"),
-        }
-        if job.get("result_json"):
-            try:
-                result_data = json.loads(job["result_json"])
-                entry["generated_image_url"] = result_data.get("generated_image_url")
-                entry["variants_count"] = len(result_data.get("variants", []))
-            except (json.JSONDecodeError, TypeError):
-                pass
-        face_swap_history.append(entry)
-
-    # Saved hook templates
-    templates = await _fetch_all(
-        """SELECT id, name, category, source_creator, source_title, thumbnail_url,
-                  effectiveness_score, times_used, last_used_at, created_at
-           FROM hook_templates WHERE user_id = ?
-           ORDER BY created_at DESC LIMIT 100""",
-        (user_id,),
-    )
-
-    return {
-        "videos": results,
-        "face_swap_jobs": face_swap_history,
-        "hook_templates": templates,
-    }
-
-
 @api_router.get("/")
 async def root():
     import apify_tiktok
@@ -10740,11 +9687,13 @@ async def proxy_thumbnail(url: str = ""):
         raise HTTPException(status_code=404, detail="Could not fetch thumbnail")
 
 
-# Exact-match creation is disabled at the router boundary. Research stays
-# reachable: discovery, ingestion, analysis, bookmarks, history, brand research,
-# and durable media remain registered below. The implementation functions are
-# retained for existing records and shared media helpers, but none of these
-# paths can create a face swap, customization, remix, or legacy video job.
+# Exact-match creation is disabled at the router boundary. The Discover,
+# Saved Hooks, analysis, and legacy-history pages are gone too, so their
+# endpoints were deleted outright rather than merely unregistered; what remains
+# below is brand research and durable media. The implementation functions for
+# the disabled creation paths are retained for existing records and shared
+# media helpers, but none of these paths can create a face swap,
+# customization, remix, or legacy video job.
 DISABLED_LEGACY_CREATION_ROUTES = frozenset({
     "/face-swap",
     "/face-swap/status/{job_id}",

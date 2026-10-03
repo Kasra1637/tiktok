@@ -12,7 +12,7 @@ export default function Terms() {
       <LegalSection number={2} title="Description of Service">
         <p>HookForge is an internal template-based video tool that provides the following services:</p>
         <LegalList>
-          <LegalItem>Discovery of trending TikTok video content via the TikTok Content Discovery API</LegalItem>
+          <LegalItem>Trend research scans of public TikTok content for reusable mechanics</LegalItem>
           <LegalItem>AI-powered analysis of video hooks and abstraction of reusable mechanics</LegalItem>
           <LegalItem>Mobile App Profiles, content angles, and hook-template recommendations</LegalItem>
           <LegalItem>Template-based promotional video generation from approved profiles and authorized assets</LegalItem>

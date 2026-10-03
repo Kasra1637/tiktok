@@ -2302,12 +2302,9 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
   });
 
   // An onboarding tour is invisible when its targets are missing, because
-  // TourOverlay advances silently past a target it cannot find â€” so a tour
+  // TourOverlay advances silently past a target it cannot find — so a tour
   // pointing at a page that no longer exists passes every other gate, shows a
-  // first-timer nothing, and still marks itself seen. Two real tours were in
-  // exactly that state: /history served GenerationHistory while the history
-  // tour's testids lived in History.jsx at /legacy-history, and /bookmarks
-  // mapped to a tour id that is not a key in TOURS at all.
+  // first-timer nothing, and still marks itself seen.
   //
   // So every target is resolved against the real source files, here. A renamed
   // testid or a moved page now fails the gate instead of quietly emptying the
@@ -2317,24 +2314,17 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     const missing = [];
 
     // The route a tour fires on, and the page component that route serves.
-    // Scoping matters: the history tour's testids all still exist in
-    // History.jsx, which is why the bug survived so long â€” they are real, on a
-    // page that /history stopped serving. A corpus-wide search would call them
-    // fine.
     const ROUTE_PAGE = {
-      "/discover": "pages/NicheFeed.jsx",
-      "/bookmarks": "pages/HookTemplates.jsx",
       "/brand": "pages/BrandSetup.jsx",
       "/history": "pages/GenerationHistory.jsx",
     };
     const firstPath = (tourId) =>
-      ["/discover", "/bookmarks", "/brand", "/history"].find(
+      ["/brand", "/history"].find(
         (p) => getTourIdForPath(p) === tourId
       );
 
     // The page plus everything it imports, so a target owned by a child
-    // component (HookBreakdown owns hook-section-*, Filmstrip owns
-    // filmstrip-frame-button-*) still resolves.
+    // component still resolves.
     const reachableFrom = (rel, seen = new Set()) => {
       if (seen.has(rel)) return "";
       seen.add(rel);
@@ -2392,15 +2382,26 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
   });
 
   // The path-to-tour map has to name tours that exist, or the provider bails
-  // before opening anything while still having marked the tour seen.
+  // before opening anything while still having marked the tour seen. Deleted
+  // routes (/discover, /analysis/*, /bookmarks) must map to null — a stale
+  // mapping here would auto-launch a tour for a page that no longer exists.
   await check("every routable path maps to a tour that exists", async (ctx) => {
     const { TOURS, getTourIdForPath } = load("lib/onboarding/tours.js");
-    const paths = ["/discover", "/analysis/x", "/bookmarks", "/brand", "/history"];
+    const paths = ["/brand", "/history"];
     const broken = paths
       .map((p) => [p, getTourIdForPath(p)])
       .filter(([, id]) => id !== null && !TOURS[id])
       .map(([p, id]) => `${p} -> "${id}", which is not a key in TOURS`);
     if (broken.length) throw new Error(broken.join("\n        "));
+  });
+
+  await check("deleted routes map to no tour", async (ctx) => {
+    const { getTourIdForPath } = load("lib/onboarding/tours.js");
+    for (const p of ["/discover", "/analysis/x", "/bookmarks", "/legacy-history"]) {
+      if (getTourIdForPath(p) !== null) {
+        throw new Error(`${p} still maps to a tour after the page was removed`);
+      }
+    }
   });
 
   // The two cards are one grid row. Bullets that are not length-matched make

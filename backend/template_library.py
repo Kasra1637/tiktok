@@ -27,8 +27,8 @@ high-performing hook mechanics". Nothing is called "proven" because no
 internal performance data exists yet — `evidence_note` says so explicitly
 until a template accumulates real results in this app's own history.
 
-Kept separate from server.py for the same reason niches_config.py is: this is
-curated content, not request handling. Seeding reads it; tests assert it.
+Kept separate from server.py: this is curated content, not request handling.
+Seeding reads it; tests assert it.
 """
 
 from typing import Optional

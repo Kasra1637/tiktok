@@ -4,8 +4,6 @@ import { isClerkConfigured } from "../lib/clerk";
 import { useOnboarding } from "./onboarding/OnboardingProvider";
 import {
   Sparkles,
-  Compass,
-  Bookmark,
   Clapperboard,
   Images,
   Radar,
@@ -16,16 +14,15 @@ import {
   PanelLeftOpen,
   X,
   HelpCircle,
-  Archive,
 } from "lucide-react";
 
 /**
  * Sidebar navigation model.
  *
  * Ordering reflects the primary workflow: App Profiles -> Create Video ->
- * History. Discovery, saved analyses, and old records remain under Research
- * for template research. Exact-match video creation is disabled, so those
- * creation routes are intentionally absent.
+ * History. Trend Research lives under Insight for template research; the
+ * retired Discover / Saved Hooks / Research Archive pages are gone, so there
+ * is no Research group anymore.
  *
  * `testId` values are the canonical ones the rest of the app (and the
  * onboarding tour convention) expects — they must stay on the DESKTOP
@@ -50,22 +47,10 @@ export const NAV_GROUPS = [
       { to: "/analytics", label: "Analytics", icon: BarChart3, testId: "analytics-nav-link", hint: "Internal metrics" },
     ],
   },
-  {
-    // Research inputs and read-only records. Creation routes are absent on
-    // purpose: exact-match video creation is disabled.
-    label: "Research",
-    items: [
-      { to: "/discover", label: "Discover", icon: Compass, testId: "discover-nav-link", hint: "Trending hooks" },
-      { to: "/bookmarks", label: "Saved Hooks", icon: Bookmark, testId: "bookmarks-nav-link", hint: "Saved analyses" },
-      { to: "/legacy-history", label: "Research Archive", icon: Archive, testId: "legacy-history-nav-link", hint: "Old records" },
-    ],
-  },
 ];
 
 /**
- * A route is active for its own path and for any nested path beneath it, so
- * `/analysis/:id` no longer leaves the whole sidebar looking unselected the
- * way the old exact-match top nav did.
+ * A route is active for its own path and for any nested path beneath it.
  */
 function useIsActive() {
   const { pathname } = useLocation();

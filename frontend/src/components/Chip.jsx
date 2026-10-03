@@ -1,9 +1,9 @@
 /**
  * Selectable pill used for filters, categories and segmented choices.
  *
- * Consolidates four near-identical hand-rolled chip styles that had drifted
- * apart across NicheFeed, HookTemplates and the save/edit template dialogs.
- * Purely presentational: it renders a <button> and forwards click/aria state.
+ * Consolidates the hand-rolled chip styles used across filter and
+ * category pickers. Purely presentational: it renders a <button> and forwards
+ * click/aria state.
  */
 export function Chip({
   children,

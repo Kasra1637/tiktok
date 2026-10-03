@@ -101,9 +101,9 @@ const FEATURES = [
   },
   {
     icon: Search,
-    title: "Learn from any viral hook",
+    title: "Learn from what already works",
     description:
-      "Paste a TikTok link. It scores the first three seconds — pacing, cuts, face, on-screen text — and turns the pattern into openings you can use.",
+      "Scan public trend data for reusable mechanics. Review the drafts, publish the keepers as templates — with the evidence attached, never the source.",
   },
   {
     icon: Video,

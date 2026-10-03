@@ -735,10 +735,11 @@ class TestNoPlatformAutomation:
 
     def test_legacy_creation_routes_are_unregistered(self, api):
         """
-        Exact-match creation is disabled at the router boundary. Research
-        discovery, analysis, bookmarks, and history remain; creation paths do
-        not, even though their implementation helpers may still exist for old
-        records and shared media code.
+        Exact-match creation is disabled at the router boundary. The retired
+        Discover / Saved Hooks / analysis / legacy-history pages took their
+        endpoints with them (deleted outright, not merely unregistered), so
+        only creation paths appear below; research and history went further
+        and no longer exist as routes at all.
         """
         paths = {getattr(r, "path", "") for r in api.api_router.routes}
         for disabled in api.DISABLED_LEGACY_CREATION_ROUTES:
@@ -747,17 +748,35 @@ class TestNoPlatformAutomation:
         for disabled in api.DISABLED_LEGACY_CREATION_ROUTES:
             assert f"/api{disabled}" not in app_paths, disabled
 
-    def test_research_routes_remain_registered(self, api):
+    def test_retired_research_routes_are_gone(self, api):
+        """
+        The Discover, Saved Hooks, video-analysis, and legacy-history pages
+        were removed along with their backends. Their routes must not be
+        registered anywhere — a leftover route is a live paid-AI endpoint
+        (analysis) or a dead page behind a bookmark. The Trend Research scan
+        that feeds generation stays registered.
+        """
         paths = {getattr(r, "path", "") for r in api.api_router.routes}
-        for retained in (
+        for gone in (
             "/api/niches",
+            "/api/niches/{niche_key}/videos",
+            "/api/niches/{niche_key}/trending",
+            "/api/trending/search",
             "/api/videos/ingest",
+            "/api/videos/{video_id}",
             "/api/videos/{video_id}/analyze-hook",
             "/api/videos/{video_id}/analysis",
+            "/api/videos/{video_id}/hook-engine",
+            "/api/hook-motion-styles",
+            "/api/video-models",
             "/api/bookmarks",
+            "/api/bookmarks/{template_id}",
             "/api/history",
-            "/api/research/scan",
+            "/api/video-assets",
+            "/api/video-assets/{job_id}",
         ):
+            assert gone not in paths, gone
+        for retained in ("/api/research/scan", "/api/studio/video-models"):
             assert retained in paths, retained
 
     def test_no_credential_capture_endpoints(self, api):

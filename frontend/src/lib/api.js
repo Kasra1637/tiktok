@@ -115,35 +115,6 @@ client.interceptors.response.use(
 );
 
 export const api = {
-  getNiches: () => client.get("/niches").then((r) => r.data),
-  getNicheVideos: (nicheKey, mode = "curated", includeAds = true) =>
-    client.get(`/niches/${nicheKey}/videos`, { params: { mode, include_ads: includeAds } }).then((r) => r.data),
-  getTrendingVideos: (nicheKey, includeAds = true) =>
-    client.get(`/niches/${nicheKey}/trending`, { params: { include_ads: includeAds } }).then((r) => r.data),
-  searchTrending: (query, limit = 20, includeAds = true) =>
-    client.get("/trending/search", { params: { q: query, limit, include_ads: includeAds } }).then((r) => r.data),
-  ingestVideo: (tiktok_url, niche = null) =>
-    client.post("/videos/ingest", { tiktok_url, niche }).then((r) => r.data),
-  getVideo: (videoId) => client.get(`/videos/${videoId}`).then((r) => r.data),
-  analyzeHook: (videoId) => client.post(`/videos/${videoId}/analyze-hook`).then((r) => r.data),
-  getAnalysis: (videoId) => client.get(`/videos/${videoId}/analysis`).then((r) => r.data),
-  getHistory: () => client.get("/history").then((r) => r.data),
-  deleteVideo: (videoId) => client.delete(`/videos/${videoId}`).then((r) => r.data),
-
-  // Persisted video assets (R2 storage)
-  getVideoAssets: () => client.get("/video-assets").then((r) => r.data),
-  deleteVideoAsset: (jobId) => client.delete(`/video-assets/${jobId}`).then((r) => r.data),
-
-  // Bookmarks — save a hook analysis for quick access from history
-  getBookmarks: (params = {}) =>
-    client.get("/bookmarks", { params }).then((r) => r.data),
-  getBookmark: (id) => client.get(`/bookmarks/${id}`).then((r) => r.data),
-  createBookmark: (payload) =>
-    client.post("/bookmarks", payload).then((r) => r.data),
-  updateBookmark: (id, payload) =>
-    client.patch(`/bookmarks/${id}`, payload).then((r) => r.data),
-  deleteBookmark: (id) => client.delete(`/bookmarks/${id}`).then((r) => r.data),
-
   // Brand profile / Content Remixer
   analyzeBrandUrl: (url) => client.post("/brand/analyze-url", { url }).then((r) => r.data),
   getActiveBrand: () => client.get("/brand/active").then((r) => r.data),

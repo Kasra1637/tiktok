@@ -47,9 +47,8 @@ export function useOnboarding() {
  *  - Auto-starts a page's tour the FIRST time a user reaches a route that has
  *    one, then never again: seen tour ids are persisted to localStorage under
  *    `hookforge_seen_tours`. Previously the tour re-ran on every visit and
- *    every reload, which meant a returning creator moving between Discover,
- *    Face Swap and Bookmarks was interrupted by a modal spotlight on each
- *    hop. Replay stays available on demand via the sidebar's
+ *    every reload, which meant a returning creator moving between pages
+ *    was interrupted by a modal spotlight on each hop. Replay stays available on demand via the sidebar's
  *    "Show me around" button, which bypasses the seen check.
  *  - Exposes controls (next/back/skip/replay) consumed by <TourOverlay />.
  *  - Renders a small floating "Tour" button on any page with a tour so users

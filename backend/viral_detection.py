@@ -1,170 +1,26 @@
 """
-Viral/trending video detection engine.
+Virality scoring engine.
 
-Provides hashtag-based and keyword-based TikTok video discovery via yt-dlp,
-plus a virality scoring algorithm that ranks videos by engagement velocity,
-engagement rate, recency, and raw scale.
+Ranks videos by engagement velocity, engagement rate, recency, and raw scale.
+Fetching (hashtag/keyword discovery) lived here for the Discover feed and left
+with it; the Trend Research scan fetches through apify_tiktok directly and
+only ranks here.
 """
-import asyncio
-import json
 import logging
 import math
-import sys
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
-# Same pattern as pipeline.py - use the current interpreter's yt_dlp module.
-YTDLP_CMD = [sys.executable, "-m", "yt_dlp"]
 
 
-async def run_cmd(cmd: list, timeout: int = 60):
-    """Run a subprocess command asynchronously, returning (returncode, stdout, stderr)."""
-    proc = await asyncio.create_subprocess_exec(
-        *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-    )
-    try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except asyncio.TimeoutError:
-        try:
-            proc.kill()
-        except ProcessLookupError:
-            pass
-        raise RuntimeError(f"Command timed out after {timeout}s: {' '.join(cmd[:3])}...")
-    return proc.returncode, stdout.decode(errors="ignore"), stderr.decode(errors="ignore")
 
 
-def _pick_thumbnail(data: dict):
-    """Extract best thumbnail URL from yt-dlp metadata."""
-    thumbs = data.get("thumbnails") or []
-    if thumbs:
-        for t in thumbs:
-            if t.get("id") == "cover":
-                return t.get("url")
-        return thumbs[0].get("url")
-    return data.get("thumbnail")
 
 
-def _parse_video_entry(data: dict) -> dict:
-    """Normalize a single yt-dlp JSON entry into our standard video metadata dict."""
-    upload_date_str = data.get("upload_date") or ""
-    timestamp = data.get("timestamp")
-
-    return {
-        "video_platform_id": data.get("id"),
-        "tiktok_url": data.get("webpage_url") or data.get("url") or "",
-        "creator": data.get("uploader") or data.get("channel") or "",
-        "creator_display": data.get("channel") or data.get("uploader") or "",
-        "title": (data.get("title") or data.get("description") or "Untitled video")[:220],
-        "description": (data.get("description") or "")[:500],
-        "view_count": data.get("view_count") or 0,
-        "like_count": data.get("like_count") or 0,
-        "comment_count": data.get("comment_count") or 0,
-        "share_count": data.get("repost_count") or data.get("share_count") or 0,
-        "duration": data.get("duration") or 0,
-        "upload_date": upload_date_str,
-        "timestamp": timestamp,
-        "thumbnail_url": _pick_thumbnail(data),
-    }
 
 
-async def fetch_hashtag_videos(hashtag: str, limit: int = 25) -> list:
-    """
-    Fetch videos from a TikTok hashtag. Uses Apify if configured, else yt-dlp.
-    """
-    import apify_tiktok
-    if apify_tiktok.is_configured():
-        videos = await apify_tiktok.fetch_hashtag_videos(hashtag, limit)
-        # Add virality score to each video
-        for v in videos:
-            v["virality_score"] = compute_virality_score(v)
-        return videos
 
-    # Fallback: yt-dlp (may be unreliable)
-    # Strip leading '#' if present
-    hashtag = hashtag.lstrip("#").strip()
-    if not hashtag:
-        return []
-
-    url = f"https://www.tiktok.com/tag/{hashtag}"
-    cmd = YTDLP_CMD + [
-        "--flat-playlist",
-        "--playlist-end", str(limit),
-        "-j",
-        "--no-warnings",
-        url,
-    ]
-
-    results = []
-    try:
-        rc, out, err = await run_cmd(cmd, timeout=45)
-    except RuntimeError as e:
-        logger.warning(f"Timed out fetching hashtag #{hashtag}: {e}")
-        return results
-
-    if rc != 0 or not out.strip():
-        logger.warning(f"Failed fetching hashtag #{hashtag}: {err.strip()[-300:]}")
-        return results
-
-    for line in out.strip().splitlines():
-        try:
-            data = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        entry = _parse_video_entry(data)
-        entry["source_hashtag"] = hashtag
-        results.append(entry)
-
-    return results
-
-
-async def fetch_keyword_videos(keyword: str, limit: int = 25) -> list:
-    """
-    Search TikTok for videos matching a keyword. Uses Apify if configured, else yt-dlp.
-    """
-    import apify_tiktok
-    if apify_tiktok.is_configured():
-        videos = await apify_tiktok.fetch_keyword_videos(keyword, limit)
-        for v in videos:
-            v["virality_score"] = compute_virality_score(v)
-        return videos
-
-    # Fallback: yt-dlp (may be unreliable)
-    keyword = keyword.strip()
-    if not keyword:
-        return []
-
-    # yt-dlp supports TikTok search via URL pattern
-    search_url = f"https://www.tiktok.com/search?q={keyword}"
-    cmd = YTDLP_CMD + [
-        "--flat-playlist",
-        "--playlist-end", str(limit),
-        "-j",
-        "--no-warnings",
-        search_url,
-    ]
-
-    results = []
-    try:
-        rc, out, err = await run_cmd(cmd, timeout=45)
-    except RuntimeError as e:
-        logger.warning(f"Timed out searching keyword '{keyword}': {e}")
-        return results
-
-    if rc != 0 or not out.strip():
-        logger.warning(f"Failed searching keyword '{keyword}': {err.strip()[-300:]}")
-        return results
-
-    for line in out.strip().splitlines():
-        try:
-            data = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        entry = _parse_video_entry(data)
-        entry["source_keyword"] = keyword
-        results.append(entry)
-
-    return results
 
 
 def compute_virality_score(video_meta: dict) -> float:

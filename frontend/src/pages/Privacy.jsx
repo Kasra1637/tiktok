@@ -22,7 +22,7 @@ export default function Privacy() {
         </LegalList>
         <LegalSubheading>Third-Party Content:</LegalSubheading>
         <LegalList>
-          <LegalItem><strong>TikTok videos:</strong> We access publicly available TikTok content via the TikTok Content Discovery API for displaying trending videos within the app. We do not store or redistribute TikTok videos beyond temporary caching for analysis.</LegalItem>
+          <LegalItem><strong>TikTok videos:</strong> We access publicly available TikTok content for trend research scans that abstract reusable mechanics. We do not store or redistribute TikTok videos beyond temporary caching for analysis.</LegalItem>
         </LegalList>
       </LegalSection>
 
@@ -31,7 +31,7 @@ export default function Privacy() {
           <LegalItem>To research mobile apps and draft reviewable App Profiles</LegalItem>
           <LegalItem>To analyze video hooks and abstract reusable template mechanics</LegalItem>
           <LegalItem>To generate template-based promotional videos from approved profiles and authorized assets</LegalItem>
-          <LegalItem>To display trending TikTok content relevant to your selected niche</LegalItem>
+          <LegalItem>To display trend research results relevant to your selected niche</LegalItem>
           <LegalItem>To improve the app's functionality and user experience</LegalItem>
         </LegalList>
       </LegalSection>
@@ -41,7 +41,7 @@ export default function Privacy() {
         <LegalList>
           <LegalItem><strong>OpenRouter API:</strong> For text analysis, hook analysis, and video generation. App assets and prompts needed for those operations are sent to their API for processing.</LegalItem>
           <LegalItem><strong>Google Gemini:</strong> For vision-based hook analysis and text generation (via OpenRouter).</LegalItem>
-          <LegalItem><strong>TikTok Content Discovery API:</strong> For displaying publicly available trending videos within the app.</LegalItem>
+          <LegalItem><strong>TikTok Content Discovery API:</strong> For trend research scans of publicly available content.</LegalItem>
           <LegalItem><strong>Cloudflare R2 and Turso:</strong> For durable video and application storage where configured.</LegalItem>
         </LegalList>
         <p>Each third-party service has its own privacy policy governing how they handle data sent to them.</p>
