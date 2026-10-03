@@ -1562,35 +1562,6 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     }
   });
 
-  await check("the overlay placeholder does not teach a claim the app forbids", async (ctx) => {
-    // It read "Try it free for 3 days" - a pricing and trial term, in a product
-    // that carries no pricing anywhere and whose claim check exists precisely to
-    // stop those. As an example on an input it invited the founder to write the
-    // one thing the renderer would refuse.
-    global.__SMOKE_PARAMS = "?project=p1";
-    try {
-      await mount(CreateVideo, {})(ctx);
-      await openStep(ctx, "Review");
-    } finally {
-      global.__SMOKE_PARAMS = "";
-    }
-    const text = ctx.text();
-    expectAbsent(
-      ctx,
-      "Try it free",
-      "the overlay example is still a trial-terms claim the product refuses"
-    );
-    expectAbsent(
-      ctx,
-      "3 days",
-      "the overlay example still states a trial length"
-    );
-    // And it must say what IS allowed, rather than only removing the example.
-    if (!text.includes("Ratings, counts and")) {
-      throw new Error("the overlay editor does not say what may not be stated");
-    }
-  });
-
   await check("Review states the length and offers no way to change it", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {

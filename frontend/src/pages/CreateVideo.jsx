@@ -34,7 +34,7 @@ import {
 import {
   Clapperboard, Loader2, AlertTriangle, Briefcase, Target, LayoutTemplate,
   Image as ImageIcon, Check, Sparkles, RefreshCw,
-  Save, CheckCircle2, Star, Plus, Trash2,
+  Save, CheckCircle2, Star,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -951,27 +951,6 @@ export default function CreateVideo() {
     setEdits((prev) => ({ ...prev, tone: value }));
   };
 
-  const setOverlay = (index, patch) => {
-    setEdits((prev) => ({
-      ...prev,
-      overlays: (prev.overlays ?? project?.overlays ?? []).map((o, i) =>
-        i === index ? { ...o, ...patch } : o,
-      ),
-    }));
-  };
-  const addOverlay = () => {
-    setEdits((prev) => ({
-      ...prev,
-      overlays: [...(prev.overlays ?? project?.overlays ?? []), { start: 0, end: 3, text: "" }],
-    }));
-  };
-  const removeOverlay = (index) => {
-    setEdits((prev) => ({
-      ...prev,
-      overlays: (prev.overlays ?? project?.overlays ?? []).filter((_, i) => i !== index),
-    }));
-  };
-
   /* Progress state, derived rather than tracked. A founder can reach any step
      from any other, so nothing here can be a counter that advances — the pills
      have to be recomputed from what actually exists, or they go stale the moment
@@ -1710,75 +1689,6 @@ export default function CreateVideo() {
                   className="min-h-[70px]"
                 />
               </div>
-            </div>
-
-            <div className="rounded-xl border border-[color:var(--hairline)] p-4">
-              <div className="flex items-center justify-between gap-2">
-                <span className="eyebrow">On-screen text</span>
-                <Button variant="ghost" size="sm" onClick={addOverlay}>
-                  <Plus className="h-3.5 w-3.5" /> Add text
-                </Button>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Added afterwards from your approved script. Without text overlays a
-                video is still the generated video, captioned on demand.
-              </p>
-              {/* The placeholder used to read "Try it free for 3 days" — a
-                  pricing and trial-term claim, in a product that deliberately
-                  carries no pricing anywhere, and the exact kind of claim the
-                  check above is designed to flag. As an example on an input it
-                  taught the founder to write precisely what the app refuses. */}
-              <p className="mt-1 text-xs text-muted-foreground">
-                Keep it to what the App Profile has verified. Ratings, counts and
-                trial terms are not yours to state here.
-              </p>
-              {editValue("overlays", []).length === 0 ? (
-                <p className="mt-2 text-sm text-muted-foreground">No on-screen text.</p>
-              ) : (
-                <div className="mt-3 space-y-2">
-                  {editValue("overlays", []).map((o, i) => (
-                    <div key={i} className="flex items-end gap-2">
-                      <label className="w-20 shrink-0 space-y-1">
-                        <span className="text-[11px] text-muted-foreground">Start (s)</span>
-                        <Input
-                          type="number"
-                          min="0"
-                          value={o.start}
-                          onChange={(e) => setOverlay(i, { start: Number(e.target.value) })}
-                          aria-label={`Overlay ${i + 1} start`}
-                        />
-                      </label>
-                      <label className="w-20 shrink-0 space-y-1">
-                        <span className="text-[11px] text-muted-foreground">End (s)</span>
-                        <Input
-                          type="number"
-                          min="0"
-                          value={o.end}
-                          onChange={(e) => setOverlay(i, { end: Number(e.target.value) })}
-                          aria-label={`Overlay ${i + 1} end`}
-                        />
-                      </label>
-                      <label className="min-w-0 flex-1 space-y-1">
-                        <span className="text-[11px] text-muted-foreground">Text</span>
-                        <Input
-                          value={o.text}
-                          onChange={(e) => setOverlay(i, { text: e.target.value })}
-                          placeholder="e.g. One timer. That's it."
-                          aria-label={`Overlay ${i + 1} text`}
-                        />
-                      </label>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeOverlay(i)}
-                        aria-label={`Remove overlay ${i + 1}`}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
 
             <SafetyPanel
