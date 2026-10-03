@@ -114,6 +114,50 @@ _ytdlp_semaphore = asyncio.Semaphore(1)
 # ---------------------------------------------------------------------------
 # SQLite helpers
 # ---------------------------------------------------------------------------
+_TURSO_BOOT_SYNC_DONE = False
+
+
+def _database_backend() -> str:
+    """
+    Which store this process is actually writing user data to.
+
+    "turso" means the cloud database (survives redeploys); "local-sqlite"
+    means a file on this machine's disk. The distinction is the difference
+    between a profile surviving a deploy and silently vanishing with it, so
+    anything that reports on the health of the deployment reads this rather
+    than guessing from config.
+    """
+    return "turso" if TURSO_DATABASE_URL else "local-sqlite"
+
+
+def _log_database_backend() -> None:
+    """
+    Say, once per boot and impossible to miss, where user data is going.
+
+    Profiles vanishing on every deploy is exactly what local SQLite on an
+    ephemeral host does, and it looks from the outside like the app "deleting"
+    things. If that is the configuration, the deploy log must say so in plain
+    language instead of letting the next data-loss report be the discovery.
+    """
+    if _database_backend() == "turso":
+        logger.info("Database backend: Turso cloud — user data survives redeploys.")
+        return
+    message = (
+        f"Database backend: local SQLite at {DB_PATH}. User data (profiles, "
+        "projects, generations) will NOT survive a redeploy or restart."
+    )
+    if os.environ.get("RENDER") or os.environ.get("RENDER_SERVICE_NAME"):
+        # Render sets these itself, so their presence means this process is on
+        # Render's ephemeral filesystem rather than a dev laptop. Local SQLite
+        # here is a data-loss configuration, not a dev default.
+        logger.critical(
+            message + " Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN (see render.yaml) "
+            "or every deploy wipes the database."
+        )
+    else:
+        logger.info(message + " (fine for local dev)")
+
+
 @asynccontextmanager
 async def get_db():
     """Async context manager for database connections.
@@ -132,9 +176,31 @@ async def get_db():
                 auth_token=TURSO_AUTH_TOKEN,
             )
             conn.execute("PRAGMA journal_mode=WAL")
+            # Pull cloud state into the replica before anything reads it. A
+            # freshly deployed container starts with an empty replica file, and
+            # without this the first reads see no profiles at all — which looks
+            # exactly like "the deploy deleted everything" even when the cloud
+            # copy is intact. Once per process is enough; every later sync
+            # happens on commit.
+            global _TURSO_BOOT_SYNC_DONE
+            if not _TURSO_BOOT_SYNC_DONE:
+                try:
+                    conn.sync()
+                    _TURSO_BOOT_SYNC_DONE = True
+                except Exception as e:
+                    logger.warning(
+                        f"Turso boot pull-sync failed, will retry on next "
+                        f"connection (reads may lag the cloud copy): {e}"
+                    )
             use_turso = True
         except Exception as e:
-            logger.warning(f"Turso connection failed, falling back to local SQLite: {e}")
+            # ERROR, not warning: from here on every write lands in an ephemeral
+            # local file that the next redeploy wipes. Falling back keeps the
+            # app serving, but it must never look routine in the logs.
+            logger.error(
+                f"Turso connection failed, falling back to EPHEMERAL local SQLite "
+                f"(user data will not survive a restart): {e}"
+            )
             use_turso = False
 
     if use_turso:
@@ -10572,6 +10638,7 @@ async def debug_apify_test():
 # ---------------------------------------------------------------------------
 @app.on_event("startup")
 async def on_startup():
+    _log_database_backend()
     # Retry init_db up to 3 times — Turso or network hiccups during a cold
     # deploy must not permanently kill the container (uvicorn exits with code 3
     # if this handler raises, and Render marks the deploy as failed).

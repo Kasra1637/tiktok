@@ -5,6 +5,25 @@ services:
     dockerfilePath: ./Dockerfile
     plan: free
     envVars:
+      # sync:false values live in the Render dashboard, never in this file.
+      # Three of them are load-bearing for production — if any is missing the
+      # app still boots and looks healthy while silently losing things:
+      #
+      #   TURSO_DATABASE_URL / TURSO_AUTH_TOKEN (REQUIRED for persistence)
+      #     Without these the app uses local SQLite on Render's ephemeral
+      #     filesystem, and EVERY deploy wipes all profiles, projects,
+      #     generations and cost history. Login keeps working (Clerk is
+      #     external), so it looks like "the deploy deleted my data" — because
+      #     it did. Free Turso tier is enough. After setting them, the deploy
+      #     log must say "Database backend: Turso cloud"; if it says local
+      #     SQLite instead, the vars did not reach the service.
+      #   CLERK_JWKS_URL (REQUIRED once anyone else uses the app)
+      #     Without it auth is DISABLED and every request is user "anonymous",
+      #     so all tenant isolation collapses to one shared user.
+      #   R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY /
+      #   R2_BUCKET_NAME (REQUIRED for durable clips)
+      #     Without these every finished render completes with a storage_error
+      #     and the only copy sits on the ephemeral disk until the next deploy.
       - key: OPENROUTER_API_KEY
         sync: false
       - key: APIFY_API_TOKEN
@@ -18,6 +37,14 @@ services:
       - key: TURSO_DATABASE_URL
         sync: false
       - key: TURSO_AUTH_TOKEN
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET_NAME
         sync: false
       - key: MODAL_FRAME_EXTRACTOR_URL
         sync: false
