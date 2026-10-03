@@ -87,17 +87,60 @@ class TestCapabilities:
         for cap in vp.list_capabilities():
             assert cap["vertical"] is True
 
-    def test_only_minimax_models_are_studio_providers(self):
+    def test_only_generative_models_are_studio_providers(self):
         """
         The point of this list is that every entry can generate a video from a
         prompt, so no in-context editor is ever offered. H3 Max is a second
-        MiniMax generative model, added for side-by-side comparison.
+        MiniMax generative model, and Avatar IV is a talking-head model from
+        HeyGen -- both generative, both offered for comparison against the
+        default. Aleph stays out because it edits a clip rather than making one.
         """
         keys = [c["key"] for c in vp.list_capabilities()]
-        assert keys == ["minimax-h3", "minimax-h3-max"]
+        assert keys == ["minimax-h3", "minimax-h3-max", "heygen-avatar-iv"]
         assert "aleph-2" not in keys
         for cap in vp.list_capabilities():
             assert cap["is_video_editor"] is False
+
+    def test_avatar_iv_is_studio_eligible_but_not_the_default(self):
+        """
+        Adding a provider must not move production spend onto it. Avatar IV is
+        opt-in: it appears in the list so it can be picked by name, and the
+        default stays Hailuo 3.
+        """
+        assert vp.is_studio_eligible("heygen-avatar-iv") is True
+        assert vp.default_model_key() == "minimax-h3"
+        assert vp.resolve(None)[0] == "minimax-h3"
+
+    def test_named_avatar_iv_is_honoured(self):
+        key, _reason = vp.resolve("heygen-avatar-iv")
+        assert key == "heygen-avatar-iv"
+
+    def test_avatar_iv_takes_identity_as_a_reference_not_a_frame(self):
+        """
+        The reason this model needs its own routing: OpenRouter lists
+        supported_frame_images as null for it, so a frame_images request would
+        400. Identity arrives as a reference image instead, which is what
+        identity_via_reference records and what accepts_identity_reference
+        reads through the max_reference_images count.
+        """
+        from ai_service import VIDEO_MODELS
+
+        entry = VIDEO_MODELS["heygen-avatar-iv"]
+        assert entry["id"] == "heygen/avatar-iv"
+        assert entry["identity_via_reference"] is True
+        assert vp.accepts_identity_reference("heygen-avatar-iv") is True
+        assert vp.capability("heygen-avatar-iv")["supports_first_frame"] is False
+
+    def test_avatar_iv_does_not_request_native_audio(self):
+        """
+        Speech is voiced by HeyGen text-to-speech and the catalog entry has
+        generate_audio false, so the studio must omit the field rather than
+        send one the provider does not accept.
+        """
+        assert vp.capability("heygen-avatar-iv")["supports_native_audio"] is False
+
+    def test_avatar_iv_reports_1080p(self):
+        assert vp.capability("heygen-avatar-iv")["resolution"] == "1080p"
 
     def test_minimax_is_capped_at_15s(self):
         cap = vp.capability("minimax-h3")

@@ -73,6 +73,26 @@ _CAPABILITY_NOTES = {
             "still the default."
         ),
     },
+    "heygen-avatar-iv": {
+        "vertical": True,
+        # One reference image, and it is the ONLY visual anchor this model
+        # takes: OpenRouter lists supported_frame_images as null, so there is
+        # no first_frame path at all. max_reference_images > 0 is what makes
+        # accepts_identity_reference() return True for it.
+        "max_reference_images": 1,
+        "max_reference_videos": 0,
+        "max_reference_audio": 0,
+        "supports_first_frame": False,
+        "supports_last_frame": False,
+        "notes": (
+            "1080p talking-head avatar, 5-15s per generation. Your photo is "
+            "the identity anchor and arrives as a reference image, not as an "
+                "opening frame (this model declares no frame-image support). "
+            "Speech is voiced by HeyGen text-to-speech, so there is no "
+            "native-audio pass and no seam frame to continue from. Opt-in: "
+            "Hailuo 3 is still the default."
+        ),
+    },
     "aleph-2": {
         "vertical": True,
         "max_reference_images": 0,
@@ -99,7 +119,7 @@ _CAPABILITY_NOTES = {
 # on either and compare. Order here does not decide the default — that is
 # ai_service.DEFAULT_VIDEO_MODEL, and it stays Hailuo 3. Listing a second model
 # only makes it selectable in the studio's model dropdown.
-STUDIO_ELIGIBLE = ("minimax-h3", "minimax-h3-max")
+STUDIO_ELIGIBLE = ("minimax-h3", "minimax-h3-max", "heygen-avatar-iv")
 
 # The hook length used when nothing states one. 5s is the lowest length the
 # current provider can render, so it needs no trim; a template's own
