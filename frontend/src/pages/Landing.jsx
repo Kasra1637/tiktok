@@ -386,21 +386,17 @@ export default function Landing() {
             className="animate-fade-up font-display text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-[4.5rem]"
             style={{ animationDelay: "60ms" }}
           >
-            <span className="text-shine">You didn't build it to be talked about.</span>
+            <span className="text-shine">Turn your link into a TikTok promo.</span>
             <br />
-            <span className="text-gradient-brand">You built it to be used.</span>
-            <br />
-            <span className="text-shine">So write the first part, and film the part only you can.</span>
+            <span className="text-gradient-brand">Starring you.</span>
           </h1>
 
           <p
             className="animate-fade-up mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl"
             style={{ animationDelay: "120ms" }}
           >
-            Here's what nobody tells you about launch week: a stranger pitching your
-            app converts like wallpaper. You pitching it converts. Paste your link, get a
-            hook and a middle starring you, then film the demo only you can film and post
-            the whole thing tonight.
+            Paste your app link. Approve the hook, the plan and the strategy. Film
+            the demo, post it tonight.
           </p>
 
           <div
