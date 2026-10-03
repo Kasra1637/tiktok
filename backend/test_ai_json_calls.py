@@ -4,8 +4,8 @@ Tests for the JSON-call failure modes that produced
 
 The bug: generate_video_strategy asked for the largest JSON schema in the
 codebase (~45 values across five nested objects) with a 4000-token budget on
-Gemini 2.5 Flash — a thinking model whose thought tokens are drawn from the
-same completion budget. The reply was cut off mid-object, and the truncated
+a thinking model whose thought tokens are drawn from the same completion
+budget. The reply was cut off mid-object, and the truncated
 JSON failed the parser in exactly the same way as a model that wrapped its
 answer in prose, so the only clue was "did not return valid JSON" and the real
 cause — a too-small budget — went unquestioned.
@@ -222,7 +222,7 @@ class TestStrategyBudget:
         assert match, "generate_video_strategy should route through _chat_json"
         assert int(match.group(1)) >= 8192, (
             f"strategy max_tokens is {match.group(1)}; the schema needs headroom "
-            f"for Gemini's thinking tokens on top of ~45 JSON values"
+            f"for thinking tokens on top of ~45 JSON values"
         )
 
     def test_the_prompt_bounds_value_length(self):

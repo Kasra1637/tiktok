@@ -38,10 +38,10 @@ OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 logger = logging.getLogger(__name__)
 
 # Models
-VISION_MODEL = "google/gemini-2.5-flash"
+VISION_MODEL = "openai/gpt-4o-mini"
 IMAGE_GEN_MODEL = "google/gemini-2.5-flash-image"
 FACE_SWAP_MODEL = "google/gemini-3.1-flash-image"  # Gemini 3.1 Flash Image — reliable face identity transfer, up to 14 input references, up to 4K
-TEXT_MODEL = "google/gemini-2.5-flash"
+TEXT_MODEL = "openai/gpt-4o-mini"
 
 # Video generation models.
 # The template studio's providers. MiniMax H3 is the default: 2K picture,
@@ -382,9 +382,10 @@ class TruncatedResponse(RuntimeError):
     Worth its own exception: truncated JSON fails the parser in exactly the
     same way as a model that wrapped its answer in prose, so without this the
     only clue is "did not return valid JSON" and the real cause — a too-small
-    token budget — goes unquestioned. Gemini 2.5 Flash is a thinking model, and
-    thought tokens are drawn from the same completion budget, so a large JSON
-    schema can exhaust max_tokens before the closing brace is ever written.
+    token budget — goes unquestioned. A thinking model spends thought tokens
+    from the same completion budget, so a large JSON schema can exhaust
+    max_tokens before the closing brace is ever written; the headroom this
+    retry adds covers that failure mode whatever model serves the call.
     """
 
 
@@ -2979,10 +2980,12 @@ async def generate_video_strategy(
     )
 
     # This is the largest JSON schema in the codebase: ~45 values across five
-    # nested objects, several of them prose. Gemini 2.5 Flash is a thinking
-    # model and its thought tokens come out of the SAME completion budget, so a
-    # budget that looks generous on paper can be exhausted before the closing
-    # brace is written. 8192 is the floor that reliably fits this schema.
+    # nested objects, several of them prose. Thinking models spend thought
+    # tokens from the SAME completion budget, so a budget that looks generous
+    # on paper can be exhausted before the closing brace is written. 8192
+    # stays the floor: it fits this schema and sits inside the provider
+    # output ceiling of the models this service can be pointed at
+    # (openai/gpt-4o-mini caps output at 16384).
     raw = await _chat_json(
         system_message=system_message,
         prompt=prompt,
