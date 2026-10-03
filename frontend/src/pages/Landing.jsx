@@ -19,7 +19,7 @@ const FEATURES = [
     icon: Briefcase,
     title: "Every video starts from your app",
     description:
-      "Paste your links once. It reads what your app does and who it's for — so no video ever starts as a generic template with your name pasted in.",
+      "Paste your links in once. We read what your app does and who it is really for, so that no video starts as a template with your name typed in.",
   },
   {
     icon: Target,
@@ -29,33 +29,33 @@ const FEATURES = [
   },
   {
     icon: LayoutTemplate,
-    title: "Ten proven openings, one already picked",
+    title: "Ten curated openers, one already picked",
     description:
-      "The best fit for your app and goal is preselected. Swap it in one click — every card says why it fits and where it falls short.",
+      "The best fit for your app and goal is preselected. Swap in one click, and every card says why it fits and where it falls short.",
   },
   {
     icon: Wand2,
     title: "No blind picks",
     description:
-      "Each recommendation shows its score, why it fits your app, and its limitations. Nothing is a black box.",
+      "Each one shows its score, why it fits your app, and its limits. I never ask you to take my word for it.",
   },
   {
     icon: FileText,
     title: "Free until the render",
     description:
-      "The script, the shot plan and the strategy are free. Read all three, change any word — the first paid click is the render, and re-rolls ask first.",
+      "The script, the shot plan and the strategy cost nothing. Read all three, rewrite any word, and the first thing that costs you money is the render.",
   },
   {
     icon: Clapperboard,
     title: "A hook, and a middle",
     description:
-      "The first seconds stop the scroll. The middle makes the case and stops where your demo takes over. A single render — no seams, no assembly.",
+      "The first seconds stop the scroll. The middle makes the case, and stops right where your demo takes over. One render, no seams or assembly.",
   },
   {
     icon: MessageSquareQuote,
     title: "Answers why they haven't downloaded",
     description:
-      "The middle works through real objections — doubt it works, the effort to switch — one at a time, never crammed into one breath.",
+      "The middle works through the objections you get in the comments, one at a time, and never cramming two answers into one breath.",
   },
   {
     icon: Film,
@@ -67,49 +67,49 @@ const FEATURES = [
     icon: ShieldCheck,
     title: "Your banned list is law",
     description:
-      "Your script is re-checked on every edit and again at the render. Anything on your never-use list blocks the paid click — it can't slip through in a revision.",
+      "Your script is re-checked on every edit and again at the render. Anything on your never-use list blocks the paid click, so it cannot slip through a revision.",
   },
   {
     icon: Layers,
     title: "The presenter is you",
     description:
-      "One photo carries the whole piece. No avatar, no voice clone, no stand-in — and exactly one photo, so there's never doubt whose face it renders.",
+      "One photo carries the entire piece. No avatar, no voice clone, no stand-in, and just the one photo, so nobody is ever in doubt whose face it is.",
   },
   {
     icon: ChartLine,
     title: "Every post teaches the next one",
     description:
-      "Log what each video actually did. What worked for this app shows up beside the next opening it recommends.",
+      "Log what each video has actually done. What worked for this app shows up beside the next one we recommend.",
   },
   {
     icon: TrendingUp,
     title: "See what each video cost and earned",
     description:
-      "Success rate, failures, spend and rework — broken down by app, opening, model and audience.",
+      "Success rate, failures, spend and rework, broken down by app, opening, model, and audience.",
   },
   {
     icon: Check,
     title: "Skip it and it sinks",
     description:
-      "Swap away from an opening and it slides down the list. Use one and it keeps climbing. Your taste becomes the ranking.",
+      "Swap away from an opening and it slides down the list. Use one and it keeps climbing. Your taste becomes our ranking.",
   },
   {
     icon: BadgeAlert,
     title: "Receipts on every render",
     description:
-      "The exact prompt sent, the claim check at the time, the model, the cost and where it came from, and any error. Audit anything.",
+      "The exact prompt sent, the claim check as it stands, the model, the cost and where it came from, plus any error. Audit it all.",
   },
   {
-    icon: Search,
-    title: "Learn from what already works",
+    icon: Zap,
+    title: "Where your openings come from",
     description:
-      "Scan public trend data for reusable mechanics. Review the drafts, publish the keepers as templates — with the evidence attached, never the source.",
+      "Ten structures we wrote by ourselves, ranked by what your own posts actually did. No scraping of creators, no borrowed faces, no invented results.",
   },
   {
     icon: Video,
     title: "You finish the video",
     description:
-      "Download the hook and the middle. Record your demo, add your close, post it. It never touches your accounts.",
+      "Download the hook and the middle. Record your demo, add your close and post it. We never touch your account.",
   },
 ];
 
@@ -121,31 +121,31 @@ const FLOW_STEPS = [
     step: "1",
     label: "Paste",
     icon: Briefcase,
-    detail: "Your links. It reads what your app does and drafts the profile for you to approve.",
+    detail: "Your links. We read what your app does, then write the profile for you to approve.",
   },
   {
     step: "2",
     label: "Choose",
     icon: Target,
-    detail: "Who you're talking to, and what you want them to do. Openings picked to match.",
+    detail: "Who you're talking to, and what you want them to do. I rank openings to match.",
   },
   {
     step: "3",
     label: "Read",
     icon: FileText,
-    detail: "Add your photo. Read the script, the shot plan and the strategy — change any line, spend nothing.",
+    detail: "Your photo. Read the script, the shot plan and the strategy. Edit any line, spend nothing at all.",
   },
   {
     step: "4",
     label: "Render",
     icon: Layers,
-    detail: "One clip: the hook, then a middle that ends where you'd reach for your phone.",
+    detail: "One render: the hook, then a middle that stops where you reach for the phone.",
   },
   {
     step: "5",
     label: "Finish",
     icon: Video,
-    detail: "Record your demo, add your close, post it wherever your audience already is.",
+    detail: "Record your demo and add your close, then post it wherever your audience is.",
   },
 ];
 
@@ -160,21 +160,21 @@ const FLOW_STEPS = [
  * shipping a lopsided card.
  */
 const WEEK_WITHOUT = [
-  "Book the shoot. Block out an afternoon, hope the light is good.",
+  "Book the shoot. Lose an afternoon, and hope the light was good.",
   "Write the script yourself, then read it back and hate how it sounds.",
   "Film it four times because the first one had you squinting.",
-  "Pay someone to edit it, then wonder if the first three seconds work.",
+  "Pay someone to edit it, then wonder all night about those 3 seconds.",
   "Post it, get 400 views, and blame the algorithm for all of it.",
-  "Do all of it again next week, for a completely different hook.",
+  "Do the whole thing again next week, from scratch, on one hook.",
 ];
 
 const WEEK_WITH = [
-  "Paste the link. It reads your app and writes a profile for you.",
-  "Pick who is watching. It writes six openings, you take the best one.",
+  "Paste the link. We read your app and write the profile for you.",
+  "Pick who is watching. We write six openings, then you take the best.",
   "Read it, change any line you like, and nothing is charged.",
   "Render the hook and the middle, then add your own demo and a close.",
   "Post it, log the views, and let them shape the very next one.",
-  "Next week it's three clicks, and it already knows what worked.",
+  "Next week it is the same profile, already knowing what worked.",
 ];
 
 
@@ -231,8 +231,8 @@ const PIPELINE_BLOCKS = [
     title: "Read Before We Write",
     body: (
       <>
-        Your links become a profile: what the app does, who it's for, and what you're allowed
-        to claim. You approve it before anything generates, and a refresh never overwrites that.
+        Your links become a profile: what the app does, who it is for, and what you may claim.
+        You approve it before anything is generated, and no refresh quietly overwrites wording.
       </>
     ),
   },
@@ -243,9 +243,9 @@ const PIPELINE_BLOCKS = [
     title: "Two Sections, One Render",
     body: (
       <>
-        The hook is the first few seconds. The middle develops it and ends at the moment the
-        presenter would reach for their phone — which is exactly where your own demo picks up.
-        One job, one file, sound included where the model supports it.
+        The hook is the first few seconds. The middle develops it, then ends at the moment the
+        presenter would reach for their phone, which is exactly where your own demo picks up.
+        One job, one file, with sound wherever the model supports it.
       </>
     ),
   },
@@ -269,8 +269,8 @@ const PIPELINE_BLOCKS = [
     title: "The Scene Is Built Around You",
     body: (
       <>
-        Your photograph is the only visual input, and the room, the light and the framing are
-        locked once for the whole piece — so the hook and the middle cannot disagree about where
+        Your photograph is the only visual input, and the room, the light, and the framing get
+        locked once for the whole piece, so the hook and the middle cannot disagree about where
         this is happening. Captions layer on afterwards, taken from the script you approved.
       </>
     ),
@@ -278,12 +278,12 @@ const PIPELINE_BLOCKS = [
   {
     icon: Search,
     tone: "indigo",
-    kicker: "Research",
-    title: "Patterns, Not Copies",
+    kicker: "On trust",
+    title: "Curated, Not Proven.",
     body: (
       <>
-        What carries in your niche becomes openings you can use, with the evidence attached
-        anonymously. No creator's face, voice or sound ever crosses into what you make.
+        Every opening ships as a written structure, not a promise. We tell you plainly when
+        we have no numbers behind one yet, so you can judge it on the post you can see.
       </>
     ),
   },
@@ -293,10 +293,10 @@ const PIPELINE_BLOCKS = [
 
 
 const MODELS = [
-  { label: "Words & analysis", value: "Gemini 2.5 Flash — research, profiles, angles, scripts and shot plans" },
+  { label: "Words & analysis", value: "gpt-4o-mini — your profile, angles, openings, scripts, and shot plans" },
   { label: "Video", value: "MiniMax H3 by default — 2K picture, native sound — or H3 Max for sharper prompt adherence at 768p. Either way one render of up to 15 seconds; each template declares the length its mechanic suits. Your pick sticks." },
   { label: "Finishing touches", value: "Captions, layered on precisely" },
-  { label: "Trend data", value: "Public TikTok metadata via a research API key — aggregated with no source attached, and it steers the openings we suggest" },
+  { label: "Provenance", value: "No scraped creators, no lifted scripts, no invented numbers. The only face in your video is the one photo that you chose." },
 ];
 
 
@@ -386,7 +386,7 @@ export default function Landing() {
             className="animate-fade-up font-display text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-[4.5rem]"
             style={{ animationDelay: "60ms" }}
           >
-            <span className="text-shine">Turn your link into a TikTok promo.</span>
+            <span className="text-shine">I finally made my own launch video.</span>
             <br />
             <span className="text-gradient-brand">Starring you.</span>
           </h1>
@@ -395,8 +395,8 @@ export default function Landing() {
             className="animate-fade-up mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl"
             style={{ animationDelay: "120ms" }}
           >
-            Paste your app link. Approve the hook, the plan and the strategy. Film
-            the demo, post it tonight.
+            Paste your links. Approve what it found. Read every word. Then film
+            the demo and post it tonight.
           </p>
 
           <div
@@ -463,8 +463,8 @@ export default function Landing() {
         <SectionHeading
           id="how-it-works"
           eyebrow="How it works"
-          title="From your link to a posted video"
-          lede="Five steps. One of them is you, on camera, filming the demo — because that's the part no model can do for you."
+          title="From your link to your own promo"
+          lede="Five steps, and only one of them is you on camera. That step is your demo, and I would not hand it to a model."
         />
 
         <div className="relative">
@@ -500,7 +500,7 @@ export default function Landing() {
           id="your-week"
           eyebrow="The difference"
           title="What your week looks like"
-          lede="Same app. Same product. One very different way of getting it in front of people."
+          lede="Same app either way. One version cost me a Saturday, the other cost me a coffee."
         />
 
         <div className="grid gap-5 lg:grid-cols-2">
@@ -541,7 +541,7 @@ export default function Landing() {
           id="features"
           eyebrow="Everything in between"
           title="You bring a link and a photo"
-          lede="It writes and renders everything up to the moment you would reach for your phone. Every one of those steps is yours to change."
+          lede="We write and then render everything up to the moment you reach for your phone. Every one of those five steps is yours to redo."
         />
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -567,7 +567,7 @@ export default function Landing() {
           id="pipeline"
           eyebrow="Under the hood"
           title="How it gets made"
-          lede="What happens between your link and a video you're happy to post."
+          lede="What happens between your link and a post you are happy to make."
         />
 
         <div className="space-y-4">
@@ -646,9 +646,9 @@ export default function Landing() {
                 Your next promo is one photo away.
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">
-                Paste your link. Approve the profile. Choose your goal and opening.
-                Get a hook and a middle starring you — then film the demo, add the close,
-                and post it.
+                Paste your link. Approve the profile. Pick your goal and opening. You get
+                a hook and a middle starring you, then film the demo, add the close and
+                post it.
               </p>
               <div className="mt-9 flex flex-col items-center justify-center gap-3.5 sm:flex-row">
                 <UnauthedOnly>
