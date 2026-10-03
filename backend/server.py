@@ -6761,6 +6761,42 @@ async def mark_project_ready(project_id: str, user_id: str = Depends(get_current
     if not row.get("template_id"):
         raise HTTPException(status_code=400, detail="Choose a hook template first.")
 
+    # Every template that puts a person on camera needs the founder's
+    # photograph. This was enforced only at the generate endpoint, which is the
+    # wrong place: marking ready is what enables the Generate button, so a
+    # project with no photo sailed through approval, showed an enabled button,
+    # and only refused at the click -- reading as the app breaking rather than a
+    # rule the founder had not met yet.
+    #
+    # Checked here so the founder is stopped at the step that can still fix it,
+    # with the photo already attachable on the step the message names. The
+    # generate endpoint keeps its own check: this one is about the button, that
+    # one is about never spending on a model inventing a presenter.
+    anchors = [
+        a for a in (row.get("assets") or [])
+        if isinstance(a, dict)
+        and str(a.get("kind") or "").strip().lower() == "character_reference"
+    ]
+    if not anchors:
+        template = await _fetch_one(
+            "SELECT required_assets FROM hook_templates WHERE id = ?", (row["template_id"],)
+        )
+        required = [
+            str(a or "").strip().lower()
+            for a in ((template or {}).get("required_assets") or [])
+        ]
+        if "character_reference" in required:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "This template puts a person on camera, so it needs a character "
+                    "reference. The video is generated from your photograph, so "
+                    "without one the model would invent someone who looks nothing "
+                    "like you. Attach a character reference on the Template & photo "
+                    "step, then mark this ready again."
+                ),
+            )
+
     # The objective is what the whole creative job is for, and it steers the
     # plan, the strategy and which templates even rank. The wizard requires it,
     # but that was a client-side check only: a direct caller could approve and

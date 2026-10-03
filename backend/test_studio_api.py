@@ -69,13 +69,52 @@ def _a_template(api, name="Stop Doing This"):
     return _run(api.list_templates(q=name, user_id=ANON))["templates"][0]
 
 
-def _a_project(api, profile, template):
+def _attach_photo(api, profile, project):
+    """Attach the founder's photograph to a project, as the upload endpoint does.
+
+    A real 1x1 PNG on disk, because the identity resolver checks the file
+    exists rather than trusting the row.
+    """
+    from models import now_iso
+    face = Path(tempfile.mkdtemp(prefix="tiktok-studio-")) / "face.png"
+    face.write_bytes(bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+        "0000000d49444154789c626001000000ffff0300000600055d3866680000000049454e44ae426082"))
+    asset_id = str(uuid.uuid4())
+    now = now_iso()
+    _run(api._execute(
+        "INSERT INTO assets (id, brand_profile_id, kind, name, file_path, label,"
+        " created_at, updated_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (asset_id, profile["id"], "character_reference", "Founder face",
+         str(face), "Founder face", now, now, ANON)))
+    _run(api._execute(
+        "UPDATE studio_projects SET assets = ? WHERE id = ?",
+        (json.dumps([{
+            "asset_id": asset_id, "kind": "character_reference",
+            "label": "Founder face", "file_path": str(face),
+        }]), project["id"])))
+    return project
+
+
+def _a_project(api, profile, template, with_character=True):
+    """
+    A project on an approved profile, with an objective already set.
+
+    `with_character` attaches the founder's photograph, which every template
+    requires and mark_project_ready now enforces. It defaults on because a
+    fixture that omitted it would be exercising the missing-photo refusal
+    instead of whatever the caller is actually testing — pass False to opt out.
+    """
     from models import CreateStudioProjectRequest
-    return _run(api.create_studio_project(payload=CreateStudioProjectRequest(
+    project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
         brand_profile_id=profile["id"],
         template_id=template["id"],
         objective="demonstrate_feature",
     ), user_id=ANON))
+    if not with_character:
+        return project
+    _attach_photo(api, profile, project)
+    return _run(api.get_studio_project(project["id"], user_id=ANON))
 
 
 # A realistic plan the mocked generator returns.
@@ -914,12 +953,48 @@ class TestReadyGate:
         template = _a_template(api)
         project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
             brand_profile_id=profile["id"], template_id=template["id"]), user_id=ANON))
+        # The photograph is attached so the objective is the ONLY thing wrong:
+        # two unmet gates would otherwise race, and this test would keep
+        # passing or failing on whichever the server happened to check first.
+        _attach_photo(api, profile, project)
         _run(api.generate_plan(project_id=project["id"],
                                payload=GeneratePlanRequest(), user_id=ANON))
         with pytest.raises(HTTPException) as err:
             _run(api.mark_project_ready(project_id=project["id"], user_id=ANON))
         assert err.value.status_code == 400
         assert "Audience & goal" in str(err.value.detail)
+
+    def test_ready_requires_a_photograph(self, api, monkeypatch):
+        """
+        Marking ready is what enables the Generate button, so it is the last
+        point at which a missing photograph can be caught before the founder
+        decides to spend.
+
+        The generate endpoint has always refused this case. Refusing there was
+        not enough: the project was approved, the button lit up, and the 409
+        only arrived on click — which reads as the app breaking rather than a
+        rule not yet met. The message has to name the step that fixes it.
+        """
+        _patch_plan(monkeypatch, api, FAKE_PLAN)
+        from models import GeneratePlanRequest
+        profile = _approved_profile(api, "Ready No Photo")
+        template = _a_template(api)
+        project = _a_project(api, profile, template, with_character=False)
+        _run(api.generate_plan(project_id=project["id"],
+                               payload=GeneratePlanRequest(), user_id=ANON))
+        with pytest.raises(HTTPException) as err:
+            _run(api.mark_project_ready(project_id=project["id"], user_id=ANON))
+        assert err.value.status_code == 400
+        detail = str(err.value.detail)
+        assert "character reference" in detail
+        assert "looks nothing like you" in detail
+        # Names the step, so the founder is not left hunting for an upload that
+        # used to live on a step called "Assets" and no longer exists.
+        assert "Template & photo" in detail
+
+        # Still a draft, so the button never lights up in the first place.
+        fresh = _run(api.get_studio_project(project["id"], user_id=ANON))
+        assert fresh["status"] != "ready_for_generation"
 
     def test_ready_requires_a_template(self, api):
         from models import CreateStudioProjectRequest

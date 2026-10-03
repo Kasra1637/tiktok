@@ -92,6 +92,13 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
   const staleStrategy = hasStrategy && project?.strategy_is_current === false;
   const strategyReady = hasStrategy && !staleStrategy;
 
+  // The presenter must be the founder's own face. Judged by the asset KIND on
+  // what is attached, matching the server: a project can legitimately hold other
+  // rows, and an attached photo of the wrong kind is still no presenter.
+  const noPhoto = !(project?.assets || []).some(
+    (a) => String(a?.kind || "").trim().toLowerCase() === "character_reference"
+  );
+
   // One click, one render. The key identifies a single INTENT to render and is
   // reused for every retry of that intent, then cleared the moment a render
   // lands so "Generate another" gets a fresh one and can still bill.
@@ -344,7 +351,22 @@ const handleGenerate = async () => {
         </Alert>
       )}
 
-      {!ready && (
+      {/* No photograph attached. Named here rather than left to the server's
+          409, because this is the panel where the founder decides to spend:
+          telling them before the click is the difference between a rule they
+          have not met yet and an app that appears to have broken. */}
+      {noPhoto && (
+        <Alert variant="destructive">
+          <AlertTitle>No photo attached</AlertTitle>
+          <AlertDescription>
+            This template puts a person on camera, so it needs a character reference — the
+            video is generated from your photograph, and without one the model would invent
+            somebody who looks nothing like you. Attach one on the Template &amp; photo step,
+            then mark the project ready again.
+          </AlertDescription>
+        </Alert>
+      )}
+      {!ready && !noPhoto && (
         <p className="text-sm text-muted-foreground">
           Mark the project ready for generation to enable production.
         </p>
@@ -413,7 +435,9 @@ const handleGenerate = async () => {
       <Button
         variant="brand"
         onClick={handleGenerate}
-        disabled={busy || inFlight || !ready || blocked || tooLong || !projectId || !strategyReady}
+        disabled={
+          busy || inFlight || !ready || blocked || tooLong || !projectId || !strategyReady || noPhoto
+        }
       >
         {busy || inFlight ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
         {inFlight

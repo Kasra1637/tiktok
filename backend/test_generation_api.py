@@ -331,6 +331,60 @@ class TestGenerationGates:
                 project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
         assert err.value.status_code == 409
 
+    def test_marking_ready_refuses_a_project_with_no_photograph(self, api):
+        """
+        Marking ready is what enables the Generate button, so it is the last
+        place a missing photo can be caught before the founder spends. Without
+        this the project was approved, the button lit up, and the refusal
+        arrived only at the click — where a 409 reads as a broken app rather
+        than a rule they had not met.
+
+        The generate endpoint keeps its own check; this one is about the button.
+        """
+        from models import CreateStudioProjectRequest, StudioGenerationRequest
+        from models import BrandProfileCreateRequest, ApproveAppProfileRequest
+        profile = _run(api.create_brand(payload=BrandProfileCreateRequest(
+            brand_name="No Photo",
+            brand_description="A focus timer for people who stall on starting.",
+            core_features=["Task timer"],
+            usage_moments=["Starting a task they have been avoiding"],
+        ), user_id=ANON))
+        _run(api.approve_app_profile(
+            profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=ANON))
+        template = _run(api.list_templates(user_id=ANON))["templates"][0]
+        project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
+            brand_profile_id=profile["id"],
+            template_id=template["id"],
+            objective="demonstrate_feature",
+        ), user_id=ANON))
+        # Write the plan the way _ready_project does, straight to the row. generate_plan
+        # would make a live LLM call, which is not what this test is about.
+        from models import now_iso
+        _run(api._execute(
+            """UPDATE studio_projects SET hook_line = ?, script = ?, script_version = 1
+               WHERE id = ?""",
+            ("Stop writing empty pages.", "Stop writing empty pages.", project["id"])))
+
+        with pytest.raises(HTTPException) as err:
+            _run(api.mark_project_ready(project["id"], user_id=ANON))
+        assert err.value.status_code == 400
+        detail = err.value.detail
+        # Says what is missing, why it matters, and which step fixes it.
+        assert "character reference" in detail
+        assert "looks nothing like you" in detail
+        assert "Template & photo" in detail
+
+        # And the project is still draft, so the button never lights up.
+        fresh = _run(api.get_studio_project(project["id"], user_id=ANON))
+        assert fresh["status"] != "ready_for_generation"
+
+        # The generate endpoint still refuses independently, for any caller
+        # that reaches it without going through the ready gate.
+        with pytest.raises(HTTPException) as gen_err:
+            _run(api.submit_project_generation(
+                project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        assert gen_err.value.status_code == 409
+
     def test_blocking_claim_prevents_spend(self, api, monkeypatch):
         calls = _mock_submit(api, monkeypatch)
         from models import StudioGenerationRequest

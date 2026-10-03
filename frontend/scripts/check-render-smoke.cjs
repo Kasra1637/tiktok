@@ -715,6 +715,43 @@ async function main() {
 expectText(ctx, "Mark the project ready for generation", "the ready gate did not render");
   });
 
+  await check("GenerationPanel refuses a ready project with no photograph", async (ctx) => {
+    // Marking ready is what enables Generate, and until this gate existed a
+    // project with no photo sailed through approval and only failed at the
+    // click, where a 409 reads as a broken app rather than an unmet rule.
+    // The founder is told before they decide to spend.
+    await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
+      mount(GenerationPanel, {
+        project: { ...PROJECT_WITH_STRATEGY, assets: [] },
+      })(ctx)
+    );
+    expectText(ctx, "No photo attached", "the missing-photograph gate did not render");
+    expectText(ctx, "invent somebody who looks nothing like you", "the gate did not say why it matters");
+    expectText(ctx, "Template & photo", "the gate did not name the step that fixes it");
+    // The old ready hint and the new one must not both be talking at once.
+    expectAbsent(ctx, "Mark the project ready for generation", "the ready hint competes with the real blocker");
+  });
+
+  await check("GenerationPanel is silent about the photo once one is attached", async (ctx) => {
+    // The gate must key off the asset KIND, not merely "some asset exists", or a
+    // project holding an unrelated row would look ready when it is not.
+    await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
+      mount(GenerationPanel, {
+        project: {
+          ...PROJECT_WITH_STRATEGY,
+          assets: [{ asset_id: "a1", kind: "screenshot", label: "ui.png", status: "ready" }],
+        },
+      })(ctx)
+    );
+    expectText(ctx, "No photo attached", "a non-character_reference asset was read as a presenter");
+
+    // And with the real thing attached, no gate at all.
+    await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
+      mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY } })(ctx)
+    );
+    expectAbsent(ctx, "No photo attached", "the gate fired on a project that has a photo");
+  });
+
   await check("GenerationPanel explains an un-ready project that already rendered", async (ctx) => {
     // Saving a content edit on an approved project now returns it to draft, so
     // the "already rendered once" case is reachable rather than theoretical. The
