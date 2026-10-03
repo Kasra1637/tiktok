@@ -22,6 +22,32 @@ stay out of frame.
 """
 from typing import Optional
 
+# Hard ceiling on the assembled render prompt, in characters.
+#
+# Proven live: a 7,724-char prompt to minimax/hailuo-3-max was refused with
+# "content[0].text too long: 7724 > 7000 characters". The /videos payload
+# sends our prompt as the text verbatim, so the prompt itself must stay under
+# the provider's 7,000. The 200-char margin covers any measuring difference on
+# their side (e.g. astral-plane characters counted as two units); it is not
+# round-number comfort, and the test below pins the measured worst case so any
+# growth forces a conscious trim rather than a surprise 400.
+#
+# Enforced structurally, not by truncating the finished string: every variable
+# read below goes through _clip, so the worst case is bounded no matter what
+# a strategy, plan, template or profile carries — including rows written
+# before this ceiling existed. Cutting the finished tail instead would
+# amputate the identity close at the end, which is the worst part of the
+# prompt to lose.
+RENDER_PROMPT_LIMIT = 6800
+
+
+def _clip(text, limit: int) -> str:
+    """Clip one variable prompt value to a fixed budget, stripped."""
+    s = str(text or "").strip()
+    if len(s) <= limit:
+        return s
+    return s[:limit].rstrip()
+
 # Words the model must not attempt to draw. Listed so the instruction can be
 # explicit rather than relying on the model inferring "don't fake the facts".
 # Note what is NOT here: the environment, setting, lighting and props ARE
@@ -62,7 +88,7 @@ def must_not_show_section(profile: dict) -> str:
         return ""
     if not items:
         return ""
-    listed = "; ".join(items[:8])
+    listed = "; ".join(_clip(part, 30) for part in items[:8])
     return (
         "MUST NOT APPEAR — recorded on this app's profile as things a promo must never "
         f"contradict or show: {listed}. Do not depict any of them, do not imply them, and "
@@ -102,7 +128,7 @@ def _format_beats(beats, duration: int, hook_seconds: int = 3) -> str:
         except (TypeError, ValueError):
             continue
         label = str(beat.get("label") or "beat").strip()
-        text = str(beat.get("text") or "").strip()
+        text = _clip(beat.get("text"), 100)
         if not text:
             continue
         lines.append(f"- {start:g}-{end:g}s [{label}]: {text}")
@@ -115,7 +141,7 @@ def _format_overlays(overlays) -> str:
     lines = []
     for item in overlays[:8]:
         if isinstance(item, dict):
-            text = str(item.get("text") or "").strip()
+            text = _clip(item.get("text"), 60)
             if not text:
                 continue
             try:
@@ -151,13 +177,13 @@ def build_single_pass_prompt(
             asks the model to continue seamlessly rather than open cold.
     """
     app_name = (profile or {}).get("brand_name") or "the app"
-    hook = (plan.get("hook_line") or "").strip()
-    script = (plan.get("script") or "").strip()
-    visual = (plan.get("visual_direction") or "").strip()
-    voice = (plan.get("voice_direction") or "").strip()
-    sound = (plan.get("sound_direction") or "").strip()
+    hook = _clip(plan.get("hook_line"), 150)
+    script = _clip(plan.get("script"), 400)
+    visual = _clip(plan.get("visual_direction"), 120)
+    voice = _clip(plan.get("voice_direction"), 120)
+    sound = _clip(plan.get("sound_direction"), 120)
     tpl = template or {}
-    tone = (plan.get("tone") or tpl.get("tone") or "").strip()
+    tone = _clip(plan.get("tone") or tpl.get("tone"), 120)
 
     # The template's own opening length, clamped. This is directorial — how much
     # of the opening the hook has to land in — and NOT a render length: the whole
@@ -218,10 +244,10 @@ def build_single_pass_prompt(
     if visual:
         sections.append(f"Visual direction: {visual}")
     if tpl.get("visual_style"):
-        sections.append(f"Visual style: {tpl['visual_style']}")
+        sections.append(f"Visual style: {_clip(tpl['visual_style'], 100)}")
     if tpl.get("camera_pacing") or tpl.get("middle_structure"):
         pacing = " ".join(
-            p for p in (tpl.get("camera_pacing"), tpl.get("middle_structure")) if p
+            p for p in (_clip(tpl.get("camera_pacing"), 100), _clip(tpl.get("middle_structure"), 100)) if p
         )
         sections.append(f"Camera and pacing: {pacing}")
     if voice:
@@ -375,7 +401,7 @@ def person_anchor_notes(assets: list) -> str:
             continue
         if str(asset.get("kind") or "").strip().lower() != "character_reference":
             continue
-        label = str(asset.get("name") or asset.get("label") or "the attached character reference").strip()
+        label = _clip(asset.get("name") or asset.get("label") or "the attached character reference", 60)
         return (
             "The person on camera is the person in the attached character reference "
             f"image ({label}). Copy that person: the same face, hair, skin, apparent age, "
@@ -454,7 +480,7 @@ def character_scene_lock(strategy: dict) -> str:
         if not isinstance(values, dict):
             continue
         described = [
-            f"{label}: {str(values.get(key)).strip()}"
+            f"{label}: {_clip(values.get(key), 100)}"
             for key, label in fields
             if str(values.get(key) or "").strip()
         ]
@@ -463,7 +489,7 @@ def character_scene_lock(strategy: dict) -> str:
 
     if not lines:
         return ""
-    return (
+    lock = (
         "THE SCENE AND THE DELIVERY ARE LOCKED. Reproduce these exactly — same place, "
         "same light, same camera, same wardrobe and props, same way of moving and speaking:\n"
         + "\n".join(lines)
@@ -471,6 +497,12 @@ def character_scene_lock(strategy: dict) -> str:
         "this scene, and do not swap in a different location, prop or outfit, even if the "
         "later part of the story would seem to call for it."
     )
+    # The block as a whole is capped, not just its values: scene fields come
+    # first so a pathological strategy loses the performance tail, never the
+    # location and light the render needs most. Sized to clear a realistic
+    # full lock (~1,050 with every field populated) — anything lower
+    # amputates pinned fields even for ordinary strategies.
+    return _clip(lock, 1100)
 
 
 def strategy_brief(strategy: dict) -> str:
@@ -494,23 +526,23 @@ def strategy_brief(strategy: dict) -> str:
     """
     strategy = strategy or {}
     parts = []
-    summary = str(strategy.get("strategy_summary") or "").strip()
+    summary = _clip(strategy.get("strategy_summary"), 250)
     if summary:
         parts.append(f"Strategy for this video: {summary}")
 
-    problem = str(strategy.get("audience_problem") or "").strip()
+    problem = _clip(strategy.get("audience_problem"), 200)
     if problem:
         parts.append(f"The problem this viewer actually has: {problem}")
 
-    triggers = [str(t).strip() for t in (strategy.get("emotional_triggers") or []) if str(t).strip()]
+    triggers = [_clip(t, 80) for t in (strategy.get("emotional_triggers") or []) if str(t).strip()]
     if triggers:
         parts.append(f"Emotions to land: {'; '.join(triggers[:4])}")
 
-    pillars = [str(p).strip() for p in (strategy.get("messaging_pillars") or []) if str(p).strip()]
+    pillars = [_clip(p, 100) for p in (strategy.get("messaging_pillars") or []) if str(p).strip()]
     if pillars:
         parts.append("Messaging that must be delivered: " + "; ".join(pillars[:4]))
 
-    feature = str(strategy.get("primary_feature") or "").strip()
+    feature = _clip(strategy.get("primary_feature"), 200)
     if feature:
         # Subject matter, not an instruction. The old wording ("The one feature
         # shown: {feature}. Show it in use, not described.") was a direct
@@ -520,19 +552,24 @@ def strategy_brief(strategy: dict) -> str:
             f"working): {feature}"
         )
 
-    outcome = str(strategy.get("desired_outcome") or "").strip()
+    outcome = _clip(strategy.get("desired_outcome"), 200)
     if outcome:
         parts.append(f"Outcome the viewer should expect: {outcome}")
 
-    diff = str(strategy.get("differentiation_beat") or "").strip()
+    diff = _clip(strategy.get("differentiation_beat"), 200)
     if diff:
         parts.append(f"How this app is different: {diff}")
 
     if not parts:
         return ""
-    return "THIS APP-SPECIFIC STRATEGY — it governs this whole video:\n" + "\n".join(
+    brief = "THIS APP-SPECIFIC STRATEGY — it governs this whole video:\n" + "\n".join(
         f"  {p}" for p in parts
     )
+    # The brief as a whole is capped: its head (summary, problem, triggers)
+    # carries the context the render needs, so a pathological strategy loses
+    # the tail, never the head. Sized to clear a realistic full brief — lower
+    # cuts feature and outcome lines out of ordinary strategies.
+    return _clip(brief, 700)
 
 
 def build_segment_prompt(
@@ -599,11 +636,11 @@ def build_segment_prompt(
         "install or try anything. End on the moment the presenter reaches for their phone."
     )
 
-    hook_line = str(strategy.get("hook_line") or "").strip()
-    hook_concept = str(strategy.get("hook_concept") or "").strip()
-    hook_action = str(strategy.get("hook_action") or "").strip()
-    hook_dialogue = str(strategy.get("hook_dialogue") or "").strip()
-    promise = str(strategy.get("hook_promise") or "").strip()
+    hook_line = _clip(strategy.get("hook_line"), 200)
+    hook_concept = _clip(strategy.get("hook_concept"), 90)
+    hook_action = _clip(strategy.get("hook_action"), 90)
+    hook_dialogue = _clip(strategy.get("hook_dialogue"), 90)
+    promise = _clip(strategy.get("hook_promise"), 50)
     if hook_concept:
         sections.append(f"What the opening must DO: {hook_concept}")
     if hook_line:
@@ -654,9 +691,9 @@ def build_segment_prompt(
         ("middle", "MIDDLE", middle_seconds, "develop the hook and end at the reach"),
     ):
         section = sections_by_role.get(role) or {}
-        goal = str(section.get("goal") or "").strip()
-        script = str(section.get("script") or "").strip()
-        action = str(section.get("action") or "").strip()
+        goal = _clip(section.get("goal"), 100)
+        script = _clip(section.get("script"), 200)
+        action = _clip(section.get("action"), 100)
         block = [f"{label} — {budget}s, and its job is to {purpose}:"]
         if goal:
             block.append(f"  what it must achieve: {goal}")
@@ -676,13 +713,13 @@ def build_segment_prompt(
         sections.append("\n".join(block))
 
     if tpl.get("opening_structure"):
-        sections.append(f"Hook mechanism to honour: {tpl['opening_structure']}")
+        sections.append(f"Hook mechanism to honour: {_clip(tpl['opening_structure'], 90)}")
     if tpl.get("middle_structure"):
-        sections.append(f"Middle structure to honour: {tpl['middle_structure']}")
+        sections.append(f"Middle structure to honour: {_clip(tpl['middle_structure'], 90)}")
     if tpl.get("visual_style"):
-        sections.append(f"Visual style: {tpl['visual_style']}")
+        sections.append(f"Visual style: {_clip(tpl['visual_style'], 90)}")
     if tpl.get("camera_pacing"):
-        sections.append(f"Camera and pacing: {tpl['camera_pacing']}")
+        sections.append(f"Camera and pacing: {_clip(tpl['camera_pacing'], 90)}")
 
     sections.append(
         "On-screen text will be added afterwards. Plan clean space for it, and do not "

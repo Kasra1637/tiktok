@@ -556,6 +556,122 @@ class TestSinglePassPrompt:
             [{"kind": "character_reference", "name": "Home"}])
 
 
+class TestRenderPromptLengthCap:
+    """
+    The provider refuses content[0].text past 7,000 characters, proven live by
+    a 7,724-char submit that 400d. The founder cannot fix that failure
+    themselves — the verbosity lives in model-generated strategy text, not in
+    anything they typed — so the builders must guarantee the cap instead of
+    letting a long strategy spend a failed submit.
+    """
+    BIG = "w " * 3000
+
+    def _verbose_strategy(self):
+        big = self.BIG
+        return {
+            "hook_line": big, "hook_concept": big, "hook_action": big,
+            "hook_dialogue": big, "hook_promise": big,
+            "strategy_summary": big, "audience_problem": big,
+            "emotional_triggers": [big] * 6, "messaging_pillars": [big] * 6,
+            "primary_feature": big, "desired_outcome": big,
+            "differentiation_beat": big,
+            "scene": {
+                "environment": big, "background": big, "setting": big,
+                "camera_angle": big, "framing": big, "lighting": big,
+                "color_palette": big,
+            },
+            "performance": {"movement": big, "voice_delivery": big},
+            "segments": [
+                {"role": "hook", "goal": big, "script": big, "action": big},
+                {"role": "middle", "goal": big, "script": big, "action": big},
+            ],
+        }
+
+    def _verbose_template(self):
+        big = self.BIG
+        return {
+            "opening_structure": big, "middle_structure": big,
+            "visual_style": big, "camera_pacing": big, "hook_seconds": 3,
+        }
+
+    def _verbose_profile(self):
+        return {
+            "brand_name": "Taskly",
+            "must_not_show": [self.BIG] * 10,
+        }
+
+    def _verbose_assets(self):
+        return [{"kind": "character_reference", "name": self.BIG}]
+
+    def test_segment_prompt_stays_within_the_provider_limit(self):
+        """
+        Every variable field at 6,000 chars — far past anything a strategy,
+        template, profile or asset label really carries — must still assemble
+        under RENDER_PROMPT_LIMIT. The number is measured, not picked: this
+        fixture lands at 6,632 against the 6,800 ceiling (provider refuses past
+        7,000, 200 margin for measuring differences).
+        """
+        prompt = gp.build_segment_prompt(
+            strategy=self._verbose_strategy(),
+            profile=self._verbose_profile(),
+            template=self._verbose_template(),
+            duration=12,
+            assets=self._verbose_assets(),
+            plan={"hook_seconds": 3},
+        )
+        assert len(prompt) <= gp.RENDER_PROMPT_LIMIT, (
+            f"verbose render prompt is {len(prompt)} chars, over the "
+            f"{gp.RENDER_PROMPT_LIMIT} ceiling — a submit this long 400s."
+        )
+
+    def test_clipping_never_amputates_the_identity_close(self):
+        """
+        The cap is enforced by clipping variable content, never by cutting the
+        finished tail: the person anchor and the same-individual close are the
+        worst part of the prompt to lose, and they sit at the end.
+        """
+        prompt = gp.build_segment_prompt(
+            strategy=self._verbose_strategy(),
+            profile=self._verbose_profile(),
+            template=self._verbose_template(),
+            duration=12,
+            assets=self._verbose_assets(),
+            plan={"hook_seconds": 3},
+        )
+        assert prompt.startswith("Create ONE continuous 12-second")
+        assert "The person on camera is the same individual" in prompt
+        assert prompt.rstrip().endswith("under the same light.")
+
+    def test_single_pass_prompt_stays_within_the_provider_limit(self):
+        """
+        The no-strategy fallback reads founder-written fields (script, beats,
+        overlays) that are equally unbounded, so it gets the same guarantee:
+        a 12-beat, 10-overlay plan at 6,000 chars a field still assembles
+        under the ceiling (measured 5,859).
+        """
+        big = self.BIG
+        prompt = gp.build_single_pass_prompt(
+            plan={
+                "hook_line": big, "script": big,
+                "visual_direction": big, "voice_direction": big,
+                "sound_direction": big, "tone": big,
+                "beat_timeline": [
+                    {"start": i, "end": i + 1, "label": "b", "text": big}
+                    for i in range(12)
+                ],
+                "overlays": [{"text": big}] * 10,
+                "assets": self._verbose_assets(),
+            },
+            profile=self._verbose_profile(),
+            template=self._verbose_template(),
+            duration=20,
+        )
+        assert len(prompt) <= gp.RENDER_PROMPT_LIMIT, (
+            f"verbose fallback prompt is {len(prompt)} chars, over the "
+            f"{gp.RENDER_PROMPT_LIMIT} ceiling — a submit this long 400s."
+        )
+
+
 class TestCostExtraction:
     def test_reads_usage_cost(self):
         cost, source = gp.extract_cost({"usage": {"cost": 0.42}})
