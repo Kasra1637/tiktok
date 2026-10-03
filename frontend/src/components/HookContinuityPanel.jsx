@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
@@ -191,6 +191,33 @@ export function HookContinuityPanel({ project, onProjectChange }) {
       setBusy(false);
     }
   };
+
+  // Build the strategy automatically once the project is ready and none
+  // exists. Without this the Generate button below stays disabled behind a
+  // "Build the strategy above" note the founder can jump past via the step
+  // pills, which is the other half of "the button sometimes is not clickable".
+  // Only fires when there is NO strategy at all -- a stale one still asks,
+  // because rebuilding discards a strategy the founder may have read and the
+  // confirm dialog is the right guard for that. One attempt per mount: the ref
+  // stops a re-render storm from re-triggering a free text call.
+  const autoBuildAttempted = useRef(false);
+  useEffect(() => {
+    if (
+      autoBuildAttempted.current ||
+      project?.status !== "ready_for_generation" ||
+      hasStrategy ||
+      !projectId ||
+      busy
+    ) {
+      return;
+    }
+    autoBuildAttempted.current = true;
+    // Fire and forget: errors land in the panel's own error state through
+    // handleGenerateStrategy, and the Generate button stays disabled for the
+    // real reason (no strategy) rather than silently proceeding.
+    handleGenerateStrategy();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleGenerateStrategy is a render-scoped closure; listing it would re-fire the free call on every render.
+  }, [project?.status, hasStrategy, projectId, busy]);
 
   const sections = plannedSections(strategy);
 

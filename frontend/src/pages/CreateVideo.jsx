@@ -711,7 +711,12 @@ export default function CreateVideo() {
         // disturbing a plan that already exists.
         if (
           project.template_id === templateId &&
-          project.content_angle_id === (angleId || null) &&
+          // Both sides normalize to "": the writes below send angleId || "",
+          // so comparing against (angleId || null) never matched an empty
+          // angle and every call fell through to a wasted update write -- which
+          // the eager-create effect above turned into an infinite
+          // update -> setProject -> re-fire loop.
+          (project.content_angle_id || "") === (angleId || "") &&
           project.objective === (objective || "")
         ) {
           return project;
@@ -749,6 +754,32 @@ export default function CreateVideo() {
     }
   }, [profileId, templateId, angleId, objective, tone, project]);
 
+  // Wire up the eager creation the ensureProject docstring promises: as soon
+  // as a profile and template are both chosen, the draft is created (or kept
+  // in step) in the background. Without this the render step shows "Create the
+  // draft" instead of the Generate button whenever a founder reaches it by the
+  // step pills rather than through the Review step, which is exactly when the
+  // button "sometimes" vanishes. A ref guards against concurrent calls because
+  // ensureProject is async and the effect re-fires on every project write.
+  const ensureProjectInFlight = useRef(false);
+  const lastSyncedKey = useRef("");
+  useEffect(() => {
+    if (!profileId || !templateId || ensureProjectInFlight.current) return;
+    // One sync per selection-set. Without this, any server echo that differs
+    // from what was sent (a dropped angle, a normalized field, or a stub that
+    // answers a create with a canned project) would ping-pong
+    // update -> setProject -> re-fire forever, because this effect re-runs on
+    // every project write. The manual buttons bypass the guard and call
+    // ensureProject directly.
+    const key = `${profileId}:${templateId}:${angleId || ""}:${objective || ""}`;
+    if (lastSyncedKey.current === key) return;
+    lastSyncedKey.current = key;
+    ensureProjectInFlight.current = true;
+    ensureProject().finally(() => {
+      ensureProjectInFlight.current = false;
+    });
+  }, [profileId, templateId, angleId, objective, ensureProject]);
+
   const handleGeneratePlan = async () => {
     const ready = await createProject();
     if (!ready) return;
@@ -770,7 +801,24 @@ export default function CreateVideo() {
         objective,
         tone,
       });
-      setProject(updated);
+      // A freshly generated plan is exactly the text the founder is about to
+      // read on Review, and "Mark ready" was a separate click they could (and
+      // did) skip by jumping straight to the render step via the pills -- which
+      // left the Generate button disabled with no obvious reason. Mark-ready
+      // now happens as part of generating, so the button is clickable the
+      // moment the plan lands. The server still recomputes claim-safety here
+      // and refuses if a prohibited claim is present, so the safety gate is
+      // unchanged; this only removes the redundant "yes I saw it" click.
+      let settled = updated;
+      try {
+        settled = await api.markProjectReady(updated.id);
+      } catch {
+        // Safety or validation refused the ready transition: keep the plan
+        // result so the founder can fix the claim on Review and mark ready
+        // from there. The render button stays disabled for the real reason.
+        settled = updated;
+      }
+      setProject(settled);
       setEdits({});
       // Straight to the top of Review, which is this step now: the plan is the
       // thing to read, and the render step below it is the first one that
@@ -816,7 +864,21 @@ export default function CreateVideo() {
           template_id: project.template_id,
         });
       }
-      setProject(updated);
+      // A content save un-readies the project server-side (ready_for_generation
+      // -> draft), which used to leave the Generate button below silently
+      // disabled behind a "mark ready" note the founder had already dismissed
+      // once. Re-mark here for the same reason plan generation does: the
+      // founder just reviewed the exact text they saved, so the approval still
+      // describes what was read. A safety refusal is swallowed the same way --
+      // the render button stays disabled for the real reason, and Review's
+      // Mark-ready button remains the explicit recovery path.
+      let settled = updated;
+      try {
+        settled = await api.markProjectReady(updated.id);
+      } catch {
+        settled = updated;
+      }
+      setProject(settled);
       setEdits({});
     } catch (err) {
       setError(getErrorMessage(err));

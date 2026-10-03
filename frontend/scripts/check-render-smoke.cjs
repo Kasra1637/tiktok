@@ -276,7 +276,11 @@ const apiStub = {
     error: null,
   }),
   getStudioProject: async () => PROJECT_WITH_STRATEGY,
-  createStudioProject: async () => PROJECT_WITH_STRATEGY,
+  // A create returns a fresh draft with no plan and no strategy, exactly as
+  // the server does. The stub used to return a fully-planned project, which
+  // the eager create adopts and which hides the "Generate the plan" button
+  // behind a plan the founder never wrote.
+  createStudioProject: async () => ({ ...BASE_PROJECT }),
   updateStudioProject: async () => PROJECT_WITH_STRATEGY,
   detachAsset: async () => BASE_PROJECT,
   getProjects: async () => ({ projects: [] }),
@@ -590,11 +594,14 @@ async function main() {
     if (!text.includes("Your photo")) {
       throw new Error("the template step does not offer the photograph upload");
     }
-    // The draft has to be creatable from here: profile + template is what
-    // ensureProject needs, and both are on this step now.
-    const create = [...ctx.container.querySelectorAll("button")]
-      .find((b) => /Create the draft/.test(b.textContent || ""));
-    if (!create) {
+    // The draft is created eagerly now (ensureProject fires on profile +
+    // template), so the photo attaches to a project without the founder
+    // pressing anything. Either the attachment UI or the pending-draft copy is
+    // the proof that this step owns the photo -- a missing project would show
+    // neither.
+    const ownsPhoto =
+      /Create the draft/.test(text) || /attach/i.test(text) || !!ctx.container.querySelector("input[type=file]");
+    if (!ownsPhoto) {
       throw new Error("the template step cannot create the draft the photo attaches to");
     }
     // No step of its own: this is the assertion that the old "Assets" pill is
@@ -644,23 +651,46 @@ async function main() {
 
   await check("the plan is generated from the step that reviews it", async (ctx) => {
     global.__SMOKE_PARAMS = "";
-    await mount(CreateVideo, {})(ctx);
-    await openTemplateStep(ctx);
-    await openStep(ctx, "Review");
-    const text = ctx.text();
-    // With no plan, Review offers the button rather than an empty state that
-    // sends the founder back to a step that held only that button.
-    const generate = [...ctx.container.querySelectorAll("button")]
-      .find((b) => /Generate the plan/.test((b.textContent || "").trim()));
-    if (!generate) throw new Error("Review cannot generate the plan it reviews");
-    if (text.includes("No plan yet")) {
-      throw new Error("Review still bounces to a separate plan step for its own plan");
-    }
-    // And it says the button is free, because that is the only reason to press
-    // a button on the step that is otherwise a reading step.
-    if (!text.includes("Free")) {
-      throw new Error("generating the plan does not say it is free");
-    }
+    // A create returns a fresh draft (no plan yet) -- matching the server. The
+    // default stub returned a fully-planned project, which the eager create now
+    // adopts and which hides the very button this check is about.
+    await withApi(
+      {
+        // A create echoes the angle it was sent (here: none chosen), exactly
+        // as the server does. Answering with the canned project's "a1" would
+        // disagree with the wizard's empty angle on every pass.
+        createStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
+        updateStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openTemplateStep(ctx);
+        // Let the eager create land before moving on, so Review sees the
+        // fresh draft (script_version 0) rather than a still-null project.
+        await act(async () => {});
+        await act(async () => {});
+        await openStep(ctx, "Review");
+        await act(async () => {});
+        await act(async () => {});
+        // Assert inside the stub scope: the eager create is async and would
+        // otherwise land after the stub restores and adopt the default's
+        // fully-planned project, hiding the very button this check is about.
+        const text = ctx.text();
+        // With no plan, Review offers the button rather than an empty state that
+        // sends the founder back to a step that held only that button.
+        const generate = [...ctx.container.querySelectorAll("button")]
+          .find((b) => /Generate the plan/.test((b.textContent || "").trim()));
+        if (!generate) throw new Error("Review cannot generate the plan it reviews");
+        if (text.includes("No plan yet")) {
+          throw new Error("Review still bounces to a separate plan step for its own plan");
+        }
+        // And it says the button is free, because that is the only reason to press
+        // a button on the step that is otherwise a reading step.
+        if (!text.includes("Free")) {
+          throw new Error("generating the plan does not say it is free");
+        }
+      }
+    );
   });
 
   // -------------------------------------------------------------------------
@@ -1051,6 +1081,12 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
             strategy: {},
             strategy_version: 0,
           }),
+          // The strategy auto-builds once the project is ready; failing it here
+          // keeps the "no strategy yet" state on screen so the button this
+          // check is about stays visible.
+          generateStrategy: async () => {
+            throw new Error("strategy build unavailable in this check");
+          },
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
@@ -1096,7 +1132,12 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
             strategy: {},
             strategy_version: 0,
           }),
-          generateStrategy: async () => PROJECT_WITH_STRATEGY,
+          // The strategy auto-builds once ready; failing it keeps the
+          // "no strategy" state so the dead-button behaviour this check pins
+          // stays observable.
+          generateStrategy: async () => {
+            throw new Error("strategy build unavailable in this check");
+          },
           generateVideo: async () => {
             renderCalls += 1;
             return { ...SEGMENT, status: "submitted" };
@@ -2163,20 +2204,12 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
         },
       },
       async () => {
-        // The create path: the Assets step's "Create the draft now" button, which
-        // is the only route to a POST before a project exists.
+        // The create path: the draft is created eagerly from profile + template
+        // (ensureProject fires on selection), so the POST happens without a
+        // manual button. Opening the template step is enough to trigger it.
         global.__SMOKE_PARAMS = "";
         await mount(CreateVideo, {})(ctx);
-        // The draft is created from the profile and the template, and both of
-        // those live on the template step now — the photo upload was folded into
-        // it and the "Create the draft" button moved with it.
         await openTemplateStep(ctx);
-        const create = [...ctx.container.querySelectorAll("button")]
-          .find((b) => /Create the draft/.test(b.textContent || ""));
-        if (!create) throw new Error("the template step offers no way to create the draft");
-        await act(async () => {
-          create.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-        });
         await act(async () => {});
 
         // The update path: with a project already in hand, generating the plan
