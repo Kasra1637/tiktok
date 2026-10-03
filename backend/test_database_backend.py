@@ -37,10 +37,12 @@ class _FakeLibsqlConnection:
 
     def __init__(self, *args, **kwargs):
         self.sync_calls = 0
+        self.statements = []
         self.closed = False
         _FakeLibsqlConnection.instances.append(self)
 
     def execute(self, sql, params=()):
+        self.statements.append(sql)
         return _FakeCursor()
 
     def sync(self):
@@ -109,10 +111,62 @@ class TestTursoBootPull:
         assert len(_FakeLibsqlConnection.instances) == 1
         assert _FakeLibsqlConnection.instances[0].sync_calls == 1
 
+    def test_no_pragma_on_the_turso_branch(self, api, monkeypatch):
+        """
+        PRAGMA journal_mode=WAL is a local-SQLite concern; on a libsql
+        embedded replica the statement is unsupported, and issuing it took down
+        the whole Turso branch — every boot fell back to ephemeral storage
+        while the config said "Turso cloud". The branch must issue no PRAGMA
+        at all.
+        """
+        _install_fake_libsql(monkeypatch)
+        api._TURSO_BOOT_SYNC_DONE = False
+        api._ACTIVE_BACKEND = None
+        _FakeLibsqlConnection.instances.clear()
+
+        async def use():
+            async with api.get_db():
+                pass
+        _run(use())
+
+        assert len(_FakeLibsqlConnection.instances) == 1
+        assert _FakeLibsqlConnection.instances[0].sync_calls == 1
+        pragmas = [s for c in _FakeLibsqlConnection.instances
+                   for s in c.statements if "PRAGMA" in str(s).upper()]
+        assert pragmas == [], pragmas
+        assert api._ACTIVE_BACKEND == "turso"
+
+    def test_pragma_rejection_no_longer_kills_turso(self, api, monkeypatch):
+        """
+        The production failure exactly: a connection whose execute() rejects
+        PRAGMA with "unsupported statement" (what libsql raises on a replica)
+        must still establish the Turso branch, because nothing issues one.
+        """
+        def connect_picky(*a, **k):
+            conn = _FakeLibsqlConnection(*a, **k)
+            real_execute = conn.execute
+
+            def execute(sql, params=()):
+                if "PRAGMA" in str(sql).upper():
+                    raise RuntimeError("unsupported statement")
+                return real_execute(sql, params)
+            conn.execute = execute
+            return conn
+        _install_fake_libsql(monkeypatch, connect=connect_picky)
+        api._TURSO_BOOT_SYNC_DONE = False
+        api._ACTIVE_BACKEND = None
+
+        async def use():
+            async with api.get_db():
+                pass
+        _run(use())  # must not raise, must not fall back
+        assert api._ACTIVE_BACKEND == "turso"
+
     def test_pull_happens_once_per_process(self, api, monkeypatch):
         """The pull is a boot concern, not a per-request tax."""
         _install_fake_libsql(monkeypatch)
         api._TURSO_BOOT_SYNC_DONE = False
+        api._ACTIVE_BACKEND = None
         _FakeLibsqlConnection.instances.clear()
 
         async def use_twice():
@@ -125,8 +179,13 @@ class TestTursoBootPull:
         total_syncs = sum(c.sync_calls for c in _FakeLibsqlConnection.instances)
         assert total_syncs == 1
 
-    def test_failed_pull_does_not_kill_boot(self, api, monkeypatch):
-        """A Turso blip at boot warns; it must not take the app down."""
+    def test_failed_pull_falls_back_loudly_not_silently_unsynced(self, api, monkeypatch, caplog):
+        """
+        A failed pull used to warn and continue on an UNSYNCED replica — which
+        is operationally identical to local SQLite while reporting as Turso.
+        Now it falls back like a connect failure: loud, ephemeral, and retrying
+        on the next connection (the flag stays False).
+        """
         def boom(*a, **k):
             conn = _FakeLibsqlConnection(*a, **k)
 
@@ -136,12 +195,16 @@ class TestTursoBootPull:
             return conn
         _install_fake_libsql(monkeypatch, connect=boom)
         api._TURSO_BOOT_SYNC_DONE = False
+        api._ACTIVE_BACKEND = None
 
         async def use():
-            async with api.get_db():
-                pass
-        _run(use())  # must not raise
+            async with api.get_db() as conn:
+                await conn.execute("SELECT 1")  # served, from the fallback
+        with caplog.at_level(logging.ERROR, logger="server"):
+            _run(use())  # must not raise
         assert api._TURSO_BOOT_SYNC_DONE is False
+        assert api._ACTIVE_BACKEND == "local-ephemeral-fallback"
+        assert any("EPHEMERAL" in r.message for r in caplog.records)
 
     def test_broken_turso_falls_back_to_local_and_says_so(self, api, monkeypatch, caplog):
         """
@@ -152,26 +215,35 @@ class TestTursoBootPull:
         def boom(*a, **k):
             raise RuntimeError("connection refused")
         _install_fake_libsql(monkeypatch, connect=boom)
+        api._TURSO_BOOT_SYNC_DONE = False
+        api._ACTIVE_BACKEND = None
 
         async def use():
             async with api.get_db() as conn:
                 await conn.execute("SELECT 1")
         with caplog.at_level(logging.ERROR, logger="server"):
             _run(use())
+        assert api._ACTIVE_BACKEND == "local-ephemeral-fallback"
         assert any("EPHEMERAL" in r.message for r in caplog.records), \
             [r.message for r in caplog.records]
 
 
 class TestBackendDisclosure:
-    """_log_database_backend states the active store, loudly when it matters."""
+    """
+    _log_database_backend reports the ACTUAL backend get_db established, not
+    the configured one. A previous version logged "Turso cloud" from config
+    while the connection had in fact fallen back to ephemeral — precisely
+    backwards, and visible in a real deploy log.
+    """
 
-    def _server_with(self, monkeypatch, turso_url):
+    def _server_with(self, monkeypatch, turso_url, actual=None):
         monkeypatch.setattr("server.TURSO_DATABASE_URL", turso_url or "")
+        monkeypatch.setattr("server._ACTIVE_BACKEND", actual)
 
     def test_local_dev_is_info_not_alarm(self, api, monkeypatch, caplog):
         monkeypatch.delenv("RENDER", raising=False)
         monkeypatch.delenv("RENDER_SERVICE_NAME", raising=False)
-        self._server_with(monkeypatch, "")
+        self._server_with(monkeypatch, "", None)
         with caplog.at_level(logging.INFO, logger="server"):
             api._log_database_backend()
         assert not [r for r in caplog.records if r.levelno >= logging.CRITICAL]
@@ -185,7 +257,7 @@ class TestBackendDisclosure:
         next data-loss report discovers.
         """
         monkeypatch.setenv("RENDER", "true")
-        self._server_with(monkeypatch, "")
+        self._server_with(monkeypatch, "", None)
         with caplog.at_level(logging.INFO, logger="server"):
             api._log_database_backend()
         critical = [r for r in caplog.records if r.levelno >= logging.CRITICAL]
@@ -195,14 +267,39 @@ class TestBackendDisclosure:
     def test_turso_reports_cloud(self, api, monkeypatch, caplog):
         monkeypatch.delenv("RENDER", raising=False)
         monkeypatch.delenv("RENDER_SERVICE_NAME", raising=False)
-        self._server_with(monkeypatch, "libsql://prod-123.turso.io")
+        self._server_with(monkeypatch, "libsql://prod-123.turso.io", "turso")
         with caplog.at_level(logging.INFO, logger="server"):
             api._log_database_backend()
         assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
         assert any("Turso cloud" in r.message for r in caplog.records)
 
+    def test_actual_beats_configured(self, api, monkeypatch, caplog):
+        """
+        The production case that motivated this: TURSO_DATABASE_URL configured
+        (so config says "turso") while the connection fell back to ephemeral.
+        The log must report the fallback, never the config.
+        """
+        monkeypatch.delenv("RENDER", raising=False)
+        monkeypatch.delenv("RENDER_SERVICE_NAME", raising=False)
+        self._server_with(monkeypatch, "libsql://prod-123.turso.io",
+                          "local-ephemeral-fallback")
+        with caplog.at_level(logging.INFO, logger="server"):
+            api._log_database_backend()
+        assert any("EPHEMERAL" in r.message for r in caplog.records)
+        assert not any("Turso cloud" in r.message for r in caplog.records)
+
+    def test_fallback_on_render_is_critical(self, api, monkeypatch, caplog):
+        monkeypatch.setenv("RENDER", "true")
+        self._server_with(monkeypatch, "libsql://prod-123.turso.io",
+                          "local-ephemeral-fallback")
+        with caplog.at_level(logging.INFO, logger="server"):
+            api._log_database_backend()
+        critical = [r for r in caplog.records if r.levelno >= logging.CRITICAL]
+        assert critical
+        assert any("EPHEMERAL" in r.message for r in critical)
+
     def test_database_backend_helper(self, api, monkeypatch):
-        self._server_with(monkeypatch, "")
+        self._server_with(monkeypatch, "", None)
         assert api._database_backend() == "local-sqlite"
-        self._server_with(monkeypatch, "libsql://x.turso.io")
+        self._server_with(monkeypatch, "libsql://x.turso.io", None)
         assert api._database_backend() == "turso"

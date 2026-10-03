@@ -116,6 +116,12 @@ _ytdlp_semaphore = asyncio.Semaphore(1)
 # ---------------------------------------------------------------------------
 _TURSO_BOOT_SYNC_DONE = False
 
+# What the last get_db() call actually established, as opposed to what the
+# config asks for. "turso" is only ever set after a real connect+pull
+# succeeded; anything that reports the backend reads this first, so the deploy
+# log can never again claim cloud persistence while running ephemeral.
+_ACTIVE_BACKEND = None
+
 
 def _database_backend() -> str:
     """
@@ -138,14 +144,31 @@ def _log_database_backend() -> None:
     ephemeral host does, and it looks from the outside like the app "deleting"
     things. If that is the configuration, the deploy log must say so in plain
     language instead of letting the next data-loss report be the discovery.
+
+    Reports the ACTUAL backend established by get_db (module global), not the
+    configured one: a previous version logged "Turso cloud" from config while
+    the connection had in fact fallen back to ephemeral, which is precisely
+    backwards. Call only after init_db has run, so the actual value exists.
     """
-    if _database_backend() == "turso":
+    actual = _ACTIVE_BACKEND
+    if actual == "turso" or (actual is None and _database_backend() == "turso"):
+        # "turso" as an actual value is only ever set after a real
+        # connect+pull succeeded, so this line can no longer claim cloud
+        # persistence while running ephemeral. (The None branch covers a call
+        # before any connection was opened; init_db always connects first.)
         logger.info("Database backend: Turso cloud — user data survives redeploys.")
         return
-    message = (
-        f"Database backend: local SQLite at {DB_PATH}. User data (profiles, "
-        "projects, generations) will NOT survive a redeploy or restart."
-    )
+    if actual == "local-ephemeral-fallback":
+        message = (
+            "Database backend: EPHEMERAL local SQLite — Turso is configured but "
+            "unreachable, so user data (profiles, projects, generations) will "
+            "NOT survive a redeploy or restart."
+        )
+    else:
+        message = (
+            f"Database backend: local SQLite at {DB_PATH}. User data (profiles, "
+            "projects, generations) will NOT survive a redeploy or restart."
+        )
     if os.environ.get("RENDER") or os.environ.get("RENDER_SERVICE_NAME"):
         # Render sets these itself, so their presence means this process is on
         # Render's ephemeral filesystem rather than a dev laptop. Local SQLite
@@ -154,6 +177,8 @@ def _log_database_backend() -> None:
             message + " Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN (see render.yaml) "
             "or every deploy wipes the database."
         )
+    elif actual == "local-ephemeral-fallback":
+        logger.error(message)
     else:
         logger.info(message + " (fine for local dev)")
 
@@ -167,7 +192,9 @@ async def get_db():
     Otherwise falls back to local aiosqlite (for dev/testing).
     """
     use_turso = False
+    global _TURSO_BOOT_SYNC_DONE, _ACTIVE_BACKEND
     if TURSO_DATABASE_URL:
+        conn = None
         try:
             import libsql_experimental as libsql
             conn = libsql.connect(
@@ -175,25 +202,34 @@ async def get_db():
                 sync_url=TURSO_DATABASE_URL,
                 auth_token=TURSO_AUTH_TOKEN,
             )
-            conn.execute("PRAGMA journal_mode=WAL")
+            # No PRAGMA journal_mode=WAL here, deliberately — and it must stay
+            # out. Journal mode is a local-SQLite concern (kept on the local
+            # branch below); on a libsql embedded replica the statement is
+            # unsupported, and issuing it took down the whole Turso branch, so
+            # every boot fell back to ephemeral storage while the config said
+            # "Turso cloud". Durability on a replica comes from sync, not from
+            # pragmas.
+            #
             # Pull cloud state into the replica before anything reads it. A
             # freshly deployed container starts with an empty replica file, and
             # without this the first reads see no profiles at all — which looks
             # exactly like "the deploy deleted everything" even when the cloud
-            # copy is intact. Once per process is enough; every later sync
-            # happens on commit.
-            global _TURSO_BOOT_SYNC_DONE
+            # copy is intact. Retried on every connection until one succeeds
+            # (flag stays False), so recovery from a blip is automatic; a
+            # failed pull is FATAL to this attempt and falls back loudly below,
+            # because an unsynced replica is operationally identical to local
+            # SQLite while reporting as Turso — the worst combination.
             if not _TURSO_BOOT_SYNC_DONE:
-                try:
-                    conn.sync()
-                    _TURSO_BOOT_SYNC_DONE = True
-                except Exception as e:
-                    logger.warning(
-                        f"Turso boot pull-sync failed, will retry on next "
-                        f"connection (reads may lag the cloud copy): {e}"
-                    )
+                conn.sync()
+                _TURSO_BOOT_SYNC_DONE = True
             use_turso = True
+            _ACTIVE_BACKEND = "turso"
         except Exception as e:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
             # ERROR, not warning: from here on every write lands in an ephemeral
             # local file that the next redeploy wipes. Falling back keeps the
             # app serving, but it must never look routine in the logs.
@@ -202,6 +238,9 @@ async def get_db():
                 f"(user data will not survive a restart): {e}"
             )
             use_turso = False
+            _ACTIVE_BACKEND = "local-ephemeral-fallback"
+    else:
+        _ACTIVE_BACKEND = "local-sqlite"
 
     if use_turso:
         try:
@@ -10638,7 +10677,6 @@ async def debug_apify_test():
 # ---------------------------------------------------------------------------
 @app.on_event("startup")
 async def on_startup():
-    _log_database_backend()
     # Retry init_db up to 3 times — Turso or network hiccups during a cold
     # deploy must not permanently kill the container (uvicorn exits with code 3
     # if this handler raises, and Render marks the deploy as failed).
@@ -10659,6 +10697,11 @@ async def on_startup():
         logger.critical(
             f"init_db failed after 3 attempts, starting anyway: {last_error}"
         )
+    # AFTER init_db, deliberately: the disclosure reports the backend init_db
+    # actually established (module global), never the configured one. Logging
+    # it before would repeat the old lie — "Turso cloud" from config while the
+    # connection had fallen back to ephemeral.
+    _log_database_backend()
     if not os.environ.get("OPENROUTER_API_KEY"):
         logger.warning(
             "OPENROUTER_API_KEY is not set. The app will run, but AI features "
