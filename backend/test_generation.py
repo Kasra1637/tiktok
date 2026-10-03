@@ -91,30 +91,45 @@ class TestCapabilities:
         """
         The point of this list is that every entry can generate a video from a
         prompt, so no in-context editor is ever offered. H3 Max is a second
-        MiniMax generative model, and HeyGen Video 1 is a general-purpose
-        prompt-to-video model -- both generative, both offered for comparison
-        against the default. Aleph stays out because it edits a clip rather
-        than making one.
+        MiniMax generative model, offered for comparison against the default.
+        Aleph stays out because it edits a clip rather than making one, and
+        HeyGen Video 1 stays out until it is proven against our payload.
         """
         keys = [c["key"] for c in vp.list_capabilities()]
-        assert keys == ["minimax-h3", "minimax-h3-max", "heygen-video-1"]
+        assert keys == ["minimax-h3", "minimax-h3-max"]
         assert "aleph-2" not in keys
+        assert "heygen-video-1" not in keys
         for cap in vp.list_capabilities():
             assert cap["is_video_editor"] is False
 
-    def test_heygen_video_1_is_studio_eligible_but_not_the_default(self):
+    def test_heygen_video_1_is_withheld_until_proven(self):
         """
-        Adding a provider must not move production spend onto it. HeyGen
-        Video 1 is opt-in: it appears in the list so it can be picked by
-        name, and the default stays Hailuo 3.
-        """
-        assert vp.is_studio_eligible("heygen-video-1") is True
-        assert vp.default_model_key() == "minimax-h3"
-        assert vp.resolve(None)[0] == "minimax-h3"
+        Its HeyGen sibling, Avatar IV, was made selectable in 7c1d21f and could
+        not render a single clip: the provider refuses a text-driven request
+        unless the caller supplies options.heygen.voice_id, and the studio always
+        drives from the approved script. Video 1 may well be fine, but that is
+        reasoned from documentation, not observed.
 
-    def test_named_heygen_video_1_is_honoured(self):
-        key, _reason = vp.resolve("heygen-video-1")
-        assert key == "heygen-video-1"
+        So it stays catalogued and unreachable. Listing it would put an
+        unverified provider one click from a paid render, and the failure lands
+        on a founder rather than on us.
+        """
+        assert vp.is_known("heygen-video-1") is True
+        assert vp.is_studio_eligible("heygen-video-1") is False
+
+        # Named explicitly, it must resolve to a model that works rather than
+        # 400 — the same degradation an unknown or removed key gets.
+        key, reason = vp.resolve("heygen-video-1")
+        assert key == vp.default_model_key() == "minimax-h3"
+        # Not the operator's fault, so the reason must not blame the allowlist.
+        assert "ALLOWLIST" not in reason
+        assert "unverified" in reason
+
+        # The dropdown reads list_capabilities(), so absence there is what keeps
+        # it out of the UI rather than a special case in the frontend.
+        assert "heygen-video-1" not in [c["key"] for c in vp.list_capabilities()]
+        # Still catalogued, so lifting the hold is a one-line change.
+        assert vp.capability("heygen-video-1")["id"] == "heygen/heygen-video-1"
 
     def test_heygen_video_1_is_registered_at_its_real_id(self):
         cap = vp.capability("heygen-video-1")
@@ -144,19 +159,20 @@ class TestCapabilities:
 
     def test_heygen_video_1_takes_identity_as_first_frame(self):
         """
-        The catalog lists first_frame among supported_frame_images, so the
-        founder photo opens the clip -- the H3 treatment, no special routing
-        needed. This is why it replaced Avatar IV as the comparison provider:
-        same request shape as the default, at about half the price.
+        Recorded from the provider's catalog, not proven by a render: the model
+        lists first_frame among its supported frame images, so if it is ever
+        admitted the photo would ride the same way H3 Max's does. This is the
+        claim a live verify has to confirm before the model is listed.
         """
         assert vp.capability("heygen-video-1")["supports_first_frame"] is True
         assert vp.accepts_identity_reference("heygen-video-1") is True
 
     def test_removed_avatar_iv_falls_back_to_the_default(self):
         """
-        Avatar IV was replaced by HeyGen Video 1 as the comparison provider,
-        but old generation rows may still name it. capability() and resolve()
-        must fall back to the default rather than raise.
+        Avatar IV was selectable in 7c1d21f and could never render, so old
+        generation rows and any stale saved model may still name it. It is gone
+        from the catalog entirely, and capability() and resolve() must degrade
+        to a working provider rather than raise.
         """
         assert vp.is_known("heygen-avatar-iv") is False
         assert vp.is_studio_eligible("heygen-avatar-iv") is False
@@ -919,6 +935,71 @@ class TestProviderRefusalMessage:
         # Short enough to survive the server's truncation of the submit
         # detail: the raw nested JSON used to arrive cut off mid-string.
         assert len(message) <= 190
+
+    def test_heygen_voice_demand_gets_an_actionable_message_not_provider_json(self):
+        """
+        The verbatim 400 that reached a founder when Avatar IV was selectable.
+        It named a parameter the studio cannot send and then listed six voice
+        ids, so the founder was told nothing they could act on.
+        """
+        import ai_service
+        raw = (
+            '{"error":{"message":"avatar-iv requires provider.options.heygen.voice_id '
+            'when using a text prompt (script); supply an audio input reference '
+            'instead, or pick a voice such as: 16a09e4706f74997ba4ed05ea11470f6 '
+            '(Cassidy, English, female); 6be73833ef9a4eb0aeee399b8fe9d62b '
+            '(Andrew, English, male)"}}'
+        )
+        message = ai_service.describe_provider_refusal(raw, model_name="HeyGen Avatar IV")
+        assert message is not None
+        # Names the model, names the way out, and does not pretend a retry helps.
+        assert "HeyGen Avatar IV" in message
+        assert "another model" in message
+        assert "fails the same way" in message
+        # The whole point: none of the provider's own noise reaches the founder.
+        for leak in ("voice_id", "heygen.options", "Cassidy", "Andrew",
+                     "16a09e47", "{", "}"):
+            assert leak not in message
+        # Under the submit path's 200-char detail truncation, so the founder
+        # reads the remedy rather than a sentence that stops mid-thought.
+        assert len(message) <= 190
+
+    def test_voice_demand_is_not_offered_as_a_retry(self):
+        """
+        The submit path stores retryable from is_recoverable_error, and the UI
+        offers another attempt off that flag. This failure is permanent by
+        construction — the studio always drives from the script — so retrying
+        would spend again on a request that cannot succeed.
+        """
+        message = (
+            "avatar-iv requires provider.options.heygen.voice_id when using a "
+            "text prompt (script); supply an audio input reference instead"
+        )
+        assert gp.is_recoverable_error(message) is False
+
+    def test_unrecognised_provider_error_is_left_to_the_caller(self):
+        """
+        This helper classifies only the failures it can explain. An unrecognised
+        body must return None so the caller can describe the request it sent,
+        rather than being told it is a photo refusal or a shape problem.
+        """
+        import ai_service
+        assert ai_service.describe_provider_refusal("HTTP 500 internal error") is None
+        assert ai_service.describe_provider_refusal("") is None
+        assert ai_service.describe_provider_refusal(None) is None
+
+    def test_shape_markers_do_not_shadow_a_photo_refusal(self):
+        """
+        Order matters: a body mentioning both a filter code and a rejected field
+        is a content refusal, and the photo remedy is the right one to give.
+        """
+        import ai_service
+        message = ai_service.describe_provider_refusal(
+            '{"error":{"code":"InputImageSensitiveContentDetected",'
+            '"message":"unsupported parameter input_image"}}'
+        )
+        assert message is not None
+        assert "privacy filter" in message
 
     def test_non_refusal_errors_get_no_message(self):
         import ai_service

@@ -1163,26 +1163,68 @@ _PROVIDER_REFUSAL_MARKERS = (
     "input_image",
 )
 
+# Provider error signatures that mean "this provider cannot render the shape of
+# request the studio builds" — as opposed to disliking this particular input.
+#
+# The known case is HeyGen's avatar endpoint, which 400s a text-driven request
+# with "avatar-iv requires provider.options.heygen.voice_id when using a text
+# prompt (script)" and then lists candidate voice ids. The studio always drives
+# a render from the approved script, so that error is permanent by construction:
+# no retry, no re-roll and no script edit can satisfy it.
+#
+# These must also read as permanent in generation_planning.is_recoverable_error,
+# which is why "requires" is listed there too.
+_PROVIDER_SHAPE_MARKERS = (
+    "requires provider.options",
+    "voice_id",
+    "does not support",
+    "not supported",
+    "unsupported",
+    "unrecognized",
+    "unknown parameter",
+    "invalid parameter",
+    "is not a valid",
+)
 
-def describe_provider_refusal(error_text: str) -> Optional[str]:
+
+def describe_provider_refusal(error_text: str, model_name: str = "") -> Optional[str]:
     """
-    Founder-facing message for a provider content refusal, or None when the
-    payload is anything else.
+    Founder-facing message for a provider rejection, or None when the payload is
+    something else entirely.
 
-    The raw provider body is a nested JSON dump ("HTTP 400: {\"error\":
-    {\"code\": ...}}") that names a filter code and nothing actionable. On a
-    hook there is no bridge frame, so the refused input is the character
-    reference photo itself — and retrying it can never succeed, so the
-    message says what to change instead of inviting another attempt.
+    Two failure classes get a real sentence:
+
+    1. The provider refused the photo on content grounds. On a hook there is no
+       bridge frame, so the refused input IS the character reference — and
+       retrying it can never succeed, so the message says what to change instead
+       of inviting another attempt.
+
+    2. The provider cannot render the request shape at all. Same permanent
+       outcome, different remedy: nothing about this script or photo is wrong,
+       so the only way forward is a different model.
+
+    Neither message repeats the provider's body. It goes to the log, where it is
+    worth having, rather than into the founder's face, where it is a wall of JSON
+    naming parameters they cannot set.
     """
     lowered = (error_text or "").lower()
-    if not any(marker in lowered for marker in _PROVIDER_REFUSAL_MARKERS):
-        return None
-    return (
-        "The provider refused the reference photo (privacy filter) — retrying "
-        "won't help. Use a different photo: face forward, plain background, "
-        "no other people or readable text."
-    )
+    if any(marker in lowered for marker in _PROVIDER_REFUSAL_MARKERS):
+        return (
+            "The provider refused the reference photo (privacy filter) — retrying "
+            "won't help. Use a different photo: face forward, plain background, "
+            "no other people or readable text."
+        )
+    if any(marker in lowered for marker in _PROVIDER_SHAPE_MARKERS):
+        who = f"{model_name} " if model_name else "This model "
+        # Kept under ~190 characters on purpose: the submit path truncates the
+        # detail at 200, so anything longer loses its own remedy mid-sentence
+        # and the founder is left with a complaint instead of a next step.
+        return (
+            f"{who}can't render a scripted clip. That's a fixed limit of the "
+            f"model, not your script or photo - re-rendering fails the same way. "
+            f"Pick another model in the dropdown."
+        )
+    return None
 
 
 async def generate_video(
@@ -1440,8 +1482,24 @@ async def generate_video(
             if resp.status_code >= 400:
                 error_text = resp.text[:500]
                 logger.error(f"Video generation submission failed: HTTP {resp.status_code}: {error_text}")
-                human = describe_provider_refusal(error_text)
-                raise RuntimeError(human or f"Video generation failed (HTTP {resp.status_code}): {error_text}")
+                human = describe_provider_refusal(
+                    error_text, model_name=model_config.get("name", "")
+                )
+                if human:
+                    raise RuntimeError(human)
+                # Nothing here matched a known signature, so do not hand the
+                # founder a wall of nested provider JSON: it names fields they
+                # cannot set and offers no action. Describe the request we
+                # actually sent instead — that is what makes the next step
+                # obvious — and leave the provider's own words in the log above.
+                raise RuntimeError(
+                    f"The provider rejected this render before it started "
+                    f"(HTTP {resp.status_code}), so no clip was produced. We sent "
+                    f"{model_config.get('name', model_id)}, {payload['duration']}s, "
+                    f"{payload['resolution']}, {payload['aspect_ratio']}, "
+                    f"{'with' if payload.get('frame_images') else 'without'} your photo. "
+                    f"The full provider response is in the server log."
+                )
             break
 
         data = resp.json()

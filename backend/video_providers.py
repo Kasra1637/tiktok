@@ -118,11 +118,21 @@ _CAPABILITY_NOTES = {
 # on either and compare. Order here does not decide the default — that is
 # ai_service.DEFAULT_VIDEO_MODEL, and it stays Hailuo 3. Listing a second model
 # only makes it selectable in the studio's model dropdown.
-# HeyGen Video 1 is listed here so a founder can compare a cheaper 768p
-# render against Hailuo 3 on the same script. Listing it makes it
-# selectable; it changes neither the default (still Hailuo 3) nor the H3
-# entries.
-STUDIO_ELIGIBLE = ("minimax-h3", "minimax-h3-max", "heygen-video-1")
+#
+# HeyGen Video 1 is deliberately NOT listed yet. Its HeyGen sibling, Avatar IV,
+# was listed in 7c1d21f and could not render a single clip: HeyGen refuses a
+# text-driven request unless the caller supplies provider.options.heygen.voice_id,
+# and the studio drives every render from the approved script, so the render
+# 400s every time. Video 1 is catalogued and its capability notes are recorded
+# below, but whether it accepts the same payload shape is UNVERIFIED — the claim
+# that it synthesizes dialogue, ambience and sound effects in one call was
+# reasoned from the provider's documentation, not probed with a paid render.
+#
+# A provider that cannot render must not be one click away in the dropdown, so
+# eligibility waits for a real clip. backend/verify_live_renders.py
+# --models heygen-video-1 costs exactly one render and is the thing that lifts
+# this. See test_heygen_video_1_is_withheld_until_proven.
+STUDIO_ELIGIBLE = ("minimax-h3", "minimax-h3-max")
 
 # The hook length used when nothing states one. 5s is the lowest length the
 # current provider can render, so it needs no trim; a template's own
@@ -290,7 +300,16 @@ def resolve(key: Optional[str] = None) -> tuple:
         )
 
     if key not in allowed:
-        return default, f"{key} is not in VIDEO_MODEL_ALLOWLIST; using {default}"
+        # Say which of the two reasons actually applies. An operator narrowing
+        # VIDEO_MODEL_ALLOWLIST is a different problem from a provider we chose
+        # not to expose, and blaming the operator for the second sends whoever
+        # reads this log looking in the wrong place.
+        if (os.environ.get("VIDEO_MODEL_ALLOWLIST") or "").strip():
+            return default, f"{key} is not in VIDEO_MODEL_ALLOWLIST; using {default}"
+        return default, (
+            f"{key} is not offered by the studio (unsupported or unverified); "
+            f"using {default}"
+        )
 
     return key, f"requested provider {key}"
 

@@ -363,6 +363,13 @@ def is_recoverable_error(message: str) -> bool:
         "not found (404)",
         "expired",
         "prompt is too long",
+        # A provider demanding a field the studio never sends is permanent for
+        # the same reason an unsupported parameter is: the founder cannot supply
+        # it from the UI, so "retry" is an invitation to spend again on a
+        # request that cannot succeed. HeyGen's avatar endpoint 400s with
+        # "requires provider.options.heygen.voice_id when using a text prompt".
+        "requires provider.options",
+        "voice_id",
     )
     if any(marker in text for marker in permanent_markers):
         return False
