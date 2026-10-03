@@ -1032,12 +1032,18 @@ class TestStrategyPromptDirectives:
         The continuity-contract half of the old assertion is gone: there is no
         contract. What holds the two sections together is the scene lock, and it
         has to be stated as applying to both of them.
+
+        Clothing is the one thing the exclusion does NOT cover. It is chosen by
+        the strategy to suit the setting, so it has to appear in the very same
+        "holds for both sections" list — otherwise the rule that keeps the scene
+        consistent would silently exclude the wardrobe from consistency too.
         """
         captured = self._run_strategy(monkeypatch)
         assert "appearance is never" in captured["system"]
         assert "do not describe the presenter's face" in captured["prompt"]
         assert "The scene must hold for BOTH sections" in captured["prompt"]
-        assert "never the face, hair, age, build or styling" in captured["prompt"]
+        assert "Never the face, hair, skin, age, build or facial hair" in captured["prompt"]
+        assert "framing, wardrobe, props and delivery it locks" in captured["prompt"]
 
     def test_no_section_beyond_the_two_is_requested(self, monkeypatch):
         """

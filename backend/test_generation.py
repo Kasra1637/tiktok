@@ -556,6 +556,105 @@ class TestSinglePassPrompt:
             [{"kind": "character_reference", "name": "Home"}])
 
 
+class TestAppearanceIsLockedAndClothingIsNot:
+    """
+    The person's appearance comes from their photograph and nothing may change
+    it; their clothing is the one thing a scene may decide.
+
+    This split is the whole policy. It exists because the render prompt used to
+    (a) require the clothing to match the photograph, which contradicted the
+    scene deciding it, and (b) say the person was "animated rather than
+    re-imagined" while only asking the model to *match* what it was shown —
+    which is how a founder with short hair got long black hair added, because
+    nothing forbade adding any.
+    """
+
+    ANCHOR = [{"kind": "character_reference", "name": "face.png"}]
+
+    def test_the_anchor_forbids_adding_to_the_hair(self):
+        anchor = gp.person_anchor_notes(self.ANCHOR)
+        # Naming hair specifically, since that is what the model invents:
+        # video models express motion in hair by lengthening it.
+        assert "do not add, lengthen, restyle or recolour their hair" in anchor
+        assert "same hairline, colour, length, texture and parting" in anchor
+        # And the general form, so the next invented attribute is covered too.
+        assert "do not add or remove anything absent from the image" in anchor
+
+    def test_the_anchor_no_longer_asks_for_the_person_to_be_animated(self):
+        """
+        "Animated rather than re-imagined" is removed rather than reworded: it
+        is the phrasing that invited hair growth in the first place. Movement is
+        still asked for, but as movement only — the identity stays fixed.
+        """
+        anchor = gp.person_anchor_notes(self.ANCHOR)
+        assert "animated rather than re-imagined" not in anchor
+        assert "Move and speak naturally, but do not change who they are" in anchor
+
+    def test_the_anchor_no_longer_binds_clothing_to_the_photograph(self):
+        anchor = gp.person_anchor_notes(self.ANCHOR)
+        assert "clothing as they appear in the photograph" not in anchor
+        # ...and it says the opposite, so the two halves cannot be misread.
+        assert "Their clothing is the one exception" in anchor
+
+    def test_the_anchor_still_names_the_photograph_as_the_only_authority(self):
+        anchor = gp.person_anchor_notes(self.ANCHOR)
+        assert "the person in the attached character reference" in anchor
+        assert "The image is the only authority on who they are" in anchor
+
+    def test_a_scene_may_choose_the_wardrobe_and_it_is_locked(self):
+        """
+        Clothing belongs to the scene, so it reaches the lock and holds for both
+        sections like the room does. Its trailer already forbade re-wardrobing;
+        this is what makes that enforceable.
+        """
+        lock = gp.character_scene_lock({
+            "scene": {"wardrobe": "teal scrubs, silver ID badge", "lighting": "cool fluorescents"},
+        })
+        assert "wardrobe: teal scrubs, silver ID badge" in lock
+        assert "THE SCENE AND THE DELIVERY ARE LOCKED" in lock
+
+    def test_a_legacy_written_appearance_is_still_refused(self):
+        """
+        Strategies written before `character` was dropped still carry one. It
+        stays excluded by name — a fabricated face next to the real photograph
+        is the failure that put a founder's own face on someone else.
+        """
+        assert gp.character_scene_lock({
+            "character": {
+                "appearance": "a late-20s nurse", "hairstyle": "low bun",
+                "wardrobe": "teal scrubs", "age_range": "late 20s",
+            },
+        }) == ""
+
+    def test_an_empty_wardrobe_simply_omits_the_line(self):
+        """
+        Degrades gracefully: a strategy that named no clothing falls back to the
+        photograph's own, so nothing breaks and the rest of the lock still ships.
+        """
+        lock = gp.character_scene_lock({
+            "scene": {"wardrobe": "", "lighting": "cool fluorescents"},
+        })
+        # The labelled field line is what carries the value; the trailer still
+        # says "do not re-wardrobe", so the bare word is always present.
+        assert "wardrobe:" not in lock
+        assert "lighting: cool fluorescents" in lock
+
+    def test_the_strategy_schema_actually_carries_a_wardrobe(self):
+        """
+        A field the schema never asks for is never returned, so the scene cannot
+        choose clothing at all. This is the whole reason wardrobe was readmitted
+        alongside — and the reason it is a scene field rather than a character
+        one.
+        """
+        import ai_service
+
+        assert "wardrobe" in ai_service.STRATEGY_SCENE_FIELDS
+        normalized = ai_service.normalize_strategy(
+            {"scene": {"wardrobe": "a grey knit jumper"}}
+        )
+        assert normalized["scene"]["wardrobe"] == "a grey knit jumper"
+
+
 class TestRenderPromptLengthCap:
     """
     The provider refuses content[0].text past 7,000 characters, proven live by
@@ -608,8 +707,10 @@ class TestRenderPromptLengthCap:
         Every variable field at 6,000 chars — far past anything a strategy,
         template, profile or asset label really carries — must still assemble
         under RENDER_PROMPT_LIMIT. The number is measured, not picked: this
-        fixture lands at 6,632 against the 6,800 ceiling (provider refuses past
-        7,000, 200 margin for measuring differences).
+        fixture lands at 6,706 against the 6,800 ceiling (provider refuses past
+        7,000, 200 margin for measuring differences). It moved when the person
+        anchor grew its no-additions clause and wardrobe joined the lock, which
+        is why the figure is re-measured rather than carried forward.
         """
         prompt = gp.build_segment_prompt(
             strategy=self._verbose_strategy(),
@@ -647,7 +748,7 @@ class TestRenderPromptLengthCap:
         The no-strategy fallback reads founder-written fields (script, beats,
         overlays) that are equally unbounded, so it gets the same guarantee:
         a 12-beat, 10-overlay plan at 6,000 chars a field still assembles
-        under the ceiling (measured 5,859).
+        under the ceiling (measured 6,077).
         """
         big = self.BIG
         prompt = gp.build_single_pass_prompt(

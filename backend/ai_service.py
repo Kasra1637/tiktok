@@ -2396,15 +2396,25 @@ def _two_section_schema(middle_seconds: int) -> str:
 #
 # There is deliberately no STRATEGY_CHARACTER_FIELDS. The on-camera person is
 # copied from the founder's uploaded character reference image, so a written
-# description of their face, hair, age, build or wardrobe is not a fallback —
-# it is a fabrication, and it was being sent to the model alongside the
-# photograph as a "locked" value. The two disagreed, and the model was told
+# description of their face, hair, skin, age, build or facial hair is not a
+# fallback — it is a fabrication, and it was being sent to the model alongside
+# the photograph as a "locked" value. The two disagreed, and the model was told
 # both were authoritative, which is how a founder's own face came back as
 # somebody else's. The scene and performance directions are plan-level and do
 # not conflict with a photograph, so those stay.
+#
+# `wardrobe` is the single deliberate exception, and it is the right one.
+# Clothing is the only thing about a person's presentation that a scene has a
+# legitimate claim on: a founder photographed at a kitchen table in a t-shirt
+# can still be filmed at a hospital bench in scrubs, and that is the scenario
+# doing its job rather than the model inventing a person. So it is chosen here,
+# from the setting, and locked like the room. It was dropped with `character`
+# and readmitting only this field is what restores that — the fabrication
+# problem above was never about clothes, it was about the face.
 STRATEGY_SCENE_FIELDS = (
     "camera_angle", "framing", "lighting", "environment", "background",
-    "setting", "visual_style", "character_positioning", "props", "color_palette",
+    "setting", "visual_style", "character_positioning", "wardrobe", "props",
+    "color_palette",
 )
 STRATEGY_PERFORMANCE_FIELDS = ("movement", "voice_delivery")
 
@@ -2821,6 +2831,8 @@ async def generate_video_strategy(
         f'    "setting": "time of day and situational context",\n'
         f'    "visual_style": "the overall look — documentary, polished UGC, cinematic",\n'
         f'    "character_positioning": "where they stand or sit in frame",\n'
+        f'    "wardrobe": "what they are wearing, chosen to suit the setting — the ONE thing about '
+        f'their appearance this render may change",\n'
         f'    "props": "objects in shot, or explicitly none",\n'
         f'    "color_palette": "the colour palette of the scene",\n'
         '  },\n'
@@ -2871,10 +2883,18 @@ async def generate_video_strategy(
         "shows is the situation that feature belongs to, not the feature working. An "
         "unfilled slot is a generic video.\n"
         "- There is no \"character\" key in this schema and none is wanted: do not add one, "
-        "and do not describe the presenter's face, hair, age, build, wardrobe or styling in "
-        "any field — not in strategy_summary, not in hook_concept, nowhere. The on-camera "
-        "person is copied from the founder's photograph; write about the audience, the "
-        "problem, the app and the action instead.\n"
+        "and do not describe the presenter's face, hair, hair colour, hairstyle, skin, age, "
+        "build, facial hair or body in any field — not in strategy_summary, not in "
+        "hook_concept, nowhere. The on-camera person is copied from the founder's "
+        "photograph and nothing written here may contradict it; write about the audience, "
+        "the problem, the app and the action instead.\n"
+        "- scene.wardrobe is the ONE exception, and it is required. Fill it with what they "
+        "are wearing, chosen to suit scene.setting and the usage moment — a coat and a "
+        "scarf for a cold walk, scrubs for a hospital bench, a jumper for a desk. It is "
+        "the only thing about their appearance the render may change, and it must be "
+        "concrete: \"a grey knit jumper\" not \"something casual\". If the founder's own "
+        "clothes already suit the scene, repeat them. Never describe their body, face or "
+        "hair here, even to justify the clothes.\n"
         "- Invent the environment, setting, props and on-screen context concretely from the "
         "verified facts (features, use cases, problems, audience, platforms) — a kitchen "
         "counter at 7am for an evening-reflection app, not \"a nice room\". Nothing is "
@@ -2889,9 +2909,10 @@ async def generate_video_strategy(
         "text's — never describe them to achieve it. Vague terms like \"casual\" or \"a nice "
         "room\" are not acceptable.\n"
         "- The scene must hold for BOTH sections. The hook and the middle are one render, so "
-        "the background, lighting, framing, props and delivery it locks apply to the whole "
-        "piece — never the face, hair, age, build or styling, which come from the founder's "
-        "photograph rather than from anything written here.\n"
+        "the background, lighting, framing, wardrobe, props and delivery it locks apply to the "
+        "whole piece — and they hold for the clothing too: they change once, here, never "
+        "mid-video. Never the face, hair, skin, age, build or facial hair, which come from "
+        "the founder's photograph rather than from anything written here.\n"
         "- Every section must be satisfiable using only the verified facts above. Put anything "
         "that would need a claim from needs_review nowhere, or omit it entirely.\n"
         # The one field that closes the gap the schema otherwise leaves to

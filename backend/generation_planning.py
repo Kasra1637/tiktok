@@ -393,6 +393,19 @@ def person_anchor_notes(assets: list) -> str:
     on Hailuo 3 and as the opening frame on Hailuo 3 Max). This text tells the
     model what that image IS: the exact person who must appear on camera. First matching character_reference asset wins —
     attach only one per project.
+
+    Two things this deliberately does NOT say, both learned the hard way:
+
+    - It used to require the clothing to match the photograph too. Clothing is
+      now the one thing a scene may change (the strategy picks a wardrobe, see
+      character_scene_lock), so requiring it here contradicted the rest of the
+      prompt.
+    - It used to say "animated rather than re-imagined". That is very likely
+      what grew the invented hair: video models express motion in hair by
+      making it longer and flowing, so asking for the person to be *animated*
+      invites the model's most confident hair behaviour. Nothing in the prompt
+      forbade adding hair — only matching it — which left the addition
+      unspecified and therefore free. Hence the explicit no-additions clause.
     """
     if not assets:
         return ""
@@ -404,13 +417,16 @@ def person_anchor_notes(assets: list) -> str:
         label = _clip(asset.get("name") or asset.get("label") or "the attached character reference", 60)
         return (
             "The person on camera is the person in the attached character reference "
-            f"image ({label}). Copy that person: the same face, hair, skin, apparent age, "
-            "build and clothing as they appear in the photograph, animated rather than "
-            "re-imagined. The image is the only authority on who they are — where this "
-            "prompt or any written description states otherwise, ignore the text and "
-            "follow the image. Do not invent a different person, do not blend them with "
-            "anyone else, and do not describe them in words instead of using the image. "
-            "They star in every scene from opening to call to action."
+            f"image ({label}). Copy that person exactly: same face, skin, age and build, "
+            "and the same hair — same hairline, colour, length, texture and parting. "
+            "Their appearance is fixed by that photograph: do not add, lengthen, restyle "
+            "or recolour their hair, and do not add or remove anything absent from the "
+            "image (hats, glasses, jewellery, makeup). Move and speak naturally, but do "
+            "not change who they are. The image is the only authority on who they are — "
+            "where this prompt or any written description states otherwise, ignore the "
+            "text and follow the image. Do not invent a different person and do not blend "
+            "them with anyone else. Their clothing is the one exception: the scene above "
+            "sets it, and it need not match the photograph."
         )
     return ""
 
@@ -445,6 +461,11 @@ _SECTION_LABELS = {
         ("color_palette", "colour palette"),
         ("visual_style", "visual style"),
         ("character_positioning", "position in frame"),
+        # Wardrobe is the one presentational field that reaches the lock. It is
+        # chosen by the strategy to suit the setting and holds for both
+        # sections, which is why it belongs to the scene rather than to the
+        # person: everything about the person is the photograph's job.
+        ("wardrobe", "wardrobe"),
         ("props", "props"),
     ),
     "performance": (
@@ -470,6 +491,14 @@ def character_scene_lock(strategy: dict) -> str:
     alongside the photograph, under a heading telling the provider both were
     locked. Strategies generated before that was removed still carry such a
     block, so "character" is skipped here by name rather than trusted.
+
+    Wardrobe is the deliberate exception, and it sits in the scene rather than
+    the person for a reason: the strategy chooses clothes to suit the setting,
+    and a scene that claims someone has to keep them in the same outfit for
+    both sections. Locking it here is what makes "do not re-wardrobe" in the
+    trailer below enforceable — the clothing is stated once, by the thing that
+    decided it, instead of being left to the photograph and the model to
+    reconcile.
     """
     strategy = strategy or {}
     lines = []
@@ -637,10 +666,10 @@ def build_segment_prompt(
     )
 
     hook_line = _clip(strategy.get("hook_line"), 200)
-    hook_concept = _clip(strategy.get("hook_concept"), 90)
-    hook_action = _clip(strategy.get("hook_action"), 90)
-    hook_dialogue = _clip(strategy.get("hook_dialogue"), 90)
-    promise = _clip(strategy.get("hook_promise"), 50)
+    hook_concept = _clip(strategy.get("hook_concept"), 75)
+    hook_action = _clip(strategy.get("hook_action"), 75)
+    hook_dialogue = _clip(strategy.get("hook_dialogue"), 75)
+    promise = _clip(strategy.get("hook_promise"), 40)
     if hook_concept:
         sections.append(f"What the opening must DO: {hook_concept}")
     if hook_line:
@@ -691,9 +720,9 @@ def build_segment_prompt(
         ("middle", "MIDDLE", middle_seconds, "develop the hook and end at the reach"),
     ):
         section = sections_by_role.get(role) or {}
-        goal = _clip(section.get("goal"), 100)
-        script = _clip(section.get("script"), 200)
-        action = _clip(section.get("action"), 100)
+        goal = _clip(section.get("goal"), 85)
+        script = _clip(section.get("script"), 160)
+        action = _clip(section.get("action"), 85)
         block = [f"{label} — {budget}s, and its job is to {purpose}:"]
         if goal:
             block.append(f"  what it must achieve: {goal}")
@@ -713,13 +742,13 @@ def build_segment_prompt(
         sections.append("\n".join(block))
 
     if tpl.get("opening_structure"):
-        sections.append(f"Hook mechanism to honour: {_clip(tpl['opening_structure'], 90)}")
+        sections.append(f"Hook mechanism to honour: {_clip(tpl['opening_structure'], 80)}")
     if tpl.get("middle_structure"):
-        sections.append(f"Middle structure to honour: {_clip(tpl['middle_structure'], 90)}")
+        sections.append(f"Middle structure to honour: {_clip(tpl['middle_structure'], 80)}")
     if tpl.get("visual_style"):
-        sections.append(f"Visual style: {_clip(tpl['visual_style'], 90)}")
+        sections.append(f"Visual style: {_clip(tpl['visual_style'], 80)}")
     if tpl.get("camera_pacing"):
-        sections.append(f"Camera and pacing: {_clip(tpl['camera_pacing'], 90)}")
+        sections.append(f"Camera and pacing: {_clip(tpl['camera_pacing'], 80)}")
 
     sections.append(
         "On-screen text will be added afterwards. Plan clean space for it, and do not "
@@ -741,7 +770,8 @@ def build_segment_prompt(
     sections.append(
         f"Vertical 9:16 throughout. One continuous {seconds}-second take with no cut, no "
         f"black frame, and no title card. The person on camera is the same individual in "
-        f"every frame, in the same clothes, in the same place, under the same light."
+        f"every frame, with their face and hair exactly as in the reference photograph, in "
+        f"the one outfit this scene specifies, in the same place, under the same light."
     )
 
     return "\n\n".join(section for section in sections if section)
