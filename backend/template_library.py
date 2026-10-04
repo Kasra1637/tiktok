@@ -75,10 +75,13 @@ VIDEO_OBJECTIVES = [
     "address_user_problem",
     "compare_alternative",
     "introduce_new_app",
-    "promote_free_trial",
-    "encourage_app_store_visit",
     "build_awareness",
     "educate_viewers",
+    "achieve_desired_outcome",
+    "overcome_viewer_doubt",
+    "ease_daily_moment",
+    "avoid_common_mistake",
+    "feel_seen_and_understood",
 ]
 
 # Content angles, per the product spec. Angles are app-specific and get

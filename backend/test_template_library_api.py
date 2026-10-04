@@ -341,7 +341,7 @@ class TestTemplateListing:
     def test_facets_expose_vocabularies(self, api):
         facets = _run(api.template_facets(user_id=ANON))
         assert len(facets["hook_categories"]) >= 12
-        assert len(facets["objectives"]) == 10
+        assert len(facets["objectives"]) == 13
         assert len(facets["content_angle_kinds"]) == 12
         # Every supported length is one render now. Was [10, 15, 20, 30], which
         # offered two lengths no studio-eligible model could produce in a single

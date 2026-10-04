@@ -256,9 +256,7 @@ function MissingRequirements({ identity, onGoToTemplatePhoto }) {
         This template needs a character reference before it can generate
       </p>
       <p className="text-xs text-muted-foreground">
-        Every video is generated from your photograph — the person on camera
-        is the person in the reference, and the scene around them is invented
-        from the App Profile. Without one the model would invent somebody else.
+        The video is generated from your photograph.
       </p>
       {/* The button says where the upload is, and the upload is on the template
           step now. It used to point at a step called "Assets" whose only
@@ -441,7 +439,6 @@ export default function CreateVideo() {
   const [edits, setEdits] = useState({});
 
   const profileId = project?.brand_profile_id || selectedProfileId;
-  const profile = profiles.find((p) => p.id === profileId) || null;
   const angle = angles.find((a) => a.id === angleId) || null;
   const template = templates.find((t) => t.id === templateId) || null;
 
@@ -1026,9 +1023,7 @@ export default function CreateVideo() {
                     {unapproved.map(profileLabel).join(", ")}
                   </p>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    These are the apps you already created. They are not selectable until you
-                    review and approve them, so that a script can only build on facts you have
-                    checked.
+                    Not selectable until reviewed.
                   </p>
                   <Button variant="secondary" size="sm" asChild className="mt-3">
                     <Link to="/app-profiles">Review and approve</Link>
@@ -1059,8 +1054,7 @@ export default function CreateVideo() {
                 <span className="font-normal text-muted-foreground">(optional)</span>
               </label>
               <p className="text-xs text-muted-foreground">
-                Who this video is for. Your App Profile already describes your audience, so this
-                narrows the match further rather than defining it.
+                Optional — narrows the match.
               </p>
               {angles.length === 0 ? (
                 <Alert>
@@ -1112,17 +1106,13 @@ export default function CreateVideo() {
             <div className="space-y-1.5 rounded-xl border border-[color:var(--hairline)] p-4">
               <span className="text-sm font-medium">What you get</span>
               <p className="text-sm">
-                One render of {pieceSeconds}s in two sections: a {pieceSplit.hookSeconds}s hook,
-                then a {pieceSplit.middleSeconds}s middle that develops it and stops at the moment
-                you would reach for your phone.
+                One render of {pieceSeconds}s: a {pieceSplit.hookSeconds}s hook, then a{" "}
+                {pieceSplit.middleSeconds}s middle.
               </p>
               <p className="text-xs text-muted-foreground">
                 {template
-                  ? `The length comes from ${template.name} and is not a choice — pick a different template for a different one.`
-                  : "Choose a template and its length is used."}{" "}
-                There is no product demo in the generated video and no closing
-                card: you record the demo yourself, add your own call to action
-                after it, then post the result.
+                  ? `Length comes from ${template.name}.`
+                  : "Choose a template and its length is used."}
               </p>
             </div>
 
@@ -1158,10 +1148,7 @@ export default function CreateVideo() {
               </select>
               {!objective && (
                 <p className="text-xs text-muted-foreground">
-                  Pick one to continue. This is the strongest signal in the
-                  template recommendation — a template built for this goal outranks
-                  one that merely fits — and tailored templates are generated for the
-                  goal you choose here.
+                  Required. Strongest signal in template ranking.
                 </p>
               )}
             </div>
@@ -1174,9 +1161,6 @@ export default function CreateVideo() {
                 onChange={(e) => setTone(e.target.value)}
                 placeholder="e.g. calm and direct"
               />
-              <p className="text-xs text-muted-foreground">
-                Seeds the plan, and you can change it on the Review step.
-              </p>
             </div>
           </div>
         </StepShell>
@@ -1188,11 +1172,7 @@ export default function CreateVideo() {
         <StepShell
           icon={LayoutTemplate}
           title="Choose a template and add your photo"
-          description={
-            objective
-              ? `Every template below is scored against ${profile?.brand_name || "this app"} and your goal. Pick one, then attach the photo it is generated from.`
-              : "Pick a goal on the previous step first — the templates are scored against it."
-          }
+          description="Scored for this app and goal. Pick one, then attach your photo."
         >
           <div className="space-y-4">
             {/* No objective means no honest scoring to show. The card list used
@@ -1205,9 +1185,7 @@ export default function CreateVideo() {
                   Choose what this video is for before picking a template.
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  The objective is the heaviest signal in the score, and tailored templates are
-                  generated for the goal you choose. Without it the list below would be ranked on
-                  much weaker evidence while looking identical.
+                  Required before templates can be ranked.
                 </p>
                 <Button variant="secondary" size="sm" className="mt-3" onClick={() => setStep(1)}>
                   <Target className="h-3.5 w-3.5" /> Set the goal
@@ -1241,8 +1219,8 @@ export default function CreateVideo() {
                 <p className="text-sm">No templates recommended for this app yet.</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {recError
-                    ? `The ranking request failed (${recError}) — nothing was ranked, so this is not a verdict on the app. You can still pick one below if the library has anything.`
-                    : "Nothing was ranked for this profile and goal — the request may have failed, or this app has no compatible templates. You can still pick one below if the library has anything."}
+                    ? `Ranking failed (${recError}).`
+                    : "Nothing ranked for this profile and goal."}
                 </p>
               </div>
             )}
@@ -1299,7 +1277,7 @@ export default function CreateVideo() {
                         <span className={r.have ? "text-muted-foreground" : ""}>{humanize(r.kind)}</span>
                         {!r.have && project && (
                           <span className="text-muted-foreground">
-                            — required, the video is generated from it
+                            — required
                           </span>
                         )}
                       </div>
@@ -1329,9 +1307,7 @@ export default function CreateVideo() {
             <div id="template-photo" className="space-y-3 border-t border-[color:var(--hairline)] pt-4">
               <span className="eyebrow block">Your photo</span>
               <p className="text-sm text-muted-foreground">
-                Every video is generated from one photograph — the person on camera is the person in
-                the reference, and the room around them is written from your App Profile. Without
-                one the model invents somebody else.
+                One photo. The person on camera is the person in the reference.
               </p>
               {!templateId ? (
                 <p className="text-sm text-muted-foreground">
@@ -1340,9 +1316,7 @@ export default function CreateVideo() {
               ) : !project ? (
                 <>
                   <p className="text-sm text-muted-foreground">
-                    A free draft from your profile, goal and template is created so your photo has
-                    somewhere to live. Drafts cost nothing; only a marked-ready generation spends
-                    money.
+                    Free draft holds your photo. Only a marked-ready generation spends.
                   </p>
                   <Button variant="secondary" size="sm" disabled={busy} onClick={() => ensureProject()}>
                     {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
@@ -1368,8 +1342,7 @@ export default function CreateVideo() {
                     </span>
                     {(project.assets || []).length === 0 ? (
                       <p className="text-sm text-muted-foreground">
-                        Nothing attached yet. Attach your photograph above — the video cannot be
-                        generated without it.
+                        Nothing attached yet.
                       </p>
                     ) : (
                       <div className="space-y-2">
@@ -1397,14 +1370,13 @@ export default function CreateVideo() {
         <StepShell
           icon={Sparkles}
           title="Hook & middle"
-          description="Read the strategy built from the plan you approved, then render the piece: a hook, then a middle that stops where you would reach for your phone. The demo and the close are yours to record and add afterwards."
+          description="Render the piece from your approved plan: hook, then middle."
         >
           <div className="space-y-3">
             {!canGenerate ? (
               <div className="rounded-xl border border-[color:var(--hairline)] p-4">
                 <p className="text-sm text-muted-foreground">
-                  Pick an App Profile and a hook template first — the strategy is built from
-                  both, so the piece has to serve the mechanism you picked.
+                  Pick an App Profile and a hook template first.
                 </p>
               </div>
             ) : blockedOnAssets ? (
@@ -1415,9 +1387,7 @@ export default function CreateVideo() {
             ) : !project ? (
               <div className="rounded-xl border border-[color:var(--hairline)] p-4">
                 <p className="text-sm text-muted-foreground">
-                  A free draft is created from your profile, angle, and template so the
-                  strategy and the piece have somewhere to live. Drafts cost nothing; only a
-                  marked-ready generation spends money.
+                  Free draft holds your work. Only a marked-ready generation spends.
                 </p>
                 <Button
                   variant="brand"
@@ -1435,9 +1405,7 @@ export default function CreateVideo() {
                 {!project?.script_version ? (
                   <div className="rounded-xl border border-[color:var(--hairline)] p-4">
                     <p className="text-sm text-muted-foreground">
-                      There is no plan yet, so there are no approved words to render. Generate one
-                      on the Review step first — it costs nothing, and it is what the strategy below
-                      is built from.
+                      No plan yet. Generate one on Review first — it is free.
                     </p>
                     <Button
                       variant="secondary"
@@ -1493,7 +1461,7 @@ export default function CreateVideo() {
           <div className="space-y-3 rounded-xl border border-[color:var(--hairline)] p-4">
             {!templateId && (
               <p className="text-sm text-muted-foreground">
-                Choose a template first — the plan is written to serve the one you pick.
+                Choose a template first.
               </p>
             )}
             <MissingRequirements
@@ -1509,9 +1477,7 @@ export default function CreateVideo() {
               Generate the plan
             </Button>
             <p className="text-xs text-muted-foreground">
-              Free, and nothing is charged. It writes the hook line, the script, the shot timeline,
-              your on-screen text, and a note on what to record for your own demo — then checks every
-              claim in it. Everything it produces is editable below.
+              Free. Writes hook, script, shots, and demo note. Editable below.
             </p>
           </div>
         ) : (
@@ -1596,9 +1562,7 @@ export default function CreateVideo() {
                 placeholder="e.g. Record yourself tapping the timer once, hands only"
               />
               <p className="text-xs text-muted-foreground">
-                A note to you, not to the model. The generated video ends where you would reach
-                for your phone, and this is what happens next — so it never reaches the render,
-                and the demo is your own footage attached afterwards.
+                For you, not the model.
               </p>
             </div>
             <div className="space-y-1.5">
@@ -1657,8 +1621,8 @@ export default function CreateVideo() {
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {project?.script_version
-                    ? "The shot timeline above is written to this length, and it is rendered in one pass. To change it, pick a different template on the Template & photo step and regenerate the plan."
-                    : "Set by the hook template you pick. There is no length to choose."}
+                    ? "Written to this length. Pick a different template to change it."
+                    : "Set by the hook template you pick."}
                 </p>
               </div>
               <div className="space-y-1.5">
@@ -1723,10 +1687,6 @@ export default function CreateVideo() {
             {/* Nothing that spends money renders on this step. GenerationPanel
                 lives on the step below, so the claim check above has been read
                 before any render is paid for. */}
-            <p className="text-sm text-muted-foreground">
-              Read the script, the demo note and the claim check above, then open the Hook &amp;
-              middle step to render it. Nothing is generated from this page.
-            </p>
           </div>
         )}
         </StepShell>
@@ -1752,7 +1712,7 @@ export default function CreateVideo() {
       <PageHeader
         icon={Clapperboard}
         title="Create Video"
-        description="Build a short-form promo from an approved App Profile and a hook template. It renders a hook and a middle for you; you record the demo, add the close, and post it. Nothing is published."
+        description="Hook + middle from an approved profile and template. You record the demo and close."
         actions={
           project ? (
             <Badge variant="secondary" className="text-xs">
@@ -1867,9 +1827,8 @@ export default function CreateVideo() {
           demo and the close are footage the founder records, not something a
           render can supply. */}
       <p className="text-xs text-muted-foreground">
-        Videos are generated here and posted by hand. The render gives you the hook and the
-        middle; the demo and the call to action are yours to record and attach. This tool never
-        publishes to any platform and never asks for platform credentials.
+        Generated here, posted by hand. The demo and call to action are yours. This tool never
+        publishes or asks for platform credentials.
       </p>
     </div>
   );

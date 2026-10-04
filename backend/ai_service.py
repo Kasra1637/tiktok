@@ -2042,7 +2042,7 @@ async def generate_brand_templates(
         "{\n"
         '  "name": "short specific title naming this app\'s angle on the mechanic",\n'
         '  "category": "one of the categories listed above",\n'
-        '  "objective": "address_user_problem | create_curiosity | demonstrate_feature | build_awareness | educate_viewers",\n'
+        '  "objective": "address_user_problem | create_curiosity | demonstrate_feature | build_awareness | educate_viewers | achieve_desired_outcome | overcome_viewer_doubt | ease_daily_moment | avoid_common_mistake | feel_seen_and_understood",\n'
         '  "opening_structure": "what the first 4 seconds do, concretely for THIS app",\n'
         '  "hook_seconds": 3,\n'
         '  "middle_structure": "how the rest of the GENERATED piece develops that hook, concretely for THIS app. It must stop at the moment the viewer would reach for the app.",\n'
