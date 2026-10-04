@@ -83,6 +83,29 @@ const STEPS = [
   { key: "hook", label: "Hook & middle", icon: Sparkles },
 ];
 
+/**
+ * Objective groups for the picker. The list grew to 13 with the
+ * outcome-driven additions, and a flat list makes the two new families
+ * (outcomes vs struggles) invisible. Native optgroups keep the accessible,
+ * mobile-friendly select while giving it structure. Objectives the backend
+ * serves that no group names yet fall into "Other" rather than vanishing.
+ */
+const OBJECTIVE_GROUPS = [
+  { label: "Show the outcome", values: ["achieve_desired_outcome", "ease_daily_moment", "avoid_common_mistake"] },
+  { label: "Name the struggle", values: ["address_user_problem", "overcome_viewer_doubt", "feel_seen_and_understood"] },
+  { label: "Present the app", values: ["explain_app", "demonstrate_feature", "introduce_new_app", "compare_alternative", "create_curiosity", "build_awareness", "educate_viewers"] },
+];
+
+function groupedObjectives(objectives) {
+  const list = objectives || [];
+  const groups = OBJECTIVE_GROUPS.map((g) => ({
+    ...g,
+    items: list.filter((o) => g.values.includes(o)),
+  })).filter((g) => g.items.length > 0);
+  const grouped = new Set(OBJECTIVE_GROUPS.flatMap((g) => g.values));
+  return { groups, rest: list.filter((o) => !grouped.has(o)) };
+}
+
 function formatTemplateUse(n) {
   if (!n) return "Never used";
   return n === 1 ? "Used once" : `Used ${n} times`;
@@ -139,9 +162,9 @@ function RecommendationCard({ r, selected, onSelect }) {
           : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
       }`}
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-sm font-medium">{r.template.name}</span>
-        <span className="flex items-center gap-2">
+        <span className="flex flex-wrap items-center gap-2">
           <Badge variant="outline" className="text-[11px]">
             {r.suggested_duration}s
           </Badge>
@@ -1019,9 +1042,20 @@ export default function CreateVideo() {
                   <p className="text-sm font-medium">
                     {describeUnapprovedCount(unapproved.length)}
                   </p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {unapproved.map(profileLabel).join(", ")}
-                  </p>
+                  {unapproved.length > 3 ? (
+                    <details className="mt-0.5">
+                      <summary className="cursor-pointer text-xs text-muted-foreground">
+                        Show all {unapproved.length} apps
+                      </summary>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {unapproved.map(profileLabel).join(", ")}
+                      </p>
+                    </details>
+                  ) : (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {unapproved.map(profileLabel).join(", ")}
+                    </p>
+                  )}
                   <p className="mt-2 text-xs text-muted-foreground">
                     Not selectable until reviewed.
                   </p>
@@ -1037,6 +1071,7 @@ export default function CreateVideo() {
     }
 
     if (step === 1) {
+      const { groups: objectiveGroups, rest: otherObjectives } = groupedObjectives(facets?.objectives);
       return (
         <StepShell
           icon={Target}
@@ -1079,9 +1114,12 @@ export default function CreateVideo() {
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm font-medium">{a.label}</span>
-                        <Badge variant="secondary" className="text-[11px]">
-                          {humanize(a.kind)}
-                        </Badge>
+                        <span className="flex items-center gap-1.5">
+                          <Badge variant="secondary" className="text-[11px]">
+                            {humanize(a.kind)}
+                          </Badge>
+                          {angleId === a.id && <Check className="h-4 w-4 text-[color:var(--brand-indigo)]" />}
+                        </span>
                       </div>
                       {a.user_problem && (
                         <p className="mt-1 text-xs text-muted-foreground">{a.user_problem}</p>
@@ -1111,8 +1149,11 @@ export default function CreateVideo() {
               </p>
               <p className="text-xs text-muted-foreground">
                 {template
-                  ? `Length comes from ${template.name}.`
-                  : "Choose a template and its length is used."}
+                  ? `Length comes from ${template.name} — not a choice.`
+                  : "Choose a template — its length is used, not a choice."}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Your demo, your close: you record the demo yourself and add your own call to action after it.
               </p>
             </div>
 
@@ -1142,9 +1183,20 @@ export default function CreateVideo() {
                 className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
               >
                 <option value="">Choose an objective</option>
-                {(facets?.objectives || []).map((o) => (
-                  <option key={o} value={o}>{humanize(o)}</option>
+                {objectiveGroups.map((g) => (
+                  <optgroup key={g.label} label={g.label}>
+                    {g.items.map((o) => (
+                      <option key={o} value={o}>{humanize(o)}</option>
+                    ))}
+                  </optgroup>
                 ))}
+                {otherObjectives.length > 0 && (
+                  <optgroup label="Other">
+                    {otherObjectives.map((o) => (
+                      <option key={o} value={o}>{humanize(o)}</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
               {!objective && (
                 <p className="text-xs text-muted-foreground">
@@ -1180,17 +1232,16 @@ export default function CreateVideo() {
                 founder could pick the top card from reasons that did not mention
                 their goal at all. */}
             {!objective && (
-              <div className="rounded-xl border border-[color:var(--hairline)] p-4">
-                <p className="text-sm">
-                  Choose what this video is for before picking a template.
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Required before templates can be ranked.
-                </p>
-                <Button variant="secondary" size="sm" className="mt-3" onClick={() => setStep(1)}>
-                  <Target className="h-3.5 w-3.5" /> Set the goal
-                </Button>
-              </div>
+              <EmptyState
+                icon={Target}
+                title="Choose what this video is for before picking a template."
+                description="Required before templates can be ranked."
+                action={
+                  <Button variant="secondary" size="sm" onClick={() => setStep(1)}>
+                    <Target className="h-3.5 w-3.5" /> Set the goal
+                  </Button>
+                }
+              />
             )}
             {profileId && objective && (
               <div className="flex flex-wrap items-center gap-2">
@@ -1227,6 +1278,7 @@ export default function CreateVideo() {
             {objective && recommendations.length > 0 && (
               <div className="space-y-2">
                 <span className="eyebrow block">Recommended</span>
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 {recommendations.map((r) => (
                   <RecommendationCard
                     key={r.template.id}
@@ -1239,6 +1291,7 @@ export default function CreateVideo() {
                     }}
                   />
                 ))}
+                </div>
               </div>
             )}
 
@@ -1405,7 +1458,7 @@ export default function CreateVideo() {
                 {!project?.script_version ? (
                   <div className="rounded-xl border border-[color:var(--hairline)] p-4">
                     <p className="text-sm text-muted-foreground">
-                      No plan yet. Generate one on Review first — it is free.
+                      There's no plan yet. Generate one on Review first — it is free.
                     </p>
                     <Button
                       variant="secondary"
@@ -1523,6 +1576,7 @@ export default function CreateVideo() {
                 </p>
               </div>
             )}
+            <span className="eyebrow block">Script</span>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Hook line</label>
               <Input
@@ -1562,9 +1616,10 @@ export default function CreateVideo() {
                 placeholder="e.g. Record yourself tapping the timer once, hands only"
               />
               <p className="text-xs text-muted-foreground">
-                For you, not the model.
+                A note to you, not the model — never reaches the render.
               </p>
             </div>
+            <span className="eyebrow block">Look &amp; sound</span>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Visual direction</label>
               <Textarea
@@ -1581,14 +1636,14 @@ export default function CreateVideo() {
                 the plan as generated — so the edits warning is repeated here
                 where the damage is visible. */}
             {editValue("beat_timeline", []).length > 0 && (
-              <div
+              <details
                 className="rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4"
                 data-testid="shot-timeline"
               >
-                <div className="flex flex-wrap items-center gap-2">
+                <summary className="flex cursor-pointer flex-wrap items-center gap-2">
                   <span className="eyebrow block">Shot timeline</span>
                   <Badge variant="outline" className="text-[11px]">read-only</Badge>
-                </div>
+                </summary>
                 <div className="mt-2 space-y-1.5 text-sm">
                   {editValue("beat_timeline", []).map((b, i) => (
                     <div key={i} className="flex gap-2">
@@ -1604,7 +1659,7 @@ export default function CreateVideo() {
                     ? "This still describes the plan as generated. Edit the script above and regenerate to bring it back in line."
                     : "Written by the plan to fit this length. Regenerate the plan to rewrite it."}
                 </p>
-              </div>
+              </details>
             )}
 
             {/* Length is shown, not edited, and it is not a founder choice at
@@ -1621,7 +1676,7 @@ export default function CreateVideo() {
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {project?.script_version
-                    ? "Written to this length. Pick a different template to change it."
+                    ? "The timeline is written to this length. Pick a different template to change it."
                     : "Set by the hook template you pick."}
                 </p>
               </div>
@@ -1655,6 +1710,7 @@ export default function CreateVideo() {
               </div>
             </div>
 
+            <span className="eyebrow block">Checks</span>
             <SafetyPanel
               report={project.safety_report}
               summary={project.safety_summary}
@@ -1701,9 +1757,26 @@ export default function CreateVideo() {
 
   if (loading) {
     return (
-      <p className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading studio...
-      </p>
+      <div className="space-y-6" aria-label="Loading studio" data-testid="studio-loading">
+        <div className="flex items-center gap-1.5">
+          {STEPS.map((s) => (
+            <span key={s.key} className="h-7 w-24 shrink-0 animate-pulse rounded-full border border-[color:var(--hairline)]" />
+          ))}
+        </div>
+        <div className="surface rounded-2xl p-5 md:p-6">
+          <div className="mx-auto w-full max-w-3xl space-y-4">
+            <div className="flex items-start gap-3">
+              <span className="h-10 w-10 shrink-0 animate-pulse rounded-xl border border-[color:var(--hairline)]" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 w-40 animate-pulse rounded bg-secondary/60" />
+                <div className="h-3 w-full animate-pulse rounded bg-secondary/40" />
+              </div>
+            </div>
+            <div className="h-24 animate-pulse rounded-2xl border border-[color:var(--hairline)]" />
+            <div className="h-24 animate-pulse rounded-2xl border border-[color:var(--hairline)]" />
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -1735,7 +1808,7 @@ export default function CreateVideo() {
           with the rest of the row — and the distinction never needed color,
           because the sentence underneath already names what is waiting and the
           pills already announce it. */}
-      <nav aria-label="Progress" className="flex flex-wrap items-center gap-1.5">
+      <nav aria-label="Progress" className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
         {stepStates.map((s, i) => {
           const active = i === step;
           const Icon = s.state === "done" ? Check : s.step.icon;
@@ -1751,7 +1824,7 @@ export default function CreateVideo() {
               title={STEP_STATE_COPY[s.state]}
               data-state={s.state}
               data-testid={`step-pill-${s.step.key}`}
-              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
                 active
                   ? "border-[color:var(--indigo-35)] bg-primary/15 text-[color:var(--brand-indigo)]"
                   : s.state === "done"
@@ -1795,7 +1868,11 @@ export default function CreateVideo() {
       )}
 
       <div className="surface rounded-2xl p-5 md:p-6">
-        {stepContent}
+        {step === 2 ? (
+          stepContent
+        ) : (
+          <div className="mx-auto w-full max-w-3xl">{stepContent}</div>
+        )}
       </div>
 
       {/* Back and Next used to live here and were pure duplication: every step

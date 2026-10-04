@@ -234,9 +234,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        This is what the render follows: a hook, then a middle that develops it and stops at the
-        moment you'd reach for your phone. Everything after that is yours to record and add — the
-        demo is your own footage and the close is your own words.
+        What the render follows. Everything after the middle is yours to record and add.
       </p>
 
       {error && (
