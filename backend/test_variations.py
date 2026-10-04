@@ -11,12 +11,12 @@ import variations as v
 
 
 class TestCatalogue:
-    def test_nine_variation_axes(self):
-        assert len(v.VARIATIONS) == 9
+    def test_eight_variation_axes(self):
+        assert len(v.VARIATIONS) == 8
 
     def test_catalogue_covers_the_specified_axes(self):
         expected = {
-            "hook_line", "cta", "audience", "tone", "pacing",
+            "hook_line", "audience", "tone", "pacing",
             "template", "visual_opening", "app_feature", "duration",
         }
         assert set(v.VARIATIONS) == expected
@@ -27,7 +27,7 @@ class TestCatalogue:
         assert v.get_variation("duration").needs_plan is False
 
     def test_creative_axes_need_a_rewrite(self):
-        for key in ("hook_line", "cta", "audience", "tone", "pacing",
+        for key in ("hook_line", "audience", "tone", "pacing",
                     "visual_opening", "app_feature"):
             assert v.get_variation(key).needs_plan is True
 
@@ -81,7 +81,7 @@ class TestValueCoercion:
             v.coerce_value(spec, "   ")
 
     def test_text_value_is_length_capped(self):
-        spec = v.get_variation("cta")
+        spec = v.get_variation("app_feature")
         with pytest.raises(ValueError):
             v.coerce_value(spec, "x" * 700)
 
@@ -94,6 +94,9 @@ class TestApplyVariation:
     PROJECT = {
         "hook_line": "Old hook",
         "script": "Old spoken script.",
+        # `cta` is here because rows written before the axis was retired still
+        # carry it. No axis may write it any more, and every test below holds
+        # the catalogue to that.
         "cta": "Old CTA",
         "audience": "Busy parents",
         "tone": "calm",
@@ -109,10 +112,17 @@ class TestApplyVariation:
         assert updates["script"].startswith("Stop doing this")
         assert "Old spoken script." in updates["script"]
 
-    def test_cta_variation_touches_only_the_cta(self):
-        spec = v.get_variation("cta")
-        updates, _ = v.apply_variation(self.PROJECT, spec, "Get it on the App Store")
-        assert set(updates) == {"cta"}
+    def test_the_retired_cta_axis_is_not_offered(self):
+        """
+        A generated piece has no closing beat: the middle stops at the moment
+        the presenter reaches for the app, and the founder records their own
+        demo and close. An axis that could only write the retired `cta` column
+        was a control that looked like it changed the video and could not, so
+        it was removed rather than relabelled.
+        """
+        assert v.get_variation("cta") is None
+        assert "cta" not in v.VARIATIONS
+        assert "cta" not in v.ALLOWED_FIELDS
 
     def test_audience_variation_touches_only_the_audience(self):
         spec = v.get_variation("audience")
@@ -173,11 +183,14 @@ class TestApplyVariation:
 
     def test_every_axis_changes_something(self):
         sample = {
-            "hook_line": "New hook", "cta": "New CTA", "audience": "New audience",
+            "hook_line": "New hook", "audience": "New audience",
             "tone": "new tone", "pacing": "faster", "template": "tid",
             "visual_opening": "New opening", "app_feature": "New feature",
             "duration": "15",
         }
+        # Pinned both ways: an axis added or removed without a value here is
+        # exactly how the retired `cta` axis went unnoticed in this file.
+        assert set(sample) == set(v.VARIATIONS)
         for key, value in sample.items():
             spec = v.get_variation(key)
             updates, _ = v.apply_variation(self.PROJECT, spec, value)
@@ -186,7 +199,7 @@ class TestApplyVariation:
 
     def test_a_variation_never_rewrites_the_script_except_for_the_hook(self):
         """Only a new hook line may prepend to the script."""
-        for key, value in (("cta", "New CTA"), ("tone", "x"), ("audience", "y")):
+        for key, value in (("tone", "x"), ("audience", "y"), ("app_feature", "z")):
             spec = v.get_variation(key)
             updates, _ = v.apply_variation(self.PROJECT, spec, value)
             assert "script" not in updates, key

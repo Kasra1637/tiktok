@@ -13,8 +13,12 @@ Two rules shape this module:
   video is a second, separate decision.
 - Cheap changes stay cheap. Changing the template, duration, tone, or
   audience only rewrites project fields and needs no model call at all.
-  Changing the hook, CTA, feature, or visual opening needs a fresh script,
+  Changing the hook, feature, or visual opening needs a fresh script,
   which is a text call, not a video call.
+- No axis promises a call to action. A generated piece has no closing beat:
+  the founder records their own demo and close. The axis that used to swap one
+  was removed rather than relabelled, because there was nothing left for it to
+  change.
 """
 import logging
 from typing import Optional
@@ -28,8 +32,15 @@ logger = logging.getLogger(__name__)
 # 'script' is included because a new hook line is spoken first: changing only
 # hook_line would leave the script opening with the old line, so the two would
 # contradict each other in the finished video.
+#
+# 'cta' used to be here. It is gone because there is no call to action in a
+# generated piece: the middle ends at the moment the viewer would reach for the
+# app, and the founder records their own demo and close. An axis that wrote the
+# retired column was a control that looked like it changed the video and could
+# not. The `cta` column survives in the SQLite schema for rows written before
+# this, and nothing writes or reads it.
 ALLOWED_FIELDS = frozenset({
-    "hook_line", "cta", "audience", "tone", "pacing",
+    "hook_line", "audience", "tone", "pacing",
     "template_id", "visual_direction", "feature_emphasis", "duration_seconds",
     "script",
 })
@@ -60,11 +71,6 @@ VARIATIONS = {
             "hook_line", "New hook line",
             "Rewrites the opening line that earns the first 3 seconds.",
             needs_plan=True, fields=("hook_line",),
-        ),
-        VariationSpec(
-            "cta", "New call to action",
-            "Swaps the closing ask, e.g. App Store visit instead of free trial.",
-            needs_plan=True, fields=("cta",),
         ),
         VariationSpec(
             "audience", "Different audience segment",

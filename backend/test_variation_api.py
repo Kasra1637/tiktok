@@ -94,10 +94,19 @@ def _generation(api, profile, name, status="completed", with_plan=True):
 
 
 class TestVariationCatalogueEndpoint:
-    def test_lists_the_nine_axes(self, api):
+    def test_lists_the_eight_axes(self, api):
         result = _run(api.list_variation_kinds())
-        assert len(result["variations"]) == 9
+        assert len(result["variations"]) == 8
         assert {v["key"] for v in result["variations"]} >= {"hook_line", "duration", "template"}
+
+    def test_the_retired_cta_axis_is_not_advertised(self, api):
+        """
+        The UI builds its variation menu from this endpoint, so an axis that is
+        gone from the catalogue but still listed here would offer the founder a
+        control that cannot change the video.
+        """
+        keys = {v["key"] for v in _run(api.list_variation_kinds())["variations"]}
+        assert "cta" not in keys
 
 
 class TestCreateVariation:
@@ -182,7 +191,7 @@ class TestCreateVariation:
         profile = _profile(api, "Var Reset")
         gen, _, _ = _generation(api, profile, "Var Reset")
         result = _run(api.create_variation(
-            gen["id"], CreateVariationRequest(kind="cta", value="Get it on the App Store"), ANON))
+            gen["id"], CreateVariationRequest(kind="app_feature", value="The reminders"), ANON))
         assert result["project"]["script_version"] == 0
 
     def test_variation_is_not_ready_for_generation_until_reviewed(self, api):
@@ -287,7 +296,7 @@ class TestVariationLineage:
         _run(api.create_variation(
             gen["id"], CreateVariationRequest(kind="hook_line", value="A"), ANON))
         child = _run(api.create_variation(
-            gen["id"], CreateVariationRequest(kind="cta", value="B"), ANON))
+            gen["id"], CreateVariationRequest(kind="app_feature", value="The reminders"), ANON))
         assert child["parent_generation_id"] == gen["id"]
         listed = _run(api.list_generation_variations(gen["id"], ANON))
         assert isinstance(listed["variations"], list)
@@ -359,10 +368,10 @@ class TestDuplicate:
         from models import CreateVariationRequest
         gen, _, _ = _generation(api, _profile(api, "Dup Keeps"), "Dup Keeps")
         _run(api.create_variation(
-            gen["id"], CreateVariationRequest(kind="cta", value="New CTA"), ANON))
+            gen["id"], CreateVariationRequest(kind="app_feature", value="The reminders"), ANON))
         _run(api.duplicate_generation(gen["id"], ANON))
         after = _run(api.get_generation(gen["id"], ANON))
-        assert after["variation_kind"] == "cta"
+        assert after["variation_kind"] == "app_feature"
 
     def test_the_copy_is_independent_of_its_parent(self, api):
         """Editing the copy must not write back to the original."""
@@ -412,13 +421,12 @@ class TestDuplicate:
         assert err.value.status_code == 409
 
     def test_duplicate_is_distinct_from_a_variation(self, api):
-        """
-        A variation changes one field; a duplicate changes none.
+        """A variation changes one field; a duplicate changes none.
 
-        Pinned on `hook_line` rather than `cta`. The `cta` axis still exists in
-        the catalogue, but the field it used to write is no longer part of a
-        generated piece, so it can no longer evidence "one field changed" —
-        both would have read None and the test would pass vacuously.
+        Pinned on `hook_line` because it is the one axis whose change is
+        observable in both halves of the comparison. An axis writing a retired
+        field could not evidence "one field changed" here: both sides would
+        read None and the test would pass vacuously.
         """
         from models import CreateVariationRequest
         profile = _profile(api, "Dup Distinct")
