@@ -1303,9 +1303,6 @@ export default function CreateVideo() {
                 attach to. */}
             <div id="template-photo" className="space-y-3 border-t border-[color:var(--hairline)] pt-4">
               <span className="eyebrow block">Your photo</span>
-              <p className="text-sm text-muted-foreground">
-                One photo. The person on camera is the person in the reference.
-              </p>
               {!templateId ? (
                 <p className="text-sm text-muted-foreground">
                   Pick a template above first — the draft that holds your photo is created from it.

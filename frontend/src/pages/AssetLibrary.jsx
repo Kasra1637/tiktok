@@ -873,17 +873,16 @@ export default function AssetLibrary({
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading assets...
         </p>
       ) : assets.length === 0 ? (
-        // This was a full EmptyState — dashed 400px box, icon, title, copy —
-        // sitting below a toolbar that already has a working Upload button and
-        // already says "0 assets". That box is sized for a page that is a dead
-        // end; this is a section inside a working page, so the box was
-        // disproportionate. The one line below carries the part the toolbar
-        // cannot: why uploading is worth doing.
-        <p className="text-sm text-muted-foreground">
-          {embedded
-            ? "Use the Upload button above to add your first one."
-            : "Add the character reference photograph the finished video will be generated from."}
-        </p>
+        // Nothing here. This was a line telling an embedded reader to press the
+        // Upload button sitting directly above it, which is a pointer to a
+        // control they can already see, next to an input they can already type
+        // into. On the standalone route the equivalent line earns its place —
+        // it says what the photo is for — so that branch stays.
+        embedded ? null : (
+          <p className="text-sm text-muted-foreground">
+            Add the character reference photograph the finished video will be generated from.
+          </p>
+        )
       ) : embedded ? (
         // Already rendered above, inside the upload surface, so it is not
         // repeated here. The empty case above is the only copy the section
