@@ -73,11 +73,13 @@ _CAPABILITY_NOTES = {
             "still the default."
         ),
     },
-    "heygen-video-1": {
+    "grok-imagine-video": {
         "vertical": True,
-        # OpenRouter lists no input_references support and prices image-to-video
-        # through reference_duration_seconds SKUs, so the founder photo rides as
-        # the opening frame -- the H3 Max treatment, not a reference list.
+        # OpenRouter lists no reference-image support for this model: the photo
+        # rides as the opening frame only. So the count is 0 and
+        # accepts_identity_reference() must not read it as permission to send
+        # an input_references list -- that is what identity_via_first_frame is
+        # for, and it is the same treatment H3 Max gets.
         "max_reference_images": 0,
         "max_reference_videos": 0,
         "max_reference_audio": 0,
@@ -85,11 +87,12 @@ _CAPABILITY_NOTES = {
         "supports_last_frame": False,
         "identity_via_first_frame": True,
         "notes": (
-            "768p (not 2K), 5-15s per generation. Prompt-to-video like Hailuo 3, "
-            "with dialogue, ambience and sound effects synthesized in the same "
-            "call and your photo opening the clip as its first frame. About half "
-            "Hailuo 3 price; the trade is picture quality. Opt-in: Hailuo 3 is "
-            "still the default."
+            "720p (not 2K), 1-15s per generation, and no native audio -- "
+            "generate_audio is not among its accepted parameters, so the studio "
+            "omits it and clips come back silent, as with H3 Max. About half "
+            "Hailuo 3's price at 720p, so it is the cheap option for comparing "
+            "a script, not a replacement for the default. Downloads are scaled "
+            "to 1080x1920 on the way out. Opt-in: Hailuo 3 is still the default."
         ),
     },
     "aleph-2": {
@@ -119,20 +122,19 @@ _CAPABILITY_NOTES = {
 # ai_service.DEFAULT_VIDEO_MODEL, and it stays Hailuo 3. Listing a second model
 # only makes it selectable in the studio's model dropdown.
 #
-# HeyGen Video 1 is deliberately NOT listed yet. Its HeyGen sibling, Avatar IV,
-# was listed in 7c1d21f and could not render a single clip: HeyGen refuses a
-# text-driven request unless the caller supplies provider.options.heygen.voice_id,
-# and the studio drives every render from the approved script, so the render
-# 400s every time. Video 1 is catalogued and its capability notes are recorded
-# below, but whether it accepts the same payload shape is UNVERIFIED — the claim
-# that it synthesizes dialogue, ambience and sound effects in one call was
-# reasoned from the provider's documentation, not probed with a paid render.
+# Grok Imagine Video joins as the cheap opt-in: it takes the same photo as the
+# same first-frame anchor as H3 Max and declares no passthrough parameters at
+# all, so there is no undocumented field that could refuse a render. It trades
+# 2K and native audio for roughly half the price, which makes it the model to
+# try a second script on. Listing it does not move the default, which stays
+# Hailuo 3.
 #
-# A provider that cannot render must not be one click away in the dropdown, so
-# eligibility waits for a real clip. backend/verify_live_renders.py
-# --models heygen-video-1 costs exactly one render and is the thing that lifts
-# this. See test_heygen_video_1_is_withheld_until_proven.
-STUDIO_ELIGIBLE = ("minimax-h3", "minimax-h3-max")
+# Every value asserted about it is checked at boot against OpenRouter's live
+# model list by provider_capabilities.check_provider_drift -- that endpoint
+# costs nothing to read and states the fields each model actually accepts, so a
+# provider quietly dropping something shows up in the log instead of in a
+# founder's failed render.
+STUDIO_ELIGIBLE = ("minimax-h3", "minimax-h3-max", "grok-imagine-video")
 
 # The hook length used when nothing states one. 5s is the lowest length the
 # current provider can render, so it needs no trim; a template's own

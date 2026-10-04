@@ -117,43 +117,54 @@ VIDEO_MODELS = {
         "resolution": "768p",
         "supports_combined_refs": False,
     },
-    # HeyGen Video 1: a general-purpose prompt-to-video renderer, closest in
-    # shape to the H3 entries. It takes the founder photo as a first-frame
-    # anchor and a text prompt, and synthesizes its own audio (dialogue,
-    # ambience, sound effects) in the same call. Opt-in for cost comparison:
-    # 768p at the reference rate against H3 2K at more than double it.
+    # Grok Imagine Video: a prompt-to-video renderer that takes the founder's
+    # photograph as the opening frame, in the same shape as the Hailuo entries.
     #
-    # The one field that must NOT be copied from the H3 entry is resolution:
-    # OpenRouter lists 480p and 768p only and rejects an unlisted value, so a
-    # 2K request would 400 on every render -- the same constraint that shaped
-    # the H3 Max entry.
+    # Facts below come from OpenRouter's own video model endpoint
+    # (GET /api/v1/videos/models), which costs nothing to read and states the
+    # accepted fields per model. provider_capabilities.check_provider_drift
+    # re-reads it at boot and warns if what we assert here stops matching.
     #
-    # supports_native_audio is False because generate_audio is NOT among the
-    # accepted parameters for this model even though it synthesizes audio.
-    # False makes the studio omit the field and let the provider apply its own
-    # default. If a real clip comes back silent, that is the flag to flip.
-    "heygen-video-1": {
-        "id": "heygen/heygen-video-1",
-        "name": "HeyGen Video 1",
+    # Three of its declared values drove this entry:
+    #   supported_resolutions  480p, 720p  -> 720p, and nothing else. An
+    #     unlisted resolution is a 400, which is the same constraint that shaped
+    #     the H3 Max entry.
+    #   supported_frame_images  first_frame only  -> the photo rides as the
+    #     opening frame, never as a reference list.
+    #   allowed_passthrough_parameters  []  -> no provider.options block, so
+    #     there is no undocumented required field waiting to refuse a render.
+    #
+    # generate_audio is unlisted for this model, so supports_native_audio is
+    # False and the studio omits the field entirely rather than sending an
+    # unlisted parameter. Clips are therefore expected to be silent, the same
+    # trade H3 Max already makes. If a real clip comes back with sound, that is
+    # the flag to flip.
+    #
+    # Opt-in for cost: 7 cents/second at 720p against Hailuo 3's 13. At the
+    # 10-12s these templates render, that is roughly $0.70 against $1.30. The
+    # trade is picture resolution - 720p, not the 2K default - and the downloads
+    # are scaled to the 1080x1920 canvas on the way out.
+    "grok-imagine-video": {
+        "id": "x-ai/grok-imagine-video",
+        "name": "Grok Imagine Video",
         "description": (
-            "General-purpose prompt-to-video generation with dialogue, "
-            "ambience and sound effects synthesized in one call. 768p, "
-            "5-15s, your photo opening the clip as its first frame. About "
-            "half the price of Hailuo 3 with a softer picture. Opt-in."
+            "Prompt-to-video with your photo opening the clip as its first "
+            "frame. 720p, 1-15s, no native audio. About half the price of "
+            "Hailuo 3 with a softer picture. Opt-in."
         ),
         "max_duration": 15,
         "min_duration": 5,
-        "supports_references": True,
-        "supports_native_audio": False,  # generate_audio unlisted; audio is synthesized in-call
+        "supports_references": False,
+        "supports_native_audio": False,  # generate_audio unlisted; omit the field
         "supports_v2v_motion": False,
-        "resolution": "768p",
+        "resolution": "720p",
         "supports_combined_refs": False,
     },
 }
 # Default for new template-studio generations. The provider remains
 # configurable through VIDEO_MODEL_DEFAULT and VIDEO_MODEL_ALLOWLIST, but
-# MiniMax H3 is currently the only studio-eligible provider: anything else
-# configured resolves back here with a logged reason.
+# MiniMax H3 stays the default: it is the only model here that renders 2K with
+# native audio. Anything else configured resolves back to it with a reason.
 DEFAULT_VIDEO_MODEL = "minimax-h3"
 # Legacy fallback
 VIDEO_MODEL = VIDEO_MODELS[DEFAULT_VIDEO_MODEL]["id"]
@@ -1163,68 +1174,25 @@ _PROVIDER_REFUSAL_MARKERS = (
     "input_image",
 )
 
-# Provider error signatures that mean "this provider cannot render the shape of
-# request the studio builds" — as opposed to disliking this particular input.
-#
-# The known case is HeyGen's avatar endpoint, which 400s a text-driven request
-# with "avatar-iv requires provider.options.heygen.voice_id when using a text
-# prompt (script)" and then lists candidate voice ids. The studio always drives
-# a render from the approved script, so that error is permanent by construction:
-# no retry, no re-roll and no script edit can satisfy it.
-#
-# These must also read as permanent in generation_planning.is_recoverable_error,
-# which is why "requires" is listed there too.
-_PROVIDER_SHAPE_MARKERS = (
-    "requires provider.options",
-    "voice_id",
-    "does not support",
-    "not supported",
-    "unsupported",
-    "unrecognized",
-    "unknown parameter",
-    "invalid parameter",
-    "is not a valid",
-)
-
-
-def describe_provider_refusal(error_text: str, model_name: str = "") -> Optional[str]:
+def describe_provider_refusal(error_text: str) -> Optional[str]:
     """
-    Founder-facing message for a provider rejection, or None when the payload is
-    something else entirely.
+    Founder-facing message for a provider content refusal, or None when the
+    payload is anything else.
 
-    Two failure classes get a real sentence:
-
-    1. The provider refused the photo on content grounds. On a hook there is no
-       bridge frame, so the refused input IS the character reference — and
-       retrying it can never succeed, so the message says what to change instead
-       of inviting another attempt.
-
-    2. The provider cannot render the request shape at all. Same permanent
-       outcome, different remedy: nothing about this script or photo is wrong,
-       so the only way forward is a different model.
-
-    Neither message repeats the provider's body. It goes to the log, where it is
-    worth having, rather than into the founder's face, where it is a wall of JSON
-    naming parameters they cannot set.
+    The raw provider body is a nested JSON dump ("HTTP 400: {\"error\":
+    {\"code\": ...}}") that names a filter code and nothing actionable. On a
+    hook there is no bridge frame, so the refused input is the character
+    reference photo itself — and retrying it can never succeed, so the
+    message says what to change instead of inviting another attempt.
     """
     lowered = (error_text or "").lower()
-    if any(marker in lowered for marker in _PROVIDER_REFUSAL_MARKERS):
-        return (
-            "The provider refused the reference photo (privacy filter) — retrying "
-            "won't help. Use a different photo: face forward, plain background, "
-            "no other people or readable text."
-        )
-    if any(marker in lowered for marker in _PROVIDER_SHAPE_MARKERS):
-        who = f"{model_name} " if model_name else "This model "
-        # Kept under ~190 characters on purpose: the submit path truncates the
-        # detail at 200, so anything longer loses its own remedy mid-sentence
-        # and the founder is left with a complaint instead of a next step.
-        return (
-            f"{who}can't render a scripted clip. That's a fixed limit of the "
-            f"model, not your script or photo - re-rendering fails the same way. "
-            f"Pick another model in the dropdown."
-        )
-    return None
+    if not any(marker in lowered for marker in _PROVIDER_REFUSAL_MARKERS):
+        return None
+    return (
+        "The provider refused the reference photo (privacy filter) — retrying "
+        "won't help. Use a different photo: face forward, plain background, "
+        "no other people or readable text."
+    )
 
 
 async def generate_video(
@@ -1482,9 +1450,7 @@ async def generate_video(
             if resp.status_code >= 400:
                 error_text = resp.text[:500]
                 logger.error(f"Video generation submission failed: HTTP {resp.status_code}: {error_text}")
-                human = describe_provider_refusal(
-                    error_text, model_name=model_config.get("name", "")
-                )
+                human = describe_provider_refusal(error_text)
                 if human:
                     raise RuntimeError(human)
                 # Nothing here matched a known signature, so do not hand the

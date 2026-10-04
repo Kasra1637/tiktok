@@ -294,7 +294,7 @@ const PIPELINE_BLOCKS = [
 
 const MODELS = [
   { label: "Words & analysis", value: "gpt-4o-mini — your profile, angles, openings, scripts, and shot plans" },
-  { label: "Video", value: "MiniMax H3 by default — 2K picture, native sound — or H3 Max for sharper prompt adherence at 768p. Either way one render of up to 15 seconds; each template declares the length its mechanic suits. Your pick sticks." },
+  { label: "Video", value: "MiniMax H3 by default — 2K picture, native sound — or H3 Max for sharper prompt adherence at 768p, or Grok for a silent 720p clip at half the price. One render of up to 15 seconds either way; each template declares the length its mechanic suits. Your pick sticks." },
   { label: "Finishing touches", value: "Captions, layered on precisely" },
   { label: "Provenance", value: "No scraped creators, no lifted scripts, no invented numbers. The only face in your video is the one photo that you chose." },
 ];

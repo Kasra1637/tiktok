@@ -31,6 +31,7 @@ import recommendation_tags
 import overlays
 import variations
 import analytics
+import provider_capabilities
 import feedback as feedback_mod
 from ai_service import (
     analyze_hook, generate_customized_preview, generate_face_swap, generate_video_prompt,
@@ -7667,6 +7668,25 @@ async def poll_generation(generation_id: str, user_id: str = Depends(get_current
                             f"Generation {generation_id}: trim to {trim_to}s failed; "
                             f"delivering the untrimmed render."
                         )
+                # Deliver on the platform's canvas. The cheaper providers render
+                # below it -- Grok Imagine Video at 720p -- and a founder posting to
+                # TikTok wants 1080x1920 rather than whatever the model emitted.
+                # Applied after the trim so the scaled clip is the canonical file:
+                # it is what an extension would bridge from, and what both the
+                # captioned and the plain download then serve.
+                #
+                # Soft by design. A plain bilinear scale adds no detail, so failing
+                # here costs resolution and nothing else, and the un-rescaled clip
+                # is still a watchable video.
+                rescaled, rescale_warnings = await overlays.rescale_to_canvas(local_path)
+                if rescaled:
+                    local_path = rescaled
+                elif rescale_warnings:
+                    logger.warning(
+                        f"Generation {generation_id}: canvas resize failed "
+                        f"({rescale_warnings[0]}); the clip is delivered at its "
+                        f"rendered size."
+                    )
                 stored_url = storage_service.upload_video(user_id, generation_id, Path(local_path))
                 if not stored_url:
                     # R2 is unconfigured or the upload failed, but the local copy
@@ -9510,6 +9530,15 @@ async def on_startup():
             "to yt-dlp, which is frequently blocked by TikTok and will likely return zero "
             "results (empty feed / 'No results found'). Set APIFY_API_TOKEN to fix this."
         )
+    # What OpenRouter will actually accept, compared against what the catalog
+    # claims. Unauthenticated and free, so it costs nothing to run on every boot.
+    # Last, because it is the only step here that touches the network for a
+    # non-essential reason — and it cannot raise, so a slow provider delays the
+    # log line and nothing else.
+    try:
+        await provider_capabilities.check_provider_drift()
+    except Exception as e:  # defensive: the helper already swallows its own
+        logger.warning(f"Provider capability check did not complete: {e}")
 
 
 # ---------------------------------------------------------------------------

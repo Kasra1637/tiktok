@@ -14,6 +14,7 @@ Only text that already passed claim_safety should reach this module: overlay
 text is on screen and is read by viewers, so it is subject to the same rules
 as the spoken script.
 """
+import asyncio
 import logging
 import os
 import shlex
@@ -314,6 +315,57 @@ def build_audio_filter(spec: dict, duration: float, first_audio_index: int, base
     return inputs, ";".join(segments), warnings, "outa"
 
 
+def canvas_fit_chain(source_label: str, out_label: str) -> list:
+    """
+    Filter fragments that fit a clip onto the 1080x1920 canvas, letterboxed.
+
+    Shared by the caption compositor and the plain-download rescale so both
+    produce the same frame size. The studio's cheaper providers render below
+    this canvas (Grok at 720p), and a founder posting to TikTok wants the
+    platform's own 1080x1920 rather than whatever the model emitted.
+
+    The scale and pad MUST be chained through explicit labels. Chaining two
+    filters off the same source label leaves the first one's output dangling
+    and unconnected, so pad re-reads the raw input and everything downstream is
+    silently orphaned — ffmpeg still exits 0 and writes a file.
+
+    Note this is a plain bilinear scale: it meets the platform's pixel
+    dimensions without adding detail. It is not super-resolution, and nothing
+    here should be described to a founder as sharpening their video.
+    """
+    return [
+        f"[{source_label}]scale={CANVAS_WIDTH}:{CANVAS_HEIGHT}:"
+        f"force_original_aspect_ratio=decrease[scaled_{out_label}]",
+        f"[scaled_{out_label}]pad={CANVAS_WIDTH}:{CANVAS_HEIGHT}:"
+        f"(ow-iw)/2:(oh-ih)/2:color=black[{out_label}]",
+    ]
+
+
+def build_upscale_command(source: Path, output_path: Path) -> list:
+    """
+    ffmpeg argv that re-encodes one clip onto the canvas with no overlays.
+
+    Used for the plain "Download MP4" path, which has no captions and so would
+    otherwise hand the founder the provider's native size — 720p for Grok,
+    which is below what the platform expects.
+
+    Audio is copied when present and dropped when absent, because the providers
+    here differ: Hailuo 3 returns a native audio track and Grok does not. A
+    graph referencing a stream that isn't there fails, so 0:a? is the only form
+    that works for both.
+    """
+    graph = ";".join(canvas_fit_chain("0:v", "outv"))
+    return [
+        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+        "-i", str(source),
+        "-filter_complex", graph,
+        "-map", "[outv]", "-map", "0:a?",
+        "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+        "-pix_fmt", "yuv420p", "-c:a", "aac",
+        str(output_path),
+    ]
+
+
 def build_filter_graph(spec: dict, duration: float, font_path: Optional[str] = None) -> tuple:
     """
     Build the ffmpeg filter graph for a composition spec.
@@ -352,18 +404,10 @@ def build_filter_graph(spec: dict, duration: float, font_path: Optional[str] = N
             "text overlays were skipped rather than rendered wrong."
         ]
 
-    # 0 is the base clip. Everything else is layered on top.
-    # The scale and pad MUST be chained through an explicit label. Chaining
-    # two filters off the same "[0:v]" leaves the first one's output dangling
-    # and unconnected, so pad re-reads the raw input and every subsequent
-    # overlay is silently orphaned — ffmpeg still exits 0 and writes a file.
-    graph.append(
-        f"[0:v]scale={CANVAS_WIDTH}:{CANVAS_HEIGHT}:"
-        f"force_original_aspect_ratio=decrease[scaled]"
-    )
-    graph.append(
-        f"[scaled]pad={CANVAS_WIDTH}:{CANVAS_HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=black[bg0]"
-    )
+    # 0 is the base clip. Everything else is layered on top. Fitted onto the
+    # canvas by the shared helper so the captioned and plain downloads agree on
+    # frame size.
+    graph += canvas_fit_chain("0:v", "bg0")
     current = "bg0"
 
     # ---- Image layers (screenshots, logos, product shots) ----
@@ -571,6 +615,46 @@ def probe_duration(path: Path) -> float:
     except Exception as e:
         logger.warning("ffprobe failed for %s: %s", path, e)
         return 0.0
+
+
+def rescale_to_canvas_sync(video_path: Path, timeout: int = 600) -> tuple:
+    """
+    Re-encode one clip onto the 1080x1920 canvas in place.
+
+    Returns (path_or_None, warnings). A failure is soft and always says so: the
+    un-rescaled clip is still a watchable video, so losing the canvas resize
+    must never lose the generation.
+
+    Written to a sibling temp file and swapped, because ffmpeg cannot read and
+    write the same path in one pass — the same reason replace_with_trimmed does
+    it that way.
+    """
+    source = Path(video_path)
+    if not source.is_file():
+        return None, ["Source clip is missing; the canvas resize was skipped."]
+    temp = source.with_name(f".{source.stem}_canvas{source.suffix}")
+    try:
+        argv = build_upscale_command(source, temp)
+        try:
+            proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return None, [f"Canvas resize timed out after {timeout}s."]
+        except FileNotFoundError as e:
+            return None, [f"ffmpeg is not available: {e}"]
+        if proc.returncode != 0 or not temp.exists():
+            detail = (proc.stderr or "").strip().splitlines()
+            tail = detail[-1] if detail else "unknown error"
+            logger.warning("Canvas resize failed: %s", tail)
+            return None, [f"ffmpeg failed while resizing to the canvas: {tail[:200]}"]
+        temp.replace(source)
+        return source, []
+    finally:
+        temp.unlink(missing_ok=True)
+
+
+async def rescale_to_canvas(video_path: Path, timeout: int = 600) -> tuple:
+    """Async wrapper so the poll path can await this alongside its other work."""
+    return await asyncio.to_thread(rescale_to_canvas_sync, video_path, timeout)
 
 
 def compose(

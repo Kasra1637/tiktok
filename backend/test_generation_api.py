@@ -836,16 +836,15 @@ class TestListingAndCapabilities:
 
     def test_capability_endpoint_reports_studio_models(self, api):
         """
-        The endpoint must offer every generative provider we have actually
-        rendered, and no editor. HeyGen Video 1 stays out until a live verify
-        proves it accepts our payload — its predecessor was selectable and
-        failed every render — so it must not appear in the founder's dropdown.
+        The endpoint must offer every generative provider and no editor. Grok
+        Imagine Video is listed so a founder can render the same script for
+        about half the cost; the default stays Hailuo 3, so adding it moves no
+        production spend.
         """
         result = _run(api.list_studio_video_models())
         keys = [m["key"] for m in result["models"]]
-        assert keys == ["minimax-h3", "minimax-h3-max"]
+        assert keys == ["minimax-h3", "minimax-h3-max", "grok-imagine-video"]
         assert "aleph-2" not in keys
-        assert "heygen-video-1" not in keys
         assert result["default"] == "minimax-h3"
 
     def test_capability_endpoint_lists_ineligible_separately(self, api):

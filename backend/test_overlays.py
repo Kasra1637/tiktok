@@ -104,10 +104,16 @@ class TestFilterGraph:
         the first output dangling, pad re-reads the raw input, and every
         overlay is silently orphaned -- ffmpeg still exits 0 and writes a file
         that looks fine until you look at a frame.
+
+        The intermediate label is now suffixed per-output (canvas_fit_chain is
+        shared with the plain-download rescale), so assert the chain shape
+        rather than the literal label name.
         """
         graph, _, _ = overlays.build_filter_graph({}, 12, None)
-        assert "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[scaled]" in graph
-        assert "[scaled]pad=1080:1920" in graph
+        assert (
+            "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[scaled_bg0]" in graph
+        )
+        assert "[scaled_bg0]pad=1080:1920" in graph
         # pad must not read the raw input again
         assert graph.count("[0:v]") == 1
 
@@ -377,3 +383,70 @@ class TestFontResolution:
         monkeypatch.setenv("OVERLAY_FONT", real)
         assert overlays.resolve_font() == real
         del os
+
+
+class TestCanvasRescale:
+    """
+    The plain "Download MP4" path has no captions, so before this existed it
+    served the provider's native size. Grok Imagine Video renders at 720p and
+    the platform expects 1080x1920, so a founder who skipped captions was
+    posting below spec.
+    """
+
+    def test_upscale_command_targets_the_canvas(self):
+        argv = overlays.build_upscale_command(Path("in.mp4"), Path("out.mp4"))
+        graph = argv[argv.index("-filter_complex") + 1]
+        assert "scale=1080:1920" in graph
+        assert "pad=1080:1920" in graph
+
+    def test_upscale_command_chains_scale_into_pad(self):
+        """
+        Same dangling-output trap as the caption graph: pad must read scale's
+        output, not the raw input, or the chain silently produces nothing.
+        """
+        argv = overlays.build_upscale_command(Path("in.mp4"), Path("out.mp4"))
+        graph = argv[argv.index("-filter_complex") + 1]
+        assert graph.count("[0:v]") == 1
+        assert "[scaled_outv]pad=1080:1920" in graph
+
+    def test_upscale_command_copies_audio_optionally(self):
+        """
+        The providers disagree about audio: Hailuo 3 returns a native track and
+        Grok does not. A hard "0:a" reference fails on the silent one, so the
+optional form is the only one that works for both.
+        """
+        argv = overlays.build_upscale_command(Path("in.mp4"), Path("out.mp4"))
+        assert "0:a?" in argv
+        # And never the mandatory form, which fails on a silent clip.
+        assert "0:a" not in argv
+
+    def test_missing_source_is_a_soft_failure(self, tmp_path):
+        missing = tmp_path / "gone.mp4"
+        path, warnings = overlays.rescale_to_canvas_sync(missing)
+        assert path is None
+        assert warnings and "missing" in warnings[0].lower()
+
+    def test_a_failed_rescale_keeps_the_original_clip(self, tmp_path, monkeypatch):
+        """
+        A founder must never lose a generated video because the canvas resize
+        failed. The original stays in place and the caller is told why.
+        """
+        source = tmp_path / "clip.mp4"
+        source.write_bytes(b"not really a video")
+        monkeypatch.setattr(overlays.subprocess, "run", lambda *a, **k: type(
+            "P", (), {"returncode": 1, "stderr": "Invalid data found"}
+        )())
+        path, warnings = overlays.rescale_to_canvas_sync(source)
+        assert path is None
+        assert warnings
+        assert source.is_file()
+
+    def test_no_temp_file_is_left_behind(self, tmp_path, monkeypatch):
+        source = tmp_path / "clip.mp4"
+        source.write_bytes(b"not really a video")
+        monkeypatch.setattr(overlays.subprocess, "run", lambda *a, **k: type(
+            "P", (), {"returncode": 1, "stderr": "boom"}
+        )())
+        overlays.rescale_to_canvas_sync(source)
+        leftovers = [p.name for p in tmp_path.iterdir() if p.name.startswith(".")]
+        assert leftovers == []
