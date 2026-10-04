@@ -122,12 +122,14 @@ CONDENSE_BELOW = 4500
 # prompts stop fitting their ceilings again. A test rebuilds both and pins them,
 # which is why they are named rather than inlined.
 #
-# Both rose when the opening pattern-interrupt directive was added (its full and
-# condensed forms are the fixed text measured here). That is the trade this
-# change makes on purpose: an interrupting opening is the product, and it is paid
-# for out of descriptive room on the providers with the tightest ceilings.
-FULL_PROMPT_FLOOR = 2781
-CONDENSED_PROMPT_FLOOR = 1654
+# Both rose when the opening pattern-interrupt directive was added, and again
+# when it grew the grounding clause that keeps the opening's beats inside this
+# video's own story (its full and condensed forms are the fixed text measured
+# here). That is the trade this change makes on purpose: an interrupting
+# opening is the product, and it is paid for out of descriptive room on the
+# providers with the tightest ceilings.
+FULL_PROMPT_FLOOR = 3052
+CONDENSED_PROMPT_FLOOR = 1800
 
 # What the variables are given at the default ceiling, derived rather than
 # measured: the default ceiling is a TOTAL, and the floor is part of it.
@@ -277,8 +279,8 @@ _CONDENSED_IDENTITY_CLOSE = (
 # replaces was an opening that drifts in, settles into a neutral pose and then
 # starts talking, which is exactly what a scrolling thumb ignores.
 _OPENING_INTERRUPT = (
-    "HOW THE OPENING MUST PLAY, frame by frame: the first frame is already in motion "
-    "\u2014 no neutral pose before anything happens, no fade, drift or slow push-in "
+    "HOW THE OPENING MUST PLAY, frame by frame: the first frame is already in motion \u2014"
+    " no neutral pose before anything happens, no fade, drift or slow push-in "
     "standing in for action, no greeting to camera. Inside the first half-second "
     "they do ONE unmistakable thing a scrolling thumb has to pause for: a sharp "
     "look straight into the lens, brows lifting and eyes widening, a hand snapping "
@@ -286,7 +288,11 @@ _OPENING_INTERRUPT = (
     "break. Two or three such beats, each bigger or stranger than the one before, "
     "so the opening escalates instead of settling. The face, gaze, hands and "
     "posture carry it; the words come second. Read the beats below as the physical "
-    "score for those seconds and play them in order."
+    "score for those seconds and play them in order.\n"
+    "Every one of those beats comes out of THIS video\u2019s own situation \u2014 its props, "
+    "its place, its problem, what the middle goes on to do \u2014 so the interrupt reads "
+    "as the first move of this story and not a random gesture, and it leaves a "
+    "question the rest of the video answers."
 )
 
 # The same rule for a provider whose ceiling is too low for the full set. Every
@@ -296,7 +302,9 @@ _CONDENSED_OPENING = (
     "pose, no fade, no greeting. One unmistakable beat inside the first half-second, "
     "then two or three escalating ones, carried by the face, gaze, hands and "
     "posture rather than by the words. Play the beats below as the physical score "
-    "for those seconds."
+    "for those seconds.\n"
+    "Those beats come out of this video\u2019s own situation, so the interrupt reads "
+    "as the first move of the story and leaves a question the rest answers."
 )
 
 # The App Profile's must_not_show list, turned into a prompt section.
@@ -938,13 +946,26 @@ def build_segment_prompt(
             _PROMPT_SCALE.reset(token)
         if not budget or len(prompt) <= budget:
             return prompt
-        # Still over: take the measured overshoot back out of the scale and
-        # reassemble. Protection is already withdrawn from here, so this is the
-        # plain scaled build. Falls back to a real reduction if the scale has
-        # bottomed out.
+        # Still over: correct the scale by the measured overshoot and reassemble.
+        # Protection is already withdrawn from here, so this is the plain scaled
+        # build. Falls back to a real reduction if the scale has bottomed out.
+        #
+        # The correction divides the VARIABLE text by the variable room, not the
+        # whole prompt by the whole ceiling. The fixed instructions are most of
+        # what is left on a tight provider and they do not scale at all, so
+        # scaling by budget/length asks for far less squeeze than the variables
+        # can actually give: the loop then crawls toward the ceiling and runs out
+        # of attempts still over it. The floors are measured from exactly this
+        # fixed text with no variables at all, so subtracting one lands the next
+        # pass inside.
         if scale <= MIN_SCALE:
             break
-        scale = max(MIN_SCALE, scale * budget / len(prompt) * 0.99)
+        fixed = CONDENSED_PROMPT_FLOOR if condensed else FULL_PROMPT_FLOOR
+        variable = max(1, len(prompt) - fixed)
+        room = budget - fixed
+        if room <= 0:
+            break
+        scale = max(MIN_SCALE, scale * room / variable * 0.99)
     return prompt
 
 

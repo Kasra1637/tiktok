@@ -1462,8 +1462,8 @@ class TestOpeningPatternInterrupt:
                                  for k in vp.STUDIO_ELIGIBLE))
         assert gp._OPENING_INTERRUPT in full
         assert gp._CONDENSED_OPENING in tight
-        for constraint in ("first frame is already", "half-second",
-                           "face, gaze, hands"):
+        for constraint in ("first frame is already", "half-second", "escalat",
+                           "face, gaze, hands", "own situation", "question"):
             assert constraint in full
             assert constraint in tight
 
@@ -1490,6 +1490,31 @@ class TestOpeningPatternInterrupt:
         tight = self._prompt(4096)
         assert self.ACTION in tight
         assert len(tight) <= 4096
+
+    def test_the_opening_and_the_middle_share_one_situation(self):
+        """
+        The failure this closes: a striking opening the rest of the video has
+        nothing to do with. The directive says so, and the section headings carry
+        the same props and place into both halves, so a strategy that grounds its
+        hook on the scene reaches the render with both sections describing it.
+        """
+        strategy = self._strategy()
+        strategy["scene"] = {
+            "environment": "a hospital corridor at night",
+            "props": "a scrunchie on the wrist, a phone in the hand",
+        }
+        strategy["segments"][1]["action"] = (
+            "The scrunchie comes off the wrist and is pocketed; they look back "
+            "down the corridor and start walking."
+        )
+        prompt = gp.build_segment_prompt(
+            strategy=strategy, profile={"brand_name": "ShiftLog"},
+            template={}, duration=12, assets={}, plan={"hook_seconds": 3},
+        )
+        assert "hospital corridor at night" in prompt
+        assert "scrunchie" in prompt
+        assert "own situation" in prompt
+        assert prompt.index("HOOK") < prompt.index("MIDDLE")
 
     def test_a_pathological_opening_still_respects_the_ceiling(self):
         """Detail is never a licence to overflow: the guard is the ceiling."""

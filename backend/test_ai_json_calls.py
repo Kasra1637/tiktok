@@ -288,6 +288,8 @@ class TestStrategyBudget:
             "posture and shoulders",
             "brows",
             "aimed at the lens",
+            "own situation",
+            "only the middle closes",
         ):
             assert requirement in prompt, f"opening rule missing: {requirement}"
         # The appearance prohibition still governs: expression is an action, and
