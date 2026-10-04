@@ -2352,6 +2352,22 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     expectText(ctx, "Record your demo", "the demo is described as the founder's own recording");
   });
 
+  // Every live route a tour can fire on, and the page component that route
+  // serves. "/app-profiles/abc" stands in for the :id parameter; the assets
+  // sub-route is listed separately because it must resolve to the same tour
+  // as /assets while serving the same page as the library.
+  const TOUR_ROUTE_PAGE = {
+    "/": "pages/Landing.jsx",
+    "/create": "pages/CreateVideo.jsx",
+    "/brand": "pages/BrandSetup.jsx",
+    "/assets": "pages/AssetLibrary.jsx",
+    "/app-profiles/abc": "pages/AppProfileDetail.jsx",
+    "/app-profiles/abc/assets": "pages/AssetLibrary.jsx",
+    "/history": "pages/GenerationHistory.jsx",
+    "/analytics": "pages/Analytics.jsx",
+  };
+  const TOUR_LIVE_PATHS = Object.keys(TOUR_ROUTE_PAGE);
+
   // An onboarding tour is invisible when its targets are missing, because
   // TourOverlay advances silently past a target it cannot find — so a tour
   // pointing at a page that no longer exists passes every other gate, shows a
@@ -2364,15 +2380,9 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     const { TOURS, getTourIdForPath } = load("lib/onboarding/tours.js");
     const missing = [];
 
-    // The route a tour fires on, and the page component that route serves.
-    const ROUTE_PAGE = {
-      "/brand": "pages/BrandSetup.jsx",
-      "/history": "pages/GenerationHistory.jsx",
-    };
+    const ROUTE_PAGE = TOUR_ROUTE_PAGE;
     const firstPath = (tourId) =>
-      ["/brand", "/history"].find(
-        (p) => getTourIdForPath(p) === tourId
-      );
+      TOUR_LIVE_PATHS.find((p) => getTourIdForPath(p) === tourId);
 
     // The page plus everything it imports, so a target owned by a child
     // component still resolves.
@@ -2438,7 +2448,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
   // mapping here would auto-launch a tour for a page that no longer exists.
   await check("every routable path maps to a tour that exists", async (ctx) => {
     const { TOURS, getTourIdForPath } = load("lib/onboarding/tours.js");
-    const paths = ["/brand", "/history"];
+    const paths = TOUR_LIVE_PATHS;
     const broken = paths
       .map((p) => [p, getTourIdForPath(p)])
       .filter(([, id]) => id !== null && !TOURS[id])
@@ -2453,6 +2463,31 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
         throw new Error(`${p} still maps to a tour after the page was removed`);
       }
     }
+  });
+
+  // Every live work page must open a tour on arrival, and the auth/legal
+  // pages must not. Without this, a page added to the router can silently
+  // ship with no pop-up at all -- which is exactly how the studio, Analytics
+  // and the Asset Library went tour-less before the tours were rewritten.
+  await check("every live work page maps to a tour (and auth/legal pages do not)", async (ctx) => {
+    const { getTourIdForPath } = load("lib/onboarding/tours.js");
+    const broken = [
+      ...TOUR_LIVE_PATHS.filter((p) => !getTourIdForPath(p)).map((p) => `${p} maps to no tour`),
+      ...[
+        "/sign-in",
+        "/sign-in/sso-callback",
+        "/sign-up",
+        "/privacy",
+        "/terms",
+        // Redirect-only routes: the destination page opens its own tour.
+        "/app-profiles",
+        "/templates",
+        "/templates/t-1",
+      ]
+        .filter((p) => getTourIdForPath(p) !== null)
+        .map((p) => `${p} maps to "${getTourIdForPath(p)}" but serves no page of its own`),
+    ];
+    if (broken.length) throw new Error(broken.join("\n        "));
   });
 
   // The two cards are one grid row. Bullets that are not length-matched make

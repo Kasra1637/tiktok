@@ -1139,7 +1139,7 @@ export default function CreateVideo() {
                 beat timeline is written to whatever number was showing, so
                 changing it after the plan existed would leave a timeline that no
                 longer added up. */}
-            <div className="space-y-1.5 rounded-xl border border-[color:var(--hairline)] p-4">
+            <div className="space-y-1.5 rounded-xl border border-[color:var(--hairline)] p-4" data-testid="create-what-you-get">
               <span className="text-sm font-medium">What you get</span>
               <p className="text-sm">
                 One render of {pieceSeconds}s: a {pieceSplit.hookSeconds}s hook, then a{" "}
@@ -1891,7 +1891,7 @@ export default function CreateVideo() {
           It also names the half of the job that never leaves this page: the
           demo and the close are footage the founder records, not something a
           render can supply. */}
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-muted-foreground" data-testid="create-no-autopost-note">
         Generated here, posted by hand. The demo and call to action are yours. This tool never
         publishes or asks for platform credentials.
       </p>

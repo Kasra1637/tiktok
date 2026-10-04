@@ -63,7 +63,7 @@ function ClaimPanel({ profile }) {
   const banned = list(profile.claims_banned);
   if (!approved.length && !review.length && !banned.length) return null;
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-testid="claim-guardrails">
       <h3 className="font-display text-base font-semibold">Claim guardrails</h3>
       <ListBlock label="Approved — safe to use" items={approved} />
       <ListBlock label="Needs review — verify first" items={review} tone="review" />
@@ -277,6 +277,7 @@ export default function AppProfileDetail() {
         </Link>
       </Button>
 
+      <div data-testid="app-profile-header">
       <PageHeader
         icon={Briefcase}
         title={profile?.brand_name || "Untitled app"}
@@ -312,6 +313,7 @@ export default function AppProfileDetail() {
           </div>
         }
       />
+      </div>
 
       {error && (
         <Alert variant="destructive">
@@ -344,7 +346,7 @@ export default function AppProfileDetail() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
-          <div className="surface space-y-4 rounded-2xl p-5">
+          <div className="surface space-y-4 rounded-2xl p-5" data-testid="profile-facts">
             <h3 className="font-display text-base font-semibold">Product facts</h3>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Category" value={profile?.app_category || profile?.niche} />
@@ -398,7 +400,7 @@ export default function AppProfileDetail() {
               numbers on their own videos, and the next strategy prompt reads
               it. Aggregate per template, so it is evidence of what carried
               views rather than a ranking of hooks. */}
-          <div className="surface space-y-3 rounded-2xl p-5">
+          <div className="surface space-y-3 rounded-2xl p-5" data-testid="what-works">
             <span className="eyebrow flex items-center gap-1.5">
               <Target className="h-3 w-3" /> What has worked here
             </span>
@@ -438,7 +440,7 @@ export default function AppProfileDetail() {
         </div>
 
         <div className="space-y-4">
-          <div className="surface space-y-3 rounded-2xl p-5">
+          <div className="surface space-y-3 rounded-2xl p-5" data-testid="app-profile-videos">
             <div className="flex items-center justify-between gap-2">
               <h3 className="flex items-center gap-2 font-display text-base font-semibold">
                 <Video className="h-4 w-4 text-[color:var(--brand-indigo)]" />
@@ -483,7 +485,7 @@ export default function AppProfileDetail() {
             )}
           </div>
 
-          <div className="surface space-y-3 rounded-2xl p-5">
+          <div className="surface space-y-3 rounded-2xl p-5" data-testid="app-profile-angles">
             <div className="flex items-center justify-between gap-2">
               <h3 className="flex items-center gap-2 font-display text-base font-semibold">
                 <Target className="h-4 w-4 text-[color:var(--brand-indigo)]" />
@@ -521,7 +523,7 @@ export default function AppProfileDetail() {
             )}
           </div>
 
-          <div className="surface space-y-3 rounded-2xl p-5">
+          <div className="surface space-y-3 rounded-2xl p-5" data-testid="app-profile-templates">
             <h3 className="font-display text-base font-semibold">Suggested templates</h3>
             {recError && (
               <p className="text-xs text-muted-foreground">

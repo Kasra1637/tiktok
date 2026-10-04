@@ -378,7 +378,7 @@ export default function Landing() {
       </header>
 
       {/* ---------- Hero ---------- */}
-      <section className="relative overflow-hidden">
+      <section className="relative overflow-hidden" data-testid="landing-hero">
         <Aurora />
         <div className="grid-overlay" />
         <div className="relative z-10 mx-auto max-w-5xl px-5 pb-24 pt-20 text-center sm:pt-28">
@@ -451,9 +451,6 @@ export default function Landing() {
               <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Nothing spent until you render
             </span>
           </div>
-
-          {/* Stats bar anchor kept for onboarding tour compatibility */}
-          <div data-testid="landing-stats" className="hidden" />
 
         </div>
       </section>

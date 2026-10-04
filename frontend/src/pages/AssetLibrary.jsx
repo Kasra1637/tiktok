@@ -510,11 +510,13 @@ export default function AssetLibrary({
     return (
       <div className="space-y-4">
         {!embedded && (
-          <PageHeader
-            icon={Images}
-            title="Asset Library"
-            description="Your photograph. Every video is generated from it, so the person on camera is you — the scene around them is invented from the App Profile."
-          />
+          <div data-testid="asset-library-header">
+            <PageHeader
+              icon={Images}
+              title="Asset Library"
+              description="Your photograph. Every video is generated from it, so the person on camera is you — the scene around them is invented from the App Profile."
+            />
+          </div>
         )}
         {loading ? (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -574,6 +576,7 @@ export default function AssetLibrary({
       {/* Only the standalone route owns a title. Embedded, the wizard step
           header above already says this. */}
       {!embedded && (
+        <div data-testid="asset-library-header">
         <PageHeader
           icon={Images}
           title="Asset Library"
@@ -607,9 +610,10 @@ export default function AssetLibrary({
             </div>
           }
         />
+        </div>
       )}
 
-      <Alert>
+      <Alert data-testid="asset-rights-alert">
         <ShieldCheck className="h-4 w-4 text-[color:var(--brand-indigo)]" />
         <AlertDescription>
           Only upload assets you have the right to use. Each upload records your
@@ -625,7 +629,7 @@ export default function AssetLibrary({
       )}
       {notice && <Alert><AlertDescription>{notice}</AlertDescription></Alert>}
 
-      <div className="surface space-y-3 rounded-2xl p-4">
+      <div className="surface space-y-3 rounded-2xl p-4" data-testid="asset-upload-panel">
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <select
             value={kind}
@@ -679,6 +683,7 @@ export default function AssetLibrary({
         </div>
       </div>
 
+      <div data-testid="asset-list">
       {loading ? (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading assets...
@@ -713,6 +718,7 @@ export default function AssetLibrary({
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

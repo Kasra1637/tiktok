@@ -119,7 +119,7 @@ export default function Analytics() {
         </Alert>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="analytics-totals">
         {[
           ["Videos created", t.videos_created ?? 0, `${t.completed ?? 0} completed`],
           ["Success rate", pct(t.success_rate), `${t.failed ?? 0} failed`],
@@ -138,7 +138,7 @@ export default function Analytics() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2" data-testid="analytics-breakdowns">
         <Breakdown title="By app" rows={report?.by_app} />
         <Breakdown title="By model" rows={report?.by_model} />
         <Breakdown title="By template" rows={report?.by_template} countKey="used" />
@@ -147,7 +147,7 @@ export default function Analytics() {
         <Breakdown title="By content angle" rows={report?.by_angle} />
       </div>
 
-      <div className="surface space-y-3 rounded-2xl p-4">
+      <div className="surface space-y-3 rounded-2xl p-4" data-testid="analytics-performance">
         <h3 className="flex items-center gap-2 font-display text-sm font-semibold">
           <TrendingUp className="h-4 w-4 text-[color:var(--brand-indigo)]" />
           TikTok performance (entered by hand)
@@ -176,6 +176,7 @@ export default function Analytics() {
         </div>
       </div>
 
+      <div className="space-y-3" data-testid="analytics-feedback">
       {feedback.top_signals?.length > 0 && (
         <div className="surface space-y-2 rounded-2xl p-4">
           <h3 className="font-display text-sm font-semibold">What happened</h3>
@@ -211,6 +212,7 @@ export default function Analytics() {
           ))}
         </div>
       )}
+      </div>
 
       <p className="text-xs text-muted-foreground">
         No TikTok account is connected and no platform data is scraped. Performance figures

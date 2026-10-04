@@ -697,7 +697,7 @@ export default function GenerationHistory() {
         </Alert>
       )}
 
-      <div className="surface flex flex-wrap items-center gap-2 rounded-2xl p-4">
+      <div className="surface flex flex-wrap items-center gap-2 rounded-2xl p-4" data-testid="history-filters">
         <select
           value={profileFilter}
           onChange={(e) => setProfileFilter(e.target.value)}
