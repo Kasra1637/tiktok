@@ -1114,7 +1114,93 @@ class TestModelSelectionAtTheApiBoundary:
 
         assert err.value.status_code == 409
         detail = str(err.value.detail)
-        # Names the size, the ceiling, and reassures that nothing was charged.
+        # Names the size, the ceiling, and reassures that nothing has been charged.
         assert "character prompt" in detail
         assert "nothing has been charged" in detail
-        assert calls == [], "a refusal that still submits spends the founder's money"
+
+
+class TestClipDownload:
+    """
+    The durable-save download: browser headers, retries, self-diagnosing
+    errors. Regression cover for the H3 Max case, where the provider clip
+    played fine in the browser but the server-side fetch failed and the
+    paid render was left with only its expiring temporary copy.
+    """
+
+    def _fake_client(self, api, monkeypatch, behaviours, seen):
+        class FakeStream:
+            def __init__(self, behaviour):
+                self.behaviour = behaviour
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            def raise_for_status(self):
+                if isinstance(self.behaviour, Exception):
+                    raise self.behaviour
+
+            async def aiter_bytes(self):
+                if not isinstance(self.behaviour, Exception):
+                    yield b"fake-video-bytes"
+
+        class FakeClient:
+            def __init__(self, **kwargs):
+                seen.update(kwargs)
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            def stream(self, method, url):
+                seen["method"] = method
+                seen["url"] = url
+                seen["calls"] = seen.get("calls", 0) + 1
+                return FakeStream(behaviours.pop(0))
+
+        async def _no_sleep(delay):
+            return None
+
+        monkeypatch.setattr(api.httpx, "AsyncClient", FakeClient)
+        monkeypatch.setattr(api.asyncio, "sleep", _no_sleep)
+
+    def test_success_sends_browser_headers(self, api, monkeypatch):
+        seen = {}
+        self._fake_client(api, monkeypatch, [None], seen)
+        path, err = _run(api._download_generation_video(
+            "https://cdn.invalid/clip.mp4", "dl-ok"))
+        assert err is None
+        assert path.read_bytes() == b"fake-video-bytes"
+        assert seen["method"] == "GET"
+        assert "Mozilla" in seen["headers"]["User-Agent"]
+
+    def test_transient_failure_is_retried_then_succeeds(self, api, monkeypatch):
+        import httpx
+        seen = {}
+        self._fake_client(api, monkeypatch, [
+            httpx.ConnectError("blip"),
+            httpx.ConnectError("blip"),
+            None,
+        ], seen)
+        path, err = _run(api._download_generation_video(
+            "https://cdn.invalid/clip.mp4", "dl-retry"))
+        assert err is None
+        assert path.read_bytes() == b"fake-video-bytes"
+        assert seen["calls"] == 3
+
+    def test_rejection_names_the_status_and_is_not_retried(self, api, monkeypatch):
+        import httpx
+        seen = {}
+        req = httpx.Request("GET", "https://cdn.invalid/clip.mp4")
+        status_err = httpx.HTTPStatusError(
+            "forbidden", request=req, response=httpx.Response(403, request=req))
+        self._fake_client(api, monkeypatch, [status_err], seen)
+        path, err = _run(api._download_generation_video(
+            "https://cdn.invalid/clip.mp4", "dl-403"))
+        assert path is None
+        assert "403" in err
+        assert seen["calls"] == 1

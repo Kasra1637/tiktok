@@ -7668,7 +7668,7 @@ async def poll_generation(generation_id: str, user_id: str = Depends(get_current
         trim_note = ""
         # Persist locally first so the clip survives even if R2 is unconfigured.
         try:
-            local_path = await _download_generation_video(video_url, generation_id)
+            local_path, download_error = await _download_generation_video(video_url, generation_id)
             if local_path:
                 # Apply the hook trim IN PLACE, before storage and before the row
                 # records a length. The canonical path is also what an extension
@@ -7729,7 +7729,10 @@ async def poll_generation(generation_id: str, user_id: str = Depends(get_current
                             "storage, because the upload to cloud storage failed."
                         )
             else:
-                storage_error = "The provider clip could not be downloaded for durable storage."
+                storage_error = (
+                    "The provider clip could not be downloaded for durable storage"
+                    f" ({download_error})."
+                )
         except Exception as e:
             storage_error = str(e)[:500]
             logger.warning(f"Generation {generation_id}: storage step failed: {e}")
@@ -7768,26 +7771,89 @@ async def poll_generation(generation_id: str, user_id: str = Depends(get_current
     )
 
 
-async def _download_generation_video(video_url: str, generation_id: str) -> Optional[Path]:
-    """Download a finished clip into storage/videos for reuse and R2 upload."""
+# Provider-clip download hardening: attempts, per-attempt timeout, and backoff
+# between attempts. Bigger than the old single 180s attempt because H3 Max
+# renders 2K files that take longer over Render's network.
+_DOWNLOAD_ATTEMPTS = 3
+_DOWNLOAD_TIMEOUT = 240
+_DOWNLOAD_BACKOFF = (2, 5)
+# Browser-like headers for the same reason: some provider CDNs refuse
+# non-browser clients while the URL plays fine in a browser.
+_DOWNLOAD_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    ),
+    "Accept": "video/mp4,video/*;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+
+async def _download_generation_video(video_url: str, generation_id: str) -> tuple:
+    """Download a finished clip into storage/videos for reuse and R2 upload.
+
+    Returns (path, error_detail): path is the saved file, or None when every
+    attempt failed — in which case error_detail names the last failure
+    (HTTP status or exception) so the stored storage_error is
+    self-diagnosing instead of a generic "could not be downloaded".
+
+    Retried with backoff, because a single attempt made any transient blip a
+    permanent loss of the paid render's durable copy. Browser-like headers,
+    because some provider CDNs refuse non-browser clients (403 to
+    python-httpx's default User-Agent) while the same URL plays fine in a
+    founder's browser — the failure seen on H3 Max's 2K files. A longer
+    timeout than the old 180s, because those 2K files are bigger. 4xx
+    responses (other than 429) are not retried: a rejection will not heal
+    by asking again.
+    """
     target = pipeline.VIDEOS_DIR / f"{generation_id}.mp4"
     target.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        async with httpx.AsyncClient(timeout=180, follow_redirects=True) as client:
-            async with client.stream("GET", video_url) as resp:
-                resp.raise_for_status()
-                with open(target, "wb") as fh:
-                    async for chunk in resp.aiter_bytes():
-                        fh.write(chunk)
-    except Exception as e:
-        logger.warning(f"Could not download generation video {generation_id}: {e}")
-        if target.exists():
-            try:
-                target.unlink()
-            except OSError:
-                pass
-        return None
-    return target if target.exists() else None
+    last_detail = "no attempt made"
+    for attempt in range(1, _DOWNLOAD_ATTEMPTS + 1):
+        try:
+            async with httpx.AsyncClient(
+                timeout=_DOWNLOAD_TIMEOUT,
+                follow_redirects=True,
+                headers=_DOWNLOAD_HEADERS,
+            ) as client:
+                async with client.stream("GET", video_url) as resp:
+                    resp.raise_for_status()
+                    with open(target, "wb") as fh:
+                        async for chunk in resp.aiter_bytes():
+                            fh.write(chunk)
+            if target.exists() and target.stat().st_size > 0:
+                return target, None
+            last_detail = "downloaded file was empty"
+        except httpx.HTTPStatusError as e:
+            code = e.response.status_code
+            last_detail = f"HTTP {code} {(e.response.reason_phrase or '').strip()}".strip()
+            logger.warning(
+                f"Could not download generation video {generation_id} "
+                f"(attempt {attempt}/{_DOWNLOAD_ATTEMPTS}): {last_detail}"
+            )
+            if code != 429 and 400 <= code < 500:
+                break
+        except httpx.TransportError as e:
+            last_detail = f"{type(e).__name__}: {str(e)[:200]}"
+            logger.warning(
+                f"Could not download generation video {generation_id} "
+                f"(attempt {attempt}/{_DOWNLOAD_ATTEMPTS}): {last_detail}"
+            )
+        except Exception as e:
+            last_detail = f"{type(e).__name__}: {str(e)[:200]}"
+            logger.warning(
+                f"Could not download generation video {generation_id} "
+                f"(attempt {attempt}/{_DOWNLOAD_ATTEMPTS}): {last_detail}"
+            )
+            break
+        if attempt < _DOWNLOAD_ATTEMPTS:
+            await asyncio.sleep(_DOWNLOAD_BACKOFF[attempt - 1])
+    if target.exists():
+        try:
+            target.unlink()
+        except OSError:
+            pass
+    return None, last_detail
 
 
 @api_router.post("/generations/{generation_id}/storage/retry")
