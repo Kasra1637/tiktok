@@ -56,6 +56,35 @@ RENDER_PROMPT_LIMIT = 6800
 # different models cannot see each other's budget.
 _PROMPT_SCALE: ContextVar = ContextVar("hookforge_prompt_scale", default=1.0)
 
+# How far into a clip's budget the first acceptable clean ending must be
+# before _clean_boundary gives up and takes the raw cut. Lower values end
+# cleaner but discard more; this is where the two trade off evenly.
+MIN_BOUNDARY = 0.45
+
+# How many times build_segment_prompt will reassemble a prompt that came out
+# over its ceiling. Two would do for every measured case — the protected values
+# are known and bounded, so one correction lands inside — but the third costs
+# nothing and covers a strategy nobody has written yet. The loop is the tail of
+# the mechanism, not the mechanism: almost every prompt fits on the first try.
+MAX_FIT_ATTEMPTS = 3
+
+# Whether protected values are still holding their full budgets. Set per attempt
+# by build_segment_prompt, which withdraws it if the first assembly came out
+# over the ceiling.
+#
+# Protection has to be best-effort rather than absolute. Holding the script,
+# the brief and the locked scene at full length is worth ~1,000 characters, and
+# a saturated strategy can spend more than that on those three alone — so a
+# provider with a 4,096 ceiling would be handed a 4,879 prompt and refused by the
+# guard. Insisting on protection is how the model becomes unusable for exactly
+# the founders who gave it the most to work with. One attempt tries the good
+# version; if it does not fit, the next rebuilds without protection.
+_PROMPT_PROTECT: ContextVar = ContextVar("hookforge_prompt_protect", default=True)
+
+# The floor _budget_scale already clamps to. Repeated here because the retry
+# loop has to recognise when it has run out of room to squeeze.
+MIN_SCALE = 0.10
+
 # Whether to use the condensed fixed instructions, set the same way as the
 # scale and for the same reason: it has to reach the assembler without threading
 # a parameter through every helper.
@@ -116,16 +145,73 @@ def _budget_scale(prompt_budget, condensed: bool) -> float:
     # A ceiling at or below the floor leaves the variables nothing. Squeeze to
     # the floor of the scale rather than to zero: a prompt of one-character
     # stubs reads as corruption, and the submit guard will refuse it anyway.
-    return max(0.10, min(1.0, scale))
+    return max(MIN_SCALE, min(1.0, scale))
 
 
-def _clip(text, limit: int) -> str:
-    """Clip one variable prompt value to a fixed budget, stripped."""
+def _clean_boundary(head: str) -> str:
+    """
+    Trim a hard-cut fragment back to the last place it can end cleanly.
+
+    Hard character cutting is what a video model should never be handed: it
+    produced lines like "looks up from the phone, tired, into the le" and
+    "What this app is abou", which a model either ignores or reads as a
+    complete instruction. A fragment is still information; a broken word is
+    just noise that costs characters.
+
+    A line end is preferred, then a sentence end, then a word end, then the raw
+    cut as a last resort. Line first matters because the two largest protected
+    blocks — the locked scene and the strategy brief — are newline-delimited,
+    where cutting mid-line loses a whole field's label and value. Boundaries
+    earlier than MIN_BOUNDARY of the budget are refused: keeping one short
+    opening sentence and discarding the rest of the field is usually a worse
+    trade than an imperfect ending.
+    """
+    floor = len(head) * MIN_BOUNDARY
+    line = head.rfind("\n")
+    if line >= floor:
+        return head[:line].rstrip()
+    end = -1
+    for i, ch in enumerate(head):
+        if ch not in ".!?;":
+            continue
+        after = i + 1
+        if after < len(head) and head[after] in "\"'":
+            after += 1
+        if after >= len(head) or head[after] == " ":
+            end = after
+    if end >= floor:
+        return head[:end].rstrip()
+    space = head.rfind(" ")
+    if space >= floor:
+        return head[:space].rstrip()
+    return head.rstrip()
+
+
+def _clip(text, limit: int, protect: bool = False) -> str:
+    """
+    Clip one variable prompt value to a fixed budget, stripped.
+
+    `protect` marks a value the render cannot do without — the spoken script,
+    the on-camera action, the app's strategy. Under a tight ceiling the
+    protected values keep their full budget and the descriptive ones absorb
+    the squeeze instead. Losing the tail of a product brief is survivable;
+    losing half of what the founder is going to say is not.
+
+    Only engaged when condensing. At a normal ceiling the scale is 1.0 and
+    every value is already whole, so this changes nothing for Hailuo.
+    """
     s = str(text or "").strip()
-    effective = max(1, int(limit * _PROMPT_SCALE.get()))
+    scale = _PROMPT_SCALE.get()
+    if protect and _PROMPT_CONDENSED.get() and scale < 1.0 and _PROMPT_PROTECT.get():
+        effective = int(limit)
+    else:
+        effective = max(1, int(limit * scale))
     if len(s) <= effective:
         return s
-    return s[:effective].rstrip()
+    head = s[:effective].rstrip()
+    if _PROMPT_CONDENSED.get():
+        return _clean_boundary(head)
+    return head
 
 # Words the model must not attempt to draw. Listed so the instruction can be
 # explicit rather than relying on the model inferring "don't fake the facts".
@@ -191,7 +277,7 @@ def must_not_show_section(profile: dict) -> str:
         return ""
     if not items:
         return ""
-    listed = "; ".join(_clip(part, 30) for part in items[:8])
+    listed = "; ".join(_clip(part, 30, protect=True) for part in items[:8])
     return (
         "MUST NOT APPEAR — recorded on this app's profile as things a promo must never "
         f"contradict or show: {listed}. Do not depict any of them, do not imply them, and "
@@ -612,7 +698,7 @@ def character_scene_lock(strategy: dict) -> str:
         if not isinstance(values, dict):
             continue
         described = [
-            f"{label}: {_clip(values.get(key), 100)}"
+            f"{label}: {_clip(values.get(key), 100, protect=True)}"
             for key, label in fields
             if str(values.get(key) or "").strip()
         ]
@@ -634,7 +720,7 @@ def character_scene_lock(strategy: dict) -> str:
     # location and light the render needs most. Sized to clear a realistic
     # full lock (~1,050 with every field populated) — anything lower
     # amputates pinned fields even for ordinary strategies.
-    return _clip(lock, 1100)
+    return _clip(lock, 1100, protect=True)
 
 
 def strategy_brief(strategy: dict) -> str:
@@ -701,7 +787,7 @@ def strategy_brief(strategy: dict) -> str:
     # carries the context the render needs, so a pathological strategy loses
     # the tail, never the head. Sized to clear a realistic full brief — lower
     # cuts feature and outcome lines out of ordinary strategies.
-    return _clip(brief, 700)
+    return _clip(brief, 700, protect=True)
 
 
 def build_segment_prompt(
@@ -743,9 +829,19 @@ def build_segment_prompt(
             so a tight provider gets a shorter prompt rather than a truncated
             one. Both mean the same constraints, so the model sees the same
             rules from every provider — only the wording is tighter.
+
+            Under a tight ceiling the spoken script, the on-camera action and
+            the app's strategy and locked scene keep their full budgets and the
+            descriptive text absorbs the squeeze, because a prompt missing half
+            of what the founder is going to say is not a shorter prompt, it is
+            a different video. Clipping also ends on a sentence or word
+            boundary rather than mid-word. If the result is still over budget
+            it is rebuilt with a smaller scale, so a very full strategy thins
+            out instead of being refused.
     """
     scale = 1.0
     condensed = False
+    budget = 0.0
     if prompt_budget:
         try:
             budget = float(prompt_budget)
@@ -758,13 +854,39 @@ def build_segment_prompt(
         if budget > 0:
             condensed = budget < CONDENSE_BELOW
             scale = _budget_scale(budget, condensed)
-    token = _PROMPT_SCALE.set(scale)
-    token2 = _PROMPT_CONDENSED.set(condensed)
-    try:
-        return _assemble_prompt(strategy, profile, template, duration, assets, plan)
-    finally:
-        _PROMPT_CONDENSED.reset(token2)
-        _PROMPT_SCALE.reset(token)
+        else:
+            # Normalised, not just ignored: the retry loop below tests the budget
+            # for truthiness, and a negative one is truthy while no prompt can
+            # ever be <= it, so it would squeeze the render to nothing.
+            budget = 0.0
+
+    # Protected values hold their full budget, so the scale is no longer a
+    # reliable predictor of the assembled length and can undershoot on a very
+    # full strategy. Measure what was actually built and squeeze again rather
+    # than hand the guard an over-budget prompt: the guard's answer is to refuse
+    # the render, which makes the model unusable for exactly the detailed
+    # founders who gave it the most to work with.
+    prompt = ""
+    for attempt in range(MAX_FIT_ATTEMPTS):
+        token = _PROMPT_SCALE.set(scale)
+        token2 = _PROMPT_CONDENSED.set(condensed)
+        token3 = _PROMPT_PROTECT.set(attempt == 0)
+        try:
+            prompt = _assemble_prompt(strategy, profile, template, duration, assets, plan)
+        finally:
+            _PROMPT_PROTECT.reset(token3)
+            _PROMPT_CONDENSED.reset(token2)
+            _PROMPT_SCALE.reset(token)
+        if not budget or len(prompt) <= budget:
+            return prompt
+        # Still over: take the measured overshoot back out of the scale and
+        # reassemble. Protection is already withdrawn from here, so this is the
+        # plain scaled build. Falls back to a real reduction if the scale has
+        # bottomed out.
+        if scale <= MIN_SCALE:
+            break
+        scale = max(MIN_SCALE, scale * budget / len(prompt) * 0.99)
+    return prompt
 
 
 def _assemble_prompt(
@@ -831,7 +953,7 @@ def _assemble_prompt(
         )
         sections.append(_CONDENSED_HANDOFF)
 
-    hook_line = _clip(strategy.get("hook_line"), 200)
+    hook_line = _clip(strategy.get("hook_line"), 200, protect=True)
     hook_concept = _clip(strategy.get("hook_concept"), 75)
     hook_action = _clip(strategy.get("hook_action"), 75)
     hook_dialogue = _clip(strategy.get("hook_dialogue"), 75)
@@ -886,9 +1008,9 @@ def _assemble_prompt(
         ("middle", "MIDDLE", middle_seconds, "develop the hook and end at the reach"),
     ):
         section = sections_by_role.get(role) or {}
-        goal = _clip(section.get("goal"), 85)
-        script = _clip(section.get("script"), 160)
-        action = _clip(section.get("action"), 85)
+        goal = _clip(section.get("goal"), 85, protect=True)
+        script = _clip(section.get("script"), 160, protect=True)
+        action = _clip(section.get("action"), 85, protect=True)
         block = [f"{label} — {budget}s, and its job is to {purpose}:"]
         if goal:
             block.append(f"  what it must achieve: {goal}")

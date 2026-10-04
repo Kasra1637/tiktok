@@ -1163,6 +1163,142 @@ class TestPerProviderPromptBudget:
             limit = vp.capability(key).get("prompt_char_limit")
             assert isinstance(limit, int) and limit > 0, key
 
+    def test_the_hailuo_prompt_is_untouched_by_all_of_this(self):
+        """
+        The founder is happy with H3 Max's output, so every mechanism added for
+        the tight ceiling has to be invisible to it: clean endings, protected
+        values and the retry loop. All three are gated on condensing, and 6,800
+        never condenses, so its prompt must be byte-identical to what it was
+        before this work — including when a budget is passed explicitly.
+        """
+        kwargs = self._verbose_kwargs()
+        baseline = gp.build_segment_prompt(**kwargs)
+        for key in ("minimax-h3", "minimax-h3-max"):
+            limit = vp.capability(key)["prompt_char_limit"]
+            assert gp.build_segment_prompt(**kwargs, prompt_budget=limit) == baseline, (
+                f"{key} is not condensed, so nothing here should change its prompt"
+            )
+
+    def test_the_protect_flag_does_not_leak_between_calls(self):
+        """
+        Same reason as the scale: protection is withdrawn mid-render when a
+        prompt will not fit, and leaking that would leave the NEXT render short
+        of its script with nothing in the logs to explain it.
+        """
+        kwargs = self._verbose_kwargs()
+        assert gp._PROMPT_PROTECT.get() is True
+        gp.build_segment_prompt(**kwargs, prompt_budget=self._TIGHTEST)
+        assert gp._PROMPT_PROTECT.get() is True
+
+    def test_the_spoken_script_survives_a_tight_ceiling(self):
+        """
+        The regression that motivates protection. Scaling every value equally cut
+        the founder's dialogue mid-word — "he list I actually needed th" — which
+        is the one field the render cannot be built without. A prompt missing
+        half of what the person says is not a shorter prompt, it is a different
+        video.
+
+        Each value here is deliberately longer than its scaled budget and shorter
+        than its protected one, and each is asserted WHOLE. Asserting a prefix
+        would pass either way and prove nothing: protection only changes how much
+        of the tail survives, so the tail is what has to be checked.
+        """
+        script = (
+            "I used to have nine lists open at once, and not one of them was "
+            "the list I actually needed that day, which is the whole joke."
+        )
+        action = (
+            "exhales, half a laugh, shrugs once, then looks back down at the desk"
+        )
+        strategy = {
+            "hook_line": "You are not lazy, you are just carrying eleven apps.",
+            "segments": [
+                {
+                    "role": "hook",
+                    "goal": "stop the scroll with recognition",
+                    "script": script,
+                    "action": action,
+                },
+                {
+                    "role": "middle",
+                    "goal": "show the relief",
+                    "script": "Now there is just the one, already sorted, waiting.",
+                    "action": "taps the phone once and slides it face-down",
+                },
+            ],
+        }
+        prompt = gp.build_segment_prompt(
+            strategy=strategy, profile={}, template={}, duration=10,
+            assets={"character_reference": {"kind": "character_reference",
+                                           "name": "Founder"}},
+            plan={"hook_seconds": 3}, prompt_budget=self._TIGHTEST,
+        )
+        assert script in prompt, "the spoken script lost its tail"
+        assert action in prompt, "the on-camera action lost its tail"
+        # And the budget actually is tight enough that protection was needed,
+        # otherwise this test would pass with protection switched off.
+        scale = gp._budget_scale(self._TIGHTEST, True)
+        assert len(script) > 160 * scale, (
+            f"fixture is too short to test protection: {len(script)} chars vs a "
+            f"scaled budget of {160 * scale:.0f}"
+        )
+
+    def test_clipping_ends_cleanly_rather_than_mid_word(self):
+        """
+        The founder-facing bug this replaced: a hard character cut produced
+        instructions like "looks up from the phone, tired, into the le", which a
+        model either ignores or reads as complete. This pins the clean ending
+        directly, with a value whose budget lands mid-word.
+        """
+        source = "looks up slowly from the phone into the lens and holds a long beat"
+        scale = gp._PROMPT_SCALE.set(1.0)
+        condensed = gp._PROMPT_CONDENSED.set(True)
+        try:
+            clipped = gp._clip(source, 30)
+        finally:
+            gp._PROMPT_CONDENSED.reset(condensed)
+            gp._PROMPT_SCALE.reset(scale)
+        assert clipped == "looks up slowly from the", (
+            f"expected a word-boundary ending, got {clipped!r}"
+        )
+
+    def test_a_line_delimited_block_ends_on_a_line(self):
+        """
+        The strategy brief and the locked scene are newline-delimited, so cutting
+        them mid-line drops a field's label along with its value. Line has to be
+        preferred over sentence for those two, or the condensed brief loses whole
+        fields that the full prompt keeps.
+        """
+        scale = gp._PROMPT_SCALE.set(1.0)
+        condensed = gp._PROMPT_CONDENSED.set(True)
+        try:
+            clipped = gp._clip(
+                "location: a dark office\nlighting: one lamp\nprops: a phone", 40
+            )
+        finally:
+            gp._PROMPT_CONDENSED.reset(condensed)
+            gp._PROMPT_SCALE.reset(scale)
+        # 40 reaches just past the first newline, so the line boundary is
+        # available. Without the line rule this would stop at the last space
+        # instead and read "location: a dark", losing the value with the label.
+        assert clipped == "location: a dark office", (
+            f"expected the line-boundary ending, got {clipped!r}"
+        )
+
+    def test_a_saturated_strategy_still_fits_by_giving_up_protection(self):
+        """
+        Protection has to be best-effort. Holding the script, brief and locked
+        scene at full length costs about 1,000 characters, and a saturated
+        strategy can spend more than that on those three alone — which produced a
+        4,879 prompt against a 4,096 ceiling and made the model unusable for the
+        most detailed founders. The retry has to converge regardless.
+        """
+        kwargs = self._verbose_kwargs()
+        for key in vp.STUDIO_ELIGIBLE:
+            limit = vp.capability(key)["prompt_char_limit"]
+            prompt = gp.build_segment_prompt(**kwargs, prompt_budget=limit)
+            assert len(prompt) <= limit, f"{key}: {len(prompt)} over {limit}"
+
     def test_the_tail_survives_a_tight_budget(self):
         """
         Clipping must stay structural. Cutting the finished string instead would
