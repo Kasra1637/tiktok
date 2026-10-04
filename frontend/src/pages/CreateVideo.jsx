@@ -1764,7 +1764,7 @@ export default function CreateVideo() {
           ))}
         </div>
         <div className="surface rounded-2xl p-5 md:p-6">
-          <div className="mx-auto w-full max-w-3xl space-y-4">
+          <div className="mx-auto w-full max-w-5xl space-y-4">
             <div className="flex items-start gap-3">
               <span className="h-10 w-10 shrink-0 animate-pulse rounded-xl border border-[color:var(--hairline)]" />
               <div className="flex-1 space-y-2">
@@ -1868,11 +1868,7 @@ export default function CreateVideo() {
       )}
 
       <div className="surface rounded-2xl p-5 md:p-6">
-        {step === 2 ? (
-          stepContent
-        ) : (
-          <div className="mx-auto w-full max-w-3xl">{stepContent}</div>
-        )}
+        <div className="mx-auto w-full max-w-5xl">{stepContent}</div>
       </div>
 
       {/* Back and Next used to live here and were pure duplication: every step
