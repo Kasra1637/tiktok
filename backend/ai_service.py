@@ -2452,7 +2452,7 @@ def _two_section_schema(middle_seconds: int) -> str:
         ',\n    {"index": 0, "role": "hook", "seconds": 3, '
         '"goal": "what the opening beat must achieve to stop the scroll", '
         '"script": "the exact words spoken in the opening - the plan\'s hook line", '
-        '"action": "what they do in the opening seconds"}'
+        '"action": "the opening physical performance: ordered, timed beats across face, hands, posture and props, already moving in frame one"}'
         f',\n    {{"index": 1, "role": "middle", "seconds": {middle_seconds}, '
         '"goal": "what the middle must achieve: develop the hook and end at the moment the viewer reaches for the app", '
         '"script": "the words spoken in the middle - different from the hook", '
@@ -2495,7 +2495,7 @@ _STRATEGY_TEXT_LIMITS = {
     "hook_concept": 700,
     "hook_line": 200,
     "hook_promise": 300,
-    "hook_action": 400,
+    "hook_action": 700,
     "hook_dialogue": 400,
     "primary_feature": 400,
     "desired_outcome": 400,
@@ -2887,7 +2887,7 @@ async def generate_video_strategy(
         '  "hook_concept": "what the first seconds DO, visually and dramatically — not a slogan",\n'
         '  "hook_line": "the single spoken hook line, max 12 words",\n'
         '  "hook_promise": "what the hook promises the viewer in the next few seconds",\n'
-        '  "hook_action": "the physical action the on-camera person performs during the hook",\n'
+        '  "hook_action": "the opening physical performance: ordered, timed beats across face, gaze, head, shoulders, hands and props, already moving in frame one",\n'
         '  "hook_dialogue": "the exact words spoken in the hook, or the delivery direction if none",\n'
         '  "messaging_pillars": ["2-4 things the video must land, derived from this app\'s real features"],\n'
         f'  "primary_feature": "the ONE feature this video shows, from the facts above",\n'
@@ -2943,6 +2943,22 @@ async def generate_video_strategy(
         +         f"- The opening section lasts {hook_seconds} seconds and must be the strongest {hook_seconds} seconds "
         f"for THIS app. Write a real hook for this app's real audience, not a generic influencer opening with "
         "the app name dropped in.\n"
+        "- THE OPENING IS A PATTERN INTERRUPT, not an introduction: the viewer is "
+        "mid-scroll, deciding in a second, so the first frame must already be moving and "
+        "the first half-second must hold ONE unmistakable physical beat. Never a neutral "
+        "pose, a fade, a slow push-in standing in for action, or a greeting.\n"
+        "- Break the expected pattern on purpose: scale (something huge, or at the lens), "
+        "pace (a snap then a hold, or three fast beats), register (comedy where sincere is "
+        "expected). Then escalate: two or three actions inside the "
+        f"{hook_seconds}-second opening, each bigger or stranger than the last, ending "
+        "on the strongest, body aimed at the lens.\n"
+        "- Write them as ordered, timed action: posture and shoulders, torso, arms and "
+        "hands and the exact gesture, head movement, gaze target, any prop grabbed or "
+        "moved, and the change in the face (brows lifting, eyes widening, jaw dropping "
+        "open). Ambiguity is the enemy: name the brow, the eye, the second.\n"
+        "- An expression is an ACTION inside the opening, never a description of who "
+        "they are: no features, face, hair, skin, age or build, and never contradicting "
+        "the founder's photograph. Say what the face does, never what the face is.\n"
         "- The hook must serve the selected hook mechanism. If the mechanism is a question, the hook is a "
         "question; if it is a contrarian correction, the hook corrects something.\n"
         "- The two sections must do genuinely different work. The hook earns attention; the middle "
@@ -3042,8 +3058,9 @@ async def generate_video_strategy(
         # is what pushes the reply past the completion budget and gets it cut
         # off mid-object. Concision costs nothing here: the fields are read as
         # locked values restated into a prompt, not as prose.
-        "- Keep EVERY string value under 25 words and each list to 2-4 short items. Be specific, not lengthy. "
-        "A long value helps nothing and risks the whole object being cut off.\n"
+        "- Keep every string value under 25 words and each list to 2-4 short items. Be specific, not lengthy. "
+        "A long value helps nothing and risks the whole object being cut off. The ONE exception is "
+        "hook_action and the opening section's action: the opening's physical beats, which may run to about 45 words.\n"
         "- Never use double-quote characters inside any string value: write hook lines and dialogue "
         "without quotation marks. A stray quote breaks the JSON and fails the whole strategy.\n"
         "- Return ONE complete JSON object and nothing else: no prose before or after it, no markdown fence."

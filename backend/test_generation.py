@@ -1399,3 +1399,105 @@ class TestBoundForSubmit:
         out = face_crop.bound_for_submit(src)
         with Image.open(out) as img:
             assert img.format == "JPEG"
+class TestOpeningPatternInterrupt:
+    """
+    The opening is a pattern interrupt, so the physical detail that makes one
+    has to survive the trip to the video model.
+
+    It used to not: `hook_action` was clipped to 75 characters, which is roughly
+    thirteen words, so a strategy written as ordered timed beats arrived at the
+    render as a fragment and the opening reverted to a person standing still and
+    then talking. These pin the detail arriving intact at both ceilings.
+    """
+
+    # A realistic opening performance: ordered, timed, body part by body part.
+    ACTION = (
+        "Frame one is already moving: the hand snaps up holding the phone, thumb "
+        "turning it to the lens; on that beat the brows lift and the eyes widen, "
+        "jaw dropping open; the hand drops out of frame as the shoulders break "
+        "forward and they step in; end on the sharp look into the camera."
+    )
+
+    def _strategy(self):
+        return {
+            "hook_line": "Nobody warned me this would happen at 3am.",
+            "hook_concept": (
+                "The viewer catches the middle of a gesture they did not see "
+                "start, so they have to stay to find out what it was."
+            ),
+            "hook_action": self.ACTION,
+            "segments": [
+                {
+                    "role": "hook",
+                    "goal": "Stop the scroll inside half a second.",
+                    "script": "Nobody warned me this would happen at 3am.",
+                    "action": self.ACTION,
+                },
+                {
+                    "role": "middle",
+                    "goal": "Develop it into the moment they reach for the phone.",
+                    "script": "I was mid-shift and completely done for the night.",
+                    "action": "The shoulders drop, the hands stay low and busy.",
+                },
+            ],
+        }
+
+    def _prompt(self, budget=None):
+        kwargs = dict(
+            strategy=self._strategy(), profile={"brand_name": "ShiftLog"},
+            template={}, duration=12, assets={}, plan={"hook_seconds": 3},
+        )
+        if budget is None:
+            return gp.build_segment_prompt(**kwargs)
+        return gp.build_segment_prompt(**kwargs, prompt_budget=budget)
+
+    def test_the_directive_is_in_both_prompt_forms(self):
+        """
+        Condensing must not cost the model the requirement. The condensed form
+        carries every constraint of the full one; only the examples of how to
+        satisfy them are dropped.
+        """
+        full = self._prompt()
+        tight = self._prompt(min(vp.capability(k)["prompt_char_limit"]
+                                 for k in vp.STUDIO_ELIGIBLE))
+        assert gp._OPENING_INTERRUPT in full
+        assert gp._CONDENSED_OPENING in tight
+        for constraint in ("first frame is already", "half-second",
+                           "face, gaze, hands"):
+            assert constraint in full
+            assert constraint in tight
+
+    def test_the_directive_precedes_the_beats_it_governs(self):
+        """A requirement read after the beats is read as a footnote."""
+        full = self._prompt()
+        assert full.index(gp._OPENING_INTERRUPT) < full.index(
+            "What the person physically does in the opening"
+        )
+
+    def test_the_opening_detail_arrives_whole_at_the_default_ceiling(self):
+        """The whole point: no fragment of the performance at 280 characters."""
+        prompt = self._prompt()
+        assert self.ACTION in prompt
+        assert f"What the person physically does in the opening: {self.ACTION}" \
+            in prompt
+
+    def test_the_opening_detail_survives_condensing(self):
+        """
+        Protected means protected. Grok's 4,096 ceiling is the tight one, and
+        losing the physical score there would put the opening back to a talking
+        head on the provider most likely to need the help.
+        """
+        tight = self._prompt(4096)
+        assert self.ACTION in tight
+        assert len(tight) <= 4096
+
+    def test_a_pathological_opening_still_respects_the_ceiling(self):
+        """Detail is never a licence to overflow: the guard is the ceiling."""
+        strategy = self._strategy()
+        strategy["hook_action"] = "A" * 3000
+        strategy["segments"][0]["action"] = "B" * 3000
+        prompt = gp.build_segment_prompt(
+            strategy=strategy, profile={"brand_name": "ShiftLog"}, template={},
+            duration=12, assets={}, plan={"hook_seconds": 3}, prompt_budget=4096,
+        )
+        assert len(prompt) <= 4096

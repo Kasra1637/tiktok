@@ -62,11 +62,19 @@ _PROMPT_SCALE: ContextVar = ContextVar("hookforge_prompt_scale", default=1.0)
 MIN_BOUNDARY = 0.45
 
 # How many times build_segment_prompt will reassemble a prompt that came out
-# over its ceiling. Two would do for every measured case — the protected values
-# are known and bounded, so one correction lands inside — but the third costs
-# nothing and covers a strategy nobody has written yet. The loop is the tail of
-# the mechanism, not the mechanism: almost every prompt fits on the first try.
-MAX_FIT_ATTEMPTS = 3
+# over its ceiling.
+#
+# Each pass corrects the scale by the measured overshoot, so it converges
+# geometrically and the number of passes needed is a function of how far
+# over the first assembly landed, not of which provider it was for. Three was
+# enough while the saturated worst case fitted inside the ceiling at scale
+# 1.0; adding the opening pattern-interrupt directive and the larger hook
+# budgets pushed that worst case about 240 characters past, which three
+# passes did not absorb. Six absorbs a far larger saturated strategy than
+# this code can currently build, and the passes are pure string work, so
+# the headroom is close to free. Still the tail of the mechanism, not the
+# mechanism: almost every prompt fits on the first try.
+MAX_FIT_ATTEMPTS = 6
 
 # Whether protected values are still holding their full budgets. Set per attempt
 # by build_segment_prompt, which withdraws it if the first assembly came out
@@ -113,8 +121,13 @@ CONDENSE_BELOW = 4500
 # below divides by the variable space these imply, so if either drifts the
 # prompts stop fitting their ceilings again. A test rebuilds both and pins them,
 # which is why they are named rather than inlined.
-FULL_PROMPT_FLOOR = 2047
-CONDENSED_PROMPT_FLOOR = 1326
+#
+# Both rose when the opening pattern-interrupt directive was added (its full and
+# condensed forms are the fixed text measured here). That is the trade this
+# change makes on purpose: an interrupting opening is the product, and it is paid
+# for out of descriptive room on the providers with the tightest ceilings.
+FULL_PROMPT_FLOOR = 2781
+CONDENSED_PROMPT_FLOOR = 1654
 
 # What the variables are given at the default ceiling, derived rather than
 # measured: the default ceiling is a TOTAL, and the floor is part of it.
@@ -251,6 +264,39 @@ _CONDENSED_IDENTITY_CLOSE = (
     "and no title card. The person on camera is the same individual in every "
     "frame, face and hair exactly as the reference photograph, in the one "
     "outfit this scene specifies, in the same place, under the same light."
+)
+
+# How the opening plays, as a standing instruction on every studio render.
+#
+# The strategy supplies the specific beats; this is the requirement they have to
+# satisfy, stated where the model is deciding what happens in the first frame.
+# It is fixed text, so it is part of the measured floor below and gets a
+# condensed twin for providers whose ceiling cannot carry the full set.
+#
+# What it forbids matters as much as what it asks for: the common failure this
+# replaces was an opening that drifts in, settles into a neutral pose and then
+# starts talking, which is exactly what a scrolling thumb ignores.
+_OPENING_INTERRUPT = (
+    "HOW THE OPENING MUST PLAY, frame by frame: the first frame is already in motion "
+    "\u2014 no neutral pose before anything happens, no fade, drift or slow push-in "
+    "standing in for action, no greeting to camera. Inside the first half-second "
+    "they do ONE unmistakable thing a scrolling thumb has to pause for: a sharp "
+    "look straight into the lens, brows lifting and eyes widening, a hand snapping "
+    "up into frame, an object grabbed, moved or put down, a posture or shoulder "
+    "break. Two or three such beats, each bigger or stranger than the one before, "
+    "so the opening escalates instead of settling. The face, gaze, hands and "
+    "posture carry it; the words come second. Read the beats below as the physical "
+    "score for those seconds and play them in order."
+)
+
+# The same rule for a provider whose ceiling is too low for the full set. Every
+# constraint above survives; only the examples of how to satisfy them go.
+_CONDENSED_OPENING = (
+    "Opening is a pattern interrupt: the first frame is already moving \u2014 no neutral "
+    "pose, no fade, no greeting. One unmistakable beat inside the first half-second, "
+    "then two or three escalating ones, carried by the face, gaze, hands and "
+    "posture rather than by the words. Play the beats below as the physical score "
+    "for those seconds."
 )
 
 # The App Profile's must_not_show list, turned into a prompt section.
@@ -842,6 +888,16 @@ def build_segment_prompt(
     scale = 1.0
     condensed = False
     budget = 0.0
+    # The default is the measured ceiling, as the docstring says it is.
+    # It used to be no ceiling at all: a caller that passed nothing got a
+    # prompt assembled at full size, which only stayed under 6,800 while
+    # every field budget fitted inside it. The opening detail raised the
+    # saturated worst case past the limit, and the overflow surfaced as a
+    # provider refusal rather than as a prompt that was too long — the
+    # same strategy still renders fine on every normal input. Enforcing the
+    # default is what the parameter always claimed to do.
+    if prompt_budget is None:
+        prompt_budget = RENDER_PROMPT_LIMIT
     if prompt_budget:
         try:
             budget = float(prompt_budget)
@@ -854,11 +910,14 @@ def build_segment_prompt(
         if budget > 0:
             condensed = budget < CONDENSE_BELOW
             scale = _budget_scale(budget, condensed)
-        else:
-            # Normalised, not just ignored: the retry loop below tests the budget
-            # for truthiness, and a negative one is truthy while no prompt can
-            # ever be <= it, so it would squeeze the render to nothing.
-            budget = 0.0
+
+    # Normalised, not just ignored: the retry loop below tests the budget for
+    # truthiness, and a negative one is truthy while no prompt can ever be <= it,
+    # so it would squeeze the render to nothing. A caller bug gets the
+    # measured default — which is what the docstring promises, and what an
+    # omitted prompt_budget now gets too — rather than an unlimited prompt.
+    if budget <= 0:
+        budget = float(RENDER_PROMPT_LIMIT)
 
     # Protected values hold their full budget, so the scale is no longer a
     # reliable predictor of the assembled length and can undershoot on a very
@@ -953,9 +1012,14 @@ def _assemble_prompt(
         )
         sections.append(_CONDENSED_HANDOFF)
 
+    # The requirement the beats below have to satisfy. Placed ahead of them, so
+    # the model reads it as the standard for what follows rather than as another
+    # fact about the video.
+    sections.append(_CONDENSED_OPENING if condensed else _OPENING_INTERRUPT)
+
     hook_line = _clip(strategy.get("hook_line"), 200, protect=True)
-    hook_concept = _clip(strategy.get("hook_concept"), 75)
-    hook_action = _clip(strategy.get("hook_action"), 75)
+    hook_concept = _clip(strategy.get("hook_concept"), 120, protect=True)
+    hook_action = _clip(strategy.get("hook_action"), 280, protect=True)
     hook_dialogue = _clip(strategy.get("hook_dialogue"), 75)
     promise = _clip(strategy.get("hook_promise"), 40)
     if hook_concept:
@@ -1003,14 +1067,17 @@ def _assemble_prompt(
     # instructions: "its job is to stops the scroll" is a visible grammar fault
     # in a prompt someone may have to debug, and the model reads it as a
     # malformed instruction rather than a shorter one.
-    for role, label, budget, purpose in (
-        ("hook", "HOOK", hook_seconds, "stop the scroll"),
-        ("middle", "MIDDLE", middle_seconds, "develop the hook and end at the reach"),
+    # Per-role budgets for goal and action, because the two sections are not
+    # the same job: the opening's action is the physical score for the seconds
+    # that have to stop the scroll, so it is given room the middle does not need.
+    for role, label, budget, purpose, goal_budget, action_budget in (
+        ("hook", "HOOK", hook_seconds, "stop the scroll", 110, 220),
+        ("middle", "MIDDLE", middle_seconds, "develop the hook and end at the reach", 85, 120),
     ):
         section = sections_by_role.get(role) or {}
-        goal = _clip(section.get("goal"), 85, protect=True)
+        goal = _clip(section.get("goal"), goal_budget, protect=True)
         script = _clip(section.get("script"), 160, protect=True)
-        action = _clip(section.get("action"), 85, protect=True)
+        action = _clip(section.get("action"), action_budget, protect=True)
         block = [f"{label} — {budget}s, and its job is to {purpose}:"]
         if goal:
             block.append(f"  what it must achieve: {goal}")

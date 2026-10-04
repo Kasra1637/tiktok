@@ -229,10 +229,71 @@ class TestStrategyBudget:
         """
         A budget is a backstop, not the fix. The prompt also has to ask for
         concise values, or every strategy costs a retry.
+
+        The opening's physical performance is the one deliberate exemption: it is
+        written as ordered timed beats, and a 25-word cap would cut it back to
+        the generic gesture this change exists to replace.
         """
         src = (BACKEND_DIR / "ai_service.py").read_text(encoding="utf-8")
-        assert "Keep EVERY string value under 25 words" in src
+        assert "Keep every string value under 25 words" in src
         assert "no markdown fence" in src
+        assert "may run to about 45 words" in src
+
+    def test_the_prompt_demands_a_physical_pattern_interrupt_opening(self, monkeypatch):
+        """
+        The render cannot invent an opening: it films the beats the strategy
+        writes. So the strategy prompt has to ask for them by body part, timed,
+        with the expression treated as an action rather than as a description of
+        the face, which the founder's photograph owns.
+        """
+        import ai_service
+
+        captured = {}
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return {
+                "strategy_summary": "s", "audience_problem": "p",
+                "emotional_triggers": ["t"], "hook_concept": "c",
+                "hook_line": "h", "hook_promise": "p", "hook_action": "a",
+                "messaging_pillars": ["m"], "primary_feature": "f",
+                "desired_outcome": "o", "differentiation_beat": "b",
+                "scene": {"environment": "kitchen"},
+                "performance": {"movement": "still"},
+                "segments": [{"index": 0, "role": "hook", "seconds": 3,
+                              "goal": "g", "script": "s", "action": "a"},
+                             {"index": 1, "role": "middle", "seconds": 17,
+                              "goal": "g", "script": "s", "action": "a"}],
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        asyncio.run(ai_service.generate_video_strategy(
+            profile={
+                "brand_name": "ShiftLog",
+                "brand_description": "Shift logging for healthcare workers.",
+                "app_category": "Productivity",
+                "usage_moments": ["the end of a night shift"],
+            },
+            template={"name": "T", "hook_seconds": 3},
+            hook_seconds=3,
+        ))
+        prompt = captured["prompt"]
+
+        assert "PATTERN INTERRUPT" in prompt
+        for requirement in (
+            "first frame must already be moving",
+            "first half-second",
+            "Never a neutral pose",
+            "escalate",
+            "posture and shoulders",
+            "brows",
+            "aimed at the lens",
+        ):
+            assert requirement in prompt, f"opening rule missing: {requirement}"
+        # The appearance prohibition still governs: expression is an action, and
+        # the photograph is the only authority on who the person is.
+        assert "Say what the face does, never what the face is" in prompt
+        assert "may run to about 45 words" in prompt
 
     def test_a_fully_populated_prompt_stays_under_a_ceiling(self, monkeypatch):
         """
