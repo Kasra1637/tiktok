@@ -19,8 +19,10 @@ import {
   describeUnapprovedCount,
   describeEmptySelection,
 } from "../lib/profileSelection";
+// requiredAssetStatus left with the per-requirement checklist it fed. The photo
+// section now reports the one requirement directly, next to the photograph, so
+// the template card only has to say whether anything is still owed.
 import {
-  requiredAssetStatus,
   blockingRequirements,
 } from "../lib/templateRequirements";
 import {
@@ -36,7 +38,9 @@ import {
   Image as ImageIcon, Check, Sparkles, RefreshCw, ChevronDown,
   Save, CheckCircle2, Star,
 } from "lucide-react";
-import { toast } from "sonner";
+// toast left with AttachedPhoto, the only place on this page that raised one.
+// Detaching now happens inside the photo section, which reports its own
+// outcome.
 
 // The order is the product, and it is deliberate.
 //
@@ -283,50 +287,6 @@ function StepShell({ icon: Icon, title, description, children }) {
         </div>
       </div>
       {children}
-    </div>
-  );
-}
-
-/**
- * One attached photograph, and a Remove button.
- *
- * This used to carry start/end seconds, an audio role and a gain, plus a "Save
- * timing" button that wrote them back. None of it does anything now. The video
- * is one render with captions composited over it, so there is no in and out
- * point for an asset, and audio mixing was never reachable from the studio —
- * the composition spec is captions only. The controls rendered as though a
- * founder could place their own face on screen at 4 seconds and hear it at
- * twice the volume, and none of those writes changed the output.
- *
- * The photograph itself has no timing either: it rides to the model as an input
- * reference for the whole generation. So a row is now a confirmation that it is
- * attached, and a way to detach it.
- */
-function AttachedPhoto({ project, attachment, onChanged }) {
-  const detach = async () => {
-    try {
-      await api.detachAsset(project.id, attachment.asset_id);
-      const fresh = await api.getStudioProject(project.id);
-      onChanged(fresh);
-    } catch (err) {
-      toast.error(getErrorMessage(err));
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-3 rounded-xl border border-[color:var(--hairline)] p-3">
-      <Badge variant="secondary" className="shrink-0 text-[11px]">
-        {humanize(attachment.kind)}
-      </Badge>
-      <span className="min-w-0 flex-1 truncate text-sm">
-        {attachment.label || attachment.asset_id.slice(0, 8)}
-      </span>
-      <span className="shrink-0 text-xs text-muted-foreground">
-        used for the whole video
-      </span>
-      <Button variant="ghost" size="sm" aria-label="Remove from project" onClick={detach}>
-        Remove
-      </Button>
     </div>
   );
 }
@@ -1314,37 +1274,22 @@ export default function CreateVideo() {
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">{template.opening_structure}</p>
                 <TemplateShape template={template} />
-                {template.required_assets?.length > 0 && (
-                  <div className="mt-2 space-y-1.5">
-                    <span className="eyebrow block">Needs from you</span>
-                    {requiredAssetStatus(template.required_assets, project?.assets).map((r, i) => (
-                      <div key={`${r.kind || "unnamed"}-${i}`} className="flex items-center gap-2 text-xs">
-                        {project ? (
-                          r.have ? (
-                            <Check className="h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />
-                          ) : (
-                            <span aria-hidden="true" className="h-3.5 w-3.5 shrink-0 rounded-full border border-[color:var(--hairline-strong)]" />
-                          )
-                        ) : null}
-                        <span className={r.have ? "text-muted-foreground" : ""}>{humanize(r.kind)}</span>
-                        {!r.have && project && (
-                          <span className="text-muted-foreground">
-                            — required
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                    {project && missingIdentity.length > 0 && (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="mt-2"
-                        onClick={scrollToTemplatePhoto}
-                      >
-                        <ImageIcon className="h-3.5 w-3.5" /> Attach it below
-                      </Button>
-                    )}
-                  </div>
+                {/* The requirement is stated in one line rather than as a
+                    checklist. It was a fourth place the same photograph was
+                    reported — template card, upload panel, asset row, and the
+                    "Attached" block below all showed it — and the photo section
+                    immediately underneath is where the photo actually lives, so
+                    the card's job is to say whether anything is still owed and
+                    point at it. */}
+                {template.required_assets?.length > 0 && project && missingIdentity.length > 0 && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="mt-2"
+                    onClick={scrollToTemplatePhoto}
+                  >
+                    <ImageIcon className="h-3.5 w-3.5" /> Add your photo below
+                  </Button>
                 )}
               </div>
             )}
@@ -1388,27 +1333,6 @@ export default function CreateVideo() {
                       api.getStudioProject(project.id).then(setProject).catch(() => {});
                     }}
                   />
-                  <div className="space-y-2">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
-                      Attached
-                    </span>
-                    {(project.assets || []).length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        Nothing attached yet.
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {(project.assets || []).map((a) => (
-                          <AttachedPhoto
-                            key={a.asset_id}
-                            project={project}
-                            attachment={a}
-                            onChanged={setProject}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
                 </>
               )}
             </div>

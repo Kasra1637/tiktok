@@ -11,7 +11,7 @@ import { resolveActiveProfileId, profileLabel, partitionProfiles } from "../lib/
 import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
 import {
   Images, Loader2, AlertTriangle, Upload, Trash2, Archive, ArchiveRestore,
-  ShieldCheck, Paperclip, Music, Link2, Check,
+  ShieldCheck, Paperclip, Music, Link2, Check, ImageOff, X,
 } from "lucide-react";
 
 // Face-only product: the character reference is the single permitted upload.
@@ -19,15 +19,12 @@ import {
 // the face the video is generated from. Rows of retired kinds can still sit
 // in the library from before; they can be archived or deleted here but never
 // attached again.
-const KINDS = [
-  ["character_reference", "Character reference — the person on camera"],
-];
-
-/** What the upload is for, shown under the upload control. */
-const KIND_PURPOSE = {
-  character_reference:
-    "This is the face the model is given. Every video is generated from it: the person on camera is the person in this photograph, and the scene around them is invented from the App Profile.",
-};
+//
+// Uploads are therefore unconditional rather than chosen. This used to be a
+// one-option <select>: a dropdown whose only possible answer was the only
+// possible value, which read as a choice the founder had to get right and
+// changed nothing. The kind is now sent as a constant.
+const UPLOAD_KIND = "character_reference";
 
 function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -39,11 +36,86 @@ function formatSeconds(value) {
   return `${seconds % 1 === 0 ? seconds : seconds.toFixed(1)}s`;
 }
 
+/**
+ * An asset's thumbnail, which degrades instead of breaking.
+ *
+ * A failed image load paints the ALT TEXT across the frame, so a photo whose
+ * `media_url` 404s rendered its own filename spilling out of a 56px box — which
+ * reads as a layout bug rather than a missing file, and hides the real cause.
+ * `onError` swaps in a neutral placeholder that keeps the box's exact shape, so
+ * a broken source looks broken on purpose and the name stays where it belongs,
+ * in the row's text.
+ */
+function AssetThumb({ asset, isVideo, isAudio }) {
+  const [failed, setFailed] = useState(false);
+  const src = asset.media_url;
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+  return (
+    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-secondary/40">
+      {!src ? null : failed || isAudio ? (
+        <div
+          className="flex h-full w-full items-center justify-center text-muted-foreground"
+          aria-hidden="true"
+        >
+          {isAudio ? <Music className="h-5 w-5" /> : <ImageOff className="h-5 w-5" />}
+        </div>
+      ) : isVideo ? (
+        <video src={mediaUrl(src)} className="h-full w-full object-cover" muted />
+      ) : (
+        <img
+          src={mediaUrl(src)}
+          alt={asset.label || asset.name || asset.kind}
+          className="h-full w-full object-cover"
+          loading="lazy"
+          onError={() => setFailed(true)}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * The photograph a draft uses, when the library cannot describe it.
+ *
+ * The draft's own attachment list is the authority on whether a photo is
+ * attached — it is what the render will actually use. The library row is only a
+ * richer view of the same file, and it is not always available: the list can be
+ * empty, still loading, or the asset can have been archived since it was
+ * attached. Promoting the library row alone therefore made the section claim no
+ * photo was attached while one demonstrably was, which is worse than showing less
+ * detail. So when the file cannot be described, the attachment itself is still
+ * reported — name, what it is used for, and the control that detaches it.
+ */
+function AttachedReference({ attachment, onDetach, busy }) {
+  const name = attachment.label || String(attachment.asset_id || "").slice(0, 8);
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-3">
+      <span className="min-w-0 flex-1 truncate text-sm font-medium">{name}</span>
+      <span className="shrink-0 text-xs text-muted-foreground">used for the whole video</span>
+      {onDetach && (
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          onClick={() => onDetach({ id: attachment.asset_id, label: name, kind: attachment.kind })}
+          title="Stops using this photo for the video you are building"
+        >
+          <X className="h-3.5 w-3.5" /> Remove
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function AssetRow({
   asset,
   onDelete,
   onArchive,
   onAttach,
+  onDetach,
+  embedded = false,
   projectId,
   attached,
   attachDisabled,
@@ -58,32 +130,26 @@ function AssetRow({
   const uses = asset.used_in || [];
   const attachable = Boolean(projectId && onAttach);
   const usable = attachable && asset.status === "active" && asset.rights_confirmed;
+  // "Attach" named the mechanism, not the outcome: nothing on screen said what
+  // attaching did, so the button read as a mystery action. It links this
+  // photograph to the draft the founder is working on, which is what the studio
+  // needs and what the section is for.
+  //
+  // It is also hidden, not merely disabled, when the draft already holds a
+  // face. Embedded in the wizard an upload attaches itself (see handleUpload),
+  // so on the row that matters this button was a second route to something the
+  // app had already done — and a permanently disabled control invites the
+  // question of what went wrong.
+  const slotHeldByAnother = attachDisabled && !busy && asset.kind === "character_reference";
   return (
     <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-3">
       <div className="flex items-center gap-3">
-        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-secondary/40">
-          {asset.media_url ? (
-            isVideo ? (
-              <video src={mediaUrl(asset.media_url)} className="h-full w-full object-cover" muted />
-            ) : isAudio ? (
-              <div className="flex h-full w-full items-center justify-center" aria-hidden="true">
-                <Music className="h-5 w-5 text-muted-foreground" />
-              </div>
-            ) : (
-              <img
-                src={mediaUrl(asset.media_url)}
-                alt={asset.label || asset.name || asset.kind}
-                className="h-full w-full object-cover"
-              />
-            )
-          ) : null}
-        </div>
+        <AssetThumb asset={asset} isVideo={isVideo} isAudio={isAudio} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="truncate text-sm font-medium">
               {asset.label || asset.name || humanize(asset.kind)}
             </span>
-            <Badge variant="secondary" className="text-[11px]">{humanize(asset.kind)}</Badge>
             {asset.status === "archived" && (
               <Badge variant="outline" className="text-[11px]">Archived</Badge>
             )}
@@ -118,23 +184,37 @@ function AssetRow({
           <UsageHistory uses={uses} />
         </div>
         <div className="flex shrink-0 gap-1">
-          {attachable && !isAudio && !isRetired && !attached && (
+          {attachable && !isAudio && !isRetired && !attached && !slotHeldByAnother && (
             <Button
               variant="secondary"
               size="sm"
               disabled={!usable || attachDisabled || attachBusy || busy}
               title={
-                attachDisabled && !busy && asset.kind === "character_reference"
-                  ? "This project already has the character reference it will render from. Detach that one first."
-                  : asset.status !== "active"
-                    ? "Restore this asset before attaching it."
+                asset.status !== "active"
+                    ? "Restore this asset before using it."
                     : !asset.rights_confirmed
                       ? "Confirm rights before using this asset in a project."
-                      : "Attach this asset to the current project"
+                      : "Uses this photograph as the face for the video you are building"
               }
               onClick={() => onAttach(asset)}
             >
-              <Link2 className="h-3.5 w-3.5" /> Attach
+              <Link2 className="h-3.5 w-3.5" /> Use this photo
+            </Button>
+          )}
+          {/* Detaching lives on the photograph itself, so the one card that says
+              which photo this video uses is also where that photo is removed
+              from the video. It used to be a second card further down the step
+              with its own Remove, which meant the photo the founder was looking
+              at and the control that changed it were never in the same place. */}
+          {embedded && attached && onDetach && (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={() => onDetach(asset)}
+              title="Stops using this photo for the video you are building"
+            >
+              <X className="h-3.5 w-3.5" /> Remove
             </Button>
           )}
           <Button
@@ -187,28 +267,26 @@ function AssetRow({
   );
 }
 
+/**
+ * Where this asset is already in use, on one line.
+ *
+ * This listed one project per row with its own status badge, so a single use
+ * wrapped to three lines and the project name out-shouted the asset it
+ * described. The names still drive the delete warning (which reads `used_in`
+ * directly), so nothing is lost by rendering them inline and truncating.
+ */
 function UsageHistory({ uses }) {
   if (!uses.length) {
     return (
-      <p className="mt-0.5 text-xs text-muted-foreground">Not used in any project yet</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">Not used in any video yet</p>
     );
   }
+  const names = uses.map((u) => u.name).filter(Boolean);
   return (
-    <div className="mt-1">
-      <p className="text-xs text-muted-foreground">
-        Used in {uses.length} project{uses.length === 1 ? "" : "s"}:
-      </p>
-      <ul className="mt-0.5 space-y-0.5">
-        {uses.map((use) => (
-          <li key={use.studio_project_id} className="flex items-center gap-1.5 text-xs">
-            <span className="truncate text-muted-foreground">{use.name}</span>
-            <Badge variant="outline" className="shrink-0 text-[10px]">
-              {humanize(use.status)}
-            </Badge>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+      Used in {uses.length} project{uses.length === 1 ? "" : "s"}
+      {names.length > 0 ? ` · ${names.join(", ")}` : ""}
+    </p>
   );
 }
 
@@ -292,10 +370,10 @@ export default function AssetLibrary({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
-  const [kind, setKind] = useState("character_reference");
   const [label, setLabel] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
   const [attachBusyId, setAttachBusyId] = useState("");
+  const [showAllPhotos, setShowAllPhotos] = useState(false);
   const fileRef = useRef(null);
   const attachedIds = new Set(
     (projectAssets || []).map((a) => a?.asset_id).filter(Boolean)
@@ -308,6 +386,27 @@ export default function AssetLibrary({
     (a) => a?.kind === "character_reference"
   ).length;
   const characterSlotTaken = attachedCharacterCount >= 1;
+
+  // The one photograph this video renders from, and everything else.
+  //
+  // Embedded, the studio needs exactly one face, so the attached asset is the
+  // subject of the section and the rest are a footnote. The founder's complaint
+  // was that an upload appeared in one component and then "showed up" somewhere
+  // else below it, so the photo and the control that manages it now sit in one
+  // surface with the other assets behind a count. Standalone, the library is
+  // genuinely a library of many assets, so nothing is collapsed there.
+  const attachedAsset = embedded
+    ? assets.find((a) => attachedIds.has(a.id) && a.kind === "character_reference") || null
+    : null;
+  const otherAssets = embedded
+    ? assets.filter((a) => !(attachedIds.has(a.id) && a.kind === "character_reference"))
+    : assets;
+  // The attachment the draft itself reports. Preferred over anything derived
+  // from the library list, which can be empty or lagging.
+  const attachedReference =
+    embedded && !attachedAsset
+      ? (projectAssets || []).find((a) => a && a.kind === "character_reference") || null
+      : null;
 
   const load = useCallback(async () => {
     if (!activeProfileId) return;
@@ -380,7 +479,7 @@ export default function AssetLibrary({
     setNotice(null);
     try {
       const form = new FormData();
-      form.append("kind", kind);
+      form.append("kind", UPLOAD_KIND);
       form.append("file", file);
       form.append("label", label);
       // The operator asserts they have the right to use this asset.
@@ -408,7 +507,7 @@ export default function AssetLibrary({
           setError(getErrorMessage(attachErr));
         }
       }
-      setNotice(`Added ${humanize(created.kind)} "${created.label || created.name}".${attachedNote}`);
+      setNotice(`Added "${created.label || created.name}".${attachedNote}`);
 // The server counts faces on upload and warns when the photo will not work
 // as a reference -- no face at all, or a group shot. That warning used to die
 // in the response object: the row badges only appear after the list reloads,
@@ -439,7 +538,7 @@ export default function AssetLibrary({
     setNotice(null);
     try {
       await api.attachAsset(projectId, { asset_id: asset.id });
-      setNotice(`Attached ${humanize(asset.kind)} "${asset.label || asset.name || asset.kind}".`);
+      setNotice(`Now using "${asset.label || asset.name || asset.kind}" for this video.`);
       await load();
       onProjectChanged?.();
       onChanged?.();
@@ -447,6 +546,24 @@ export default function AssetLibrary({
       setError(getErrorMessage(err));
     } finally {
       setAttachBusyId("");
+    }
+  };
+
+  const handleDetach = async (asset) => {
+    if (!projectId) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.detachAsset(projectId, asset.id);
+      setNotice(`Removed "${asset.label || asset.name || asset.kind}" from this video.`);
+      await load();
+      onProjectChanged?.();
+      onChanged?.();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -491,14 +608,6 @@ export default function AssetLibrary({
       setBusy(false);
     }
   };
-
-  const counts = useMemo(() => {
-    const map = {};
-    assets.forEach((a) => {
-      map[a.kind] = (map[a.kind] || 0) + 1;
-    });
-    return map;
-  }, [assets]);
 
   if (!activeProfileId) {
     // This used to be a dead end: EmptyState accepts an action, and none was
@@ -613,13 +722,17 @@ export default function AssetLibrary({
         </div>
       )}
 
-      <Alert data-testid="asset-rights-alert">
-        <ShieldCheck className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-        <AlertDescription>
-          Only upload assets you have the right to use. Each upload records your
-          confirmation, and assets stay scoped to this App Profile.
-        </AlertDescription>
-      </Alert>
+      {/* Rights. A full Alert box for one sentence made the section read as a
+          warning before it read as a photo control; the wording is unchanged
+          because it is a compliance statement, not decoration. */}
+      <p
+        className="flex items-center gap-2 text-xs text-muted-foreground"
+        data-testid="asset-rights-alert"
+      >
+        <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />
+        Only upload assets you have the right to use. Each upload records your
+        confirmation, and assets stay scoped to this App Profile.
+      </p>
 
       {error && (
         <Alert variant="destructive">
@@ -629,23 +742,11 @@ export default function AssetLibrary({
       )}
       {notice && <Alert><AlertDescription>{notice}</AlertDescription></Alert>}
 
+      {/* One surface: the upload control and the photograph it produces sit
+          together, so an upload no longer appears to "turn up" in a separate
+          component further down the step. */}
       <div className="surface space-y-3 rounded-2xl p-4" data-testid="asset-upload-panel">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <select
-            value={kind}
-            onChange={(e) => setKind(e.target.value)}
-            aria-label="Asset type"
-            className="rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
-          >
-            {KINDS.map(([value, text]) => (
-              <option key={value} value={value}>{text}</option>
-            ))}
-          </select>
-          {KIND_PURPOSE[kind] && (
-            <p className="col-span-full text-xs text-muted-foreground">
-              {KIND_PURPOSE[kind]}
-            </p>
-          )}
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
           <Input
             value={label}
             onChange={(e) => setLabel(e.target.value)}
@@ -654,7 +755,7 @@ export default function AssetLibrary({
           />
           <Button variant="brand" onClick={() => fileRef.current?.click()} disabled={busy}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            Upload
+            {attachedAsset ? "Upload a different photo" : "Upload"}
           </Button>
         </div>
         <input
@@ -665,22 +766,88 @@ export default function AssetLibrary({
           onChange={handleUpload}
           aria-label="Asset file"
         />
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-xs text-muted-foreground">
-            {assets.length} asset{assets.length === 1 ? "" : "s"}
-            {Object.keys(counts).length > 0 &&
-              ` · ${Object.entries(counts).map(([k, n]) => `${n} ${humanize(k).toLowerCase()}`).join(", ")}`}
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIncludeArchived((v) => !v)}
-            aria-pressed={includeArchived}
-          >
-            <Paperclip className="h-3.5 w-3.5" />
-            {includeArchived ? "Hide archived" : "Show archived"}
-          </Button>
-        </div>
+
+        {/* The photograph this video renders from, in the same surface as the
+            control that put it there. */}
+        {attachedReference && (
+          <div className="border-t border-[color:var(--hairline)] pt-3">
+            <AttachedReference
+              attachment={attachedReference}
+              onDetach={handleDetach}
+              busy={busy}
+            />
+          </div>
+        )}
+        {attachedAsset && (
+          <div className="border-t border-[color:var(--hairline)] pt-3">
+            <AssetRow
+              asset={attachedAsset}
+              onDelete={handleDelete}
+              onArchive={handleArchive}
+              onAttach={handleAttach}
+              onDetach={handleDetach}
+              embedded
+              projectId={projectId}
+              attached
+              attachDisabled={busy || characterSlotTaken}
+              attachBusy={attachBusyId === attachedAsset.id}
+              busy={busy}
+            />
+          </div>
+        )}
+
+        {/* Everything else stays out of the way until it is asked for: the
+            studio needs one face, and a wall of unused photographs read as
+            more to do. */}
+        {embedded && otherAssets.length > 0 && (
+          <div className="border-t border-[color:var(--hairline)] pt-3">
+            {!showAllPhotos ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAllPhotos(true)}
+              >
+                {otherAssets.length} other photo{otherAssets.length === 1 ? "" : "s"}
+              </Button>
+            ) : (
+              <div className="space-y-2">
+                {otherAssets.map((a) => (
+                  <AssetRow
+                    key={a.id}
+                    asset={a}
+                    onDelete={handleDelete}
+                    onArchive={handleArchive}
+                    onAttach={handleAttach}
+                    onDetach={handleDetach}
+                    embedded
+                    projectId={projectId}
+                    attached={attachedIds.has(a.id)}
+                    attachDisabled={busy || characterSlotTaken}
+                    attachBusy={attachBusyId === a.id}
+                    busy={busy}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {!embedded && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[color:var(--hairline)] pt-3">
+            <span className="text-xs text-muted-foreground">
+              {assets.length} asset{assets.length === 1 ? "" : "s"}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIncludeArchived((v) => !v)}
+              aria-pressed={includeArchived}
+            >
+              <Paperclip className="h-3.5 w-3.5" />
+              {includeArchived ? "Hide archived" : "Show archived"}
+            </Button>
+          </div>
+        )}
       </div>
 
       <div data-testid="asset-list">
@@ -700,6 +867,11 @@ export default function AssetLibrary({
             ? "Use the Upload button above to add your first one."
             : "Add the character reference photograph the finished video will be generated from."}
         </p>
+      ) : embedded ? (
+        // Already rendered above, inside the upload surface, so it is not
+        // repeated here. The empty case above is the only copy the section
+        // shows when there is nothing attached yet.
+        null
       ) : (
         <div className="space-y-2">
           {assets.map((a) => (
@@ -709,6 +881,7 @@ export default function AssetLibrary({
               onDelete={handleDelete}
               onArchive={handleArchive}
               onAttach={handleAttach}
+              onDetach={handleDetach}
               projectId={projectId}
               attached={attachedIds.has(a.id)}
               attachDisabled={busy || (characterSlotTaken && a.kind === "character_reference")}
