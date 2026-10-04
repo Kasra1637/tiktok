@@ -947,16 +947,42 @@ class TestPerProviderPromptBudget:
     400s, and the founder pays for the attempt. These pin the scaling.
     """
 
+    # Derived, never typed in: a literal here goes stale the moment a ceiling
+    # moves, and a stale literal keeps testing a budget no provider uses.
+    _TIGHTEST = min(
+        vp.capability(k)["prompt_char_limit"] for k in vp.STUDIO_ELIGIBLE
+    )
+
     def _verbose_kwargs(self):
-        big = "P" * 400
+        """
+        A strategy with every field saturated, so the prompt is as large as this
+        code can build.
+
+        Sized from the real refusal, not invented. A founder's render came back
+        4,689 characters against Grok's ceiling; this saturates every field and
+        reaches well past that, so the ceiling tests below are strictly harder
+        than the case that actually failed.
+
+        Every field the assembler reads has to be populated, not just the obvious
+        ones: `scene` and `performance` feed the locked-scene block, which is the
+        single largest variable section at 1,100 characters. A fixture missing
+        them lands around 4,775 and fits every ceiling whether the scaling works
+        or not, which is how the floor-blind formula survived the first version
+        of this test.
+        """
+        big = "P" * 900
         return {
             "strategy": {
                 "hook_line": "H" * 200, "hook_concept": "C" * 200,
                 "hook_action": "A" * 200, "hook_promise": "P" * 200,
+                "hook_dialogue": "D" * 200,
                 "audience_problem": big, "primary_feature": big,
                 "desired_outcome": big, "differentiation_beat": big,
-                "strategy_summary": big, "proof_moment": big,
+                "strategy_summary": big, "proof_moment": big, "key_takeaway": big,
                 "emotional_triggers": [big] * 5, "messaging_pillars": [big] * 5,
+                "objection_overcomes": [big] * 5,
+                "scene": {k: big for k, _ in gp._SECTION_LABELS["scene"]},
+                "performance": {k: big for k, _ in gp._SECTION_LABELS["performance"]},
                 "segments": [
                     {"role": "hook", "goal": big, "script": big, "action": big},
                     {"role": "middle", "goal": big, "script": big, "action": big},
@@ -965,6 +991,8 @@ class TestPerProviderPromptBudget:
             "profile": {
                 "brand_name": "Test", "must_not_show": [big] * 8,
                 "viewer_objections": [big] * 5,
+                "proof_moment": "R" * 900, "usage_moments": [big] * 5,
+                "tone_voice": big,
             },
             "template": {
                 "name": "T", "opening_structure": big, "middle_structure": big,
@@ -976,6 +1004,19 @@ class TestPerProviderPromptBudget:
             }},
             "plan": {"hook_seconds": 3},
         }
+
+    def test_the_fixture_is_harder_than_the_render_that_broke(self):
+        """
+        Guard the guard. The founder's real prompt was 4,689; if this fixture ever
+        assembles below that, every ceiling test resting on it is vacuous and will
+        pass without exercising the scaling at all.
+        """
+        unscaled = len(gp.build_segment_prompt(**self._verbose_kwargs()))
+        assert unscaled >= 5500, (
+            f"fixture assembles to {unscaled} chars, below the 4,689 that actually "
+            f"failed and near the 4,775 of a fixture missing the locked-scene "
+            f"fields. Ceiling tests resting on it stop testing anything."
+        )
 
     def test_the_default_is_unchanged(self):
         """
@@ -990,7 +1031,7 @@ class TestPerProviderPromptBudget:
     def test_a_lower_ceiling_produces_a_shorter_prompt(self):
         kwargs = self._verbose_kwargs()
         full = len(gp.build_segment_prompt(**kwargs))
-        tight = len(gp.build_segment_prompt(**kwargs, prompt_budget=3800))
+        tight = len(gp.build_segment_prompt(**kwargs, prompt_budget=self._TIGHTEST))
         assert tight < full
 
     def test_the_scale_does_not_leak_between_calls(self):
@@ -1004,6 +1045,93 @@ class TestPerProviderPromptBudget:
         gp.build_segment_prompt(**kwargs, prompt_budget=1200)
         assert gp._PROMPT_SCALE.get() == before
 
+    def test_the_condensed_flag_does_not_leak_between_calls(self):
+        """
+        Same reason as the scale. A leak would condense a Hailuo render after a
+        Grok one, which is silent: the prompt is still valid, just thinner, and
+        nothing in the submit log would say why.
+        """
+        kwargs = self._verbose_kwargs()
+        before = gp._PROMPT_CONDENSED.get()
+        gp.build_segment_prompt(**kwargs, prompt_budget=4096)
+        assert gp._PROMPT_CONDENSED.get() == before
+        assert gp._PROMPT_CONDENSED.get() is before
+
+    def test_every_studio_prompt_fits_its_own_ceiling(self):
+        """
+        The regression that motivated condensing, on the verbose strategy that
+        produced the founder's 4,689-character refusal.
+
+        Scaling the variable budget alone could not fix this: the fixed
+        instructions do not scale, and measured with no app data at all they are
+        2,047 characters — over half of a 4,096 ceiling. Every provider has to
+        fit its real data now, not just the small-strategy case.
+        """
+        kwargs = self._verbose_kwargs()
+        for key in vp.STUDIO_ELIGIBLE:
+            limit = vp.capability(key)["prompt_char_limit"]
+            prompt = gp.build_segment_prompt(**kwargs, prompt_budget=limit)
+            assert len(prompt) <= limit, (
+                f"{key}: {len(prompt)} chars exceeds its {limit} ceiling. The submit "
+                f"guard will refuse this and the founder pays nothing, but the model "
+                f"is then unusable for any realistic strategy."
+            )
+
+    def test_the_measured_floors_still_match_their_constants(self):
+        """
+        The scale divides by the variable space these constants imply, so drift in
+        either one silently pushes every prompt back over its ceiling. The scale
+        would keep producing plausible numbers while the prompts stopped fitting,
+        which is exactly how the 4,689-character refusal happened unnoticed.
+        """
+        empty = dict(strategy={}, profile={}, template={}, duration=10,
+                     assets={}, plan={"hook_seconds": 3})
+        full = gp.build_segment_prompt(**empty)
+        condensed = gp.build_segment_prompt(**empty, prompt_budget=4096)
+        assert len(full) == gp.FULL_PROMPT_FLOOR
+        assert len(condensed) == gp.CONDENSED_PROMPT_FLOOR
+        assert gp.CONDENSED_PROMPT_FLOOR < gp.FULL_PROMPT_FLOOR
+
+    def test_the_variable_budget_excludes_the_fixed_floor(self):
+        """
+        A ceiling is a TOTAL, so the floor comes out of it before the variables
+        get anything. The old scale divided by the total, over-allocating by the
+        floor and producing 4,175 characters against a 4,096 ceiling.
+        """
+        kwargs = self._verbose_kwargs()
+        full_budget = len(gp.build_segment_prompt(**kwargs))
+        for limit in (4096, 4600, gp.RENDER_PROMPT_LIMIT):
+            prompt = gp.build_segment_prompt(**kwargs, prompt_budget=limit)
+            headroom = limit - gp.CONDENSED_PROMPT_FLOOR
+            assert len(prompt) <= limit
+            assert len(prompt) <= (
+                gp.CONDENSED_PROMPT_FLOOR + headroom
+                if limit < gp.CONDENSE_BELOW
+                else limit
+            )
+
+    def test_condensing_drops_only_redundant_words(self):
+        """
+        Condensing exists to buy room for the app-specific brief, so it must not
+        quietly become censorship. Every constraint has to survive it, checked
+        against the full prompt for the parts it compresses.
+        """
+        kwargs = self._verbose_kwargs()
+        full = gp.build_segment_prompt(**kwargs)
+        condensed = gp.build_segment_prompt(**kwargs, prompt_budget=4096)
+        for constraint in (
+            "reference photograph",  # identity lock, appears only in the close
+            "verified app facts",    # invented-claims rule, merged into the handoff
+            "do not",                 # the prohibitions
+            "one outfit",
+        ):
+            assert constraint in full, f"fixture drifted: {constraint!r} not in full"
+            assert constraint in condensed, (
+                f"condensing dropped {constraint!r} — that is a lost constraint, not "
+                f"redundant wording"
+            )
+        assert len(condensed) < len(full)
+
     def test_a_nonsense_budget_falls_back_to_the_default(self):
         kwargs = self._verbose_kwargs()
         baseline = gp.build_segment_prompt(**kwargs)
@@ -1011,17 +1139,24 @@ class TestPerProviderPromptBudget:
         assert gp.build_segment_prompt(**kwargs, prompt_budget="nonsense") == baseline
         assert gp.build_segment_prompt(**kwargs, prompt_budget=-5) == baseline
 
-    def test_grok_ceiling_is_below_the_hailuo_one(self):
+    def test_grok_ceiling_is_the_documented_maximum(self):
         """
-        The whole point of the field: Grok's is set from its own documented
-        4,096 maximum, not carried over from Hailuo's measured 7,000.
+        Grok's ceiling is its own documented 4,096, not carried over from
+        Hailuo's measured 7,000 and not guessed below it now that the prompt
+        fits. Guessing lower only discards app detail for nothing.
         """
         h3 = vp.capability("minimax-h3").get("prompt_char_limit")
         grok = vp.capability("grok-imagine-video").get("prompt_char_limit")
         assert h3 == 6800
-        assert grok is not None
-        assert grok < h3
-        assert grok <= 4096, "must leave headroom under the documented maximum"
+        assert grok == 4096
+
+    def test_the_budget_leaves_the_condensed_path_for_tight_providers_only(self):
+        kwargs = self._verbose_kwargs()
+        assert gp._budget_scale(4096, True) < 1.0
+        assert gp._budget_scale(gp.RENDER_PROMPT_LIMIT, False) == 1.0
+        # A ceiling below the condensed floor still cannot go to zero: a prompt of
+        # one-character stubs reads as corruption. The guard refuses it instead.
+        assert gp._budget_scale(500, True) >= 0.10
 
     def test_every_studio_model_declares_a_ceiling(self):
         for key in vp.STUDIO_ELIGIBLE:
@@ -1035,7 +1170,7 @@ class TestPerProviderPromptBudget:
         the prompt to lose -- so the ending has to be intact at any budget.
         """
         kwargs = self._verbose_kwargs()
-        prompt = gp.build_segment_prompt(**kwargs, prompt_budget=3800)
+        prompt = gp.build_segment_prompt(**kwargs, prompt_budget=self._TIGHTEST)
         assert "Vertical 9:16 throughout" in prompt
         assert prompt.rstrip().endswith("under the same light.")
 

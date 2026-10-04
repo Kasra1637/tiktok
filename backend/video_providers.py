@@ -92,17 +92,16 @@ _CAPABILITY_NOTES = {
         "supports_first_frame": True,
         "supports_last_frame": False,
         "identity_via_first_frame": True,
-        # NOT MEASURED for this provider, and deliberately set well under the
-        # 4,096 characters its own tooling documents as the prompt maximum.
-        # RENDER_PROMPT_LIMIT was derived from Hailuo's measured 7,000 and does
-        # not transfer: this model 400s on a prompt Hailuo accepts, and the
-        # founder pays for the attempt. 3,800 leaves headroom under the
-        # documented figure, and build_segment_prompt scales every field budget
-        # down to fit rather than cutting the finished tail.
+        # NOT MEASURED for this provider. Its own tooling documents a 4,096
+        # character prompt maximum, and OpenRouter publishes no limit at all, so
+        # this is set at the documented figure rather than below it — the
+        # condensing and the variable budget now make that ceiling reachable,
+        # and guessing lower only throws away app-specific detail for nothing.
         #
-        # When a real clip comes back, measure the actual ceiling and correct
-        # this rather than raising it on optimism.
-        "prompt_char_limit": 3800,
+        # The first live render settles it: read prompt_chars from the submit log
+        # and correct this to what the provider actually accepts, rather than
+        # raising it on optimism.
+        "prompt_char_limit": 4096,
         "notes": (
             "720p (not 2K), 1-15s per generation, and no native audio -- "
             "generate_audio is not among its accepted parameters, so the studio "
@@ -173,9 +172,10 @@ _FALLBACK_NOTES = {
     "supports_first_frame": True,
     "supports_last_frame": False,
     # Unknown provider, so assume the most conservative ceiling any of ours
-    # needs. An unrecognised key resolving to a real render is worse than it
-    # looking conservative in the capability record.
-    "prompt_char_limit": 3800,
+    # needs — Grok's 4,096, the lowest in the catalog. An unrecognised key
+    # resolving to a real render is worse than it looking conservative in the
+    # capability record.
+    "prompt_char_limit": 4096,
     "notes": "Unrecognised provider; conservative limits applied.",
 }
 

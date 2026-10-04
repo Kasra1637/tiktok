@@ -56,6 +56,68 @@ RENDER_PROMPT_LIMIT = 6800
 # different models cannot see each other's budget.
 _PROMPT_SCALE: ContextVar = ContextVar("hookforge_prompt_scale", default=1.0)
 
+# Whether to use the condensed fixed instructions, set the same way as the
+# scale and for the same reason: it has to reach the assembler without threading
+# a parameter through every helper.
+_PROMPT_CONDENSED: ContextVar = ContextVar("hookforge_prompt_condensed", default=False)
+
+# Any ceiling under this renders with the condensed instructions.
+#
+# Scaling the variable budget alone is not enough to fit a tight ceiling,
+# because the FIXED instructions do not scale: measured against no app data at
+# all they are 2,047 characters, over half of a typical prompt. A provider
+# capping prompts near 4,000 therefore cannot fit a normal prompt however hard
+# the variables are squeezed — the floor alone eats half the budget.
+#
+# So the redundancy in the fixed text comes out instead. It is genuine
+# redundancy: the "ends before the product is shown" block and the UI warning
+# both forbid the interface, and the opening sentence restates the section
+# structure that the per-section headings state again with their real jobs.
+# Merging them costs nothing in meaning and roughly halves the floor, which is
+# what buys the app-specific brief enough room to still be worth sending.
+CONDENSE_BELOW = 4500
+
+# Measured sizes of the fixed instruction text, with no app data at all. The
+# difference between the two IS what condensing buys.
+#
+# These are load-bearing arithmetic, not documentation: the per-provider scale
+# below divides by the variable space these imply, so if either drifts the
+# prompts stop fitting their ceilings again. A test rebuilds both and pins them,
+# which is why they are named rather than inlined.
+FULL_PROMPT_FLOOR = 2047
+CONDENSED_PROMPT_FLOOR = 1326
+
+# What the variables are given at the default ceiling, derived rather than
+# measured: the default ceiling is a TOTAL, and the floor is part of it.
+#
+# This overestimates the variable text the code can actually assemble, which is
+# the safe direction. Saturated fields top out around 3,830 characters, not
+# 4,753, so a tight budget clips marginally harder than it strictly needs to.
+# Erring toward a shorter prompt that fits beats an exact split that does not.
+NATURAL_VARIABLE_SPACE = RENDER_PROMPT_LIMIT - FULL_PROMPT_FLOOR
+
+
+def _budget_scale(prompt_budget, condensed: bool) -> float:
+    """
+    What fraction of each field budget this render may use.
+
+    The ceiling is a TOTAL character budget, so the fixed instructions have to
+    come out of it before the variables get anything. Scaling by
+    budget/RENDER_PROMPT_LIMIT ignores that and silently over-allocates by the
+    floor, which is how a 4,096 ceiling still produced a 4,175-character prompt.
+
+    Subtracting the floor first is the whole fix: what remains is the space the
+    variables actually have, and dividing that by their natural size gives the
+    fraction. The guard in the submit path remains the backstop for the residue.
+    """
+    floor = CONDENSED_PROMPT_FLOOR if condensed else FULL_PROMPT_FLOOR
+    available = float(prompt_budget) - float(floor)
+    scale = available / float(NATURAL_VARIABLE_SPACE)
+    # A ceiling at or below the floor leaves the variables nothing. Squeeze to
+    # the floor of the scale rather than to zero: a prompt of one-character
+    # stubs reads as corruption, and the submit guard will refuse it anyway.
+    return max(0.10, min(1.0, scale))
+
 
 def _clip(text, limit: int) -> str:
     """Clip one variable prompt value to a fixed budget, stripped."""
@@ -79,6 +141,30 @@ _UI_RENDERING_WARNING = (
     "and props concretely from the verified app facts — but anything the "
     "viewer could read as a factual claim about the app must come from those "
     "facts, never from invention. Leave clean, uncluttered space for the captions."
+)
+
+# Condensed forms of the fixed instructions, for providers whose prompt ceiling
+# is too low to carry the full set. See CONDENSE_BELOW for why.
+#
+# Nothing is dropped, only stated once. The two prohibitions are merged because
+# they were the same prohibition said twice; the opening sentence is folded into
+# the section headings that already carry the real jobs. What survives is every
+# constraint, and what it buys is the room the app-specific brief needs to still
+# be worth sending — which is the entire point of the product.
+_CONDENSED_HANDOFF = (
+    "The video ends before the product appears: the founder films their own "
+    "demo and adds their own close afterwards. Do NOT film or render the app "
+    "in use, any interface, screenshot, button, price, rating, review or "
+    "download count, logo, or on-screen text. Invent the setting, light and "
+    "props from the verified app facts; any factual claim must come from those "
+    "facts, never from invention."
+)
+
+_CONDENSED_IDENTITY_CLOSE = (
+    "Vertical 9:16 throughout, one continuous take with no cut, no black frame "
+    "and no title card. The person on camera is the same individual in every "
+    "frame, face and hair exactly as the reference photograph, in the one "
+    "outfit this scene specifies, in the same place, under the same light."
 )
 
 # The App Profile's must_not_show list, turned into a prompt section.
@@ -651,28 +737,33 @@ def build_segment_prompt(
         prompt_budget: this render's character ceiling. Defaults to
             RENDER_PROMPT_LIMIT, which is the measured figure for Hailuo. A
             provider with a lower ceiling passes its own; every field budget is
-            scaled down to fit rather than the tail being cut off.
+            scaled down to fit rather than the tail being cut off. A ceiling low
+            enough to leave the fixed instructions most of the budget (see
+            CONDENSE_BELOW) also switches the fixed text to its condensed form,
+            so a tight provider gets a shorter prompt rather than a truncated
+            one. Both mean the same constraints, so the model sees the same
+            rules from every provider — only the wording is tighter.
     """
     scale = 1.0
+    condensed = False
     if prompt_budget:
         try:
-            scale = float(prompt_budget) / float(RENDER_PROMPT_LIMIT)
-        except (TypeError, ValueError, ZeroDivisionError):
-            scale = 1.0
+            budget = float(prompt_budget)
+        except (TypeError, ValueError):
+            budget = 0.0
         # A zero, negative or non-numeric budget is a caller bug, not a tight
         # budget. Falling back to the measured default keeps the prompt whole;
         # clamping it would silently shrink every Hailuo render to a tenth of
         # its detail because someone passed -1.
-        if scale <= 0:
-            scale = 1.0
-        # Floor it well above zero: a provider ceiling far below what the fixed
-        # instructions alone occupy would clip every field to a stub, which reads
-        # as corruption rather than as a budget.
-        scale = max(0.10, min(1.0, scale))
+        if budget > 0:
+            condensed = budget < CONDENSE_BELOW
+            scale = _budget_scale(budget, condensed)
     token = _PROMPT_SCALE.set(scale)
+    token2 = _PROMPT_CONDENSED.set(condensed)
     try:
         return _assemble_prompt(strategy, profile, template, duration, assets, plan)
     finally:
+        _PROMPT_CONDENSED.reset(token2)
         _PROMPT_SCALE.reset(token)
 
 
@@ -705,27 +796,40 @@ def _assemble_prompt(
 
     sections = []
 
+    condensed = _PROMPT_CONDENSED.get()
     # The whole piece is one render with two sections, so both are always
     # described: index 0 is the hook and index 1 is the middle. Which is which
     # comes from the section's role, not its position, so a strategy whose
     # middle is missing still renders the hook and says plainly that it has no
     # middle to film rather than stretching the hook over the whole runtime.
-    sections.append(
-        f"Create ONE continuous {seconds}-second vertical (9:16) promotional video for the "
-        f"mobile app {app_name}, containing exactly TWO sections: a HOOK in the opening "
-        f"seconds, then a MIDDLE that develops it. It must read as a single take — no visible "
-        f"cut to a separate clip, no black frames, no title card."
-    )
-    # Stated up front rather than left to the beat list, because this is the
-    # single most important constraint on the render and the model has a strong
-    # prior towards resolving a promo on camera.
-    sections.append(
-        "This video ends before the product is shown. The founder records their own demo and "
-        "attaches it after this footage, and adds their own call to action. So: do NOT film the "
-        "app being used, do NOT show a screen or interface, do NOT describe the app working "
-        "while something unrelated happens on camera, and do NOT ask the viewer to download, "
-        "install or try anything. End on the moment the presenter reaches for their phone."
-    )
+    #
+    # Condensed, the section structure is not restated here: the two headings
+    # below carry the real durations and jobs, so this sentence would be saying
+    # it a third time in shorter words.
+    if not condensed:
+        sections.append(
+            f"Create ONE continuous {seconds}-second vertical (9:16) promotional video for the "
+            f"mobile app {app_name}, containing exactly TWO sections: a HOOK in the opening "
+            f"seconds, then a MIDDLE that develops it. It must read as a single take — no visible "
+            f"cut to a separate clip, no black frames, no title card."
+        )
+        # Stated up front rather than left to the beat list, because this is the
+        # single most important constraint on the render and the model has a strong
+        # prior towards resolving a promo on camera.
+        sections.append(
+            "This video ends before the product is shown. The founder records their own demo and "
+            "attaches it after this footage, and adds their own call to action. So: do NOT film the "
+            "app being used, do NOT show a screen or interface, do NOT describe the app working "
+            "while something unrelated happens on camera, and do NOT ask the viewer to download, "
+            "install or try anything. End on the moment the presenter reaches for their phone."
+        )
+    else:
+        sections.append(
+            f"Create ONE continuous {seconds}-second vertical (9:16) promotional video for the "
+            f"mobile app {app_name}, in two sections. End on the moment the presenter reaches "
+            f"for their phone, and do not ask the viewer to download or install anything."
+        )
+        sections.append(_CONDENSED_HANDOFF)
 
     hook_line = _clip(strategy.get("hook_line"), 200)
     hook_concept = _clip(strategy.get("hook_concept"), 75)
@@ -796,11 +900,17 @@ def _assemble_prompt(
             # A strategy missing a section is a real gap — a model that returned
             # one beat. Say what the section is for rather than borrowing the
             # other one's content, which is how the hook used to be restated.
-            block.append(
-                f"  the strategy did not plan this section in detail. Write it so it "
-                f"{purpose}, in this same scene, and keep it distinct from the other "
-                f"section."
-            )
+            if condensed:
+                block.append(
+                    f"  unplanned here: write it to {purpose}, same scene, distinct "
+                    f"from the other section."
+                )
+            else:
+                block.append(
+                    f"  the strategy did not plan this section in detail. Write it so it "
+                    f"{purpose}, in this same scene, and keep it distinct from the other "
+                    f"section."
+                )
         sections.append("\n".join(block))
 
     if tpl.get("opening_structure"):
@@ -816,7 +926,10 @@ def _assemble_prompt(
         "On-screen text will be added afterwards. Plan clean space for it, and do not "
         "render any text yourself."
     )
-    sections.append(_UI_RENDERING_WARNING)
+    # The condensed handoff block above already carries this prohibition, merged
+    # so the same rule is not stated twice on a budget that cannot afford it.
+    if not condensed:
+        sections.append(_UI_RENDERING_WARNING)
 
     forbidden = must_not_show_section(profile)
     if forbidden:
@@ -829,11 +942,17 @@ def _assemble_prompt(
     if person_anchor:
         sections.append(person_anchor)
 
-    sections.append(
-        f"Vertical 9:16 throughout. One continuous {seconds}-second take with no cut, no "
-        f"black frame, and no title card. The person on camera is the same individual in "
-        f"every frame, with their face and hair exactly as in the reference photograph, in "
-        f"the one outfit this scene specifies, in the same place, under the same light."
-    )
+    if condensed:
+        # The seconds are already stated in the opening sentence and in both
+        # section headings, so the close states them once and carries only the
+        # identity lock, which appears nowhere else.
+        sections.append(_CONDENSED_IDENTITY_CLOSE)
+    else:
+        sections.append(
+            f"Vertical 9:16 throughout. One continuous {seconds}-second take with no cut, no "
+            f"black frame, and no title card. The person on camera is the same individual in "
+            f"every frame, with their face and hair exactly as in the reference photograph, in "
+            f"the one outfit this scene specifies, in the same place, under the same light."
+        )
 
     return "\n\n".join(section for section in sections if section)
