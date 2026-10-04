@@ -651,9 +651,14 @@ async function main() {
 
   await check("the plan is generated from the step that reviews it", async (ctx) => {
     global.__SMOKE_PARAMS = "";
+    // Entering Review with a ready draft and no plan generates it without a
+    // click; the button below is the retry path, not the happy path. The
+    // default generatePlan stub answers with a planned project, so by the
+    // time the acts flush the step reads the fresh plan.
+    const plans = [];
     // A create returns a fresh draft (no plan yet) -- matching the server. The
     // default stub returned a fully-planned project, which the eager create now
-    // adopts and which hides the very button this check is about.
+    // adopts and which would hide the auto-generation this check is about.
     await withApi(
       {
         // A create echoes the angle it was sent (here: none chosen), exactly
@@ -661,6 +666,10 @@ async function main() {
         // disagree with the wizard's empty angle on every pass.
         createStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
         updateStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
+        generatePlan: async (id, payload) => {
+          plans.push(payload);
+          return PROJECT_WITH_STRATEGY;
+        },
       },
       async () => {
         await mount(CreateVideo, {})(ctx);
@@ -672,22 +681,23 @@ async function main() {
         await openStep(ctx, "Review");
         await act(async () => {});
         await act(async () => {});
-        // Assert inside the stub scope: the eager create is async and would
-        // otherwise land after the stub restores and adopt the default's
-        // fully-planned project, hiding the very button this check is about.
+        // Assert inside the stub scope: the calls above are async and would
+        // otherwise land after the stub restores.
+        if (plans.length === 0) {
+          throw new Error("Review did not generate the plan on entry");
+        }
         const text = ctx.text();
-        // With no plan, Review offers the button rather than an empty state that
-        // sends the founder back to a step that held only that button.
+        // Either the fresh plan is already showing, or the fallback button is
+        // still there mid-flight — both mean the step owns its plan rather
+        // than bouncing the founder elsewhere for it.
+        const showingPlan = text.includes("Hook line");
         const generate = [...ctx.container.querySelectorAll("button")]
           .find((b) => /Generate the plan/.test((b.textContent || "").trim()));
-        if (!generate) throw new Error("Review cannot generate the plan it reviews");
+        if (!showingPlan && !generate) {
+          throw new Error("Review neither shows the fresh plan nor offers to generate it");
+        }
         if (text.includes("No plan yet")) {
           throw new Error("Review still bounces to a separate plan step for its own plan");
-        }
-        // And it says the button is free, because that is the only reason to press
-        // a button on the step that is otherwise a reading step.
-        if (!text.includes("Free")) {
-          throw new Error("generating the plan does not say it is free");
         }
       }
     );

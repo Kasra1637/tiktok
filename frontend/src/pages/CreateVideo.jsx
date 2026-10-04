@@ -33,7 +33,7 @@ import {
 // button and is now the top of Review, so the icon went with it.
 import {
   Clapperboard, Loader2, AlertTriangle, Briefcase, Target, LayoutTemplate,
-  Image as ImageIcon, Check, Sparkles, RefreshCw,
+  Image as ImageIcon, Check, Sparkles, RefreshCw, ChevronDown,
   Save, CheckCircle2, Star,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -971,6 +971,28 @@ export default function CreateVideo() {
     setEdits((prev) => ({ ...prev, tone: value }));
   };
 
+  // Auto-generate the plan on entering Review with a ready draft that has
+  // none yet. The step exists to READ the plan, so arriving to an empty step
+  // plus a button was a wasted click on every first pass. Same gates as the
+  // manual button below (a template, a goal, the photo, nothing in flight):
+  // without them there is nothing to write the plan from, and the box keeps
+  // its button as the retry path after a failure. One attempt per
+  // selection-set, keyed on everything the plan is written from: a failed
+  // generation must not loop, and regenerating an existing plan stays a
+  // deliberate, confirmed click. Placed after the renderability consts above:
+  // the dep array reads them during render, so this cannot live above their
+  // declarations the way the other effects do.
+  const planAutoAttempted = useRef("");
+  useEffect(() => {
+    if (step !== 3 || busy || !canGenerate || blockedOnAssets || !objective) return;
+    if (project?.script_version) return;
+    const key = `${profileId}:${templateId}:${angleId || ""}:${objective || ""}:${tone || ""}`;
+    if (planAutoAttempted.current === key) return;
+    planAutoAttempted.current = key;
+    handleGeneratePlan();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleGeneratePlan is a render-scoped closure, same as handleGenerateStrategy in the auto-build below; the key ref guards re-fires, and listing it would re-run the effect on every render.
+  }, [step, busy, canGenerate, blockedOnAssets, objective, profileId, templateId, angleId, tone, project?.id, project?.script_version]);
+
   /* Progress state, derived rather than tracked. A founder can reach any step
      from any other, so nothing here can be a counter that advances — the pills
      have to be recomputed from what actually exists, or they go stale the moment
@@ -1175,13 +1197,18 @@ export default function CreateVideo() {
               <label htmlFor="objective" className="text-sm font-medium">
                 What is this video for? <span className="text-muted-foreground">(required)</span>
               </label>
-              <select
-                id="objective"
-                value={objective}
-                onChange={(e) => setObjective(e.target.value)}
-                aria-required="true"
-                className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
-              >
+              <div className="relative">
+                <select
+                  id="objective"
+                  value={objective}
+                  onChange={(e) => setObjective(e.target.value)}
+                  aria-required="true"
+                  className={`w-full appearance-none rounded-xl border bg-transparent py-2.5 pl-3 pr-10 text-sm transition-colors focus:border-[color:var(--indigo-35)] ${
+                    objective
+                      ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
+                      : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)]"
+                  }`}
+                >
                 <option value="">Choose an objective</option>
                 {objectiveGroups.map((g) => (
                   <optgroup key={g.label} label={g.label}>
@@ -1197,7 +1224,14 @@ export default function CreateVideo() {
                     ))}
                   </optgroup>
                 )}
-              </select>
+                </select>
+                <ChevronDown
+                  aria-hidden="true"
+                  className={`pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 transition-colors ${
+                    objective ? "text-[color:var(--brand-indigo)]" : "text-muted-foreground"
+                  }`}
+                />
+              </div>
               {!objective && (
                 <p className="text-xs text-muted-foreground">
                   Required. Strongest signal in template ranking.
@@ -1764,7 +1798,7 @@ export default function CreateVideo() {
           ))}
         </div>
         <div className="surface rounded-2xl p-5 md:p-6">
-          <div className="mx-auto w-full max-w-5xl space-y-4">
+          <div className="mx-auto w-full max-w-6xl space-y-4">
             <div className="flex items-start gap-3">
               <span className="h-10 w-10 shrink-0 animate-pulse rounded-xl border border-[color:var(--hairline)]" />
               <div className="flex-1 space-y-2">
@@ -1786,13 +1820,6 @@ export default function CreateVideo() {
         icon={Clapperboard}
         title="Create Video"
         description="Hook + middle from an approved profile and template. You record the demo and close."
-        actions={
-          project ? (
-            <Badge variant="secondary" className="text-xs">
-              Draft v{project.script_version}
-            </Badge>
-          ) : null
-        }
       />
 
       {/* Progress that tracks state rather than position.
@@ -1828,8 +1855,8 @@ export default function CreateVideo() {
                 active
                   ? "border-[color:var(--indigo-35)] bg-primary/15 text-[color:var(--brand-indigo)]"
                   : s.state === "done"
-                    ? "border-[color:var(--hairline)] text-foreground/80 hover:border-[color:var(--indigo-35)] hover:text-foreground"
-                    : "border-dashed border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--indigo-35)] hover:text-foreground"
+                    ? "border-[color:var(--hairline)] text-foreground/80 hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)] hover:text-foreground"
+                    : "border-dashed border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)] hover:text-foreground"
               }`}
             >
               {s.state === "todo" || s.state === "blocked" ? (
@@ -1868,7 +1895,7 @@ export default function CreateVideo() {
       )}
 
       <div className="surface rounded-2xl p-5 md:p-6">
-        <div className="mx-auto w-full max-w-5xl">{stepContent}</div>
+        <div className="mx-auto w-full max-w-6xl">{stepContent}</div>
       </div>
 
       {/* Back and Next used to live here and were pure duplication: every step
