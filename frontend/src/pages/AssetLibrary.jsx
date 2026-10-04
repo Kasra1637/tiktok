@@ -740,15 +740,26 @@ export default function AssetLibrary({
       )}
 
       {/* Rights. A full Alert box for one sentence made the section read as a
-          warning before it read as a photo control; the wording is unchanged
-          because it is a compliance statement, not decoration. */}
+          warning before it read as a photo control.
+
+          The line now leads with what the photo is FOR rather than with the
+          confirmation machinery behind it. "Upload the person you want on
+          camera" is the answer to the question the founder actually has at
+          this point in the step, and it is the one thing the upload cannot be
+          used without. The compliance half stays, and it stays first — it is
+          still a statement about what is allowed, not decoration. What was
+          dropped is the storage detail: the per-upload confirmation and the
+          per-App-Profile scoping are real and still enforced, but they read as
+          a receipt rather than as an instruction, so they now live where the
+          enforcement is visible instead: the "Rights unconfirmed" badge on an
+          unconfirmed row, and the refusal to attach one to a project. */}
       <p
         className="flex items-center gap-2 text-xs text-muted-foreground"
         data-testid="asset-rights-alert"
       >
         <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />
-        Only upload assets you have the right to use. Each upload records your
-        confirmation, and assets stay scoped to this App Profile.
+        Only upload assets you have the right to use. Upload the person you want
+        on camera. This image will be your video reference.
       </p>
 
       {error && (

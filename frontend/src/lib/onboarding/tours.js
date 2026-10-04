@@ -153,7 +153,7 @@ export const TOURS = {
       },
       {
         target: '[data-testid="asset-rights-alert"]',
-        title: "Checked before it costs you",
+        title: "Checked before it renders",
         optional: true,
         body:
           "Rights are confirmed per upload, and faces are counted up front: a photo with no detectable face \u2014 or several competing ones \u2014 is flagged here, which is what the video provider would otherwise refuse at the render.",
