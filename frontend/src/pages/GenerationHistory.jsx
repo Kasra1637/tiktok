@@ -430,36 +430,12 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
       {error && <p className="text-xs text-destructive">{error}</p>}
 
       {(row.status === "completed" && downloadUrl) && (
-        <div className="flex flex-wrap gap-2">
-          <video
-            src={mediaUrl(downloadUrl)}
-            controls
-            playsInline
-            className="w-full max-w-[240px] rounded-lg border border-[color:var(--hairline)]"
-          />
-          <div className="flex flex-col gap-1.5">
-            <Button variant="secondary" size="sm" asChild>
-              <a
-                href={mediaUrl(downloadUrl)}
-                download
-                onClick={() => recordSignal("video_downloaded", "downloaded", signalRefs)}
-              >
-                <Download className="h-3.5 w-3.5" /> Download
-              </a>
-            </Button>
-            {composedUrl && (
-              <Button variant="secondary" size="sm" asChild>
-                <a
-                  href={mediaUrl(composedUrl)}
-                  download
-                  onClick={() => recordSignal("video_downloaded", "downloaded", signalRefs)}
-                >
-                  <Star className="h-3.5 w-3.5" /> With real visuals
-                </a>
-              </Button>
-            )}
-          </div>
-        </div>
+        <video
+          src={mediaUrl(downloadUrl)}
+          controls
+          playsInline
+          className="w-full max-w-[240px] rounded-lg border border-[color:var(--hairline)]"
+        />
       )}
 
       {row.status === "failed" && (
@@ -486,7 +462,43 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
         </p>
       )}
 
-      <div className="flex flex-wrap items-center gap-1.5">
+      {/* One action bar per card, and the downloads lead it.
+
+          They used to sit in their own column immediately beside the <video>,
+          which read as two buttons floating at the top-right of the player and
+          put the file the founder most likely wants somewhere other than with
+          the rest of this card's actions. So the outputs come first and are
+          `secondary`, which makes them read as actions rather than utilities;
+          the verdict controls and the navigation follow as `ghost`; and the
+          destructive pair is held at the right edge so it cannot be reached by
+          muscle memory on the way to Details. The hairline above separates the
+          actions from the content the row is describing, which is what the
+          variations panel below already does. */}
+      <div className="flex flex-wrap items-center gap-1.5 border-t border-[color:var(--hairline)] pt-3">
+        {(row.status === "completed" && downloadUrl) && (
+          <>
+            <Button variant="secondary" size="sm" asChild>
+              <a
+                href={mediaUrl(downloadUrl)}
+                download
+                onClick={() => recordSignal("video_downloaded", "downloaded", signalRefs)}
+              >
+                <Download className="h-3.5 w-3.5" /> Download MP4
+              </a>
+            </Button>
+            {composedUrl && (
+              <Button variant="secondary" size="sm" asChild>
+                <a
+                  href={mediaUrl(composedUrl)}
+                  download
+                  onClick={() => recordSignal("video_downloaded", "downloaded", signalRefs)}
+                >
+                  <Star className="h-3.5 w-3.5" /> With real visuals
+                </a>
+              </Button>
+            )}
+          </>
+        )}
         <Button variant="ghost" size="sm" onClick={loadChildren}>
           <GitBranch className="h-3.5 w-3.5" /> Variations
           {children.length > 0 && ` (${children.length})`}
@@ -539,22 +551,24 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
         >
           <Copy className="h-3.5 w-3.5" /> Duplicate
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={busy || row.status === "archived"}
-          onClick={() => act(() => api.archiveGeneration(row.id))}
-        >
-          <Archive className="h-3.5 w-3.5" /> Archive
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={busy}
-          onClick={() => act(() => api.deleteGeneration(row.id))}
-        >
-          <Trash2 className="h-3.5 w-3.5" /> Delete
-        </Button>
+        <span className="ml-auto flex items-center gap-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={busy || row.status === "archived"}
+            onClick={() => act(() => api.archiveGeneration(row.id))}
+          >
+            <Archive className="h-3.5 w-3.5" /> Archive
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={() => act(() => api.deleteGeneration(row.id))}
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Delete
+          </Button>
+        </span>
       </div>
 
       {showDetails && (
@@ -669,7 +683,7 @@ export default function GenerationHistory() {
   const failed = rows.filter((r) => r.status === "failed").length;
 
   return (
-    <div className="space-y-5">
+    <div className="mx-auto w-full max-w-6xl space-y-5">
       <PageHeader
         icon={HistoryIcon}
         title="Generation History"
@@ -715,9 +729,22 @@ export default function GenerationHistory() {
       </div>
 
       {loading ? (
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading history...
-        </p>
+        /* Mirrors the real row rather than a centered spinner: a bare spinner on
+           a page whose cards are stacked means the layout jumps the moment data
+           lands, which is the same flash the studio loader was changed to
+           remove. */
+        <div className="space-y-3" aria-label="Loading history" data-testid="history-loading">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="surface space-y-3 rounded-2xl p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="h-4 w-32 animate-pulse rounded bg-secondary/60" />
+                <div className="h-4 w-20 animate-pulse rounded bg-secondary/40" />
+              </div>
+              <div className="h-3 w-3/5 animate-pulse rounded bg-secondary/40" />
+              <div className="h-40 w-full max-w-[240px] animate-pulse rounded-lg bg-secondary/30" />
+            </div>
+          ))}
+        </div>
       ) : rows.length === 0 ? (
         <EmptyState
           icon={Film}

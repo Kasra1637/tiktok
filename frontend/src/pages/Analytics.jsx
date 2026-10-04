@@ -89,7 +89,7 @@ export default function Analytics() {
   const feedback = report?.feedback || {};
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6">
       <PageHeader
         icon={BarChart3}
         title="Analytics"

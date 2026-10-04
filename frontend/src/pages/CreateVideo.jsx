@@ -83,29 +83,6 @@ const STEPS = [
   { key: "hook", label: "Hook & middle", icon: Sparkles },
 ];
 
-/**
- * Objective groups for the picker. The list grew to 13 with the
- * outcome-driven additions, and a flat list makes the two new families
- * (outcomes vs struggles) invisible. Native optgroups keep the accessible,
- * mobile-friendly select while giving it structure. Objectives the backend
- * serves that no group names yet fall into "Other" rather than vanishing.
- */
-const OBJECTIVE_GROUPS = [
-  { label: "Show the outcome", values: ["achieve_desired_outcome", "ease_daily_moment", "avoid_common_mistake"] },
-  { label: "Name the struggle", values: ["address_user_problem", "overcome_viewer_doubt", "feel_seen_and_understood"] },
-  { label: "Present the app", values: ["explain_app", "demonstrate_feature", "introduce_new_app", "compare_alternative", "create_curiosity", "build_awareness", "educate_viewers"] },
-];
-
-function groupedObjectives(objectives) {
-  const list = objectives || [];
-  const groups = OBJECTIVE_GROUPS.map((g) => ({
-    ...g,
-    items: list.filter((o) => g.values.includes(o)),
-  })).filter((g) => g.items.length > 0);
-  const grouped = new Set(OBJECTIVE_GROUPS.flatMap((g) => g.values));
-  return { groups, rest: list.filter((o) => !grouped.has(o)) };
-}
-
 function formatTemplateUse(n) {
   if (!n) return "Never used";
   return n === 1 ? "Used once" : `Used ${n} times`;
@@ -1093,7 +1070,6 @@ export default function CreateVideo() {
     }
 
     if (step === 1) {
-      const { groups: objectiveGroups, rest: otherObjectives } = groupedObjectives(facets?.objectives);
       return (
         <StepShell
           icon={Target}
@@ -1210,20 +1186,9 @@ export default function CreateVideo() {
                   }`}
                 >
                 <option value="">Choose an objective</option>
-                {objectiveGroups.map((g) => (
-                  <optgroup key={g.label} label={g.label}>
-                    {g.items.map((o) => (
-                      <option key={o} value={o}>{humanize(o)}</option>
-                    ))}
-                  </optgroup>
+                {(facets?.objectives || []).map((o) => (
+                  <option key={o} value={o}>{humanize(o)}</option>
                 ))}
-                {otherObjectives.length > 0 && (
-                  <optgroup label="Other">
-                    {otherObjectives.map((o) => (
-                      <option key={o} value={o}>{humanize(o)}</option>
-                    ))}
-                  </optgroup>
-                )}
                 </select>
                 <ChevronDown
                   aria-hidden="true"
@@ -1815,7 +1780,7 @@ export default function CreateVideo() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6">
       <PageHeader
         icon={Clapperboard}
         title="Create Video"
