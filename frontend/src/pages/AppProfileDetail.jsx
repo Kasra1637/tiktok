@@ -74,7 +74,7 @@ function ClaimPanel({ profile }) {
 
 function AngleCard({ angle, onDelete, busy }) {
   return (
-    <div className="surface rounded-2xl p-4">
+    <div className="surface rounded-2xl">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h4 className="font-display text-sm font-semibold">{angle.label || angle.kind}</h4>
@@ -340,7 +340,7 @@ export default function AppProfileDetail() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
-          <div className="surface space-y-4 rounded-2xl p-4" data-testid="profile-facts">
+          <div className="surface space-y-4 rounded-2xl" data-testid="profile-facts">
             <span className="eyebrow block">Product facts</span>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Category" value={profile?.app_category || profile?.niche} />
@@ -394,7 +394,7 @@ export default function AppProfileDetail() {
               numbers on their own videos, and the next strategy prompt reads
               it. Aggregate per template, so it is evidence of what carried
               views rather than a ranking of hooks. */}
-          <div className="surface space-y-3 rounded-2xl p-4" data-testid="what-works">
+          <div className="surface space-y-3 rounded-2xl" data-testid="what-works">
             <span className="eyebrow flex items-center gap-1.5">
               <Target className="h-3 w-3" /> What has worked here
             </span>
@@ -423,7 +423,7 @@ export default function AppProfileDetail() {
             )}
           </div>
 
-          <div className="surface space-y-4 rounded-2xl p-4">
+          <div className="surface space-y-4 rounded-2xl">
             <span className="eyebrow block">Audiences</span>
             <Field label="Primary audience" value={profile?.target_audience} />
             <Field label="Ideal customer" value={profile?.ideal_customer_profile} />
@@ -434,7 +434,7 @@ export default function AppProfileDetail() {
         </div>
 
         <div className="space-y-4">
-          <div className="surface space-y-3 rounded-2xl p-4" data-testid="app-profile-videos">
+          <div className="surface space-y-3 rounded-2xl" data-testid="app-profile-videos">
             <div className="flex items-center justify-between gap-2">
               <span className="eyebrow flex items-center gap-1.5">
                 <Video className="h-3 w-3" />
@@ -479,7 +479,7 @@ export default function AppProfileDetail() {
             )}
           </div>
 
-          <div className="surface space-y-3 rounded-2xl p-4" data-testid="app-profile-angles">
+          <div className="surface space-y-3 rounded-2xl" data-testid="app-profile-angles">
             <div className="flex items-center justify-between gap-2">
               <span className="eyebrow flex items-center gap-1.5">
                 <Target className="h-3 w-3" />
@@ -517,7 +517,7 @@ export default function AppProfileDetail() {
             )}
           </div>
 
-          <div className="surface space-y-3 rounded-2xl p-4" data-testid="app-profile-templates">
+          <div className="surface space-y-3 rounded-2xl" data-testid="app-profile-templates">
             <span className="eyebrow block">Suggested templates</span>
             {recError && (
               <p className="text-xs text-muted-foreground">
