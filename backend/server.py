@@ -15,9 +15,9 @@ from typing import Optional
 import aiosqlite
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, APIRouter, BackgroundTasks, HTTPException, UploadFile, File, Form, Depends
+from fastapi import FastAPI, APIRouter, BackgroundTasks, HTTPException, UploadFile, File, Form, Depends, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from PIL import Image
 from starlette.middleware.cors import CORSMiddleware
 
@@ -9749,6 +9749,149 @@ async def serve_template_thumbnail(template_id: str):
         str(thumbnail_path),
         media_type="image/jpeg",
         headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+# A generated clip's filename, accepted or refused whole.
+#
+# The blanket StaticFiles mount below happily serves any readable path under
+# storage/, which is fine for a file that already exists on disk. This route
+# resolves a name supplied in the URL instead, so it validates the name itself
+# rather than trusting the filesystem: one segment, a UUID-ish id, an .mp4
+# suffix, nothing else. That rules out traversal ("../"), absolute paths,
+# separators, and query tricks without having to reason about what
+# Path.resolve() would do with each of them.
+_VIDEO_FILENAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}\.mp4$")
+
+
+def _parse_byte_range(range_header: str, total: int):
+    """
+    Classify a `Range: bytes=...` header against a known file size.
+
+    Returns ("ok", (start, end_inclusive)) for a usable range,
+    ("unsatisfiable", None) for a syntactically valid one that lies outside the
+    file, and ("none", None) when there is nothing to honour — no header, an
+    unrecognised unit, or a form this does not answer.
+
+    The three are kept apart because they are three different answers: a 206, a
+    416 that tells the player how long the file actually is, and an ordinary
+    200. Collapsing "unsatisfiable" into "none" would answer a request the
+    player believed it had satisfied with a body it did not ask for.
+
+    Only the single-range forms a media element sends are honoured: `bytes=a-`,
+    `bytes=a-b`, `bytes=-suffix`. A multi-range request (`bytes=0-9,20-29`)
+    returns "none" rather than a partial answer.
+    """
+    if not range_header:
+        return "none", None
+    header = range_header.strip()
+    if not header.lower().startswith("bytes="):
+        return "none", None
+    spec = header[6:].strip()
+    if "," in spec:  # multi-range: not supported, fall back to a full 200
+        return "none", None
+    start_text, _, end_text = spec.partition("-")
+    start_text, end_text = start_text.strip(), end_text.strip()
+    try:
+        if not start_text:
+            if not end_text:
+                return "none", None
+            # Suffix form: the last N bytes.
+            suffix = int(end_text)
+            if suffix <= 0:
+                return "unsatisfiable", None
+            start = max(0, total - suffix)
+            end = total - 1
+        else:
+            start = int(start_text)
+            end = int(end_text) if end_text else total - 1
+    except ValueError:
+        return "none", None
+    if start >= total or end < start:
+        return "unsatisfiable", None
+    return "ok", (start, min(end, total - 1))
+
+
+def _iter_file_range(path: Path, start: int, end: int, chunk_size: int = 256 * 1024):
+    """
+    Yield exactly bytes[start..end] of a file, in chunks.
+
+    Deliberately not FileResponse. On this Starlette version FileResponse always
+    streams the WHOLE file and, when a caller supplies its own Content-Length,
+    sends that header anyway — so a 206 built from it claims to be a 100-byte
+    range and then delivers the entire clip. A player that trusts the header is
+    worse off than one that got a 200: it is told the response was truncated
+    partway through. The bytes therefore have to be counted here.
+    """
+    remaining = end - start + 1
+    with open(path, "rb") as fh:
+        fh.seek(start)
+        while remaining > 0:
+            chunk = fh.read(min(chunk_size, remaining))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+            yield chunk
+
+
+@app.get("/api/media/videos/{filename}")
+async def serve_video(filename: str, request: Request):
+    """
+    Serve a generated clip so a <video> element can actually play it.
+
+    Every other file under /api/media is served by the StaticFiles mount below,
+    which is fine for images. It is not fine for video: Starlette's StaticFiles
+    has no byte-range support, so it answers a media element's request with a
+    plain 200 and no `Accept-Ranges`. Chrome needs ranges to start playback and
+    to report a duration, which is why these clips rendered their first frame,
+    showed 0:00, and had a play button that did nothing — while "Download MP4"
+    beside them, a plain GET that saves bytes, worked perfectly. The file was
+    never the problem; the response headers were.
+
+    Declared above the mount on purpose: Starlette matches routes in
+    registration order, so this shadows StaticFiles for /api/media/videos/*
+    while leaving every other media path untouched.
+    """
+    if not _VIDEO_FILENAME_RE.match(filename or ""):
+        raise HTTPException(status_code=404, detail="Clip not found")
+
+    video_path = pipeline.VIDEOS_DIR / filename
+    if not video_path.is_file():
+        raise HTTPException(status_code=404, detail="Clip not found")
+    total = video_path.stat().st_size
+    if total <= 0:
+        raise HTTPException(status_code=404, detail="Clip is empty")
+
+    base_headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Type": "video/mp4",
+        # The bytes of a completed clip never change, and the filename is the
+        # generation id, so this can be cached hard. The provider's temporary
+        # URL it replaces was the opposite: expiring.
+        "Cache-Control": "public, max-age=31536000, immutable",
+    }
+
+    verdict, span = _parse_byte_range(request.headers.get("range"), total)
+    if verdict == "unsatisfiable":
+        # A 416 has to say how long the file is, or the player cannot tell a
+        # stale request from a wrong one.
+        return Response(
+            status_code=416,
+            headers={**base_headers, "Content-Range": f"bytes */{total}"},
+        )
+    if verdict == "none":
+        # No range, or one we decline to answer: the whole file, and still
+        # advertising that ranges exist so the player can seek.
+        return FileResponse(str(video_path), headers=base_headers)
+    start, end = span
+    return StreamingResponse(
+        _iter_file_range(video_path, start, end),
+        status_code=206,
+        headers={
+            **base_headers,
+            "Content-Range": f"bytes {start}-{end}/{total}",
+            "Content-Length": str(end - start + 1),
+        },
     )
 
 

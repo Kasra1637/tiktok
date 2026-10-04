@@ -289,6 +289,24 @@ function GenerationDetails({ generationId, onClose }) {
   );
 }
 
+/**
+ * One fact about a render: model, length, cost, objective, version, date.
+ *
+ * Chips rather than a sentence of middot-separated values, because a sentence
+ * has to be read end to end to find one fact in it, and because the row used to
+ * carry the same kind of information two ways — four badges opposite the title
+ * and a run-on line below it — which is why it never looked settled. Text is
+ * `text-xs`, which is 12px: the project's floor, and one step up from the 11px
+ * the old badges used.
+ */
+function FactChip({ children }) {
+  return (
+    <span className="rounded-full border border-[color:var(--hairline)] px-2 py-0.5 text-xs text-muted-foreground">
+      {children}
+    </span>
+  );
+}
+
 function GenerationRow({ row, onChanged, focusGenerationId }) {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
@@ -303,10 +321,14 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
   // page should not invite them to answer twice.
   const [verdict, setVerdict] = useState("");
   const [showDetails, setShowDetails] = useState(false);
+  // Set when the clip cannot be played inline, so the row can say so instead of
+  // leaving a player that looks loaded and does nothing.
+  const [previewBroken, setPreviewBroken] = useState(false);
 
   const downloadUrl = row.r2_url || row.video_url;
   const composedUrl = row.composition?.r2_url || row.composition?.output_url;
   const cost = money(row.cost_usd);
+  const hasClip = row.status === "completed" && Boolean(downloadUrl);
 
   const signalRefs = {
     brand_profile_id: row.brand_profile_id,
@@ -385,9 +407,77 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
   };
 
   return (
-    <div className="surface space-y-3 rounded-2xl p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
+    <div className="surface rounded-2xl p-4">
+      {/* One grid for the whole row, and the clip gets a rail of its own.
+
+          It used to sit in a 240px column with roughly 800px of empty card to
+          its right, because everything else in the row was full-width text on
+          the way to an action bar at the bottom. Putting the player in a rail
+          and giving the right column the content it was missing removes the
+          void by using it, rather than by stretching the player to fill it —
+          a 9:16 clip wide enough to span 1150px would be two thousand pixels
+          tall.
+
+          The grid only exists when there is a clip: a failed render has no
+          player, and forcing its error message into a 240px rail would make
+          the two states look like different components. */}
+      <div className={`grid gap-4 ${hasClip ? "sm:grid-cols-[minmax(0,240px)_minmax(0,1fr)]" : ""}`}>
+        {hasClip && (
+          <div className="space-y-2">
+            {previewBroken ? (
+              /* Says what is actually true instead of leaving a dead control.
+                 A clip whose source cannot be played inline (an expired
+                 provider URL, a storage path that no longer resolves) used to
+                 render a player that looked loaded and did nothing, which reads
+                 as a bug in the app rather than a file that cannot be previewed
+                 here. The download is the way through either way. */
+              <div className="rounded-xl border border-dashed border-[color:var(--hairline-strong)] p-3">
+                <p className="text-sm">Preview unavailable</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  This clip cannot be played here. Download it to view.
+                </p>
+              </div>
+            ) : (
+              <video
+                src={mediaUrl(downloadUrl)}
+                controls
+                playsInline
+                preload="metadata"
+                onError={() => setPreviewBroken(true)}
+                className="w-full rounded-lg border border-[color:var(--hairline)]"
+              />
+            )}
+            {/* The download sits under the file it produces. It was the most
+                likely action on the card and it sat in a ten-item row at the
+                bottom, two lines away from the thing it acts on. */}
+            <Button variant="secondary" size="sm" className="w-full" asChild>
+              <a
+                href={mediaUrl(downloadUrl)}
+                download
+                onClick={() => recordSignal("video_downloaded", "downloaded", signalRefs)}
+              >
+                <Download className="h-3.5 w-3.5" /> Download MP4
+              </a>
+            </Button>
+            {composedUrl && (
+              <Button variant="secondary" size="sm" className="w-full" asChild>
+                <a
+                  href={mediaUrl(composedUrl)}
+                  download
+                  onClick={() => recordSignal("video_downloaded", "downloaded", signalRefs)}
+                >
+                  <Star className="h-3.5 w-3.5" /> With real visuals
+                </a>
+              </Button>
+            )}
+          </div>
+        )}
+
+        <div className="min-w-0 space-y-3">
+          {/* Identity, then what it says. The model/duration/cost badges that
+              used to sit opposite the app name are gone from here — they are
+              facts about the render, not about which video this is, and they
+              join the strip below. */}
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-display text-sm font-semibold">
               {row.brand_name || "Unassigned app"}
@@ -404,135 +494,110 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
               </Badge>
             )}
           </div>
+
           {row.hook_line && (
-            <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">
+            <p className="text-sm leading-snug text-muted-foreground">
               &ldquo;{row.hook_line}&rdquo;
             </p>
           )}
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {row.model && <Badge variant="outline" className="text-[11px]">{row.model}</Badge>}
-          {row.duration && <Badge variant="outline" className="text-[11px]">{row.duration}s</Badge>}
-          {cost && <Badge variant="secondary" className="text-[11px]">{cost}</Badge>}
-          {row.attempt > 1 && (
-            <Badge variant="outline" className="text-[11px]">attempt {row.attempt}</Badge>
+
+          {/* One treatment for every fact about the render.
+
+              These were three: four badges opposite the title, and a run-on
+              "a · b · c · date" sentence below it. A sentence of dots is not
+              scannable — you cannot find one fact in it without reading it
+              all — and two treatments for the same kind of information meant
+              the card never looked settled. Chips also let the row go quiet
+              when facts are missing instead of leaving a dangling separator. */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {row.model && <FactChip>{row.model}</FactChip>}
+            {row.duration ? <FactChip>{row.duration}s</FactChip> : null}
+            {cost ? <FactChip>{cost}</FactChip> : null}
+            {row.attempt > 1 ? <FactChip>attempt {row.attempt}</FactChip> : null}
+            {row.objective ? <FactChip>{humanize(row.objective)}</FactChip> : null}
+            {row.template_id ? <FactChip>template v{row.template_version}</FactChip> : null}
+            <FactChip>script v{row.script_version}</FactChip>
+            <FactChip>{new Date(row.created_at).toLocaleString()}</FactChip>
+          </div>
+
+          {error && <p className="text-xs text-destructive">{error}</p>}
+
+          {row.status === "failed" && (
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="flex-1 text-xs text-destructive">{row.error}</p>
+              {row.retryable && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => act(() => api.retryGeneration(row.id))}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" /> Retry
+                </Button>
+              )}
+            </div>
+          )}
+
+          {row.performance && (
+            <p className="text-xs text-muted-foreground">
+              Manually logged: {row.performance.views ?? 0} views
+              {row.performance.likes != null && `, ${row.performance.likes} likes`}
+              {row.performance.outcome && ` — ${row.performance.outcome}`}
+            </p>
+          )}
+
+          {/* The verdict is a judgement about the video, which is a different
+              kind of action from moving a file or deleting a row. It used to be
+              a text fragment sitting inline between two buttons, so it read as
+              a label for whatever came next rather than a question. In its own
+              bordered group with a heading, it asks to be answered — which is
+              the point of asking. */}
+          {row.status === "completed" && (
+            <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-3">
+              <span className="eyebrow block">How did this turn out?</span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-pressed={verdict === "approved"}
+                  onClick={() => judge("approved")}
+                  className={verdict === "approved" ? "text-success" : undefined}
+                >
+                  <Check className="h-3.5 w-3.5" /> Looks good
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-pressed={verdict === "rejected"}
+                  onClick={() => judge("rejected")}
+                  className={verdict === "rejected" ? "text-destructive" : undefined}
+                >
+                  <ThumbsDown className="h-3.5 w-3.5" /> Not good
+                </Button>
+                <PerformanceForm
+                  generation={row}
+                  onSaved={onChanged}
+                  openInitially={row.id === focusGenerationId}
+                />
+              </div>
+            </div>
           )}
         </div>
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        {row.objective ? `${humanize(row.objective)} · ` : ""}
-        {row.template_id ? `template v${row.template_version} · ` : ""}
-        script v{row.script_version} ·{" "}
-        {new Date(row.created_at).toLocaleString()}
-      </p>
+      {/* One action bar per card, and it carries no file actions.
 
-      {error && <p className="text-xs text-destructive">{error}</p>}
-
-      {(row.status === "completed" && downloadUrl) && (
-        <video
-          src={mediaUrl(downloadUrl)}
-          controls
-          playsInline
-          className="w-full max-w-[240px] rounded-lg border border-[color:var(--hairline)]"
-        />
-      )}
-
-      {row.status === "failed" && (
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="flex-1 text-xs text-destructive">{row.error}</p>
-          {row.retryable && (
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={busy}
-              onClick={() => act(() => api.retryGeneration(row.id))}
-            >
-              <RotateCcw className="h-3.5 w-3.5" /> Retry
-            </Button>
-          )}
-        </div>
-      )}
-
-      {row.performance && (
-        <p className="text-xs text-muted-foreground">
-          Manually logged: {row.performance.views ?? 0} views
-          {row.performance.likes != null && `, ${row.performance.likes} likes`}
-          {row.performance.outcome && ` — ${row.performance.outcome}`}
-        </p>
-      )}
-
-      {/* One action bar per card, and the downloads lead it.
-
-          They used to sit in their own column immediately beside the <video>,
-          which read as two buttons floating at the top-right of the player and
-          put the file the founder most likely wants somewhere other than with
-          the rest of this card's actions. So the outputs come first and are
-          `secondary`, which makes them read as actions rather than utilities;
-          the verdict controls and the navigation follow as `ghost`; and the
-          destructive pair is held at the right edge so it cannot be reached by
-          muscle memory on the way to Details. The hairline above separates the
-          actions from the content the row is describing, which is what the
-          variations panel below already does. */}
-      <div className="flex flex-wrap items-center gap-1.5 border-t border-[color:var(--hairline)] pt-3">
-        {(row.status === "completed" && downloadUrl) && (
-          <>
-            <Button variant="secondary" size="sm" asChild>
-              <a
-                href={mediaUrl(downloadUrl)}
-                download
-                onClick={() => recordSignal("video_downloaded", "downloaded", signalRefs)}
-              >
-                <Download className="h-3.5 w-3.5" /> Download MP4
-              </a>
-            </Button>
-            {composedUrl && (
-              <Button variant="secondary" size="sm" asChild>
-                <a
-                  href={mediaUrl(composedUrl)}
-                  download
-                  onClick={() => recordSignal("video_downloaded", "downloaded", signalRefs)}
-                >
-                  <Star className="h-3.5 w-3.5" /> With real visuals
-                </a>
-              </Button>
-            )}
-          </>
-        )}
+          Downloads moved up beside the clip, and the verdict controls above.
+          What is left is navigation on the left and the destructive pair held
+          at the right edge, so Archive and Delete cannot be reached by muscle
+          memory on the way to Details. The hairline separates acting on the row
+          from reading it, which is what the variations panel below already
+          does. */}
+      <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-[color:var(--hairline)] pt-3">
         <Button variant="ghost" size="sm" onClick={loadChildren}>
           <GitBranch className="h-3.5 w-3.5" /> Variations
           {children.length > 0 && ` (${children.length})`}
         </Button>
-        {row.status === "completed" && (
-          <>
-            <span className="text-xs text-muted-foreground">How did this turn out?</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-pressed={verdict === "approved"}
-              onClick={() => judge("approved")}
-              className={verdict === "approved" ? "text-success" : undefined}
-            >
-              <Check className="h-3.5 w-3.5" /> Looks good
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-pressed={verdict === "rejected"}
-              onClick={() => judge("rejected")}
-              className={verdict === "rejected" ? "text-destructive" : undefined}
-            >
-              <ThumbsDown className="h-3.5 w-3.5" /> Not good
-            </Button>
-          </>
-        )}
-        {row.status === "completed" && (
-          <PerformanceForm
-            generation={row}
-            onSaved={onChanged}
-            openInitially={row.id === focusGenerationId}
-          />
-        )}
         <Button
           variant="ghost"
           size="sm"

@@ -355,6 +355,7 @@ def build_upscale_command(source: Path, output_path: Path) -> list:
     that works for both.
     """
     graph = ";".join(canvas_fit_chain("0:v", "outv"))
+
     return [
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
         "-i", str(source),
@@ -362,9 +363,15 @@ def build_upscale_command(source: Path, output_path: Path) -> list:
         "-map", "[outv]", "-map", "0:a?",
         "-c:v", "libx264", "-preset", "medium", "-crf", "20",
         "-pix_fmt", "yuv420p", "-c:a", "aac",
+        # +faststart moves the moov atom to the front of the file. Without it
+        # the index sits at the end, so a player must fetch the whole clip
+        # before it can seek or report a duration — which is what made these
+        # clips show 0:00 and refuse to scrub. It is a container-level move, not
+        # a re-encode: no quality is touched and it costs a fraction of a second
+        # on a file that was just re-encoded anyway.
+        "-movflags", "+faststart",
         str(output_path),
     ]
-
 
 def build_filter_graph(spec: dict, duration: float, font_path: Optional[str] = None) -> tuple:
     """

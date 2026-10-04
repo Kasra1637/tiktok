@@ -71,6 +71,9 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
   const [composition, setComposition] = useState(null);
   const [busy, setBusy] = useState(false);
   const [composing, setComposing] = useState(false);
+  // Set when the finished clip cannot be played inline, so the panel replaces a
+  // dead-looking player with the truth instead of leaving a dead control.
+  const [previewBroken, setPreviewBroken] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [retryingStorage, setRetryingStorage] = useState(false);
@@ -506,12 +509,25 @@ const handleGenerate = async () => {
 
           {generation.status === "completed" && downloadUrl && (
             <>
-              <video
-                src={downloadUrl}
-                controls
-                playsInline
-                className="w-full max-w-[280px] rounded-xl border border-[color:var(--hairline)]"
-              />
+              {/* Says so when the clip cannot be played here. A player that
+                  renders its first frame and then does nothing on click looks
+                  like a broken app; the truth is usually a source the browser
+                  cannot stream (an expired provider link), and the download is
+                  the way through either way. */}
+              {previewBroken ? (
+                <p className="w-full max-w-[280px] rounded-xl border border-dashed border-[color:var(--hairline-strong)] p-3 text-xs text-muted-foreground">
+                  Preview unavailable — download it to view.
+                </p>
+              ) : (
+                <video
+                  src={downloadUrl}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  onError={() => setPreviewBroken(true)}
+                  className="w-full max-w-[280px] rounded-xl border border-[color:var(--hairline)]"
+                />
+              )}
               <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" size="sm" asChild>
                   <a
