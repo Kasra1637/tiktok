@@ -1083,3 +1083,38 @@ class TestModelSelectionAtTheApiBoundary:
         # ...and the two-section prompt is identical on both models.
         assert "The person on camera is the person in the attached character reference" in (
             calls[0]["prompt"])
+
+    def test_a_prompt_over_the_provider_ceiling_prevents_spend(self, api, monkeypatch):
+        """
+        Each provider has its own prompt ceiling and the two limits we can
+        actually hit here -- prompt characters and encoded body bytes -- are
+        ours, not the provider's, so neither appears in anything the founder is
+        shown. When the assembled prompt still exceeds the ceiling after
+        scaling, the refusal has to happen BEFORE the submit.
+
+        Cost of getting this wrong is concrete: the founder pays for an attempt
+        that cannot succeed, and the error they see names a parameter they have
+        no way to set.
+        """
+        import video_providers as vp
+        calls = _mock_submit(api, monkeypatch)
+        from models import StudioGenerationRequest
+        project, _, _ = _ready_project(api, "Over Ceiling")
+
+        # Squeeze the ceiling below what the prompt's fixed instructions alone
+        # occupy, which is the only way the scaled variables cannot save it.
+        original = vp._CAPABILITY_NOTES["minimax-h3"]["prompt_char_limit"]
+        vp._CAPABILITY_NOTES["minimax-h3"]["prompt_char_limit"] = 200
+        try:
+            with pytest.raises(HTTPException) as err:
+                _run(api.submit_project_generation(
+                    project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        finally:
+            vp._CAPABILITY_NOTES["minimax-h3"]["prompt_char_limit"] = original
+
+        assert err.value.status_code == 409
+        detail = str(err.value.detail)
+        # Names the size, the ceiling, and reassures that nothing was charged.
+        assert "character prompt" in detail
+        assert "nothing has been charged" in detail
+        assert calls == [], "a refusal that still submits spends the founder's money"

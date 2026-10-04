@@ -7005,7 +7005,7 @@ async def _studio_identity_references(
             detail="The attached character reference image is missing its file. Re-upload it before generating.",
         )
     from ai_service import image_data_uri
-    from face_crop import crop_face_from_path
+    from face_crop import crop_face_from_path, bound_for_submit
 
     # Crop to the face before sending. The legacy image paths have always done
     # this (ai_service.py:613, 664) because models treat an unframed scene
@@ -7018,6 +7018,13 @@ async def _studio_identity_references(
     except Exception as e:  # never fail a paid render over a crop
         logger.warning(f"Character reference crop failed for {path} ({e}); sending original.")
         reference_path = Path(path)
+
+    # Then bound it. The reference travels as a base64 data URI inside a JSON
+    # body, and nothing about that was capped: a 200 MB upload ceiling plus a
+    # crop that never resizes means a phone photo can arrive as megabytes of
+    # data URI. Bounding after the crop, because the crop is what decides how
+    # much of the frame is actually the person.
+    reference_path = bound_for_submit(reference_path)
 
     # Prove the file is a readable image before any spend, even though the
     # caller — not this function — decides which request field carries it.
@@ -7107,6 +7114,11 @@ async def _submit_generation(
     # strategy exists to prevent, bought precisely when something had already
     # gone wrong once.
     strategy = strategy or _project_strategy(project)
+    # Each provider has its own prompt ceiling. Hailuo's was measured live at
+    # 7,000; others are lower, and sending them a Hailuo-sized prompt 400s
+    # after the founder has committed to paying. The builder scales every field
+    # budget to fit rather than cutting the finished tail.
+    prompt_budget = video_providers.capability(model_key).get("prompt_char_limit")
     if strategy:
         prompt = generation_planning.build_segment_prompt(
             strategy=strategy,
@@ -7115,6 +7127,7 @@ async def _submit_generation(
             duration=seconds,
             assets=project.get("assets") or [],
             plan=project,
+            prompt_budget=prompt_budget,
         )
     else:
         prompt = generation_planning.build_single_pass_prompt(
@@ -7124,6 +7137,21 @@ async def _submit_generation(
             duration=seconds,
             segment=segment_role,
             is_extension=is_extension,
+        )
+
+    # The fixed instructions in a prompt do not scale with the budget, only the
+    # variables do, so a tight ceiling can still land over it. That is knowable
+    # here and nowhere else, and it is knowable BEFORE spending — so it is
+    # refused here rather than discovered as a provider 400 the founder pays for.
+    if prompt_budget and len(prompt) > prompt_budget:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"This script and photo produce a {len(prompt)}-character prompt, over "
+                f"the {prompt_budget} {video_providers.capability(model_key).get('name', '')} "
+                f"accepts. Shorten the script or the app's own wording, or pick another "
+                f"model — nothing has been charged."
+            ),
         )
 
     # Avatar influencer: the attached character_reference rides along as the

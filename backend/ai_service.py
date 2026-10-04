@@ -1417,12 +1417,26 @@ async def generate_video(
     if refs:
         payload["input_references"] = refs
 
+    # Size the request before sending it. A provider 400 usually names a
+    # parameter, but the two limits we can actually hit here — prompt
+    # characters and encoded body bytes — are ours, not theirs, and neither is
+    # visible in the request or in anything the founder is shown. Logging them
+    # here is what makes a size-related refusal answerable from our own logs
+    # instead of inferred after the fact.
+    _encoded_bytes = 0
+    for _frame in payload.get("frame_images") or []:
+        _encoded_bytes += len(str((_frame.get("image_url") or {}).get("url") or ""))
+    for _ref in payload.get("input_references") or []:
+        _encoded_bytes += len(str((_ref.get("image_url") or {}).get("url") or ""))
+
     logger.info(
         f"Submitting video generation ({model_config['name']}): duration={payload['duration']}s, "
         f"resolution={payload['resolution']}, has_frame_image={bool(payload.get('frame_images'))}, "
         f"continuity_frame={bool(bridge_frame)}, v2v_mode={use_v2v_mode}, audio={generate_audio}, "
         f"num_references={len(payload.get('input_references', []))}, "
-        f"has_v2v_motion={bool(reference_video_url)}, model={model_id}"
+        f"has_v2v_motion={bool(reference_video_url)}, model={model_id}, "
+        f"prompt_chars={len(prompt)}, prompt_limit={model_config.get('prompt_char_limit')}, "
+        f"image_data_kb={_encoded_bytes // 1024}"
     )
 
     async with httpx.AsyncClient(timeout=90) as client:

@@ -42,6 +42,10 @@ _CAPABILITY_NOTES = {
         "max_reference_audio": 3,
         "supports_first_frame": True,
         "supports_last_frame": False,
+        # Measured live: a 7,724-char prompt to this model was refused with
+        # "content[0].text too long". 6,800 is the ceiling below that, with a
+        # margin for however the provider counts characters.
+        "prompt_char_limit": 6800,
         "notes": (
             "2K, native audio, 5-15s per generation. Cannot combine "
             "frame_images with input_references in one request. Durations "
@@ -63,6 +67,8 @@ _CAPABILITY_NOTES = {
         "supports_first_frame": True,
         "supports_last_frame": True,
         "identity_via_first_frame": True,
+        # Same provider as H3, so the same measured ceiling.
+        "prompt_char_limit": 6800,
         "notes": (
             "768p (not 2K), 5-15s per generation. Faster than Hailuo 3 with "
             "tighter prompt adherence, which makes it useful for testing a "
@@ -86,6 +92,17 @@ _CAPABILITY_NOTES = {
         "supports_first_frame": True,
         "supports_last_frame": False,
         "identity_via_first_frame": True,
+        # NOT MEASURED for this provider, and deliberately set well under the
+        # 4,096 characters its own tooling documents as the prompt maximum.
+        # RENDER_PROMPT_LIMIT was derived from Hailuo's measured 7,000 and does
+        # not transfer: this model 400s on a prompt Hailuo accepts, and the
+        # founder pays for the attempt. 3,800 leaves headroom under the
+        # documented figure, and build_segment_prompt scales every field budget
+        # down to fit rather than cutting the finished tail.
+        #
+        # When a real clip comes back, measure the actual ceiling and correct
+        # this rather than raising it on optimism.
+        "prompt_char_limit": 3800,
         "notes": (
             "720p (not 2K), 1-15s per generation, and no native audio -- "
             "generate_audio is not among its accepted parameters, so the studio "
@@ -102,6 +119,8 @@ _CAPABILITY_NOTES = {
         "max_reference_audio": 0,
         "supports_first_frame": False,
         "supports_last_frame": False,
+        # Editors take a clip rather than a prompt, and are not studio-eligible.
+        "prompt_char_limit": 6800,
         "notes": (
             "In-context video EDITOR, not a generator: it edits a supplied "
             "clip and preserves everything the prompt does not name. Cannot "
@@ -153,6 +172,10 @@ _FALLBACK_NOTES = {
     "max_reference_audio": 1,
     "supports_first_frame": True,
     "supports_last_frame": False,
+    # Unknown provider, so assume the most conservative ceiling any of ours
+    # needs. An unrecognised key resolving to a real render is worse than it
+    # looking conservative in the capability record.
+    "prompt_char_limit": 3800,
     "notes": "Unrecognised provider; conservative limits applied.",
 }
 

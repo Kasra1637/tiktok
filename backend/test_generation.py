@@ -938,3 +938,193 @@ class TestProviderRefusalMessage:
         assert ai_service.describe_provider_refusal("HTTP 500 internal error") is None
         assert ai_service.describe_provider_refusal("") is None
         assert ai_service.describe_provider_refusal(None) is None
+
+
+class TestPerProviderPromptBudget:
+    """
+    RENDER_PROMPT_LIMIT was measured against Hailuo's 7,000-char refusal. A
+    second provider with a lower ceiling cannot be handed the same prompt: it
+    400s, and the founder pays for the attempt. These pin the scaling.
+    """
+
+    def _verbose_kwargs(self):
+        big = "P" * 400
+        return {
+            "strategy": {
+                "hook_line": "H" * 200, "hook_concept": "C" * 200,
+                "hook_action": "A" * 200, "hook_promise": "P" * 200,
+                "audience_problem": big, "primary_feature": big,
+                "desired_outcome": big, "differentiation_beat": big,
+                "strategy_summary": big, "proof_moment": big,
+                "emotional_triggers": [big] * 5, "messaging_pillars": [big] * 5,
+                "segments": [
+                    {"role": "hook", "goal": big, "script": big, "action": big},
+                    {"role": "middle", "goal": big, "script": big, "action": big},
+                ],
+            },
+            "profile": {
+                "brand_name": "Test", "must_not_show": [big] * 8,
+                "viewer_objections": [big] * 5,
+            },
+            "template": {
+                "name": "T", "opening_structure": big, "middle_structure": big,
+                "visual_style": big, "camera_pacing": big,
+            },
+            "duration": 12,
+            "assets": {"character_reference": {
+                "kind": "character_reference", "name": "A" * 400,
+            }},
+            "plan": {"hook_seconds": 3},
+        }
+
+    def test_the_default_is_unchanged(self):
+        """
+        Every pre-existing caller passes no budget, so the assembled prompt must
+        be byte-identical to what it was before this parameter existed.
+        """
+        kwargs = self._verbose_kwargs()
+        assert gp.build_segment_prompt(**kwargs) == gp.build_segment_prompt(
+            **kwargs, prompt_budget=gp.RENDER_PROMPT_LIMIT
+        )
+
+    def test_a_lower_ceiling_produces_a_shorter_prompt(self):
+        kwargs = self._verbose_kwargs()
+        full = len(gp.build_segment_prompt(**kwargs))
+        tight = len(gp.build_segment_prompt(**kwargs, prompt_budget=3800))
+        assert tight < full
+
+    def test_the_scale_does_not_leak_between_calls(self):
+        """
+        The scale is a ContextVar, so it must be cleared even though the builder
+        is the only thing that sets it. A leak would silently shrink the NEXT
+        render's Hailuo prompt.
+        """
+        kwargs = self._verbose_kwargs()
+        before = gp._PROMPT_SCALE.get()
+        gp.build_segment_prompt(**kwargs, prompt_budget=1200)
+        assert gp._PROMPT_SCALE.get() == before
+
+    def test_a_nonsense_budget_falls_back_to_the_default(self):
+        kwargs = self._verbose_kwargs()
+        baseline = gp.build_segment_prompt(**kwargs)
+        assert gp.build_segment_prompt(**kwargs, prompt_budget=0) == baseline
+        assert gp.build_segment_prompt(**kwargs, prompt_budget="nonsense") == baseline
+        assert gp.build_segment_prompt(**kwargs, prompt_budget=-5) == baseline
+
+    def test_grok_ceiling_is_below_the_hailuo_one(self):
+        """
+        The whole point of the field: Grok's is set from its own documented
+        4,096 maximum, not carried over from Hailuo's measured 7,000.
+        """
+        h3 = vp.capability("minimax-h3").get("prompt_char_limit")
+        grok = vp.capability("grok-imagine-video").get("prompt_char_limit")
+        assert h3 == 6800
+        assert grok is not None
+        assert grok < h3
+        assert grok <= 4096, "must leave headroom under the documented maximum"
+
+    def test_every_studio_model_declares_a_ceiling(self):
+        for key in vp.STUDIO_ELIGIBLE:
+            limit = vp.capability(key).get("prompt_char_limit")
+            assert isinstance(limit, int) and limit > 0, key
+
+    def test_the_tail_survives_a_tight_budget(self):
+        """
+        Clipping must stay structural. Cutting the finished string instead would
+        amputate the identity close at the very end, which is the worst part of
+        the prompt to lose -- so the ending has to be intact at any budget.
+        """
+        kwargs = self._verbose_kwargs()
+        prompt = gp.build_segment_prompt(**kwargs, prompt_budget=3800)
+        assert "Vertical 9:16 throughout" in prompt
+        assert prompt.rstrip().endswith("under the same light.")
+
+
+class TestBoundForSubmit:
+    """
+    The identity reference is embedded as a base64 data URI inside a JSON body,
+    and nothing capped it: the upload ceiling is 200 MB, and crop_face_from_path
+    crops without resizing -- and two of its three return paths hand back the
+    original untouched. A phone photo therefore arrives as megabytes of data URI
+    that the provider can refuse without naming anything we control.
+    """
+
+    def _photo(self, tmp_path, size, fmt="PNG"):
+        from PIL import Image
+        img = Image.new("RGB", size, (120, 90, 60))
+        path = tmp_path / f"face{fmt.lower() if fmt == 'JPEG' else ''}.{ 'jpg' if fmt == 'JPEG' else 'png'}"
+        img.save(path, format=fmt)
+        return path
+
+    def test_a_large_photo_is_downscaled(self, tmp_path):
+        import face_crop
+        src = self._photo(tmp_path, (4000, 3000))
+        out = face_crop.bound_for_submit(src)
+        from PIL import Image
+        with Image.open(out) as img:
+            assert max(img.size) <= 1024
+
+    def test_a_small_photo_is_left_alone(self, tmp_path):
+        """
+        Re-encoding a small JPEG would only lose quality, so a reference already
+        inside the bound is passed through byte-identical.
+        """
+        import face_crop
+        src = self._photo(tmp_path, (400, 300), fmt="JPEG")
+        assert face_crop.bound_for_submit(src) == src
+
+    def test_the_encoded_size_actually_drops(self, tmp_path):
+        """
+        The point of the exercise. Noise defeats compression, so this is the
+        worst realistic case: a photo that will not compress well but still has
+        to fit in a request body.
+        """
+        import random
+        import face_crop
+        from PIL import Image
+        rnd = random.Random(7)
+        img = Image.new("RGB", (4000, 3000))
+        img.putdata([
+            (rnd.randrange(256), rnd.randrange(256), rnd.randrange(256))
+            for _ in range(4000 * 3000)
+        ])
+        src = tmp_path / "noise.png"
+        img.save(src, format="PNG")
+        before = src.stat().st_size
+        out = face_crop.bound_for_submit(src)
+        after = out.stat().st_size
+        assert after < before / 4, f"{before} -> {after}"
+
+    def test_bounding_twice_does_not_chain(self, tmp_path):
+        import face_crop
+        src = self._photo(tmp_path, (4000, 3000))
+        once = face_crop.bound_for_submit(src)
+        twice = face_crop.bound_for_submit(once)
+        assert twice == once
+
+    def test_a_missing_file_is_returned_unchanged(self, tmp_path):
+        import face_crop
+        missing = tmp_path / "gone.png"
+        assert face_crop.bound_for_submit(missing) == missing
+
+    def test_an_unreadable_file_is_returned_unchanged(self, tmp_path):
+        """
+        Never raises. An oversized-but-valid reference still renders, so losing
+        the generation over a failed re-encode would be strictly worse.
+        """
+        import face_crop
+        broken = tmp_path / "broken.png"
+        broken.write_bytes(b"this is not an image")
+        assert face_crop.bound_for_submit(broken) == broken
+
+    def test_the_result_is_a_jpeg(self, tmp_path):
+        """
+        The declared MIME has to match the bytes, and image_data_uri derives it
+        from the extension.
+        """
+        import face_crop
+        from PIL import Image
+        src = self._photo(tmp_path, (2000, 2000))
+        out = face_crop.bound_for_submit(src)
+        with Image.open(out) as img:
+            assert img.format == "JPEG"

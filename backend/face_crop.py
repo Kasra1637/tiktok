@@ -131,6 +131,60 @@ def count_faces_from_path(image_path: Path) -> Optional[int]:
         return None
 
 
+def bound_for_submit(image_path: Path, max_side: int = 1024, quality: int = 85) -> Path:
+    """
+    Downscale and re-encode an image so its base64 form is bounded.
+
+    The identity reference is embedded in the request as a base64 data URI, and
+    base64 inflates by about a third. Nothing else bounded it: the upload
+    ceiling is 200 MB, crop_face_from_path crops without resizing, and two of
+    its three return paths hand back the original untouched — a no-face photo,
+    or one where the face already dominates. A modern phone photo therefore
+    arrives as several megabytes of data URI inside a JSON body, which is a
+    request the provider can refuse for reasons that name neither the image nor
+    a field we control.
+
+    1024 on the long side at JPEG 85 keeps a face crop well above what identity
+    conditioning needs while landing the encoded image in the low hundreds of
+    KB. Written beside the source with a '_submit' suffix, and only when it
+    actually helps, so a small photo is passed through untouched.
+
+    Never raises: an image that cannot be re-encoded is returned as-is, because
+    an oversized-but-valid reference is better than no render at all.
+    """
+    source = Path(image_path)
+    if not source.is_file():
+        return source
+    if "_submit" in source.stem:
+        return source
+    try:
+        img = Image.open(source)
+        img.load()
+        longest = max(img.size)
+        # Only re-encode when there is something to gain. A PNG of a small crop
+        # can be smaller than the JPEG it would become.
+        if longest <= max_side and source.suffix.lower() in (".jpg", ".jpeg"):
+            return source
+
+        img = img.convert("RGB")
+        if longest > max_side:
+            ratio = max_side / float(longest)
+            img = img.resize(
+                (max(1, int(img.width * ratio)), max(1, int(img.height * ratio))),
+                Image.LANCZOS,
+            )
+        target = source.with_name(f"{source.stem}_submit.jpg")
+        img.save(target, format="JPEG", quality=quality, optimize=True)
+        logger.info(
+            f"Bounded {source.name} for submit: {img.size[0]}x{img.size[1]} "
+            f"{source.stat().st_size // 1024}KB -> {target.stat().st_size // 1024}KB"
+        )
+        return target
+    except Exception as e:
+        logger.warning(f"Could not bound {source.name} for submit ({e}); sending as-is.")
+        return source
+
+
 def crop_face_from_path(image_path: Path) -> Path:
     """
     Detect and crop the face from an image file, saving the cropped version

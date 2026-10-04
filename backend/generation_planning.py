@@ -20,6 +20,7 @@ model input. Anything the viewer could read as a factual claim about the
 app (prices, ratings, interface text) must come from verified facts or
 stay out of frame.
 """
+from contextvars import ContextVar
 from typing import Optional
 
 # Hard ceiling on the assembled render prompt, in characters.
@@ -40,13 +41,29 @@ from typing import Optional
 # prompt to lose.
 RENDER_PROMPT_LIMIT = 6800
 
+# How much of the field budgets above to actually grant this render.
+#
+# The budgets above are sized for the provider whose ceiling RENDER_PROMPT_LIMIT
+# was measured against. A second provider with a lower ceiling cannot be given
+# the same prompt: it 400s, and the founder pays for the attempt. Rather than
+# truncate the finished string — which would amputate the identity close at the
+# very end, the worst part of the prompt to lose — every _clip is scaled, so the
+# bound holds structurally at any ceiling.
+#
+# A ContextVar rather than a parameter threaded through all four helper
+# functions: the scale is set once at the top of build_segment_prompt and must
+# reach every _clip inside them. Task-local, so two concurrent renders on
+# different models cannot see each other's budget.
+_PROMPT_SCALE: ContextVar = ContextVar("hookforge_prompt_scale", default=1.0)
+
 
 def _clip(text, limit: int) -> str:
     """Clip one variable prompt value to a fixed budget, stripped."""
     s = str(text or "").strip()
-    if len(s) <= limit:
+    effective = max(1, int(limit * _PROMPT_SCALE.get()))
+    if len(s) <= effective:
         return s
-    return s[:limit].rstrip()
+    return s[:effective].rstrip()
 
 # Words the model must not attempt to draw. Listed so the instruction can be
 # explicit rather than relying on the model inferring "don't fake the facts".
@@ -608,19 +625,16 @@ def build_segment_prompt(
     duration: int = 4,
     assets: Optional[list] = None,
     plan: Optional[dict] = None,
+    prompt_budget: Optional[int] = None,
 ) -> str:
     """
     Build the prompt for the whole generated piece: a hook and a middle.
 
-    The name is historical. A video used to be assembled from separately
-    rendered segments, one per beat, and this built the prompt for whichever
-    one was being made. Now the hook and the middle are a single render, so
-    this builds the whole thing. There is no `segment_index`, `continuity`,
-    `is_hook` or `previous_summary` argument: all four described a seam between
-    two clips, and there is no seam.
-
-    What holds the two sections together now is the scene lock plus the
-    app-specific brief, both of which apply to the whole piece.
+    Thin wrapper that establishes the per-provider character ceiling and then
+    hands off to the assembler. Split out so the scale is set and cleared around
+    the whole assembly rather than inside it — the budget has to reach every
+    _clip call, including the ones in the four helpers this calls, and those have
+    no reason to know which provider is rendering.
 
     Args:
         strategy: the normalized app-specific strategy (see
@@ -634,6 +648,54 @@ def build_segment_prompt(
             two sections are split at the boundary the plan and the strategy
             both agreed on. Nothing else is taken from it: the strategy already
             carries the approved words.
+        prompt_budget: this render's character ceiling. Defaults to
+            RENDER_PROMPT_LIMIT, which is the measured figure for Hailuo. A
+            provider with a lower ceiling passes its own; every field budget is
+            scaled down to fit rather than the tail being cut off.
+    """
+    scale = 1.0
+    if prompt_budget:
+        try:
+            scale = float(prompt_budget) / float(RENDER_PROMPT_LIMIT)
+        except (TypeError, ValueError, ZeroDivisionError):
+            scale = 1.0
+        # A zero, negative or non-numeric budget is a caller bug, not a tight
+        # budget. Falling back to the measured default keeps the prompt whole;
+        # clamping it would silently shrink every Hailuo render to a tenth of
+        # its detail because someone passed -1.
+        if scale <= 0:
+            scale = 1.0
+        # Floor it well above zero: a provider ceiling far below what the fixed
+        # instructions alone occupy would clip every field to a stub, which reads
+        # as corruption rather than as a budget.
+        scale = max(0.10, min(1.0, scale))
+    token = _PROMPT_SCALE.set(scale)
+    try:
+        return _assemble_prompt(strategy, profile, template, duration, assets, plan)
+    finally:
+        _PROMPT_SCALE.reset(token)
+
+
+def _assemble_prompt(
+    strategy: dict,
+    profile: dict,
+    template: Optional[dict] = None,
+    duration: int = 4,
+    assets: Optional[list] = None,
+    plan: Optional[dict] = None,
+) -> str:
+    """
+    Assemble the render prompt. See build_segment_prompt for the arguments.
+
+    The name of the public wrapper is historical. A video used to be assembled
+    from separately rendered segments, one per beat, and the builder chose the
+    prompt for whichever one was being made. Now the hook and the middle are a
+    single render, so this builds the whole thing. There is no `segment_index`,
+    `continuity`, `is_hook` or `previous_summary` argument: all four described a
+    seam between two clips, and there is no seam.
+
+    What holds the two sections together is the scene lock plus the app-specific
+    brief, both of which apply to the whole piece.
     """
     strategy = strategy or {}
     tpl = template or {}
