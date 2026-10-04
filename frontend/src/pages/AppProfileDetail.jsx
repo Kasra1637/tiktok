@@ -1,13 +1,23 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { toast } from "sonner";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
+import { Input } from "../components/ui/input";
 import PageHeader from "../components/PageHeader";
 import { api, getErrorMessage } from "../lib/api";
 import {
   Briefcase, Loader2, AlertTriangle, ArrowLeft, Sparkles, Target,
-  ShieldAlert, Lightbulb, ChevronRight, Video,
+  ShieldAlert, Lightbulb, ChevronRight, Video, Trash2,
 } from "lucide-react";
 
 /** Read an array-or-empty field into a clean list. */
@@ -142,6 +152,7 @@ function AngleCard({ angle, onDelete, busy }) {
 
 export default function AppProfileDetail() {
   const { profileId } = useParams();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [angles, setAngles] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
@@ -153,6 +164,10 @@ export default function AppProfileDetail() {
   const [notice, setNotice] = useState(null);
   const [drafts, setDrafts] = useState([]);
   const [whatWorks, setWhatWorks] = useState(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [typedName, setTypedName] = useState("");
+  const [deleteError, setDeleteError] = useState(null);
+  const [deletingProfile, setDeletingProfile] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -240,6 +255,43 @@ export default function AppProfileDetail() {
     }
   };
 
+  // What the founder has to type to arm the delete. Falls back to the same
+  // "Untitled app" the header shows, because brand_name is optional on a
+  // researched draft — and without the fallback an unnamed profile would match
+  // an empty string, leaving the confirm button permanently enabled.
+  const deletableName = profile?.brand_name?.trim() || "Untitled app";
+  const canDelete = typedName.trim() === deletableName && !deletingProfile;
+
+  const openConfirm = () => {
+    setTypedName("");
+    setDeleteError(null);
+    setConfirmOpen(true);
+  };
+
+  const handleDeleteProfile = async () => {
+    if (!canDelete) return;
+    setDeletingProfile(true);
+    setDeleteError(null);
+    try {
+      const res = await api.deleteAppProfile(profileId);
+      // There is no profile list page any more, so "Your app" is the only
+      // landing. The toast is mounted globally, so it survives the navigation.
+      const removed = res?.generations_removed || 0;
+      toast.success(
+        removed
+          ? `Deleted ${deletableName} and ${removed} video${removed === 1 ? "" : "s"}`
+          : `Deleted ${deletableName}`
+      );
+      navigate("/brand");
+    } catch (err) {
+      // Deliberately not the page-level setError: that renders at the top of
+      // the page, behind this dialog, so a 409 would look like the button
+      // simply stopped working.
+      setDeleteError(getErrorMessage(err));
+      setDeletingProfile(false);
+    }
+  };
+
   if (loading) {
     return (
       <p className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -285,6 +337,22 @@ export default function AppProfileDetail() {
             )}
             <Button variant="secondary" size="sm" asChild>
               <Link to="/brand">Edit</Link>
+            </Button>
+            {/* Deletes the profile and everything scoped to it: content angles,
+                studio projects, generations, assets and their analytics. The
+                endpoint and the api client both already existed and nothing
+                called them; this is the control that reaches them. Type-to-
+                confirm rather than window.confirm because the blast radius is
+                paid-for videos, not one regenerable row. */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={openConfirm}
+              aria-label="Delete app profile"
+              title="Delete this app profile and everything built on it"
+              data-testid="delete-profile-button"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
             </Button>
             {/* An App Profile is not consumed by making a video: the same
                 approved profile backs every video, and the studio reuses its
@@ -556,6 +624,85 @@ export default function AppProfileDetail() {
           </div>
         </div>
       </div>
+
+      <Dialog
+        open={confirmOpen}
+        onOpenChange={(open) => {
+          setConfirmOpen(open);
+          if (!open) {
+            setTypedName("");
+            setDeleteError(null);
+          }
+        }}
+      >
+        <DialogContent data-testid="delete-profile-dialog">
+          <DialogHeader>
+            <DialogTitle>Delete {deletableName}?</DialogTitle>
+            <DialogDescription>
+              This cannot be undone. It removes the profile and everything built
+              on it:{" "}
+              {drafts.length > 0 && (
+                <>
+                  {drafts.length} video draft{drafts.length === 1 ? "" : "s"}
+                  {angles.length > 0 && ", "}
+                </>
+              )}
+              {angles.length > 0 && (
+                <>
+                  {angles.length} content angle{angles.length === 1 ? "" : "s"}
+                  ,{" "}
+                </>
+              )}
+              {whatWorks?.videos > 0 && (
+                <>
+                  the analytics from {whatWorks.videos} recorded video
+                  {whatWorks.videos === 1 ? "" : "s"}
+                  {angles.length > 0 || drafts.length > 0 ? ", and " : " and "}
+                </>
+              )}
+              every uploaded photo. Your spend history is kept.
+            </DialogDescription>
+          </DialogHeader>
+
+          <label className="block text-sm font-medium" htmlFor="delete-confirm-name">
+            Type <span className="font-semibold">{deletableName}</span> to confirm
+          </label>
+          <Input
+            id="delete-confirm-name"
+            value={typedName}
+            onChange={(e) => setTypedName(e.target.value)}
+            placeholder={deletableName}
+            autoComplete="off"
+            data-testid="delete-confirm-input"
+          />
+
+          {deleteError && (
+            <Alert variant="destructive" data-testid="delete-profile-error">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>{deleteError}</AlertDescription>
+            </Alert>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setConfirmOpen(false)}
+              disabled={deletingProfile}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteProfile}
+              disabled={!canDelete}
+              data-testid="delete-profile-confirm"
+            >
+              {deletingProfile && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Delete permanently
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

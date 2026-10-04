@@ -50,12 +50,19 @@ global.window = dom.window;
 global.document = dom.window.document;
 global.navigator = dom.window.navigator;
 global.HTMLElement = dom.window.HTMLElement;
+global.HTMLInputElement = dom.window.HTMLInputElement;
+global.HTMLTextAreaElement = dom.window.HTMLTextAreaElement;
+global.HTMLSelectElement = dom.window.HTMLSelectElement;
+global.HTMLButtonElement = dom.window.HTMLButtonElement;
 global.SVGElement = dom.window.SVGElement;
 global.Node = dom.window.Node;
+global.NodeFilter = dom.window.NodeFilter;
 global.Element = dom.window.Element;
 global.Event = dom.window.Event;
+global.CustomEvent = dom.window.CustomEvent;
 global.MouseEvent = dom.window.MouseEvent;
 global.getComputedStyle = dom.window.getComputedStyle;
+global.MutationObserver = dom.window.MutationObserver;
 global.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0);
 global.cancelAnimationFrame = (id) => clearTimeout(id);
 global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -392,17 +399,33 @@ function load(relPath) {
       return {
         __esModule: true,
         Link: ({ children }) => React.createElement("a", { href: "#" }, children),
-        useNavigate: () => () => {},
+        useNavigate: () => (...args) => {
+          // Rest params, not `arguments`: arrows do not bind their own, so
+          // `arguments` here would leak the requireShim spec string instead
+          // of the navigated path.
+          if (global.__SMOKE_NAVIGATIONS) global.__SMOKE_NAVIGATIONS.push(...args);
+        },
         useSearchParams: () => [searchParams(), () => {}],
         // The embedded AssetLibrary on the Assets step reads the route, so a
-        // deep link that lands there needs these to exist.
-        useParams: () => ({}),
+        // deep link that lands there needs these to exist. Overridable for a
+        // page that renders off a route param: AppProfileDetail is driven
+        // entirely by :profileId, so with an empty object it would fetch under
+        // `undefined` and settle on its error state, and its delete dialog
+        // could never be exercised.
+        useParams: () => global.__SMOKE_ROUTE_PARAMS || {},
         useLocation: () => ({ pathname: "/create", search: searchParams().toString() }),
       };
     }
     if (spec === "sonner") return { toast: { success: () => {}, error: () => {} } };
     if (spec.endsWith("lib/api")) {
-      return { api: apiStub, getErrorMessage: () => "error", mediaUrl: (p) => p };
+      // Mirror the real getErrorMessage: checks assert on the surfaced text
+      // (e.g. a 409's detail), and a constant would swallow it.
+      return {
+        api: apiStub,
+        getErrorMessage: (err) =>
+          err?.response?.data?.detail || err?.message || "error",
+        mediaUrl: (p) => p,
+      };
     }
     if (spec.endsWith("lib/feedback")) {
       return { recordSignal: () => {}, classifyScriptEdit: () => ({ kind: "other" }) };
@@ -457,6 +480,9 @@ async function check(label, fn) {
     console.log(`  [FAIL] ${label}`);
     console.log(`         ${err && err.message ? err.message : String(err)}`);
     if (process.env.SMOKE_TRACE) console.log(err && err.stack ? err.stack : "");
+    if (process.env.SMOKE_TRACE && err && Array.isArray(err.errors)) {
+      err.errors.forEach((inner, n) => console.log(`         [inner ${n}] ${inner && inner.stack ? inner.stack : String(inner)}`));
+    }
     failures.push(label);
   }
 }
@@ -1345,10 +1371,10 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     if (renderCalls !== 0) {
       throw new Error("a render went out with no strategy to render from");
     }
-    // The harness stubs getErrorMessage() to a fixed string, so assert that the
-    // panel shows an error at all rather than the provider's wording: what is
-    // under test is that the failure reaches the screen and no render escaped.
-    if (!/Something went wrong|error/i.test(ctx.text())) {
+    // The harness mirrors the real getErrorMessage, so assert the provider's
+    // own wording reaches the screen: what is under test is that the failure
+    // reaches the founder and no render escaped.
+    if (!ctx.text().includes("the model returned a truncated response")) {
       throw new Error("the failure is not surfaced anywhere the founder can see");
     }
   });
@@ -2508,6 +2534,167 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     if (with_.length === 0) throw new Error("found no check-marked rows to compare");
     expectBalanced(without, with_, 1, "problem/solution bullets");
   });
+
+  console.log("");
+  console.log("Mounting the App Profile detail page...");
+  await runDeleteDialogChecks();
+}
+
+/**
+ * Deleting an App Profile.
+ *
+ * The endpoint, the cascade and the api client all existed before this control
+ * did, and nothing called them — a delete path with no UI, which is worse than
+ * no delete path, because the capability looks present in review. So these pin
+ * the gate rather than the plumbing: the endpoint already has its own backend
+ * tests for the cascade, the 404 and the in-flight 409.
+ *
+ * Type-to-confirm rather than window.confirm because the blast radius is the
+ * profile's videos and analytics, not one regenerable row. A single
+ * window.confirm on this would be the loosest destructive gate in the app, and
+ * the page's own content-angle delete already sets that bar low enough.
+ */
+function mountProfileDetail() {
+  global.__SMOKE_ROUTE_PARAMS = { profileId: "p1" };
+  const AppProfileDetail = load("pages/AppProfileDetail.jsx").default;
+  return (ctx) => mount(AppProfileDetail, {})(ctx);
+}
+
+async function runDeleteDialogChecks() {
+  const PROFILE = {
+    id: "p1",
+    brand_name: "Threadly",
+    brand_description: "One list, not eleven.",
+    status: "approved",
+  };
+
+  const stubProfileApi = (extra = {}) => ({
+    getAppProfile: async () => PROFILE,
+    getContentAngles: async () => ({ angles: [{ id: "a1", label: "Confession" }] }),
+    getStudioProjects: async () => ({ projects: [{ id: "s1", name: "Draft one" }] }),
+    getProfileWhatWorks: async () => ({ videos: 3, top: [] }),
+    getTemplateRecommendations: async () => ({ recommendations: [] }),
+    ...extra,
+  });
+
+  async function openDialog(ctx) {
+    await clickEl(
+      ctx,
+      ctx.container.querySelector('[data-testid="delete-profile-button"]'),
+      "the profile page offers no delete control"
+    );
+    // Radix renders DialogContent through a portal into document.body, not
+    // inside the mount container, so the dialog is never found under ctx.
+    // Each check opens exactly one dialog and never closes it, so the current
+    // check's dialog is always the last match in document order.
+    const dialogs = document.querySelectorAll('[data-testid="delete-profile-dialog"]');
+    const dialog = dialogs.length ? dialogs[dialogs.length - 1] : null;
+    if (!dialog) throw new Error("the delete control did not open a confirmation");
+    return dialog;
+  }
+
+  const confirmBtn = (scope) => scope.querySelector('[data-testid="delete-profile-confirm"]');
+
+  await check("a profile cannot be deleted without typing its name", async (ctx) => {
+    await withApi(stubProfileApi({ deleteAppProfile: async () => ({ deleted: true }) }), async () => {
+      await mountProfileDetail()(ctx);
+      const dialog = await openDialog(ctx);
+
+      if (!confirmBtn(dialog).disabled) {
+        throw new Error("the destructive button is live before anything is typed");
+      }
+      const input = dialog.querySelector('[data-testid="delete-confirm-input"]');
+      await typeInto(ctx, input, "something else", "no name field in the dialog");
+      if (!confirmBtn(dialog).disabled) {
+        throw new Error("a wrong name armed the delete");
+      }
+      await typeInto(ctx, input, PROFILE.brand_name);
+      if (confirmBtn(dialog).disabled) {
+        throw new Error("the correct name did not arm the delete");
+      }
+    });
+  });
+
+  await check("deleting a profile calls the endpoint and leaves the page", async (ctx) => {
+    let called = null;
+    await withApi(
+      stubProfileApi({
+        deleteAppProfile: async (id) => {
+          called = id;
+          return { deleted: true, id, generations_removed: 3 };
+        },
+      }),
+      async () => {
+        global.__SMOKE_NAVIGATIONS = [];
+        await mountProfileDetail()(ctx);
+        const dialog = await openDialog(ctx);
+        await typeInto(ctx, dialog.querySelector('[data-testid="delete-confirm-input"]'), PROFILE.brand_name);
+        await clickEl(ctx, confirmBtn(dialog), "no enabled confirm button");
+        await act(async () => {});
+        if (called !== PROFILE.id) {
+          throw new Error(`deleteAppProfile was called with ${JSON.stringify(called)}`);
+        }
+        // The profile list page is gone, so "Your app" is the only landing.
+        const went = global.__SMOKE_NAVIGATIONS || [];
+        if (!went.includes("/brand")) {
+          throw new Error(`expected to land on /brand, navigated to ${JSON.stringify(went)}`);
+        }
+      }
+    );
+  });
+
+  await check("a refused delete keeps the dialog open and shows why", async (ctx) => {
+    // The backend refuses while a generation is in flight and the message is
+    // already written for a founder. If that message were routed to the page's
+    // own error state it would render above a modal the founder cannot see
+    // through, and the button would look simply broken.
+    await withApi(
+      stubProfileApi({
+        deleteAppProfile: async () => {
+          const err = new Error("refused");
+          err.response = { data: { detail: "This profile has a generation still running." } };
+          throw err;
+        },
+      }),
+      async () => {
+        await mountProfileDetail()(ctx);
+        const dialog = await openDialog(ctx);
+        await typeInto(ctx, dialog.querySelector('[data-testid="delete-confirm-input"]'), PROFILE.brand_name);
+        await clickEl(ctx, confirmBtn(dialog), "no enabled confirm button");
+        await act(async () => {});
+        // The error renders inside the portalled dialog, so scope to it —
+        // ctx.container never contains portal content.
+        const shown = dialog.querySelector('[data-testid="delete-profile-error"]');
+        if (!shown) throw new Error("the refusal was swallowed and the dialog closed");
+        if (!(shown.textContent || "").includes("generation still running")) {
+          throw new Error(`the backend's reason never reached the founder: ${shown.textContent}`);
+        }
+      }
+    );
+  });
+
+  await check("an unnamed profile still has to be confirmed", async (ctx) => {
+    // brand_name is optional on a researched draft. Without the "Untitled app"
+    // fallback the required string is "", which the empty input matches, so the
+    // destructive button would start live the moment the dialog opened.
+    await withApi(
+      stubProfileApi({
+        getAppProfile: async () => ({ ...PROFILE, brand_name: "" }),
+        deleteAppProfile: async () => ({ deleted: true }),
+      }),
+      async () => {
+        await mountProfileDetail()(ctx);
+        const dialog = await openDialog(ctx);
+        if (!confirmBtn(dialog).disabled) {
+          throw new Error("an unnamed profile armed the delete with nothing typed");
+        }
+        await typeInto(ctx, dialog.querySelector('[data-testid="delete-confirm-input"]'), "Untitled app");
+        if (confirmBtn(dialog).disabled) {
+          throw new Error("the fallback name did not arm the delete");
+        }
+      }
+    );
+  });
 }
 
 function stepPill(ctx, label) {
@@ -2577,6 +2764,34 @@ async function openTemplateStep(ctx) {
   if (!first) throw new Error("the objective control has no objectives to pick");
   await selectOption(ctx, select, first.value);
   await openStep(ctx, "Template & photo");
+}
+
+/** Click an element the way a person would, so React's onClick fires. */
+async function clickEl(ctx, el, why) {
+  if (!el) throw new Error(why || "nothing to click");
+  await act(async () => {
+    el.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+  });
+  await act(async () => {});
+}
+
+/**
+ * Set a text input the way a person would, so React's onChange fires.
+ *
+ * Assigning `.value` directly does not notify React of a change — React
+ * installs its own value setter on the prototype and tracks the last value it
+ * wrote, so a plain assignment is swallowed and the state never moves.
+ */
+async function typeInto(ctx, input, text, why) {
+  if (!input) throw new Error(why || "no input to type into");
+  const setter = Object.getOwnPropertyDescriptor(
+    dom.window.HTMLInputElement.prototype, "value"
+  ).set;
+  await act(async () => {
+    setter.call(input, text);
+    input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  });
+  await act(async () => {});
 }
 
 /** Swap api stub methods for the duration of one check, then restore them. */
