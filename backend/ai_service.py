@@ -1814,7 +1814,6 @@ async def generate_content_angles(profile: dict, max_angles: int = 8) -> list:
         '  "hook_promise": "what the first 3 seconds promise",\n'
         '  "app_feature": "the app feature this angle demonstrates",\n'
         '  "desired_emotion": "the emotion the viewer should feel by the end",\n'
-        '  "recommended_cta": "one suitable call to action",\n'
         '  "claims_to_respect": ["claims or limitations that bound this angle"]\n'
         "}\n"
         "Rules: use ONLY facts present in the profile. If an angle would require a "
@@ -1859,7 +1858,6 @@ async def generate_content_angles(profile: dict, max_angles: int = 8) -> list:
             "hook_promise": (item.get("hook_promise") or "").strip()[:300],
             "app_feature": (item.get("app_feature") or "").strip()[:300],
             "desired_emotion": (item.get("desired_emotion") or "").strip()[:200],
-            "recommended_cta": (item.get("recommended_cta") or "").strip()[:200],
             "claims_to_respect": [],
         }
         raw_claims = item.get("claims_to_respect")
@@ -2191,7 +2189,6 @@ async def generate_creative_plan(
         "angle_hook_promise": (angle or {}).get("hook_promise") or "",
         "angle_feature": (angle or {}).get("app_feature") or "",
         "angle_emotion": (angle or {}).get("desired_emotion") or "",
-        "angle_cta": (angle or {}).get("recommended_cta") or "",
         "duration_seconds": duration_seconds,
         "tone": tone or "(unstated)",
     }
@@ -2759,6 +2756,14 @@ async def generate_video_strategy(
         "content_slots": template.get("content_slots") or {},
     }
 
+    # `angle_cta` used to sit in this brief, carrying the angle's
+    # `recommended_cta` straight from the research step. It was a contradiction
+    # rather than a hint: the same prompt goes on to forbid a call to action
+    # outright, so the brief was handing the model a closing beat and then
+    # telling it not to write one — and the founder's own close, which happens
+    # after the render, is the only close there is. Nothing fills this gap now,
+    # and nothing should: if a prompt needs the ending spelled out, that is the
+    # `demo_brief` handoff, not a CTA.
     brief = {
         "angle_kind": (angle or {}).get("kind") or "(none)",
         "angle_label": (angle or {}).get("label") or "",
@@ -2767,7 +2772,6 @@ async def generate_video_strategy(
         "angle_hook_promise": (angle or {}).get("hook_promise") or "",
         "angle_feature": (angle or {}).get("app_feature") or "",
         "angle_emotion": (angle or {}).get("desired_emotion") or "",
-        "angle_cta": (angle or {}).get("recommended_cta") or "",
         "claims_to_respect": _list_of(angle, "claims_to_respect"),
         "hook_seconds": hook_seconds,
         "total_duration": total_duration,

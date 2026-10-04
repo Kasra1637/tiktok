@@ -124,12 +124,6 @@ function AngleCard({ angle, onDelete, busy }) {
             <dd className="text-foreground/90">{angle.desired_emotion}</dd>
           </div>
         )}
-        {angle.recommended_cta && (
-          <div>
-            <dt className="eyebrow">CTA</dt>
-            <dd className="text-foreground/90">{angle.recommended_cta}</dd>
-          </div>
-        )}
       </dl>
 
       {list(angle.claims_to_respect).length > 0 && (

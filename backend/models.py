@@ -238,6 +238,10 @@ class ObjectiveTemplatesRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Content angles
 # ---------------------------------------------------------------------------
+# `recommended_cta` used to be on both angle requests. It is gone: an angle is
+# material for a hook and a middle, and a generated piece has no closing beat.
+# The column stays in SQLite for rows written before this, and nothing reads or
+# writes it.
 class CreateContentAngleRequest(BaseModel):
     """Add one hand-written content angle to an App Profile."""
     kind: str = "problem_solution"
@@ -247,7 +251,6 @@ class CreateContentAngleRequest(BaseModel):
     hook_promise: Optional[str] = ""
     app_feature: Optional[str] = ""
     desired_emotion: Optional[str] = ""
-    recommended_cta: Optional[str] = ""
     claims_to_respect: Optional[List[str]] = None
 
 
@@ -259,7 +262,6 @@ class UpdateContentAngleRequest(BaseModel):
     hook_promise: Optional[str] = None
     app_feature: Optional[str] = None
     desired_emotion: Optional[str] = None
-    recommended_cta: Optional[str] = None
     claims_to_respect: Optional[List[str]] = None
 
 

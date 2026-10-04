@@ -198,14 +198,35 @@ class TestRecordFeedback:
 
     def test_reason_must_belong_to_the_event(self, api):
         """
-        'cta_unclear' is valid for an edited script but not for a rejected
+        'too_promotional' is valid for an edited script but not for a rejected
         generation. Allowing it would put codes in the table that analytics
         cannot group meaningfully.
+
+        It was 'cta_unclear' here, which was itself removed: a generated piece
+        has no closing beat, so "the CTA was unclear" described something the
+        product never produced. The event-scoped rule it demonstrated is
+        unchanged, and the retired reason is asserted gone below.
         """
         from models import FeedbackRequest
         with pytest.raises(HTTPException) as err:
             _run(api.record_feedback(
-                FeedbackRequest(event="generation_rejected", reason="cta_unclear"), ANON))
+                FeedbackRequest(event="generation_rejected", reason="too_promotional"), ANON))
+        assert err.value.status_code == 400
+
+    def test_the_retired_cta_reason_stays_retired(self, api):
+        """
+        'cta_unclear' is refused as an unknown reason, not merely unused.
+
+        It was a selectable reason on script edits while no CTA was ever
+        generated, so a founder could explain a rejection with a fact about the
+        video that could not be true. Anything already stored under the code
+        still reads back through its stored value; what must not come back is
+        the ability to record new events under it.
+        """
+        from models import FeedbackRequest
+        with pytest.raises(HTTPException) as err:
+            _run(api.record_feedback(
+                FeedbackRequest(event="script_edited", reason="cta_unclear"), ANON))
         assert err.value.status_code == 400
 
     def test_event_with_neither_signal_nor_reason_is_rejected(self, api):
@@ -237,9 +258,9 @@ class TestRecordFeedback:
     def test_summary_counts_events(self, api):
         from models import FeedbackRequest
         _run(api.record_feedback(
-            FeedbackRequest(event="script_edited", reason="cta_unclear"), ANON))
+            FeedbackRequest(event="script_edited", reason="too_promotional"), ANON))
         _run(api.record_feedback(
-            FeedbackRequest(event="script_edited", reason="cta_unclear"), ANON))
+            FeedbackRequest(event="script_edited", reason="too_promotional"), ANON))
         summary = _run(api.list_feedback(user_id=ANON))["summary"]
         assert summary["by_event"]["script_edited"] >= 2
 

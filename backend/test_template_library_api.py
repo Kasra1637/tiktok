@@ -452,6 +452,38 @@ class TestContentAngles:
         remaining = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
         assert made["id"] not in [a["id"] for a in remaining["angles"]]
 
+    def test_an_angle_carries_no_call_to_action(self, api):
+        """
+        An angle used to store, return and edit a `recommended_cta`, and the
+        research prompt asked the model for one. That text was then injected
+        into the strategy brief as `angle_cta` — the same prompt forbidding a
+        call to action a few rules later. Pinned here on both halves: the field
+        is not part of an angle any more, and no request can write it.
+        """
+        from models import CreateContentAngleRequest, UpdateContentAngleRequest
+        profile = _make_profile(api, ANON)
+        made = _run(api.create_manual_content_angle(
+            profile_id=profile["id"],
+            payload=CreateContentAngleRequest(label="No CTA", target_audience="a", user_problem="p"),
+            user_id=ANON,
+        ))
+        assert "recommended_cta" not in made
+        assert "recommended_cta" not in _run(api.list_content_angles(
+            profile_id=profile["id"], user_id=ANON))["angles"][0]
+
+        # The request models no longer accept it, so an old client sending one
+        # is dropped rather than silently stored.
+        assert "recommended_cta" not in CreateContentAngleRequest.model_fields
+        assert "recommended_cta" not in UpdateContentAngleRequest.model_fields
+        assert "recommended_cta" not in api.CONTENT_ANGLE_TEXT_FIELDS
+        updated = _run(api.update_content_angle(
+            profile_id=profile["id"], angle_id=made["id"],
+            payload=UpdateContentAngleRequest.model_validate(
+                {"desired_emotion": "relief", "recommended_cta": "Try it free"}),
+            user_id=ANON,
+        ))
+        assert "recommended_cta" not in updated
+
     def test_angles_scoped_to_owning_profile(self, api):
         from models import CreateContentAngleRequest, UpdateContentAngleRequest
         p1 = _make_profile(api, ANON, name="App One")

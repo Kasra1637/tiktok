@@ -881,7 +881,7 @@ async def init_db():
             --           (template_changed, regenerated, downloaded...). Always
             --           knowable without asking the founder anything.
             --   reason: a JUDGMENT about why, supplied explicitly
-            --           (hook_too_weak, cta_unclear...). Optional.
+            --           (hook_too_weak, too_promotional...). Optional.
             --
             -- Keeping them apart matters: guessing a reason from a trigger
             -- would poison the "common regeneration reasons" aggregate with
@@ -5362,9 +5362,13 @@ async def refresh_app_profile(profile_id: str, user_id: str = Depends(get_curren
 # ---------------------------------------------------------------------------
 # Content angles (per App Profile)
 # ---------------------------------------------------------------------------
+# `recommended_cta` was here and is now gone: an angle describes the hook and
+# the middle, and neither has a closing beat. The `recommended_cta TEXT` column
+# survives in the schema for rows written before this and is neither written
+# nor read.
 CONTENT_ANGLE_TEXT_FIELDS = (
     "label", "target_audience", "user_problem", "hook_promise",
-    "app_feature", "desired_emotion", "recommended_cta",
+    "app_feature", "desired_emotion",
 )
 
 
@@ -5380,7 +5384,6 @@ def _serialize_angle_row(row: dict) -> dict:
         "hook_promise": row.get("hook_promise") or "",
         "app_feature": row.get("app_feature") or "",
         "desired_emotion": row.get("desired_emotion") or "",
-        "recommended_cta": row.get("recommended_cta") or "",
         "claims_to_respect": row.get("claims_to_respect") or [],
         "rank": row.get("rank") or 0,
         "created_at": row.get("created_at"),
@@ -5511,14 +5514,14 @@ async def generate_profile_content_angles(profile_id: str, user_id: str = Depend
     for rank, angle in enumerate(angles):
         angle_id = str(uuid.uuid4())
         await _execute(
-            """INSERT INTO content_angles
+"""INSERT INTO content_angles
                (id, brand_profile_id, kind, label, target_audience, user_problem,
-                hook_promise, app_feature, desired_emotion, recommended_cta,
-                claims_to_respect, rank, created_at, user_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 hook_promise, app_feature, desired_emotion,
+                 claims_to_respect, rank, created_at, user_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (angle_id, profile_id, angle["kind"], angle["label"],
              angle["target_audience"], angle["user_problem"], angle["hook_promise"],
-             angle["app_feature"], angle["desired_emotion"], angle["recommended_cta"],
+             angle["app_feature"], angle["desired_emotion"],
              json.dumps(angle["claims_to_respect"]), rank, now, user_id),
         )
         saved.append({**angle, "id": angle_id, "rank": rank})
@@ -5555,15 +5558,15 @@ async def create_manual_content_angle(
     now = now_iso()
     claims = _normalize_str_list(payload.claims_to_respect)
     await _execute(
-        """INSERT INTO content_angles
+"""INSERT INTO content_angles
            (id, brand_profile_id, kind, label, target_audience, user_problem,
-            hook_promise, app_feature, desired_emotion, recommended_cta,
-            claims_to_respect, rank, created_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             hook_promise, app_feature, desired_emotion,
+             claims_to_respect, rank, created_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (angle_id, profile_id, template_library.normalize_angle_kind(payload.kind), label,
          (payload.target_audience or "").strip(), (payload.user_problem or "").strip(),
          (payload.hook_promise or "").strip(), (payload.app_feature or "").strip(),
-         (payload.desired_emotion or "").strip(), (payload.recommended_cta or "").strip(),
+         (payload.desired_emotion or "").strip(),
          json.dumps(claims), rank, now, user_id),
     )
     row = await _fetch_one("SELECT * FROM content_angles WHERE id = ?", (angle_id,))

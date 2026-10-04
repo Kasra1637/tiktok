@@ -16,8 +16,14 @@ the length, the audience, or the day they had.
 
 `reason` values are a fixed vocabulary rather than free text, because free
 text cannot be aggregated, and this data is only useful if "hook too weak" and
-"CTA unclear" are distinguishable. `detail` is accepted as an optional note
-but is never counted.
+"the ending felt abrupt" are distinguishable. `detail` is accepted as an
+optional note but is never counted.
+
+The vocabulary describes the generated piece only. "CTA unclear" was here for
+as long as the plan carried a call to action; it is gone because a generated
+piece has no closing beat — the middle stops at the moment the viewer would
+reach for the app, and the close is the founder's own footage. Asking why a
+generated video's CTA was unclear asked about something that was never in it.
 """
 
 # What happened.
@@ -80,7 +86,6 @@ REASONS = {
     "script_edited": (
         "script_too_long",
         "hook_too_weak",
-        "cta_unclear",
         "too_promotional",
         "app_feature_inaccurate",
         "pacing_too_slow",
@@ -121,6 +126,13 @@ REASONS = {
 
 # Human-readable labels for the UI. Keeping them here means the wording lives
 # beside the codes it describes.
+#
+# "clear_cia" keeps its original misspelling on purpose: it is a code already
+# stored against real approval events, and renaming the key would orphan that
+# history and print the raw code in the analytics breakdown. Only the label
+# changed — it used to read "Clear CTA", which described a closing beat this
+# product does not generate. "Ended cleanly" is what the founder is actually
+# reporting on: the generated middle stopping where the demo takes over.
 REASON_LABELS = {
     "hook_too_weak": "Hook too weak",
     "template_inappropriate": "Template inappropriate",
@@ -130,14 +142,13 @@ REASON_LABELS = {
     "ui_distorted": "UI distorted",
     "character_inconsistent": "Character inconsistent",
     "pacing_too_slow": "Pacing too slow",
-    "cta_unclear": "CTA unclear",
     "script_too_long": "Script too long",
     "visual_style_wrong": "Visual style wrong",
     "audio_unsuitable": "Audio unsuitable",
     "model_error": "Model error",
     "worked_well": "Worked well",
     "hook_strong": "Hook was strong",
-    "clear_cia": "Clear CTA",
+    "clear_cia": "Ended cleanly",
     "ready_to_post": "Ready to post",
     "good_performance": "Good performance",
     "poor_performance": "Poor performance",
