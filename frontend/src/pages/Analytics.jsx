@@ -141,7 +141,7 @@ export default function Analytics() {
           ["Variations", rework.variations ?? 0, `max ${rework.max_variations_of_one_video ?? 0} of one video`],
           ["Approved videos", feedback.by_event?.video_approved ?? 0, "approved at review"],
         ].map(([label, value, hint]) => (
-          <div key={label} className="surface rounded-2xl p-4">
+          <div key={label} className="surface rounded-2xl">
             <span className="text-xs text-muted-foreground">{label}</span>
             <p className="mt-1 font-display text-xl font-bold">{value}</p>
             <p className="text-xs text-muted-foreground">{hint}</p>

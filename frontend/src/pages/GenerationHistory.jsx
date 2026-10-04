@@ -197,7 +197,7 @@ function GenerationDetails({ generationId, onClose }) {
       onClick={onClose}
     >
       <div
-        className="surface my-8 w-full max-w-2xl space-y-4 rounded-2xl p-5"
+        className="surface my-8 w-full max-w-2xl space-y-4 rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">
@@ -398,7 +398,7 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
   };
 
   return (
-    <div className="surface rounded-2xl p-4">
+    <div className="surface rounded-2xl">
       {/* One grid for the whole row, and the clip gets a rail of its own.
 
           It used to sit in a 240px column with roughly 800px of empty card to
@@ -753,7 +753,7 @@ export default function GenerationHistory() {
         </Alert>
       )}
 
-      <div className="surface flex flex-wrap items-center gap-2 rounded-2xl p-4" data-testid="history-filters">
+      <div className="surface flex flex-wrap items-center gap-2 rounded-2xl" data-testid="history-filters">
         <select
           value={profileFilter}
           onChange={(e) => setProfileFilter(e.target.value)}
@@ -791,7 +791,7 @@ export default function GenerationHistory() {
            remove. */
         <div className="space-y-3" aria-label="Loading history" data-testid="history-loading">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="surface space-y-3 rounded-2xl p-4">
+            <div key={i} className="surface space-y-3 rounded-2xl">
               <div className="flex items-center justify-between gap-2">
                 <div className="h-4 w-32 animate-pulse rounded bg-secondary/60" />
                 <div className="h-4 w-20 animate-pulse rounded bg-secondary/40" />

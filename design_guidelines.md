@@ -123,6 +123,12 @@ Elevation ramp: `--shadow-xs` → `--shadow-sm` → `--shadow-md` → `--shadow-
 
 Radii: cards `rounded-2xl`, buttons/inputs/chips `rounded-xl`, pills `rounded-full`.
 
+Card padding is unified in `index.css`: `.surface` / `.surface-solid` default to
+`24px` mobile / `32px` desktop (`p-6 md:p-8`). Do not add `p-4`, `p-5`, `p-6`,
+`sm:p-7`, or `md:p-6` to card JSX — outer section widths stay untouched
+(`max-w-6xl` pages inside AppShell `max-w-[1400px]`), inner content narrows via
+this gutter alone. `.surface-glass` hero/CTAs keep bespoke `px/py`.
+
 ---
 
 ## 5. Layout

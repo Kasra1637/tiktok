@@ -13,7 +13,7 @@ export function HookBreakdown({ analysis }) {
       {/* Hook summary — the headline takeaway, given coral emphasis so it
           reads as the conclusion rather than one card among six. */}
       <div className="border-gradient relative rounded-2xl p-[1px]">
-        <div className="surface-solid relative overflow-hidden rounded-2xl p-5">
+        <div className="surface-solid relative overflow-hidden rounded-2xl">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-0"
@@ -33,7 +33,7 @@ export function HookBreakdown({ analysis }) {
         </div>
       </div>
 
-      <div className="surface rounded-2xl p-5" data-testid="replicable-mechanics-checklist">
+      <div className="surface rounded-2xl" data-testid="replicable-mechanics-checklist">
         <div className="mb-3.5 flex items-center gap-2.5">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
             <ListChecks className="h-4 w-4" />
@@ -56,7 +56,7 @@ export function HookBreakdown({ analysis }) {
         {SECTIONS.map(({ key, label, icon: Icon }) => (
           <div
             key={key}
-            className="surface surface-interactive min-w-0 rounded-2xl p-5"
+            className="surface surface-interactive min-w-0 rounded-2xl"
             data-testid={`hook-section-${key}`}
           >
             <div className="mb-2.5 flex items-center gap-2.5">

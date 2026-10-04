@@ -385,7 +385,7 @@ export default function BrandSetup() {
 
       {/* ---------- Autofill from website ---------- */}
       <div className="border-gradient relative rounded-2xl p-[1px]">
-        <div className="surface-solid relative overflow-hidden rounded-2xl p-4">
+        <div className="surface-solid relative overflow-hidden rounded-2xl">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-0"
@@ -434,7 +434,7 @@ export default function BrandSetup() {
 
       {/* ---------- App research (website + store listings) ---------- */}
       <div className="border-gradient relative rounded-2xl p-[1px]">
-        <div className="surface-solid relative overflow-hidden rounded-2xl p-4">
+        <div className="surface-solid relative overflow-hidden rounded-2xl">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-0"
@@ -528,13 +528,11 @@ export default function BrandSetup() {
       )}
 
       {/* ---------- Manual details ----------
-          p-4 and space-y-4, where this used to carry `p-5 md:p-6` and
-          `space-y-5` — a scale of its own, on the one page with the longest
-          form. It made this card read as a different kind of object from every
-          other content card in the app. The fields themselves are untouched;
-          this is container padding and vertical rhythm only, so the form does
-          not reflow. */}
-      <div className="surface space-y-4 rounded-2xl p-4" data-testid="brand-manual-card">
+          Padding lives in `.surface` in `index.css` (24px / 32px), so this
+          card matches every other content card in the app. The fields
+          themselves are untouched; this is container padding and vertical
+          rhythm only, so the form does not reflow. */}
+      <div className="surface space-y-4 rounded-2xl" data-testid="brand-manual-card">
         <div className="flex items-center justify-between gap-3">
           <div>
             <span className="eyebrow block">Profile</span>

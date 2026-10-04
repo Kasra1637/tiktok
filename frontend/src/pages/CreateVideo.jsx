@@ -1686,7 +1686,7 @@ export default function CreateVideo() {
             <span key={s.key} className="h-7 w-24 shrink-0 animate-pulse rounded-full border border-[color:var(--hairline)]" />
           ))}
         </div>
-        <div className="surface rounded-2xl p-5 md:p-6">
+        <div className="surface rounded-2xl">
           <div className="mx-auto w-full max-w-6xl space-y-4">
             <div className="flex items-start gap-3">
               <span className="h-10 w-10 shrink-0 animate-pulse rounded-xl border border-[color:var(--hairline)]" />
@@ -1783,7 +1783,7 @@ export default function CreateVideo() {
         </Alert>
       )}
 
-      <div className="surface rounded-2xl p-5 md:p-6">
+      <div className="surface rounded-2xl">
         <div className="mx-auto w-full max-w-6xl">{stepContent}</div>
       </div>
 

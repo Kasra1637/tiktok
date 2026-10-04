@@ -207,19 +207,33 @@ select option:checked {
 }
 
 /* ---------- Surfaces ----------
-   `.surface` is the new default card: translucent card color, a hairline
-   border, and a 1px inner top highlight that mimics light catching a raised
-   edge. `.surface-glass` adds blur for chrome that overlaps content. */
+   Unified card padding lives HERE, not in JSX `p-*` utilities.
+   Outer section widths (`max-w-6xl`, AppShell `max-w-[1400px]`) are untouched —
+   this only narrows the inner content by giving every card roomier gutters:
+   24px mobile / 32px desktop. `.surface` is un-layered CSS so it beats any
+   leftover Tailwind `p-*` on the same element; remove `p-*` from card JSX. */
 .surface {
     background-color: hsl(228 14% 10% / 0.72);
     border: 1px solid var(--hairline);
     box-shadow: var(--shadow-md), inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+    padding: 24px;
+}
+@media (min-width: 768px) {
+    .surface {
+        padding: 32px;
+    }
 }
 
 .surface-solid {
     background-color: hsl(228 14% 10%);
     border: 1px solid var(--hairline);
     box-shadow: var(--shadow-md), inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+    padding: 24px;
+}
+@media (min-width: 768px) {
+    .surface-solid {
+        padding: 32px;
+    }
 }
 
 .surface-glass {

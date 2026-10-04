@@ -3,11 +3,9 @@ import { cn } from "../lib/utils";
 /**
  * A content card: the app's one container for a group of related things.
  *
- * `.surface rounded-2xl p-4` was written out by hand on roughly twenty
- * elements across Analytics, Asset Library, App Profile detail and Generation
- * History — and the copies had begun to drift. Two pages used `p-5` for what
- * was otherwise the same card, so a single page could hold two cards of
- * visibly different weight for no reason at all. One definition ends that.
+ * Padding lives in `.surface` in `index.css` (24px / 32px) — do not add `p-*`
+ * here or at call sites. Outer widths are untouched; this only narrows the
+ * inner content with roomier gutters.
  *
  * `title` renders as `.eyebrow`: a GROUP LABEL, and keeping that distinction is
  * the point. Identity in this app is the display face at semibold (which app,
@@ -19,7 +17,7 @@ import { cn } from "../lib/utils";
  */
 export function SectionCard({ title, icon: Icon, actions, children, className, ...rest }) {
   return (
-    <div className={cn("surface space-y-2 rounded-2xl p-4", className)} {...rest}>
+    <div className={cn("surface space-y-2 rounded-2xl", className)} {...rest}>
       {(title || actions) && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           {title && (

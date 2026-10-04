@@ -474,7 +474,7 @@ export default function Landing() {
             {FLOW_STEPS.map((s) => (
               <div
                 key={s.step}
-                className="surface surface-interactive shimmer-on-hover group rounded-2xl p-5 text-center"
+                className="surface surface-interactive shimmer-on-hover group rounded-2xl text-center"
               >
                 <div className="relative mx-auto mb-4 flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-gradient-to-br from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] font-bold text-white shadow-[var(--glow-indigo)]">
                   <span className="font-display text-lg">{s.step}</span>
@@ -501,7 +501,7 @@ export default function Landing() {
         />
 
         <div className="grid gap-5 lg:grid-cols-2">
-          <div className="surface rounded-2xl p-6 sm:p-7">
+          <div className="surface rounded-2xl">
             <span className="eyebrow">The old way</span>
             <ul className="mt-5 space-y-3.5">
               {WEEK_WITHOUT.map((line) => (
@@ -517,7 +517,7 @@ export default function Landing() {
               background utility placed on the same element. The gradient hairline
               is a masked pseudo-element instead, which nothing can override. */}
           <div className="border-gradient relative rounded-2xl p-[1px]">
-            <div className="surface surface-interactive shimmer-on-hover rounded-2xl p-6 sm:p-7">
+            <div className="surface surface-interactive shimmer-on-hover rounded-2xl">
               <span className="eyebrow text-[color:var(--brand-indigo)]">With HookForge</span>
               <ul className="mt-5 space-y-3.5">
                 {WEEK_WITH.map((line) => (
@@ -545,7 +545,7 @@ export default function Landing() {
           {FEATURES.map((f) => (
             <div
               key={f.title}
-              className="surface surface-interactive shimmer-on-hover group rounded-2xl p-6 text-center"
+              className="surface surface-interactive shimmer-on-hover group rounded-2xl text-center"
             >
               <div className="relative mx-auto mb-4 flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-gradient-to-br from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] text-white shadow-[var(--glow-indigo)]">
                 <f.icon className="h-5 w-5" />
@@ -573,7 +573,7 @@ export default function Landing() {
             return (
               <div
                 key={block.title}
-                className="surface surface-interactive rounded-2xl p-5 sm:p-7"
+                className="surface surface-interactive rounded-2xl"
               >
                 <div className="flex flex-col gap-4 sm:flex-row sm:gap-5">
                   <div
@@ -608,7 +608,7 @@ export default function Landing() {
           })}
 
           {/* Models used — table-like layout reads better than a bullet list */}
-          <div className="surface rounded-2xl p-5 sm:p-7">
+          <div className="surface rounded-2xl">
             <div className="flex flex-col gap-4 sm:flex-row sm:gap-5">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[color:var(--coral-25)] bg-[color:var(--coral-12)]">
                 <Layers className="h-5 w-5 text-[color:var(--brand-coral)]" />

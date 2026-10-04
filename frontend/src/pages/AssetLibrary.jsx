@@ -762,7 +762,7 @@ export default function AssetLibrary({
       {/* One surface: the upload control and the photograph it produces sit
           together, so an upload no longer appears to "turn up" in a separate
           component further down the step. */}
-      <div className="surface space-y-3 rounded-2xl p-4" data-testid="asset-upload-panel">
+      <div className="surface space-y-3 rounded-2xl" data-testid="asset-upload-panel">
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
           <Input
             value={label}
