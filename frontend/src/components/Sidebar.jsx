@@ -18,9 +18,19 @@ import {
 /**
  * Sidebar navigation model.
  *
- * Ordering reflects the primary workflow: App Profiles -> Create Video ->
- * History. The retired Discover / Saved Hooks / Research Archive / Trend
- * Research pages are gone, so there is no Research group anymore.
+ * Ordering reflects the workflow: make the video, the app it is for, the
+ * assets it is generated from, what you have already made, and how that is
+ * going. The retired Discover / Saved Hooks / Research Archive / Trend Research
+ * pages are gone, so there is no Research group anymore.
+ *
+ * This was two labelled groups — "Create" and "Insight" — and both headings
+ * are gone. "Insight" sat above exactly one link, so it read as a section with
+ * more in it than there was; "Create" named the four links that are simply the
+ * app. Removing them also removed the reason the links looked unevenly spaced:
+ * the two groups were separated by different rules from the items inside them
+ * (a 20px gap between groups, 4px within), so the distance between History and
+ * Analytics did not match the distance between any other two links. One flat
+ * list with one gap is the fix, not a tweak to either number.
  *
  * `testId` values are the canonical ones the rest of the app (and the
  * onboarding tour convention) expects — they must stay on the DESKTOP
@@ -28,22 +38,12 @@ import {
  * `mobile-`-prefixed test ids so the two instances never produce duplicate
  * selectors for `document.querySelector`.
  */
-export const NAV_GROUPS = [
-  {
-    label: "Create",
-    items: [
-      { to: "/create", label: "Create Video", icon: Clapperboard, testId: "create-nav-link", hint: "Guided wizard" },
-      { to: "/brand", label: "Your app", icon: PenLine, testId: "brand-nav-link", hint: "Research, edit, approve" },
-      { to: "/assets", label: "Asset Library", icon: Images, testId: "assets-nav-link", hint: "Character reference" },
-      { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Everything you made" },
-    ],
-  },
-  {
-    label: "Insight",
-    items: [
-      { to: "/analytics", label: "Analytics", icon: BarChart3, testId: "analytics-nav-link", hint: "Internal metrics" },
-    ],
-  },
+const NAV_ITEMS = [
+  { to: "/create", label: "Create Video", icon: Clapperboard, testId: "create-nav-link", hint: "Guided wizard" },
+  { to: "/brand", label: "Your app", icon: PenLine, testId: "brand-nav-link", hint: "Research, edit, approve" },
+  { to: "/assets", label: "Asset Library", icon: Images, testId: "assets-nav-link", hint: "Character reference" },
+  { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Everything you made" },
+  { to: "/analytics", label: "Analytics", icon: BarChart3, testId: "analytics-nav-link", hint: "Internal metrics" },
 ];
 
 /**
@@ -112,29 +112,24 @@ function NavItem({ item, collapsed, active, onNavigate, testId }) {
   );
 }
 
-function NavGroups({ collapsed, onNavigate, testIdPrefix = "" }) {
+function NavList({ collapsed, onNavigate, testIdPrefix = "" }) {
   const isActive = useIsActive();
 
   return (
-    <nav className={`flex flex-col gap-5 ${collapsed ? "items-center px-4" : "px-4"}`} aria-label="Main">
-      {NAV_GROUPS.map((group) => (
-        <div key={group.label} className={`flex flex-col gap-1 ${collapsed ? "items-center" : ""}`}>
-          {collapsed ? (
-            <span aria-hidden="true" className="mb-1 h-px w-6 bg-border" />
-          ) : (
-            <span className="eyebrow mb-1 px-3">{group.label}</span>
-          )}
-          {group.items.map((item) => (
-            <NavItem
-              key={item.to}
-              item={item}
-              collapsed={collapsed}
-              active={isActive(item.to)}
-              onNavigate={onNavigate}
-              testId={`${testIdPrefix}${item.testId}`}
-            />
-          ))}
-        </div>
+    /* One list, one gap, so every link sits the same distance from its
+       neighbours. `gap-1.5` rather than the 4px the old within-group spacing
+       used: with the headings gone there is nothing marking a break, so the
+       rhythm has to come from the spacing itself. */
+    <nav className={`flex flex-col gap-1.5 ${collapsed ? "items-center px-4" : "px-4"}`} aria-label="Main">
+      {NAV_ITEMS.map((item) => (
+        <NavItem
+          key={item.to}
+          item={item}
+          collapsed={collapsed}
+          active={isActive(item.to)}
+          onNavigate={onNavigate}
+          testId={`${testIdPrefix}${item.testId}`}
+        />
       ))}
     </nav>
   );
@@ -261,7 +256,7 @@ export function Sidebar({ collapsed, onToggleCollapsed }) {
       <div className="mb-4 h-px bg-border/60" />
 
       <div className="flex-1 overflow-y-auto overflow-x-hidden">
-        <NavGroups collapsed={collapsed} />
+        <NavList collapsed={collapsed} />
       </div>
 
       <SidebarFooter collapsed={collapsed} />
@@ -323,7 +318,7 @@ export function MobileSidebar({ open, onClose }) {
         <div className="mb-4 h-px bg-border/60" />
 
         <div className="flex-1 overflow-y-auto">
-          <NavGroups collapsed={false} onNavigate={onClose} testIdPrefix="mobile-" />
+          <NavList collapsed={false} onNavigate={onClose} testIdPrefix="mobile-" />
         </div>
 
         <SidebarFooter collapsed={false} />
