@@ -2497,8 +2497,16 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
   // and the Asset Library went tour-less before the tours were rewritten.
   await check("every live work page maps to a tour (and auth/legal pages do not)", async (ctx) => {
     const { getTourIdForPath } = load("lib/onboarding/tours.js");
+    // The home page is exempt, and named here rather than quietly filtered out
+    // of TOUR_LIVE_PATHS, so the exemption is a visible decision instead of a
+    // hole in the list. It had a five-step welcome tour that fired on every
+    // arrival over marketing copy the visitor can simply read; see
+    // getTourIdForPath in lib/onboarding/tours.js.
+    const NO_TOUR = new Set(["/"]);
     const broken = [
-      ...TOUR_LIVE_PATHS.filter((p) => !getTourIdForPath(p)).map((p) => `${p} maps to no tour`),
+      ...TOUR_LIVE_PATHS.filter((p) => !getTourIdForPath(p) && !NO_TOUR.has(p)).map(
+        (p) => `${p} maps to no tour`
+      ),
       ...[
         "/sign-in",
         "/sign-in/sso-callback",

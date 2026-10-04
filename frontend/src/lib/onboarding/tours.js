@@ -25,42 +25,17 @@
 //              there isn't room.
 
 export const TOURS = {
-  landing: {
-    id: "landing",
-    label: "Welcome tour",
-    steps: [
-      {
-        target: '[data-testid="landing-hero"]',
-        title: "Welcome to HookForge \u{1F44B}",
-        body:
-          "You bring a link and a photograph. The studio researches your app, writes a script you read and approve, and renders the hook and the middle of your video with you as the presenter.",
-      },
-      {
-        target: '[data-testid="landing-how-it-works"]',
-        title: "Five moves, one pipeline",
-        body:
-          "Paste your links \u2192 choose who you're talking to and what the video is for \u2192 read the script, shot plan and strategy \u2192 render \u2192 finish it yourself. Nothing is spent until the render.",
-      },
-      {
-        target: '[data-testid="landing-your-week"]',
-        title: "The difference",
-        body:
-          "The old way costs a Saturday and an editor. This way: approve the profile it found, read every word, render tonight \u2014 and next week it already knows which opening carried.",
-      },
-      {
-        target: '[data-testid="landing-features"]',
-        title: "What's inside",
-        body:
-          "Scored template picks with their limits shown, free scripts until the render, your banned-claims list enforced at the paid step, one photo as the presenter, and receipts on every render.",
-      },
-      {
-        target: '[data-testid="landing-enter-app-button"]',
-        title: "Ready when you are",
-        body:
-          "Open the app to land on the studio's first step. Every page pops this tour up on arrival \u2014 and the sidebar's \u201CShow me around\u201D button replays it whenever you like.",
-      },
-    ],
-  },
+  // No landing tour. The home page used to have one that pointed at
+  // landing-hero, landing-how-it-works, landing-your-week, landing-features and
+  // landing-enter-app-button, and it fired on every arrival. See
+  // getTourIdForPath for why it is gone.
+  //
+  // The data was deleted rather than left unmapped on purpose. Five steps that
+  // can never open are five steps a reader assumes are reachable, and the
+  // "every onboarding tour step points at a real element" check would keep
+  // passing on them while verifying nothing a user can see. The landing
+  // testids stay on the page — they cost nothing and are what a future test on
+  // the home page would hook to.
 
   // Targets CreateVideo — the five-step studio at /create.
   create: {
@@ -321,9 +296,17 @@ export const TOURS = {
  * Redirect-only routes (/app-profiles, /templates, /templates/:id) and the
  * public auth/legal pages map to null — a redirect's destination opens its own
  * tour, and a sign-in page is not a section anyone needs a tour of.
+ *
+ * The home page maps to null too, deliberately. It had a five-step "Welcome
+ * tour" that fired on every arrival, over marketing copy the visitor can just
+ * read: the tour walked them through the hero, the how-it-works strip, the
+ * comparison table and the features grid, which is a page tour in the least
+ * useful sense — it taught the layout rather than the product. It also popped
+ * over the one screen people arrive on before they have any context for a
+ * coach mark. The app's own pages still tour on arrival, which is where the
+ * tour earns its keep: those are working surfaces with a next action.
  */
 export function getTourIdForPath(pathname) {
-  if (pathname === "/") return "landing";
   if (pathname === "/create") return "create";
   if (pathname === "/brand") return "brand";
   if (pathname === "/history") return "history";

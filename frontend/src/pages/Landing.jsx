@@ -350,9 +350,11 @@ export default function Landing() {
                   Sign In
                 </button>
               </SignInTrigger>
-              {/* Same testid as the signed-in "Enter App" button — the two
-                  branches are mutually exclusive, so the onboarding tour
-                  always finds exactly one primary CTA to anchor to. */}
+              {/* The same testid in both branches — signed-in and signed-out —
+                  so anything hooking the primary CTA finds exactly one. It used
+                  to be here for the onboarding tour, which pointed its last step
+                  at this button; the home page has no tour now, and the testid
+                  is kept because it marks the page's one primary action. */}
               <SignUpTrigger>
                 <Button
                   className="gap-2 rounded-xl bg-[color:var(--brand-indigo)] px-4 text-sm font-semibold text-white shadow-[var(--glow-indigo)] hover:bg-[color:var(--brand-indigo-dark)]"
