@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "../components/ui/button";
-import { Badge } from "../components/ui/badge";
 import { Alert, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import { api, getErrorMessage } from "../lib/api";
+import { FactChip } from "../components/FactChip";
+import { SectionCard } from "../components/SectionCard";
 import { BarChart3, Loader2, AlertTriangle, Info, TrendingUp } from "lucide-react";
 
 function money(value) {
@@ -15,28 +16,38 @@ function pct(value) {
   return value == null ? "—" : `${Math.round(value * 100)}%`;
 }
 
+/**
+ * One labelled set of rows, with the numbers in real columns.
+ *
+ * The three figures were bare spans inside a flex row, so nothing lined up:
+ * counts and percentages sat wherever their labels ended, and the money column
+ * was a `w-14` box that only lined up within a single card. Six of these sit side
+ * by side, so misalignment read as the cards being different sizes rather than
+ * as columns that needed widths. Fixed columns make the six cards comparable at
+ * a glance, which is the entire point of a breakdown.
+ */
 function Breakdown({ title, rows, describeKey = "label", countKey = "count" }) {
   if (!rows?.length) return null;
   return (
-    <div className="surface space-y-2 rounded-2xl p-4">
-      <h3 className="font-display text-sm font-semibold">{title}</h3>
+    <SectionCard title={title}>
       <div className="space-y-1.5">
         {rows.slice(0, 8).map((row) => (
-          <div key={row.key} className="flex items-center justify-between gap-3 text-sm">
+          <div
+            key={row.key}
+            className="grid grid-cols-[minmax(0,1fr)_2.5rem_3.5rem_4.5rem] items-center gap-2 text-sm"
+          >
             <span className="min-w-0 truncate text-muted-foreground">
               {row[describeKey] || row.key}
             </span>
-            <span className="flex shrink-0 items-center gap-2">
-              <span className="text-xs text-muted-foreground">{row[countKey]}</span>
-              <span className="text-xs">{pct(row.success_rate)}</span>
-              <span className="w-14 text-right text-xs text-muted-foreground">
-                {money(row.total_usd) || "$0"}
-              </span>
+            <span className="text-right text-xs text-muted-foreground">{row[countKey]}</span>
+            <span className="text-right text-xs">{pct(row.success_rate)}</span>
+            <span className="text-right text-xs text-muted-foreground">
+              {money(row.total_usd) || "$0"}
             </span>
           </div>
         ))}
       </div>
-    </div>
+    </SectionCard>
   );
 }
 
@@ -147,11 +158,12 @@ export default function Analytics() {
         <Breakdown title="By content angle" rows={report?.by_angle} />
       </div>
 
-      <div className="surface space-y-3 rounded-2xl p-4" data-testid="analytics-performance">
-        <h3 className="flex items-center gap-2 font-display text-sm font-semibold">
-          <TrendingUp className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-          TikTok performance (entered by hand)
-        </h3>
+      <SectionCard
+        title="TikTok performance (entered by hand)"
+        icon={TrendingUp}
+        className="space-y-3"
+        data-testid="analytics-performance"
+      >
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
           {[
             ["Entries", perf.entries ?? 0],
@@ -167,19 +179,21 @@ export default function Analytics() {
             </div>
           ))}
         </div>
+        {/* Facts about the source, not status: a badge reads as a state this
+            thing is in, and none of these is a state. The two that matter most
+            are the disclaimers, so they are chips like every other fact. */}
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="text-[11px]">Source: manual</Badge>
-          <Badge variant="outline" className="text-[11px]">Not platform-verified</Badge>
+          <FactChip>Source: manual</FactChip>
+          <FactChip>Not platform-verified</FactChip>
           <span className="text-xs text-muted-foreground">
             {perf.marked_successful ?? 0} marked worked · {perf.marked_unsuccessful ?? 0} did not
           </span>
         </div>
-      </div>
+      </SectionCard>
 
       <div className="space-y-3" data-testid="analytics-feedback">
       {feedback.top_signals?.length > 0 && (
-        <div className="surface space-y-2 rounded-2xl p-4">
-          <h3 className="font-display text-sm font-semibold">What happened</h3>
+        <SectionCard title="What happened" className="space-y-2">
           <p className="text-xs text-muted-foreground">
             Captured automatically as you worked. These are facts about the workflow, not
             opinions about why.
@@ -189,15 +203,16 @@ export default function Analytics() {
               <span className="text-muted-foreground">
                 {String(s.signal).replace(/_/g, " ")}
               </span>
-              <Badge variant="secondary" className="text-[11px]">{s.count}</Badge>
+              {/* A count is a fact about the row, so it is a chip rather than a
+                  badge — the same rule the breakdown columns follow. */}
+              <FactChip>{s.count}</FactChip>
             </div>
           ))}
-        </div>
+        </SectionCard>
       )}
 
       {feedback.top_reasons?.length > 0 && (
-        <div className="surface space-y-2 rounded-2xl p-4">
-          <h3 className="font-display text-sm font-semibold">Why work was rejected or redone</h3>
+        <SectionCard title="Why work was rejected or redone" className="space-y-2">
           <p className="text-xs text-muted-foreground">
             Only the {feedback.explained ?? 0} of {feedback.total ?? 0} events you explained
             yourself. The rest are counted above without a stated reason.
@@ -207,10 +222,10 @@ export default function Analytics() {
               <span className="text-muted-foreground">
                 {String(r.reason).replace(/_/g, " ")}
               </span>
-              <Badge variant="secondary" className="text-[11px]">{r.count}</Badge>
+              <FactChip>{r.count}</FactChip>
             </div>
           ))}
-        </div>
+        </SectionCard>
       )}
       </div>
 

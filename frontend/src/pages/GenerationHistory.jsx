@@ -8,6 +8,7 @@ import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import EmptyState from "../components/EmptyState";
 import { api, getErrorMessage, mediaUrl } from "../lib/api";
+import { FactChip, FactList } from "../components/FactChip";
 import { recordSignal, recordReason } from "../lib/feedback";
 import {
   History as HistoryIcon, Loader2, AlertTriangle, Download, Trash2, Archive,
@@ -290,23 +291,13 @@ function GenerationDetails({ generationId, onClose }) {
 }
 
 /**
- * One fact about a render: model, length, cost, objective, version, date.
+ * One row per generation: what it is, what it cost, how it turned out, and the
+ * actions that apply to it.
  *
- * Chips rather than a sentence of middot-separated values, because a sentence
- * has to be read end to end to find one fact in it, and because the row used to
- * carry the same kind of information two ways — four badges opposite the title
- * and a run-on line below it — which is why it never looked settled. Text is
- * `text-xs`, which is 12px: the project's floor, and one step up from the 11px
- * the old badges used.
+ * The facts are `FactChip`s rather than a middot-separated sentence, and the
+ * card is a `SectionCard` like every other content card in the app — see those
+ * two for why the vocabulary is shared rather than restated per page.
  */
-function FactChip({ children }) {
-  return (
-    <span className="rounded-full border border-[color:var(--hairline)] px-2 py-0.5 text-xs text-muted-foreground">
-      {children}
-    </span>
-  );
-}
-
 function GenerationRow({ row, onChanged, focusGenerationId }) {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
@@ -509,7 +500,7 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
               all — and two treatments for the same kind of information meant
               the card never looked settled. Chips also let the row go quiet
               when facts are missing instead of leaving a dangling separator. */}
-          <div className="flex flex-wrap items-center gap-1.5">
+          <FactList>
             {row.model && <FactChip>{row.model}</FactChip>}
             {row.duration ? <FactChip>{row.duration}s</FactChip> : null}
             {cost ? <FactChip>{cost}</FactChip> : null}
@@ -518,7 +509,7 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
             {row.template_id ? <FactChip>template v{row.template_version}</FactChip> : null}
             <FactChip>script v{row.script_version}</FactChip>
             <FactChip>{new Date(row.created_at).toLocaleString()}</FactChip>
-          </div>
+          </FactList>
 
           {error && <p className="text-xs text-destructive">{error}</p>}
 

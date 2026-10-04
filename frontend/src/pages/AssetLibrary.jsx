@@ -7,6 +7,7 @@ import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import EmptyState from "../components/EmptyState";
 import { api, getErrorMessage, mediaUrl } from "../lib/api";
+import { FactChip, FactList } from "../components/FactChip";
 import { resolveActiveProfileId, profileLabel, partitionProfiles } from "../lib/profileSelection";
 import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
 import {
@@ -174,12 +175,19 @@ function AssetRow({
             )}
           </div>
           {asset.notes && <p className="mt-0.5 text-xs text-muted-foreground">{asset.notes}</p>}
+          {/* Facts as chips, not a middot sentence. The badges above are status
+              ("Archived", "Rights unconfirmed") and stay badges; a date and a
+              duration are measurements, and this is the same vocabulary the
+              generation row uses for them. */}
           {(asset.created_at || asset.duration_seconds) && (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {asset.created_at ? `Uploaded ${new Date(asset.created_at).toLocaleDateString()}` : ""}
-              {asset.created_at && asset.duration_seconds ? " · " : ""}
-              {asset.duration_seconds ? `Duration ${formatSeconds(asset.duration_seconds)}` : ""}
-            </p>
+            <FactList className="mt-1">
+              {asset.created_at ? (
+                <FactChip>Uploaded {new Date(asset.created_at).toLocaleDateString()}</FactChip>
+              ) : null}
+              {asset.duration_seconds ? (
+                <FactChip>{formatSeconds(asset.duration_seconds)}</FactChip>
+              ) : null}
+            </FactList>
           )}
           <UsageHistory uses={uses} />
         </div>
@@ -217,28 +225,37 @@ function AssetRow({
               <X className="h-3.5 w-3.5" /> Remove
             </Button>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={busy}
-            onClick={() => onArchive(asset)}
-            aria-label={asset.status === "archived" ? "Restore asset" : "Archive asset"}
-          >
-            {asset.status === "archived" ? (
-              <ArchiveRestore className="h-3.5 w-3.5" />
-            ) : (
-              <Archive className="h-3.5 w-3.5" />
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={busy}
-            onClick={() => onDelete(asset)}
-            aria-label="Delete asset"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          {/* Archive and Delete are held at the right edge with a gap before
+              them, so they cannot be reached by muscle memory on the way to
+              "Use this photo" — the same rule the generation card's action bar
+              follows. No hairline here: this is a compact row in a list, and a
+              divider between a one-line description and three small buttons
+              repeated down the page reads as scaffolding rather than
+              structure. The divider belongs on the card, not the row. */}
+          <span className="ml-auto flex items-center gap-1 pl-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={() => onArchive(asset)}
+              aria-label={asset.status === "archived" ? "Restore asset" : "Archive asset"}
+            >
+              {asset.status === "archived" ? (
+                <ArchiveRestore className="h-3.5 w-3.5" />
+              ) : (
+                <Archive className="h-3.5 w-3.5" />
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={() => onDelete(asset)}
+              aria-label="Delete asset"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </span>
         </div>
       </div>
       {isAudio && asset.media_url && (
@@ -810,7 +827,7 @@ export default function AssetLibrary({
                 {otherAssets.length} other photo{otherAssets.length === 1 ? "" : "s"}
               </Button>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {otherAssets.map((a) => (
                   <AssetRow
                     key={a.id}
@@ -873,7 +890,7 @@ export default function AssetLibrary({
         // shows when there is nothing attached yet.
         null
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {assets.map((a) => (
             <AssetRow
               key={a.id}
