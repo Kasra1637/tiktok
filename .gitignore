@@ -84,6 +84,11 @@ backend/storage/templates/
 
 memory/test_credentials.md
 
+# Local scratch: scoring/eval tooling and its notes, kept out of the repo
+# (apply_score.ps1 rewrites backend/server.py from these files)
+backend/.rec_tmp/
+.freebuff/
+
 # Mobile development
 android-sdk/frontend/node_modules/.cache/default-development/4.pack
 frontend/node_modules/.cache/default-development/4.pack

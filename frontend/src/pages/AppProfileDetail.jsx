@@ -150,6 +150,48 @@ function AngleCard({ angle, onDelete, busy }) {
   );
 }
 
+/**
+ * Join a list the way a sentence does: "a", "a and b", "a, b and c".
+ *
+ * Written out rather than assembled with inline conditionals because the
+ * punctuation has to stay correct at every count — including none. Spreading
+ * ternaries through JSX produced "removes the profile and everything built on
+ * it: every uploaded photo", which reads as though photos were the only thing
+ * lost.
+ */
+function formatList(items) {
+  if (items.length === 0) return "";
+  if (items.length === 1) return items[0];
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+/**
+ * Everything a delete of this profile takes with it, named from the data the
+ * page has already loaded rather than described in the abstract.
+ *
+ * The counts are the point. "Deletes your profile and its data" gives a founder
+ * no way to tell a profile they forgot about from one that made six videos, and
+ * the videos are the part they paid for.
+ */
+function destroyedBy(drafts, angles, whatWorks) {
+  const items = [];
+  const videos = drafts.length;
+  if (videos > 0) {
+    items.push(`${videos} video draft${videos === 1 ? "" : "s"}`);
+  }
+  if (angles.length > 0) {
+    items.push(`${angles.length} content angle${angles.length === 1 ? "" : "s"}`);
+  }
+  const recorded = whatWorks?.videos || 0;
+  if (recorded > 0) {
+    items.push(
+      `analytics from ${recorded} recorded video${recorded === 1 ? "" : "s"}`
+    );
+  }
+  items.push("every uploaded photo");
+  return items;
+}
+
 export default function AppProfileDetail() {
   const { profileId } = useParams();
   const navigate = useNavigate();
@@ -639,28 +681,10 @@ export default function AppProfileDetail() {
           <DialogHeader>
             <DialogTitle>Delete {deletableName}?</DialogTitle>
             <DialogDescription>
-              This cannot be undone. It removes the profile and everything built
-              on it:{" "}
-              {drafts.length > 0 && (
-                <>
-                  {drafts.length} video draft{drafts.length === 1 ? "" : "s"}
-                  {angles.length > 0 && ", "}
-                </>
-              )}
-              {angles.length > 0 && (
-                <>
-                  {angles.length} content angle{angles.length === 1 ? "" : "s"}
-                  ,{" "}
-                </>
-              )}
-              {whatWorks?.videos > 0 && (
-                <>
-                  the analytics from {whatWorks.videos} recorded video
-                  {whatWorks.videos === 1 ? "" : "s"}
-                  {angles.length > 0 || drafts.length > 0 ? ", and " : " and "}
-                </>
-              )}
-              every uploaded photo. Your spend history is kept.
+              This cannot be undone. It removes {deletableName} and
+              everything built on it:{" "}
+              {formatList(destroyedBy(drafts, angles, whatWorks))}. Your
+              spend history is kept.
             </DialogDescription>
           </DialogHeader>
 

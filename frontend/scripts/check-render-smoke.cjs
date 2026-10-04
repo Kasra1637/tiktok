@@ -2578,17 +2578,27 @@ async function runDeleteDialogChecks() {
   });
 
   async function openDialog(ctx) {
+    // Purged before the click, not after: the portal this reads is the one the
+    // click is about to create.
+    //
+    // Radix renders DialogContent through a portal into document.body, not
+    // inside the mount container, so the dialog is never found under ctx. The
+    // document is taken from the container rather than the global: a bare
+    // `document` here resolves against whatever Node exposes, which is not
+    // necessarily the one the portalled nodes were written into.
+    //
+    // The purge also matters because the harness unmounts roots only after the
+    // last check. A check that mounts more than once — the copy checks do, one
+    // per count — otherwise finds every earlier dialog still in the body and
+    // reads the first one's stale contents.
+    const doc = ctx.container.ownerDocument;
+    doc.querySelectorAll('[data-testid="delete-profile-dialog"]').forEach((n) => n.remove());
     await clickEl(
       ctx,
       ctx.container.querySelector('[data-testid="delete-profile-button"]'),
       "the profile page offers no delete control"
     );
-    // Radix renders DialogContent through a portal into document.body, not
-    // inside the mount container, so the dialog is never found under ctx.
-    // Each check opens exactly one dialog and never closes it, so the current
-    // check's dialog is always the last match in document order.
-    const dialogs = document.querySelectorAll('[data-testid="delete-profile-dialog"]');
-    const dialog = dialogs.length ? dialogs[dialogs.length - 1] : null;
+    const dialog = doc.querySelector('[data-testid="delete-profile-dialog"]');
     if (!dialog) throw new Error("the delete control did not open a confirmation");
     return dialog;
   }
@@ -2695,6 +2705,58 @@ async function runDeleteDialogChecks() {
       }
     );
   });
+
+  // One check per count rather than a loop inside one check: re-rendering the same
+  // root with the same component does not remount it, so a looped check would
+  // carry the previous case's state into the next and read a stale dialog.
+  const copyCases = [
+    { drafts: 0, angles: 0, videos: 0, want: "every uploaded photo" },
+    { drafts: 1, angles: 0, videos: 0, want: "1 video draft and every uploaded photo" },
+    {
+      drafts: 3,
+      angles: 2,
+      videos: 0,
+      want: "3 video drafts, 2 content angles and every uploaded photo",
+    },
+    {
+      drafts: 3,
+      angles: 0,
+      videos: 3,
+      want: "3 video drafts, analytics from 3 recorded videos and every uploaded photo",
+    },
+  ];
+
+  for (const c of copyCases) {
+    // The counts are the point: a founder cannot tell a profile they forgot
+    // about from one that made six videos, and the videos are what they paid
+    // for. Punctuation has to hold at zero too — an earlier version spread
+    // ternaries through the JSX and read "everything built on it: every
+    // uploaded photo" for a profile with three drafts on it.
+    await check(
+      `the delete warning names what is lost (${c.drafts} drafts, ${c.angles} angles, ${c.videos} recorded)`,
+      async (ctx) => {
+        await withApi(
+          stubProfileApi({
+            getStudioProjects: async () => ({
+              projects: Array.from({ length: c.drafts }, (_, i) => ({ id: `s${i}` })),
+            }),
+            getContentAngles: async () => ({
+              angles: Array.from({ length: c.angles }, (_, i) => ({ id: `a${i}` })),
+            }),
+            getProfileWhatWorks: async () => ({ videos: c.videos, top: [] }),
+          }),
+          async () => {
+            await mountProfileDetail()(ctx);
+            const dialog = await openDialog(ctx);
+            const text = (dialog.textContent || "").replace(/\s+/g, " ");
+            if (!text.includes(c.want)) {
+              throw new Error(`expected ${JSON.stringify(c.want)} in: ${text.slice(0, 240)}`);
+            }
+          }
+        );
+      }
+    );
+  }
 }
 
 function stepPill(ctx, label) {
