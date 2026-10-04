@@ -210,7 +210,7 @@ class TestAnalyzeUrlDoesNotShareRowsBetweenUsers:
 
 class TestApprovalNeedsAProfileWorthApproving:
     """
-    Approval is the only thing between unreviewed research and a paid render, so
+    Approval is the only thing between unreviewed research and a render, so
     it used to be too cheap to mean anything: a bare POST flipped the status.
 
     The harm landed later, at generation time, where nothing on screen said the

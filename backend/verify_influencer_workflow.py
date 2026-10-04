@@ -6,7 +6,7 @@ End-to-end verification of the app-specific influencer workflow.
 Runs the REAL strategy generator (one OpenRouter text call per app) and the REAL
 prompt builders, then prints the hook and extension prompts for two different
 apps so they can be compared by eye as well as by assertion. Video submission
-is mocked because it costs money; everything that decides WHAT to submit is
+is mocked because it calls no provider; everything deciding WHAT to submit is
 real, including the real ffmpeg concat.
 
 If OPENROUTER_API_KEY is empty the strategy-generation call is skipped and

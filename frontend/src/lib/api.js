@@ -208,7 +208,7 @@ export const api = {
   // from the server and gone here: a hook-only render, a per-segment approval
   // gate, a repeatable extension, a join, and a seam-continuity readout were
   // five ways of describing a workflow that no longer exists, and every one of
-  // them was a button a founder could spend money on.
+  // them was a button a founder could click to start a render.
   generateStrategy: (id, payload = {}) =>
     client.post(`/studio/projects/${id}/strategy`, payload).then((r) => r.data),
 
@@ -253,11 +253,10 @@ export const api = {
   recordPerformance: (id, payload) =>
     client.post(`/generations/${id}/performance`, payload).then((r) => r.data),
 
-  // Feedback, analytics
+  // Feedback
   getFeedbackCatalog: () => client.get("/feedback/catalog").then((r) => r.data),
   recordFeedback: (payload) => client.post("/feedback", payload).then((r) => r.data),
   getFeedback: (params = {}) => client.get("/feedback", { params }).then((r) => r.data),
-  getAnalytics: (params = {}) => client.get("/analytics", { params }).then((r) => r.data),
 };
 
 export const getErrorMessage = (err) => {

@@ -1,5 +1,5 @@
 """
-DB-backed tests for feedback, analytics, research, and operations.
+DB-backed tests for feedback, research, and operations.
 
 The properties worth pinning: feedback reasons must belong to their event,
 research drafts must be unpublished and must never carry a source reference,
@@ -65,7 +65,7 @@ def _profile(api, name):
     return p
 
 
-def _generation(api, profile, status="completed", cost=0.25, **overrides):
+def _generation(api, profile, status="completed", **overrides):
     from models import CreateStudioProjectRequest, now_iso
     template = _run(api.list_templates(user_id=ANON))["templates"][0]
     project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
@@ -76,12 +76,11 @@ def _generation(api, profile, status="completed", cost=0.25, **overrides):
     _run(api._execute(
         """INSERT INTO generations
            (id, studio_project_id, brand_profile_id, template_id, template_version,
-            model, duration, status, cost_usd, cost_source, attempt,
-            parent_generation_id, created_at, updated_at, started_at, completed_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, 20, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             model, duration, status, attempt,
+             parent_generation_id, created_at, updated_at, started_at, completed_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, 20, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (gen_id, project["id"], profile["id"], template["id"], template["version"],
-         overrides.pop("model", "minimax-h3"), status, cost,
-         "usage.cost" if cost is not None else "unavailable",
+         overrides.pop("model", "minimax-h3"), status,
          overrides.pop("attempt", 1), overrides.pop("parent_generation_id", None),
          now, now, overrides.pop("started_at", now), overrides.pop("completed_at", now),
          ANON)))
@@ -199,8 +198,8 @@ class TestRecordFeedback:
     def test_reason_must_belong_to_the_event(self, api):
         """
         'too_promotional' is valid for an edited script but not for a rejected
-        generation. Allowing it would put codes in the table that analytics
-        cannot group meaningfully.
+        generation. Allowing it would put codes in the table that nothing
+        could group meaningfully.
 
         It was 'cta_unclear' here, which was itself removed: a generated piece
         has no closing beat, so "the CTA was unclear" described something the
@@ -386,73 +385,12 @@ class TestClassifyScriptEdit:
         assert fb.classify_script_edit(short, padded) == "script_edited_heavy"
 
 
-class TestAnalyticsReport:
-    def test_empty_report_is_shaped_correctly(self, api):
-        report = _run(api.analytics_report(user_id=OTHER_USER))
-        assert report["totals"]["videos_created"] == 0
-        assert report["totals"]["success_rate"] is None
-        assert report["performance"]["verified"] is False
-        assert report["scope"] == "internal"
-        assert report["publishing"] == "manual"
-
-    def test_report_totals(self, api):
-        profile = _profile(api, "An One")
-        _generation(api, profile, "completed", 0.5, id_note=None) if False else None
-        _generation(api, profile, "completed", 0.5)
-        _generation(api, profile, "failed", 0.25)
-        report = _run(api.analytics_report(brand_profile_id=profile["id"], user_id=ANON))
-        assert report["totals"]["videos_created"] == 2
-        assert report["totals"]["completed"] == 1
-        assert report["totals"]["failed"] == 1
-        assert report["totals"]["total_usd"] == pytest.approx(0.75)
-
-    def test_report_breaks_down_by_model_and_app(self, api):
-        profile = _profile(api, "An Two")
-        _generation(api, profile, model="minimax-h3")
-        _generation(api, profile, model="aleph-2")
-        report = _run(api.analytics_report(brand_profile_id=profile["id"], user_id=ANON))
-        by_model = {e["key"] for e in report["by_model"]}
-        assert by_model == {"minimax-h3", "aleph-2"}
-        assert report["by_app"][0]["label"] == "An Two"
-
-    def test_report_lists_templates_with_outcomes(self, api):
-        profile = _profile(api, "An Three")
-        _generation(api, profile)
-        report = _run(api.analytics_report(brand_profile_id=profile["id"], user_id=ANON))
-        assert report["by_template"][0]["name"]
-        assert report["by_template"][0]["used"] == 1
-
-    def test_report_never_marks_performance_verified(self, api):
-        from models import PerformanceEntryRequest
-        profile = _profile(api, "An Four")
-        gen = _generation(api, profile)
-        _run(api.record_performance(gen["id"], PerformanceEntryRequest(views=500), ANON))
-        report = _run(api.analytics_report(brand_profile_id=profile["id"], user_id=ANON))
-        assert report["performance"]["verified"] is False
-        assert report["performance"]["source"] == "manual"
-        assert report["performance"]["views"] == 500
-
-    def test_unpriced_runs_are_surfaced(self, api):
-        profile = _profile(api, "An Five")
-        _generation(api, profile, cost=None)
-        report = _run(api.analytics_report(brand_profile_id=profile["id"], user_id=ANON))
-        assert report["totals"]["unpriced_runs"] == 1
-        assert report["totals"]["complete"] is False
-
-    def test_report_counts_rework(self, api):
-        profile = _profile(api, "An Six")
-        _generation(api, profile)
-        _generation(api, profile, attempt=2)
-        report = _run(api.analytics_report(brand_profile_id=profile["id"], user_id=ANON))
-        assert report["rework"]["regenerated"] == 1
-
-
 class TestModelRequestLedger:
     USER = "ops-model-user"
 
     def test_success_and_failure_are_recorded(self, api):
         async def succeed():
-            return {"usage": {"cost": 0.03}}
+            return {"ok": True}
 
         async def fail():
             raise RuntimeError("provider unavailable")
@@ -461,14 +399,14 @@ class TestModelRequestLedger:
             "ops-text-check", "text", "text-model", succeed, self.USER,
             brand_profile_id="profile-1",
         ))
-        assert result["usage"]["cost"] == 0.03
+        assert result["ok"] is True
         with pytest.raises(RuntimeError):
             _run(api._log_model_call(
                 "ops-vision-check", "vision", "vision-model", fail, self.USER,
                 brand_profile_id="profile-1",
             ))
         rows = _run(api._fetch_all(
-            "SELECT operation, status, cost_usd, error, latency_ms FROM model_requests "
+            "SELECT operation, status, error, latency_ms FROM model_requests "
             "WHERE user_id = ? ORDER BY created_at",
             (self.USER,),
         ))
@@ -476,7 +414,6 @@ class TestModelRequestLedger:
             ("ops-text-check", "completed"),
             ("ops-vision-check", "failed"),
         ]
-        assert rows[0]["cost_usd"] == pytest.approx(0.03)
         assert "unavailable" in rows[1]["error"]
         assert rows[0]["latency_ms"] >= 0
 
@@ -500,24 +437,22 @@ class TestModelRequestLedger:
         assert _run(api._fetch_all(
             "SELECT id FROM asset_events WHERE user_id = ?", (OTHER_USER,))) == []
 
-    def test_model_request_ledger_summarises_by_modality(self, api):
+    def test_model_request_ledger_records_the_modality_actually_used(self, api):
         """
-        analytics.model_request_summary is still used by the analytics report,
-        so the summary it produces keeps being worth asserting.
+        The ledger's value is that a modality is attributable after the fact,
+        so the recorded modality is asserted rather than assumed.
         """
-        import analytics
 
         async def succeed():
-            return {"usage": {"cost": 0.02}}
+            return {"ok": True}
 
         _run(api._log_model_call(
             "summary-text-check", "text", "text-model", succeed, self.USER))
         rows = _run(api._fetch_all(
-            "SELECT operation, modality, status, cost_usd FROM model_requests WHERE user_id = ?",
+            "SELECT operation, modality, status FROM model_requests WHERE user_id = ?",
             (self.USER,)))
-        summary = analytics.model_request_summary(rows)
-        assert summary["total"] >= 1
-        assert summary["by_modality"]["text"]["completed"] >= 1
+        assert rows
+        assert any(r["modality"] == "text" and r["status"] == "completed" for r in rows)
 
     def test_completed_generation_storage_failure_is_recorded_and_retryable(
         self, api, monkeypatch
@@ -582,10 +517,19 @@ class TestModelRequestLedger:
 #   profiles / profiles_awaiting_approval   GET /api/app-profiles; the same
 #                                           approved-vs-draft split is asserted
 #                                           in test_studio_api's picker tests
-#   totals (videos_created, spend, rate)     GET /api/analytics
+#   totals (videos_created, success rate)   GET /api/generations, which History
+#                                           renders with its totals line and
+#                                           per-row status badge
 #   pending_template_drafts                  GET /api/templates by review_status
 #   recent_failures                          GET /api/generations, which History
 #                                           renders with a Failed badge and Retry
+
+
+# The Analytics page and GET /api/analytics are gone. It reported this
+# operator's own activity and what it cost them; the product does not meter
+# that. Its remaining honesty rule — that operator-entered TikTok figures are
+# never presented as platform-verified — still holds at the point the figures
+# are entered, in test_variation_api's TestManualPerformance.
 
 
 # The Settings page and GET /api/settings are gone. The three honesty notes it
@@ -593,7 +537,7 @@ class TestModelRequestLedger:
 # with the page:
 #
 #   never publishes          frontend/src/pages/CreateVideo.jsx (studio footer)
-#   TikTok figures are by hand   frontend/src/pages/Analytics.jsx
+#   TikTok figures are by hand   frontend/src/pages/GenerationHistory.jsx
 #   templates are not proven     frontend/src/pages/CreateVideo.jsx
 #
 # Integration status went with it. It was a read-only self-serve report, so

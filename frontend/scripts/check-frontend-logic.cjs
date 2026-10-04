@@ -203,7 +203,7 @@ check("30s on MiniMax does not fit", L.exceedsSinglePass(30, MINIMAX) === true);
 check("30s on a 30s model fits", L.exceedsSinglePass(30, WIDE) === false);
 check("31s on a 30s model does not", L.exceedsSinglePass(31, WIDE) === true);
 // Every length the facets endpoint offers is one render, which is the invariant
-// that replaced the old "a length that costs more than one render says so up
+// that replaced the old "a length that needs more than one render says so up
 // front" label check. A new supported length that needs two passes would break
 // the product, so it is asserted here against the real set.
 for (const d of [8, 10, 12, 15]) {

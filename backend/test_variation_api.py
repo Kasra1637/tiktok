@@ -82,11 +82,11 @@ def _generation(api, profile, name, status="completed", with_plan=True):
     gen_id = str(uuid.uuid4())
     now = now_iso()
     _run(api._execute(
-        """INSERT INTO generations
+"""INSERT INTO generations
            (id, studio_project_id, brand_profile_id, template_id, template_version,
-            script_version, model, duration, status, video_url, cost_usd, cost_source,
-            created_at, updated_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, 'minimax-h3', 20, ?, ?, 0.30, 'usage.cost', ?, ?, ?)""",
+             script_version, model, duration, status, video_url,
+             created_at, updated_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, 'minimax-h3', 20, ?, ?, ?, ?, ?)""",
         (gen_id, project["id"], profile["id"], template["id"], template["version"],
          1, status, f"/api/media/videos/{gen_id}.mp4", now, now, ANON)))
     return _run(api.get_generation(gen_id, ANON)), _run(
@@ -449,7 +449,6 @@ class TestHistory:
         row = rows["generations"][0]
         assert row["brand_name"] == "Hist Ctx"
         assert row["model"]
-        assert row["cost_usd"] == pytest.approx(0.30)
         assert row["template_version"]
 
     def test_history_is_scoped_to_user(self, api):
@@ -508,13 +507,13 @@ class TestHistory:
             _run(api.delete_generation(gen["id"], OTHER_USER))
         assert err.value.status_code == 404
 
-    def test_archive_preserves_the_cost_record(self, api):
-        """Archive, not delete, is the default: analytics needs the cost."""
+    def test_archive_preserves_the_row(self, api):
+        """Archive, not delete, is the default: the row keeps the render."""
         profile = _profile(api, "Hist Archive")
         gen, _, _ = _generation(api, profile, "Hist Archive")
         archived = _run(api.archive_generation(gen["id"], ANON))
         assert archived["status"] == "archived"
-        assert archived["cost_usd"] == pytest.approx(0.30)
+        assert archived["video_url"] == gen["video_url"]
 
 
 class TestManualPerformance:

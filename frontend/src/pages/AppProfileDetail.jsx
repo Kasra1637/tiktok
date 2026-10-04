@@ -171,7 +171,7 @@ function formatList(items) {
  *
  * The counts are the point. "Deletes your profile and its data" gives a founder
  * no way to tell a profile they forgot about from one that made six videos, and
- * the videos are the part they paid for.
+ * the videos are the part they cannot get back.
  */
 function destroyedBy(drafts, angles, whatWorks) {
   const items = [];
@@ -185,7 +185,7 @@ function destroyedBy(drafts, angles, whatWorks) {
   const recorded = whatWorks?.videos || 0;
   if (recorded > 0) {
     items.push(
-      `analytics from ${recorded} recorded video${recorded === 1 ? "" : "s"}`
+      `history from ${recorded} recorded video${recorded === 1 ? "" : "s"}`
     );
   }
   items.push("every uploaded photo");
@@ -381,11 +381,11 @@ export default function AppProfileDetail() {
               <Link to="/brand">Edit</Link>
             </Button>
             {/* Deletes the profile and everything scoped to it: content angles,
-                studio projects, generations, assets and their analytics. The
-                endpoint and the api client both already existed and nothing
-                called them; this is the control that reaches them. Type-to-
-                confirm rather than window.confirm because the blast radius is
-                paid-for videos, not one regenerable row. */}
+                studio projects, generations, assets and their recorded
+                results. The endpoint and the api client both already existed
+                and nothing called them; this is the control that reaches them.
+                Type-to-confirm rather than window.confirm because the blast
+                radius is every finished video, not one regenerable row. */}
             <Button
               variant="ghost"
               size="sm"
@@ -684,7 +684,7 @@ export default function AppProfileDetail() {
               This cannot be undone. It removes {deletableName} and
               everything built on it:{" "}
               {formatList(destroyedBy(drafts, angles, whatWorks))}. Your
-              spend history is kept.
+              provider call log is kept.
             </DialogDescription>
           </DialogHeader>
 

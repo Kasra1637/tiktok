@@ -47,14 +47,14 @@ import {
 //   profile -> angle -> template -> assets -> plan -> review -> hook & middle
 //
 // The script is written, checked for banned claims and read by the founder
-// BEFORE any video is paid for. The last step then renders the piece that
+// BEFORE any video is rendered. The last step then renders the piece that
 // script describes: the strategy is built from the approved plan, so the words
 // the founder read are the words that get rendered.
 //
 // This was the other way round. The hook came first, so a founder approved a
-// strategy on trust, spent money on a render, and only then read a script
-// describing a different video — with the claim check and the SafetyPanel
-// running against text nobody had looked at before the spend.
+// strategy on trust, rendered, and only then read a script describing a
+// different video — with the claim check and the SafetyPanel running against
+// text nobody had looked at before the render.
 /**
  * The five steps, in order.
  *
@@ -70,10 +70,10 @@ import {
  *     where the plan is actually read and edited.
  *
  * The step count is not a vanity metric; every extra step is a place a founder
- * can stall with nothing to do, and nothing is spent until the last one.
+ * can stall with nothing to do, and nothing is generated until the last one.
  *
- * Last, because this is the only step that spends money. The plan is free text,
- * and it is what that step renders.
+ * Last, because this is the only step that calls the model. The plan is text
+ * only, and it is what that step renders.
  *
  * Named for what it produces rather than for the old hook-first workflow: one
  * render containing a hook and a middle. The demo and the close are the
@@ -249,7 +249,7 @@ function TemplateShape({ template }) {
  * and every template requires exactly it. Without a photograph of the
  * person the model would invent one, and the founder would pay for a video
  * of somebody who looks nothing like them. The server refuses that case
- * before spending, so this is the early warning rather than the guarantee.
+ * before rendering, so this is the early warning rather than the guarantee.
  */
 function MissingRequirements({ identity, onGoToTemplatePhoto }) {
   if (!identity || identity.length === 0) return null;
@@ -352,7 +352,7 @@ function nextStepMessage(stepStates, step) {
       return "Next: pick a template and add your photo. Both are needed before anything can be generated.";
     }
   }
-  if (step === 0) return "Nothing is spent until the last step.";
+  if (step === 0) return "Nothing is generated until the last step.";
   // "Everything is ready" has to be measured against the steps that CAN be
   // ready. The render step is deliberately never marked done -- it has no
   // completion state, because a project stays renderable and gets re-rendered
@@ -360,13 +360,13 @@ function nextStepMessage(stepStates, step) {
   // was unreachable. Comparing only the steps before it makes the message
   // reachable, and says it at the point where it is true.
   if (stepStates.slice(0, step).every((s) => s.state === "done")) {
-    return "Everything before this is ready. This is the only step that costs money.";
+    return "Everything before this is ready. This is the only step that calls the model.";
   }
   const first = stepStates.findIndex((s) => s.state !== "done");
   if (first > step) {
     return `${stepStates[first].step.label} is still ahead of you.`;
   }
-  return "Nothing is spent until the last step.";
+  return "Nothing is generated until the last step.";
 }
 
 export default function CreateVideo() {
@@ -651,13 +651,12 @@ export default function CreateVideo() {
    * Make sure a draft exists without the founder having to ask.
    *
    * The render step writes to a studio project, and the plan is meant to be
-   * validated BEFORE anything is paid for. Previously the project was only
-   * created by the plan step, which forced the Assets step to carry a manual
+   * validated BEFORE anything is rendered. Previously the project was only   * created by the plan step, which forced the Assets step to carry a manual
    * "Create draft" button purely to get out of the way.
    *
    * So: as soon as an App Profile and a hook template are both chosen, the
-   * draft is created or updated in the background. Drafts are free — only a
-   * marked-ready generation spends money — so doing this eagerly costs
+   * draft is created or updated in the background. A draft calls no model —
+   * only a marked-ready generation renders — so doing this eagerly costs
    * nothing. Returns the project, or null when it cannot be created.
    */
   const ensureProject = useCallback(async () => {
@@ -779,8 +778,8 @@ export default function CreateVideo() {
       setEdits({});
       // Straight to the top of Review, which is this step now: the plan is the
       // thing to read, and the render step below it is the first one that
-      // spends money. The old indices were 5 (Review) and 6 (Hook & middle);
-      // merging the plan step into Review moved both down by one.
+      // calls the model. The old indices were 5 (Review) and 6 (Hook and
+      // middle); merging the plan step into Review moved both down by one.
       setStep(3);
     } catch (err) {
       setError(getErrorMessage(err));
@@ -864,7 +863,7 @@ export default function CreateVideo() {
   // reference, and the backend refuses a generation without one (see
   // _studio_identity_references) as well as any project still holding
   // retired uploads. The requirement used to be decoration: it was listed
-  // on the template but nothing stopped the click, so a paid render could
+  // on the template but nothing stopped the click, so a render could
   // go out with no identity input and the model free to invent a presenter.
   //
   // Kept separate from canGenerate on purpose — "you have not chosen a template
@@ -1310,7 +1309,7 @@ export default function CreateVideo() {
               ) : !project ? (
                 <>
                   <p className="text-sm text-muted-foreground">
-                    Free draft holds your photo. Only a marked-ready generation spends.
+                    Draft only — this holds your photo. Only a marked-ready project renders.
                   </p>
                   <Button variant="secondary" size="sm" disabled={busy} onClick={() => ensureProject()}>
                     {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
@@ -1360,7 +1359,7 @@ export default function CreateVideo() {
             ) : !project ? (
               <div className="rounded-xl border border-[color:var(--hairline)] p-4">
                 <p className="text-sm text-muted-foreground">
-                  Free draft holds your work. Only a marked-ready generation spends.
+                  Draft only — this holds your work. Only a marked-ready project renders.
                 </p>
                 <Button
                   variant="brand"
@@ -1396,16 +1395,15 @@ export default function CreateVideo() {
                       onProjectChange={setProject}
                     />
                     {/* The one and only render. It used to sit on the review
-                        step, where it let money be spent on text the founder had
+                        step, where it let a render run on text the founder had
                         not read yet, and it sat BELOW the segmented chain, which
                         made the chain look like the product.
 
                         onProjectChange lets the panel build the strategy itself
-                        on the way to a paid render. It was a button above,
-                        which meant a founder could skip it and pay for a
+                        on the way to a render. It was a button above,
+                        which meant a founder could skip it and get a
                         generic take without ever being told the specific one
-                        existed. */}
-                    <GenerationPanel
+                        existed. */}                    <GenerationPanel
                       project={project}
                       onGenerationChange={() => {}}
                       onProjectChange={setProject}
@@ -1660,9 +1658,9 @@ export default function CreateVideo() {
               onGoToTemplatePhoto={scrollToTemplatePhoto}
             />
 
-            {/* Nothing that spends money renders on this step. GenerationPanel
+            {/* Nothing that calls the model renders on this step. GenerationPanel
                 lives on the step below, so the claim check above has been read
-                before any render is paid for. */}
+                before any render runs. */}
           </div>
         )}
         </StepShell>

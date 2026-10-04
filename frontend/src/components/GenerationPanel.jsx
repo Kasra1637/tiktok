@@ -18,35 +18,30 @@ import {
  *
  * A video is a hook and a middle in a single pass. There is no second job, no
  * extension and nothing to join, so this panel has one button and one output —
- * where it used to offer a second paid call for a length the model could not
- * reach in one pass. That call is gone from the server as well: a request past
+ * where it used to offer a second render for a length the model could not
+ * reach in one pass. That path is gone from the server as well: a request past
  * the ceiling is refused with a 400 rather than split, because handing back a
  * file that is not the video the plan describes is worse than refusing it.
  * What is left for the founder is the demo they record and the close they add,
  * and saying so is part of this panel's job.
  *
  * The claim gate and the ready gate both stay. They are the two things standing
- * between an unreviewed plan and a paid render, and nothing about making the
+ * between an unreviewed plan and the render, and nothing about making the
  * render a single job weakened either one.
  *
  * A third thing stands there now, and it is built here rather than asked for:
  * the strategy. Without one the render falls back to a generic take with a name
- * in it, and nothing on screen said so — the founder could spend money and only
- * find out from the log. It is a text call, free, so it is built automatically
- * on the way to the render they actually asked for, and the panel above shows
- * the result for reading either before or after.
+ * in it, and nothing on screen said so — the founder would only find out from
+ * the log. It is built automatically on the way to the render they actually
+ * asked for, and the panel above shows the result for reading either before or
+ * after.
  *
- * If that build fails, the render does NOT proceed. Spending on a less specific
+ * If that build fails, the render does NOT proceed. Sending a less specific
  * video than the founder believes they are getting, without being told, is the
  * same dishonesty as silently shortening the piece — which this panel already
  * refuses to do.
  */
 const POLL_INTERVAL_MS = 6000;
-
-function money(value) {
-  if (value === null || value === undefined) return null;
-  return `$${Number(value).toFixed(2)}`;
-}
 
 function StatusBadge({ status }) {
   const map = {
@@ -190,17 +185,17 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
 
 
 const handleGenerate = async () => {
-    // "Generate another" spends a second paid render on a video the founder has
+    // "Generate another" runs a second render on a video the founder has
     // already seen. Idempotency stops accidental duplicates of one click, not a
     // deliberate click the founder did not mean, so a re-roll asks first. Same
     // window.confirm pattern as the strategy rebuild: one click when there is
-    // nothing to lose, two when there is money on it.
+    // nothing to lose, two when there is work on it.
     if (Boolean(generation)) {
       const ok =
         typeof window === "undefined" || typeof window.confirm !== "function"
           ? true
           : window.confirm(
-              "Generate another video from this plan? This spends a second paid render. " +
+              "Generate another video from this plan? This runs a second render. " +
               "The video you already have stays in history."
             );
       if (!ok) return;
@@ -220,12 +215,13 @@ const handleGenerate = async () => {
             ? crypto.randomUUID()
             : `render-${projectId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       }
-      // No strategy is built here. This path used to build one and spend in the
-      // same click, which made the "read the strategy" copy above cosmetic: the
-      // founder never got a chance to see it before the money went. Building is
-      // a free, separate action on HookContinuityPanel directly above this one,
-      // and the button below stays disabled until a current strategy exists, so
-      // the review is a real step rather than a race the founder loses.
+      // No strategy is built here. This path used to build one and render in
+      // the same click, which made the "read the strategy" copy above cosmetic:
+      // the founder never got a chance to see it before the render went.
+      // Building is a separate, text-only action on HookContinuityPanel
+      // directly above this one, and the button below stays disabled until a
+      // current strategy exists, so the review is a real step rather than a
+      // race the founder loses.
       //
       // No duration is sent. The length is computed from the template, the
       // project carries it, and the response has no plan to return because
@@ -320,7 +316,6 @@ const handleGenerate = async () => {
 
   const capability = models?.models?.find((m) => m.key === selectedModel);
   const inFlight = generation && (generation.status === "submitted" || generation.status === "generating");
-  const cost = generation ? money(generation.cost_usd) : null;
   const downloadUrl = generation ? mediaUrl(generation.r2_url || generation.video_url) : null;
   // The length this project will render at, and whether the selected model can
   // do it in one pass. Shown before the click because the endpoint refuses
@@ -355,8 +350,7 @@ const handleGenerate = async () => {
       )}
 
       {/* No photograph attached. Named here rather than left to the server's
-          409, because this is the panel where the founder decides to spend:
-          telling them before the click is the difference between a rule they
+          409, because this is the panel where the founder decides to generate:          telling them before the click is the difference between a rule they
           have not met yet and an app that appears to have broken. */}
       {noPhoto && (
         <Alert variant="destructive">
@@ -454,7 +448,7 @@ const handleGenerate = async () => {
         <p className="text-sm text-muted-foreground">
           {staleStrategy
             ? "Rebuild the strategy above so it matches the plan you edited, then generate."
-            : "Build the strategy above, read it, then generate. It is free and it is what makes the paid render about this app."}
+            : "Build the strategy above, read it, then generate. It is what makes the render about this app."}
         </p>
       )}
 
@@ -470,19 +464,15 @@ const handleGenerate = async () => {
             {generation.attempt > 1 && (
               <Badge variant="outline" className="text-[11px]">attempt {generation.attempt}</Badge>
             )}
-            {cost && <Badge variant="secondary" className="text-[11px]">{cost}</Badge>}
-            {generation.cost_source === "unavailable" && (
-              <span className="text-[11px] text-muted-foreground">cost not reported by provider</span>
-            )}
           </div>
 
           {/* A storage failure used to be a muted line here, so a video that would
               not load later looked like a playback bug rather than a failed
               upload. It is now the loudest thing on the panel, because the
               stakes are expiry: the clip above is the provider's temporary
-              copy, and once it lapses with no durable copy the paid render is
-              gone. The retry endpoint existed but no UI called it, so the only
-              recovery was one the founder could not reach. */}
+              copy, and once it lapses with no durable copy the render is gone. The
+              retry endpoint existed but no UI called it, so the only recovery
+              was one the founder could not reach. */}
           {generation.storage_error && (
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />

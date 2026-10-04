@@ -160,8 +160,8 @@ def _completed_generation(api, profile, base_clip: Path):
     _run(api._execute(
         """INSERT INTO generations
            (id, studio_project_id, brand_profile_id, template_id, duration, status,
-            video_url, cost_usd, cost_source, created_at, updated_at, user_id)
-           VALUES (?, ?, ?, ?, 12, 'completed', ?, 0.25, 'usage.cost', ?, ?, ?)""",
+            video_url, created_at, updated_at, user_id)
+           VALUES (?, ?, ?, ?, 12, 'completed', ?, ?, ?, ?)""",
         (gen_id, project["id"], profile["id"], project["template_id"],
          f"/api/media/videos/{gen_id}.mp4", now, now, ANON)))
     return _run(api.get_generation(gen_id, ANON)), project

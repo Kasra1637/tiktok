@@ -20,11 +20,6 @@ function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function money(value) {
-  if (value === null || value === undefined) return null;
-  return `$${Number(value).toFixed(2)}`;
-}
-
 function StatusBadge({ status }) {
   const map = {
     submitted: ["Queued", "secondary"],
@@ -219,7 +214,6 @@ function GenerationDetails({ generationId, onClose }) {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <DetailRow label="Model">{detail.model}</DetailRow>
               <DetailRow label="Status">{humanize(detail.status)}</DetailRow>
-              <DetailRow label="Cost">{money(detail.cost_usd)}</DetailRow>
               <DetailRow label="Script version">v{detail.script_version}</DetailRow>
               <DetailRow label="Template version">v{detail.template_version}</DetailRow>
               <DetailRow label="Attempt">{detail.attempt}</DetailRow>
@@ -229,7 +223,6 @@ function GenerationDetails({ generationId, onClose }) {
               <DetailRow label="Variance">
                 {detail.variation_kind ? humanize(detail.variation_kind) : "None"}
               </DetailRow>
-              <DetailRow label="Cost source">{humanize(detail.cost_source)}</DetailRow>
             </div>
 
             {detail.hook_line && (
@@ -291,7 +284,7 @@ function GenerationDetails({ generationId, onClose }) {
 }
 
 /**
- * One row per generation: what it is, what it cost, how it turned out, and the
+ * One row per generation: what it is, how it turned out, and the
  * actions that apply to it.
  *
  * The facts are `FactChip`s rather than a middot-separated sentence, and the
@@ -318,7 +311,6 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
 
   const downloadUrl = row.r2_url || row.video_url;
   const composedUrl = row.composition?.r2_url || row.composition?.output_url;
-  const cost = money(row.cost_usd);
   const hasClip = row.status === "completed" && Boolean(downloadUrl);
 
   const signalRefs = {
@@ -465,7 +457,7 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
         )}
 
         <div className="min-w-0 space-y-3">
-          {/* Identity, then what it says. The model/duration/cost badges that
+          {/* Identity, then what it says. The model/duration badges that
               used to sit opposite the app name are gone from here — they are
               facts about the render, not about which video this is, and they
               join the strip below. */}
@@ -503,7 +495,6 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
           <FactList>
             {row.model && <FactChip>{row.model}</FactChip>}
             {row.duration ? <FactChip>{row.duration}s</FactChip> : null}
-            {cost ? <FactChip>{cost}</FactChip> : null}
             {row.attempt > 1 ? <FactChip>attempt {row.attempt}</FactChip> : null}
             {row.objective ? <FactChip>{humanize(row.objective)}</FactChip> : null}
             {row.template_id ? <FactChip>template v{row.template_version}</FactChip> : null}
@@ -685,7 +676,7 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
           </div>
           <p className="text-xs text-muted-foreground">
             A variation makes a draft. You review it and generate the video yourself, so
-            nothing is spent until you say so.
+            nothing runs until you say so.
           </p>
         </div>
       )}
@@ -734,7 +725,6 @@ export default function GenerationHistory() {
     api.getAppProfiles().then((d) => setProfiles(d.profiles || [])).catch(() => setProfiles([]));
   }, []);
 
-  const spent = rows.reduce((sum, r) => sum + (r.cost_usd || 0), 0);
   const completed = rows.filter((r) => r.status === "completed").length;
   const failed = rows.filter((r) => r.status === "failed").length;
 
@@ -743,7 +733,7 @@ export default function GenerationHistory() {
       <PageHeader
         icon={HistoryIcon}
         title="Generation History"
-        description="Every video produced, with the exact template, script version, model, and cost behind it. Publishing stays manual."
+        description="Every video produced, with the exact template, script version and model behind it. Publishing stays manual."
       />
 
       {error && (
@@ -779,7 +769,7 @@ export default function GenerationHistory() {
         {rows.length > 0 && (
           <span className="ml-auto text-xs text-muted-foreground">
             {rows.length} result{rows.length === 1 ? "" : "s"} · {completed} completed ·{" "}
-            {failed} failed · {money(spent)} spent
+            {failed} failed
           </span>
         )}
       </div>

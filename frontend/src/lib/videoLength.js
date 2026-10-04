@@ -10,7 +10,7 @@
  * `default_duration`, the project seeds from it, and the render is that long.
  *
  * What is left is the arithmetic the UI has to get right before it lets anyone
- * spend, which is the same reason these helpers existed when the workflow was a
+ * render, which is the same reason these helpers existed when the workflow was a
  * chain. `npm run build` type-checks and lints but never evaluates a comparison
  * at runtime, and the backend suite cannot see frontend code at all. That gap
  * is exactly how `project.extend_intent === 0` survived against a boolean return
@@ -23,7 +23,7 @@
  * The rules mirror template_library.clamp_duration(), the hook clamp in
  * update_studio_project, and the single-pass ceiling the backend refuses a
  * generate request over. The backend still decides; this only predicts, so the
- * UI can say what will happen before the render is paid for.
+ * UI can say what will happen before the render runs.
  */
 
 /**

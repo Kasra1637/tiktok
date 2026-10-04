@@ -6,7 +6,6 @@ import {
   Sparkles,
   Clapperboard,
   Images,
-  BarChart3,
   PenLine,
   History as HistoryIcon,
   PanelLeftClose,
@@ -19,18 +18,18 @@ import {
  * Sidebar navigation model.
  *
  * Ordering reflects the workflow: make the video, the app it is for, the
- * assets it is generated from, what you have already made, and how that is
- * going. The retired Discover / Saved Hooks / Research Archive / Trend Research
- * pages are gone, so there is no Research group anymore.
+ * assets it is generated from, and what you have already made. The retired
+ * Discover / Saved Hooks / Research Archive / Trend Research / Analytics pages
+ * are gone, so there is no Research group and no Insight link.
  *
  * This was two labelled groups — "Create" and "Insight" — and both headings
  * are gone. "Insight" sat above exactly one link, so it read as a section with
  * more in it than there was; "Create" named the four links that are simply the
  * app. Removing them also removed the reason the links looked unevenly spaced:
  * the two groups were separated by different rules from the items inside them
- * (a 20px gap between groups, 4px within), so the distance between History and
- * Analytics did not match the distance between any other two links. One flat
- * list with one gap is the fix, not a tweak to either number.
+ * (a 20px gap between groups, 4px within), so the distance between two links
+ * did not match the distance between any other two. One flat list with one gap
+ * is the fix, not a tweak to either number.
  *
  * `testId` values are the canonical ones the rest of the app (and the
  * onboarding tour convention) expects — they must stay on the DESKTOP
@@ -43,7 +42,6 @@ const NAV_ITEMS = [
   { to: "/brand", label: "Your app", icon: PenLine, testId: "brand-nav-link", hint: "Research, edit, approve" },
   { to: "/assets", label: "Asset Library", icon: Images, testId: "assets-nav-link", hint: "Character reference" },
   { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Everything you made" },
-  { to: "/analytics", label: "Analytics", icon: BarChart3, testId: "analytics-nav-link", hint: "Internal metrics" },
 ];
 
 /**

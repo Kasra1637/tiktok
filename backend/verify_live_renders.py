@@ -1,13 +1,12 @@
 """
-Live render verification: one real paid render per model, end to end.
-
+Live render verification: one real render per model, end to end.
 This is the check no mocked test can perform. The suite proves the gates refuse
 correctly; only a real provider response proves the two-section prompt produces
 a real hook-then-middle clip, that the character reference survives as the
 presenter on BOTH models, and that H3 Max accepts what we send it (768p, no
-generate_audio) instead of 400ing after the money is committed.
+generate_audio) instead of 400ing after the request is committed.
 
-Cost: exactly two paid video renders (one per model) plus a few text calls.
+Runs: exactly two video renders (one per model) plus a few text calls.
 Nothing here is mocked. Run it, then WATCH both clips: the script asserts file
 validity, but identity likeness, the phone-reach ending, and the absence of a
 generated demo/CTA need human eyes.
@@ -189,7 +188,6 @@ async def _one_render(api, photo: Path, out_dir: Path, model_key: str,
     return {
         "model": model_key,
         "generation_id": gen["id"],
-        "cost_usd": final.get("cost_usd"),
         "storage_error": final.get("storage_error"),
         "file": str(dest),
         "report": report,
@@ -240,7 +238,7 @@ def main() -> int:
             print(f"\n!!! {key} FAILED: {e}", flush=True)
     print("\n================ SUMMARY ================", flush=True)
     for r in results:
-        print(f"{r['model']}: {r['file']} cost={r['cost_usd']} "
+        print(f"{r['model']}: {r['file']} "
               f"storage_error={r['storage_error']!r}", flush=True)
     if results:
         print("\nHUMAN CHECKLIST -- watch each clip and confirm:", flush=True)

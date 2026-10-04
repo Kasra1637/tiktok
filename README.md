@@ -90,15 +90,15 @@ App URL  →  website + store research  →  AI App Profile  →  review & appro
         →  review, vary, download  →  founder posts by hand
 ```
 
-Three gates protect the spend, in order:
+Three gates stand between an unreviewed plan and a render, in order:
 
 1. **Profile approval** — nothing is generated from an unreviewed profile.
 2. **Claim check** — the plan is independently re-checked on *every edit*, and
    generation is blocked while a prohibited claim is present.
-3. **Ready state** — a project must be explicitly marked ready before a paid
+3. **Ready state** — a project must be explicitly marked ready before a
    generation is submitted.
 
-### Why a variation never costs money by itself
+### Why a variation never renders by itself
 
 A variation produces a **draft project**. Producing the video is a separate,
 explicit action. Variations are never batch-generated.
@@ -123,11 +123,10 @@ pixel-exact and cannot drift.
 | `template_library.py` | Curated structures, vocabularies, duration clamping |
 | `claim_safety.py` | **Deterministic** claim checking (never model self-report) |
 | `video_providers.py` | Provider capability layer; env-configurable model |
-| `generation_planning.py` | Single-pass prompt, cost extraction, error triage |
+| `generation_planning.py` | Single-pass prompt, error triage |
 | `overlays.py` | ffmpeg filter-graph construction and rendering |
 | `variations.py` | The nine controlled variation axes |
-| `analytics.py` | Pure metric computation |
-| `feedback.py` | Structured feedback vocabulary |
+| `feedback.py` | Structured feedback vocabulary and its aggregate summary |
 | `research_abstraction.py` | Trend data → abstract template drafts |
 | `pipeline.py` | yt-dlp / ffmpeg / Modal media pipeline |
 | `storage_service.py` | Cloudflare R2 |
@@ -142,7 +141,7 @@ pixel-exact and cannot drift.
 `performance_entries` · `feedback_events` · `research_runs`
 
 `studio_projects` is deliberately separate from `generations`: the founder
-iterates on a script for free, and only a marked-ready project spends money.
+iterates on a script on text alone, and only a marked-ready project renders.
 
 ---
 
@@ -177,11 +176,11 @@ Other constraints:
   default model means a 15s generation plus a 5s extension, which can show a
   visible join. Set `VIDEO_MODEL_DEFAULT=seedance-2.5` for 20s/30s in one pass.
 - **Vertical is assumed.** Every model here is driven at 9:16.
-- **Cost reporting is best-effort.** Spend counts only runs whose provider
-  response carried a cost. Unpriced runs are reported separately, never as
-  free.
-- **No live end-to-end verification.** Duration logic, cost capture, retry,
-  provenance, and overlay compositing are verified — the last against real
+- **No cost reporting at all.** The product does not meter what a render costs
+  the operator. No generation row, no model-request row and no API response
+  carries a cost field, and no screen shows one. Metering this honestly is a
+  product of its own, and a half-honest meter is worse than none.
+- **No live end-to-end verification.** Duration logic, retry,  provenance, and overlay compositing are verified — the last against real
   rendered MP4s. Whether a given model returns a usable clip to composite onto
   has **not** been confirmed against a live generation; that needs a key with
   credit.
@@ -220,8 +219,7 @@ Other constraints:
   ICP, claim tiers, and review/approve/refresh
 - `hook_templates` → **Hook Template Library** with structure fields,
   versioning, favorites, archive, and publication
-- Video generation → **one job per video** with provenance and cost tracking
-- Nav → Create / Insight / Research
+- Video generation → **one job per video** with provenance- Nav → Create / Insight / Research
 
 ### Added
 
@@ -229,7 +227,7 @@ App Profiles, content angles, the 18-template curated library, the
 recommendation engine, the creation studio, deterministic claim safety, the
 provider capability layer, the per-App-Profile asset library, deterministic
 overlay compositing, generation history, nine controlled variation axes,
-manual performance logging, trend research, analytics, and structured feedback.
+manual performance logging, trend research, and structured feedback.
 
 ### Removed since
 
@@ -239,11 +237,11 @@ the work happens:
 
 | Removed | Where its content lives now |
 |---|---|
-| Operations (`/operations`) | Analytics (costs, rework), History (failures + Retry), per-generation endpoints |
-| Settings (`/settings`) | Studio footer (never-publishes line), Analytics (entered-by-hand figures), Create Video (not-proven-performers note) |
-| Dashboard (`/`) | Analytics (totals), History (failures + Retry), the sidebar (next steps). `/` redirects to `/create` |
+| Operations (`/operations`) | History (failures + Retry), per-generation endpoints |
+| Settings (`/settings`) | Studio footer (never-publishes line), History (entered-by-hand figures), Create Video (not-proven-performers note) |
+| Dashboard (`/`) | History (totals + failures + Retry), the sidebar (next steps). `/` redirects to `/create` |
 | App Profiles list (`/app-profiles`) | Your app (`/brand`) for research/edit/approve; the profile detail page survives for angles, templates, and per-app drafts. `/app-profiles` redirects to `/brand` |
-
+| Analytics (`/analytics`) | Nowhere — deliberately. It reported the operator's own activity and what it cost them, and this product does not meter that. `/analytics` redirects to `/create` |
 ### Removed / demoted
 
 Pages that were views *of* the work rather than places *of* work have been

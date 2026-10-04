@@ -13,8 +13,8 @@ studio needs (vertical support, reference limits, audio).
 Configuration (all optional):
     VIDEO_MODEL_DEFAULT   model key to use when none is requested
     VIDEO_MODEL_ALLOWLIST comma-separated keys the app may use; anything else
-                          is refused so a bad config cannot silently route
-                          spend to an unvetted model
+                          is                           refused so a bad config cannot silently route a
+                          render to an unvetted model
 """
 
 import functools
@@ -105,10 +105,11 @@ _CAPABILITY_NOTES = {
         "notes": (
             "720p (not 2K), 1-15s per generation, and no native audio -- "
             "generate_audio is not among its accepted parameters, so the studio "
-            "omits it and clips come back silent, as with H3 Max. About half "
-            "Hailuo 3's price at 720p, so it is the cheap option for comparing "
-            "a script, not a replacement for the default. Downloads are scaled "
-            "to 1080x1920 on the way out. Opt-in: Hailuo 3 is still the default."
+            "omits it and clips come back silent, as with H3 Max. 720p is a "
+            "visibly softer clip than the default, so this is the quick option "
+            "for trying a second script, not a replacement for the default. "
+            "Downloads are scaled to 1080x1920 on the way out. Opt-in: Hailuo 3 "
+            "is still the default."
         ),
     },
     "aleph-2": {
@@ -140,16 +141,16 @@ _CAPABILITY_NOTES = {
 # ai_service.DEFAULT_VIDEO_MODEL, and it stays Hailuo 3. Listing a second model
 # only makes it selectable in the studio's model dropdown.
 #
-# Grok Imagine Video joins as the cheap opt-in: it takes the same photo as the
-# same first-frame anchor as H3 Max and declares no passthrough parameters at
-# all, so there is no undocumented field that could refuse a render. It trades
-# 2K and native audio for roughly half the price, which makes it the model to
-# try a second script on. Listing it does not move the default, which stays
-# Hailuo 3.
+# Grok Imagine Video joins as the lighter opt-in: it takes the same photo
+# as the same first-frame anchor as H3 Max and declares no passthrough
+# parameters at all, so there is no undocumented field that could refuse a
+# render. It trades 2K and native audio for 720p and silence, which makes it
+# the model to try a second script on. Listing it does not move the default,
+# which stays Hailuo 3.
 #
 # Every value asserted about it is checked at boot against OpenRouter's live
 # model list by provider_capabilities.check_provider_drift -- that endpoint
-# costs nothing to read and states the fields each model actually accepts, so a
+# is a free read and states the fields each model actually accepts, so a
 # provider quietly dropping something shows up in the log instead of in a
 # founder's failed render.
 STUDIO_ELIGIBLE = ("minimax-h3", "minimax-h3-max", "grok-imagine-video")
@@ -306,7 +307,7 @@ def resolve(key: Optional[str] = None) -> tuple:
     Returns (model_key, reason). An explicitly requested, allowed, eligible
     model wins. An explicit request that is not usable falls back to the
     default WITH a reason, because silently generating with a different
-    model would make cost and quality non-reproducible.
+    model would make the result non-reproducible.
     """
     allowed = _allowlist()
     default = default_model_key()
@@ -660,7 +661,7 @@ def resolve_length(target: Optional[int], model_key: Optional[str] = None) -> di
         }
 
     `trim_unavailable` is returned when a trim is required but ffmpeg is not on
-    PATH, so the caller can say so BEFORE spending a paid render rather than
+    PATH, so the caller can say so BEFORE running the render rather than
     discovering it afterwards and silently handing back a 4s clip for a 3s
     request.
     """

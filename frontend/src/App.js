@@ -16,7 +16,6 @@ import BrandSetup from "./pages/BrandSetup";
 import AppProfileDetail from "./pages/AppProfileDetail";
 import CreateVideo from "./pages/CreateVideo";
 import AssetLibrary from "./pages/AssetLibrary";
-import Analytics from "./pages/Analytics";
 import { OnboardingProvider } from "./components/onboarding/OnboardingProvider";
 
 function App() {
@@ -53,8 +52,8 @@ function App() {
                         <Route path="/app-profiles/:profileId" element={<AppProfileDetail />} />
                         <Route path="/app-profiles/:profileId/assets" element={<AssetLibrary />} />
                         <Route path="/assets" element={<AssetLibrary />} />
-                        {/* The Dashboard is gone. It restated what Analytics and
-                            History already show — totals, spend, and failed
+                        {/* The Dashboard is gone. It restated what Generation
+                            History already shows — totals and failed
                             generations with a Retry button — and then linked out
                             to Create Video, App Profiles and Templates, all of
                             which are in the sidebar anyway. "/" now goes where
@@ -63,7 +62,11 @@ function App() {
                             real. The public "/" for signed-out visitors is the
                             landing page, declared above and unaffected. */}
                         <Route path="/" element={<Navigate to="/create" replace />} />
-                        <Route path="/analytics" element={<Analytics />} />
+                        {/* Analytics is gone. It reported this operator's own
+                            activity and what it cost them, and the product does
+                            not meter that. A redirect rather than a dead route,
+                            so a bookmark lands where the work is. */}
+                        <Route path="/analytics" element={<Navigate to="/create" replace />} />
                         {/* The template library is gone: templates are picked
                             per App Profile inside the Create Video wizard, so
                             there is nowhere standalone left to land. Redirects

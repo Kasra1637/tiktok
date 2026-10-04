@@ -30,7 +30,6 @@ import generation_planning
 import recommendation_tags
 import overlays
 import variations
-import analytics
 import provider_capabilities
 import feedback as feedback_mod
 from ai_service import (
@@ -644,8 +643,8 @@ async def init_db():
             -- A studio project is one founder's in-progress video: the chosen
             -- App Profile, angle, objective, template (pinned to a version),
             -- assets, and the editable creative plan. The plan is separate from
-            -- any generation so a founder can iterate on the script for free
-            -- before spending a video generation.
+            -- any generation so a founder can iterate on the script on text
+            -- alone before generating a video.
             CREATE TABLE IF NOT EXISTS studio_projects (
                 id TEXT PRIMARY KEY,
                 brand_profile_id TEXT,
@@ -720,7 +719,14 @@ async def init_db():
             --
             -- status ladder: submitted -> generating -> completed | failed,
             -- plus 'archived'. draft/ready_for_generation live on the studio
-            -- project, not here, because no money is spent before submission.
+            -- project, not here, because no render is submitted before the
+            -- founder asks for one.
+            --
+            -- There is deliberately no cost column. This app does not meter
+            -- what a render costs the operator. Deployments created before
+            -- that still carry the old cost_usd / cost_source columns; SQLite
+            -- cannot drop them cheaply, so nothing reads or writes them and
+            -- they stay dormant.
             CREATE TABLE IF NOT EXISTS generations (
                 id TEXT PRIMARY KEY,
                 studio_project_id TEXT,
@@ -769,8 +775,6 @@ async def init_db():
                 polling_url TEXT,
                 video_url TEXT,
                 r2_url TEXT,
-                cost_usd REAL,
-                cost_source TEXT,
                 prompt_used TEXT,
                 adjustments TEXT,
                 error TEXT,
@@ -924,11 +928,10 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_video_assets_user
                 ON video_assets (user_id, created_at);
 
-            -- Internal model-request ledger. Generations already carry video
-            -- cost and status, but text/vision calls otherwise leave no trace.
-            -- This table answers which model operation ran, whether it worked,
-            -- how long it took, and what it cost, without storing prompts or
-            -- generated copy.
+            -- Internal model-request ledger. Generations already carry status,
+            -- but text/vision calls otherwise leave no trace. This table answers
+            -- which model operation ran, whether it worked, and how long it took,
+            -- without storing prompts or generated copy.
             CREATE TABLE IF NOT EXISTS model_requests (
                 id TEXT PRIMARY KEY,
                 operation TEXT NOT NULL,
@@ -936,7 +939,6 @@ async def init_db():
                 model TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'completed',
                 latency_ms INTEGER,
-                cost_usd REAL,
                 error TEXT,
                 brand_profile_id TEXT,
                 studio_project_id TEXT,
@@ -1200,8 +1202,8 @@ async def init_db():
             # used to receive. Additive: existing rows get NULL, which reads as
             # "no brief recorded" and simply shows an empty field on Review.
             ("studio_projects", "demo_brief", "TEXT"),
-            # Idempotency for the one paid render. A repeated key returns the
-            # generation already created for it instead of billing a second
+            # Idempotency for the one render. A repeated key returns the
+            # generation already created for it instead of running a second
             # job. Existing rows get NULL, which means "no key supplied" and
             # keeps every historical render re-submittable exactly as before.
             ("generations", "idempotency_key", "TEXT"),
@@ -1636,7 +1638,6 @@ async def _record_model_request(
     status: str,
     latency_ms: int,
     user_id: str,
-    cost_usd=None,
     error: str = "",
     brand_profile_id: str = "",
     studio_project_id: str = "",
@@ -1648,17 +1649,17 @@ async def _record_model_request(
     Persist one provider interaction for operations visibility.
 
     Prompts and generated copy are deliberately not stored. Operations needs to
-    know that a request happened, which model handled it, whether it worked,
-    and what it cost — not the creative material itself.
+    know that a request happened, which model handled it, and whether it
+    worked — not the creative material itself.
     """
     await _execute(
         """INSERT INTO model_requests
-           (id, operation, modality, model, status, latency_ms, cost_usd, error,
+           (id, operation, modality, model, status, latency_ms, error,
             brand_profile_id, studio_project_id, generation_id, template_id,
             research_run_id, created_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (str(uuid.uuid4()), operation, modality, model, status, int(latency_ms),
-         cost_usd, (error or "")[:500],
+         (error or "")[:500],
          brand_profile_id or None, studio_project_id or None,
          generation_id or None, template_id or None, research_run_id or None,
          now_iso(), user_id),
@@ -1693,10 +1694,10 @@ async def _log_model_call(operation, modality, model, call, user_id, **refs):
     """
     Run one retained provider call and ledger its outcome.
 
-    Centralizing this keeps operations honest: a failed research, plan, or
-    poll is recorded with its latency and provider-reported cost (when any)
-    before the route converts it into an HTTP error. Only metadata is stored;
-    prompts and generated copy are not.
+    Centralizing this keeps operations honest: a failed research, plan, or poll
+    is recorded with its latency before the route converts it into an HTTP
+    error. Only metadata is stored; prompts and generated copy are not, and
+    nothing about what the call cost is recorded.
     """
     started = time.perf_counter()
     try:
@@ -1708,13 +1709,10 @@ async def _log_model_call(operation, modality, model, call, user_id, **refs):
             error=str(exc), **refs,
         )
         raise
-    latency_ms = int((time.perf_counter() - started) * 1000)
-    cost = None
-    if isinstance(result, dict):
-        cost, _ = generation_planning.extract_cost(result)
     await _record_model_request(
-        operation, modality, model, "completed", latency_ms, user_id,
-        cost_usd=cost, **refs,
+        operation, modality, model, "completed",
+        int((time.perf_counter() - started) * 1000), user_id,
+        **refs,
     )
     return result
 
@@ -2693,7 +2691,7 @@ HOOK_VIDEO_PROMPT_TEMPLATE = (
 # trending sound or use native text-to-speech in TikTok's own editor after
 # exporting — a locally-generated audio track can't be posted as a "trending
 # sound" and would just get stripped/replaced anyway. Muting by default avoids
-# paying for audio generation nobody keeps, while still letting users opt in
+# generating audio nobody keeps, while still letting users opt in
 # (e.g. for platforms without an in-app sound library, like Reels/Shorts).
 AUDIO_ON_INSTRUCTION = (
     "\n\nGenerate native audio that complements the hook — ambient sound, subtle "
@@ -2931,7 +2929,7 @@ def build_hook_prompt_from_image_analysis(image_analysis: dict) -> str:
 
 
 def build_hook_prompt_from_motion_style(motion_style: str) -> str:
-    """Final fallback: a hand-written motion template. Costs zero AI calls.
+    """Final fallback: a hand-written motion template. Zero model calls.
 
     Reached only when there is no template, no hook analysis, and the
     single-image analysis returned nothing usable. When motion_style is empty
@@ -2980,8 +2978,8 @@ def apply_motion_style_directive(prompt: str, motion_style: str) -> str:
 #   - a local copy of the source clip for V2V motion transfer (never re-downloaded)
 #   - a local copy of the key hook frame as a thumbnail
 #
-# Creating and reusing templates costs ZERO AI calls. Only the video generation
-# itself is billed, which is unavoidable for a new output.
+# Creating and reusing templates makes ZERO model calls. Only the video
+# generation itself calls a provider, which is unavoidable for a new output.
 # ---------------------------------------------------------------------------
 HOOK_TEMPLATE_CATEGORIES = [
     "curiosity-gap", "pattern-interrupt", "reveal", "reaction", "authority", "confrontation", "other",
@@ -3189,7 +3187,7 @@ async def face_swap_generate_hook_video(
 
     If template_id is provided, reuses a saved hook template. This is the cheapest
     path: the prompt and the V2V motion reference are already cached on disk, so
-    the request costs ZERO AI calls (no hook re-analysis, no prompt regeneration,
+    the request makes ZERO model calls (no hook re-analysis, no prompt regeneration,
     no re-download of the source video) — only the video generation itself.
 
     Falls back to a motion-style template if no analysis is available.
@@ -3211,7 +3209,7 @@ async def face_swap_generate_hook_video(
     hook_category: optional style directive (intrigue, reveal, reaction, tutorial,
     lifestyle, transformation). When provided, injects a category-specific prompt
     modifier that flavors the hook's energy/intent on top of the base prompt from
-    analysis, template, or motion-style fallback. Zero additional AI cost.
+    analysis, template, or motion-style fallback. Zero additional model calls.
 
     hook_custom_prompt: optional freeform text (max 200 chars) from the creator
     describing exactly what they want the hook to convey. Sanitized server-side
@@ -3310,7 +3308,7 @@ async def face_swap_generate_hook_video(
         # analyzed. Requires: a video file (downloaded above) to extract
         # frames from. The auto-analysis is lightweight (extract 8 frames,
         # call the vision model once) and its result is persisted for future
-        # reuse — so this cost is paid at most once per video.
+        # reuse — so the vision call happens at most once per video.
         if not analysis and reference_video_path and reference_video_path.exists():
             try:
                 logger.info(
@@ -3419,7 +3417,7 @@ async def face_swap_generate_hook_video(
         if image_analysis and image_analysis.get("body_language_gestures"):
             prompt = build_hook_prompt_from_image_analysis(image_analysis)
         else:
-            # Final fallback: hand-written motion template (no AI cost).
+            # Final fallback: hand-written motion template (no model call).
             # This branch builds the whole prompt AROUND motion_style, so the
             # directive must not also be appended below or the same movement
             # would be specified twice.
@@ -5162,7 +5160,7 @@ def _approval_gaps(profile: dict, pending: Optional[dict] = None) -> list:
     What this App Profile is missing that a founder must fill before approving.
 
     Approval is the only thing standing between unreviewed AI research and a
-    paid render, so it has to mean something. It used to flip the status on a
+    render, so it has to mean something. It used to flip the status on a
     bare request: a profile whose research had failed, or had only populated a
     couple of fields, could be approved and then steer the plan and strategy --
     with the gaps invisible, because AppProfileDetail renders only the fields
@@ -5413,10 +5411,12 @@ async def delete_app_profile(profile_id: str, user_id: str = Depends(get_current
     Cascades to the profile's content angles, studio projects, generations,
     assets, overlay compositions, performance entries, feedback events, and
     asset event logs. The model_requests ledger is deliberately kept: it is
-    the audit trail of what was spent, and its orphaned rows are harmless.
+    the audit trail of which provider calls ran, and its orphaned rows are
+    harmless.
 
-    Deletion is refused while a generation is still in flight — finishing or
-    failing on its own keeps the spend attributable.
+    Deletion is refused while a generation is still in flight, so a run that
+    finishes or fails on its own is never left without the profile it belongs
+    to.
 
     Files are removed best-effort: the profile's asset folder and any locally
     cached generation videos. R2 copies are left in place; they are
@@ -5748,8 +5748,8 @@ async def template_facets(user_id: str = Depends(get_current_user_id)):
         "WHERE (user_id = ? OR user_id = 'system') AND archived = 0",
         (user_id,),
     )
-    # How many paid renders a total length actually costs, so the length picker
-    # can say so before the founder chooses rather than after they have paid.
+    # How many renders a total length actually takes, so the length picker can
+    # say so before the founder chooses rather than after it has run.
     # Derived from the default studio model's real single-pass ceiling -- today
     # minimax-h3 caps at 15s, which makes the 20s and 30s options two passes.
     # Read per request rather than baked in, so pointing VIDEO_MODEL_DEFAULT at
@@ -6186,8 +6186,8 @@ def _public_project(row: dict) -> dict:
     # Which script the strategy was built from, and whether the script has moved
     # on since. 0 on both sides means either side predates the other, which is
     # not a mismatch — it is missing history, and the founder is not blocked for
-    # it. The studio reads `strategy_is_current` to warn before spending rather
-    # than to refuse silently.
+    # it. The studio reads `strategy_is_current` to warn before generating
+    # rather than to refuse silently.
     built_from = int(out.get("strategy_script_version") or 0)
     current_script = int(out.get("script_version") or 0)
     out["strategy_script_version"] = built_from
@@ -6222,7 +6222,7 @@ def _project_strategy(project: dict) -> dict:
 
     A project row carries `strategy` as a JSON string, so every reader would
     otherwise repeat the same parse-and-discard-on-error. An unparseable value
-    is treated as no strategy rather than crashing a paid render: the fallback
+    is treated as no strategy rather than crashing a real render: the fallback
     path produces a working video from the plan, and a hard failure here would
     strand a project the founder has already paid to review.
     """
@@ -6744,7 +6744,7 @@ async def mark_project_ready(project_id: str, user_id: str = Depends(get_current
     Mark a reviewed project ready for video generation.
 
     Refuses while the claim-safety report is failing, so a prohibited claim
-    cannot be waved through. This is the last gate before Phase 5 spends money.
+    cannot be waved through. This is the last gate before Phase 5 renders.
 
     The verdict is recomputed against the live App Profile and written back,
     rather than read from the row. The stored copy was computed when the plan was
@@ -6858,15 +6858,6 @@ def _public_generation_detail(row: dict) -> dict:
     return out
 
 
-async def _record_cost(generation_id: str, response: dict) -> None:
-    """Store the reported cost, or an explicit marker when none is reported."""
-    cost, source = generation_planning.extract_cost(response)
-    await _execute(
-        "UPDATE generations SET cost_usd = ?, cost_source = ? WHERE id = ?",
-        (cost, source, generation_id),
-    )
-
-
 def _retired_project_assets(assets: list) -> list:
     """Attachment entries whose kind is no longer part of the product."""
     return [
@@ -6932,7 +6923,7 @@ async def _studio_identity_references(
     - A template that declares character_reference in required_assets is
       REFUSED without one. The requirement used to be decorative: it was
       rendered as "Needs character reference" in the studio and on the
-      template, but nothing enforced it, so a paid render could go out with
+      template, but nothing enforced it, so a render could go out with
       no identity input at all and the model free to invent a presenter.
     - Exactly one character_reference asset may be attached, and it is the one
       used. Several used to be allowed and the first in JSON order silently
@@ -7018,7 +7009,7 @@ async def _studio_identity_references(
     # when no face is found, so this can only improve the reference.
     try:
         reference_path = crop_face_from_path(Path(path))
-    except Exception as e:  # never fail a paid render over a crop
+    except Exception as e:  # never fail a render over a crop
         logger.warning(f"Character reference crop failed for {path} ({e}); sending original.")
         reference_path = Path(path)
 
@@ -7119,7 +7110,7 @@ async def _submit_generation(
     strategy = strategy or _project_strategy(project)
     # Each provider has its own prompt ceiling. Hailuo's was measured live at
     # 7,000; others are lower, and sending them a Hailuo-sized prompt 400s
-    # after the founder has committed to paying. The builder scales every field
+    # after the founder has asked for it. The builder scales every field
     # budget to fit rather than cutting the finished tail.
     prompt_budget = video_providers.capability(model_key).get("prompt_char_limit")
     if strategy:
@@ -7211,14 +7202,15 @@ async def _submit_generation(
     # this change still carry a non-zero value and must still be trimmed.
     trim_to_seconds = 0
 
-    # Idempotency: ONE key means ONE paid render.
+    # Idempotency: ONE key means ONE render.
     #
     # The generate endpoint had no key and no in-flight check, so a double-tap,
     # a client-level retry of the same request, or the same project opened in two
     # tabs could each create a real billed job. Two lookups make that safe: the
     # first turns a plain repeat into the generation that already exists, and
     # the unique index catches the genuinely concurrent case that a check-then-
-    # insert cannot, so the loser adopts the winner's row instead of billing.
+    # insert cannot, so the loser adopts the winner's row instead of running
+    # a duplicate.
     #
     # This runs AFTER the gates and the prompt build but BEFORE the provider is
     # called, so a repeat costs no money and reaches no provider.
@@ -7244,9 +7236,9 @@ async def _submit_generation(
             script_version, model, model_id, requested_duration, duration, status,
             segment_role, segment_index, strategy_version, continuity, trim_to_seconds,
             attempt, parent_generation_id, variation_kind, variation_params,
-            cost_source, prompt_used, adjustments, retryable, approved,
+            prompt_used, adjustments, retryable, approved,
             requested_at, created_at, updated_at, user_id, idempotency_key)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?)""",
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?)""",
         (generation_id, project["id"], project.get("brand_profile_id"),
          project.get("template_id"), project.get("template_version"),
          project.get("script_version"), model_key, cap["id"],
@@ -7254,14 +7246,14 @@ async def _submit_generation(
          json.dumps(continuity) if continuity else None, trim_to_seconds,
          attempt, parent_generation_id or None,
          variation_kind or None, json.dumps(variation_params or {}),
-          "pending", prompt, json.dumps([]), now, now, now, user_id,
+         prompt, json.dumps([]), now, now, now, user_id,
          claim_key or None),
         )
     except Exception as exc:
         # The unique index refused this row, which means a concurrent request
         # with the same key won the race between our SELECT and this INSERT.
-        # That request is already paying for this render, so adopting its row is
-        # the correct outcome: the founder asked once and gets one video. Any
+        # That request is already running, so adopting its row is the correct
+        # outcome: the founder asked once and gets one video. Any
         # other failure is a real error and must not be swallowed here.
         if claim_key and "UNIQUE" in str(exc).upper():
             winner = await _fetch_one(
@@ -7327,7 +7319,6 @@ async def _submit_generation(
         (job_id, submitted.get("polling_url") or "", json.dumps(reported), now_iso(),
          generation_id),
     )
-    await _record_cost(generation_id, submitted)
 
     # Register with the persistent video store so a completed clip survives a
     # redeploy, exactly like the legacy face-swap path does.
@@ -7341,8 +7332,7 @@ async def _submit_generation(
     logger.info(
         f"Submitted generation {generation_id} ({segment_role}, segment {segment_index}, "
         f"attempt {attempt}) model={model_key} duration={seconds}s "
-        f"continuity={reported.get('guarantee') or 'n/a'} "
-        f"cost={submitted.get('usage', {}).get('cost') if isinstance(submitted.get('usage'), dict) else 'n/a'}"
+        f"continuity={reported.get('guarantee') or 'n/a'}"
     )
     return _public_generation_detail(
         await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
@@ -7620,7 +7610,7 @@ async def submit_project_generation(
 @api_router.post("/generations/{generation_id}/poll")
 async def poll_generation(generation_id: str, user_id: str = Depends(get_current_user_id)):
     """
-    Refresh a generation's status and persist cost when the provider reports it.
+    Refresh a generation's status and resolve a finished clip to a URL.
 
     Poll is the only place a completed clip is resolved to a URL and handed to
     persistent storage, so a completed generation always has a durable copy
@@ -7768,7 +7758,6 @@ async def poll_generation(generation_id: str, user_id: str = Depends(get_current
             (now, generation_id),
         )
 
-    await _record_cost(generation_id, response)
     return _public_generation_detail(
         await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
     )
@@ -7801,7 +7790,7 @@ async def _download_generation_video(video_url: str, generation_id: str) -> tupl
     self-diagnosing instead of a generic "could not be downloaded".
 
     Retried with backoff, because a single attempt made any transient blip a
-    permanent loss of the paid render's durable copy. Browser-like headers,
+    permanent loss of the finished render's durable copy. Browser-like headers,
     because some provider CDNs refuse non-browser clients (403 to
     python-httpx's default User-Agent) while the same URL plays fine in a
     founder's browser — the failure seen on H3 Max's 2K files. A longer
@@ -7912,8 +7901,8 @@ async def retry_generation(generation_id: str, user_id: str = Depends(get_curren
     Replace a failed segment.
 
     The new attempt is recorded as a child of the failed generation rather
-    than overwriting it, so the failure and its cost stay in history — a
-    failed generation that is silently replaced makes cost reporting lie.
+    than overwriting it, so the failure stays in history — a failed generation
+    that is silently replaced makes the history read as though it worked.
     """
     row = await _fetch_one(
         "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
@@ -7949,7 +7938,7 @@ async def retry_generation(generation_id: str, user_id: str = Depends(get_curren
     # ones, so the question is whether those choices are still valid. Both used
     # to drift silently: _submit_generation clamps a length past the model's cap
     # and video_providers.resolve() falls back to the default for a model that
-    # has left the allowlist. Either way the founder paid for one render and got
+    # has left the allowlist. Either way the founder got one render and got
     # another -- a different model, or a shorter clip than the plan describes.
     # Refusing is cheaper than a surprise.
     model_key = row.get("model") or ""
@@ -8125,8 +8114,8 @@ async def generate_project_strategy(
     )
 
     # The founder-approved creative plan, when one exists. The plan is written
-    # and reviewed before the first paid render, so the strategy has to produce
-    # THAT video. Without this the founder approved a script and then paid for a
+    # and reviewed before the first render, so the strategy has to produce
+    # THAT video. Without this the founder approved a script and then got a
     # different one.
     #
     # `cta` and `feature_emphasis` are not read. Both used to be here, and both
@@ -8795,7 +8784,7 @@ async def create_overlay_composition(
     retired uploads are refused before composition.
 
     The composition is recorded separately from the generation so the exact
-    composite can be re-rendered or audited without paying for another
+    composite can be re-rendered or audited without running another
     generation.
     """
     generation = await _fetch_one(
@@ -9000,7 +8989,7 @@ async def list_generation_variations(generation_id: str, user_id: str = Depends(
     # before this change still lists its children. `project_cta` is gone — a
     # generated piece carries no call to action.
     rows = await _fetch_all(
-        """SELECT g.id, g.status, g.model, g.duration, g.cost_usd, g.variation_kind,
+        """SELECT g.id, g.status, g.model, g.duration, g.variation_kind,
                   g.variation_params, g.created_at, g.script_version, g.template_version,
                   p.hook_line AS project_hook, p.demo_brief AS project_demo_brief
            FROM generations g
@@ -9245,7 +9234,7 @@ async def generation_history(
 ):
     """
     Generation history with everything needed to judge a result at a glance:
-    profile, template, objective, duration, status, cost, and output links.
+    profile, template, objective, duration, status, and output links.
     The script itself stays on the detail endpoint to keep this list light.
     """
     clauses = ["g.user_id = ?"]
@@ -9261,7 +9250,7 @@ async def generation_history(
         f"""SELECT g.id, g.studio_project_id, g.brand_profile_id, g.template_id,
                    g.template_version, g.script_version, g.model, g.duration,
                    g.status, g.segment_role, g.attempt, g.parent_generation_id,
-                   g.variation_kind, g.cost_usd, g.cost_source, g.video_url,
+                   g.variation_kind, g.video_url,
                    g.r2_url, g.error, g.retryable, g.created_at, g.completed_at,
                    b.brand_name, p.objective, p.hook_line, p.demo_brief, p.audience
             FROM generations g
@@ -9297,9 +9286,9 @@ async def delete_generation(generation_id: str, user_id: str = Depends(get_curre
     """
     Delete a generation and its derived overlays.
 
-    Archiving is usually the better choice: it keeps the cost record that
-    analytics depends on. Delete is for removing something that was never
-    usable.
+    Archiving is usually the better choice: the row keeps the render, its
+    prompt, and its verdict while dropping it from the working list. Delete is
+    for removing something that was never usable.
     """
     row = await _fetch_one(
         "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
@@ -9482,70 +9471,7 @@ async def list_feedback(
         "ORDER BY created_at DESC LIMIT ?",
         tuple(params) + (max(1, min(int(limit or 100), 500)),),
     )
-    return {"feedback": rows, "summary": analytics.feedback_summary(rows)}
-
-
-# ---------------------------------------------------------------------------
-# Analytics
-# ---------------------------------------------------------------------------
-@api_router.get("/analytics")
-async def analytics_report(
-    brand_profile_id: str = "", user_id: str = Depends(get_current_user_id)
-):
-    """
-    Internal analytics for this operator.
-
-    Cost is reported as known spend plus a count of unpriced runs, so a missing
-    provider cost never quietly lowers the average. TikTok performance is
-    operator-entered and always labelled unverified.
-    """
-    clauses = ["g.user_id = ?"]
-    params: list = [user_id]
-    if brand_profile_id.strip():
-        clauses.append("g.brand_profile_id = ?")
-        params.append(brand_profile_id.strip())
-    generations = await _fetch_all(
-        f"SELECT * FROM generations g WHERE {' AND '.join(clauses)} ORDER BY created_at DESC",
-        tuple(params),
-    )
-    templates = await _fetch_all(
-        "SELECT id, name, category, origin FROM hook_templates "
-        "WHERE (user_id = ? OR user_id = 'system')",
-        (user_id,),
-    )
-    perf_clauses = ["user_id = ?"]
-    perf_params: list = [user_id]
-    if brand_profile_id.strip():
-        perf_clauses.append("brand_profile_id = ?")
-        perf_params.append(brand_profile_id.strip())
-    performance = await _fetch_all(
-        f"SELECT * FROM performance_entries WHERE {' AND '.join(perf_clauses)}",
-        tuple(perf_params),
-    )
-    feedback_rows = await _fetch_all(
-        "SELECT * FROM feedback_events WHERE user_id = ?", (user_id,)
-    )
-    profiles = await _fetch_all(
-        "SELECT id, brand_name FROM brand_profiles WHERE user_id = ?", (user_id,)
-    )
-    project_ids = {g.get("studio_project_id") for g in generations if g.get("studio_project_id")}
-    projects = await _fetch_all(
-        "SELECT id, objective, audience, content_angle_id FROM studio_projects "
-        "WHERE user_id = ?", (user_id,)
-    )
-    project_lookup = {p["id"]: p for p in projects if p["id"] in project_ids}
-
-    report = analytics.build_report(
-        generations=generations,
-        templates=templates,
-        performance=performance,
-        feedback=feedback_rows,
-        profiles=profiles,
-        project_lookup=project_lookup,
-    )
-    report["scope"] = "internal"
-    report["publishing"] = "manual"
-    return report
+    return {"feedback": rows, "summary": feedback_mod.summarize(rows)}
 
 
 # _apify_configured() used to live here, reporting whether the Apify integration
@@ -9554,15 +9480,19 @@ async def analytics_report(
 
 
 # GET /api/dashboard is gone with the Dashboard page. It aggregated totals,
-# spend, unapproved profiles, research drafts and recent failures, all of which
-# are already served where the work happens: GET /api/analytics for the totals,
-# GET /api/generations with a Failed badge and a Retry button for failures, and
-# GET /api/app-profiles for approvals. Nothing read it but the page.
+# unapproved profiles, research drafts and recent failures, all of which
+# are already served where the work happens: GET /api/generations with a
+# Failed badge and a Retry button for failures, and GET /api/app-profiles
+# for approvals. Nothing read it but the page.
 #
-# What went dark with it: the single line telling a founder their video is
-# published by hand and never posted automatically. That line was moved to the
-# studio footer rather than dropped, and TestNoPlatformAutomation is what
-# actually guarantees the behaviour.
+# GET /api/analytics went with the Analytics page for the same reason. It was
+# an internal report on this operator's own activity, cost included, and the
+# product does not meter that. Nothing else read it.
+#
+# What went dark with the Dashboard: the single line telling a founder their
+# video is published by hand and never posted automatically. That line was
+# moved to the studio footer rather than dropped, and TestNoPlatformAutomation
+# is what actually guarantees the behaviour.
 #
 
 

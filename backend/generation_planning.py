@@ -7,7 +7,6 @@ network or a model:
 - build_single_pass_prompt(): turns a reviewed creative plan into ONE prompt
   that covers the hook AND its continuation, so the video is a single
   coherent take rather than two unrelated clips.
-- extract_cost(): reads cost out of whatever shape OpenRouter returns.
 - is_recoverable_error(): decides whether a failure is worth retrying.
 
 The prompt contract matters for the product rule that the model renders
@@ -126,7 +125,7 @@ CONDENSE_BELOW = 4500
 # when it grew the grounding clause that keeps the opening's beats inside this
 # video's own story (its full and condensed forms are the fixed text measured
 # here). That is the trade this change makes on purpose: an interrupting
-# opening is the product, and it is paid for out of descriptive room on the
+# opening is the product, and it is bought out of descriptive room on the
 # providers with the tightest ceilings.
 FULL_PROMPT_FLOOR = 3052
 CONDENSED_PROMPT_FLOOR = 1800
@@ -528,48 +527,6 @@ def build_single_pass_prompt(
     )
 
     return "\n\n".join(sections)
-
-
-def extract_cost(response: dict) -> tuple:
-    """
-    Pull a USD cost out of an OpenRouter response.
-
-    Returns (cost_usd_or_None, source_label). OpenRouter has moved this
-    between `usage.cost`, `data.usage.cost`, and a top-level `cost`, and not
-    every response includes it at all, so every shape is probed and an
-    explicit "unavailable" is returned rather than a silent zero — a hard 0.0
-    would read as "free" in the analytics.
-    """
-    if not isinstance(response, dict):
-        return None, "unavailable"
-
-    cost_keys = ("cost", "total_cost", "cost_usd")
-
-    def pick(node):
-        if not isinstance(node, dict):
-            return None
-        for key in cost_keys:
-            value = node.get(key)
-            if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0:
-                return float(value)
-        return None
-
-    # Each probe is (container, label); the container is where the cost keys
-    # are expected to live directly.
-    probes = [
-        (response.get("usage"), "usage.cost"),
-        (
-            response.get("data", {}).get("usage") if isinstance(response.get("data"), dict) else None,
-            "data.usage.cost",
-        ),
-        (response, "cost"),
-    ]
-    for container, label in probes:
-        value = pick(container)
-        if value is not None:
-            return value, label
-
-    return None, "unavailable"
 
 
 def is_recoverable_error(message: str) -> bool:

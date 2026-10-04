@@ -4,7 +4,7 @@ Compare the video provider catalog against what OpenRouter actually accepts.
 Why this exists
 ---------------
 Two providers reached this studio that could not render anything, and both were
-found by spending a founder's money on a failed submit rather than by reading a
+found by burning a render on a failed submit rather than by reading a
 document:
 
   - Hailuo 3 Max refuses `input_references` outright, though OpenRouter lists
@@ -216,8 +216,8 @@ async def check_provider_drift() -> list:
         log.warning(
             "Video provider catalog disagrees with OpenRouter on %d point(s). "
             "Each one means a render can fail after the founder has committed to "
-            "spending:",
-            len(problems),
+            "it:",
+len(problems),
         )
         for line in problems:
             log.warning("  %s", line)

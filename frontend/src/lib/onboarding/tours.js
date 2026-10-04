@@ -4,7 +4,7 @@
 // Every step anchors to a real `data-testid` already present in the app (or a
 // small set added specifically for onboarding). Copy is written to explain the
 // BENEFIT of each step, not just what it is, and to state the product's honest
-// limits: nothing is spent until the last step, publishing is always manual,
+// limits: nothing is generated until the last step, publishing is always manual,
 // and the demo and the close are the founder's own footage.
 //
 // Tours auto-OPEN on every arrival of their route (see OnboardingProvider) —
@@ -52,7 +52,7 @@ export const TOURS = {
         target: '[data-testid="step-pill-angle"]',
         title: "Say what the video is for",
         body:
-          "The objective is required and is the heaviest signal in template ranking; the content angle is optional and narrows the match further. Nothing is spent until the last step.",
+          "The objective is required and is the heaviest signal in template ranking; the content angle is optional and narrows the match further. Nothing is generated until the last step.",
       },
       {
         target: '[data-testid="create-what-you-get"]',
@@ -69,13 +69,13 @@ export const TOURS = {
       },
       {
         target: '[data-testid="step-pill-review"]',
-        title: "Read before you spend",
+        title: "Read before you render",
         body:
           "The plan is free: hook line, script, a demo note for you (it never reaches the model), and a read-only shot timeline. The claim check runs here, and your banned list blocks the render outright.",
       },
       {
         target: '[data-testid="step-pill-hook"]',
-        title: "The one paid step",
+        title: "The one render step",
         body:
           "Build the app-specific strategy first \u2014 free, and it is what makes the render about your app rather than a generic take. Then one render of the hook and the middle, with captions from your approved script.",
       },
@@ -156,7 +156,7 @@ export const TOURS = {
         title: "Checked before it costs you",
         optional: true,
         body:
-          "Rights are confirmed per upload, and faces are counted up front: a photo with no detectable face \u2014 or several competing ones \u2014 is flagged here, which is what the video provider would otherwise refuse at the paid render.",
+          "Rights are confirmed per upload, and faces are counted up front: a photo with no detectable face \u2014 or several competing ones \u2014 is flagged here, which is what the video provider would otherwise refuse at the render.",
       },
       {
         target: '[data-testid="asset-list"]',
@@ -190,7 +190,7 @@ export const TOURS = {
         title: "Claim guardrails",
         optional: true,
         body:
-          "Approved claims are safe to use, \u201Cneeds review\u201D claims must be verified first, and the never-use list blocks the paid render outright. Fix the flagged claim in the plan and the block clears.",
+          "Approved claims are safe to use, \u201Cneeds review\u201D claims must be verified first, and the never-use list blocks the render outright. Fix the flagged claim in the plan and the block clears.",
       },
       {
         target: '[data-testid="what-works"]',
@@ -228,14 +228,14 @@ export const TOURS = {
         target: '[data-testid="history-filters"]',
         title: "Every render, accounted for",
         body:
-          "Filter by app or status; the totals line shows results, completed, failed, and exactly what you have spent. Publishing stays manual \u2014 this is a production log, not a posting schedule.",
+          "Filter by app or status; the totals line shows results, completed and failed. Publishing stays manual \u2014 this is a production log, not a posting schedule.",
       },
       {
         target: '[data-testid="history-list"]',
         title: "What each card holds",
         optional: true,
         body:
-          "The video, its status, model and cost, with downloads, a duplicate button, and verdict controls. Marking a render \u201Clooks good\u201D or \u201Cnot good\u201D is recorded and steers what gets recommended next.",
+          "The video, its status and model, with downloads, a duplicate button, and verdict controls. Marking a render \u201Clooks good\u201D or \u201Cnot good\u201D is recorded and steers what gets recommended next.",
       },
       {
         target: '[data-testid="generation-details-button"]',
@@ -253,39 +253,6 @@ export const TOURS = {
       },
     ],
   },
-
-  // Targets Analytics at /analytics.
-  analytics: {
-    id: "analytics",
-    label: "Analytics tour",
-    steps: [
-      {
-        target: '[data-testid="analytics-totals"]',
-        title: "Production metrics, from your own history",
-        body:
-          "Videos created, success and failure rates, average generation time, known spend, rework and variations. Runs that reported no cost are flagged above rather than counted as free.",
-      },
-      {
-        target: '[data-testid="analytics-breakdowns"]',
-        title: "Where the work happens",
-        body:
-          "Volume, success rate and spend broken down by app, model, template, objective, audience and content angle \u2014 the view that tells you what to make next, or what to stop making.",
-      },
-      {
-        target: '[data-testid="analytics-performance"]',
-        title: "TikTok numbers, typed by you",
-        body:
-          "Views, likes, comments, shares and saves are entered by hand and labelled as such. No platform account is connected and nothing is scraped \u2014 these figures are never presented as verified.",
-      },
-      {
-        target: '[data-testid="analytics-feedback"]',
-        title: "What happened, and why",
-        optional: true,
-        body:
-          "Workflow facts captured as you worked \u2014 downloads, edits, regenerations \u2014 plus the rejection reasons you stated yourself. Facts about the workflow, not opinions about why.",
-      },
-    ],
-  },
 };
 
 /**
@@ -293,9 +260,10 @@ export const TOURS = {
  *
  * Order matters: /app-profiles/:id/assets is a prefix-sibling of
  * /app-profiles/:id, so the assets form is matched first and exactly.
- * Redirect-only routes (/app-profiles, /templates, /templates/:id) and the
- * public auth/legal pages map to null — a redirect's destination opens its own
- * tour, and a sign-in page is not a section anyone needs a tour of.
+ * Redirect-only routes (/app-profiles, /analytics, /templates,
+ * /templates/:id) and the public auth/legal pages map to null — a redirect's
+ * destination opens its own tour, and a sign-in page is not a section anyone
+ * needs a tour of.
  *
  * The home page maps to null too, deliberately. It had a five-step "Welcome
  * tour" that fired on every arrival, over marketing copy the visitor can just
@@ -309,9 +277,8 @@ export const TOURS = {
 export function getTourIdForPath(pathname) {
   if (pathname === "/create") return "create";
   if (pathname === "/brand") return "brand";
-  if (pathname === "/history") return "history";
-  if (pathname === "/analytics") return "analytics";
-  if (pathname === "/assets") return "assets";
+if (pathname === "/history") return "history";
+if (pathname === "/assets") return "assets";
   if (/^\/app-profiles\/[^/]+\/assets$/.test(pathname)) return "assets";
   if (/^\/app-profiles\/[^/]+$/.test(pathname)) return "app-profile";
   return null;

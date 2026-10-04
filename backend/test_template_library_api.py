@@ -352,7 +352,7 @@ class TestTemplateListing:
     def test_facets_state_how_many_renders_each_length_costs(self, api):
         """The length picker labels the render cost before the length is chosen.
 
-        Every segment past the first is a separate paid render, and the count
+        Every segment past the first is a separate render, and the count
         has to be readable off the option rather than discovered at the extend
         button.
 

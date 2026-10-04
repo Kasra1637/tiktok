@@ -177,7 +177,7 @@ def _mark_ready(api, project_id, script="A plain line about the shift, no promis
     Put a project in the state the single generation endpoint requires.
 
     The hook used to be its own endpoint and its own, cheaper gate — a project
-    could reach a paid render of the opening without a script at all. There is
+    could reach a render of the opening without a script at all. There is
     one render now, so the piece goes through the same ready gate as any
     generation: a script on the project, and a claim report that passes.
 
@@ -732,7 +732,7 @@ class TestWorkflowGates:
     def test_a_banned_claim_in_the_strategy_blocks_the_render(self, api, monkeypatch):
         """
         The strategy is where the spoken words live, so it goes through the same
-        claim check as the script. A banned claim must not reach a paid render.
+        claim check as the script. A banned claim must not reach a render.
 
         Asserted at the only paid endpoint there is now: one render, gated on the
         stored report, which generate_project_strategy recomputed when it wrote
@@ -1172,10 +1172,10 @@ class TestStrategyPromptDirectives:
 class TestStrategyFollowsTheApprovedPlan:
     """
     The founder reads and edits the script on the Review step, before any video
-    is paid for. The strategy then has to produce THAT video.
+    is rendered. The strategy then has to produce THAT video.
 
     It did not. The plan and the strategy were two independent generations and
-    neither read the other, so the founder approved a script and paid for a
+    neither read the other, so the founder approved a script and got a
     render of a different one: different hook line, different beats, and a CTA
     that never reached the video at all.
     """

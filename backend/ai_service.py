@@ -121,7 +121,7 @@ VIDEO_MODELS = {
     # photograph as the opening frame, in the same shape as the Hailuo entries.
     #
     # Facts below come from OpenRouter's own video model endpoint
-    # (GET /api/v1/videos/models), which costs nothing to read and states the
+    # (GET /api/v1/videos/models), which is a free read and states the
     # accepted fields per model. provider_capabilities.check_provider_drift
     # re-reads it at boot and warns if what we assert here stops matching.
     #
@@ -140,17 +140,18 @@ VIDEO_MODELS = {
     # trade H3 Max already makes. If a real clip comes back with sound, that is
     # the flag to flip.
     #
-    # Opt-in for cost: 7 cents/second at 720p against Hailuo 3's 13. At the
-    # 10-12s these templates render, that is roughly $0.70 against $1.30. The
-    # trade is picture resolution - 720p, not the 2K default - and the downloads
-    # are scaled to the 1080x1920 canvas on the way out.
+    # Opt-in, not default: 720p rather than the 2K the default model gives,
+    # with no native audio. At the 10-12s these templates render that is a
+    # visibly softer clip, which is why Hailuo 3 stays the default and this is
+    # the model to try a second script on. The downloads are scaled to the
+    # 1080x1920 canvas on the way out.
     "grok-imagine-video": {
         "id": "x-ai/grok-imagine-video",
         "name": "Grok Imagine Video",
         "description": (
             "Prompt-to-video with your photo opening the clip as its first "
-            "frame. 720p, 1-15s, no native audio. About half the price of "
-            "Hailuo 3 with a softer picture. Opt-in."
+            "frame. 720p, 1-15s, no native audio. A softer, quieter take than "
+            "the default. Opt-in."
         ),
         "max_duration": 15,
         "min_duration": 5,
@@ -2156,7 +2157,7 @@ async def generate_creative_plan(
         "differentiators": profile.get("differentiation") or "(unstated)",
         # The plan prompt never saw the competitor list, while the strategy
         # prompt did -- so the one document the founder now reads and approves
-        # before spending was written by a model that could not see what this
+        # before rendering was written by a model that could not see what this
         # app is up against, and the differentiation beat it asked for rested on
         # a comparison it could only guess at.
         "competitors": _list("competitors"),
@@ -2680,7 +2681,7 @@ async def generate_video_strategy(
     profile's own review tier instead.
 
     `plan` is the founder-approved creative plan, when one exists. The founder
-    writes the script and the visual direction there and then spends money on
+    writes the script and the visual direction there and then generates
     the video; a strategy that ignored it would render a different video than the
     one they approved, so the approved words win and this only fills in what a
     plan cannot express: the on-camera action per section and the locked scene.
@@ -2786,7 +2787,7 @@ async def generate_video_strategy(
     }
 
     # The founder-approved creative plan, when there is one. Its words are
-    # already committed — the founder read and edited them before the first paid
+    # already committed — the founder read and edited them before the first
     # render — so they are handed over as fixed material and the strategy is
     # built to deliver them. A beat's own text is the plan's, not a fresh line.
     approved_plan = {}

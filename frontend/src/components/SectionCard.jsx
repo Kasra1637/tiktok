@@ -10,8 +10,8 @@ import { cn } from "../lib/utils";
  * `title` renders as `.eyebrow`: a GROUP LABEL, and keeping that distinction is
  * the point. Identity in this app is the display face at semibold (which app,
  * which video); a card holding a set of things has no identity and gets a quiet
- * uppercase label instead. Analytics was using a display heading for those,
- * which made a breakdown title compete with the numbers beneath it.
+ * uppercase label instead. The retired Analytics page used a display heading for
+ * those, which made a breakdown title compete with the numbers beneath it.
  *
  * Pass no `title` for a card that IS one thing rather than a set.
  */

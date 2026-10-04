@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Mounts every wizard step and the panels in a real DOM, to catch crashes that
  * a type-check and a build cannot.
  *
@@ -144,8 +144,7 @@ const SEGMENT = {
   trim_to_seconds: 0,
   approved: 0,
   video_url: "/media/gen-1.mp4",
-  r2_url: null,
-  cost_usd: 0.42,
+    r2_url: null,
   retryable: true,
   performance: null,
 };
@@ -165,7 +164,7 @@ const ASSETS = [
 
 // template_id and content_angle_id are set because canGenerate is
 // `profileId && templateId`: without them every step correctly refuses to open
-// the paid path, which would make the "paid controls exist" assertions prove
+// the render path, which would make the "render controls exist" assertions prove
 // nothing.
 //
 // `cta` and `feature_emphasis` are absent for the same reason the components no
@@ -247,7 +246,7 @@ const ANGLE = {
 
 // template_library.SUPPORTED_DURATIONS. Every one of them is a single render on
 // the only studio-eligible model, which is why the length control is gone: there
-// is nothing for the founder to choose that would not cost a second paid pass.
+// is nothing for the founder to choose that would not need a second pass.
 const SUPPORTED_DURATIONS = [8, 10, 12, 15];
 
 const apiStub = {
@@ -576,13 +575,13 @@ const CreateVideo = load("pages/CreateVideo.jsx").default;
 
 // The shipped order, in the order the founder walks it. Asserted as a whole
 // sequence rather than a set: the point of the reorder is that the free, claim-
-// checked plan comes before the step that spends money, and a set comparison
+// checked plan comes before the step that calls the model, and a set comparison
 // would pass just as happily if the render went back to fourth.
 //
 // The last step is "Hook & middle" rather than "Influencer hook" because that is
 // what it produces: one render with two sections. The old label named the first
 // beat of a chain, and a step called "Influencer hook" whose output is a hook
-// plus a middle is a step that under-describes the thing being paid for.
+// plus a middle is a step that under-describes the thing being rendered.
 // Five, not seven. "Assets" was a step whose only content was the photo upload,
 // and "Creative plan" was a step whose only content was a button whose result
 // you had to go to the next screen to read. Both are now part of the step they
@@ -590,8 +589,7 @@ const CreateVideo = load("pages/CreateVideo.jsx").default;
 // leaving, and presses Generate on the same page that shows the result.
 //
 // The order still matters and is still asserted as a whole sequence: the
-// free, claim-checked plan is read before the step that spends money, and a set
-// comparison would pass just as happily if the render went back to third.
+// free, claim-checked plan is read before the step that calls the model, and a// comparison would pass just as happily if the render went back to third.
 const STEP_LABELS = [
   "App Profile",
   "Audience & goal",
@@ -755,7 +753,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     // Marking ready is what enables Generate, and until this gate existed a
     // project with no photo sailed through approval and only failed at the
     // click, where a 409 reads as a broken app rather than an unmet rule.
-    // The founder is told before they decide to spend.
+    // The founder is told before they decide to render.
     await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
       mount(GenerationPanel, {
         project: { ...PROJECT_WITH_STRATEGY, assets: [] },
@@ -865,7 +863,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
   // target and asserted "The strategy plans N more segments" â€” the finite-plan
   // warning. There is no chain to run out of, so that branch and its warning are
   // gone. What replaced it is the thing the founder actually has to read before
-  // spending: the two sections, named as the two sections, with the model's own
+  // rendering: the two sections, named as the two sections, with the model's own
   // goal for each.
   // -------------------------------------------------------------------------
   await check("the strategy review presents the two sections and what they are", async (ctx) => {
@@ -887,9 +885,9 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
   });
 
   // The property the running-total and coverage checks used to protect: nothing
-  // on this panel can start a second paid job, approve anything, or join
+  // on this panel can start a second job, approve anything, or join
   // anything. It is a review surface, and "no controls" is the whole contract.
-  await check("the strategy review renders no paid or chain control", async (ctx) => {
+  await check("the strategy review renders no render or chain control", async (ctx) => {
     await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
     const labels = [...ctx.container.querySelectorAll("button")]
       .map((b) => (b.textContent || "").trim());
@@ -924,7 +922,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
       throw new Error("the review surface still renders a coverage progress bar");
     }
     // Exactly one button: build the strategy. It is free, and the strategy is
-    // what makes the one paid render about this app.
+    // what makes the one render about this app.
     const onlyFree = labels.filter((l) => l);
     if (onlyFree.length !== 1 || !/strategy/i.test(onlyFree[0])) {
       throw new Error(`expected only the free strategy button, found: ${JSON.stringify(onlyFree)}`);
@@ -981,7 +979,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
   // level. The old property lived in the extend lock, which returned null past
   // the ceiling so the button was disabled; the refusal itself has moved to the
   // endpoint, which answers 400. The panel's job is now to say so before the
-  // click, and to disable the button rather than spend one to find out.
+  // click, and to disable the button rather than find out with a failed one.
   await check("GenerationPanel warns that a length past one pass will be refused", async (ctx) => {
     await mount(GenerationPanel, {
       // A project whose declared length is longer than the model's ceiling. A
@@ -1118,14 +1116,14 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     });
   }
 
-  // Nothing that costs money may render before the plan has been read. This is
+  // Nothing that calls the model may render before the plan has been read. This
   // the reorder's whole point, and it is invisible to a type-check: the render
   // panel is still imported and still reachable, just on a later step.
-  await check("no paid control renders before the plan step", async (ctx) => {
+  await check("no render control appears before the plan step", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     // Every step before the last one. STEP_LABELS minus its final entry, so a
     // step added later is covered here by default rather than silently becoming
-    // an unchecked place to spend money.
+    // an unchecked place to run a render.
     for (const label of STEP_LABELS.slice(0, -1)) {
       await mount(CreateVideo, {})(ctx);
       const pill = stepPill(ctx, label);
@@ -1134,15 +1132,15 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
       });
       await act(async () => {});
       const text = ctx.text();
-      for (const paid of ["Generate the video", "Build the app-specific strategy"]) {
-        if (text.includes(paid)) {
-          throw new Error(`step ${JSON.stringify(label)} renders a paid control: ${JSON.stringify(paid)}`);
+      for (const control of ["Generate the video", "Build the app-specific strategy"]) {
+        if (text.includes(control)) {
+          throw new Error(`step ${JSON.stringify(label)} renders a render control: ${JSON.stringify(control)}`);
         }
       }
     }
   });
 
-  await check("the render step holds the paid controls once a plan exists", async (ctx) => {
+  await check("the render step holds the render controls once a plan exists", async (ctx) => {
     // A plan reviewed, no strategy yet: the state the reorder puts the founder
     // in when they arrive here. Deep-linked so the wizard has that draft.
     global.__SMOKE_PARAMS = "?project=p1";
@@ -1276,9 +1274,9 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     }
   });
 
-  await check("generating another video asks first, and a no spends nothing", async (ctx) => {
+  await check("generating another video asks first, and a no renders nothing", async (ctx) => {
     // Idempotency stops a duplicated click, not a deliberate one the founder
-    // did not mean. A re-roll is a second paid render, so it asks first, and a
+    // did not mean. A re-roll is a second render, so it asks first, and a
     // "no" must leave everything exactly as it was.
     global.__SMOKE_PARAMS = "?project=p1";
     const originalConfirm = dom.window.confirm;
@@ -1328,7 +1326,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
   await check("a failed strategy build leaves nothing generated and says so", async (ctx) => {
     // The build is its own action on the panel above, so its failure is reported
     // there. What matters from this panel's side is the guarantee that no render
-    // went out: nothing is charged for a video that does not exist, and the
+    // went out: nothing is generated for a video that does not exist, and the
     // founder is told why rather than left with a dead button.
     global.__SMOKE_PARAMS = "?project=p1";
     let renderCalls = 0;
@@ -1383,7 +1381,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     // This check used to insist the warning NOT promise a refusal, because the
     // 409 that enforced it "lived only on the two deleted segmented endpoints".
     // It lives on the single-render generate endpoint now: a stale strategy is
-    // refused, because a warning that arrives before the money still spends the
+    // refused, because a warning that arrives before the render still runs the
     // money on the plan the founder had already moved away from. The warning has
     // to tell the truth about that, and the button has to be dead.
     global.__SMOKE_PARAMS = "?project=p1";
@@ -1477,7 +1475,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
       if (!/plan v3/.test(asked[0]) || !/plan v1/.test(asked[0])) {
         throw new Error(`the confirmation does not name the plan versions: ${asked[0]}`);
       }
-      // Declining must spend nothing. Reads happen on mount and are irrelevant;
+      // Declining must generate nothing. Reads happen on mount and are irrelevant;
       // the thing that would be wrong here is a write.
       const writes = apiCalls.filter((n) => /^(generate|update|create|mark|detach|upload)/.test(n));
       if (writes.length !== 0) {
@@ -1539,7 +1537,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     }
   });
 
-  await check("the render step refuses to spend without an approved plan", async (ctx) => {
+  await check("the render step refuses to run without an approved plan", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       // A draft that exists but has no plan: the strategy and the one render
@@ -1566,9 +1564,9 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
         )}`
       );
     }
-    for (const paid of ["Build the app-specific strategy", "Generate the video", "Extend"]) {
-      if (text.includes(paid)) {
-        throw new Error(`the render step offers ${JSON.stringify(paid)} with no approved plan`);
+    for (const control of ["Build the app-specific strategy", "Generate the video", "Extend"]) {
+      if (text.includes(control)) {
+        throw new Error(`the render step offers ${JSON.stringify(control)} with no approved plan`);
       }
     }
   });
@@ -1587,10 +1585,10 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
   // -------------------------------------------------------------------------
   // The length is computed. These three checks replace "Review shows the length
   // but does not offer editing it", "the length selector lives on the step
-  // before the plan" and "a length that costs more than one render says so up
+  // before the plan" and "a length that needs more than one render says so up
   // front" â€” none of whose properties survived, because there is no longer a
-  // picker, no step that owns the choice, and no length that costs two renders.
-  // The properties that did survive are re-asserted below: the length is stated
+  // picker, no step that owns the choice, and no length that takes two renders.
+// The properties that did survive are re-asserted below: the length is stated
   // wherever the founder needs it, nothing anywhere can change it, and the UI
   // never implies a length exists that one render cannot produce.
   // -------------------------------------------------------------------------
@@ -2390,7 +2388,6 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     "/app-profiles/abc": "pages/AppProfileDetail.jsx",
     "/app-profiles/abc/assets": "pages/AssetLibrary.jsx",
     "/history": "pages/GenerationHistory.jsx",
-    "/analytics": "pages/Analytics.jsx",
   };
   const TOUR_LIVE_PATHS = Object.keys(TOUR_ROUTE_PAGE);
 
@@ -2493,8 +2490,8 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
 
   // Every live work page must open a tour on arrival, and the auth/legal
   // pages must not. Without this, a page added to the router can silently
-  // ship with no pop-up at all -- which is exactly how the studio, Analytics
-  // and the Asset Library went tour-less before the tours were rewritten.
+  // ship with no pop-up at all -- which is exactly how the studio and the
+  // Asset Library went tour-less before the tours were rewritten.
   await check("every live work page maps to a tour (and auth/legal pages do not)", async (ctx) => {
     const { getTourIdForPath } = load("lib/onboarding/tours.js");
     // The home page is exempt, and named here rather than quietly filtered out
@@ -2515,6 +2512,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
         "/terms",
         // Redirect-only routes: the destination page opens its own tour.
         "/app-profiles",
+        "/analytics",
         "/templates",
         "/templates/t-1",
       ]
@@ -2558,8 +2556,8 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
  * tests for the cascade, the 404 and the in-flight 409.
  *
  * Type-to-confirm rather than window.confirm because the blast radius is the
- * profile's videos and analytics, not one regenerable row. A single
- * window.confirm on this would be the loosest destructive gate in the app, and
+ * profile's finished videos and recorded results, not one regenerable row.
+A single * window.confirm on this would be the loosest destructive gate in the app, and
  * the page's own content-angle delete already sets that bar low enough.
  */
 function mountProfileDetail() {
@@ -2730,14 +2728,15 @@ async function runDeleteDialogChecks() {
       drafts: 3,
       angles: 0,
       videos: 3,
-      want: "3 video drafts, analytics from 3 recorded videos and every uploaded photo",
+      want: "3 video drafts, history from 3 recorded videos and every uploaded photo",
     },
   ];
 
   for (const c of copyCases) {
     // The counts are the point: a founder cannot tell a profile they forgot
-    // about from one that made six videos, and the videos are what they paid
-    // for. Punctuation has to hold at zero too — an earlier version spread
+    // about from one that made six videos, and the videos are the finished
+    // work they cannot get back. Punctuation has to hold at zero too — an
+    // earlier version spread
     // ternaries through the JSX and read "everything built on it: every
     // uploaded photo" for a profile with three drafts on it.
     await check(
@@ -2775,8 +2774,7 @@ function stepPill(ctx, label) {
 }
 
 /**
- * The one paid render control on the last step.
- *
+ * The one render control on the last step. *
  * Its label depends on whether a previous generation is on file - "Generate the
  * video" the first time, "Generate another" on a re-render, and "Generating..."
  * while one is in flight - so a check that clicks the render must match on the

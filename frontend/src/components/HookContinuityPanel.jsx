@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 
 /**
- * The strategy review: what the render will be, before anything is paid for.
+ * The strategy review: what the render will be, before anything is rendered.
  *
  * This used to be the whole influencer workflow — strategy, hook, approve,
  * extend, join — and the extend/approve/assemble machinery had a referent
@@ -18,7 +18,7 @@ import {
  * action in the generated footage, and the founder assembles the final video
  * themselves: hook, middle, their own demo, their own close. So every control
  * that assumed a chain went with it, and what is left is the part that was
- * always worth keeping — the strategy is what the founder is about to spend on,
+ * always worth keeping — the strategy is what the render is built from,
  * and reading it should not require pressing a button first.
  *
  * The file name is historical. There is no continuity to review: with one
@@ -305,8 +305,9 @@ export function HookContinuityPanel({ project, onProjectChange }) {
         </Button>
         {!hasStrategy && (
           <p className="text-xs text-muted-foreground">
-            Text only, and free. It fixes the concept, the words and the locked scene so the one
-            paid render is about this app rather than a generic take with a name in it.
+            Text only. It fixes the concept, the words and the locked scene so
+            the one render is about this app rather than a generic take with a
+            name in it.
           </p>
         )}
       </div>
@@ -345,8 +346,8 @@ export function HookContinuityPanel({ project, onProjectChange }) {
             </p>
           </div>
           <p className="text-xs text-muted-foreground">
-            Built automatically when you generate, and shown here before then if you would rather
-            read it first. Text only and free either way.
+            Built automatically when you generate, and shown here before then if you
+            would rather read it first. Text only either way.
           </p>
         </div>
       )}
@@ -406,8 +407,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
               collapsed runs of continuation beats into ranges and closed by
               saying the hook and the call to action were the two that carried the
               video — a description of a chain with a fixed number of beats to
-              spend, none of which exists now. */}
-          <div className="space-y-1.5">
+              segments, none of which exists now. */}          <div className="space-y-1.5">
             <span className="eyebrow">The two sections</span>
             <ol className="space-y-3 text-sm">
               {sections.map((section) => (

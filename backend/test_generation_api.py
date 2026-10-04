@@ -221,15 +221,6 @@ class TestSinglePassGeneration:
         assert result["script_version"] == project["script_version"]
         assert result["model"]
 
-    def test_cost_is_captured_on_submit(self, api, monkeypatch):
-        _mock_submit(api, monkeypatch, response={"id": "j1", "usage": {"cost": 0.31}})
-        from models import StudioGenerationRequest
-        project, _, _ = _ready_project(api, "Cost Submit")
-        result = _run(api.submit_project_generation(
-            project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
-        assert result["cost_usd"] == pytest.approx(0.31)
-        assert result["cost_source"] == "usage.cost"
-
     def test_status_is_generating_after_submit(self, api, monkeypatch):
         _mock_submit(api, monkeypatch)
         from models import StudioGenerationRequest
@@ -242,7 +233,7 @@ class TestSinglePassGeneration:
 
 class TestIdempotency:
     """
-    One click, one paid render.
+    One click, one render.
 
     The generate endpoint had no key and no in-flight check, so a double-tap, a
     client retry of the same request, or the same project in two tabs could each
@@ -549,24 +540,22 @@ class TestDurationIsOnePass:
 class TestPolling:
     def _submitted(self, api, monkeypatch, name="Poll App"):
         from models import StudioGenerationRequest
-        _mock_submit(api, monkeypatch, response={"id": "job-poll", "usage": {"cost": 0.4}})
+        _mock_submit(api, monkeypatch, response={"id": "job-poll"})
         project, _, _ = _ready_project(api, name)
         gen = _run(api.submit_project_generation(
             project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
         return gen
 
-    def test_poll_completes_and_persists_cost(self, api, monkeypatch):
+    def test_poll_completes_and_persists_the_result(self, api, monkeypatch):
         gen = self._submitted(api, monkeypatch, "Poll Complete")
         _mock_poll(api, monkeypatch, {
             "status": "completed",
             "unsigned_urls": ["https://example.invalid/clip.mp4"],
-            "usage": {"cost": 0.55},
         })
         # Storage is not configured in tests; the URL still resolves.
         result = _run(api.poll_generation(gen["id"], ANON))
         assert result["status"] == "completed"
         assert result["video_url"] == "https://example.invalid/clip.mp4"
-        assert result["cost_usd"] == pytest.approx(0.55)
         assert result["completed_at"]
 
     def test_poll_marks_failure_and_retryability(self, api, monkeypatch):
@@ -629,8 +618,8 @@ class TestRetry:
 
     def test_retry_creates_a_child_generation(self, api, monkeypatch):
         """
-        A replacement is a new row, so the failure and its cost stay in
-        history instead of being overwritten.
+        A replacement is a new row, so the failure stays in history
+        instead of being overwritten.
         """
         gen, calls = self._failed(api, monkeypatch, "Retry Child")
         replacement = _run(api.retry_generation(gen["id"], ANON))
@@ -644,7 +633,7 @@ class TestRetry:
         _run(api.retry_generation(gen["id"], ANON))
         original = _run(api.get_generation(gen["id"], ANON))
         assert original["status"] == "failed"
-        assert original["cost_usd"] == pytest.approx(0.2)
+        assert original["error"]
 
     def test_non_retryable_failure_is_refused(self, api, monkeypatch):
         gen, calls = self._failed(
@@ -707,7 +696,7 @@ class TestRetry:
     def test_retry_refuses_a_length_the_model_can_no_longer_fill(self, api, monkeypatch):
         """
         A recorded length past the current model's ceiling used to be silently
-        clamped, so the founder paid for one render and received a shorter clip
+        clamped, so the founder got a shorter clip than the one that was asked for
         than the plan describes.
         """
         gen, calls = self._failed(api, monkeypatch, "Retry Long")
@@ -939,7 +928,7 @@ class TestStudioIdentityReference:
     def test_a_template_that_needs_a_face_refuses_without_one(self, api, monkeypatch):
         """
         The requirement used to be decoration: it was listed on the template and
-        in the studio, but nothing stopped the click. A paid render could go out
+        in the studio, but nothing stopped the click. A render could go out
         with no identity input at all, and the model free to invent a presenter.
         The refusal has to happen before the provider is called, not after.
         """
@@ -1124,7 +1113,7 @@ class TestClipDownload:
     The durable-save download: browser headers, retries, self-diagnosing
     errors. Regression cover for the H3 Max case, where the provider clip
     played fine in the browser but the server-side fetch failed and the
-    paid render was left with only its expiring temporary copy.
+    render was left with only its expiring temporary copy.
     """
 
     def _fake_client(self, api, monkeypatch, behaviours, seen):

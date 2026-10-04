@@ -531,7 +531,7 @@ export default function AssetLibrary({
 // and nothing at the moment of upload said the photo was wrong. It rides on
 // the notice rather than the error because the upload itself succeeded; the
 // 0-face case is still the one to read carefully, since the provider is
-// likely to refuse a render built on it and that refusal costs a paid attempt.
+// likely to refuse a render built on it and that refusal costs an attempt.
       if (created?.face_warning) {
         setNotice((current) => `${current || ""} ${created.face_warning}`.trim());
       }
@@ -872,7 +872,7 @@ export default function AssetLibrary({
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading assets...
         </p>
-      ) : assets.length === 0 ? (
+) : assets.length === 0 ? (
         // Nothing here. This was a line telling an embedded reader to press the
         // Upload button sitting directly above it, which is a pointer to a
         // control they can already see, next to an input they can already type

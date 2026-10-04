@@ -402,9 +402,9 @@ class StudioGenerationRequest(BaseModel):
     generate_audio: request native audio where the provider supports it.
     idempotency_key: optional caller-supplied key identifying ONE intent to
         render. A repeat of the same key returns the generation already created
-        for it instead of submitting a second paid job. The studio sends a key
+        for it instead of submitting a second job. The studio sends a key
         that survives a retried request but is fresh for "Generate another", so
-        a double-tap or a network retry cannot bill twice while a deliberate
+        a double-tap or a network retry cannot run it twice while a deliberate
         re-roll still can. Omitted by any other caller, which is the same
         one-key-one-render behaviour as before.
     """
@@ -457,8 +457,7 @@ class CreateVariationRequest(BaseModel):
     number of seconds, a template id, "faster"/"slower", or free text).
 
     A variation always produces a DRAFT project. Producing the video is a
-    separate, explicit action, so a variation can never spend money on its
-    own.
+    separate, explicit action, so a variation can never render on its own.
     """
     kind: str
     value: Optional[str] = None

@@ -8,7 +8,7 @@ version, script version, assets, model, and parent generation.
 
 Two rules shape this module:
 
-- Variations are never generated in bulk. Each one costs a separate, explicit
+- Variations are never generated in bulk. Each one takes a separate, explicit
   founder action, and a variation only produces a DRAFT project. Producing the
   video is a second, separate decision.
 - Cheap changes stay cheap. Changing the template, duration, tone, or
@@ -190,7 +190,7 @@ def apply_variation(project: dict, spec: VariationSpec, value) -> tuple:
 
     Returns (updates, prompt_additions). The caller writes the updates and
     decides whether to regenerate the plan. Nothing here touches the database
-    or spends money.
+    or touches the database.
     """
     coerced = coerce_value(spec, value)
     updates = {}

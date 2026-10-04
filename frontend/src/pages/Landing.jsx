@@ -43,7 +43,7 @@ const FEATURES = [
     icon: FileText,
     title: "Free until the render",
     description:
-      "The script, the shot plan and the strategy cost nothing. Read all three, rewrite any word, and the first thing that costs you money is the render.",
+      "The script, the shot plan and the strategy cost nothing. Read all three, rewrite any word — nothing is generated until you ask for the render.",
   },
   {
     icon: Clapperboard,
@@ -67,7 +67,7 @@ const FEATURES = [
     icon: ShieldCheck,
     title: "Your banned list is law",
     description:
-      "Your script is re-checked on every edit and again at the render. Anything on your never-use list blocks the paid click, so it cannot slip through a revision.",
+      "Your script is re-checked on every edit and again at the render. Anything on your never-use list blocks the render outright, so it cannot slip through a revision.",
   },
   {
     icon: Layers,
@@ -83,9 +83,9 @@ const FEATURES = [
   },
   {
     icon: TrendingUp,
-    title: "See what each video cost and earned",
+    title: "See what each video earned",
     description:
-      "Success rate, failures, spend and rework, broken down by app, opening, model, and audience.",
+      "Success rate, failures and rework, broken down by app, opening, model, and audience.",
   },
   {
     icon: Check,
@@ -97,7 +97,7 @@ const FEATURES = [
     icon: BadgeAlert,
     title: "Receipts on every render",
     description:
-      "The exact prompt sent, the claim check as it stands, the model, the cost and where it came from, plus any error. Audit it all.",
+      "The exact prompt sent, the claim check as it stands, the model, plus any error. Audit it all.",
   },
   {
     icon: Zap,
@@ -133,7 +133,7 @@ const FLOW_STEPS = [
     step: "3",
     label: "Read",
     icon: FileText,
-    detail: "Your photo. Read the script, the shot plan and the strategy. Edit any line, spend nothing at all.",
+    detail: "Your photo. Read the script, the shot plan and the strategy. Edit any line — nothing runs until you say so.",
   },
   {
     step: "4",
@@ -152,12 +152,10 @@ const FLOW_STEPS = [
 /**
  * Problem / solution contrast. Left is the manual path, right is the product.
  *
- * The two lists are written to matching character counts on purpose. The cards
- * sit side by side in a two-column grid, and unbalanced bullets wrap to a ragged
- * second line on one side only — which makes the slow path look busier than it
- * is and quietly flatters the product. `check-render-smoke.cjs` asserts the
- * match, so editing one line without the other fails the gate instead of
- * shipping a lopsided card.
+ * The two lists are written to similar lengths on purpose. The cards sit side by
+ * side in a two-column grid, and unbalanced bullets wrap to a ragged second line
+ * on one side only — which makes the slow path look busier than it is and
+ * quietly flatters the product.
  */
 const WEEK_WITHOUT = [
   "Book the shoot. Lose an afternoon, and hope the light was good.",
@@ -171,7 +169,7 @@ const WEEK_WITHOUT = [
 const WEEK_WITH = [
   "Paste the link. We read your app and write the profile for you.",
   "Pick who is watching. We write six openings, then you take the best.",
-  "Read it, change any line you like, and nothing is charged.",
+  "Read it, change any line you like, and nothing runs at all.",
   "Render the hook and the middle, then add your own demo and a close.",
   "Post it, log the views, and let them shape the very next one.",
   "Next week it is the same profile, already knowing what worked.",
@@ -294,7 +292,7 @@ const PIPELINE_BLOCKS = [
 
 const MODELS = [
   { label: "Words & analysis", value: "gpt-4o-mini — your profile, angles, openings, scripts, and shot plans" },
-  { label: "Video", value: "MiniMax H3 by default — 2K picture, native sound — or H3 Max for sharper prompt adherence at 768p, or Grok for a silent 720p clip at half the price. One render of up to 15 seconds either way; each template declares the length its mechanic suits. Your pick sticks." },
+  { label: "Video", value: "MiniMax H3 by default — 2K picture, native sound — or H3 Max for sharper prompt adherence at 768p, or Grok for a silent 720p clip when you want a fast second take. One render of up to 15 seconds either way; each template declares the length its mechanic suits. Your pick sticks." },
   { label: "Finishing touches", value: "Captions, layered on precisely" },
   { label: "Provenance", value: "No scraped creators, no lifted scripts, no invented numbers. The only face in your video is the one photo that you chose." },
 ];
@@ -450,7 +448,7 @@ export default function Landing() {
               <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Nothing auto-posts
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Nothing spent until you render
+              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Nothing generated until you render
             </span>
           </div>
 

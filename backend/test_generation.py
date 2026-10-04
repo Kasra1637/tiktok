@@ -840,39 +840,6 @@ class TestRenderPromptLengthCap:
         )
 
 
-class TestCostExtraction:
-    def test_reads_usage_cost(self):
-        cost, source = gp.extract_cost({"usage": {"cost": 0.42}})
-        assert cost == 0.42
-        assert source == "usage.cost"
-
-    def test_reads_nested_data_usage_cost(self):
-        cost, _ = gp.extract_cost({"data": {"usage": {"cost": 1.5}}})
-        assert cost == 1.5
-
-    def test_reads_top_level_cost(self):
-        cost, _ = gp.extract_cost({"cost": 0.09})
-        assert cost == 0.09
-
-    def test_missing_cost_is_explicit_not_zero(self):
-        """A silent 0.0 would read as 'free' in analytics."""
-        cost, source = gp.extract_cost({"status": "completed"})
-        assert cost is None
-        assert source == "unavailable"
-
-    def test_absent_response_is_handled(self):
-        assert gp.extract_cost(None) == (None, "unavailable")
-
-    def test_zero_cost_is_preserved_as_zero(self):
-        cost, _ = gp.extract_cost({"usage": {"cost": 0}})
-        assert cost == 0.0
-
-    def test_negative_cost_is_ignored(self):
-        cost, source = gp.extract_cost({"usage": {"cost": -5}})
-        assert cost is None
-        assert source == "unavailable"
-
-
 class TestRecoverableErrors:
     @pytest.mark.parametrize("message", [
         "Request timed out",
