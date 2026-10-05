@@ -1618,15 +1618,20 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                  picker. Deliberately `secondary`, not coral: the Export button
                  is this screen's one primary action (design_guidelines.md:174),
                  and two coral buttons would make neither the primary one. */
-              <div className="flex flex-col items-center gap-3 px-6 text-center">
-                <Upload className="h-7 w-7 text-muted-foreground" />
+              /* One control, not an illustration above a control. The large
+                 icon was a second Upload symbol next to the button's own, and
+                 the stack of icon + gap + 40px button read as a hero for
+                 something you do once. The dashed frame already says "empty";
+                 this just names the action. */
+              <div className="px-6 text-center">
                 <Button
                   type="button"
                   variant="secondary"
+                  size="sm"
                   onClick={() => fileInputRef.current?.click()}
                   data-testid="demo-cta-frame-upload"
                 >
-                  <Upload className="h-4 w-4" />
+                  <Upload className="h-3.5 w-3.5" />
                   Upload a clip
                 </Button>
               </div>

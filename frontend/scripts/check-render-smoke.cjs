@@ -3312,11 +3312,25 @@ async function runDemoCtaChecks() {
           if (/data-testid="demo-cta-player"[\s\S]{0,200}?\bsurface\b/.test(src)) {
             throw new Error("the player picked up a surface class");
           }
-          if (!/--demo-cta-chrome:\s*84px/.test(css) || !/data-player="on"\][\s\S]{0,120}?--demo-cta-chrome:\s*200px/.test(css)) {
+          if (!/--demo-cta-chrome:\s*92px/.test(css) || !/data-player="on"\][\s\S]{0,160}?--demo-cta-chrome:\s*208px/.test(css)) {
             throw new Error(
               "the chrome budget lost its per-state values. Without a height " +
                 "reserve for the player bar the frame is sized as though it were " +
                 "never there."
+            );
+          }
+          // The budget must EXCEED the real content, not equal it. At exactly
+          // 84px (caption 16 + two 12px gaps + export 44) the column landed on
+          // its own max-h, so rounding pushed it 1px over and a scrollbar
+          // appeared beside a video that fitted. 8px of slack is load-bearing.
+          const chrome = Number(
+            (/--demo-cta-chrome:\s*(\d+)px/.exec(css) || [])[1]
+          );
+          if (!Number.isFinite(chrome) || chrome < 92) {
+            throw new Error(
+              `the frame's height budget is ${chrome}px of chrome. It must leave ` +
+                "slack above the 84px the column really occupies, or the column " +
+                "overflows its own max-h and shows a scrollbar."
             );
           }
           if (!/data-player=\{videoUrl && videoMeta \? "on" : "off"\}/.test(src)) {
@@ -3411,12 +3425,30 @@ async function runDemoCtaChecks() {
         { getGenerations: async () => ({ generations: [COMPLETED] }) },
         async () => {
           await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
+          const html = ctx.container.innerHTML;
           const panels = ctx.container.querySelectorAll(".demo-cta-panel-scroll");
           if (panels.length < 2) {
             throw new Error(
               `only ${panels.length} scroll container(s) use the slim scrollbar. ` +
                 "Both the settings panel and the preview column need it: the " +
                 "global rules give them a 10px bar with arrow buttons."
+            );
+          }
+          // The preview column keeps `overflow-y-auto` for short viewports, but at a
+          // normal height it must not overflow — that is what put a scrollbar
+          // beside a frame that fitted. Height correctness is the CSS budget
+          // above; this guards that the container can still scroll when a short
+          // viewport or the Export-ready card demands it. Scoped to the column
+          // itself: the settings panel also scrolls, so a document-wide match
+          // would pass even with the preview column's overflow removed.
+          const previewColumn = ctx.container.querySelector(".demo-cta-column");
+          if (!previewColumn) {
+            throw new Error("no preview column to check");
+          }
+          if (!/lg:overflow-y-auto/.test(previewColumn.className)) {
+            throw new Error(
+              "the preview column cannot scroll. A short viewport or an " +
+                "Export-ready card below the button would be clipped."
             );
           }
           if (!/demo-cta-panel-scroll\s*\{[^}]*scrollbar-width: thin[^}]*scrollbar-color: hsl\(228 12% 22%\) transparent/.test(css)) {

@@ -314,11 +314,18 @@ select option:checked {
  * flow directly below the player, so the short column scrolls as one piece
  * rather than pinning the button over a frame it can no longer fit beside. */
 .demo-cta-column {
-    --demo-cta-chrome: 84px;
+    /* 92, not 84. The column's real non-frame content is the caption row (16)
+       plus two 12px gaps plus the 44px export button = 84px, and subtracting
+       exactly that from `100vh - 3rem` left the column landing precisely on its
+       own max-h — so sub-pixel rounding of a 9:16 ratio, or a one-pixel
+       border, put it 1px over and a scrollbar appeared beside a video that
+       fitted. The 8px is deliberate slack, not a fudge. */
+    --demo-cta-chrome: 92px;
     --demo-cta-frame-w: min(100%, calc(45vh * 9 / 16));
 }
 .demo-cta-column[data-player="on"] {
-    --demo-cta-chrome: 200px;
+    /* Same 8px of slack over the player bar's 104px. */
+    --demo-cta-chrome: 208px;
 }
 .demo-cta-frame {
     width: var(--demo-cta-frame-w);
