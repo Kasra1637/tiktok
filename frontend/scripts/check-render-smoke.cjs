@@ -3132,9 +3132,9 @@ async function runDemoCtaChecks() {
             "in the control row — the scrubber strip carries no text."
         );
       }
-      // Shared-width contract: the right column is fixed at xl to whatever the
-      // single control row needs (~650px), so preview card, player card, and
-      // export button all span the same width with identical edges.
+      // Shared-width contract, part 1: the right column is fixed at xl to
+      // whatever the single control row needs (~650px), so the player row
+      // keeps the width it was measured against.
       if (!/xl:grid-cols-\[minmax\(0,1fr\)_650px\]/.test(src)) {
         throw new Error(
           "the right column is not fixed at xl. A fluid column lets the frame " +
@@ -3152,13 +3152,195 @@ async function runDemoCtaChecks() {
         );
       }
       // The export button carries no padded desktop container: `lg:p-0` with
-      // no `lg:px-4`, so its edges sit exactly on the cards' edges.
+      // no `lg:px-4`. Its WIDTH now comes from the shared token (see below),
+      // not from the column, so this only guards the padding.
       if (!/demo-cta-export[\s\S]*?lg:p-0/.test(src) || /demo-cta-export[\s\S]{0,400}?lg:px-4/.test(src)) {
         throw new Error(
           "the export button regained a padded desktop container. Its edges no " +
-            "longer sit exactly on the preview and player cards' edges."
+            "longer sit exactly on the preview frame's edges."
         );
       }
+    }
+  );
+
+  await check(
+    "the preview and the export button are chromeless and share one width",
+    async (ctx) => {
+      const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+      const src = fs.readFileSync(
+        path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
+        "utf8"
+      );
+      const css = fs.readFileSync(path.join(__dirname, "..", "src", "index.css"), "utf8");
+
+      await withApi(
+        { getGenerations: async () => ({ generations: [COMPLETED] }) },
+        async () => {
+          await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
+          const html = ctx.container.innerHTML;
+
+          // Chromeless: the preview frame may not sit inside a `.surface` card again.
+          // The preview card spent ~46px on a border and padding around a video
+          // that needed all of it.
+          if (/demo-cta-frame[\s\S]{0,400}?class="[^"]*\bsurface\b/.test(html)) {
+            throw new Error(
+              "the preview frame is inside a surface card again. The card's " +
+                "border, background and padding are taken out of the frame's height."
+            );
+          }
+          // One token, two consumers. This is what guarantees identical edges:
+          // neither box can measure the other in CSS, so both read the same
+          // variable, and the player bar deliberately does not.
+          if (!/\.demo-cta-frame,\s*\n\s*\.demo-cta-export\s*\{[^}]*width: var\(--demo-cta-frame-w\)/.test(css)) {
+            throw new Error(
+              "the frame and the export button no longer resolve the same width " +
+                "token. Two separate widths is exactly how they drifted apart."
+            );
+          }
+          // The player is a plain bar, asserted in source: like the order check
+          // below, it only mounts with a real clip's metadata, which jsdom
+          // cannot supply, so a DOM query here would silently pass forever.
+          if (!/<div className="space-y-2" data-testid="demo-cta-player">/.test(src)) {
+            throw new Error(
+              "the player is a card again. It must be a plain bar matching the " +
+                "chromeless preview — a surface box under a chromeless frame."
+            );
+          }
+          if (/data-testid="demo-cta-player"[\s\S]{0,200}?\bsurface\b/.test(src)) {
+            throw new Error("the player picked up a surface class");
+          }
+          if (!/--demo-cta-chrome:\s*84px/.test(css) || !/data-player="on"\][\s\S]{0,120}?--demo-cta-chrome:\s*200px/.test(css)) {
+            throw new Error(
+              "the chrome budget lost its per-state values. Without a height " +
+                "reserve for the player bar the frame is sized as though it were " +
+                "never there."
+            );
+          }
+          if (!/data-player=\{videoUrl && videoMeta \? "on" : "off"\}/.test(src)) {
+            throw new Error(
+              "the column no longer reports whether the player bar is present, so " +
+                "the frame gets the wrong height budget."
+            );
+          }
+          // The zoom-keyframe strip keeps its box when empty, so locking a zoom
+          // cannot silently resize the video.
+          if (/\{zoomKeyframes\.length > 0 && \(\s*\n\s*<div className="relative h-2/.test(src)) {
+            throw new Error(
+              "the zoom-keyframe strip is conditional again. It must keep its 8px " +
+                "box when empty or the frame resizes the first time someone locks."
+            );
+          }
+          // Frame floor: 253px wide is 450px tall at 9:16.
+          if (!/max\(253px/.test(css)) {
+            throw new Error(
+              "the preview frame has no ~450px floor (253px wide at 9:16). Below " +
+                "it the column must scroll rather than the frame shrinking further."
+            );
+          }
+        }
+      );
+    }
+  );
+
+  await check(
+    "swatches are fixed size and animation uses the app's chip",
+    async () => {
+      const src = fs.readFileSync(
+        path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
+        "utf8"
+      );
+      // Three swatch groups: frame color, background, accent. All 40px and
+      // fixed — a grid with `aspect-square` grew them with the settings column.
+      const fixed = (src.match(/h-10 w-10 shrink-0/g) || []).length;
+      if (fixed < 3) {
+        throw new Error(
+          `only ${fixed} of 3 swatch groups are fixed 40px. A stretchy grid makes ` +
+            "a wider window silently grow every swatch."
+        );
+      }
+      if (/aspect-square overflow-hidden rounded-lg/.test(src)) {
+        throw new Error("the background swatches are still a stretchy aspect-square grid");
+      }
+      if ((src.match(/flex flex-wrap items-center gap-2/g) || []).length < 3) {
+        throw new Error("the swatch rows are not flex-wrap with an 8px gap");
+      }
+      // Selected state has to be visible, and the ring must not use the default
+      // white offset Tailwind applies on this dark theme.
+      if (!/ring-2 ring-\[color:var\(--indigo-45\)\]/.test(src)) {
+        throw new Error("the selected swatch lost its accent ring");
+      }
+      if (/ring-offset/.test(src)) {
+        throw new Error(
+          "a ring-offset is back. Tailwind's default offset colour is white, " +
+            "which draws a white halo on this theme."
+        );
+      }
+      // Animation is a segmented choice, so it uses the app's own Chip.
+      if (!/import \{ Chip \} from "\.\.\/components\/Chip"/.test(src)) {
+        throw new Error(
+          "animation stopped using the app's Chip. It is a segmented choice, and " +
+            "the hand-rolled row of borderless text buttons was the deviation."
+        );
+      }
+      if (!/aria-label="Animation"[\s\S]{0,200}?grid grid-cols-2 gap-1\.5 xl:grid-cols-3/.test(src)) {
+        throw new Error(
+          "the animation chips are not 2-per-row below xl and 3 above. A bare " +
+            "grid-cols-3 truncates labels at narrow widths."
+        );
+      }
+      // The page must stay on the documented control radius. Matched inside a
+      // className so the comment that documents the old value does not trip it.
+      if (/className=[^>]*rounded-\[10px\]/.test(src)) {
+        throw new Error(
+          "a rounded-[10px] control is back. design_guidelines.md:124 fixes " +
+            "control radii at rounded-xl."
+        );
+      }
+    }
+  );
+
+  await check(
+    "the settings panel scrolls on a slim bar that never overlaps a card",
+    async (ctx) => {
+      const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+      const css = fs.readFileSync(path.join(__dirname, "..", "src", "index.css"), "utf8");
+      await withApi(
+        { getGenerations: async () => ({ generations: [COMPLETED] }) },
+        async () => {
+          await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
+          if (!/demo-cta-panel-scroll/.test(ctx.container.innerHTML)) {
+            throw new Error(
+              "the settings panel does not use the slim scrollbar class. The " +
+                "global rules give it a 10px bar with arrow buttons."
+            );
+          }
+          if (!/demo-cta-panel-scroll\s*\{[^}]*scrollbar-width: thin[^}]*scrollbar-color: hsl\(228 12% 22%\) transparent/.test(css)) {
+            throw new Error("the Firefox scrollbar properties are missing (scrollbar-width/color)");
+          }
+          if (!/\.demo-cta-panel-scroll::\-webkit-scrollbar\s*\{\s*width: 6px/.test(css)) {
+            throw new Error("the webkit scrollbar is not 6px");
+          }
+          if (!/\.demo-cta-panel-scroll::\-webkit-scrollbar-thumb\s*\{[^}]*border-radius: 9999px/.test(css)) {
+            throw new Error("the scrollbar thumb is not rounded");
+          }
+          if (!/\.demo-cta-panel-scroll::\-webkit-scrollbar-thumb:hover/.test(css)) {
+            throw new Error("the scrollbar thumb does not brighten on hover");
+          }
+          // Chrome/Edge draw arrow buttons at the bar's ends; they have to go.
+          if (!/\.demo-cta-panel-scroll::\-webkit-scrollbar-button\s*\{[^}]*display: none/.test(css)) {
+            throw new Error(
+              "the scrollbar arrow buttons are not suppressed. Chrome and Edge " +
+                "draw them regardless of width."
+            );
+          }
+          if (!/lg:pr-2\.5/.test(ctx.container.innerHTML)) {
+            throw new Error(
+              "the settings panel has no right padding for the bar. A 6px scroll " +
+                "bar drawn over a card edge reads as a rendering bug."
+            );
+          }
+        }
+      );
     }
   );
 
@@ -3173,9 +3355,9 @@ async function runDemoCtaChecks() {
         path.join(__dirname, "..", "src", "index.css"),
         "utf8"
       );
-      if (!/\.demo-cta-frame[\s\S]*?max\(225px/.test(css)) {
+      if (!/\.demo-cta-frame[\s\S]*?max\(253px/.test(css)) {
         throw new Error(
-          "the preview frame has no ~400px floor (225px wide at 9:16). Below it " +
+          "the preview frame has no ~450px floor (253px wide at 9:16). Below it " +
             "the column must scroll rather than the frame shrinking further."
         );
       }

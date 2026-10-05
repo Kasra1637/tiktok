@@ -25,6 +25,7 @@ import { Slider } from "../components/ui/slider";
 import { Switch } from "../components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
 import { SectionCard } from "../components/SectionCard";
+import { Chip } from "../components/Chip";
 import { api, getErrorMessage } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
 import {
@@ -57,7 +58,9 @@ const SECTIONS_KEY = "hookforge.demoCta.openSections.v2";
 // editor's selects and fields are indistinguishable from the app's own inputs.
 // The earlier hand-rolled `rounded-[10px]` and a `/40` focus ring were both
 // deviations: design_guidelines.md:124 fixes control radii at rounded-xl, and
-// ui/input.jsx uses --indigo-35 border with a --indigo-15 ring.
+// ui/input.jsx uses --indigo-35 border with a --indigo-15 ring. The page had
+// three more `rounded-[10px]` callers (transport buttons, the view-mode
+// segmented control, the platform preset); all four are now rounded-xl.
 const CONTROL_CLASS =
   "h-10 w-full appearance-none rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 text-sm text-foreground shadow-[var(--shadow-xs)] transition-colors outline-none hover:border-[color:var(--hairline-strong)] focus-visible:border-[color:var(--indigo-35)] focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-15)] disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -162,7 +165,7 @@ function TransportButton({ label, onClick, disabled, children, testId }) {
       disabled={disabled}
       data-testid={testId}
       aria-label={label}
-      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] border border-[color:var(--hairline)] bg-secondary/40 text-foreground transition duration-150 hover:border-[color:var(--hairline-strong)] hover:bg-secondary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-indigo)]/40 disabled:pointer-events-none disabled:opacity-40"
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[color:var(--hairline)] bg-secondary/40 text-foreground transition duration-150 hover:border-[color:var(--hairline-strong)] hover:bg-secondary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-indigo)]/40 disabled:pointer-events-none disabled:opacity-40"
     >
       {children}
     </button>
@@ -1110,9 +1113,11 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           <ArrowUp className="h-4 w-4" />
         </button>
 
+        {/* Own scroll container, own slim scrollbar, and enough right padding that a
+            6px bar never sits over a card edge. */}
         <div
           ref={settingsRef}
-          className="space-y-3 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1"
+          className="demo-cta-panel-scroll space-y-3 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-2.5"
         >
         <EditorSection title="Source & Look" open={openSections.source} onToggle={() => toggleSection("source")} testId="demo-cta-source">
           {generation ? (
@@ -1176,7 +1181,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           )}
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
             <SubLabel>View style</SubLabel>
-            <div className="grid grid-cols-2 gap-1 rounded-[10px] border border-[color:var(--hairline)] bg-secondary/30 p-1">
+            <div className="grid grid-cols-2 gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1">
               {[
                 ["floating", "Floating Phone"],
                 ["hand", "Hand Holding"],
@@ -1232,29 +1237,39 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                     <option key={d.id} value={d.id}>{d.label}</option>
                   ))}
                 </select>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Frame color:</span>
-                  {[
-                    ["black", "#0d0d10", "Black"],
-                    ["white", "#f0f0f2", "White"],
-                  ].map(([id, color, title]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => setFrameColor(id)}
-                      title={title}
-                      aria-label={title}
-                      aria-pressed={frameColor === id}
-                      style={{ background: color }}
-                      data-testid={`frame-color-${id}`}
-                      className={`h-6 w-6 rounded-full border-2 transition duration-150 ${frameColor === id ? "border-[color:var(--brand-indigo)] ring-2 ring-[color:var(--brand-indigo)]/40" : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"}`}
-                    />
-                  ))}
+                {/* 40px fixed, wrapping on its own terms. A `grid-cols-*` with
+                    `aspect-square` made these grow with the settings column,
+                    so a wider window silently grew every swatch. `shrink-0` is
+                    what makes them fixed instead. */}
+                <div className="space-y-2">
+                  <SubLabel>Frame color</SubLabel>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {[
+                      ["black", "#0d0d10", "Black"],
+                      ["white", "#f0f0f2", "White"],
+                    ].map(([id, color, title]) => (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => setFrameColor(id)}
+                        title={title}
+                        aria-label={title}
+                        aria-pressed={frameColor === id}
+                        style={{ background: color }}
+                        data-testid={`frame-color-${id}`}
+                        className={`h-10 w-10 shrink-0 rounded-full border-2 transition duration-150 ${
+                          frameColor === id
+                            ? "border-[color:var(--brand-indigo)] ring-2 ring-[color:var(--indigo-45)]"
+                            : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
+                        }`}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
               <div className="space-y-2">
                 <SubLabel>Background</SubLabel>
-                <div className="grid grid-cols-4 gap-1.5">
+                <div className="flex flex-wrap items-center gap-2">
                   {BACKGROUNDS.map((b) => (
                     <button
                       key={b.id}
@@ -1264,8 +1279,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                       aria-label={b.label}
                       aria-pressed={bg === b.id}
                       data-testid={`background-${b.id}`}
-                      className={`aspect-square overflow-hidden rounded-lg border transition duration-150 ${
-                        bg === b.id ? "border-[color:var(--brand-indigo)] ring-2 ring-[color:var(--brand-indigo)]/40" : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
+                      className={`h-10 w-10 shrink-0 overflow-hidden rounded-xl border transition duration-150 ${
+                        bg === b.id
+                          ? "border-[color:var(--brand-indigo)] ring-2 ring-[color:var(--indigo-45)]"
+                          : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
                       }`}
                       style={
                         b.preview === "transparent"
@@ -1278,22 +1295,29 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               </div>
               <div className="space-y-2">
                 <SubLabel>Animation</SubLabel>
-                <div className="grid grid-cols-2 gap-1.5">
+                {/* The app's own selectable pill rather than another hand-rolled
+                    row of text buttons: this list is a segmented choice, which is
+                    what `Chip` is for, and it carries the visible border, hover
+                    state and indigo selected state the previous version lacked.
+                    Even widths come from the grid, because `Chip` takes no
+                    className. Two columns below xl — "Breathing Pulse" does not
+                    fit the ~92px a third column leaves at that width. */}
+                <div
+                  role="group"
+                  aria-label="Animation"
+                  data-testid="animation-group"
+                  className="grid grid-cols-2 gap-1.5 xl:grid-cols-3"
+                >
                   {ANIMATIONS.map((a) => (
-                    <button
+                    <Chip
                       key={a.id}
-                      type="button"
+                      active={anim === a.id}
                       onClick={() => setAnim(a.id)}
-                      aria-pressed={anim === a.id}
-                      data-testid={`animation-${a.id}`}
-                      className={`h-8 rounded-lg text-xs font-medium transition duration-150 ${
-                        anim === a.id
-                          ? "bg-[color:var(--brand-indigo)]/15 text-foreground shadow-[var(--shadow-xs)]"
-                          : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
-                      }`}
+                      testId={`animation-${a.id}`}
+                      ariaLabel={a.label}
                     >
                       {a.label}
-                    </button>
+                    </Chip>
                   ))}
                 </div>
               </div>
@@ -1358,19 +1382,26 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             <ResetButton onClick={() => { setCtaOffsetX(0); setCtaOffsetY(0); }}>Reset position</ResetButton>
           )}
           <p className="text-xs italic text-muted-foreground">Drag the end card on the preview to reposition</p>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Accent</span>
-            {ACCENT_SWATCHES.map((c) => (
-              <button
-                key={c}
-                type="button"
-                data-testid={`overlay-accent-${c.replace("#", "")}`}
-                onClick={() => setOverlayAccent(c)}
-                style={{ background: c }}
-                aria-label={`Accent ${c}`}
-                className={`h-5 w-5 rounded-full border-2 transition ${overlayAccent === c ? "border-[color:var(--brand-indigo)]" : "border-[color:var(--hairline)]"}`}
-              />
-            ))}
+          <div className="space-y-2">
+            <SubLabel>Accent</SubLabel>
+            <div className="flex flex-wrap items-center gap-2">
+              {ACCENT_SWATCHES.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  data-testid={`overlay-accent-${c.replace("#", "")}`}
+                  onClick={() => setOverlayAccent(c)}
+                  style={{ background: c }}
+                  aria-label={`Accent ${c}`}
+                  aria-pressed={overlayAccent === c}
+                  className={`h-10 w-10 shrink-0 rounded-full border-2 transition duration-150 ${
+                    overlayAccent === c
+                      ? "border-[color:var(--brand-indigo)] ring-2 ring-[color:var(--indigo-45)]"
+                      : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
+                  }`}
+                />
+              ))}
+            </div>
           </div>
           <p className="text-xs leading-snug text-muted-foreground">
             Laid out inside TikTok&apos;s safe area — clear of the right icon rail and bottom caption strip.
@@ -1398,7 +1429,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   aria-checked={preset === p.id}
                   onClick={() => setPreset(p.id)}
                   title={`${p.label} — ${p.id === "source" ? "auto" : `${p.w}x${p.h}`}`}
-                  className={`flex w-full items-center justify-between gap-3 rounded-[10px] border px-3 py-2 text-left transition duration-150 ${
+                  className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left transition duration-150 ${
                     preset === p.id
                       ? "border-[color:var(--brand-indigo)] bg-[color:var(--brand-indigo)]/10"
                       : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)] hover:bg-secondary/40"
@@ -1510,48 +1541,61 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           The column caps at the viewport and scrolls internally when its
           content (frame floor, player, export) exceeds it, so the frame never
           has to shrink below ~400px tall to keep everything on screen. */}
-      <div className="min-w-0 space-y-3 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
-        <SectionCard
-          title="Live preview"
-          actions={<span className="text-xs text-muted-foreground">{(PRESETS.find((p) => p.id === preset) || {}).label}</span>}
-          className="!p-3"
+      {/* `demo-cta-column` carries the one width token the frame and the export
+          button both resolve, so they cannot drift apart. `data-player` tells
+          the stylesheet whether the player bar is in the column, because its
+          104px comes out of the frame's height budget when it is. */}
+      <div
+        className="demo-cta-column min-w-0 space-y-3 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1"
+        data-player={videoUrl && videoMeta ? "on" : "off"}
+      >
+        {/* Chromeless. The preview card spent ~46px on a border, a background
+            and padding around a video that needs all of it; that height belongs
+            to the frame now. A caption row costs 16px — an overlay would cover
+            the first thing you look at and still need a scrim to stay legible,
+            so the row wins. */}
+        <div className="flex items-center justify-between gap-2 px-1">
+          <span className="eyebrow">Live preview</span>
+          <span className="text-xs text-muted-foreground">
+            {(PRESETS.find((p) => p.id === preset) || {}).label}
+          </span>
+        </div>
+        {/* A fixed 9:16 frame rather than a box that grows to the canvas.
+            Portrait output filled the width of a flexible card and left black
+            bars either side; a real aspect frame makes the preview the shape
+            the export will be, and the empty state can share it. Its width comes
+            from `--demo-cta-frame-w`, which spends the column's leftover height
+            on the video. */}
+        <div
+          className={`demo-cta-frame mx-auto flex items-center justify-center overflow-hidden rounded-xl border ${
+            videoUrl ? "border-[color:var(--hairline)] bg-black" : "border-dashed border-[color:var(--hairline-strong)] bg-secondary/20"
+          }`}
         >
-          {/* A fixed 9:16 frame rather than a box that grows to the canvas.
-              Portrait output filled the width of a flexible card and left black
-              bars either side; a real aspect frame makes the preview the shape
-              the export will be, and the empty state can share it.
-              `.demo-cta-frame` sizes the frame from the column height — 70% of
-              the sticky column, floored at ~400px tall — so on laptop-height
-              screens the video is the priority and the player/export fit around
-              it instead of the frame shrinking to fit them. */}
-          <div
-            className={`demo-cta-frame mx-auto flex items-center justify-center overflow-hidden rounded-xl border ${
-              videoUrl ? "border-[color:var(--hairline)] bg-black" : "border-dashed border-[color:var(--hairline-strong)] bg-secondary/20"
-            }`}
-          >
-            {videoUrl ? (
-              <canvas
-                ref={previewCanvasRef}
-                className="block h-full w-full cursor-grab touch-none active:cursor-grabbing"
-                onPointerDown={handlePointerDown}
-                onWheel={handleWheel}
-              />
-            ) : loadingSource ? (
-              <div className="h-full w-full animate-pulse bg-secondary/40" role="status" aria-label="Loading the finished render">
-                <span className="sr-only">Loading the finished render…</span>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-2 px-6 text-center">
-                <Upload className="h-7 w-7 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Upload a clip to preview.</p>
-              </div>
-            )}
-          </div>
-        </SectionCard>
+          {videoUrl ? (
+            <canvas
+              ref={previewCanvasRef}
+              className="block h-full w-full cursor-grab touch-none active:cursor-grabbing"
+              onPointerDown={handlePointerDown}
+              onWheel={handleWheel}
+            />
+          ) : loadingSource ? (
+            <div className="h-full w-full animate-pulse bg-secondary/40" role="status" aria-label="Loading the finished render">
+              <span className="sr-only">Loading the finished render…</span>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-2 px-6 text-center">
+              <Upload className="h-7 w-7 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Upload a clip to preview.</p>
+            </div>
+          )}
+        </div>
 
         {videoUrl && videoMeta && (
-          <SectionCard title="Player" className="surface-compact" data-testid="demo-cta-player">
-            <div className="space-y-2">
+          /* A plain bar, not a card: the preview is chromeless, so a boxed
+             player under a boxed preview was one box too many. It stays
+             full-column — deliberately wider than the frame and the export
+             button, which share a width with each other. */
+          <div className="space-y-2" data-testid="demo-cta-player">
               {/* Scrubber first: tick marks and zoom zones stay clickable but lose
                   their text labels — the readout lives once, beside the play
                   button — so the whole block is a compact strip above the one
@@ -1573,24 +1617,32 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   ))}
                 </div>
 
-                {zoomKeyframes.length > 0 && (
-                  <div className="relative h-2 overflow-hidden rounded-full bg-secondary/60" role="img" aria-label={`${zoomKeyframes.length} zoom ${zoomKeyframes.length === 1 ? "lock" : "locks"}`}>
-                    {sortedKeyframes.map((seg, i, sorted) => {
-                      const end = sorted[i + 1]?.time ?? duration;
-                      return (
-                        <div
-                          key={seg.id}
-                          className="absolute inset-y-0 border-l border-amber-400/40 bg-amber-400/20"
-                          style={{
-                            left: `${(seg.time / duration) * 100}%`,
-                            width: `${((end - seg.time) / duration) * 100}%`,
-                          }}
-                          title={`${formatTime(seg.time)} → ${formatTime(end)}: ${seg.scale.toFixed(2)}x`}
-                        />
-                      );
-                    })}
-                  </div>
-                )}
+                {/* Always rendered, even with no locks. The column spends a fixed
+                    104px on the player bar when it sizes the frame, so a strip
+                    that appeared and disappeared with the first keyframe would
+                    silently resize the video the moment someone locked a zoom.
+                    Empty, it is an 8px gap between two rules. */}
+                <div
+                  className="relative h-2 overflow-hidden rounded-full bg-secondary/60"
+                  role="img"
+                  aria-label={zoomKeyframes.length > 0 ? `${zoomKeyframes.length} zoom ${zoomKeyframes.length === 1 ? "lock" : "locks"}` : "No zoom locks yet"}
+                >
+                  {zoomKeyframes.length === 0 && <span className="sr-only">No zoom locks yet</span>}
+                  {sortedKeyframes.map((seg, i, sorted) => {
+                    const end = sorted[i + 1]?.time ?? duration;
+                    return (
+                      <div
+                        key={seg.id}
+                        className="absolute inset-y-0 border-l border-amber-400/40 bg-amber-400/20"
+                        style={{
+                          left: `${(seg.time / duration) * 100}%`,
+                          width: `${((end - seg.time) / duration) * 100}%`,
+                        }}
+                        title={`${formatTime(seg.time)} → ${formatTime(end)}: ${seg.scale.toFixed(2)}x`}
+                      />
+                    );
+                  })}
+                </div>
 
                 <div
                   className="group relative h-6 cursor-pointer"
@@ -1744,11 +1796,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                     </div>
                   </details>
                 )}
-              </div>
-          </SectionCard>
+          </div>
         )}
 
-        {/* No padded container on desktop: the button spans the column exactly,
+        {/* No padded container on desktop, and `width` comes from the same token
+            as the frame so the two share identical edges. Mobile keeps the
+            full-width fixed bar. */}
             edge to edge with the preview and player cards. The mobile fixed
             bar keeps its background and padding; only lg+ goes bare. */}
         <div className="demo-cta-export fixed inset-x-0 bottom-0 z-40 border-t border-[color:var(--hairline)] bg-background/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur lg:sticky lg:bottom-4 lg:border-0 lg:bg-transparent lg:p-0">

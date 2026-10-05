@@ -288,29 +288,96 @@ select option:checked {
     padding: 16px;
 }
 
-/* Demo + CTA sticky-column geometry. The right column caps at the viewport
- * minus its top/bottom offsets (`lg:max-h-[calc(100vh-3rem)]` in JSX), and the
- * frame takes 70% of that height — width derived from height so the 9:16 ratio
- * never distorts, clamped to the column width when the column is the limit.
- * 225px wide is 400px tall at 9:16: the floor below which the column scrolls
- * instead of the frame shrinking further. Mobile keeps the old 45vh budget.
+/* Demo + CTA sticky-column geometry.
+ *
+ * The right column caps at the viewport minus its own offsets
+ * (`lg:max-h-[calc(100vh-3rem)]` in JSX) and holds three things: the frame, the
+ * player bar, and the export button. The frame gets everything left over.
+ *
+ * That is expressed as ONE variable, `--demo-cta-frame-w`, because the frame
+ * and the export button have to be exactly the same width with identical
+ * edges, and neither can measure the other in CSS. The width is derived from
+ * the height budget rather than a percentage of the column so the 9:16 ratio
+ * is never distorted and the frame never leaves dead space beside it.
+ *
+ * `--demo-cta-chrome` is the height the frame does NOT get: the caption row
+ * (16px), the 12px gaps, the export button (44px), and — only when a clip is
+ * loaded — the player bar (104px). The bar's height is deliberately constant:
+ * the zoom-keyframe strip keeps its 8px box when empty so locking a zoom does
+ * not silently change the frame size.
+ *
+ * 253px wide is 450px tall at 9:16: the floor below which the column scrolls
+ * instead of the frame shrinking further. Mobile keeps a 45vh budget and a
+ * full-width fixed export bar, because matching those is not the point there.
  *
  * Below 700px tall the export bar drops its desktop sticky pin and sits in
  * flow directly below the player, so the short column scrolls as one piece
  * rather than pinning the button over a frame it can no longer fit beside. */
+.demo-cta-column {
+    --demo-cta-chrome: 84px;
+    --demo-cta-frame-w: min(100%, calc(45vh * 9 / 16));
+}
+.demo-cta-column[data-player="on"] {
+    --demo-cta-chrome: 200px;
+}
 .demo-cta-frame {
-    width: min(100%, calc(45vh * 9 / 16));
+    width: var(--demo-cta-frame-w);
     aspect-ratio: 9 / 16;
 }
 @media (min-width: 1024px) {
-    .demo-cta-frame {
-        width: min(100%, max(225px, calc((100vh - 3rem) * 0.7 * 9 / 16)));
+    .demo-cta-column {
+        --demo-cta-frame-w: min(100%, max(253px, calc((100vh - 3rem - var(--demo-cta-chrome)) * 9 / 16)));
+    }
+    /* Same width, same edges, centered: the frame and the export button are
+       two consumers of one token, so they cannot drift apart. The player bar
+       stays full-column — deliberately a different width. */
+    .demo-cta-frame,
+    .demo-cta-export {
+        width: var(--demo-cta-frame-w);
+        margin-inline: auto;
     }
 }
 @media (min-width: 1024px) and (max-height: 699px) {
     .demo-cta-export {
         position: static;
     }
+}
+
+/* Slim scrollbar for the settings panel.
+ *
+ * The global rules in this file give every scrollable a 10px bar, which is a
+ * lot of chrome beside a card-dense column, and Chrome/Edge draw arrow buttons
+ * at the ends that have no place in an app on a dark surface. 6px, transparent
+ * track, a low-contrast thumb that brightens on hover, arrows suppressed, and a
+ * few px of column padding so the bar never sits over a card edge.
+ *
+ * `scrollbar-width`/`scrollbar-color` are the Firefox path; the `::-webkit-*`
+ * rules cover Chrome/Safari/Edge, which ignore the standard properties.
+ * Firefox cannot draw arrow buttons on a thin bar, so nothing is lost there. */
+.demo-cta-panel-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(228 12% 22%) transparent;
+}
+.demo-cta-panel-scroll::-webkit-scrollbar {
+    width: 6px;
+}
+.demo-cta-panel-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+.demo-cta-panel-scroll::-webkit-scrollbar-thumb {
+    background-color: hsl(228 12% 24%);
+    border-radius: 9999px;
+}
+.demo-cta-panel-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(228 12% 36%);
+}
+.demo-cta-panel-scroll::-webkit-scrollbar-corner {
+    background: transparent;
+}
+.demo-cta-panel-scroll::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
 }
 
 /* Interactive lift for cards. Transform + shadow only — never `all`. */
