@@ -25,6 +25,7 @@ import pipeline
 import storage_service
 import template_library
 import claim_safety
+import media_signing
 import video_providers
 import generation_planning
 import recommendation_tags
@@ -3866,9 +3867,11 @@ async def face_swap_video_status(job_id: str, user_id: str = Depends(get_current
                 (job_id, user_id, r2_url, "hook", now_iso()),
             )
 
-        # Serve from our own stable URL (local cache for this container)
-        response["video_url"] = f"/api/media/videos/{job_id}.mp4"
-        response["video_urls"] = [f"/api/media/videos/{job_id}.mp4"]
+        # Serve from our own stable URL (local cache for this container). Signed,
+        # because that route is unauthenticated by necessity: a <video src> and
+        # an <a download> cannot carry a header, so the link itself is the proof.
+        response["video_url"] = media_signing.build_signed_path(f"{job_id}.mp4")
+        response["video_urls"] = [response["video_url"]]
         # Include R2 URL so frontend can use it as a permanent link
         if r2_url:
             response["r2_url"] = r2_url
@@ -6839,6 +6842,11 @@ def _public_generation(row: dict) -> dict:
 
     The prompt is long and only useful when debugging a specific result, so
     it is returned by the detail endpoint but trimmed from list responses.
+
+    The video URL is signed here, in the one serializer every generation
+    response passes through, rather than at each of the nine places that return
+    one. Every list, detail, poll, retry and history response therefore hands
+    out a link that works, and there is no second path that can forget.
     """
     out = dict(row)
     out["adjustments"] = out.get("adjustments") or []
@@ -6850,6 +6858,12 @@ def _public_generation(row: dict) -> dict:
     out["strategy_version"] = int(out.get("strategy_version") or 0)
     out["trim_to_seconds"] = int(out.get("trim_to_seconds") or 0)
     out.pop("prompt_used", None)
+    # Stored unsigned so a row never holds a signature that outlives its own
+    # expiry; signed fresh on every read.
+    out["video_url"] = media_signing.sign_stored_path(out.get("video_url"))
+    for key in ("video_urls", "unsigned_urls"):
+        if isinstance(out.get(key), list):
+            out[key] = [media_signing.sign_stored_path(u) for u in out[key]]
     return out
 
 
@@ -8595,6 +8609,13 @@ async def get_asset_usage(asset_id: str, user_id: str = Depends(get_current_user
             "WHERE studio_project_id = ? ORDER BY created_at DESC LIMIT 20",
             (use["studio_project_id"],),
         )
+        # Signed for the same reason as everywhere else: this endpoint returns
+        # raw generation rows rather than going through _public_generation, and
+        # the media route now rejects an unsigned one.
+        gens = [
+            {**g, "video_url": media_signing.sign_stored_path(g.get("video_url"))}
+            for g in gens
+        ]
         use["generations"] = gens
     return {
         "asset": _attach_usage(_public_asset(asset), index),
@@ -9127,6 +9148,9 @@ async def _render_overlay_composition(composition_id: str, user_id: str) -> dict
         "audios": len(spec.get("audios") or []),
         "end_card": bool(spec.get("end_card")),
     }
+    # Stored unsigned. This row outlives any one signature, so a signed URL
+    # written here would expire and the composition would be a dead link
+    # forever. Signed on the way out instead — see media_signing.sign_stored_path.
     await _execute(
         "UPDATE overlay_compositions SET status = 'completed', output_path = ?, "
         "output_url = ?, r2_url = ?, applied = ?, error = NULL, updated_at = ? WHERE id = ?",
@@ -9137,7 +9161,7 @@ async def _render_overlay_composition(composition_id: str, user_id: str) -> dict
     return {
         "id": composition_id,
         "status": "completed",
-        "output_url": f"/api/media/videos/{composition_id}.mp4",
+        "output_url": media_signing.build_signed_path(f"{composition_id}.mp4"),
         "r2_url": r2_url or "",
         "applied": applied_summary,
         "warnings": warnings,
@@ -9155,6 +9179,9 @@ async def get_overlay_composition(generation_id: str, user_id: str = Depends(get
     if not row:
         return {"composition": None}
     out = dict(row)
+    # Stored unsigned, so it gets a fresh signature on the way out. Without
+    # this the row's own URL would be rejected by the now-signed media route.
+    out["output_url"] = media_signing.sign_stored_path(out.get("output_url"))
     if isinstance(out.get("spec"), str):
         try:
             out["spec"] = json.loads(out["spec"])
@@ -9458,11 +9485,23 @@ async def generation_history(
     for row in rows:
         entry = dict(row)
         entry["retryable"] = bool(entry.get("retryable"))
+        # This endpoint builds its rows by hand rather than through
+        # _public_generation, so the video URL has to be signed here too.
+        # Without it the History row's player would get a 404 from the now-signed
+        # media route, which is a visible break in existing functionality.
+        entry["video_url"] = media_signing.sign_stored_path(entry.get("video_url"))
         composition = await _fetch_one(
             "SELECT id, status, output_url, r2_url FROM overlay_compositions "
             "WHERE generation_id = ? ORDER BY created_at DESC LIMIT 1",
             (entry["id"],),
         )
+        if composition:
+            # Signed on read, for the same reason as the single-composition
+            # route: the stored path is unsigned so it never expires in the row.
+            composition = dict(composition)
+            composition["output_url"] = media_signing.sign_stored_path(
+                composition.get("output_url")
+            )
         entry["composition"] = composition
         performance = await _fetch_all(
             "SELECT views, likes, comments, shares, saves, outcome, notes, created_at "
@@ -9958,7 +9997,7 @@ def _iter_file_range(path: Path, start: int, end: int, chunk_size: int = 256 * 1
 
 
 @app.get("/api/media/videos/{filename}")
-async def serve_video(filename: str, request: Request):
+async def serve_video(filename: str, request: Request, sig: str = "", exp: str = ""):
     """
     Serve a generated clip so a <video> element can actually play it.
 
@@ -9974,8 +10013,23 @@ async def serve_video(filename: str, request: Request):
     Declared above the mount on purpose: Starlette matches routes in
     registration order, so this shadows StaticFiles for /api/media/videos/*
     while leaving every other media path untouched.
+
+    Authenticated by signature, not by header. A `<video src>` and an
+    `<a download>` cannot carry an Authorization header, so requiring one would
+    mean the player never worked — which is what this route exists to prevent.
+    Instead every clip is fetched through a signed URL (see media_signing.py),
+    and an unsigned or expired one is refused. Without that, this route was
+    world-readable: the filename IS the generation id, so every paid render
+    could be pulled by anyone who guessed one.
+
+    The refusal is a 404 with the same body as a missing file, on purpose. A
+    403 would confirm the clip exists, which turns this route into a way to
+    enumerate other people's paid renders.
     """
     if not _VIDEO_FILENAME_RE.match(filename or ""):
+        raise HTTPException(status_code=404, detail="Clip not found")
+
+    if not media_signing.verify(filename, exp, sig):
         raise HTTPException(status_code=404, detail="Clip not found")
 
     video_path = pipeline.VIDEOS_DIR / filename
@@ -9988,10 +10042,11 @@ async def serve_video(filename: str, request: Request):
     base_headers = {
         "Accept-Ranges": "bytes",
         "Content-Type": "video/mp4",
-        # The bytes of a completed clip never change, and the filename is the
-        # generation id, so this can be cached hard. The provider's temporary
-        # URL it replaces was the opposite: expiring.
-        "Cache-Control": "public, max-age=31536000, immutable",
+        # Private, not public: the bytes never change, so the response can be
+        # cached hard, but only by the client that was given a signed link.
+        # `public` here would let a shared cache keep serving a paid render to
+        # whoever asked next.
+        "Cache-Control": "private, max-age=31536000, immutable",
     }
 
     verdict, span = _parse_byte_range(request.headers.get("range"), total)

@@ -11,12 +11,22 @@ server.py exists to answer the headers a player needs.
 These call the route function directly with a hand-built Request, because the
 suite has no HTTP client and adding one for four header assertions would be a
 larger change than the behaviour under test.
+
+Authorization
+-------------
+The route is signed (media_signing.py): it has to be, because a `<video src>`
+and an `<a download>` cannot carry an Authorization header, and unsigned it was
+world-readable — the filename IS the generation id. These tests mint a valid
+signature so the range and caching behaviour under test is exercised against a
+properly authorized request; the signature rules have their own tests at the
+bottom, so the two concerns stay separate.
 """
 import asyncio
 import importlib
 import os
 import sys
 import tempfile
+import time
 import uuid
 from pathlib import Path
 
@@ -26,6 +36,8 @@ from starlette.requests import Request
 
 BACKEND_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BACKEND_DIR))
+
+import media_signing
 
 ANON = "anonymous"
 
@@ -146,8 +158,29 @@ def _serve(api, filename="clip.mp4", range_header=None):
     return _run(_serve_async(api, filename, range_header))
 
 
-async def _serve_async(api, filename, range_header):
-    response = await api.serve_video(filename, _request(range_header))
+def _signed(filename="clip.mp4"):
+    """A valid (exp, sig) pair for this filename, as the API would mint one.
+
+    Every test in this file goes through here, so the range/caching behaviour
+    under test is exercised against a properly authorized request. The
+    authorization rules themselves have their own tests below rather than being
+    mixed into each of these.
+    """
+    return media_signing.build_signed_path(filename).split("?", 1)[1]
+
+
+def _query(params: str) -> dict:
+    out = {}
+    for pair in params.split("&"):
+        if "=" in pair:
+            k, v = pair.split("=", 1)
+            out[k] = v
+    return out
+
+
+async def _serve_async(api, filename, range_header, query=None):
+    query = query if query is not None else _signed(filename)
+    response = await api.serve_video(filename, _request(range_header), **_query(query))
     body = await _body(response)
     return response, body
 
@@ -293,3 +326,136 @@ class TestRangeParsing:
     )
     def test_classification(self, api, header, total, expected):
         assert api._parse_byte_range(header, total) == expected
+
+
+class TestSignatureRequired:
+    """
+    The route is signed. Before this it had no authorization at all, and because
+    the filename IS the generation id, every rendered clip was readable by anyone
+    who could guess an id — which is exactly what the three spend gates exist to
+    make valuable.
+
+    Every refusal is a 404 with a missing-file body, deliberately: a 403 would
+    confirm the clip exists, turning this route into a way to enumerate other
+    people's paid renders.
+    """
+
+    def test_a_signed_url_plays_the_clip(self, api):
+        _write_clip(api)
+        response, body = _serve(api)
+        assert response.status_code == 200
+        assert body == CLIP_BYTES
+
+    def test_an_unsigned_request_is_refused(self, api):
+        _write_clip(api)
+        with pytest.raises(HTTPException) as err:
+            _run(_serve_async(api, "clip.mp4", None, query=""))
+        assert err.value.status_code == 404
+        assert err.value.detail == "Clip not found"
+
+    def test_a_missing_signature_is_refused_even_with_a_valid_expiry(self, api):
+        """
+        The two halves have to both be present. An attacker who can read an
+        expiry from a shared link must still not be able to serve the file.
+        """
+        _write_clip(api)
+        exp = int(time.time()) + 600
+        with pytest.raises(HTTPException) as err:
+            _run(_serve_async(api, "clip.mp4", None, query=f"exp={exp}"))
+        assert err.value.status_code == 404
+
+    def test_a_forged_signature_is_refused(self, api):
+        _write_clip(api)
+        exp = int(time.time()) + 600
+        with pytest.raises(HTTPException) as err:
+            _run(_serve_async(api, "clip.mp4", None, query=f"exp={exp}&sig=" + "0" * 64))
+        assert err.value.status_code == 404
+
+    def test_an_expired_signature_is_refused(self, api):
+        _write_clip(api)
+        exp = int(time.time()) - 1
+        sig = media_signing.make_signature("clip.mp4", exp)
+        with pytest.raises(HTTPException) as err:
+            _run(_serve_async(api, "clip.mp4", None, query=f"exp={exp}&sig={sig}"))
+        assert err.value.status_code == 404
+
+    def test_a_signature_for_another_clip_does_not_open_this_one(self, api):
+        """
+        The signature is bound to the filename, so a valid link for one render
+        cannot be edited into a link for another. Without that binding, any
+        signature the holder ever obtained would authorise every paid render on
+        the instance.
+        """
+        _write_clip(api)
+        _write_clip(api, name="other.mp4", data=b"other-bytes")
+        signed_for_other = media_signing.build_signed_path("other.mp4")
+        with pytest.raises(HTTPException) as err:
+            _run(_serve_async(api, "clip.mp4", None, query=signed_for_other.split("?", 1)[1]))
+        assert err.value.status_code == 404
+
+    def test_a_nonsense_expiry_is_refused(self, api):
+        _write_clip(api)
+        with pytest.raises(HTTPException) as err:
+            _run(_serve_async(api, "clip.mp4", None, query="exp=soon&sig=abc"))
+        assert err.value.status_code == 404
+
+    def test_a_range_request_needs_the_signature_too(self, api):
+        """
+        A ranged request is the one a player actually makes. If only the plain
+        path were guarded, the browser would get its first bytes and then be
+        told to stop.
+        """
+        _write_clip(api)
+        with pytest.raises(HTTPException) as err:
+            _run(_serve_async(api, "clip.mp4", "bytes=0-99", query=""))
+        assert err.value.status_code == 404
+
+    def test_the_clip_is_not_cacheable_by_a_shared_cache(self, api):
+        """
+        The bytes are immutable, so `private, immutable` is correct and cheap:
+        the client that was handed a signed link can re-fetch it for a year,
+        while a shared cache cannot hold a paid render and serve it onward.
+        `public` here would undo the whole point.
+        """
+        _write_clip(api)
+        response, _ = _serve(api)
+        assert response.headers["cache-control"].startswith("private")
+
+
+class TestSigningHelpers:
+    """The signing helpers on their own, without a request in the way."""
+
+    def test_a_fresh_signature_verifies(self):
+        exp = int(time.time()) + 60
+        sig = media_signing.make_signature("a.mp4", exp)
+        assert media_signing.verify("a.mp4", str(exp), sig)
+
+    def test_verify_rejects_every_missing_piece(self):
+        exp = int(time.time()) + 60
+        sig = media_signing.make_signature("a.mp4", exp)
+        assert not media_signing.verify("a.mp4", str(exp), "")
+        assert not media_signing.verify("a.mp4", "", sig)
+        assert not media_signing.verify("a.mp4", None, None)
+
+    def test_sign_stored_path_only_touches_media_video_paths(self):
+        """
+        This is applied to nullable columns that may hold any URL at all, so it
+        has to pass everything else through untouched rather than mangling an
+        R2 link or a provider URL.
+        """
+        signed = media_signing.sign_stored_path("/api/media/videos/a.mp4")
+        assert signed.startswith("/api/media/videos/a.mp4?")
+        assert media_signing.sign_stored_path("https://r2.example/x.mp4") == "https://r2.example/x.mp4"
+        assert media_signing.sign_stored_path(None) is None
+        assert media_signing.sign_stored_path("") == ""
+
+    def test_signing_a_stored_path_is_stable_per_filename(self):
+        """
+        Two reads of the same stored row must both produce a usable URL, since
+        every list and history response re-signs on read.
+        """
+        first = media_signing.sign_stored_path("/api/media/videos/a.mp4")
+        second = media_signing.sign_stored_path("/api/media/videos/a.mp4")
+        for path in (first, second):
+            query = _query(path.split("?", 1)[1])
+            assert media_signing.verify("a.mp4", query["exp"], query["sig"])

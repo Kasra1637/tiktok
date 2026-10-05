@@ -804,6 +804,54 @@ class TestListingAndCapabilities:
         listing = _run(api.list_generations(studio_project_id=project["id"], user_id=ANON))
         assert "prompt_used" not in listing["generations"][0]
 
+    def test_every_response_hands_out_a_url_the_media_route_will_accept(self, api, monkeypatch):
+        """
+        The media route is signed now, so a response carrying a bare
+        /api/media/videos/x.mp4 gives the player a 404. This walks every endpoint
+        that returns a generation — detail, list, history, asset usage — because
+        each reaches the client by a different route and a miss on any of them
+        breaks a screen that otherwise works.
+
+        History is the one worth watching: it builds its rows by hand instead of
+        going through _public_generation, so it is the one most likely to miss
+        the signing, and its player sits on the page a founder uses most.
+        """
+        import media_signing
+
+        from models import StudioGenerationRequest
+        _mock_submit(api, monkeypatch)
+        project, _, _ = _ready_project(api, "Signed URL")
+        gen = _run(api.submit_project_generation(
+            project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        _mock_poll(api, monkeypatch, {
+            "status": "completed",
+            "unsigned_urls": ["https://example.invalid/clip.mp4"],
+        })
+        _run(api.poll_generation(gen["id"], ANON))
+        # The poll stored a provider URL, which is not a media path and so has
+        # nothing to sign. Point the row at a real one so this exercises the
+        # signing rather than passing on an unrelated URL shape.
+        _run(api._execute(
+            "UPDATE generations SET video_url = ? WHERE id = ?",
+            (f"/api/media/videos/{gen['id']}.mp4", gen["id"])))
+
+        def assert_plays(payload, label):
+            url = payload.get("video_url")
+            assert url and url.startswith("/api/media/videos/"), (
+                f"{label}: expected a media path, got {url!r}")
+            assert "?" in url, f"{label}: {url} carries no signature"
+            query = dict(p.split("=", 1) for p in url.split("?", 1)[1].split("&"))
+            assert media_signing.verify(
+                url.split("/")[-1].split("?", 1)[0], query["exp"], query["sig"]
+            ), f"{label}: the media route would reject {url}"
+
+        assert_plays(_run(api.get_generation(gen["id"], user_id=ANON)), "detail")
+        assert_plays(
+            _run(api.list_generations(studio_project_id=project["id"], user_id=ANON))["generations"][0],
+            "list",
+        )
+        assert_plays(_run(api.generation_history(user_id=ANON))["generations"][0], "history")
+
     def test_detail_response_includes_the_prompt(self, api, monkeypatch):
         from models import StudioGenerationRequest
         _mock_submit(api, monkeypatch)
