@@ -39,6 +39,64 @@ const { JSDOM } = require("jsdom");
 
 const SRC = path.resolve(__dirname, "..", "src");
 
+/**
+ * Find JSX text nodes that contain comment syntax, across every source file.
+ *
+ * This exists because a real defect shipped that this file could not see. An
+ * editing pass replaced a SectionCard close tag and its opening comment marker
+ * but left the comment's *closing lines* behind as raw text between elements.
+ * Raw text between JSX elements is valid, so `npm run build` compiled it, every
+ * render check passed, and the page rendered the comment's prose — comment
+ * markers and all — as visible copy.
+ *
+ * Mounting catches this only for components this file happens to mount, and
+ * only for the branch each fixture reaches. Parsing every file catches it
+ * everywhere: a `JSXText` node with non-whitespace content is by definition
+ * something the browser will show, and if that content looks like a comment
+ * then a comment lost its braces. Whitespace-only JSXText is normal (JSX drops
+ * the newlines and indentation between elements) and is skipped.
+ */
+function findLeakedJsxText() {
+  const leaks = [];
+  const walk = (dir) =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = path.join(dir, entry.name);
+      return entry.isDirectory() ? walk(full) : [full];
+    });
+
+  for (const file of walk(SRC)) {
+    if (!/\.(jsx|js)$/.test(file)) continue;
+    const code = fs.readFileSync(file, "utf8");
+    const ast = babel.parseSync(code, {
+      filename: file,
+      babelrc: false,
+      configFile: false,
+      parserOpts: { plugins: ["jsx"] },
+    });
+    const visit = (node) => {
+      if (!node || typeof node !== "object") return;
+      if (Array.isArray(node)) {
+        node.forEach(visit);
+        return;
+      }
+      if (node.type === "JSXText" && node.value.trim()) {
+        const SLASH = String.fromCharCode(47);
+        if (node.value.includes(SLASH + "*") || node.value.includes("*" + SLASH)) {
+          leaks.push(
+            `${path.relative(SRC, file)}:${node.loc.start.line} ` +
+              JSON.stringify(node.value.trim().slice(0, 60))
+          );
+        }
+      }
+      for (const key of Object.keys(node)) {
+        if (key !== "loc") visit(node[key]);
+      }
+    };
+    visit(ast.program);
+  }
+  return leaks;
+}
+
 // ---------------------------------------------------------------------------
 // DOM, installed before React is required so it binds to a real document
 // ---------------------------------------------------------------------------
@@ -643,6 +701,16 @@ const PIECE_SECONDS = String(TEMPLATE.default_duration);
 const stepSource = fs.readFileSync(path.join(SRC, "pages", "CreateVideo.jsx"), "utf8");
 
 async function main() {
+  await check("no source file leaks JSX comment text into the page", async () => {
+    const leaks = findLeakedJsxText();
+    if (leaks.length) {
+      throw new Error(
+        `${leaks.length} JSX text node(s) contain comment syntax and will render ` +
+          `as visible copy: ${leaks.join("; ")}`
+      );
+    }
+  });
+
   // -------------------------------------------------------------------------
   // The wizard is five steps, and every step that existed only to hold a button
   // has been folded into the step it belonged to. These prove the shape is real
@@ -2994,7 +3062,7 @@ async function runDemoCtaChecks() {
     "which settings groups are open is remembered across visits",
     async (ctx) => {
       const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
-      const key = "hookforge.demoCta.openSections.v2";
+      const key = "hookforge.demoCta.openSections.v3";
       dom.window.localStorage.removeItem(key);
       const mountEditor = async () => {
         // A fresh container per mount: `check` owns one, and creating a second
@@ -3008,43 +3076,70 @@ async function runDemoCtaChecks() {
         });
         return { container, root };
       };
+      // Which groups are expanded, read from the rendered aria-expanded state
+      // rather than from text: two groups can each contain "1.8s"-like content,
+      // but only one header can claim to be open.
+      const openGroups = (container) =>
+        [...container.querySelectorAll('button[aria-expanded]')]
+          .filter((b) => b.getAttribute("aria-expanded") === "true")
+          .map((b) => (b.textContent || "").trim());
+      const clickGroup = async (container, label) => {
+        const btn = [...container.querySelectorAll("button[aria-expanded]")].find(
+          (b) => (b.textContent || "").trim() === label
+        );
+        if (!btn) throw new Error(`no ${label} group header to click`);
+        await act(async () => {
+          btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+      };
       try {
-        // First visit: the defaults are Source & Look, Hook Text, End Card CTA open.
-        // The duration value renders once, right-aligned in the label row — the
-        // label itself carries no value, so "On screen" and "1.8s" are asserted
-        // separately rather than as one string.
+        // First visit: exactly one group, Source & Look — it is the input, and
+        // eleven open groups made the panel taller than the video it describes.
         const first = await mountEditor();
+        const firstOpen = openGroups(first.container);
+        if (firstOpen.length !== 1 || firstOpen[0] !== "Source & Look") {
+          throw new Error(
+            `a first visit should open only Source & Look (open: ${JSON.stringify(firstOpen)})`
+          );
+        }
+        // Opening another closes the first. This is the whole point of the
+        // change: two expanded groups is the layout that pushed the video small.
+        await clickGroup(first.container, "Hook Text");
+        const afterSwitch = openGroups(first.container);
+        if (afterSwitch.length !== 1 || afterSwitch[0] !== "Hook Text") {
+          throw new Error(
+            `opening Hook Text must leave exactly it open (open: ${JSON.stringify(afterSwitch)})`
+          );
+        }
+        // And the content assertion: the duration reads once, right-aligned.
         const firstText = first.container.textContent;
         if (!firstText.includes("On screen") || !firstText.includes("1.8s")) {
-          throw new Error("Hook Text did not start open on a first visit");
-        }
-        const hooks = [...first.container.querySelectorAll("button")].find(
-          (b) => (b.textContent || "").trim() === "Hook Text"
-        );
-        if (!hooks) throw new Error("no Hook Text group header to click");
-        await act(async () => {
-          hooks.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-        });
-        if (first.container.textContent.includes("On screen")) {
-          throw new Error("clicking the Hook Text header did not collapse it");
+          throw new Error("Hook Text did not open on click");
         }
         const saved = JSON.parse(dom.window.localStorage.getItem(key) || "{}");
-        if (saved.hook !== false) {
+        const savedOpen = Object.keys(saved).filter((k) => saved[k]);
+        if (savedOpen.length !== 1 || savedOpen[0] !== "hook") {
           throw new Error(
-            `collapsing Hook Text was not written through (stored: ${JSON.stringify(saved)})`
+            `switching groups was not written through (stored: ${JSON.stringify(saved)})`
           );
         }
-        // Second visit must honour it.
+        // Second visit must honour it, not reset to the default.
         const second = await mountEditor();
-        if (second.container.textContent.includes("1.8s")) {
+        const secondOpen = openGroups(second.container);
+        if (secondOpen.length !== 1 || secondOpen[0] !== "Hook Text") {
           throw new Error(
-            "Hook Text reopened on a later visit. The panel is a workspace, not a " +
-              "form; re-collapsing the groups someone deliberately opened is the " +
-              "friction that makes a tool feel like it forgot you."
+            "the open group was not remembered. The panel is a workspace, not a " +
+              "form; re-opening a different group than the one someone left on " +
+              `is the friction that makes a tool feel like it forgot you (open: ${JSON.stringify(secondOpen)})`
           );
         }
-        if (!second.container.textContent.includes("Choose a video") && !second.container.textContent.includes("Replace video file")) {
-          throw new Error("Source & Look should still be open on the second visit");
+        // Clicking the open group closes it; none open is valid.
+        await clickGroup(second.container, "Hook Text");
+        const closed = openGroups(second.container);
+        if (closed.length !== 0) {
+          throw new Error(
+            `clicking the open group should close it (still open: ${JSON.stringify(closed)})`
+          );
         }
       } finally {
         dom.window.localStorage.removeItem(key);
@@ -3179,6 +3274,14 @@ async function runDemoCtaChecks() {
           await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
           const html = ctx.container.innerHTML;
 
+          // The caption row above the frame is centered, so the two labels read as one
+          // caption instead of two ends of a full-width row.
+          if (!/justify-center gap-x-2 px-1/.test(html)) {
+            throw new Error(
+              "the preview caption row is not centered. Two labels pushed to " +
+                "opposite edges of a 650px column read as unrelated labels."
+            );
+          }
           // Chromeless: the preview frame may not sit inside a `.surface` card again.
           // The preview card spent ~46px on a border and padding around a video
           // that needed all of it.
@@ -3308,10 +3411,12 @@ async function runDemoCtaChecks() {
         { getGenerations: async () => ({ generations: [COMPLETED] }) },
         async () => {
           await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
-          if (!/demo-cta-panel-scroll/.test(ctx.container.innerHTML)) {
+          const panels = ctx.container.querySelectorAll(".demo-cta-panel-scroll");
+          if (panels.length < 2) {
             throw new Error(
-              "the settings panel does not use the slim scrollbar class. The " +
-                "global rules give it a 10px bar with arrow buttons."
+              `only ${panels.length} scroll container(s) use the slim scrollbar. ` +
+                "Both the settings panel and the preview column need it: the " +
+                "global rules give them a 10px bar with arrow buttons."
             );
           }
           if (!/demo-cta-panel-scroll\s*\{[^}]*scrollbar-width: thin[^}]*scrollbar-color: hsl\(228 12% 22%\) transparent/.test(css)) {
@@ -3371,6 +3476,80 @@ async function runDemoCtaChecks() {
   );
 
   await check(
+    "an old stored open-groups value cannot open two groups",
+    async (ctx) => {
+      // v2 allowed several groups open at once. Anyone who visited before the
+      // one-open change has that shape on disk, and reading it as-is would
+      // restore the exact layout the change was made to remove.
+      const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+      const key = "hookforge.demoCta.openSections.v3";
+      dom.window.localStorage.removeItem(key);
+      try {
+        dom.window.localStorage.setItem(
+          key,
+          JSON.stringify({ source: true, hook: true, cta: true, output: false, advanced: false })
+        );
+        const container = dom.window.document.createElement("div");
+        dom.window.document.body.appendChild(container);
+        const root = createRoot(container);
+        roots.push(root);
+        await act(async () => {
+          root.render(React.createElement(DemoCtaEditor, { generation: COMPLETED }));
+        });
+        const open = [...container.querySelectorAll('button[aria-expanded]')]
+          .filter((b) => b.getAttribute("aria-expanded") === "true")
+          .map((b) => (b.textContent || "").trim());
+        if (open.length !== 1) {
+          throw new Error(
+            `a stored multi-open value opened ${open.length} groups (${JSON.stringify(open)}). ` +
+              "It must be coerced to one."
+          );
+        }
+      } finally {
+        dom.window.localStorage.removeItem(key);
+      }
+    }
+  );
+
+  await check(
+    "the empty frame offers a real upload control",
+    async (ctx) => {
+      const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+      await withApi(
+        { getGenerations: async () => ({ generations: [COMPLETED] }) },
+        async () => {
+          await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
+          const input = ctx.container.querySelector('[data-testid="demo-cta-file-input"]');
+          const button = ctx.container.querySelector('[data-testid="demo-cta-frame-upload"]');
+          if (!button) {
+            throw new Error(
+              "the empty frame has no upload control. \"Upload a clip to preview\" " +
+                "was a sentence describing an action; the frame should offer it."
+            );
+          }
+          if (!input) {
+            throw new Error("no file input to drive — the upload button would do nothing");
+          }
+          // Behaviour, not a class list: a button wired to a dead ref looks
+          // perfect in markup and does nothing when clicked.
+          let reached = false;
+          input.addEventListener("click", () => {
+            reached = true;
+          });
+          await act(async () => {
+            button.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          if (!reached) {
+            throw new Error(
+              "clicking the frame's upload button did not reach the file input"
+            );
+          }
+        }
+      );
+    }
+  );
+
+  await check(
     "group titles and slider labels read correctly",
     async (ctx) => {
       const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
@@ -3378,10 +3557,20 @@ async function runDemoCtaChecks() {
         { getGenerations: async () => ({ generations: [COMPLETED] }) },
         async () => {
           await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
-          const text = ctx.text();
-          if (!text.includes("End Card CTA")) {
+          if (!ctx.text().includes("End Card CTA")) {
             throw new Error("the end-card group is mislabeled or missing");
           }
+          // Group headers always render, but the hook duration only exists once
+          // Hook Text is expanded — and only one group is open at a time, so
+          // this check has to open it rather than assume it.
+          const hook = [...ctx.container.querySelectorAll("button[aria-expanded]")].find(
+            (b) => (b.textContent || "").trim() === "Hook Text"
+          );
+          if (!hook) throw new Error("no Hook Text group header to click");
+          await act(async () => {
+            hook.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          const text = ctx.text();
           // The value lives once, right-aligned in the label row. A label that
           // repeats it ("On screen: 1.8s") reads the same number twice.
           if (text.includes("On screen:")) {

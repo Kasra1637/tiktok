@@ -52,7 +52,19 @@ import { drawEndCard, drawHookOverlay, getEndCardBounds, getHookBounds, HOOK_FON
 import { drawHandView, preloadHandViewImages } from "./handView";
 import { captureZoomLock, getEffectiveZoom, removeZoomKeyframe, sortKeyframes, tickInterval } from "./zoom";
 
-const SECTIONS_KEY = "hookforge.demoCta.openSections.v2";
+const SECTIONS_KEY = "hookforge.demoCta.openSections.v3";
+
+// Render order, which is also the order that decides which group wins when a
+// stored value somehow has more than one open (older versions allowed it).
+const SECTION_ORDER = ["source", "hook", "cta", "output", "advanced"];
+
+/** The one-open shape: every key present, exactly one true (or none). */
+function singleOpen(openKey) {
+  return SECTION_ORDER.reduce((acc, key) => {
+    acc[key] = key === openKey;
+    return acc;
+  }, {});
+}
 
 // Heights, radii, borders and focus rings copied from ui/input.jsx so the
 // editor's selects and fields are indistinguishable from the app's own inputs.
@@ -195,27 +207,37 @@ function TransportButton({ label, onClick, disabled, children, testId }) {
  *   is saved standalone. Either way it never creates a Hook + Middle.
  */
 export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) {
-  // Which groups are open is remembered across visits: this panel is a
-  // workspace, not a form, and re-collapsing the groups someone deliberately
-  // opened on every reload is the kind of small friction that makes a tool feel
-  // like it forgot you. Keys are stable; anything unknown is ignored so a stale
-  // or hand-edited value cannot break the panel.
+  // At most ONE group is open at a time. This panel describes one clip, and
+  // eleven groups open at once made the settings column taller than the video
+  // they were describing — the preview shrank to fit a wall of controls. One
+  // group also means one obvious next place to look.
+  //
+  // Which group is still remembered across visits: this is a workspace, not a
+  // form, and re-opening Source & Look over whatever someone was tuning is the
+  // same friction as before, just inverted.
   const [openSections, setOpenSections] = useState(() => {
-    const defaults = { source: true, hook: true, cta: true, output: false, advanced: false };
+    const raw = (() => {
+      try {
+        return window.localStorage.getItem(SECTIONS_KEY);
+      } catch {
+        return null;
+      }
+    })();
+    if (!raw) return singleOpen("source");
     try {
-      const raw = window.localStorage.getItem(SECTIONS_KEY);
-      if (!raw) return defaults;
       const saved = JSON.parse(raw);
-      if (!saved || typeof saved !== "object") return defaults;
-      return { ...defaults, ...saved };
+      if (!saved || typeof saved !== "object") return singleOpen("source");
+      return singleOpen(SECTION_ORDER.find((k) => saved[k]) || "source");
     } catch {
-      // Private mode, quota, or malformed JSON. The defaults are a fine answer.
-      return defaults;
+      // Private mode, quota, or malformed JSON. The default is a fine answer.
+      return singleOpen("source");
     }
   });
   const toggleSection = useCallback((key) => {
     setOpenSections((prev) => {
-      const next = { ...prev, [key]: !prev[key] };
+      // Clicking the open group closes it. Nothing open is a valid state, the
+      // same as Radix's `type="single"` + `collapsible`.
+      const next = singleOpen(prev[key] ? null : key);
       try {
         window.localStorage.setItem(SECTIONS_KEY, JSON.stringify(next));
       } catch {
@@ -281,6 +303,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
 
   const videoRef = useRef(null);
   const previewCanvasRef = useRef(null);
+  // The one file input, referenced so the empty frame's upload button can
+  // drive it. Two inputs would mean two sources of truth and a duplicate
+  // `data-testid` for the same control.
+  const fileInputRef = useRef(null);
   const rafRef = useRef(null);
   const audioCtxRef = useRef(null);
   const audioSrcRef = useRef(null);
@@ -1147,6 +1173,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 <Upload className="h-3.5 w-3.5" />
                 <span>{sourceFileName ? "Replace" : "Choose a video"}</span>
                 <input
+                  ref={fileInputRef}
                   type="file"
                   accept="video/*"
                   data-testid="demo-cta-file-input"
@@ -1546,16 +1573,18 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           the stylesheet whether the player bar is in the column, because its
           104px comes out of the frame's height budget when it is. */}
       <div
-        className="demo-cta-column min-w-0 space-y-3 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1"
+        className="demo-cta-column demo-cta-panel-scroll min-w-0 space-y-3 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1"
         data-player={videoUrl && videoMeta ? "on" : "off"}
       >
         {/* Chromeless. The preview card spent ~46px on a border, a background
             and padding around a video that needs all of it; that height belongs
             to the frame now. A caption row costs 16px — an overlay would cover
             the first thing you look at and still need a scrim to stay legible,
-            so the row wins. */}
-        <div className="flex items-center justify-between gap-2 px-1">
+            so the row wins. Centered with a middot so the two read as one
+            caption rather than two ends of a full-width row. */}
+        <div className="flex flex-wrap items-center justify-center gap-x-2 px-1">
           <span className="eyebrow">Live preview</span>
+          <span aria-hidden="true" className="text-xs text-muted-foreground/60">·</span>
           <span className="text-xs text-muted-foreground">
             {(PRESETS.find((p) => p.id === preset) || {}).label}
           </span>
@@ -1582,12 +1611,26 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             <div className="h-full w-full animate-pulse bg-secondary/40" role="status" aria-label="Loading the finished render">
               <span className="sr-only">Loading the finished render…</span>
             </div>
-          ) : (
-            <div className="flex flex-col items-center gap-2 px-6 text-center">
-              <Upload className="h-7 w-7 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Upload a clip to preview.</p>
-            </div>
-          )}
+) : (
+              /* An actual control, not a sentence. "Upload a clip to preview"
+                 read as a caption; the one thing you can do here is pick a
+                 file, so the frame says so with a button that opens the
+                 picker. Deliberately `secondary`, not coral: the Export button
+                 is this screen's one primary action (design_guidelines.md:174),
+                 and two coral buttons would make neither the primary one. */
+              <div className="flex flex-col items-center gap-3 px-6 text-center">
+                <Upload className="h-7 w-7 text-muted-foreground" />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => fileInputRef.current?.click()}
+                  data-testid="demo-cta-frame-upload"
+                >
+                  <Upload className="h-4 w-4" />
+                  Upload a clip
+                </Button>
+              </div>
+            )}
         </div>
 
         {videoUrl && videoMeta && (
@@ -1802,8 +1845,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         {/* No padded container on desktop, and `width` comes from the same token
             as the frame so the two share identical edges. Mobile keeps the
             full-width fixed bar. */}
-            edge to edge with the preview and player cards. The mobile fixed
-            bar keeps its background and padding; only lg+ goes bare. */}
         <div className="demo-cta-export fixed inset-x-0 bottom-0 z-40 border-t border-[color:var(--hairline)] bg-background/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur lg:sticky lg:bottom-4 lg:border-0 lg:bg-transparent lg:p-0">
           <Button
             type="button"
