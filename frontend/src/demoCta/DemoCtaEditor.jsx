@@ -47,7 +47,7 @@ import { drawHandView, preloadHandViewImages } from "./handView";
 import { captureZoomLock, getEffectiveZoom, removeZoomKeyframe, sortKeyframes, tickInterval } from "./zoom";
 
 const SELECT_CLASS =
-  "w-full appearance-none rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-2 text-sm outline-none transition focus:border-[color:var(--brand-indigo)]";
+  "w-full appearance-none truncate rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-2 text-sm outline-none transition focus:border-[color:var(--brand-indigo)]";
 
 /**
  * One collapsible control group. The standalone app's sidebar sections map
@@ -64,13 +64,22 @@ function EditorSection({ title, defaultOpen = false, testId, children }) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
+        className="flex w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left"
       >
         <span className="eyebrow">{title}</span>
         <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
-      {open && <div className="space-y-3 px-4 pb-4">{children}</div>}
+      {open && <div className="space-y-2.5 px-3.5 pb-3.5">{children}</div>}
     </SectionCard>
+  );
+}
+
+/** Small caps sub-label for blocks nested inside a group card. */
+function SubLabel({ children }) {
+  return (
+    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+      {children}
+    </p>
   );
 }
 
@@ -948,9 +957,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+    <div className="grid gap-5 xl:grid-cols-[400px_minmax(0,1fr)]">
       <div className="min-w-0 space-y-3">
-        <EditorSection title="Source" defaultOpen testId="demo-cta-source">
+        <EditorSection title="Source & look" defaultOpen testId="demo-cta-source">
           {generation ? (
             <>
               <p className="text-xs text-muted-foreground">
@@ -972,27 +981,24 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               without generating a hook first.
             </p>
           )}
-          <label className="block">
-            <span className="text-xs text-muted-foreground">
-              {generation ? "Replace source file (optional fallback)" : "Choose a video"}
-            </span>
-            <input
-              type="file"
-              accept="video/*"
-              data-testid="demo-cta-file-input"
-              className="mt-1 block w-full text-xs"
-              onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-            />
-          </label>
+          <Button variant="secondary" size="sm" asChild className="w-full sm:w-auto">
+            <label className="cursor-pointer">
+              <span>{videoUrl ? "Replace video file" : "Choose a video"}</span>
+              <input
+                type="file"
+                accept="video/*"
+                data-testid="demo-cta-file-input"
+                className="sr-only"
+                onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+              />
+            </label>
+          </Button>
           {sourceReplaced && generation && (
             <p className="text-xs text-muted-foreground">
               Source replaced for this edit. The export is still filed under the selected Hook + Middle.
             </p>
           )}
-        </EditorSection>
-
-        <EditorSection title="View style" defaultOpen>
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="grid grid-cols-2 gap-1.5 border-t border-[color:var(--hairline)] pt-2.5">
             {[
               ["floating", "Floating Phone"],
               ["hand", "Hand Holding"],
@@ -1008,169 +1014,170 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               </Button>
             ))}
           </div>
-        </EditorSection>
-
-        {viewMode === "hand" && (
-          <EditorSection title="Environment" defaultOpen>
-            <div className="grid grid-cols-3 gap-1.5">
+          {viewMode === "hand" && (
+            <div className="grid grid-cols-5 gap-1.5">
               {ENVIRONMENTS.map((env) => (
                 <button
                   key={env.id}
                   type="button"
                   onClick={() => setEnvBg(env.id)}
+                  title={env.label}
                   className={`overflow-hidden rounded-xl border text-xs transition ${
                     envBg === env.id ? "border-[color:var(--brand-indigo)]" : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
                   }`}
                 >
                   <img src={env.url} alt={env.label} className="aspect-[3/4] w-full object-cover" loading="lazy" crossOrigin="anonymous" />
-                  <div className="px-1 py-1 text-center text-muted-foreground">{env.label}</div>
+                  <div className="px-0.5 py-1 text-center text-[10px] leading-tight text-muted-foreground">{env.label}</div>
                 </button>
               ))}
             </div>
-          </EditorSection>
-        )}
+          )}
+        </EditorSection>
 
-        {viewMode === "hand" && (
-          <EditorSection title="Hand size & position" defaultOpen testId="hand-transform-controls">
-            <p className="text-xs text-muted-foreground">Drag the preview to move • scroll to zoom</p>
-            <ControlSlider label={`Zoom: ${handZoom.toFixed(2)}x`} value={handZoom} min={RANGES.handZoom.min} max={RANGES.handZoom.max} step={RANGES.handZoom.step} onChange={setHandZoom} testId="hand-zoom-slider" />
-            <ControlSlider label={`H position: ${Math.round(handPanX * 100)}%`} value={handPanX} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={setHandPanX} testId="hand-panx-slider" />
-            <ControlSlider label={`V position: ${Math.round(handPanY * 100)}%`} value={handPanY} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={setHandPanY} testId="hand-pany-slider" />
-            <ResetButton testId="hand-transform-reset-btn" onClick={() => { setHandZoom(1); setHandPanX(0); setHandPanY(0); }}>
-              Reset hand framing
-            </ResetButton>
-          </EditorSection>
-        )}
-
-        {viewMode === "hand" && (
-          <EditorSection title="Screen position" testId="screen-position-controls">
-            {[
-              ["Left", screenX, setScreenX, "left"],
-              ["Top", screenY, setScreenY, "top"],
-              ["Width", screenW, setScreenW, "width"],
-              ["Height", screenH, setScreenH, "height"],
-            ].map(([label, val, setter, key]) => (
-              <div key={key} className="flex items-center gap-2">
-                <span className="w-11 shrink-0 text-xs text-muted-foreground">{label}</span>
-                <Slider
-                  data-testid={`screen-${key}-slider`}
-                  value={[val]}
-                  min={RANGES.screen.min}
-                  max={RANGES.screen.max}
-                  step={RANGES.screen.step}
-                  onValueChange={([next]) => setter(next)}
-                  className="flex-1"
-                />
-                <span className="w-10 text-right font-mono text-[11px] text-muted-foreground">{(val * 100).toFixed(1)}</span>
+        <EditorSection title="Framing">
+          {viewMode === "floating" && (
+            <div className="space-y-2">
+              <SubLabel>Device</SubLabel>
+              <select value={device} onChange={(e) => setDevice(e.target.value)} className={SELECT_CLASS} title={(DEVICES.find((d) => d.id === device) || {}).label} aria-label="Device frame">
+                {DEVICES.map((d) => (
+                  <option key={d.id} value={d.id}>{d.label}</option>
+                ))}
+              </select>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Frame color:</span>
+                {[
+                  ["black", "#0d0d10", "Black"],
+                  ["white", "#f0f0f2", "White"],
+                ].map(([id, color, title]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setFrameColor(id)}
+                    title={title}
+                    aria-label={title}
+                    style={{ background: color }}
+                    className={`h-6 w-6 rounded-full border-2 transition ${frameColor === id ? "border-[color:var(--brand-indigo)]" : "border-[color:var(--hairline)]"}`}
+                  />
+                ))}
               </div>
-            ))}
-            <ResetButton testId="screen-reset-btn" onClick={() => { setScreenX(DEFAULT_SCREEN.x); setScreenY(DEFAULT_SCREEN.y); setScreenW(DEFAULT_SCREEN.w); setScreenH(DEFAULT_SCREEN.h); }}>
-              Reset to photo screen
-            </ResetButton>
-          </EditorSection>
-        )}
-
-        {viewMode === "floating" && (
-          <EditorSection title="Device frame" defaultOpen>
-            <select value={device} onChange={(e) => setDevice(e.target.value)} className={SELECT_CLASS} aria-label="Device frame">
-              {DEVICES.map((d) => (
-                <option key={d.id} value={d.id}>{d.label}</option>
+            </div>
+          )}
+          <div className="space-y-2">
+            <SubLabel>Platform</SubLabel>
+            <select value={preset} onChange={(e) => setPreset(e.target.value)} className={SELECT_CLASS} title={`${(PRESETS.find((p) => p.id === preset) || {}).label} — ${preset === "source" ? "auto" : `${(PRESETS.find((p) => p.id === preset) || {}).w}x${(PRESETS.find((p) => p.id === preset) || {}).h}`}`} aria-label="Platform preset">
+              {PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label} — {p.id === "source" ? "auto" : `${p.w}x${p.h}`}
+                </option>
               ))}
             </select>
-            <div className="mt-2 flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Frame color:</span>
-              {[
-                ["black", "#0d0d10", "Black"],
-                ["white", "#f0f0f2", "White"],
-              ].map(([id, color, title]) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setFrameColor(id)}
-                  title={title}
-                  aria-label={title}
-                  style={{ background: color }}
-                  className={`h-6 w-6 rounded-full border-2 transition ${frameColor === id ? "border-[color:var(--brand-indigo)]" : "border-[color:var(--hairline)]"}`}
-                />
-              ))}
-            </div>
-          </EditorSection>
-        )}
-
-        <EditorSection title="Platform preset" defaultOpen>
-          <select value={preset} onChange={(e) => setPreset(e.target.value)} className={SELECT_CLASS} aria-label="Platform preset">
-            {PRESETS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label} — {p.id === "source" ? "auto" : `${p.w}x${p.h}`}
-              </option>
-            ))}
-          </select>
-        </EditorSection>
-
-        {viewMode === "floating" && (
-          <EditorSection title="Background" defaultOpen>
-            <div className="grid grid-cols-5 gap-1.5">
-              {BACKGROUNDS.map((b) => (
-                <button
-                  key={b.id}
-                  type="button"
-                  onClick={() => setBg(b.id)}
-                  title={b.label}
-                  aria-label={b.label}
-                  className={`aspect-square overflow-hidden rounded-lg border transition ${
-                    bg === b.id ? "border-[color:var(--brand-indigo)]" : "border-[color:var(--hairline)]"
-                  }`}
-                  style={
-                    b.preview === "transparent"
-                      ? { backgroundImage: "linear-gradient(45deg,#666 25%,transparent 25%),linear-gradient(-45deg,#666 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#666 75%),linear-gradient(-45deg,transparent 75%,#666 75%)", backgroundSize: "8px 8px", backgroundPosition: "0 0,0 4px,4px -4px,-4px 0", backgroundColor: "#222" }
-                      : { background: b.preview }
-                  }
-                />
-              ))}
-            </div>
-          </EditorSection>
-        )}
-
-        {viewMode === "floating" && (
-          <EditorSection title="Animation" defaultOpen>
-            <div className="grid grid-cols-2 gap-1.5">
-              {ANIMATIONS.map((a) => (
-                <Button key={a.id} type="button" variant={anim === a.id ? "secondary" : "ghost"} size="sm" onClick={() => setAnim(a.id)}>
-                  {a.label}
-                </Button>
-              ))}
-            </div>
-          </EditorSection>
-        )}
-
-        <EditorSection title={`Phone size (${Math.round(scale * 100)}%)`}>
-          <ControlSlider label={`Phone size (${Math.round(scale * 100)}%)`} value={scale} min={RANGES.scale.min} max={RANGES.scale.max} step={RANGES.scale.step} onChange={setScale} />
-        </EditorSection>
-
-        <EditorSection title={`Mockup height (${Math.round(mockupStretchY * 100)}%)`}>
-          <div className="flex items-center gap-2">
-            <Slider value={[mockupStretchY]} min={RANGES.mockupStretchY.min} max={RANGES.mockupStretchY.max} step={RANGES.mockupStretchY.step} onValueChange={([next]) => setMockupStretchY(next)} className="flex-1" />
-            <ResetButton onClick={() => setMockupStretchY(1)}>Reset</ResetButton>
           </div>
+          {viewMode === "floating" && (
+            <div className="space-y-2">
+              <SubLabel>Background</SubLabel>
+              <div className="grid grid-cols-4 gap-1.5">
+                {BACKGROUNDS.map((b) => (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => setBg(b.id)}
+                    title={b.label}
+                    aria-label={b.label}
+                    className={`aspect-square overflow-hidden rounded-lg border transition ${
+                      bg === b.id ? "border-[color:var(--brand-indigo)]" : "border-[color:var(--hairline)]"
+                    }`}
+                    style={
+                      b.preview === "transparent"
+                        ? { backgroundImage: "linear-gradient(45deg,#666 25%,transparent 25%),linear-gradient(-45deg,#666 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#666 75%),linear-gradient(-45deg,transparent 75%,#666 75%)", backgroundSize: "8px 8px", backgroundPosition: "0 0,0 4px,4px -4px,-4px 0", backgroundColor: "#222" }
+                        : { background: b.preview }
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+          {viewMode === "floating" && (
+            <div className="space-y-2">
+              <SubLabel>Animation</SubLabel>
+              <div className="grid grid-cols-2 gap-1.5">
+                {ANIMATIONS.map((a) => (
+                  <Button key={a.id} type="button" variant={anim === a.id ? "secondary" : "ghost"} size="sm" onClick={() => setAnim(a.id)}>
+                    {a.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+          {viewMode === "hand" && (
+            <div className="space-y-2" data-testid="hand-transform-controls">
+              <SubLabel>Hand framing</SubLabel>
+              <p className="text-xs text-muted-foreground">Drag the preview to move • scroll to zoom</p>
+              <ControlSlider label={`Zoom: ${handZoom.toFixed(2)}x`} value={handZoom} min={RANGES.handZoom.min} max={RANGES.handZoom.max} step={RANGES.handZoom.step} onChange={setHandZoom} testId="hand-zoom-slider" />
+              <ControlSlider label={`H position: ${Math.round(handPanX * 100)}%`} value={handPanX} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={setHandPanX} testId="hand-panx-slider" />
+              <ControlSlider label={`V position: ${Math.round(handPanY * 100)}%`} value={handPanY} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={setHandPanY} testId="hand-pany-slider" />
+              <ResetButton testId="hand-transform-reset-btn" onClick={() => { setHandZoom(1); setHandPanX(0); setHandPanY(0); }}>
+                Reset hand framing
+              </ResetButton>
+            </div>
+          )}
+          {viewMode === "hand" && (
+            <div className="space-y-2" data-testid="screen-position-controls">
+              <SubLabel>Screen position</SubLabel>
+              {[
+                ["Left", screenX, setScreenX, "left"],
+                ["Top", screenY, setScreenY, "top"],
+                ["Width", screenW, setScreenW, "width"],
+                ["Height", screenH, setScreenH, "height"],
+              ].map(([label, val, setter, key]) => (
+                <div key={key} className="flex items-center gap-2">
+                  <span className="w-11 shrink-0 text-xs text-muted-foreground">{label}</span>
+                  <Slider
+                    data-testid={`screen-${key}-slider`}
+                    value={[val]}
+                    min={RANGES.screen.min}
+                    max={RANGES.screen.max}
+                    step={RANGES.screen.step}
+                    onValueChange={([next]) => setter(next)}
+                    className="flex-1"
+                  />
+                  <span className="w-10 text-right font-mono text-[11px] text-muted-foreground">{(val * 100).toFixed(1)}</span>
+                </div>
+              ))}
+              <ResetButton testId="screen-reset-btn" onClick={() => { setScreenX(DEFAULT_SCREEN.x); setScreenY(DEFAULT_SCREEN.y); setScreenW(DEFAULT_SCREEN.w); setScreenH(DEFAULT_SCREEN.h); }}>
+                Reset to photo screen
+              </ResetButton>
+            </div>
+          )}
+          <div className="space-y-2">
+            <SubLabel>Size</SubLabel>
+            <ControlSlider label={`Phone size (${Math.round(scale * 100)}%)`} value={scale} min={RANGES.scale.min} max={RANGES.scale.max} step={RANGES.scale.step} onChange={setScale} />
+          </div>
+          <div className="space-y-2">
+            <SubLabel>Height</SubLabel>
+            <div className="flex items-center gap-2">
+              <Slider value={[mockupStretchY]} min={RANGES.mockupStretchY.min} max={RANGES.mockupStretchY.max} step={RANGES.mockupStretchY.step} onValueChange={([next]) => setMockupStretchY(next)} className="flex-1" aria-label={`Mockup height (${Math.round(mockupStretchY * 100)}%)`} />
+              <ResetButton onClick={() => setMockupStretchY(1)}>Reset</ResetButton>
+            </div>
+          </div>
+          {videoUrl && (
+            <div className="space-y-2">
+              <SubLabel>Crop</SubLabel>
+              <div className="flex items-center justify-between gap-2">
+                <select value={videoFit} onChange={(e) => setVideoFit(e.target.value)} className={SELECT_CLASS} aria-label="Video fit">
+                  <option value="cover">Cover</option>
+                  <option value="contain">Contain</option>
+                  <option value="fill">Fill</option>
+                </select>
+                <ResetButton onClick={() => { setVideoFit("cover"); setVideoScale(1); setVideoOffsetX(0); setVideoOffsetY(0); }}>Reset</ResetButton>
+              </div>
+              <ControlSlider label={`Zoom: ${videoScale.toFixed(2)}x`} value={videoScale} min={RANGES.videoScale.min} max={RANGES.videoScale.max} step={RANGES.videoScale.step} onChange={setVideoScale} />
+              <ControlSlider label={`H offset: ${Math.round(videoOffsetX)}%`} value={videoOffsetX} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => setVideoOffsetX(Math.round(v))} />
+              <ControlSlider label={`V offset: ${Math.round(videoOffsetY)}%`} value={videoOffsetY} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => setVideoOffsetY(Math.round(v))} />
+            </div>
+          )}
         </EditorSection>
 
-        {videoUrl && (
-          <EditorSection title="Video crop">
-            <div className="flex items-center justify-between gap-2">
-              <select value={videoFit} onChange={(e) => setVideoFit(e.target.value)} className={SELECT_CLASS} aria-label="Video fit">
-                <option value="cover">Cover</option>
-                <option value="contain">Contain</option>
-                <option value="fill">Fill</option>
-              </select>
-              <ResetButton onClick={() => { setVideoFit("cover"); setVideoScale(1); setVideoOffsetX(0); setVideoOffsetY(0); }}>Reset</ResetButton>
-            </div>
-            <ControlSlider label={`Zoom: ${videoScale.toFixed(2)}x`} value={videoScale} min={RANGES.videoScale.min} max={RANGES.videoScale.max} step={RANGES.videoScale.step} onChange={setVideoScale} />
-            <ControlSlider label={`H offset: ${Math.round(videoOffsetX)}%`} value={videoOffsetX} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => setVideoOffsetX(Math.round(v))} />
-            <ControlSlider label={`V offset: ${Math.round(videoOffsetY)}%`} value={videoOffsetY} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => setVideoOffsetY(Math.round(v))} />
-          </EditorSection>
-        )}
-
-        <EditorSection title="Hook text (first seconds)" defaultOpen testId="hook-controls">
+        <EditorSection title="Hook text" defaultOpen testId="hook-controls">
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <Switch data-testid="hook-toggle" checked={hookEnabled} onCheckedChange={setHookEnabled} />
             Show punch-in hook on frame 1
@@ -1190,7 +1197,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           <p className="text-xs italic text-muted-foreground">Drag the hook text on the preview to reposition</p>
         </EditorSection>
 
-        <EditorSection title="End card CTA (TikTok)" defaultOpen testId="cta-controls">
+        <EditorSection title="End card" defaultOpen testId="cta-controls">
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <Switch data-testid="cta-toggle" checked={ctaEnabled} onCheckedChange={setCtaEnabled} />
             Show lead-gen end card
@@ -1233,7 +1240,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           </p>
         </EditorSection>
 
-        <EditorSection title="Export format">
+        <EditorSection title="Output" defaultOpen>
           <select
             value={bg === "transparent" ? "webm" : exportFormat}
             disabled={bg === "transparent"}
@@ -1249,48 +1256,19 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             <p className="text-xs text-muted-foreground">Transparent backgrounds export as WebM to keep the alpha channel.</p>
           )}
         </EditorSection>
-
-        <div className="space-y-2">
-          <Button
-            type="button"
-            variant="brand"
-            className="w-full"
-            disabled={!videoUrl || !videoMeta || recording || saving}
-            onClick={exportVideo}
-          >
-            {recording ? (
-              <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Recording… {Math.round(progress * 100)}%</>
-            ) : (
-              <><Smartphone className="h-3.5 w-3.5" /> {bg === "transparent" ? "Export transparent WebM" : "Export MP4"}</>
-            )}
-          </Button>
-          {recording && <Progress value={Math.round(progress * 100)} />}
-          {saving && (
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" /> Saving to History…
-            </p>
-          )}
-          {error && (
-            <Alert variant="destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-        </div>
       </div>
 
-      <div className="min-w-0 space-y-3">
-        <SectionCard title="Live preview">
+      <div className="min-w-0 space-y-3 order-first xl:order-none">
+        <SectionCard title="Live preview" className="xl:sticky xl:top-6 xl:z-10">
           <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
             <span>Live preview</span>
             <span>{(PRESETS.find((p) => p.id === preset) || {}).label}</span>
           </div>
-          <div className="flex w-full items-center justify-center overflow-hidden rounded-xl border border-[color:var(--hairline)] bg-black" style={{ height: "min(72vh, 660px)" }}>
+          <div className="flex min-h-[280px] w-full items-center justify-center overflow-hidden rounded-xl border border-[color:var(--hairline)] bg-black p-2">
             {videoUrl ? (
               <canvas
                 ref={previewCanvasRef}
-                className="max-h-full max-w-full cursor-grab touch-none active:cursor-grabbing"
-                style={{ objectFit: "contain" }}
+                className="block h-auto w-auto max-h-[62vh] max-w-full cursor-grab touch-none active:cursor-grabbing xl:max-h-[54vh]"
                 onPointerDown={handlePointerDown}
                 onWheel={handleWheel}
               />
@@ -1300,9 +1278,11 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               </div>
             )}
           </div>
+        </SectionCard>
 
-          {videoUrl && videoMeta && (
-            <div className="mt-3 space-y-3 rounded-2xl border border-[color:var(--hairline)] bg-secondary/30 p-4">
+        {videoUrl && videoMeta && (
+          <SectionCard title="Player">
+            <div className="space-y-3">
               <div className="space-y-1">
                 <div className="relative h-4 select-none">
                   {ticks.map((t) => (
@@ -1402,42 +1382,40 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                     {formatTime(duration)}
                   </span>
                 </div>
-                <div className="ml-auto flex items-center gap-1">
-                  <Button type="button" variant="ghost" size="sm" className="h-7 px-2 font-mono text-[10px]" onClick={() => handleSeek(Math.max(0, currentTime - 1))} title="Back 1 second">
+                <div className="ml-auto flex items-center gap-1.5">
+                  <Button type="button" variant="ghost" size="sm" className="h-9 min-w-9 px-2.5 font-mono text-[11px]" onClick={() => handleSeek(Math.max(0, currentTime - 1))} title="Back 1 second">
                     −1s
                   </Button>
-                  <Button type="button" variant="ghost" size="sm" className="h-7 px-1.5" onClick={() => handleSeek(Math.max(0, currentTime - 1 / 30))} title="Back 1 frame (1/30s)">
+                  <Button type="button" variant="ghost" size="sm" className="h-9 min-w-9 px-2.5" onClick={() => handleSeek(Math.max(0, currentTime - 1 / 30))} title="Back 1 frame (1/30s)">
                     ‹
                   </Button>
-                  <Button type="button" variant="ghost" size="sm" className="h-7 px-1.5" onClick={() => handleSeek(Math.min(duration, currentTime + 1 / 30))} title="Forward 1 frame (1/30s)">
+                  <Button type="button" variant="ghost" size="sm" className="h-9 min-w-9 px-2.5" onClick={() => handleSeek(Math.min(duration, currentTime + 1 / 30))} title="Forward 1 frame (1/30s)">
                     ›
                   </Button>
-                  <Button type="button" variant="ghost" size="sm" className="h-7 px-2 font-mono text-[10px]" onClick={() => handleSeek(Math.min(duration, currentTime + 1))} title="Forward 1 second">
+                  <Button type="button" variant="ghost" size="sm" className="h-9 min-w-9 px-2.5 font-mono text-[11px]" onClick={() => handleSeek(Math.min(duration, currentTime + 1))} title="Forward 1 second">
                     +1s
                   </Button>
                 </div>
               </div>
 
-              <div className="space-y-3 border-t border-[color:var(--hairline)] pt-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="eyebrow">Zoom Lock</span>
-                    {zoomKeyframes.length > 0 && (
-                      <span className="text-[11px] text-muted-foreground">
-                        {zoomKeyframes.length} {zoomKeyframes.length === 1 ? "keyframe" : "keyframes"} set
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1.5">
+              <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="eyebrow">Zoom Lock</span>
+                  {zoomKeyframes.length > 0 && (
+                    <span className="text-[11px] text-muted-foreground">
+                      {zoomKeyframes.length} {zoomKeyframes.length === 1 ? "keyframe" : "keyframes"}
+                    </span>
+                  )}
+                  <span className="ml-auto flex items-center gap-1.5">
                     <Button type="button" variant="secondary" size="sm" onClick={handleCaptureZoomLock}>
                       + Lock at {formatTime(currentTime)}
                     </Button>
                     {zoomKeyframes.length > 0 && (
                       <Button type="button" variant="ghost" size="sm" onClick={handleClearZoomKeyframes}>
-                        Clear all
+                        Clear
                       </Button>
                     )}
-                  </div>
+                  </span>
                 </div>
                 {sortedKeyframes.length > 0 && (
                   <div className="space-y-1.5">
@@ -1477,8 +1455,37 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 )}
               </div>
             </div>
+          </SectionCard>
+        )}
+
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[color:var(--hairline)] bg-background/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur xl:sticky xl:bottom-4 xl:rounded-2xl xl:border xl:bg-card/90 xl:px-4 xl:py-3">
+          <Button
+            type="button"
+            variant="brand"
+            className="w-full"
+            disabled={!videoUrl || !videoMeta || recording || saving}
+            onClick={exportVideo}
+          >
+            {recording ? (
+              <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Recording… {Math.round(progress * 100)}%</>
+            ) : (
+              <><Smartphone className="h-3.5 w-3.5" /> {bg === "transparent" ? "Export transparent WebM" : "Export MP4"}</>
+            )}
+          </Button>
+          {recording && <Progress value={Math.round(progress * 100)} />}
+          {saving && (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" /> Saving to History…
+            </p>
           )}
-        </SectionCard>
+          {error && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+        </div>
+        <div className="h-24 xl:hidden" aria-hidden="true" />
 
         <video ref={videoRef} className="hidden" playsInline muted loop autoPlay />
 

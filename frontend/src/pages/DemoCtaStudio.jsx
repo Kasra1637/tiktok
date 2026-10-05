@@ -74,9 +74,9 @@ function SourcePicker() {
   return (
     <div className="space-y-3">
       <h2 className="eyebrow">Or open a finished render</h2>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {rows.map((row) => (
-          <SectionCard key={row.id} className="space-y-2">
+          <SectionCard key={row.id} className="flex h-full flex-col">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-display text-sm font-semibold">
                 {row.brand_name || "Unassigned app"}
@@ -90,7 +90,7 @@ function SourcePicker() {
             {row.hook_line && (
               <p className="truncate text-xs text-muted-foreground">&ldquo;{row.hook_line}&rdquo;</p>
             )}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 pt-1" style={{ marginTop: "auto" }}>
               <Button variant="brand" size="sm" asChild>
                 <Link to={`/demo-cta/${row.id}`}>
                   <Smartphone className="h-3.5 w-3.5" /> Open in editor
@@ -169,7 +169,7 @@ function EditorRoute({ generationId }) {
 export function DemoCtaStudio() {
   const { generationId } = useParams();
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-5">
+    <div className="mx-auto w-full max-w-7xl space-y-5">
       <PageHeader
         icon={Smartphone}
         eyebrow="Studio"
