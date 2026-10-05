@@ -162,6 +162,38 @@ export function extensionForMime(mime) {
   return String(mime || "").startsWith("video/mp4") ? "mp4" : "webm";
 }
 
+/**
+ * Floor for a believable recording. A multi-second capture at 8Mbps is
+ * megabytes; nothing legitimate is smaller. Anything under this is an empty
+ * mux, a truncated write, or a recorder that stopped before the first sample
+ * — all of which used to be offered as a download with a confident filename.
+ */
+export const MIN_EXPORT_BYTES = 32768;
+
+export function isPlausibleRecordingSize(size) {
+  return Number.isFinite(size) && size >= MIN_EXPORT_BYTES;
+}
+
+/**
+ * Identify a recorded container from its first bytes, so a corrupt or
+ * truncated file is caught before it becomes a download link.
+ *
+ * MP4 is a box structure: the file opens with a 4-byte big-endian box size
+ * followed by the box type, and the first box of a recording is always `ftyp`.
+ * WebM is EBML: the stream opens with the fixed 4-byte element ID 0x1A45DFA3.
+ * Anything else — a zeroed buffer, an HTML error page saved as .mp4, a file
+ * cut mid-header — is not a recording. Returns "mp4", "webm", or null.
+ *
+ * `bytes` is the first 8+ bytes as a Uint8Array (or any indexable of numbers).
+ */
+export function sniffRecordingContainer(bytes) {
+  if (!bytes || bytes.length < 8) return null;
+  const b = (i) => bytes[i] & 0xff;
+  if (b(4) === 0x66 && b(5) === 0x74 && b(6) === 0x79 && b(7) === 0x70) return "mp4";
+  if (b(0) === 0x1a && b(1) === 0x45 && b(2) === 0xdf && b(3) === 0xa3) return "webm";
+  return null;
+}
+
 function sanitizePart(part, fallback) {
   const clean = String(part || "")
     .toLowerCase()

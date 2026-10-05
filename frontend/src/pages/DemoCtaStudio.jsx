@@ -183,7 +183,7 @@ export function DemoCtaStudio() {
         description={
           generationId
             ? "The finished Hook + Middle, wrapped in a phone mockup with your demo and close. The export lands beside the original in History."
-            : "Wrap your footage in a phone mockup and add your own call to action. Use your own clip, or open a finished Hook + Middle from below. Exports save to History."
+            : "Wrap your own clip—or a finished render—in a phone mockup. Exports save to History."
         }
       />
       {generationId ? (

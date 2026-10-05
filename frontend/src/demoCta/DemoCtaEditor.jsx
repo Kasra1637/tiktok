@@ -46,7 +46,9 @@ import {
   buildExportFilename,
   extensionForMime,
   formatTime,
+  isPlausibleRecordingSize,
   selectExportMime,
+  sniffRecordingContainer,
 } from "./constants";
 import { drawEndCard, drawHookOverlay, getEndCardBounds, getHookBounds, HOOK_FONT } from "./overlays";
 import { drawHandView, preloadHandViewImages } from "./handView";
@@ -64,6 +66,45 @@ function singleOpen(openKey) {
     acc[key] = key === openKey;
     return acc;
   }, {});
+}
+
+/**
+ * Load a recorded blob into a throwaway video element and confirm it has a
+ * real duration. This is the same check a player performs on open — metadata
+ * parses, the container demuxes — so a blob that passes here opens in VLC,
+ * QuickTime, and the in-app preview alike. A blob that fails never becomes a
+ * download link or a History row.
+ */
+function probeRecordingPlays(blob) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const probe = document.createElement("video");
+    const cleanup = () => {
+      URL.revokeObjectURL(url);
+      probe.removeAttribute("src");
+    };
+    const fail = (message) => {
+      cleanup();
+      reject(new Error(message));
+    };
+    const timer = setTimeout(
+      () => fail("The recording would not play back. Try again, or switch Export format to WebM in Output."),
+      8000
+    );
+    probe.preload = "auto";
+    probe.onloadedmetadata = () => {
+      clearTimeout(timer);
+      if (Number.isFinite(probe.duration) && probe.duration > 0) {
+        cleanup();
+        resolve();
+      } else {
+        fail("The recording has no playable duration. Try again, or switch Export format to WebM in Output.");
+      }
+    };
+    probe.onerror = () =>
+      fail("The recording would not play back. Try again, or switch Export format to WebM in Output.");
+    probe.src = url;
+  });
 }
 
 // Heights, radii, borders and focus rings copied from ui/input.jsx so the
@@ -929,6 +970,16 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       if (!mime) throw new Error("Your browser does not support video recording.");
       const ext = extensionForMime(mime);
 
+      // Pre-flight: an instant stop — zero duration, a canvas that never sized —
+      // produces a valid-looking empty file that no player opens. Fail here with
+      // words instead of offering that file with a confident filename.
+      if (!Number.isFinite(videoMeta.d) || videoMeta.d <= 0) {
+        throw new Error("The clip has no playable duration, so there is nothing to record.");
+      }
+      if (!canvas.width || !canvas.height) {
+        throw new Error("The preview has no size yet. Wait for it to appear, then export again.");
+      }
+
       const stream = canvas.captureStream(CAPTURE_FPS);
       video.loop = false;
       video.muted = false;
@@ -979,13 +1030,23 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       });
       const chunks = [];
       recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-      const done = new Promise((res) => {
+      const done = new Promise((res, rej) => {
+        // Without this, a mid-record mux failure resolves the blob anyway and
+        // the partial file is offered as a download. Rejecting here routes it
+        // to the catch below like any other failure.
+        recorder.onerror = (e) => {
+          const detail = e?.error?.message || e?.error?.name || "unknown recorder error";
+          rej(new Error(`The recording failed mid-capture (${detail}). Try again, or switch Export format to WebM in Output.`));
+        };
         recorder.onstop = () => res(new Blob(chunks, { type: mime }));
       });
 
       await seekVideo(video, 0);
       await video.play();
-      recorder.start();
+      // A 250ms timeslice: same accumulated output, but chunks flow during the
+      // capture instead of arriving only at stop, so a stalled recorder shows
+      // itself earlier.
+      recorder.start(250);
 
       const duration = videoMeta.d;
       const start = performance.now();
@@ -999,11 +1060,30 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         tick();
       });
 
-      recorder.stop();
+      // Guarded: if the recorder already errored and went inactive, stopping it
+      // throws InvalidStateError and masks the real failure with noise.
+      if (recorder.state !== "inactive") recorder.stop();
       video.pause();
       video.loop = true;
       video.muted = true;
       const blob = await done;
+
+      // Post-record validation. Everything below is about refusing to offer a
+      // broken download: a file that fails here never gets a URL, a filename,
+      // or a History row.
+      if (!isPlausibleRecordingSize(blob.size)) {
+        throw new Error("The recording came out empty — nothing was captured. Try again, or switch Export format to WebM in Output.");
+      }
+      const head = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
+      const container = sniffRecordingContainer(head);
+      if (!container) {
+        throw new Error("The recording is damaged and would not play. Try again, or switch Export format to WebM in Output.");
+      }
+      if ((ext === "mp4") !== (container === "mp4")) {
+        throw new Error("The recording is not the format it claims to be. Try again, or switch Export format to WebM in Output.");
+      }
+      await probeRecordingPlays(blob);
+
       const url = URL.createObjectURL(blob);
       if (resultObjectUrlRef.current) URL.revokeObjectURL(resultObjectUrlRef.current);
       resultObjectUrlRef.current = url;
@@ -1168,20 +1248,20 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             </p>
           )}
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="secondary" size="sm" asChild className="h-10">
-              <label className="cursor-pointer">
-                <Upload className="h-3.5 w-3.5" />
-                <span>{sourceFileName ? "Replace" : "Choose a video"}</span>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="video/*"
-                  data-testid="demo-cta-file-input"
-                  className="sr-only"
-                  onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-                />
-              </label>
-            </Button>
+            {/* No picker button here. The frame carries the upload action in
+                both routes, so a second button in this group was two doors to
+                the same input. The input itself stays — the frame's button
+                drives it by ref — unwrapped and named, since a `sr-only`
+                input with no label is invisible to assistive tech too. */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="video/*"
+              aria-label="Choose a video file"
+              data-testid="demo-cta-file-input"
+              className="sr-only"
+              onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+            />
             {sourceFileName && (
               <>
                 <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={sourceFileName}>

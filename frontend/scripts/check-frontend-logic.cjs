@@ -647,6 +647,24 @@ check("mp4 is detected by prefix, everything else is webm",
 check("no recorder means no mime rather than a guess",
   DC.selectExportMime({ transparent: false, exportFormat: "auto" }) === null);
 
+// A broken recording must never become a download. These pin the pure half of
+// that gate: the size floor and the container sniff that run before a blob
+// gets a URL, a filename, or a History row.
+check("recordings under 32KB are not plausible",
+  DC.isPlausibleRecordingSize(0) === false
+    && DC.isPlausibleRecordingSize(32767) === false
+    && DC.isPlausibleRecordingSize(32768) === true
+    && DC.isPlausibleRecordingSize(10 * 1024 * 1024) === true
+    && DC.isPlausibleRecordingSize(NaN) === false);
+check("an mp4 recording opens with an ftyp box",
+  DC.sniffRecordingContainer(new Uint8Array([0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70])) === "mp4");
+check("a webm recording opens with the EBML header",
+  DC.sniffRecordingContainer(new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x93, 0x42, 0x82, 0x88])) === "webm");
+check("a truncated header sniffs as nothing, not as a guess",
+  DC.sniffRecordingContainer(new Uint8Array([0x00, 0x00, 0x00])) === null
+    && DC.sniffRecordingContainer(new Uint8Array(8)) === null
+    && DC.sniffRecordingContainer(new Uint8Array([0x3c, 0x21, 0x44, 0x4f, 0x43, 0x54, 0x59, 0x50])) === null);
+
 // Catalog parity with the standalone app: nothing dropped in the port.
 check("the device catalog survived the port",
   DC.DEVICES.length === 7 && DC.DEVICES[0].id === "s24" && DC.DEVICES[6].id === "lg_g8");

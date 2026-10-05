@@ -3015,6 +3015,33 @@ async function runDemoCtaChecks() {
             "would make this unreachable for anyone who just wants to wrap their own clip."
         );
       }
+      // The section carries no picker button of its own: the frame's upload
+      // button drives the input above by ref in both routes, so a second
+      // button here was two doors to the same input. The input stays.
+      const labels = [...ctx.container.querySelectorAll("button")].map((b) =>
+        (b.textContent || "").trim()
+      );
+      if (labels.some((t) => t === "Choose a video" || t === "Replace")) {
+        throw new Error(
+          "the Source & Look picker button is back. The frame's upload button " +
+            "is the one picker control; this one only duplicated it."
+        );
+      }
+      // The standalone header describes the page in one sentence. 85 chars is
+      // the budget: anything longer pushes the editor down on the small screens
+      // this route is most useful on.
+      const STANDALONE_COPY =
+        "Wrap your own clip—or a finished render—in a phone mockup. Exports save to History.";
+      if (STANDALONE_COPY.length > 85) {
+        throw new Error(
+          `the standalone copy is ${STANDALONE_COPY.length} chars, over the 85 budget`
+        );
+      }
+      if (!ctx.text().includes(STANDALONE_COPY)) {
+        throw new Error(
+          "the standalone page does not carry its one-sentence description"
+        );
+      }
       // And it must not nag about a missing render, because none is needed.
       if (ctx.text().includes("No finished render yet")) {
         throw new Error(
@@ -3611,6 +3638,45 @@ async function runDemoCtaChecks() {
           }
         }
       );
+    }
+  );
+
+  await check(
+    "a failed recording can never become a download",
+    async () => {
+      // jsdom has no MediaRecorder, so the record path itself cannot run here.
+      // What this guards is the structure that makes a corrupt file impossible
+      // to offer: size floor, container sniff, and playback probe all run
+      // before setResult, and the recorder's own errors reject instead of
+      // resolving partial chunks. A broken download link — the VLC failure —
+      // came from exactly the absence of this gate.
+      const src = fs.readFileSync(
+        path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
+        "utf8"
+      );
+      const need = [
+        "isPlausibleRecordingSize(blob.size)",
+        "sniffRecordingContainer(head)",
+        "await probeRecordingPlays(blob)",
+        "recorder.onerror",
+        'recorder.start(250)',
+      ];
+      for (const marker of need) {
+        if (!src.includes(marker)) {
+          throw new Error(
+            `the export validation gate lost a piece: ${marker}. Without all of ` +
+              "them a corrupt recording can reach the download link again."
+          );
+        }
+      }
+      const probeAt = src.indexOf("await probeRecordingPlays(blob)");
+      const resultAt = src.indexOf("setResult({ url, name, size: blob.size, mime, blob })");
+      if (probeAt === -1 || resultAt === -1 || probeAt > resultAt) {
+        throw new Error(
+          "the playback probe does not run before the result is published. A " +
+            "recording that would not play must never get a URL or a History row."
+        );
+      }
     }
   );
 
