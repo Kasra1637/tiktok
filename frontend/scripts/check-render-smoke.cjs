@@ -2815,6 +2815,35 @@ async function runDemoCtaChecks() {
     );
   }
 
+  // Mounts the studio with a config endpoint that fails the first `failures`
+  // attempts and then answers. The two cases matter separately: a blip must not
+  // remove the step, and a genuinely unreachable check must not leave a button
+  // that goes nowhere. Both end up calling the endpoint more than once, which is
+  // what tells them apart from the old one-shot behaviour.
+  async function mountStudioWithFlakyConfig(ctx, failures) {
+    let calls = 0;
+    await withApi(
+      {
+        getDemoCtaConfig: async () => {
+          calls += 1;
+          if (calls <= failures) throw new Error("simulated network failure");
+          return { available: true, origin: "https://demo-cta.example" };
+        },
+        getGenerations: async () => ({
+          generations: [{ ...SEGMENT, video_url: "/api/media/videos/gen-1.mp4" }],
+        }),
+      },
+      async () => {
+        await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+        // Long enough for the whole retry ladder (300ms, then 1000ms).
+        await act(async () => {
+          await new Promise((r) => setTimeout(r, 1500));
+        });
+      }
+    );
+    return calls;
+  }
+
   // Posts a finished-clip message at the studio window and reports whether it was
   // accepted. `origin` is set explicitly because that is the whole question: the
   // message arrives from the Product Demo + CTA app, which is a different origin
@@ -2947,6 +2976,42 @@ async function runDemoCtaChecks() {
         throw new Error(
           "a clip naming another render was filed against this one. The origin " +
             "check alone cannot tell two tabs apart."
+        );
+      }
+    }
+  );
+
+  await check(
+    "a transient failure to reach the config does not hide the step",
+    async (ctx) => {
+      const calls = await mountStudioWithFlakyConfig(ctx, 1);
+      if (calls < 2) {
+        throw new Error(
+          "the config was asked once and gave up. A failed request on mount is " +
+            "exactly how this step disappears for a whole page view with nothing " +
+            "to explain it."
+        );
+      }
+      if (!demoCtaButton(ctx)) {
+        throw new Error(
+          "the step stayed hidden after a single failed request, even though the " +
+            "next one succeeded"
+        );
+      }
+    }
+  );
+
+  await check(
+    "an unreachable config leaves the step hidden rather than offering a dead button",
+    async (ctx) => {
+      const calls = await mountStudioWithFlakyConfig(ctx, 99);
+      if (calls < 2) {
+        throw new Error("a permanently failing check was never retried");
+      }
+      if (demoCtaButton(ctx)) {
+        throw new Error(
+          "the step is offered on an instance whose config never answered, so the " +
+            "button leads nowhere"
         );
       }
     }

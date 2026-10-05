@@ -115,21 +115,50 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
   const intentKey = useRef(null);
 
   // Whether the optional Product Demo + CTA step exists on this instance, and
-  // which origin it lives on. Asked once on mount and failing closed: if the
-  // call errors, the step stays hidden, so a broken config can never turn into a
-  // button that goes nowhere.
+  // which origin it lives on.
+  //
+  // Asked on mount but retried, because this call gates a button and mount can
+  // land before a freshly loaded session has a token to attach. As a one-shot it
+  // turned that race into a step that stayed hidden for the whole page view, with
+  // no retry and nothing on screen to explain it - and a founder has no way to
+  // tell "this instance has no Product Demo + CTA app" from "the check failed".
+  //
+  // Still fails closed when it gives up: a broken config must not become a button
+  // that goes nowhere. The distinction is that an unconfigured instance *answers*
+  // available:false - a success - so the retry here only ever re-asks about
+  // genuine failures, never about a deliberate "no".
   useEffect(() => {
     let cancelled = false;
-    api
-      .getDemoCtaConfig()
-      .then((data) => {
-        if (cancelled) return;
-        setDemoCtaAvailable(Boolean(data?.available));
-        setDemoCtaOrigin(typeof data?.origin === "string" ? data.origin.replace(/\/+$/, "") : "");
-      })
-      .catch(() => {});
+    let timer = null;
+    // Bounded, and short: the case worth covering is the first moments after
+    // mount, not a backend that is genuinely down.
+    const RETRY_DELAYS_MS = [300, 1000];
+    let attempt = 0;
+
+    const ask = () => {
+      api
+        .getDemoCtaConfig()
+        .then((data) => {
+          if (cancelled) return;
+          setDemoCtaAvailable(Boolean(data?.available));
+          setDemoCtaOrigin(
+            typeof data?.origin === "string" ? data.origin.replace(/\/+$/, "") : ""
+          );
+        })
+        .catch(() => {
+          if (cancelled) return;
+          if (attempt < RETRY_DELAYS_MS.length) {
+            const delay = RETRY_DELAYS_MS[attempt];
+            attempt += 1;
+            timer = setTimeout(ask, delay);
+          }
+        });
+    };
+
+    ask();
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
   }, []);
 

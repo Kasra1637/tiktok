@@ -1,6 +1,6 @@
 services:
-  - type: web
-    name: tiktok-hookforge
+- type: web
+      name: tiktok-a1xr
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: free
