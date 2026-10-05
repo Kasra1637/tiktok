@@ -76,6 +76,7 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
   // offered until the backend says the app is configured, so an instance
   // without it renders exactly as it does today.
   const [demoCtaAvailable, setDemoCtaAvailable] = useState(false);
+  const [demoCtaOrigin, setDemoCtaOrigin] = useState("");
   const [startingDemoCta, setStartingDemoCta] = useState(false);
   const [receivingDemoCta, setReceivingDemoCta] = useState(false);
   const timer = useRef(null);
@@ -113,15 +114,18 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
   // founder actually hits.
   const intentKey = useRef(null);
 
-  // Whether the optional Product Demo + CTA step exists on this instance.
-  // Asked once on mount and failing closed: if the call errors, the step stays
-  // hidden, so a broken config can never turn into a button that goes nowhere.
+  // Whether the optional Product Demo + CTA step exists on this instance, and
+  // which origin it lives on. Asked once on mount and failing closed: if the
+  // call errors, the step stays hidden, so a broken config can never turn into a
+  // button that goes nowhere.
   useEffect(() => {
     let cancelled = false;
     api
       .getDemoCtaConfig()
       .then((data) => {
-        if (!cancelled) setDemoCtaAvailable(Boolean(data?.available));
+        if (cancelled) return;
+        setDemoCtaAvailable(Boolean(data?.available));
+        setDemoCtaOrigin(typeof data?.origin === "string" ? data.origin.replace(/\/+$/, "") : "");
       })
       .catch(() => {});
     return () => {
@@ -132,17 +136,21 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
   // The return leg: the Product Demo + CTA app posts its finished clip back
   // here when it exports.
   //
-  // The origin is checked, not assumed. Any page can postMessage into this one,
-  // and a blob accepted on faith would be filed into a stranger's History.
+  // The origin is checked against the configured app, not assumed. Any page can
+  // postMessage into this one, and a blob accepted on faith would be filed into a
+  // stranger's History. Note this is the *other* origin: the message arrives from
+  // the Product Demo + CTA app, so comparing it to our own origin would reject
+  // every legitimate return and quietly break the feature in production.
   useEffect(() => {
-    if (!demoCtaAvailable || !generation?.id) return undefined;
+    if (!demoCtaAvailable || !demoCtaOrigin || !generation?.id) return undefined;
     const onMessage = async (event) => {
-      if (event.origin !== window.location.origin) return;
+      if (event.origin !== demoCtaOrigin) return;
       const data = event.data;
       if (!data || data.type !== "hookforge:demo-cta-finished") return;
-      // The opener tells us which render it came from; refuse anything else, so a
-      // second tab cannot file against this one.
-      if (data.generationId && data.generationId !== generation.id) return;
+      // The app echoes back which render it came from. Refuse anything else, so a
+      // second tab cannot file against this one, and refuse a missing one outright
+      // rather than accepting any blob the configured origin happens to send.
+      if (data.generationId !== generation.id) return;
       if (!(data.blob instanceof Blob)) return;
       setReceivingDemoCta(true);
       try {
@@ -165,7 +173,7 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [demoCtaAvailable, generation?.id, onGenerationChange]);
+  }, [demoCtaAvailable, demoCtaOrigin, generation?.id, onGenerationChange]);
 
   useEffect(() => {
     let cancelled = false;

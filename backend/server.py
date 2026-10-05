@@ -7455,13 +7455,15 @@ async def demo_cta_link(generation_id: str, user_id: str = Depends(get_current_u
     A time-limited link that hands this clip to the Product Demo + CTA app.
 
     Issued only for the caller's own completed generation, and only when that
-    app is configured. The clip URL inside it is the ordinary signed media URL,
-    so this grants no access the founder does not already have: it cannot be
-    used to reach another generation, and it expires with everything else.
+    app is configured. The clip URL inside it is a time-limited signed media URL, so this grants no
+    access the founder does not already have: it cannot be used to reach another
+    generation, and it expires with everything else.
 
-    The link is signed as a whole as well. The Demo + CTA app fetches from a
-    different origin, so the query string is its only way to prove intent, and
-    an unsigned one would be a bearer token in a URL that gets logged.
+    The `sig` and `gid` on the link itself are a statement of intent, not a
+    secret from the other app - it holds no key and cannot verify them. What
+    actually constrains the return is that the app is told which render it came
+    from, the receiving tab checks that against its own render, and it checks
+    the sender's origin.
     """
     origin = _demo_cta_origin()
     if not origin:
@@ -7482,25 +7484,36 @@ async def demo_cta_link(generation_id: str, user_id: str = Depends(get_current_u
             detail="Wait for the render to finish before continuing to Product Demo + CTA.",
         )
 
-    stored = row.get("r2_url") or row.get("video_url")
+    stored = row.get("video_url") or row.get("r2_url")
     signed = media_signing.sign_stored_path(stored)
     if not signed or not signed.startswith("/api/media/videos/"):
-        # An R2 URL is handed over as-is: it is already a durable, authorized
-        # location, and there is no local path to sign.
+        # Only reachable when there is no local copy to sign. Hand the durable
+        # location over as-is rather than inventing a signed path for it - but
+        # prefer the local file above, because the whole point of signing was to
+        # keep the paid clip off public URLs, and preferring R2 here would quietly
+        # undo that the moment an upload finished.
         signed = stored or ""
     if not signed:
         raise HTTPException(
             status_code=409,
             detail="This clip has no playable copy to hand over yet.",
         )
+    if not PUBLIC_BASE_URL.strip():
+        # The other app is a different origin, so it cannot resolve a relative
+        # media path against our host. Fail loudly here rather than opening a
+        # window that fails to load anything.
+        raise HTTPException(
+            status_code=503,
+            detail="The Product Demo + CTA handoff needs PUBLIC_BASE_URL set on this instance.",
+        )
 
-    absolute = (
-        signed if signed.startswith("http")
-        else f"{PUBLIC_BASE_URL.rstrip('/')}{signed}" if PUBLIC_BASE_URL else signed
-    )
+    absolute = signed if signed.startswith("http") else f"{PUBLIC_BASE_URL.rstrip('/')}{signed}"
     expires_at = int(time.time()) + media_signing.DEFAULT_TTL_SECONDS
     params = {
         "src": absolute,
+        # Echoed back by the other app on the return leg, so a finished clip can
+        # only be filed against the render it actually came from.
+        "gid": generation_id,
         "exp": str(expires_at),
         "sig": media_signing.make_signature(
             f"demo-cta:{generation_id}", expires_at

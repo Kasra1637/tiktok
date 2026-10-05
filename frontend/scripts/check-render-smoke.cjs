@@ -61,6 +61,12 @@ global.Element = dom.window.Element;
 global.Event = dom.window.Event;
 global.CustomEvent = dom.window.CustomEvent;
 global.MouseEvent = dom.window.MouseEvent;
+// Blob and MessageEvent have to come from the same window as the rest. Node
+// supplies its own global Blob, so without this a blob built here fails an
+// `instanceof Blob` check in component code - a harness artifact that would hide
+// a real code path rather than reveal one. In a browser these are one object.
+global.Blob = dom.window.Blob;
+global.MessageEvent = dom.window.MessageEvent;
 global.getComputedStyle = dom.window.getComputedStyle;
 global.MutationObserver = dom.window.MutationObserver;
 global.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0);
@@ -2809,6 +2815,45 @@ async function runDemoCtaChecks() {
     );
   }
 
+  // Posts a finished-clip message at the studio window and reports whether it was
+  // accepted. `origin` is set explicitly because that is the whole question: the
+  // message arrives from the Product Demo + CTA app, which is a different origin
+  // from ours, so a check comparing it to our own would reject every real return.
+  async function postReturn(ctx, { origin, generationId }) {
+    let accepted = 0;
+    await withApi(
+      {
+        getDemoCtaConfig: async () => ({ available: true, origin: "https://demo-cta.example" }),
+        getGenerations: async () => ({
+          generations: [{ ...SEGMENT, video_url: "/api/media/videos/gen-1.mp4" }],
+        }),
+        uploadDemoCtaResult: async () => {
+          accepted += 1;
+          return { id: "returned-1", status: "completed" };
+        },
+      },
+      async () => {
+        await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+        dom.window.dispatchEvent(
+          new dom.window.MessageEvent("message", {
+            origin,
+            data: {
+              type: "hookforge:demo-cta-finished",
+              blob: new dom.window.Blob([new Uint8Array([0, 1, 2])], { type: "video/mp4" }),
+              name: "mockreel-s24.mp4",
+              generationId,
+            },
+          })
+        );
+        // Let the async listener run to completion before tearing the mount down.
+        await act(async () => {
+          await new Promise((r) => setTimeout(r, 20));
+        });
+      }
+    );
+    return accepted;
+  }
+
   await check(
     "the Product Demo + CTA step is absent when the instance has none configured",
     async (ctx) => {
@@ -2853,6 +2898,56 @@ async function runDemoCtaChecks() {
       if (!download) throw new Error("the studio's own download is gone");
       if (!download.getAttribute("href")?.includes("/api/media/videos/")) {
         throw new Error(`the download points somewhere else: ${download.getAttribute("href")}`);
+      }
+    }
+  );
+
+  await check(
+    "a returned clip from the Product Demo + CTA app is filed in History",
+    async (ctx) => {
+      const accepted = await postReturn(ctx, {
+        origin: "https://demo-cta.example",
+        generationId: SEGMENT.id,
+      });
+      if (!accepted) {
+        throw new Error(
+          "the finished clip was dropped. The other app is a different origin, so " +
+            "a listener that compares the sender against our own origin rejects " +
+            "every real return and this feature is dead in production while still " +
+            "looking fine locally."
+        );
+      }
+    }
+  );
+
+  await check(
+    "a posted blob from any other origin is refused",
+    async (ctx) => {
+      const accepted = await postReturn(ctx, {
+        origin: "https://attacker.example",
+        generationId: SEGMENT.id,
+      });
+      if (accepted) {
+        throw new Error(
+          "a page on another origin filed a video into this founder's History. " +
+            "Any page can postMessage in here, so the sender has to be checked."
+        );
+      }
+    }
+  );
+
+  await check(
+    "a returned clip for a different render is refused",
+    async (ctx) => {
+      const accepted = await postReturn(ctx, {
+        origin: "https://demo-cta.example",
+        generationId: "some-other-generation",
+      });
+      if (accepted) {
+        throw new Error(
+          "a clip naming another render was filed against this one. The origin " +
+            "check alone cannot tell two tabs apart."
+        );
       }
     }
   );

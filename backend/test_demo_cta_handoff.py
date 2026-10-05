@@ -36,6 +36,9 @@ def api():
     os.environ["OPENROUTER_API_KEY"] = "test-key-not-real"
     os.environ["CLERK_JWKS_URL"] = ""
     os.environ["DEMO_CTA_ORIGIN"] = "https://demo-cta.example"
+    # The other app is a different origin and cannot resolve a relative media
+    # path, so the handoff needs an absolute public base to hand it.
+    os.environ["PUBLIC_BASE_URL"] = "https://hookforge.example"
     if "server" in sys.modules:
         del sys.modules["server"]
     server = importlib.import_module("server")
@@ -183,6 +186,47 @@ class TestHandoffLink:
         query = self._query(_run(api.demo_cta_link(gen_id, user_id=ANON))["url"])
         exp = int(query["exp"])
         assert media_signing.verify(f"demo-cta:{gen_id}", str(exp), query["sig"])
+
+    def test_the_link_names_the_render_so_the_return_can_be_matched(self, api):
+        """
+        The other app holds no key and cannot verify the signature, so the tie
+        between a finished clip and the render it came from rests entirely on this
+        echo: it sends the id back and the receiving tab compares it to its own.
+        Without it the origin check alone would let a second tab file against this
+        one.
+        """
+        _, _, gen_id = _completed_generation(api)
+        query = self._query(_run(api.demo_cta_link(gen_id, user_id=ANON))["url"])
+        assert query["gid"] == gen_id
+
+    def test_a_durable_upload_does_not_replace_the_signed_local_source(self, api):
+        """
+        Once an upload finishes the row also has an r2_url. Preferring that would
+        hand a third-party app the raw bucket URL and quietly undo the signing
+        that keeps a paid clip off public links, so the local signed copy has to
+        win even when both exist.
+        """
+        _, _, gen_id = _completed_generation(api)
+        _run(api._execute(
+            "UPDATE generations SET r2_url = ? WHERE id = ?",
+            ("https://pub.example/bucket/paid-clip.mp4", gen_id),
+        ))
+        query = self._query(_run(api.demo_cta_link(gen_id, user_id=ANON))["url"])
+        assert "/api/media/videos/" in query["src"]
+        assert "pub.example" not in query["src"]
+
+    def test_it_refuses_to_hand_over_a_relative_source(self, api, monkeypatch):
+        """
+        The other app is a different origin and cannot resolve a relative media
+        path against our host. Failing here is the difference between a clear
+        config error and a window that opens on nothing.
+        """
+        _, _, gen_id = _completed_generation(api)
+        monkeypatch.setattr(api, "PUBLIC_BASE_URL", "")
+        with pytest.raises(HTTPException) as err:
+            _run(api.demo_cta_link(gen_id, user_id=ANON))
+        assert err.value.status_code == 503
+        assert "PUBLIC_BASE_URL" in err.value.detail
 
     def test_another_user_cannot_get_a_link_for_someone_elses_render(self, api):
         _, _, gen_id = _completed_generation(api)
