@@ -1096,7 +1096,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     // Radix tooltips need a provider ancestor; the app has none, and the
     // transport buttons are the first tooltips on this page.
     <TooltipProvider delayDuration={200}>
-    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] xl:grid-cols-[420px_minmax(0,1fr)]">
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] xl:grid-cols-[minmax(0,1fr)_650px]">
       <div className="relative min-w-0">
         {/* Back to top. Deliberately outside the scrolling panel and to its
             left, so it can never sit over the sticky preview. */}
@@ -1634,8 +1634,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
 
                 {/* Single control row: transport on the left, Zoom Lock on the
                     right. The time readout moved up here from below the
-                    scrubber so nothing reads twice. */}
-                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2">
+                    scrubber so nothing reads twice. Wrap below xl so the row
+                    never overflows narrow columns; nowrap at xl where the
+                    650px column is measured to hold it. */}
+                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2 xl:flex-nowrap">
                   <TransportButton
                     label={isPlaying ? "Pause" : "Play"}
                     onClick={togglePlayPause}
@@ -1746,7 +1748,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           </SectionCard>
         )}
 
-        <div className="demo-cta-export fixed inset-x-0 bottom-0 z-40 border-t border-[color:var(--hairline)] bg-background/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur lg:sticky lg:bottom-4 lg:rounded-2xl lg:border lg:bg-card/90 lg:px-4 lg:py-3">
+        {/* No padded container on desktop: the button spans the column exactly,
+            edge to edge with the preview and player cards. The mobile fixed
+            bar keeps its background and padding; only lg+ goes bare. */}
+        <div className="demo-cta-export fixed inset-x-0 bottom-0 z-40 border-t border-[color:var(--hairline)] bg-background/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur lg:sticky lg:bottom-4 lg:border-0 lg:bg-transparent lg:p-0">
           <Button
             type="button"
             variant="brand"

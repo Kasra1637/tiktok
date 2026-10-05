@@ -3132,6 +3132,33 @@ async function runDemoCtaChecks() {
             "in the control row — the scrubber strip carries no text."
         );
       }
+      // Shared-width contract: the right column is fixed at xl to whatever the
+      // single control row needs (~650px), so preview card, player card, and
+      // export button all span the same width with identical edges.
+      if (!/xl:grid-cols-\[minmax\(0,1fr\)_650px\]/.test(src)) {
+        throw new Error(
+          "the right column is not fixed at xl. A fluid column lets the frame " +
+            "budget and the cards drift apart, and the player row loses the " +
+            "width it was measured against."
+        );
+      }
+      // No-wrap binds at xl only, where the 650px column holds the row. Below
+      // xl the row must still wrap rather than overflow a narrower column.
+      if (!/flex flex-wrap items-center gap-x-1\.5 gap-y-2 xl:flex-nowrap/.test(src)) {
+        throw new Error(
+          "the control row is not wrap-below-xl / nowrap-at-xl. Always-nowrap " +
+            "overflows narrow columns; always-wrap reintroduces the two-line " +
+            "player the fixed column was measured to avoid."
+        );
+      }
+      // The export button carries no padded desktop container: `lg:p-0` with
+      // no `lg:px-4`, so its edges sit exactly on the cards' edges.
+      if (!/demo-cta-export[\s\S]*?lg:p-0/.test(src) || /demo-cta-export[\s\S]{0,400}?lg:px-4/.test(src)) {
+        throw new Error(
+          "the export button regained a padded desktop container. Its edges no " +
+            "longer sit exactly on the preview and player cards' edges."
+        );
+      }
     }
   );
 
