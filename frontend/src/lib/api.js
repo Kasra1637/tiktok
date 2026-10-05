@@ -196,7 +196,14 @@ export const api = {
   getGeneration: (id) => client.get(`/generations/${id}`).then((r) => r.data),
   pollGeneration: (id) => client.post(`/generations/${id}/poll`).then((r) => r.data),
   retryGeneration: (id) => client.post(`/generations/${id}/retry`).then((r) => r.data),
-  retryGenerationStorage: (id) => client.post(`/generations/${id}/storage/retry`).then((r) => r.data),
+  retryGenerationStorage: (id) =>
+    // Not a bare re-upload: when the provider download was what failed there is
+    // no local file left, so this re-fetches, trims, rescales and uploads. That
+    // is a full render's worth of transfer, comfortably past the 120s default —
+    // and a client-side abort would leave the server working on a repair the
+    // founder was already told had failed.
+    client.post(`/generations/${id}/storage/retry`, null, { timeout: 600000 })
+      .then((r) => r.data),
   archiveGeneration: (id) => client.post(`/generations/${id}/archive`).then((r) => r.data),
 
   // App-specific creative direction for the one render.

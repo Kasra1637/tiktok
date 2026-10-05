@@ -31,6 +31,7 @@ import recommendation_tags
 import overlays
 import variations
 import provider_capabilities
+import ai_service
 import feedback as feedback_mod
 from ai_service import (
     analyze_hook, generate_customized_preview, generate_face_swap, generate_video_prompt,
@@ -7653,92 +7654,47 @@ async def poll_generation(generation_id: str, user_id: str = Depends(get_current
     status = str(response.get("status") or "").lower()
     urls = response.get("unsigned_urls") or response.get("urls") or []
     video_url = urls[0] if isinstance(urls, list) and urls else response.get("video_url") or ""
+    if not video_url:
+        # A completed job can arrive with no URL list at all. The content
+        # endpoint is derivable from the job id we already hold, and it is what
+        # those URLs point at anyway, so use it rather than completing the row
+        # with nothing playable and an empty video_url.
+        video_url = ai_service.video_content_url(job_id)
+        if video_url:
+            logger.info(
+                f"Generation {generation_id}: poll returned no URL for job {job_id}; "
+                f"using the provider content endpoint instead."
+            )
     now = now_iso()
 
     if status in ("completed", "succeeded", "success") and video_url:
         stored_url = None
         storage_error = None
-        trim_note = ""
+        delivered_seconds = int(row.get("duration") or 0)
         # Persist locally first so the clip survives even if R2 is unconfigured.
+        # _persist_generation_clip owns the whole sequence -- download, trim,
+        # rescale, upload, local fallback -- because retry_generation_storage
+        # runs the identical pipeline to repair a row that already failed, and
+        # two copies of this is how the studio downloader ended up without the
+        # bearer token the legacy one always sent.
+        #
+        # It also resolves the precedence for us: a real problem outranks a
+        # trim note, so "the upload fell back to local storage" is never
+        # overwritten by "Cut down to 5s", and a clean run reports neither.
         try:
-            local_path, download_error = await _download_generation_video(video_url, generation_id)
-            if local_path:
-                # Apply the hook trim IN PLACE, before storage and before the row
-                # records a length. The canonical path is also what an extension
-                # bridges from (the previous clip's FINAL FRAME), so a trimmed
-                # hook that sat beside the full render as a sidecar would make
-                # every continuation resume from a frame the viewer never saw.
-                trim_to = int(row.get("trim_to_seconds") or 0)
-                if trim_to > 0:
-                    trimmed = await pipeline.replace_with_trimmed(local_path, trim_to)
-                    if trimmed:
-                        local_path = trimmed
-                        trim_note = f"Cut down to {trim_to}s."
-                        logger.info(
-                            f"Generation {generation_id}: hook trimmed to {trim_to}s "
-                            f"(rendered at a length the provider cannot go below)"
-                        )
-                    else:
-                        # Keep the full render rather than lose it, and say so:
-                        # the delivered clip is longer than was asked for.
-                        storage_error = (
-                            f"Could not cut the hook down to {trim_to}s, so it is "
-                            f"delivered at its full rendered length."
-                        )
-                        logger.warning(
-                            f"Generation {generation_id}: trim to {trim_to}s failed; "
-                            f"delivering the untrimmed render."
-                        )
-                # Deliver on the platform's canvas. The cheaper providers render
-                # below it -- Grok Imagine Video at 720p -- and a founder posting to
-                # TikTok wants 1080x1920 rather than whatever the model emitted.
-                # Applied after the trim so the scaled clip is the canonical file:
-                # it is what an extension would bridge from, and what both the
-                # captioned and the plain download then serve.
-                #
-                # Soft by design. A plain bilinear scale adds no detail, so failing
-                # here costs resolution and nothing else, and the un-rescaled clip
-                # is still a watchable video.
-                rescaled, rescale_warnings = await overlays.rescale_to_canvas(local_path)
-                if rescaled:
-                    local_path = rescaled
-                elif rescale_warnings:
-                    logger.warning(
-                        f"Generation {generation_id}: canvas resize failed "
-                        f"({rescale_warnings[0]}); the clip is delivered at its "
-                        f"rendered size."
-                    )
-                stored_url = storage_service.upload_video(user_id, generation_id, Path(local_path))
-                if not stored_url:
-                    # R2 is unconfigured or the upload failed, but the local copy
-                    # survived and /api/media serves it. Record that instead of
-                    # leaving r2_url empty, because an empty r2_url makes the
-                    # panel fall back to the provider's unsigned link — which
-                    # expires, and then an already-generated video will not play.
-                    stored_url = served_media_path(Path(local_path))
-                    if stored_url:
-                        storage_error = (
-                            "Saved to this server's storage rather than durable cloud "
-                            "storage, because the upload to cloud storage failed."
-                        )
-            else:
-                storage_error = (
-                    "The provider clip could not be downloaded for durable storage"
-                    f" ({download_error})."
-                )
+            stored_url, storage_error, delivered_seconds = await _persist_generation_clip(
+                row, user_id, video_url
+            )
         except Exception as e:
             storage_error = str(e)[:500]
             logger.warning(f"Generation {generation_id}: storage step failed: {e}")
 
-        # The row records the length the founder will actually get, not the
-        # length that was asked of the model.
-        delivered_seconds = int(row.get("trim_to_seconds") or 0) or row.get("duration") or 0
         await _execute(
             "UPDATE generations SET status = 'completed', video_url = ?, r2_url = ?, "
             "duration = ?, error = NULL, storage_error = ?, completed_at = ?, updated_at = ? "
             "WHERE id = ?",
             (video_url, stored_url or "", delivered_seconds,
-             storage_error or trim_note or None, now, now, generation_id),
+             storage_error or None, now, now, generation_id),
         )
         if stored_url:
             await _execute(
@@ -7781,6 +7737,36 @@ _DOWNLOAD_HEADERS = {
 }
 
 
+def _is_complete_mp4(path: Path, probe_bytes: int = 4096) -> bool:
+    """
+    Whether a file at least claims to be a finished MP4.
+
+    A `moov` atom is the index every player seeks through, and for a
+    non-fragmented file the provider writes it at the end -- so its absence is
+    the reliable signal that the transfer stopped early. Checking it costs one
+    small read and is the difference between "re-fetch this" and "hand the
+    founder an unplayable file and call the render saved".
+
+    Not a full validity check and not pretending to be: it cannot detect a file
+    that carries a moov but is missing media data. It catches the failure that
+    actually happens here, which is a truncated download.
+    """
+    try:
+        if not path.is_file() or path.stat().st_size == 0:
+            return False
+        size = path.stat().st_size
+        with open(path, "rb") as fh:
+            head = fh.read(probe_bytes)
+            if size <= probe_bytes:
+                tail = b""
+            else:
+                fh.seek(-probe_bytes, os.SEEK_END)
+                tail = fh.read(probe_bytes)
+        return b"ftyp" in head and b"moov" in (head + tail)
+    except OSError:
+        return False
+
+
 async def _download_generation_video(video_url: str, generation_id: str) -> tuple:
     """Download a finished clip into storage/videos for reuse and R2 upload.
 
@@ -7797,16 +7783,27 @@ async def _download_generation_video(video_url: str, generation_id: str) -> tupl
     timeout than the old 180s, because those 2K files are bigger. 4xx
     responses (other than 429) are not retried: a rejection will not heal
     by asking again.
+
+    The bearer token is the load-bearing part. `unsigned_urls` is a
+    misleading name — those URLs are NOT presigned — so when one points back
+    at the OpenRouter API the request must authenticate exactly as the poll
+    did, and without it every completed render failed here with a 401 while
+    the clip itself sat finished and unplayable. provider_download_headers()
+    adds it for our own endpoints only, so a third-party storage URL never
+    receives the account key. The legacy face-swap download has always sent
+    it inline; this is that same header, applied to the studio path.
     """
     target = pipeline.VIDEOS_DIR / f"{generation_id}.mp4"
     target.parent.mkdir(parents=True, exist_ok=True)
+    headers = dict(_DOWNLOAD_HEADERS)
+    headers.update(ai_service.provider_download_headers(video_url))
     last_detail = "no attempt made"
     for attempt in range(1, _DOWNLOAD_ATTEMPTS + 1):
         try:
             async with httpx.AsyncClient(
                 timeout=_DOWNLOAD_TIMEOUT,
                 follow_redirects=True,
-                headers=_DOWNLOAD_HEADERS,
+                headers=headers,
             ) as client:
                 async with client.stream("GET", video_url) as resp:
                     resp.raise_for_status()
@@ -7814,15 +7811,46 @@ async def _download_generation_video(video_url: str, generation_id: str) -> tupl
                         async for chunk in resp.aiter_bytes():
                             fh.write(chunk)
             if target.exists() and target.stat().st_size > 0:
-                return target, None
-            last_detail = "downloaded file was empty"
+                if _is_complete_mp4(target):
+                    return target, None
+                # A truncated container: the stream ended early or the process
+                # died mid-write. Serving or uploading this would hand the
+                # founder a file that cannot play, and a size check cannot tell
+                # it from a good one. Fall through to the backoff rather than
+                # `continue`, so a retry does not hammer the endpoint
+                # immediately -- and delete the bad file now, so a later attempt
+                # that fails before writing cannot leave it looking reusable.
+                last_detail = "download was truncated (not a complete MP4)"
+                logger.warning(
+                    f"Generation {generation_id}: downloaded clip is not a complete "
+                    f"MP4 ({target.stat().st_size} bytes, attempt "
+                    f"{attempt}/{_DOWNLOAD_ATTEMPTS}); treating as failed."
+                )
+                try:
+                    target.unlink()
+                except OSError:
+                    pass
+            else:
+                last_detail = "downloaded file was empty"
         except httpx.HTTPStatusError as e:
             code = e.response.status_code
             last_detail = f"HTTP {code} {(e.response.reason_phrase or '').strip()}".strip()
             logger.warning(
                 f"Could not download generation video {generation_id} "
-                f"(attempt {attempt}/{_DOWNLOAD_ATTEMPTS}): {last_detail}"
+                f"(attempt {attempt}/{_DOWNLOAD_ATTEMPTS}): {last_detail} "
+                f"url={video_url[:160]} auth={'yes' if headers.get('Authorization') else 'no'}"
             )
+            # A 401 on a URL we just authenticated for is our bug, not the
+            # provider's, and it used to be indistinguishable from a genuinely
+            # expired link in the log. Name it so the next occurrence is a
+            # two-minute fix instead of an investigation.
+            if code in (401, 403) and headers.get("Authorization"):
+                logger.error(
+                    f"Provider clip for generation {generation_id} was refused WITH a "
+                    f"bearer token (HTTP {code}). The key is being sent to "
+                    f"{video_url[:160]} but rejected -- check OPENROUTER_API_KEY and "
+                    f"whether this URL belongs to the configured OpenRouter account."
+                )
             if code != 429 and 400 <= code < 500:
                 break
         except httpx.TransportError as e:
@@ -7848,15 +7876,161 @@ async def _download_generation_video(video_url: str, generation_id: str) -> tupl
     return None, last_detail
 
 
+async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "") -> tuple:
+    """
+    Turn a finished provider render into a playable, durable clip.
+
+    Returns (stored_url, storage_error, delivered_seconds):
+      - stored_url is where the founder can watch and download it from, or None
+        when nothing could be salvaged.
+      - storage_error is the founder-facing explanation when the clip is
+        degraded rather than lost, else None.
+      - delivered_seconds is the length they will actually get, which is the
+        trimmed length when a trim applied and the requested one otherwise.
+
+    The whole post-download pipeline lives here — download, hook trim, canvas
+    rescale, R2 upload, local-served fallback — because two callers need it to
+    agree exactly. poll_generation runs it on the way to 'completed', and
+    retry_generation_storage runs it to repair a row that already failed.
+
+    That duplication is what caused the bug this exists to prevent: the studio
+    path grew its own downloader without the bearer token the legacy one always
+    sent, so a finished render could not be saved, and the only recovery
+    endpoint required a local file that the failure had already deleted. One
+    function, one downloader, one set of headers.
+
+    `video_url` is the caller's fresh URL when it has one; otherwise the stored
+    row's. Falls back to the provider's content endpoint, which is derivable
+    from the job id and does not depend on the poll response having included a
+    URL list.
+
+    Reuses an existing local copy instead of re-downloading, so retrying after
+    a pure upload failure costs one PUT rather than a full fetch, and a second
+    poll of an already-saved generation costs nothing. "Existing" means
+    _is_complete_mp4, not merely present: a file left truncated by a killed
+    process is worthless, and reusing one would persist a clip that cannot
+    play. Trim and rescale therefore run ONLY on a fresh download: both are
+    idempotent in principle, but running them twice would rewrite the canonical
+    file, and an extension bridges its next segment from that file's final
+    frame.
+    """
+    generation_id = row["id"]
+    trim_to = int(row.get("trim_to_seconds") or 0)
+    local_path = pipeline.VIDEOS_DIR / f"{generation_id}.mp4"
+    storage_error = None
+    trim_note = ""
+
+    fresh = not _is_complete_mp4(local_path)
+    if fresh:
+        source = (
+            video_url
+            or row.get("video_url")
+            or ai_service.video_content_url(row.get("openrouter_job_id") or "")
+        )
+        if not source:
+            return None, (
+                "There is no local copy of this video and no provider link left "
+                "to fetch it from, so it cannot be recovered."
+            ), 0
+        local_path, download_error = await _download_generation_video(source, generation_id)
+        if not local_path:
+            return None, (
+                "The provider clip could not be downloaded for durable storage"
+                f" ({download_error})."
+            ), 0
+
+        # Apply the hook trim IN PLACE, before storage and before the row
+        # records a length. The canonical path is also what an extension
+        # bridges from (the previous clip's FINAL FRAME), so a trimmed
+        # hook that sat beside the full render as a sidecar would make
+        # every continuation resume from a frame the viewer never saw.
+        if trim_to > 0:
+            trimmed = await pipeline.replace_with_trimmed(local_path, trim_to)
+            if trimmed:
+                local_path = trimmed
+                trim_note = f"Cut down to {trim_to}s."
+                logger.info(
+                    f"Generation {generation_id}: hook trimmed to {trim_to}s "
+                    f"(rendered at a length the provider cannot go below)"
+                )
+            else:
+                # Keep the full render rather than lose it, and say so:
+                # the delivered clip is longer than was asked for.
+                storage_error = (
+                    f"Could not cut the hook down to {trim_to}s, so it is "
+                    f"delivered at its full rendered length."
+                )
+                logger.warning(
+                    f"Generation {generation_id}: trim to {trim_to}s failed; "
+                    f"delivering the untrimmed render."
+                )
+
+        # Deliver on the platform's canvas. The cheaper providers render
+        # below it -- Grok Imagine Video at 720p -- and a founder posting to
+        # TikTok wants 1080x1920 rather than whatever the model emitted.
+        # Applied after the trim so the scaled clip is the canonical file:
+        # it is what an extension would bridge from, and what both the
+        # captioned and the plain download then serve.
+        #
+        # Soft by design. A plain bilinear scale adds no detail, so failing
+        # here costs resolution and nothing else, and the un-rescaled clip
+        # is still a watchable video.
+        rescaled, rescale_warnings = await overlays.rescale_to_canvas(local_path)
+        if rescaled:
+            local_path = rescaled
+        elif rescale_warnings:
+            logger.warning(
+                f"Generation {generation_id}: canvas resize failed "
+                f"({rescale_warnings[0]}); the clip is delivered at its "
+                f"rendered size."
+            )
+
+    stored_url = storage_service.upload_video(user_id, generation_id, Path(local_path))
+    if not stored_url:
+        # R2 is unconfigured or the upload failed, but the local copy
+        # survived and /api/media serves it. Record that instead of
+        # leaving r2_url empty, because an empty r2_url makes the
+        # panel fall back to the provider's unsigned link — which
+        # expires, and then an already-generated video will not play.
+        stored_url = served_media_path(Path(local_path))
+        if stored_url:
+            storage_error = (
+                "Saved to this server's storage rather than durable cloud "
+                "storage, because the upload to cloud storage failed."
+            )
+
+    # The row records the length the founder will actually get, not the
+    # length that was asked of the model.
+    delivered_seconds = trim_to or int(row.get("duration") or 0)
+    return stored_url, storage_error or trim_note, delivered_seconds
+
+
 @api_router.post("/generations/{generation_id}/storage/retry")
 async def retry_generation_storage(generation_id: str, user_id: str = Depends(get_current_user_id)):
     """
     Retry durable storage for a completed generation.
 
     This is separate from retrying a failed render: the video itself is done,
-    but its local/R2 copy failed. It succeeds only when the local clip still
-    exists and R2 accepts it; otherwise it reports exactly which half is
-    missing instead of pretending the retry worked.
+    but its durable copy failed.
+
+    It runs the same pipeline the poll path does, via _persist_generation_clip,
+    because a download failure and an upload failure need different repairs:
+
+    - Upload failed, local file survived -> re-upload that file. One PUT.
+    - Download failed -> the partial file was deleted, so the only copy left is
+      the provider's, and the retry re-fetches it. This is the case the old
+      endpoint could not service at all: it demanded a local file that the
+      failure had just removed, so the button the panel offered for a download
+      failure was guaranteed to answer 409. That is how a finished render could
+      sit finished and unrecoverable behind a "Retry durable save" button.
+
+    A row is only refused when there is genuinely nothing to work from: no local
+    copy AND no provider link. The provider content endpoint is derivable from
+    the job id, so a row that stored an empty video_url is still repairable.
+
+    It no longer refuses when R2 is unconfigured. _persist_generation_clip falls
+    back to serving the local copy, which is a watchable, downloadable result;
+    an error the founder can do nothing about is strictly worse than that.
     """
     row = await _fetch_one(
         "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
@@ -7868,31 +8042,50 @@ async def retry_generation_storage(generation_id: str, user_id: str = Depends(ge
             status_code=409,
             detail="Storage can be retried only after the video has completed.",
         )
+
     local_path = pipeline.VIDEOS_DIR / f"{generation_id}.mp4"
-    if not local_path.is_file():
+    # Same test the helper uses, so this log line describes what will actually
+    # happen rather than what is merely on disk.
+    has_local = _is_complete_mp4(local_path)
+    source = row.get("video_url") or ai_service.video_content_url(row.get("openrouter_job_id") or "")
+    if not has_local and not source:
         raise HTTPException(
             status_code=409,
-            detail="The local clip is no longer available, so there is nothing to upload.",
+            detail=(
+                "This video has no local copy and no provider link left to fetch it "
+                "from, so it cannot be recovered. Generating it again is the only way."
+            ),
         )
-    if not storage_service.is_configured():
-        raise HTTPException(
-            status_code=409,
-            detail="R2 storage is not configured, so the retry has nowhere to upload.",
-        )
+
+    logger.info(
+        f"Retrying durable storage for generation {generation_id}: "
+        f"usable local copy={'yes' if has_local else 'no'}, "
+        f"provider link={'yes' if source else 'no'}"
+    )
     try:
-        stored_url = storage_service.upload_video(user_id, generation_id, local_path)
+        stored_url, storage_error, _delivered = await _persist_generation_clip(row, user_id)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Storage retry failed: {str(e)[:200]}")
+
     if not stored_url:
-        raise HTTPException(status_code=502, detail="Storage retry failed without a provider error.")
+        # The helper already phrased this for the founder and knows which half
+        # failed -- nothing to work from, or a download that was refused. Pass
+        # it through rather than flattening it, because the two need different
+        # actions from the founder.
+        raise HTTPException(
+            status_code=502,
+            detail=storage_error or "Storage retry failed without a provider error.",
+        )
+
     await _execute(
-        "UPDATE generations SET r2_url = ?, storage_error = NULL, updated_at = ? WHERE id = ?",
-        (stored_url, now_iso(), generation_id),
+        "UPDATE generations SET r2_url = ?, storage_error = ?, updated_at = ? WHERE id = ?",
+        (stored_url, storage_error or None, now_iso(), generation_id),
     )
     await _execute(
         "UPDATE video_assets SET r2_url = ? WHERE job_id = ?", (stored_url, generation_id)
     )
-    return {"id": generation_id, "r2_url": stored_url, "storage_error": None}
+    logger.info(f"Generation {generation_id}: durable copy repaired -> {stored_url}")
+    return {"id": generation_id, "r2_url": stored_url, "storage_error": storage_error or None}
 
 
 @api_router.post("/generations/{generation_id}/retry", status_code=202)

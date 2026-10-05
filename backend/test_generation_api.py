@@ -1108,12 +1108,24 @@ class TestModelSelectionAtTheApiBoundary:
         assert "nothing has been charged" in detail
 
 
+# The smallest byte string the download path accepts as a finished MP4: an
+# ftyp box up front and a moov at the end, which is where a provider writes it
+# for a non-fragmented file. Real ffmpeg is not needed to exercise the check.
+_DL_MP4 = b"\x00\x00\x00\x18ftypmp42" + (b"\x00" * 256) + b"\x00\x00\x00\x08moov"
+
+
 class TestClipDownload:
     """
-    The durable-save download: browser headers, retries, self-diagnosing
-    errors. Regression cover for the H3 Max case, where the provider clip
-    played fine in the browser but the server-side fetch failed and the
-    render was left with only its expiring temporary copy.
+    The durable-save download: authentication, browser headers, retries,
+    self-diagnosing errors. Regression cover for two distinct failures:
+
+    - H3 Max, where the provider clip played fine in the browser but the
+      server-side fetch failed, leaving the render with only its expiring
+      temporary copy.
+    - `unsigned_urls` not actually being presigned. The downloader sent
+      browser-like headers only, so every completed render came back 401 at the
+      moment its durable copy was being taken. That is the bug the auth
+      assertions below exist to prevent returning.
     """
 
     def _fake_client(self, api, monkeypatch, behaviours, seen):
@@ -1132,8 +1144,9 @@ class TestClipDownload:
                     raise self.behaviour
 
             async def aiter_bytes(self):
-                if not isinstance(self.behaviour, Exception):
-                    yield b"fake-video-bytes"
+                if isinstance(self.behaviour, Exception):
+                    return
+                yield self.behaviour if isinstance(self.behaviour, bytes) else _DL_MP4
 
         class FakeClient:
             def __init__(self, **kwargs):
@@ -1163,9 +1176,61 @@ class TestClipDownload:
         path, err = _run(api._download_generation_video(
             "https://cdn.invalid/clip.mp4", "dl-ok"))
         assert err is None
-        assert path.read_bytes() == b"fake-video-bytes"
+        assert path.read_bytes() == _DL_MP4
         assert seen["method"] == "GET"
         assert "Mozilla" in seen["headers"]["User-Agent"]
+
+    def test_an_openrouter_url_is_authenticated(self, api, monkeypatch):
+        """
+        The load-bearing one. `unsigned_urls` is a misleading name: those URLs
+        are NOT presigned, so a download of one that points at the OpenRouter
+        API without the bearer token is refused with 401 -- which is exactly
+        how every completed render lost its durable copy.
+
+        The key is set on the module rather than read from the environment:
+        ai_service binds OPENROUTER_API_KEY at import time, and this module
+        re-imports server but not ai_service, so an ambient key would make the
+        assertion depend on which test module happened to import it first.
+        """
+        monkeypatch.setattr(api.ai_service, "OPENROUTER_API_KEY", "test-key-not-real")
+        seen = {}
+        self._fake_client(api, monkeypatch, [None], seen)
+        path, err = _run(api._download_generation_video(
+            "https://openrouter.ai/api/v1/videos/job-1/content?index=0", "dl-auth"))
+        assert err is None
+        assert path is not None
+        assert "Authorization" in seen["headers"]
+        assert "Mozilla" in seen["headers"]["User-Agent"]
+
+    def test_a_third_party_url_is_never_given_the_key(self, api, monkeypatch):
+        """
+        The leak guard, at the point the header is actually built. OpenRouter's
+        own docs show unsigned_urls carrying a third-party storage URL, and
+        forwarding the account key there hands that host the key.
+        """
+        monkeypatch.setattr(api.ai_service, "OPENROUTER_API_KEY", "test-key-not-real")
+        seen = {}
+        self._fake_client(api, monkeypatch, [None], seen)
+        path, err = _run(api._download_generation_video(
+            "https://storage.example.com/clip.mp4", "dl-noauth"))
+        assert err is None
+        assert path is not None
+        assert "Authorization" not in seen["headers"]
+
+    def test_a_truncated_download_is_not_treated_as_success(self, api, monkeypatch):
+        """
+        A stream that ends early leaves a file with an ftyp and no moov. Saving
+        that would report the render as durable while handing the founder
+        something no player can open, so it must fail and be retried.
+        """
+        seen = {}
+        truncated = b"\x00\x00\x00\x18ftypmp42" + (b"\x00" * 512)
+        self._fake_client(api, monkeypatch, [truncated, truncated, truncated], seen)
+        path, err = _run(api._download_generation_video(
+            "https://cdn.invalid/clip.mp4", "dl-truncated"))
+        assert path is None
+        assert "truncated" in err
+        assert seen["calls"] == 3
 
     def test_transient_failure_is_retried_then_succeeds(self, api, monkeypatch):
         import httpx
@@ -1178,7 +1243,7 @@ class TestClipDownload:
         path, err = _run(api._download_generation_video(
             "https://cdn.invalid/clip.mp4", "dl-retry"))
         assert err is None
-        assert path.read_bytes() == b"fake-video-bytes"
+        assert path.read_bytes() == _DL_MP4
         assert seen["calls"] == 3
 
     def test_rejection_names_the_status_and_is_not_retried(self, api, monkeypatch):

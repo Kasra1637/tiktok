@@ -39,8 +39,14 @@ def api():
     server.DB_PATH = Path(tmpdir) / "test.db"
     server.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     # Keep generated-file side effects inside the temp tree, not real storage.
-    server.pipeline.VIDEOS_DIR = Path(tmpdir) / "videos"
-    server.pipeline.ASSETS_DIR = Path(tmpdir) / "assets"
+    # STORAGE_DIR moves WITH them: in production VIDEOS_DIR and ASSETS_DIR are
+    # always underneath it, and served_media_path() derives the /api/media URL
+    # by taking a path relative to it. Repointing only the children used to make
+    # that helper return None for every clip written here, so the local-serving
+    # fallback could not be exercised without tripping the fixture.
+    server.pipeline.STORAGE_DIR = Path(tmpdir) / "storage"
+    server.pipeline.VIDEOS_DIR = server.pipeline.STORAGE_DIR / "videos"
+    server.pipeline.ASSETS_DIR = server.pipeline.STORAGE_DIR / "assets"
     server.pipeline.VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
     server.pipeline.ASSETS_DIR.mkdir(parents=True, exist_ok=True)
     asyncio.run(server.init_db())
@@ -50,6 +56,24 @@ def api():
 
 def _run(coro):
     return asyncio.run(coro)
+
+
+async def _no_rescale(local_path):
+    """A canvas rescale that is a no-op, so these tests need no real mp4."""
+    return None, []
+
+
+async def _forbid_rescale(local_path):
+    raise AssertionError("an already-persisted clip must not be rewritten")
+
+
+def _fake_mp4():
+    """
+    The smallest byte string the download path will accept as a finished MP4:
+    an ftyp box up front and a moov at the end, which is where a real provider
+    writes it. Real ffmpeg is not needed to exercise the container check.
+    """
+    return b"\x00\x00\x00\x18ftypmp42" + (b"\x00" * 256) + b"\x00\x00\x00\x08moov"
 
 
 def _profile(api, name):
@@ -385,6 +409,45 @@ class TestClassifyScriptEdit:
         assert fb.classify_script_edit(short, padded) == "script_edited_heavy"
 
 
+class TestMp4CompletenessCheck:
+    """
+    A file left truncated by a killed process is the case a size check waves
+    through, and it must never be reused or persisted: the founder would get a
+    clip that cannot play while being told the render was saved.
+    """
+
+    def _write(self, tmp_path, data):
+        p = tmp_path / "clip.mp4"
+        p.write_bytes(data)
+        return p
+
+    def test_a_complete_file_passes(self, api, tmp_path):
+        assert api._is_complete_mp4(self._write(tmp_path, _fake_mp4()))
+
+    def test_a_truncated_file_is_rejected(self, api, tmp_path):
+        truncated = b"\x00\x00\x00\x18ftypmp42" + (b"\x00" * 512)
+        assert not api._is_complete_mp4(self._write(tmp_path, truncated))
+
+    def test_an_empty_file_is_rejected(self, api, tmp_path):
+        assert not api._is_complete_mp4(self._write(tmp_path, b""))
+
+    def test_a_missing_file_is_rejected(self, api, tmp_path):
+        assert not api._is_complete_mp4(tmp_path / "nope.mp4")
+
+    def test_an_error_page_is_not_mistaken_for_a_video(self, api, tmp_path):
+        """
+        A CDN that answers a dead link with an HTML body would otherwise be
+        saved as a .mp4 and served to the video element.
+        """
+        assert not api._is_complete_mp4(self._write(tmp_path, b"<html>404</html>" * 60))
+
+    def test_a_large_file_with_moov_at_the_end_passes(self, api, tmp_path):
+        # Reading only the head would call this truncated; the tail probe is
+        # exactly why a real 2K render is not rejected.
+        big = b"\x00\x00\x00\x18ftypmp42" + (b"\x00" * 200_000) + b"\x00\x00\x00\x08moov"
+        assert api._is_complete_mp4(self._write(tmp_path, big))
+
+
 class TestModelRequestLedger:
     USER = "ops-model-user"
 
@@ -466,7 +529,7 @@ class TestModelRequestLedger:
         gen = _generation(api, profile, "completed")
         local_path = api.pipeline.VIDEOS_DIR / f"{gen['id']}.mp4"
         local_path.parent.mkdir(parents=True, exist_ok=True)
-        local_path.write_bytes(b"fake-video")
+        local_path.write_bytes(_fake_mp4())
         _run(api._execute(
             "UPDATE generations SET r2_url = '', storage_error = ? WHERE id = ?",
             ("R2 upload failed", gen["id"]),
@@ -489,23 +552,210 @@ class TestModelRequestLedger:
         assert retried["storage_error"] is None
         assert _run(api.get_generation(gen["id"], ANON))["storage_error"] is None
 
-    def test_storage_retry_reports_a_missing_local_copy(self, api):
+    def test_storage_retry_reports_a_row_with_nothing_left_to_work_from(self, api):
+        """
+        The one genuinely unrecoverable shape: no local copy AND no provider
+        link. _generation stores neither, so there is nothing to fetch and
+        nothing to upload, and saying so is the only honest answer.
+        """
         profile = _profile(api, "Ops Missing Copy")
         gen = _generation(api, profile, "completed")
         local_path = api.pipeline.VIDEOS_DIR / f"{gen['id']}.mp4"
         if local_path.exists():
             local_path.unlink()
+        _run(api._execute(
+            "UPDATE generations SET video_url = '', openrouter_job_id = NULL WHERE id = ?",
+            (gen["id"],),
+        ))
         with pytest.raises(HTTPException) as err:
             _run(api.retry_generation_storage(gen["id"], ANON))
         assert err.value.status_code == 409
+        assert "cannot be recovered" in err.value.detail
 
-    def test_storage_retry_requires_configured_remote_storage(self, api, monkeypatch):
+    def test_storage_retry_refetches_when_the_download_failed(self, api, monkeypatch):
+        """
+        The bug this endpoint could not previously service.
+
+        A failed download deletes the partial file, so the row was left with no
+        local copy at all -- and the old endpoint demanded one, answering 409 to
+        the exact button the panel offers for that failure. The provider link is
+        still on the row, so the retry must re-fetch rather than give up.
+        """
+        profile = _profile(api, "Ops Refetch")
+        gen = _generation(api, profile, "completed")
+        local_path = api.pipeline.VIDEOS_DIR / f"{gen['id']}.mp4"
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        if local_path.exists():
+            local_path.unlink()
+        _run(api._execute(
+            "UPDATE generations SET video_url = ?, openrouter_job_id = ?, r2_url = '', "
+            "storage_error = ? WHERE id = ?",
+            (
+                "https://openrouter.ai/api/v1/videos/job-1/content?index=0",
+                "job-1",
+                "The provider clip could not be downloaded for durable storage "
+                "(HTTP 401 Unauthorized).",
+                gen["id"],
+            ),
+        ))
+
+        fetched = {}
+
+        async def fake_download(url, generation_id):
+            fetched["url"] = url
+            path = api.pipeline.VIDEOS_DIR / f"{generation_id}.mp4"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"refetched-video")
+            return path, None
+
+        monkeypatch.setattr(api, "_download_generation_video", fake_download)
+        monkeypatch.setattr(api.overlays, "rescale_to_canvas", _no_rescale)
+        monkeypatch.setattr(
+            api.storage_service, "upload_video",
+            lambda user_id, job_id, path: "https://example.invalid/refetched.mp4",
+        )
+
+        retried = _run(api.retry_generation_storage(gen["id"], ANON))
+        assert fetched["url"] == "https://openrouter.ai/api/v1/videos/job-1/content?index=0"
+        assert retried["r2_url"] == "https://example.invalid/refetched.mp4"
+        # The alert the founder is looking at has to actually clear.
+        assert retried["storage_error"] is None
+        assert _run(api.get_generation(gen["id"], ANON))["storage_error"] is None
+
+    def test_storage_retry_uses_the_content_url_when_none_was_stored(self, api, monkeypatch):
+        """
+        A row can have an empty video_url and still be repairable: the provider
+        content endpoint is derivable from the job id. Without this the founder
+        sees an unrecoverable error on a video the provider would happily serve.
+        """
+        profile = _profile(api, "Ops Derived URL")
+        gen = _generation(api, profile, "completed")
+        local_path = api.pipeline.VIDEOS_DIR / f"{gen['id']}.mp4"
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        if local_path.exists():
+            local_path.unlink()
+        _run(api._execute(
+            "UPDATE generations SET video_url = '', openrouter_job_id = 'job-77', r2_url = '', "
+            "storage_error = ? WHERE id = ?",
+            ("download failed", gen["id"]),
+        ))
+
+        seen = {}
+
+        async def fake_download(url, generation_id):
+            seen["url"] = url
+            path = api.pipeline.VIDEOS_DIR / f"{generation_id}.mp4"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"derived-video")
+            return path, None
+
+        monkeypatch.setattr(api, "_download_generation_video", fake_download)
+        monkeypatch.setattr(api.overlays, "rescale_to_canvas", _no_rescale)
+        monkeypatch.setattr(
+            api.storage_service, "upload_video",
+            lambda user_id, job_id, path: "https://example.invalid/derived.mp4",
+        )
+
+        retried = _run(api.retry_generation_storage(gen["id"], ANON))
+        assert seen["url"].endswith("/videos/job-77/content?index=0")
+        assert retried["r2_url"] == "https://example.invalid/derived.mp4"
+
+    def test_storage_retry_reuses_a_surviving_local_copy(self, api, monkeypatch):
+        """
+        An upload-only failure should cost one PUT, not a full re-fetch, and it
+        must NOT re-trim or re-rescale: the canonical file is what an extension
+        bridges its next segment from, so rewriting it twice is not free.
+        """
+        profile = _profile(api, "Ops Reuse Local")
+        gen = _generation(api, profile, "completed")
+        local_path = api.pipeline.VIDEOS_DIR / f"{gen['id']}.mp4"
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_bytes(_fake_mp4())
+        _run(api._execute(
+            "UPDATE generations SET r2_url = '', storage_error = ? WHERE id = ?",
+            ("R2 upload failed", gen["id"]),
+        ))
+
+        async def forbidden_download(url, generation_id):
+            raise AssertionError("a surviving local copy must not be re-downloaded")
+
+        monkeypatch.setattr(api, "_download_generation_video", forbidden_download)
+        monkeypatch.setattr(api.overlays, "rescale_to_canvas", _forbid_rescale)
+        monkeypatch.setattr(
+            api.storage_service, "upload_video",
+            lambda user_id, job_id, path: "https://example.invalid/reused.mp4",
+        )
+
+        retried = _run(api.retry_generation_storage(gen["id"], ANON))
+        assert retried["r2_url"] == "https://example.invalid/reused.mp4"
+        assert retried["storage_error"] is None
+
+    def test_storage_retry_refetches_a_truncated_local_copy(self, api, monkeypatch):
+        """
+        "Present" is not "usable". A file left half-written by a killed process
+        is exactly the case a size check waves through, and reusing it would
+        upload a clip that cannot play while reporting the render as saved.
+        """
+        profile = _profile(api, "Ops Truncated")
+        gen = _generation(api, profile, "completed")
+        local_path = api.pipeline.VIDEOS_DIR / f"{gen['id']}.mp4"
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_bytes(b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 512)  # no moov
+        _run(api._execute(
+            "UPDATE generations SET video_url = ?, r2_url = '', storage_error = ? WHERE id = ?",
+            ("https://openrouter.ai/api/v1/videos/job-9/content?index=0", "broken",
+             gen["id"]),
+        ))
+
+        seen = {}
+
+        async def fake_download(url, generation_id):
+            seen["url"] = url
+            path = api.pipeline.VIDEOS_DIR / f"{generation_id}.mp4"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(_fake_mp4())
+            return path, None
+
+        monkeypatch.setattr(api, "_download_generation_video", fake_download)
+        monkeypatch.setattr(api.overlays, "rescale_to_canvas", _no_rescale)
+        monkeypatch.setattr(
+            api.storage_service, "upload_video",
+            lambda user_id, job_id, path: "https://example.invalid/refetched.mp4",
+        )
+
+        retried = _run(api.retry_generation_storage(gen["id"], ANON))
+        assert seen["url"].endswith("/content?index=0")
+        assert retried["r2_url"] == "https://example.invalid/refetched.mp4"
+
+    def test_storage_retry_falls_back_to_local_serving_when_r2_is_unconfigured(
+        self, api, monkeypatch
+    ):
+        """
+        This used to be a 409. It is not an error: the local copy survived and
+        /api/media serves it, so the founder gets a watchable, downloadable
+        video instead of a refusal they cannot act on. The message has to admit
+        that this is a degraded save rather than a durable one.
+        """
         profile = _profile(api, "Ops Unconfigured Storage")
         gen = _generation(api, profile, "completed")
         local_path = api.pipeline.VIDEOS_DIR / f"{gen['id']}.mp4"
         local_path.parent.mkdir(parents=True, exist_ok=True)
-        local_path.write_bytes(b"fake-video")
+        local_path.write_bytes(_fake_mp4())
+        _run(api._execute(
+            "UPDATE generations SET r2_url = '', storage_error = ? WHERE id = ?",
+            ("R2 upload failed", gen["id"]),
+        ))
+
         monkeypatch.setattr(api.storage_service, "is_configured", lambda: False)
+        monkeypatch.setattr(api.storage_service, "upload_video", lambda *a, **k: None)
+
+        retried = _run(api.retry_generation_storage(gen["id"], ANON))
+        assert retried["r2_url"]
+        assert "this server's storage" in retried["storage_error"]
+
+    def test_storage_retry_refuses_a_row_still_in_flight(self, api):
+        profile = _profile(api, "Ops Still Running")
+        gen = _generation(api, profile, "generating")
         with pytest.raises(HTTPException) as err:
             _run(api.retry_generation_storage(gen["id"], ANON))
         assert err.value.status_code == 409

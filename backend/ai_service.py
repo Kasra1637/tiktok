@@ -292,6 +292,49 @@ def _headers():
     }
 
 
+def video_content_url(job_id: str) -> str:
+    """
+    The stable download URL for a finished video job.
+
+    OpenRouter's poll response normally hands back this exact URL in
+    `unsigned_urls`, but the field is optional -- a completed job can arrive
+    with no list at all. Their cookbook treats the content endpoint as the
+    direct path precisely because it is derivable from the job id we already
+    hold, so it works as a fallback when the response omits it.
+    """
+    if not job_id:
+        return ""
+    return f"{OPENROUTER_BASE}/videos/{job_id}/content?index=0"
+
+
+def provider_download_headers(url: str) -> dict:
+    """
+    Auth for downloading a finished clip, and ONLY for our own endpoints.
+
+    `unsigned_urls` is a misleading name: those URLs are NOT presigned. When
+    one points back at the OpenRouter API -- which is the normal case, and is
+    what the content endpoint returns -- the request must carry the same
+    bearer token as the poll itself or OpenRouter answers 401. That is the
+    whole reason this function exists: the studio's download was sending
+    browser-like headers only, and every completed render came back
+    "Unauthorized" at exactly the point where the durable copy was being
+    taken.
+
+    Scoped to the OpenRouter origin on purpose. The same field can carry a
+    third-party storage URL instead ("https://storage.example.com/video.mp4"
+    appears in their own docs), and forwarding our bearer token to an
+    arbitrary host would hand the account key to that host. No token, no
+    problem: those URLs are genuinely unsigned.
+    """
+    if not url:
+        return {}
+    if not url.startswith(f"{OPENROUTER_BASE}/"):
+        return {}
+    if not OPENROUTER_API_KEY:
+        return {}
+    return {"Authorization": f"Bearer {OPENROUTER_API_KEY}"}
+
+
 def image_to_base64(path: Path) -> str:
     with open(path, "rb") as f:
         return base64.b64encode(f.read()).decode("utf-8")
