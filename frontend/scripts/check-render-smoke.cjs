@@ -2994,7 +2994,7 @@ async function runDemoCtaChecks() {
     "which settings groups are open is remembered across visits",
     async (ctx) => {
       const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
-      const key = "hookforge.demoCta.openSections";
+      const key = "hookforge.demoCta.openSections.v2";
       dom.window.localStorage.removeItem(key);
       const mountEditor = async () => {
         // A fresh container per mount: `check` owns one, and creating a second
@@ -3009,9 +3009,13 @@ async function runDemoCtaChecks() {
         return { container, root };
       };
       try {
-        // First visit: the defaults are Source & Look, Hook Text, End Card open.
+        // First visit: the defaults are Source & Look, Hook Text, End Card CTA open.
+        // The duration value renders once, right-aligned in the label row — the
+        // label itself carries no value, so "On screen" and "1.8s" are asserted
+        // separately rather than as one string.
         const first = await mountEditor();
-        if (!first.container.textContent.includes("On screen:")) {
+        const firstText = first.container.textContent;
+        if (!firstText.includes("On screen") || !firstText.includes("1.8s")) {
           throw new Error("Hook Text did not start open on a first visit");
         }
         const hooks = [...first.container.querySelectorAll("button")].find(
@@ -3021,7 +3025,7 @@ async function runDemoCtaChecks() {
         await act(async () => {
           hooks.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
         });
-        if (first.container.textContent.includes("On screen:")) {
+        if (first.container.textContent.includes("On screen")) {
           throw new Error("clicking the Hook Text header did not collapse it");
         }
         const saved = JSON.parse(dom.window.localStorage.getItem(key) || "{}");
@@ -3032,19 +3036,75 @@ async function runDemoCtaChecks() {
         }
         // Second visit must honour it.
         const second = await mountEditor();
-        if (second.container.textContent.includes("On screen:")) {
+        if (second.container.textContent.includes("1.8s")) {
           throw new Error(
             "Hook Text reopened on a later visit. The panel is a workspace, not a " +
               "form; re-collapsing the groups someone deliberately opened is the " +
               "friction that makes a tool feel like it forgot you."
           );
         }
-        if (!second.container.textContent.includes("Choose a video") && !second.container.textContent.includes("Replace")) {
+        if (!second.container.textContent.includes("Choose a video") && !second.container.textContent.includes("Replace video file")) {
           throw new Error("Source & Look should still be open on the second visit");
         }
       } finally {
         dom.window.localStorage.removeItem(key);
       }
+    }
+  );
+
+  await check(
+    "the export action sits after the preview in the pinned column",
+    async (ctx) => {
+      const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+      await withApi(
+        { getGenerations: async () => ({ generations: [COMPLETED] }) },
+        async () => {
+          await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
+          const html = ctx.container.innerHTML;
+          const previewAt = html.indexOf("Live preview");
+          const exportAt = html.indexOf("demo-cta-export");
+          if (previewAt === -1 || exportAt === -1 || exportAt < previewAt) {
+            throw new Error(
+              "the export action is missing or precedes the preview. It must sit " +
+                "below the preview and player in the pinned column so it stays " +
+                "reachable without page scroll."
+            );
+          }
+          // Fixed bar on small screens, sticky in-column on desktop. Either
+          // class missing means one of the two viewports loses the button.
+          if (!/fixed inset-x-0 bottom-0/.test(html) || !/lg:sticky lg:bottom-4/.test(html)) {
+            throw new Error(
+              "the export bar is not fixed on mobile and sticky on desktop. One " +
+                "of the two viewports scrolls it out of reach."
+            );
+          }
+        }
+      );
+    }
+  );
+
+  await check(
+    "group titles and slider labels read correctly",
+    async (ctx) => {
+      const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+      await withApi(
+        { getGenerations: async () => ({ generations: [COMPLETED] }) },
+        async () => {
+          await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
+          const text = ctx.text();
+          if (!text.includes("End Card CTA")) {
+            throw new Error("the end-card group is mislabeled or missing");
+          }
+          // The value lives once, right-aligned in the label row. A label that
+          // repeats it ("On screen: 1.8s") reads the same number twice.
+          if (text.includes("On screen:")) {
+            throw new Error("the hook duration value is shown twice: in the label and beside it");
+          }
+          if (!text.includes("1.8s")) {
+            throw new Error("the hook duration value is missing from the label row");
+          }
+        }
+      );
     }
   );
 

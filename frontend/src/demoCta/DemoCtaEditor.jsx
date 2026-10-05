@@ -5,6 +5,8 @@ import {
   ArrowUp,
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Download,
   Info,
   Loader2,
@@ -14,8 +16,6 @@ import {
   Smartphone,
   Upload,
   X,
-  ZoomIn,
-  ZoomOut,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -51,14 +51,21 @@ import { drawEndCard, drawHookOverlay, getEndCardBounds, getHookBounds, HOOK_FON
 import { drawHandView, preloadHandViewImages } from "./handView";
 import { captureZoomLock, getEffectiveZoom, removeZoomKeyframe, sortKeyframes, tickInterval } from "./zoom";
 
-const SECTIONS_KEY = "hookforge.demoCta.openSections";
+const SECTIONS_KEY = "hookforge.demoCta.openSections.v2";
 
-// 8px rhythm: 40px controls, 10px radius, 1px hairline, accent focus ring.
+// Heights, radii, borders and focus rings copied from ui/input.jsx so the
+// editor's selects and fields are indistinguishable from the app's own inputs.
+// The earlier hand-rolled `rounded-[10px]` and a `/40` focus ring were both
+// deviations: design_guidelines.md:124 fixes control radii at rounded-xl, and
+// ui/input.jsx uses --indigo-35 border with a --indigo-15 ring.
 const CONTROL_CLASS =
-  "h-10 w-full appearance-none rounded-[10px] border border-[color:var(--hairline)] bg-secondary/40 px-3 text-sm text-foreground outline-none transition duration-150 hover:border-[color:var(--hairline-strong)] focus:border-[color:var(--brand-indigo)] focus:ring-2 focus:ring-[color:var(--brand-indigo)]/40 disabled:opacity-50";
+  "h-10 w-full appearance-none rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 text-sm text-foreground shadow-[var(--shadow-xs)] transition-colors outline-none hover:border-[color:var(--hairline-strong)] focus-visible:border-[color:var(--indigo-35)] focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-15)] disabled:cursor-not-allowed disabled:opacity-50";
 
 const INPUT_CLASS =
-  "h-10 w-full rounded-[10px] border border-[color:var(--hairline)] bg-secondary/40 px-3 text-sm text-foreground outline-none transition duration-150 placeholder:text-muted-foreground hover:border-[color:var(--hairline-strong)] focus:border-[color:var(--brand-indigo)] focus:ring-2 focus:ring-[color:var(--brand-indigo)]/40";
+  "h-10 w-full rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3.5 py-1 text-sm shadow-[var(--shadow-xs)] transition-colors placeholder:text-muted-foreground hover:border-[color:var(--hairline-strong)] focus-visible:border-[color:var(--indigo-35)] focus-visible:bg-secondary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-15)]";
+
+const TEXTAREA_CLASS =
+  "w-full resize-none rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3.5 py-2 text-sm leading-snug shadow-[var(--shadow-xs)] transition-colors placeholder:text-muted-foreground hover:border-[color:var(--hairline-strong)] focus-visible:border-[color:var(--indigo-35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-15)]";
 
 /**
  * One collapsible control group.
@@ -89,13 +96,14 @@ function EditorSection({ title, open, onToggle, testId, children }) {
   );
 }
 
-/** Small caps sub-label for blocks nested inside a group card. */
+/** Small caps sub-label for blocks nested inside a group card.
+ *
+ *  Uses `.eyebrow` rather than re-stating it. A hand-rolled
+ *  `text-[11px] uppercase` copy was both a duplicate of an existing primitive
+ *  and below the 12px floor design_guidelines.md:94 sets with no exceptions.
+ */
 function SubLabel({ children }) {
-  return (
-    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-      {children}
-    </p>
-  );
+  return <span className="eyebrow block">{children}</span>;
 }
 
 function FieldLabel({ children }) {
@@ -1104,7 +1112,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
 
         <div
           ref={settingsRef}
-          className="max-h-[calc(100vh-7rem)] space-y-3 overflow-y-auto overscroll-contain pr-1 lg:max-h-[calc(100vh-7rem)]"
+          className="space-y-3 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1"
         >
         <EditorSection title="Source & Look" open={openSections.source} onToggle={() => toggleSection("source")} testId="demo-cta-source">
           {generation ? (
@@ -1203,9 +1211,105 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   }`}
                 >
                   <img src={env.url} alt={env.label} className="aspect-[3/4] w-full object-cover" loading="lazy" crossOrigin="anonymous" />
-                  <div className="px-0.5 py-1 text-center text-[10px] leading-tight text-muted-foreground">{env.label}</div>
+                  <div className="px-0.5 py-1 text-center text-xs leading-tight text-muted-foreground">{env.label}</div>
                 </button>
               ))}
+            </div>
+          )}
+          {viewMode === "floating" && (
+            <>
+              <div className="space-y-2">
+                <SubLabel>Device frame</SubLabel>
+                <select
+                  value={device}
+                  onChange={(e) => setDevice(e.target.value)}
+                  className={CONTROL_CLASS}
+                  title={(DEVICES.find((d) => d.id === device) || {}).label}
+                  aria-label="Device frame"
+                  data-testid="device-frame-select"
+                >
+                  {DEVICES.map((d) => (
+                    <option key={d.id} value={d.id}>{d.label}</option>
+                  ))}
+                </select>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Frame color:</span>
+                  {[
+                    ["black", "#0d0d10", "Black"],
+                    ["white", "#f0f0f2", "White"],
+                  ].map(([id, color, title]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setFrameColor(id)}
+                      title={title}
+                      aria-label={title}
+                      aria-pressed={frameColor === id}
+                      style={{ background: color }}
+                      data-testid={`frame-color-${id}`}
+                      className={`h-6 w-6 rounded-full border-2 transition duration-150 ${frameColor === id ? "border-[color:var(--brand-indigo)] ring-2 ring-[color:var(--brand-indigo)]/40" : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"}`}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <SubLabel>Background</SubLabel>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {BACKGROUNDS.map((b) => (
+                    <button
+                      key={b.id}
+                      type="button"
+                      onClick={() => setBg(b.id)}
+                      title={b.label}
+                      aria-label={b.label}
+                      aria-pressed={bg === b.id}
+                      data-testid={`background-${b.id}`}
+                      className={`aspect-square overflow-hidden rounded-lg border transition duration-150 ${
+                        bg === b.id ? "border-[color:var(--brand-indigo)] ring-2 ring-[color:var(--brand-indigo)]/40" : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
+                      }`}
+                      style={
+                        b.preview === "transparent"
+                          ? { backgroundImage: "linear-gradient(45deg,#666 25%,transparent 25%),linear-gradient(-45deg,#666 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#666 75%),linear-gradient(-45deg,transparent 75%,#666 75%)", backgroundSize: "8px 8px", backgroundPosition: "0 0,0 4px,4px -4px,-4px 0", backgroundColor: "#222" }
+                          : { background: b.preview }
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <SubLabel>Animation</SubLabel>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {ANIMATIONS.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => setAnim(a.id)}
+                      aria-pressed={anim === a.id}
+                      data-testid={`animation-${a.id}`}
+                      className={`h-8 rounded-lg text-xs font-medium transition duration-150 ${
+                        anim === a.id
+                          ? "bg-[color:var(--brand-indigo)]/15 text-foreground shadow-[var(--shadow-xs)]"
+                          : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                      }`}
+                    >
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <ControlSlider label="Phone size" value={scale} min={RANGES.scale.min} max={RANGES.scale.max} step={RANGES.scale.step} onChange={setScale} testId="phone-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
+            </>
+          )}
+          {viewMode === "hand" && (
+            <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
+              <SubLabel>Hand size &amp; position</SubLabel>
+              <p className="text-xs text-muted-foreground">Drag the preview to move • scroll to zoom</p>
+              <ControlSlider label="Zoom" value={handZoom} min={RANGES.handZoom.min} max={RANGES.handZoom.max} step={RANGES.handZoom.step} onChange={setHandZoom} testId="hand-zoom-slider" format={(v) => `${v.toFixed(2)}x`} />
+              <ControlSlider label="H position" value={handPanX} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={setHandPanX} testId="hand-panx-slider" format={(v) => `${Math.round(v * 100)}%`} />
+              <ControlSlider label="V position" value={handPanY} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={setHandPanY} testId="hand-pany-slider" format={(v) => `${Math.round(v * 100)}%`} />
+              <ResetButton testId="hand-transform-reset-btn" onClick={() => { setHandZoom(1); setHandPanX(0); setHandPanY(0); }}>
+                Reset hand framing
+              </ResetButton>
             </div>
           )}
         </EditorSection>
@@ -1221,16 +1325,16 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             onChange={(e) => setHookText(e.target.value)}
             rows={3}
             placeholder="I built this so I'd stop journaling in Notes app"
-            className="w-full resize-none rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-2 text-xs leading-snug outline-none transition focus:border-[color:var(--brand-indigo)]"
+            className={TEXTAREA_CLASS}
           />
-          <ControlSlider label={`On screen: ${hookDuration.toFixed(1)}s`} value={hookDuration} min={RANGES.hookDuration.min} max={RANGES.hookDuration.max} step={RANGES.hookDuration.step} onChange={setHookDuration} testId="hook-duration-slider" />
+          <ControlSlider label="On screen" value={hookDuration} min={RANGES.hookDuration.min} max={RANGES.hookDuration.max} step={RANGES.hookDuration.step} onChange={setHookDuration} testId="hook-duration-slider" format={(v) => `${v.toFixed(1)}s`} />
           {(hookOffsetX !== 0 || hookOffsetY !== 0) && (
             <ResetButton onClick={() => { setHookOffsetX(0); setHookOffsetY(0); }}>Reset position</ResetButton>
           )}
           <p className="text-xs italic text-muted-foreground">Drag the hook text on the preview to reposition</p>
         </EditorSection>
 
-        <EditorSection title="End card" defaultOpen testId="cta-controls">
+        <EditorSection title="End Card CTA" open={openSections.cta} onToggle={() => toggleSection("cta")} testId="cta-controls">
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <Switch data-testid="cta-toggle" checked={ctaEnabled} onCheckedChange={setCtaEnabled} />
             Show lead-gen end card
@@ -1240,16 +1344,16 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             value={ctaHeadline}
             onChange={(e) => setCtaHeadline(e.target.value)}
             placeholder="Try it free — link in bio"
-            className="w-full rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-2 text-xs outline-none transition focus:border-[color:var(--brand-indigo)]"
+            className={INPUT_CLASS}
           />
           <input
             data-testid="cta-handle-input"
             value={ctaHandle}
             onChange={(e) => setCtaHandle(e.target.value)}
             placeholder="@yourhandle"
-            className="w-full rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-2 text-xs outline-none transition focus:border-[color:var(--brand-indigo)]"
+            className={INPUT_CLASS}
           />
-          <ControlSlider label={`Last ${ctaDuration.toFixed(1)}s of the video`} value={ctaDuration} min={RANGES.ctaDuration.min} max={RANGES.ctaDuration.max} step={RANGES.ctaDuration.step} onChange={setCtaDuration} testId="cta-duration-slider" />
+          <ControlSlider label="Visible for" value={ctaDuration} min={RANGES.ctaDuration.min} max={RANGES.ctaDuration.max} step={RANGES.ctaDuration.step} onChange={setCtaDuration} testId="cta-duration-slider" format={(v) => `${v.toFixed(1)}s`} />
           {(ctaOffsetX !== 0 || ctaOffsetY !== 0) && (
             <ResetButton onClick={() => { setCtaOffsetX(0); setCtaOffsetY(0); }}>Reset position</ResetButton>
           )}
@@ -1301,7 +1405,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   }`}
                 >
                   <span className="min-w-0 flex-1 truncate text-sm text-foreground">{p.label}</span>
-                  <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+                  <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
                     {p.id === "source" ? "auto" : `${p.w}x${p.h}`}
                   </span>
                 </button>
@@ -1403,18 +1507,22 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           bounded by a column that also holds the player and the export bar has
           almost no travel, which is exactly the bug this replaces: the video
           scrolled off the top while the settings were still being adjusted. */}
-      <div className="min-w-0 space-y-3 lg:sticky lg:top-24">
-        <SectionCard title="Live preview" className="!p-3">
-          <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
-            <span>Live preview</span>
+      <div className="min-w-0 space-y-3 lg:sticky lg:top-6">
+        <SectionCard title="Live preview" className="sticky top-0 z-10 !p-3 lg:top-6">
+          <div className="mb-2 flex items-center justify-end text-xs text-muted-foreground">
             <span>{(PRESETS.find((p) => p.id === preset) || {}).label}</span>
           </div>
           {/* A fixed 9:16 frame rather than a box that grows to the canvas.
               Portrait output filled the width of a flexible card and left black
               bars either side; a real aspect frame makes the preview the shape
-              the export will be, and the empty state can share it. */}
+              the export will be, and the empty state can share it.
+              `max-h` leaves room below for the player card and the export bar
+              so the export stays reachable without page scroll at 700px tall:
+              100vh minus card chrome, the player, and the export bar. */}
           <div
-            className="mx-auto flex aspect-[9/16] w-auto max-h-[calc(100vh-20rem)] max-w-full items-center justify-center overflow-hidden rounded-xl border border-[color:var(--hairline)] bg-black"
+            className={`mx-auto flex aspect-[9/16] w-auto max-h-[45vh] max-w-full items-center justify-center overflow-hidden rounded-xl border lg:max-h-[calc(100vh-30rem)] ${
+              videoUrl ? "border-[color:var(--hairline)] bg-black" : "border-dashed border-[color:var(--hairline-strong)] bg-secondary/20"
+            }`}
           >
             {videoUrl ? (
               <canvas
@@ -1424,9 +1532,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 onWheel={handleWheel}
               />
             ) : loadingSource ? (
-              <div className="flex flex-col items-center gap-2 text-center">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                <p className="text-xs text-muted-foreground">Loading the finished render…</p>
+              <div className="h-full w-full animate-pulse bg-secondary/40" role="status" aria-label="Loading the finished render">
+                <span className="sr-only">Loading the finished render…</span>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-2 px-6 text-center">
@@ -1451,7 +1558,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                       style={{ left: `${(t / duration) * 100}%`, transform: "translateX(-50%)" }}
                     >
                       <div className="h-2 w-px bg-muted-foreground/30 transition group-hover:bg-muted-foreground/60" />
-                      <span className="mt-0.5 font-mono text-[8px] tabular-nums leading-none text-muted-foreground/70 transition group-hover:text-muted-foreground">
+                      <span className="mt-0.5 font-mono text-xs tabular-nums leading-none text-muted-foreground transition group-hover:text-muted-foreground">
                         {formatTime(t)}
                       </span>
                     </button>
@@ -1472,9 +1579,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                           }}
                           title={`${formatTime(seg.time)} → ${formatTime(end)}: ${seg.scale.toFixed(2)}x`}
                         >
-                          <span className="pointer-events-none absolute inset-0 flex items-center justify-center font-mono text-[7px] text-amber-300/70">
-                            {seg.scale.toFixed(1)}x
-                          </span>
+                          {/* No inline label: at 12px a zoom readout overflows these
+                              narrow zone strips, so the value lives in the title
+                              tooltip instead. */}
                         </div>
                       );
                     })}
@@ -1521,8 +1628,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 </div>
 
                 <div className="flex items-center justify-between px-0.5">
-                  <span className="font-mono text-[9px] tabular-nums text-muted-foreground">0:00.0</span>
-                  <span className="font-mono text-[9px] tabular-nums text-muted-foreground">{formatTime(duration)}</span>
+                  <span className="font-mono text-xs tabular-nums text-muted-foreground">0:00.0</span>
+                  <span className="font-mono text-xs tabular-nums text-muted-foreground">{formatTime(duration)}</span>
                 </div>
               </div>
 
@@ -1549,28 +1656,28 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                       onClick={() => handleSeek(Math.max(0, currentTime - 1))}
                       testId="transport-back-1s"
                     >
-                      <span className="font-mono text-[11px]">−1s</span>
+                      <span className="font-mono text-xs">−1s</span>
                     </TransportButton>
                     <TransportButton
                       label="Back 1 frame (1/30s)"
                       onClick={() => handleSeek(Math.max(0, currentTime - 1 / 30))}
                       testId="transport-back-frame"
                     >
-                      <ZoomOut className="h-4 w-4" />
+                      <ChevronLeft className="h-4 w-4" />
                     </TransportButton>
                     <TransportButton
                       label="Forward 1 frame (1/30s)"
                       onClick={() => handleSeek(Math.min(duration, currentTime + 1 / 30))}
                       testId="transport-forward-frame"
                     >
-                      <ZoomIn className="h-4 w-4" />
+                      <ChevronRight className="h-4 w-4" />
                     </TransportButton>
                     <TransportButton
                       label="Forward 1 second"
                       onClick={() => handleSeek(Math.min(duration, currentTime + 1))}
                       testId="transport-forward-1s"
                     >
-                      <span className="font-mono text-[11px]">+1s</span>
+                      <span className="font-mono text-xs">+1s</span>
                     </TransportButton>
                   </div>
                 </div>
@@ -1579,7 +1686,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="eyebrow">Zoom Lock</span>
                   {zoomKeyframes.length > 0 && (
-                    <span className="text-[11px] text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       {zoomKeyframes.length} {zoomKeyframes.length === 1 ? "keyframe" : "keyframes"}
                     </span>
                   )}
@@ -1598,7 +1705,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   <div className="space-y-1.5">
                     {sortedKeyframes[0].time > 0.01 && (
                       <div className="flex items-center gap-2 rounded-lg border border-[color:var(--hairline)] bg-secondary/40 px-3 py-2">
-                        <span className="font-mono text-[11px] text-muted-foreground">0:00.0 → {formatTime(sortedKeyframes[0].time)} • default (1.00x)</span>
+                        <span className="font-mono text-xs text-muted-foreground">0:00.0 → {formatTime(sortedKeyframes[0].time)} • default (1.00x)</span>
                       </div>
                     )}
                     {sortedKeyframes.map((kf, idx, sorted) => {
@@ -1609,7 +1716,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                           <button
                             type="button"
                             onClick={() => handleSeek(kf.time)}
-                            className="flex-1 text-left font-mono text-[11px] tabular-nums text-muted-foreground transition hover:text-foreground"
+                            className="flex-1 text-left font-mono text-xs tabular-nums text-muted-foreground transition hover:text-foreground"
                             title="Jump to this keyframe"
                           >
                             {formatTime(kf.time)} → {formatTime(nextTime)} • {kf.scale.toFixed(2)}x zoom
@@ -1625,7 +1732,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                         </div>
                       );
                     })}
-                    <p className="pt-0.5 text-[11px] text-muted-foreground">
+                    <p className="pt-0.5 text-xs text-muted-foreground">
                       Pause → seek to exact time → adjust zoom → Lock. Each segment displays its locked zoom in the preview and export.
                     </p>
                   </div>
@@ -1635,8 +1742,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           </SectionCard>
         )}
 
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[color:var(--hairline)] bg-background/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
-          <div className="lg:surface lg:!p-3">
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[color:var(--hairline)] bg-background/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur lg:sticky lg:bottom-4 lg:rounded-2xl lg:border lg:bg-card/90 lg:px-4 lg:py-3">
           <Button
             type="button"
             variant="brand"
@@ -1663,7 +1769,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          </div>
         </div>
         {/* Clears the fixed mobile bar so it never covers the last card. */}
         <div className="h-24 lg:hidden" aria-hidden="true" />
