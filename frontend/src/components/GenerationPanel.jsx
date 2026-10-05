@@ -390,23 +390,42 @@ const handleGenerate = async () => {
    * usable here either way and leaving would lose the generation the founder is
    * looking at.
    *
-   * Deliberately WITHOUT `noopener`, because the finished clip comes back
-   * through `window.opener.postMessage` and a severed opener would drop it.
-   * That is the one place this product opens a cross-origin window, so it
-   * carries the risk the flag exists to manage; the target is a first-party
-   * origin we configure, and the message is validated against it on the way in
-   * (see the receiver's expected origin). The alternative — no return leg — was
-   * rejected because it strands the finished file in a tab the founder has to
-   * find and re-download by hand.
+   * The tab is claimed BEFORE the link is requested, not after. window.open
+   * following a network round trip is no longer user-initiated as far as a popup
+   * blocker is concerned, so the founder would click, watch the button spin, and
+   * get no tab and no error. Claiming it inside the click and aiming it at the
+   * link afterwards keeps the gesture that the blocker is looking for.
+   *
+   * A blocked popup is now reported rather than swallowed. The alternative — no
+   * return leg — was rejected because it strands the finished file in a tab the
+   * founder has to find and re-download by hand.
+   *
+   * Still opened WITHOUT `noopener`, and that must stay: the finished clip
+   * returns through `window.opener.postMessage`, so severing the opener would
+   * drop it. This is the one cross-origin window this product opens, which is
+   * why the message is validated on the way in - the receiver checks the sender
+   * against the configured app origin and requires the clip to name this render.
    */
   const handleContinueToDemoCta = async () => {
     if (!generation?.id) return;
     setStartingDemoCta(true);
     setError(null);
+    const tab = window.open("", "_blank");
+    if (!tab) {
+      setStartingDemoCta(false);
+      setError(
+        "Your browser blocked the Product Demo + CTA tab. Allow pop-ups for this site, then try again."
+      );
+      return;
+    }
     try {
       const { url } = await api.getDemoCtaLink(generation.id);
-      window.open(url, "_blank");
+      // replace, not href: there is no useful about:blank for the back button
+      // to return to.
+      tab.location.replace(url);
     } catch (err) {
+      // Don't leave an empty tab behind for a request that never happened.
+      tab.close();
       setError(getErrorMessage(err));
     } finally {
       setStartingDemoCta(false);

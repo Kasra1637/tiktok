@@ -2917,6 +2917,109 @@ async function runDemoCtaChecks() {
     }
   );
 
+  // Clicks "Continue to Product Demo + CTA" and reports what the handler did to the
+  // popup. `openResult` is what window.open returns: a fake tab, or null for a
+  // blocked pop-up. The event order is the point - the tab has to be claimed
+  // inside the click, because a window.open after the link request is no longer
+  // user-initiated and gets silently blocked.
+  async function clickContinueToDemoCta(ctx, { openResult = "tab" } = {}) {
+    const events = [];
+    const originalOpen = dom.window.open;
+    const tab =
+      openResult === "blocked"
+        ? null
+        : {
+            location: {
+              replace: (u) => events.push(["replace", u]),
+            },
+            close: () => events.push(["close"]),
+          };
+    dom.window.open = (...args) => {
+      events.push(["open", args[0]]);
+      return tab;
+    };
+    try {
+      await withApi(
+        {
+          getDemoCtaConfig: async () => ({ available: true, origin: "https://demo-cta.example" }),
+          getGenerations: async () => ({
+            generations: [{ ...SEGMENT, video_url: "/api/media/videos/gen-1.mp4" }],
+          }),
+          getDemoCtaLink: async () => {
+            events.push(["link-resolved"]);
+            return {
+              url: "https://demo-cta.example/?src=x&gid=gen-1",
+              origin: "https://demo-cta.example",
+              expires_in: 3600,
+            };
+          },
+        },
+        async () => {
+          await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+          const cta = demoCtaButton(ctx);
+          if (!cta) throw new Error("the optional step is missing, so there is nothing to click");
+          await act(async () => {
+            cta.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {
+            await new Promise((r) => setTimeout(r, 20));
+          });
+        }
+      );
+    } finally {
+      dom.window.open = originalOpen;
+    }
+    return events;
+  }
+
+  await check(
+    "the Product Demo + CTA tab is claimed inside the click, before the link is fetched",
+    async (ctx) => {
+      const events = await clickContinueToDemoCta(ctx);
+      const openIndex = events.findIndex(([name]) => name === "open");
+      const linkIndex = events.findIndex(([name]) => name === "link-resolved");
+      if (openIndex === -1) throw new Error("no tab was opened at all");
+      if (linkIndex !== -1 && linkIndex < openIndex) {
+        throw new Error(
+          "the tab was opened after the link request. That is not user-initiated " +
+            "any more, so a popup blocker stops it: the founder clicks, the button " +
+            "spins, no tab appears and nothing says why."
+        );
+      }
+      // Claimed blank, then aimed. Passing the URL to window.open would also be
+      // too late, and an about:blank target is the only thing available here.
+      if (events[openIndex][1] !== "") {
+        throw new Error(
+          `expected the tab to be claimed blank, got ${JSON.stringify(events[openIndex][1])}`
+        );
+      }
+      const replace = events.find(([name]) => name === "replace");
+      if (!replace) throw new Error("the claimed tab was never pointed at the link");
+      if (!String(replace[1]).startsWith("https://demo-cta.example/?")) {
+        throw new Error(`the tab was aimed somewhere unexpected: ${replace[1]}`);
+      }
+    }
+  );
+
+  await check(
+    "a blocked pop-up is reported instead of failing silently",
+    async (ctx) => {
+      const events = await clickContinueToDemoCta(ctx, { openResult: "blocked" });
+      if (!events.some(([name]) => name === "open")) {
+        throw new Error("the handler never tried to open a tab");
+      }
+      if (events.some(([name]) => name === "replace")) {
+        throw new Error("a blocked pop-up still went on to request the link");
+      }
+      if (!ctx.text().toLowerCase().includes("blocked")) {
+        throw new Error(
+          "the pop-up was blocked and nothing told the founder. A silent dead " +
+            "click is indistinguishable from the feature being broken."
+        );
+      }
+    }
+  );
+
   await check(
     "the studio's own download is untouched by the optional step",
     async (ctx) => {
