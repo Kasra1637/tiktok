@@ -72,25 +72,31 @@ function SourcePicker() {
   }
 
   return (
-    <div className="space-y-3">
-      <h2 className="eyebrow">Or open a finished render</h2>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="space-y-4">
+      <h2 className="font-display text-lg font-semibold tracking-tight">Start from a finished render</h2>
+      <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
         {rows.map((row) => (
-          <SectionCard key={row.id} className="flex h-full flex-col">
-            <div className="flex flex-wrap items-center gap-2">
+          <SectionCard key={row.id} className="flex h-full flex-col !gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-display text-sm font-semibold">
                 {row.brand_name || "Unassigned app"}
               </span>
               {typeof row.duration === "number" && (
-                <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                <Badge variant="secondary" className="font-mono text-[11px] tabular-nums">
                   {row.duration}s
-                </span>
+                </Badge>
               )}
             </div>
-            {row.hook_line && (
-              <p className="truncate text-xs text-muted-foreground">&ldquo;{row.hook_line}&rdquo;</p>
+            {row.hook_line ? (
+              <p className="line-clamp-2 text-xs text-muted-foreground" title={row.hook_line}>
+                &ldquo;{row.hook_line}&rdquo;
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">No hook line recorded.</p>
             )}
-            <div className="flex flex-wrap gap-2 pt-1" style={{ marginTop: "auto" }}>
+            {/* mt-auto pins the actions to the bottom of every card so a row of
+                cards with different quote lengths still lines up. */}
+            <div className="mt-auto flex flex-wrap gap-2">
               <Button variant="brand" size="sm" asChild>
                 <Link to={`/demo-cta/${row.id}`}>
                   <Smartphone className="h-3.5 w-3.5" /> Open in editor
@@ -183,13 +189,11 @@ export function DemoCtaStudio() {
       {generationId ? (
         <EditorRoute generationId={generationId} />
       ) : (
-        <>
-          <DemoCtaEditor />
-          <div className="pt-2">
-            <SourcePicker />
-          </div>
-        </>
+        <DemoCtaEditor />
       )}
+      {/* Full-width and below the two-column editor: a second way in, not a
+          competing column competing for the same height. */}
+      {!generationId && <SourcePicker />}
     </div>
   );
 }

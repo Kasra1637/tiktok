@@ -72,6 +72,33 @@ global.MessageEvent = dom.window.MessageEvent;
 // page throws "Image is not defined" on import and every check reports a
 // component crash instead of the assertion it meant to make.
 global.Image = dom.window.Image;
+// The Demo + CTA editor remembers which setting groups are open, and reads that
+// on mount via `window.localStorage`. jsdom's own storage throws on this opaque
+// origin, and the editor's try/catch then falls back to defaults — so the panel
+// would look correct while the persistence path stayed untested. The stub has to
+// land on `dom.window` specifically, not on `global`: the component reads
+// `window`, and stubbing only `global` left the throw in place.
+if (!global.__SMOKE_STORAGE_STUBBED) {
+  const store = new Map();
+  const stub = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: (k) => store.delete(k),
+    clear: () => store.clear(),
+  };
+  try {
+    Object.defineProperty(dom.window, "localStorage", {
+      value: stub,
+      configurable: true,
+      writable: true,
+    });
+  } catch {
+    // Older jsdom refuses; fall back so the check degrades loudly rather than
+    // silently testing nothing.
+  }
+  global.localStorage = stub;
+  global.__SMOKE_STORAGE_STUBBED = true;
+}
 global.getComputedStyle = dom.window.getComputedStyle;
 global.MutationObserver = dom.window.MutationObserver;
 global.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0);
@@ -2928,6 +2955,95 @@ async function runDemoCtaChecks() {
       }
       if (ctx.text().includes("Finish recording")) {
         throw new Error("the export is gated on a render that was never made");
+      }
+    }
+  );
+
+  await check(
+    "the preview column is pinned, and the settings column is what scrolls",
+    async (ctx) => {
+      const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+      await withApi(
+        { getGenerations: async () => ({ generations: [COMPLETED] }) },
+        async () => {
+          await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
+          const html = ctx.container.innerHTML;
+          // The regression this exists for: sticky had been on the preview card,
+          // which is bounded by its own column and therefore travelled almost
+          // nothing, so the video scrolled away with the page.
+          if (!/lg:sticky/.test(html)) {
+            throw new Error(
+              "nothing in the preview column is sticky. Sticky belongs on the column " +
+                "itself, not on the preview card inside it — a sticky card is bounded " +
+                "by that column and scrolls away with the page."
+            );
+          }
+          if (!/overflow-y-auto/.test(html)) {
+            throw new Error(
+              "the settings column does not scroll independently. Without its own " +
+                "scroll container the whole page scrolls and the two columns cannot " +
+                "be peers."
+            );
+          }
+        }
+      );
+    }
+  );
+
+  await check(
+    "which settings groups are open is remembered across visits",
+    async (ctx) => {
+      const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+      const key = "hookforge.demoCta.openSections";
+      dom.window.localStorage.removeItem(key);
+      const mountEditor = async () => {
+        // A fresh container per mount: `check` owns one, and creating a second
+        // root on it warns and leaves the first tree mounted.
+        const container = dom.window.document.createElement("div");
+        dom.window.document.body.appendChild(container);
+        const root = createRoot(container);
+        roots.push(root);
+        await act(async () => {
+          root.render(React.createElement(DemoCtaEditor, { generation: COMPLETED }));
+        });
+        return { container, root };
+      };
+      try {
+        // First visit: the defaults are Source & Look, Hook Text, End Card open.
+        const first = await mountEditor();
+        if (!first.container.textContent.includes("On screen:")) {
+          throw new Error("Hook Text did not start open on a first visit");
+        }
+        const hooks = [...first.container.querySelectorAll("button")].find(
+          (b) => (b.textContent || "").trim() === "Hook Text"
+        );
+        if (!hooks) throw new Error("no Hook Text group header to click");
+        await act(async () => {
+          hooks.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        if (first.container.textContent.includes("On screen:")) {
+          throw new Error("clicking the Hook Text header did not collapse it");
+        }
+        const saved = JSON.parse(dom.window.localStorage.getItem(key) || "{}");
+        if (saved.hook !== false) {
+          throw new Error(
+            `collapsing Hook Text was not written through (stored: ${JSON.stringify(saved)})`
+          );
+        }
+        // Second visit must honour it.
+        const second = await mountEditor();
+        if (second.container.textContent.includes("On screen:")) {
+          throw new Error(
+            "Hook Text reopened on a later visit. The panel is a workspace, not a " +
+              "form; re-collapsing the groups someone deliberately opened is the " +
+              "friction that makes a tool feel like it forgot you."
+          );
+        }
+        if (!second.container.textContent.includes("Choose a video") && !second.container.textContent.includes("Replace")) {
+          throw new Error("Source & Look should still be open on the second visit");
+        }
+      } finally {
+        dom.window.localStorage.removeItem(key);
       }
     }
   );

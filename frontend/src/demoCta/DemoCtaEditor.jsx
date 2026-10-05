@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle,
+  ArrowUp,
   Check,
   ChevronDown,
   Download,
@@ -11,7 +12,10 @@ import {
   Play,
   RotateCcw,
   Smartphone,
+  Upload,
   X,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -19,6 +23,7 @@ import { Alert, AlertDescription } from "../components/ui/alert";
 import { Progress } from "../components/ui/progress";
 import { Slider } from "../components/ui/slider";
 import { Switch } from "../components/ui/switch";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
 import { SectionCard } from "../components/SectionCard";
 import { api, getErrorMessage } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
@@ -46,30 +51,40 @@ import { drawEndCard, drawHookOverlay, getEndCardBounds, getHookBounds, HOOK_FON
 import { drawHandView, preloadHandViewImages } from "./handView";
 import { captureZoomLock, getEffectiveZoom, removeZoomKeyframe, sortKeyframes, tickInterval } from "./zoom";
 
-const SELECT_CLASS =
-  "w-full appearance-none truncate rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-2 text-sm outline-none transition focus:border-[color:var(--brand-indigo)]";
+const SECTIONS_KEY = "hookforge.demoCta.openSections";
+
+// 8px rhythm: 40px controls, 10px radius, 1px hairline, accent focus ring.
+const CONTROL_CLASS =
+  "h-10 w-full appearance-none rounded-[10px] border border-[color:var(--hairline)] bg-secondary/40 px-3 text-sm text-foreground outline-none transition duration-150 hover:border-[color:var(--hairline-strong)] focus:border-[color:var(--brand-indigo)] focus:ring-2 focus:ring-[color:var(--brand-indigo)]/40 disabled:opacity-50";
+
+const INPUT_CLASS =
+  "h-10 w-full rounded-[10px] border border-[color:var(--hairline)] bg-secondary/40 px-3 text-sm text-foreground outline-none transition duration-150 placeholder:text-muted-foreground hover:border-[color:var(--hairline-strong)] focus:border-[color:var(--brand-indigo)] focus:ring-2 focus:ring-[color:var(--brand-indigo)]/40";
 
 /**
- * One collapsible control group. The standalone app's sidebar sections map
- * one-to-one onto these; only the skin changed to the app's card language.
+ * One collapsible control group.
+ *
+ * `.surface` is un-layered CSS with its own 24px padding, so the padding here
+ * has to be important to win — without `!p-0` every group carried 24px of dead
+ * space around a 32px header, which is most of what made the old panel feel
+ * bloated. Content padding is 16px to match the rest of the app's card rhythm.
+ *
+ * `open`/`onToggle` are lifted so the parent can persist which groups are open.
  */
-function EditorSection({ title, defaultOpen = false, testId, children }) {
-  const [open, setOpen] = useState(defaultOpen);
+function EditorSection({ title, open, onToggle, testId, children }) {
   return (
-    <SectionCard
-      className="!space-y-0 p-0"
-      data-testid={testId}
-    >
+    <SectionCard className="!space-y-0 !p-0" data-testid={testId}>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left"
+        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition duration-150 hover:bg-[color:var(--indigo-6)]"
       >
         <span className="eyebrow">{title}</span>
-        <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+        />
       </button>
-      {open && <div className="space-y-2.5 px-3.5 pb-3.5">{children}</div>}
+      {open && <div className="space-y-3 px-4 pb-4">{children}</div>}
     </SectionCard>
   );
 }
@@ -87,10 +102,18 @@ function FieldLabel({ children }) {
   return <span className="text-xs text-muted-foreground">{children}</span>;
 }
 
-function ControlSlider({ label, value, min, max, step, onChange, testId }) {
+/**
+ * A labelled slider with its current value right-aligned in the label row, so
+ * the number sits where the eye already is rather than needing a second pass.
+ */
+function ControlSlider({ label, value, min, max, step, onChange, testId, format }) {
+  const display = format ? format(value) : value;
   return (
-    <div className="space-y-1.5">
-      <FieldLabel>{label}</FieldLabel>
+    <div className="space-y-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <FieldLabel>{label}</FieldLabel>
+        <span className="font-mono text-xs tabular-nums text-foreground">{display}</span>
+      </div>
       <Slider
         data-testid={testId}
         value={[value]}
@@ -109,10 +132,38 @@ function ResetButton({ onClick, children, testId }) {
       type="button"
       data-testid={testId}
       onClick={onClick}
-      className="text-xs text-muted-foreground underline-offset-2 transition hover:text-foreground hover:underline"
+      className="text-xs text-muted-foreground underline-offset-2 transition duration-150 hover:text-foreground hover:underline"
     >
       {children || "Reset"}
     </button>
+  );
+}
+
+/**
+ * A transport control: a real 44px target with a tooltip.
+ *
+ * These were 28px text buttons, which is below the 44px touch guideline and
+ * hard to hit while watching the preview. The size is on the button rather than
+ * an icon so the whole square is the hit area.
+ */
+function TransportButton({ label, onClick, disabled, children, testId }) {
+  const button = (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      data-testid={testId}
+      aria-label={label}
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] border border-[color:var(--hairline)] bg-secondary/40 text-foreground transition duration-150 hover:border-[color:var(--hairline-strong)] hover:bg-secondary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-indigo)]/40 disabled:pointer-events-none disabled:opacity-40"
+    >
+      {children}
+    </button>
+  );
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -133,7 +184,40 @@ function ResetButton({ onClick, children, testId }) {
  *   is saved standalone. Either way it never creates a Hook + Middle.
  */
 export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) {
+  // Which groups are open is remembered across visits: this panel is a
+  // workspace, not a form, and re-collapsing the groups someone deliberately
+  // opened on every reload is the kind of small friction that makes a tool feel
+  // like it forgot you. Keys are stable; anything unknown is ignored so a stale
+  // or hand-edited value cannot break the panel.
+  const [openSections, setOpenSections] = useState(() => {
+    const defaults = { source: true, hook: true, cta: true, output: false, advanced: false };
+    try {
+      const raw = window.localStorage.getItem(SECTIONS_KEY);
+      if (!raw) return defaults;
+      const saved = JSON.parse(raw);
+      if (!saved || typeof saved !== "object") return defaults;
+      return { ...defaults, ...saved };
+    } catch {
+      // Private mode, quota, or malformed JSON. The defaults are a fine answer.
+      return defaults;
+    }
+  });
+  const toggleSection = useCallback((key) => {
+    setOpenSections((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      try {
+        window.localStorage.setItem(SECTIONS_KEY, JSON.stringify(next));
+      } catch {
+        // Nothing to do: persistence is a convenience, not the feature.
+      }
+      return next;
+    });
+  }, []);
+
   const [videoUrl, setVideoUrl] = useState(null);
+  // Name of a founder-supplied file, so the upload control can show what is
+  // actually loaded rather than an anonymous "replace" affordance.
+  const [sourceFileName, setSourceFileName] = useState("");
   const [sourceReplaced, setSourceReplaced] = useState(false);
   const [loadingSource, setLoadingSource] = useState(true);
   const [videoMeta, setVideoMeta] = useState(null);
@@ -260,7 +344,37 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     const url = URL.createObjectURL(file);
     sourceObjectUrlRef.current = url;
     setVideoUrl(url);
+    setSourceFileName(file.name || "video");
     setSourceReplaced(true);
+  };
+
+  /**
+   * Drop a founder-supplied clip and go back to the render that was here before.
+   * Restoring the pinned bytes rather than clearing the source is what makes
+   * "Remove" reversible: without it the panel would sit empty with no way back
+   * short of a reload.
+   */
+  const clearSource = () => {
+    if (!generation || !sourceUrl) return;
+    setSourceFileName("");
+    setSourceReplaced(false);
+    setError(null);
+    setLoadingSource(true);
+    (async () => {
+      try {
+        const res = await fetch(sourceUrl);
+        if (!res.ok) throw new Error(`The finished render returned ${res.status}. Reload to get a fresh link.`);
+        const blob = await res.blob();
+        if (sourceObjectUrlRef.current) URL.revokeObjectURL(sourceObjectUrlRef.current);
+        const url = URL.createObjectURL(blob);
+        sourceObjectUrlRef.current = url;
+        setVideoUrl(url);
+      } catch (e) {
+        setError(e?.message || "The finished render could not be reloaded.");
+      } finally {
+        setLoadingSource(false);
+      }
+    })();
   };
 
   // Probe metadata and ensure preview video starts playing
@@ -956,10 +1070,43 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     if (ticks[ticks.length - 1] < duration - interval * 0.3) ticks.push(duration);
   }
 
+  // The settings panel is its own scroll container and the preview column is
+  // pinned beside it.
+  //
+  // This is the fix for the one that mattered: the preview card carried
+  // `position: sticky`, but it sits inside a column that also holds the player,
+  // the export bar and the export result — so its sticky travel was bounded by
+  // that column and the video scrolled away with the page. Sticky has to be on
+  // the COLUMN, and the settings column has to own the scrolling.
+  //
+  // `max-h-[calc(100vh-7rem)]` on the settings column is what makes the two
+  // columns peers: the page itself stops growing, the panel scrolls inside its
+  // own box, and the preview stays put no matter how long the panel gets.
+  const settingsRef = useRef(null);
+
   return (
-    <div className="grid gap-5 xl:grid-cols-[400px_minmax(0,1fr)]">
-      <div className="min-w-0 space-y-3">
-        <EditorSection title="Source & look" defaultOpen testId="demo-cta-source">
+    // Radix tooltips need a provider ancestor; the app has none, and the
+    // transport buttons are the first tooltips on this page.
+    <TooltipProvider delayDuration={200}>
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] xl:grid-cols-[420px_minmax(0,1fr)]">
+      <div className="relative min-w-0">
+        {/* Back to top. Deliberately outside the scrolling panel and to its
+            left, so it can never sit over the sticky preview. */}
+        <button
+          type="button"
+          onClick={() => settingsRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
+          aria-label="Back to top of settings"
+          title="Back to top"
+          className="absolute -left-1 top-0 z-20 hidden h-9 w-9 -translate-x-full items-center justify-center rounded-full border border-[color:var(--hairline)] bg-card text-muted-foreground transition duration-150 hover:border-[color:var(--brand-indigo)] hover:text-foreground hover:bg-[color:var(--indigo-8)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-indigo)]/40 lg:flex"
+        >
+          <ArrowUp className="h-4 w-4" />
+        </button>
+
+        <div
+          ref={settingsRef}
+          className="max-h-[calc(100vh-7rem)] space-y-3 overflow-y-auto overscroll-contain pr-1 lg:max-h-[calc(100vh-7rem)]"
+        >
+        <EditorSection title="Source & Look" open={openSections.source} onToggle={() => toggleSection("source")} testId="demo-cta-source">
           {generation ? (
             <>
               <p className="text-xs text-muted-foreground">
@@ -981,38 +1128,67 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               without generating a hook first.
             </p>
           )}
-          <Button variant="secondary" size="sm" asChild className="w-full sm:w-auto">
-            <label className="cursor-pointer">
-              <span>{videoUrl ? "Replace video file" : "Choose a video"}</span>
-              <input
-                type="file"
-                accept="video/*"
-                data-testid="demo-cta-file-input"
-                className="sr-only"
-                onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-              />
-            </label>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="secondary" size="sm" asChild className="h-10">
+              <label className="cursor-pointer">
+                <Upload className="h-3.5 w-3.5" />
+                <span>{sourceFileName ? "Replace" : "Choose a video"}</span>
+                <input
+                  type="file"
+                  accept="video/*"
+                  data-testid="demo-cta-file-input"
+                  className="sr-only"
+                  onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+                />
+              </label>
+            </Button>
+            {sourceFileName && (
+              <>
+                <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={sourceFileName}>
+                  {sourceFileName}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-10"
+                  onClick={clearSource}
+                  title="Remove this clip and go back to the finished render"
+                  data-testid="demo-cta-remove-source"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  <span>Remove</span>
+                </Button>
+              </>
+            )}
+          </div>
           {sourceReplaced && generation && (
             <p className="text-xs text-muted-foreground">
               Source replaced for this edit. The export is still filed under the selected Hook + Middle.
             </p>
           )}
-          <div className="grid grid-cols-2 gap-1.5 border-t border-[color:var(--hairline)] pt-2.5">
-            {[
-              ["floating", "Floating Phone"],
-              ["hand", "Hand Holding"],
-            ].map(([id, label]) => (
-              <Button
-                key={id}
-                type="button"
-                variant={viewMode === id ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setViewMode(id)}
-              >
-                {label}
-              </Button>
-            ))}
+          <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
+            <SubLabel>View style</SubLabel>
+            <div className="grid grid-cols-2 gap-1 rounded-[10px] border border-[color:var(--hairline)] bg-secondary/30 p-1">
+              {[
+                ["floating", "Floating Phone"],
+                ["hand", "Hand Holding"],
+              ].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setViewMode(id)}
+                  aria-pressed={viewMode === id}
+                  data-testid={`view-mode-${id}`}
+                  className={`h-8 rounded-lg text-xs font-medium transition duration-150 ${
+                    viewMode === id
+                      ? "bg-[color:var(--brand-indigo)]/15 text-foreground shadow-[var(--shadow-xs)]"
+                      : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           {viewMode === "hand" && (
             <div className="grid grid-cols-5 gap-1.5">
@@ -1034,150 +1210,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           )}
         </EditorSection>
 
-        <EditorSection title="Framing">
-          {viewMode === "floating" && (
-            <div className="space-y-2">
-              <SubLabel>Device</SubLabel>
-              <select value={device} onChange={(e) => setDevice(e.target.value)} className={SELECT_CLASS} title={(DEVICES.find((d) => d.id === device) || {}).label} aria-label="Device frame">
-                {DEVICES.map((d) => (
-                  <option key={d.id} value={d.id}>{d.label}</option>
-                ))}
-              </select>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Frame color:</span>
-                {[
-                  ["black", "#0d0d10", "Black"],
-                  ["white", "#f0f0f2", "White"],
-                ].map(([id, color, title]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setFrameColor(id)}
-                    title={title}
-                    aria-label={title}
-                    style={{ background: color }}
-                    className={`h-6 w-6 rounded-full border-2 transition ${frameColor === id ? "border-[color:var(--brand-indigo)]" : "border-[color:var(--hairline)]"}`}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-          <div className="space-y-2">
-            <SubLabel>Platform</SubLabel>
-            <select value={preset} onChange={(e) => setPreset(e.target.value)} className={SELECT_CLASS} title={`${(PRESETS.find((p) => p.id === preset) || {}).label} — ${preset === "source" ? "auto" : `${(PRESETS.find((p) => p.id === preset) || {}).w}x${(PRESETS.find((p) => p.id === preset) || {}).h}`}`} aria-label="Platform preset">
-              {PRESETS.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label} — {p.id === "source" ? "auto" : `${p.w}x${p.h}`}
-                </option>
-              ))}
-            </select>
-          </div>
-          {viewMode === "floating" && (
-            <div className="space-y-2">
-              <SubLabel>Background</SubLabel>
-              <div className="grid grid-cols-4 gap-1.5">
-                {BACKGROUNDS.map((b) => (
-                  <button
-                    key={b.id}
-                    type="button"
-                    onClick={() => setBg(b.id)}
-                    title={b.label}
-                    aria-label={b.label}
-                    className={`aspect-square overflow-hidden rounded-lg border transition ${
-                      bg === b.id ? "border-[color:var(--brand-indigo)]" : "border-[color:var(--hairline)]"
-                    }`}
-                    style={
-                      b.preview === "transparent"
-                        ? { backgroundImage: "linear-gradient(45deg,#666 25%,transparent 25%),linear-gradient(-45deg,#666 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#666 75%),linear-gradient(-45deg,transparent 75%,#666 75%)", backgroundSize: "8px 8px", backgroundPosition: "0 0,0 4px,4px -4px,-4px 0", backgroundColor: "#222" }
-                        : { background: b.preview }
-                    }
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-          {viewMode === "floating" && (
-            <div className="space-y-2">
-              <SubLabel>Animation</SubLabel>
-              <div className="grid grid-cols-2 gap-1.5">
-                {ANIMATIONS.map((a) => (
-                  <Button key={a.id} type="button" variant={anim === a.id ? "secondary" : "ghost"} size="sm" onClick={() => setAnim(a.id)}>
-                    {a.label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
-          {viewMode === "hand" && (
-            <div className="space-y-2" data-testid="hand-transform-controls">
-              <SubLabel>Hand framing</SubLabel>
-              <p className="text-xs text-muted-foreground">Drag the preview to move • scroll to zoom</p>
-              <ControlSlider label={`Zoom: ${handZoom.toFixed(2)}x`} value={handZoom} min={RANGES.handZoom.min} max={RANGES.handZoom.max} step={RANGES.handZoom.step} onChange={setHandZoom} testId="hand-zoom-slider" />
-              <ControlSlider label={`H position: ${Math.round(handPanX * 100)}%`} value={handPanX} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={setHandPanX} testId="hand-panx-slider" />
-              <ControlSlider label={`V position: ${Math.round(handPanY * 100)}%`} value={handPanY} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={setHandPanY} testId="hand-pany-slider" />
-              <ResetButton testId="hand-transform-reset-btn" onClick={() => { setHandZoom(1); setHandPanX(0); setHandPanY(0); }}>
-                Reset hand framing
-              </ResetButton>
-            </div>
-          )}
-          {viewMode === "hand" && (
-            <div className="space-y-2" data-testid="screen-position-controls">
-              <SubLabel>Screen position</SubLabel>
-              {[
-                ["Left", screenX, setScreenX, "left"],
-                ["Top", screenY, setScreenY, "top"],
-                ["Width", screenW, setScreenW, "width"],
-                ["Height", screenH, setScreenH, "height"],
-              ].map(([label, val, setter, key]) => (
-                <div key={key} className="flex items-center gap-2">
-                  <span className="w-11 shrink-0 text-xs text-muted-foreground">{label}</span>
-                  <Slider
-                    data-testid={`screen-${key}-slider`}
-                    value={[val]}
-                    min={RANGES.screen.min}
-                    max={RANGES.screen.max}
-                    step={RANGES.screen.step}
-                    onValueChange={([next]) => setter(next)}
-                    className="flex-1"
-                  />
-                  <span className="w-10 text-right font-mono text-[11px] text-muted-foreground">{(val * 100).toFixed(1)}</span>
-                </div>
-              ))}
-              <ResetButton testId="screen-reset-btn" onClick={() => { setScreenX(DEFAULT_SCREEN.x); setScreenY(DEFAULT_SCREEN.y); setScreenW(DEFAULT_SCREEN.w); setScreenH(DEFAULT_SCREEN.h); }}>
-                Reset to photo screen
-              </ResetButton>
-            </div>
-          )}
-          <div className="space-y-2">
-            <SubLabel>Size</SubLabel>
-            <ControlSlider label={`Phone size (${Math.round(scale * 100)}%)`} value={scale} min={RANGES.scale.min} max={RANGES.scale.max} step={RANGES.scale.step} onChange={setScale} />
-          </div>
-          <div className="space-y-2">
-            <SubLabel>Height</SubLabel>
-            <div className="flex items-center gap-2">
-              <Slider value={[mockupStretchY]} min={RANGES.mockupStretchY.min} max={RANGES.mockupStretchY.max} step={RANGES.mockupStretchY.step} onValueChange={([next]) => setMockupStretchY(next)} className="flex-1" aria-label={`Mockup height (${Math.round(mockupStretchY * 100)}%)`} />
-              <ResetButton onClick={() => setMockupStretchY(1)}>Reset</ResetButton>
-            </div>
-          </div>
-          {videoUrl && (
-            <div className="space-y-2">
-              <SubLabel>Crop</SubLabel>
-              <div className="flex items-center justify-between gap-2">
-                <select value={videoFit} onChange={(e) => setVideoFit(e.target.value)} className={SELECT_CLASS} aria-label="Video fit">
-                  <option value="cover">Cover</option>
-                  <option value="contain">Contain</option>
-                  <option value="fill">Fill</option>
-                </select>
-                <ResetButton onClick={() => { setVideoFit("cover"); setVideoScale(1); setVideoOffsetX(0); setVideoOffsetY(0); }}>Reset</ResetButton>
-              </div>
-              <ControlSlider label={`Zoom: ${videoScale.toFixed(2)}x`} value={videoScale} min={RANGES.videoScale.min} max={RANGES.videoScale.max} step={RANGES.videoScale.step} onChange={setVideoScale} />
-              <ControlSlider label={`H offset: ${Math.round(videoOffsetX)}%`} value={videoOffsetX} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => setVideoOffsetX(Math.round(v))} />
-              <ControlSlider label={`V offset: ${Math.round(videoOffsetY)}%`} value={videoOffsetY} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => setVideoOffsetY(Math.round(v))} />
-            </div>
-          )}
-        </EditorSection>
-
-        <EditorSection title="Hook text" defaultOpen testId="hook-controls">
+        <EditorSection title="Hook Text" open={openSections.hook} onToggle={() => toggleSection("hook")} testId="hook-controls">
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <Switch data-testid="hook-toggle" checked={hookEnabled} onCheckedChange={setHookEnabled} />
             Show punch-in hook on frame 1
@@ -1240,41 +1273,165 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           </p>
         </EditorSection>
 
-        <EditorSection title="Output" defaultOpen>
-          <select
-            value={bg === "transparent" ? "webm" : exportFormat}
-            disabled={bg === "transparent"}
-            onChange={(e) => setExportFormat(e.target.value)}
-            className={`${SELECT_CLASS} disabled:opacity-50`}
-            aria-label="Export format"
-          >
-            <option value="auto">Auto (MP4)</option>
-            <option value="mp4">MP4</option>
-            <option value="webm">WebM</option>
-          </select>
-          {bg === "transparent" && (
-            <p className="text-xs text-muted-foreground">Transparent backgrounds export as WebM to keep the alpha channel.</p>
+        <EditorSection title="Output" open={openSections.output} onToggle={() => toggleSection("output")}>
+          {/* Platform preset as a two-line list rather than a native select:
+              "TikTok / Reels / Shorts" as the value and "1080×1920" beneath it.
+              A select truncates both into one clipped line at 420px, and the
+              dimensions are the part you actually check before exporting. */}
+          <div className="space-y-2">
+            <SubLabel>Platform preset</SubLabel>
+            <div
+              role="radiogroup"
+              aria-label="Platform preset"
+              data-testid="platform-preset-group"
+              className="space-y-1.5"
+            >
+              {PRESETS.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={preset === p.id}
+                  onClick={() => setPreset(p.id)}
+                  title={`${p.label} — ${p.id === "source" ? "auto" : `${p.w}x${p.h}`}`}
+                  className={`flex w-full items-center justify-between gap-3 rounded-[10px] border px-3 py-2 text-left transition duration-150 ${
+                    preset === p.id
+                      ? "border-[color:var(--brand-indigo)] bg-[color:var(--brand-indigo)]/10"
+                      : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)] hover:bg-secondary/40"
+                  }`}
+                >
+                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">{p.label}</span>
+                  <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+                    {p.id === "source" ? "auto" : `${p.w}x${p.h}`}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <SubLabel>Export format</SubLabel>
+            <select
+              value={bg === "transparent" ? "webm" : exportFormat}
+              disabled={bg === "transparent"}
+              onChange={(e) => setExportFormat(e.target.value)}
+              className={CONTROL_CLASS}
+              aria-label="Export format"
+            >
+              <option value="auto">Auto (MP4)</option>
+              <option value="mp4">MP4</option>
+              <option value="webm">WebM</option>
+            </select>
+            {bg === "transparent" && (
+              <p className="text-xs text-muted-foreground">Transparent backgrounds export as WebM to keep the alpha channel.</p>
+            )}
+          </div>
+        </EditorSection>
+
+        {/* Rarely touched. Mockup height, screen position and crop live here
+            because they are set once and then left alone; keeping them in the
+            main groups is what made the panel taller than the preview it is
+            meant to describe. */}
+        <EditorSection title="Advanced" open={openSections.advanced} onToggle={() => toggleSection("advanced")}>
+          <div className="space-y-2">
+            <SubLabel>Mockup height</SubLabel>
+            <div className="flex items-center gap-2">
+              <Slider
+                value={[mockupStretchY]}
+                min={RANGES.mockupStretchY.min}
+                max={RANGES.mockupStretchY.max}
+                step={RANGES.mockupStretchY.step}
+                onValueChange={([next]) => setMockupStretchY(next)}
+                className="flex-1"
+                aria-label="Mockup height"
+              />
+              <span className="w-12 shrink-0 text-right font-mono text-xs tabular-nums text-foreground">
+                {Math.round(mockupStretchY * 100)}%
+              </span>
+              <ResetButton onClick={() => setMockupStretchY(1)}>Reset</ResetButton>
+            </div>
+          </div>
+          {viewMode === "hand" && (
+            <div className="space-y-2" data-testid="screen-position-controls">
+              <SubLabel>Screen position</SubLabel>
+              {[
+                ["Left", screenX, setScreenX, "left"],
+                ["Top", screenY, setScreenY, "top"],
+                ["Width", screenW, setScreenW, "width"],
+                ["Height", screenH, setScreenH, "height"],
+              ].map(([label, val, setter, key]) => (
+                <div key={key} className="space-y-1.5">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <FieldLabel>{label}</FieldLabel>
+                    <span className="font-mono text-xs tabular-nums text-foreground">{(val * 100).toFixed(1)}</span>
+                  </div>
+                  <Slider
+                    data-testid={`screen-${key}-slider`}
+                    value={[val]}
+                    min={RANGES.screen.min}
+                    max={RANGES.screen.max}
+                    step={RANGES.screen.step}
+                    onValueChange={([next]) => setter(next)}
+                  />
+                </div>
+              ))}
+              <ResetButton testId="screen-reset-btn" onClick={() => { setScreenX(DEFAULT_SCREEN.x); setScreenY(DEFAULT_SCREEN.y); setScreenW(DEFAULT_SCREEN.w); setScreenH(DEFAULT_SCREEN.h); }}>
+                Reset to photo screen
+              </ResetButton>
+            </div>
+          )}
+          {videoUrl && (
+            <div className="space-y-2">
+              <SubLabel>Video crop</SubLabel>
+              <div className="flex items-center justify-between gap-2">
+                <select value={videoFit} onChange={(e) => setVideoFit(e.target.value)} className={CONTROL_CLASS} aria-label="Video fit">
+                  <option value="cover">Cover</option>
+                  <option value="contain">Contain</option>
+                  <option value="fill">Fill</option>
+                </select>
+                <ResetButton onClick={() => { setVideoFit("cover"); setVideoScale(1); setVideoOffsetX(0); setVideoOffsetY(0); }}>Reset</ResetButton>
+              </div>
+              <ControlSlider label="Zoom" value={videoScale} min={RANGES.videoScale.min} max={RANGES.videoScale.max} step={RANGES.videoScale.step} onChange={setVideoScale} format={(v) => `${v.toFixed(2)}x`} />
+              <ControlSlider label="H offset" value={videoOffsetX} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => setVideoOffsetX(Math.round(v))} format={(v) => `${Math.round(v)}%`} />
+              <ControlSlider label="V offset" value={videoOffsetY} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => setVideoOffsetY(Math.round(v))} format={(v) => `${Math.round(v)}%`} />
+            </div>
           )}
         </EditorSection>
+        </div>
       </div>
 
-      <div className="min-w-0 space-y-3 order-first xl:order-none">
-        <SectionCard title="Live preview" className="xl:sticky xl:top-6 xl:z-10">
+      {/* Sticky on the COLUMN, not on the preview card inside it. A sticky card
+          bounded by a column that also holds the player and the export bar has
+          almost no travel, which is exactly the bug this replaces: the video
+          scrolled off the top while the settings were still being adjusted. */}
+      <div className="min-w-0 space-y-3 lg:sticky lg:top-24">
+        <SectionCard title="Live preview" className="!p-3">
           <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
             <span>Live preview</span>
             <span>{(PRESETS.find((p) => p.id === preset) || {}).label}</span>
           </div>
-          <div className="flex min-h-[280px] w-full items-center justify-center overflow-hidden rounded-xl border border-[color:var(--hairline)] bg-black p-2">
+          {/* A fixed 9:16 frame rather than a box that grows to the canvas.
+              Portrait output filled the width of a flexible card and left black
+              bars either side; a real aspect frame makes the preview the shape
+              the export will be, and the empty state can share it. */}
+          <div
+            className="mx-auto flex aspect-[9/16] w-auto max-h-[calc(100vh-20rem)] max-w-full items-center justify-center overflow-hidden rounded-xl border border-[color:var(--hairline)] bg-black"
+          >
             {videoUrl ? (
               <canvas
                 ref={previewCanvasRef}
-                className="block h-auto w-auto max-h-[62vh] max-w-full cursor-grab touch-none active:cursor-grabbing xl:max-h-[54vh]"
+                className="block h-full w-full cursor-grab touch-none active:cursor-grabbing"
                 onPointerDown={handlePointerDown}
                 onWheel={handleWheel}
               />
+            ) : loadingSource ? (
+              <div className="flex flex-col items-center gap-2 text-center">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <p className="text-xs text-muted-foreground">Loading the finished render…</p>
+              </div>
             ) : (
-              <div className="text-sm text-muted-foreground">
-                {loadingSource ? "Loading the finished render…" : "No video to preview"}
+              <div className="flex flex-col items-center gap-2 px-6 text-center">
+                <Upload className="h-7 w-7 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Upload a clip to preview.</p>
               </div>
             )}
           </div>
@@ -1369,34 +1526,54 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 pt-1">
-                <Button type="button" variant="secondary" size="icon" onClick={togglePlayPause} title={isPlaying ? "Pause" : "Play"}>
-                  {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                </Button>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="font-mono text-[15px] font-medium tabular-nums tracking-tight">
-                    {formatTime(currentTime)}
-                  </span>
-                  <span className="font-mono text-[11px] text-muted-foreground">/</span>
-                  <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                    {formatTime(duration)}
-                  </span>
+<div className="flex items-center gap-2 pt-1">
+                  <TransportButton
+                    label={isPlaying ? "Pause" : "Play"}
+                    onClick={togglePlayPause}
+                    testId="transport-play"
+                  >
+                    {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                  </TransportButton>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="font-mono text-sm font-medium tabular-nums tracking-tight">
+                      {formatTime(currentTime)}
+                    </span>
+                    <span className="font-mono text-xs text-muted-foreground">/</span>
+                    <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                      {formatTime(duration)}
+                    </span>
+                  </div>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <TransportButton
+                      label="Back 1 second"
+                      onClick={() => handleSeek(Math.max(0, currentTime - 1))}
+                      testId="transport-back-1s"
+                    >
+                      <span className="font-mono text-[11px]">−1s</span>
+                    </TransportButton>
+                    <TransportButton
+                      label="Back 1 frame (1/30s)"
+                      onClick={() => handleSeek(Math.max(0, currentTime - 1 / 30))}
+                      testId="transport-back-frame"
+                    >
+                      <ZoomOut className="h-4 w-4" />
+                    </TransportButton>
+                    <TransportButton
+                      label="Forward 1 frame (1/30s)"
+                      onClick={() => handleSeek(Math.min(duration, currentTime + 1 / 30))}
+                      testId="transport-forward-frame"
+                    >
+                      <ZoomIn className="h-4 w-4" />
+                    </TransportButton>
+                    <TransportButton
+                      label="Forward 1 second"
+                      onClick={() => handleSeek(Math.min(duration, currentTime + 1))}
+                      testId="transport-forward-1s"
+                    >
+                      <span className="font-mono text-[11px]">+1s</span>
+                    </TransportButton>
+                  </div>
                 </div>
-                <div className="ml-auto flex items-center gap-1.5">
-                  <Button type="button" variant="ghost" size="sm" className="h-9 min-w-9 px-2.5 font-mono text-[11px]" onClick={() => handleSeek(Math.max(0, currentTime - 1))} title="Back 1 second">
-                    −1s
-                  </Button>
-                  <Button type="button" variant="ghost" size="sm" className="h-9 min-w-9 px-2.5" onClick={() => handleSeek(Math.max(0, currentTime - 1 / 30))} title="Back 1 frame (1/30s)">
-                    ‹
-                  </Button>
-                  <Button type="button" variant="ghost" size="sm" className="h-9 min-w-9 px-2.5" onClick={() => handleSeek(Math.min(duration, currentTime + 1 / 30))} title="Forward 1 frame (1/30s)">
-                    ›
-                  </Button>
-                  <Button type="button" variant="ghost" size="sm" className="h-9 min-w-9 px-2.5 font-mono text-[11px]" onClick={() => handleSeek(Math.min(duration, currentTime + 1))} title="Forward 1 second">
-                    +1s
-                  </Button>
-                </div>
-              </div>
 
               <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
                 <div className="flex flex-wrap items-center gap-2">
@@ -1458,18 +1635,20 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           </SectionCard>
         )}
 
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[color:var(--hairline)] bg-background/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur xl:sticky xl:bottom-4 xl:rounded-2xl xl:border xl:bg-card/90 xl:px-4 xl:py-3">
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[color:var(--hairline)] bg-background/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
+          <div className="lg:surface lg:!p-3">
           <Button
             type="button"
             variant="brand"
-            className="w-full"
+            className="h-11 w-full"
             disabled={!videoUrl || !videoMeta || recording || saving}
             onClick={exportVideo}
+            data-testid="demo-cta-export"
           >
             {recording ? (
-              <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Recording… {Math.round(progress * 100)}%</>
+              <><Loader2 className="h-4 w-4 animate-spin" /> Recording… {Math.round(progress * 100)}%</>
             ) : (
-              <><Smartphone className="h-3.5 w-3.5" /> {bg === "transparent" ? "Export transparent WebM" : "Export MP4"}</>
+              <><Smartphone className="h-4 w-4" /> {bg === "transparent" ? "Export transparent WebM" : "Export MP4"}</>
             )}
           </Button>
           {recording && <Progress value={Math.round(progress * 100)} />}
@@ -1484,8 +1663,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
+          </div>
         </div>
-        <div className="h-24 xl:hidden" aria-hidden="true" />
+        {/* Clears the fixed mobile bar so it never covers the last card. */}
+        <div className="h-24 lg:hidden" aria-hidden="true" />
 
         <video ref={videoRef} className="hidden" playsInline muted loop autoPlay />
 
@@ -1543,6 +1724,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         )}
       </div>
     </div>
+    </TooltipProvider>
   );
 }
 
