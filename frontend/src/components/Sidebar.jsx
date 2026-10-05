@@ -5,6 +5,7 @@ import { useOnboarding } from "./onboarding/OnboardingProvider";
 import {
   Sparkles,
   Clapperboard,
+  Smartphone,
   Images,
   PenLine,
   History as HistoryIcon,
@@ -39,6 +40,7 @@ import {
  */
 const NAV_ITEMS = [
   { to: "/create", label: "Create Video", icon: Clapperboard, testId: "create-nav-link", hint: "Guided wizard" },
+  { to: "/demo-cta", label: "Demo + CTA", icon: Smartphone, testId: "demo-cta-nav-link", hint: "Phone mockup and close" },
   { to: "/brand", label: "Your app", icon: PenLine, testId: "brand-nav-link", hint: "Research, edit, approve" },
   { to: "/assets", label: "Asset Library", icon: Images, testId: "assets-nav-link", hint: "Character reference" },
   { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Everything you made" },

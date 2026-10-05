@@ -7412,151 +7412,57 @@ async def get_generation(generation_id: str, user_id: str = Depends(get_current_
     return _public_generation_detail(row)
 
 
-# --- Optional Product Demo + CTA handoff -------------------------------------
+# --- Native Product Demo + CTA export ----------------------------------------
 #
-# Everything below is additive. The Product Demo + CTA step is optional: the
-# studio's own flow, its download, its History and every gate around it are
-# untouched, and none of this runs unless a founder explicitly chooses to continue.
+# The editor lives inside HookForge, on the same origin. There is no popup,
+# redirect, new tab, iframe, opener, postMessage, or cross-app link: the
+# completed Hook + Middle generation is the editor's input, and the exported
+# file is saved here as a child generation beside the original.
 #
-# The Demo + CTA system stays its own application with its own build and its own
-# capabilities. Nothing here reimplements it — this only issues a time-limited
-# link to a clip and accepts a finished file back.
-
-
-def _demo_cta_origin() -> str:
-    """
-    Where the Product Demo + CTA app lives.
-
-    Configured, not guessed: the two apps have separate deployments and separate
-    origins, and a default here would be a guess that silently sends real
-    footage to the wrong place. An unset value disables the handoff instead,
-    which is the right way to fail — the studio keeps working, there is just no
-    step to continue into.
-    """
-    return (os.environ.get("DEMO_CTA_ORIGIN") or "").strip().rstrip("/")
-
-
-@api_router.get("/studio/demo-cta")
-async def demo_cta_config(user_id: str = Depends(get_current_user_id)):
-    """
-    Whether the optional Product Demo + CTA step is available, and where.
-
-    Asked for on mount rather than assumed in the frontend, so an instance
-    without it configured shows the studio exactly as it does today instead of
-    offering a button that leads nowhere.
-    """
-    origin = _demo_cta_origin()
-    return {"available": bool(origin), "origin": origin}
-
-
-@api_router.get("/generations/{generation_id}/demo-cta-link")
-async def demo_cta_link(generation_id: str, user_id: str = Depends(get_current_user_id)):
-    """
-    A time-limited link that hands this clip to the Product Demo + CTA app.
-
-    Issued only for the caller's own completed generation, and only when that
-    app is configured. The clip URL inside it is a time-limited signed media URL, so this grants no
-    access the founder does not already have: it cannot be used to reach another
-    generation, and it expires with everything else.
-
-    The `sig` and `gid` on the link itself are a statement of intent, not a
-    secret from the other app - it holds no key and cannot verify them. What
-    actually constrains the return is that the app is told which render it came
-    from, the receiving tab checks that against its own render, and it checks
-    the sender's origin.
-    """
-    origin = _demo_cta_origin()
-    if not origin:
-        raise HTTPException(
-            status_code=404,
-            detail="The Product Demo + CTA step is not available on this instance.",
-        )
-
-    row = await _fetch_one(
-        "SELECT id, status, video_url, r2_url FROM generations WHERE id = ? AND user_id = ?",
-        (generation_id, user_id),
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Generation not found")
-    if row.get("status") != "completed":
-        raise HTTPException(
-            status_code=409,
-            detail="Wait for the render to finish before continuing to Product Demo + CTA.",
-        )
-
-    stored = row.get("video_url") or row.get("r2_url")
-    signed = media_signing.sign_stored_path(stored)
-    if not signed or not signed.startswith("/api/media/videos/"):
-        # Only reachable when there is no local copy to sign. Hand the durable
-        # location over as-is rather than inventing a signed path for it - but
-        # prefer the local file above, because the whole point of signing was to
-        # keep the paid clip off public URLs, and preferring R2 here would quietly
-        # undo that the moment an upload finished.
-        signed = stored or ""
-    if not signed:
-        raise HTTPException(
-            status_code=409,
-            detail="This clip has no playable copy to hand over yet.",
-        )
-    if not PUBLIC_BASE_URL.strip():
-        # The other app is a different origin, so it cannot resolve a relative
-        # media path against our host. Fail loudly here rather than opening a
-        # window that fails to load anything.
-        raise HTTPException(
-            status_code=503,
-            detail="The Product Demo + CTA handoff needs PUBLIC_BASE_URL set on this instance.",
-        )
-
-    absolute = signed if signed.startswith("http") else f"{PUBLIC_BASE_URL.rstrip('/')}{signed}"
-    expires_at = int(time.time()) + media_signing.DEFAULT_TTL_SECONDS
-    params = {
-        "src": absolute,
-        # Echoed back by the other app on the return leg, so a finished clip can
-        # only be filed against the render it actually came from.
-        "gid": generation_id,
-        "exp": str(expires_at),
-        "sig": media_signing.make_signature(
-            f"demo-cta:{generation_id}", expires_at
-        ),
-    }
-    from urllib.parse import urlencode
-
-    return {
-        "url": f"{origin}/?{urlencode(params)}",
-        "origin": origin,
-        "expires_in": media_signing.DEFAULT_TTL_SECONDS,
-    }
+# This is storage, not generation. No model is called, nothing is submitted
+# upstream, and it does not touch the ready/claim gates — those guard a paid
+# render, and this is the founder saving a file they just exported. It
+# therefore cannot spend anything, which is why it is safe to leave off every
+# gate.
 
 
 @api_router.post("/generations/{generation_id}/demo-cta-result", status_code=201)
-async def receive_demo_cta_result(
-    generation_id: str,
+@api_router.post("/demo-cta-result", status_code=201)
+async def save_demo_cta_export(
     file: UploadFile = File(...),
+    generation_id: str | None = None,
     user_id: str = Depends(get_current_user_id),
 ):
     """
-    Accept the finished Product Demo + CTA clip back into History.
+    Save the native Product Demo + CTA export into History.
 
-    Filed as a new generation row with parent_generation_id pointing at the
-    render it came from, which is the same lineage a variation or a replacement
-    already uses. So it appears beside the original rather than replacing it:
-    both downloads keep working, and the founder can see which finished piece
-    came from which hook.
+    Two mounts on one handler, not two endpoints. The generation-scoped path
+    takes the finished Hook + Middle as its parent, so the export appears beside
+    the original rather than replacing it — both downloads keep working and the
+    lineage is recorded. The bare path is the same save with no parent, for
+    someone who brought their own footage in through the editor rather than
+    generating a hook first.
 
-    This is storage, not generation. No model is called, nothing is submitted
-    upstream, and it does not touch the ready/claim gates — those guard a paid
-    render, and this is the founder handing back a file they already made. It
-    therefore cannot spend anything, which is why it is safe to leave off every
-    gate.
+    Everything else is deliberately inherited from the parent rather than
+    invented: template, script version, model and strategy come from the render
+    this wrapped. Without one there is nothing to inherit, so those stay null —
+    the row is a real finished clip with no ancestry, which History already
+    displays without needing a parent.
+
+    Still storage, not generation: no model call, nothing upstream, and none of
+    the three spend gates. Those guard a paid render, and this is a file the
+    founder already made.
     """
-    parent = await _fetch_one(
-        "SELECT id, studio_project_id, brand_profile_id, template_id, template_version, "
-        "script_version, duration, model, model_id, segment_role, segment_index, "
-        "strategy_version FROM generations WHERE id = ? AND user_id = ?",
-        (generation_id, user_id),
-    )
-    if not parent:
-        raise HTTPException(status_code=404, detail="Generation not found")
+    parent = None
+    if generation_id:
+        parent = await _fetch_one(
+            "SELECT id, studio_project_id, brand_profile_id, template_id, template_version, "
+            "script_version, duration, model, model_id, segment_role, segment_index, "
+            "strategy_version FROM generations WHERE id = ? AND user_id = ?",
+            (generation_id, user_id),
+        )
+        if not parent:
+            raise HTTPException(status_code=404, detail="Generation not found")
 
     if not (file.filename or "").lower().endswith((".mp4", ".mov", ".webm")):
         raise HTTPException(
@@ -7571,9 +7477,9 @@ async def receive_demo_cta_result(
         raise HTTPException(status_code=400, detail="That file was empty.")
     target.write_bytes(payload)
 
-    # Measured rather than accepted from the caller. The other app knows its own
-    # export length, but this is the record of what was actually stored, and a
-    # client-supplied number would let a wrong length into History.
+    # Measured rather than accepted from the caller. This is the record of what
+    # was actually stored, and a client-supplied number would let a wrong length
+    # into History.
     try:
         seconds = overlays.probe_duration(target)
     except Exception:
@@ -7586,8 +7492,8 @@ async def receive_demo_cta_result(
     if storage_service.is_configured():
         try:
             r2_url = storage_service.upload_video(user_id, result_id, target) or ""
-        except Exception as exc:  # storage must not lose the returned clip
-            logger.warning("Could not upload the returned Demo + CTA clip to R2: %s", exc)
+        except Exception as exc:  # storage must not lose the exported clip
+            logger.warning("Could not upload the native Demo + CTA export to R2: %s", exc)
 
     await _execute(
         """INSERT INTO generations
@@ -7602,20 +7508,20 @@ async def receive_demo_cta_result(
                    '', 0, 1, ?, ?, ?, ?, ?, ?, ?)""",
         (
             result_id,
-            parent.get("studio_project_id"),
-            parent.get("brand_profile_id"),
-            parent.get("template_id"),
-            parent.get("template_version"),
-            parent.get("script_version"),
-            parent.get("model"),
-            parent.get("model_id"),
+            parent.get("studio_project_id") if parent else None,
+            parent.get("brand_profile_id") if parent else None,
+            parent.get("template_id") if parent else None,
+            parent.get("template_version") if parent else None,
+            parent.get("script_version") if parent else None,
+            parent.get("model") if parent else None,
+            parent.get("model_id") if parent else None,
             seconds,
             seconds,
-            parent.get("segment_role") or "primary",
-            int(parent.get("segment_index") or 0),
-            int(parent.get("strategy_version") or 0),
+            (parent.get("segment_role") or "primary") if parent else "primary",
+            int(parent.get("segment_index") or 0) if parent else 0,
+            int(parent.get("strategy_version") or 0) if parent else 0,
             1,
-            parent["id"],
+            parent["id"] if parent else None,
             now_iso(),
             now_iso(),
             now_iso(),
@@ -7627,12 +7533,14 @@ async def receive_demo_cta_result(
     )
 
     logger.info(
-        f"Stored Demo + CTA result {result_id} for generation {generation_id}"
+        "Stored native Demo + CTA export %s%s",
+        result_id,
+        f" for generation {generation_id}" if generation_id else " with no parent",
     )
     return {
         "id": result_id,
         "status": "completed",
-        "parent_generation_id": parent["id"],
+        "parent_generation_id": parent["id"] if parent else None,
         "video_url": media_signing.build_signed_path(f"{result_id}.mp4"),
         "r2_url": r2_url,
     }

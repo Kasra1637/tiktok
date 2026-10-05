@@ -1,0 +1,35 @@
+Demo + CTA visual assets
+========================
+
+Vendored into this repository so the editor's required inputs do not depend on a
+third-party request at render time. The hand plate is keyed per pixel and the
+Anton face is painted onto a canvas, so a blocked or slow remote fetch degrades
+an export rather than just a page.
+
+hand.jpg
+  Woman's arm / wrist / hand holding a modern black phone, shot on a seamless
+  white studio backdrop so the backdrop can be keyed out cleanly.
+  Source: https://unsplash.com/photos/357c3aa66c89 (Unsplash, free license)
+
+env-living-room.jpg
+  Source: https://www.pexels.com/photo/19473771/ (Pexels, free license)
+
+env-bedroom.jpg
+  Source: https://www.pexels.com/photo/5948744/ (Pexels, free license)
+
+env-bedroom-light.jpg
+  Source: https://unsplash.com/photos/074c1983ddb8 (Unsplash, free license)
+
+env-bedroom-warm.jpg
+  Source: https://unsplash.com/photos/19b96519f1de (Unsplash, free license)
+
+env-loft.jpg
+  Source: https://unsplash.com/photos/58be50f89bf8 (Unsplash, free license)
+
+public/fonts/anton-latin-400-normal.woff2
+  Anton, Latin subset, as served by Google Fonts.
+  Source: https://fonts.google.com/specimen/Anton (SIL Open Font License 1.1)
+
+Each file is the unmodified original response. Resizing, re-encoding or
+re-keying them changes the composite: the screen-rectangle defaults in
+src/demoCta/handView.js are measured against the exact hand.jpg dimensions.

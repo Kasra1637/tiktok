@@ -67,6 +67,11 @@ global.MouseEvent = dom.window.MouseEvent;
 // a real code path rather than reveal one. In a browser these are one object.
 global.Blob = dom.window.Blob;
 global.MessageEvent = dom.window.MessageEvent;
+// The Demo + CTA engine constructs `new Image()` at module scope to load the
+// hand plate and environment photos. Node has no DOM Image, so without this the
+// page throws "Image is not defined" on import and every check reports a
+// component crash instead of the assertion it meant to make.
+global.Image = dom.window.Image;
 global.getComputedStyle = dom.window.getComputedStyle;
 global.MutationObserver = dom.window.MutationObserver;
 global.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0);
@@ -257,13 +262,6 @@ const SUPPORTED_DURATIONS = [8, 10, 12, 15];
 
 const apiStub = {
   getStudioVideoModels: async () => ({ default: "minimax-h3", models: [CAPABILITY] }),
-  // The optional Product Demo + CTA step reports itself unavailable by default,
-  // which is the honest default and keeps every other check looking at the
-  // studio exactly as it is without this feature. The dedicated checks below
-  // turn it on explicitly.
-  getDemoCtaConfig: async () => ({ available: false, origin: "" }),
-  getDemoCtaLink: async () => ({ url: "https://demo-cta.example/?src=x", origin: "https://demo-cta.example", expires_in: 3600 }),
-  uploadDemoCtaResult: async () => ({ id: "returned-1", status: "completed" }),
   getGenerations: async () => ({ generations: [SEGMENT] }),
   pollGeneration: async () => SEGMENT,
   getTemplates: async () => ({ templates: [TEMPLATE] }),
@@ -585,6 +583,7 @@ console.log("Mounting every wizard step and panel...");
 const { GenerationPanel } = load("components/GenerationPanel.jsx");
 const { HookContinuityPanel } = load("components/HookContinuityPanel.jsx");
 const CreateVideo = load("pages/CreateVideo.jsx").default;
+const DemoCtaStudio = load("pages/DemoCtaStudio.jsx").default;
 
 // The shipped order, in the order the founder walks it. Asserted as a whole
 // sequence rather than a set: the point of the reorder is that the free, claim-
@@ -973,11 +972,16 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
   await check("GenerationPanel offers no second render, approval or join", async (ctx) => {
     await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
     // The Extend button went with the endpoint. The remaining controls are the
-    // one generate, the download, the caption compose and the retry, and a
-    // re-render of the SAME single job.
-    for (const phrase of ["Extend", "Approve", "Join", "end card", "CTA", "in two passes", "second pass"]) {
+    // one generate, the download, the caption compose, the retry, a re-render
+    // of the SAME single job — and the native Demo + CTA entry, which is a link
+    // into this app's own editor, not a second render and not an approval.
+    for (const phrase of ["Extend", "Approve", "Join", "end card", "in two passes", "second pass"]) {
       expectAbsent(ctx, phrase, "GenerationPanel still offers a chain affordance");
     }
+    // A bare "CTA" used to be banned outright, back when any CTA mention was a
+    // promise the render could not keep. The native editor entry is the one
+    // legitimate use now, so the check names the entry instead of the acronym.
+    expectText(ctx, "Open in Demo + CTA", "the native editor entry is missing");
     const labels = [...ctx.container.querySelectorAll("button")]
       .map((b) => (b.textContent || "").trim())
       .filter(Boolean);
@@ -1819,8 +1823,11 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
         const text = ctx.text();
         // The acronym is the affordance: a field labelled "CTA", a "CTA pattern"
         // row, a "CTA end card" badge. Prose that spells the phrase out to say
-        // the close is the founder's own is honest and is allowed to stay.
-        if (/\bCTA\b/.test(text)) {
+        // the close is the founder's own is honest and is allowed to stay. So is
+        // the native editor entry: "Demo + CTA" names this app's own editor, not
+        // a promise the render keeps, so it is lifted out before the test.
+        const withoutEntry = text.replace(/demo \+ cta/gi, "");
+        if (/\bCTA\b/.test(withoutEntry)) {
           throw new Error(`step ${JSON.stringify(label)} offers a CTA affordance`);
         }
         if (text.includes("end card")) {
@@ -2559,7 +2566,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
   await runDeleteDialogChecks();
 
   console.log("");
-  console.log("Checking the optional Product Demo + CTA step...");
+  console.log("Checking the native Product Demo + CTA editor...");
   await runDemoCtaChecks();
 }
 
@@ -2792,22 +2799,26 @@ async function runDeleteDialogChecks() {
  * "optional" in any sense that matters to a founder who wanted none of it.
  */
 async function runDemoCtaChecks() {
-  const demoCtaButton = (ctx) =>
-    [...ctx.container.querySelectorAll("button")].find((b) =>
-      (b.textContent || "").includes("Continue to Product Demo + CTA")
-    );
+  // The native editor, not a handoff. These pin the new contract: the studio
+  // links into /demo-cta/:id, the picker lists finished renders, nothing opens
+  // a popup and nothing listens for cross-origin messages.
 
-  async function mountStudio(ctx, available) {
+  const COMPLETED = {
+    ...SEGMENT,
+    id: "gen-1",
+    status: "completed",
+    video_url: "/api/media/videos/gen-1.mp4",
+    r2_url: null,
+  };
+
+  async function mountStudio(ctx) {
     // Mounted directly rather than through the wizard, like the other
     // GenerationPanel checks: the block under test only renders for a finished
     // render, and reaching that through the wizard would be testing navigation
     // instead of this.
     await withApi(
       {
-        getDemoCtaConfig: async () => ({ available, origin: "https://demo-cta.example" }),
-        getGenerations: async () => ({
-          generations: [{ ...SEGMENT, video_url: "/api/media/videos/gen-1.mp4" }],
-        }),
+        getGenerations: async () => ({ generations: [COMPLETED] }),
       },
       async () => {
         await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
@@ -2815,215 +2826,38 @@ async function runDemoCtaChecks() {
     );
   }
 
-  // Mounts the studio with a config endpoint that fails the first `failures`
-  // attempts and then answers. The two cases matter separately: a blip must not
-  // remove the step, and a genuinely unreachable check must not leave a button
-  // that goes nowhere. Both end up calling the endpoint more than once, which is
-  // what tells them apart from the old one-shot behaviour.
-  async function mountStudioWithFlakyConfig(ctx, failures) {
-    let calls = 0;
+  async function mountPicker(ctx, generations) {
     await withApi(
       {
-        getDemoCtaConfig: async () => {
-          calls += 1;
-          if (calls <= failures) throw new Error("simulated network failure");
-          return { available: true, origin: "https://demo-cta.example" };
-        },
-        getGenerations: async () => ({
-          generations: [{ ...SEGMENT, video_url: "/api/media/videos/gen-1.mp4" }],
-        }),
+        getGenerationHistory: async () => ({ generations }),
       },
       async () => {
-        await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
-        // Long enough for the whole retry ladder (300ms, then 1000ms).
-        await act(async () => {
-          await new Promise((r) => setTimeout(r, 1500));
-        });
+        await mount(DemoCtaStudio, {})(ctx);
       }
     );
-    return calls;
-  }
-
-  // Posts a finished-clip message at the studio window and reports whether it was
-  // accepted. `origin` is set explicitly because that is the whole question: the
-  // message arrives from the Product Demo + CTA app, which is a different origin
-  // from ours, so a check comparing it to our own would reject every real return.
-  async function postReturn(ctx, { origin, generationId }) {
-    let accepted = 0;
-    await withApi(
-      {
-        getDemoCtaConfig: async () => ({ available: true, origin: "https://demo-cta.example" }),
-        getGenerations: async () => ({
-          generations: [{ ...SEGMENT, video_url: "/api/media/videos/gen-1.mp4" }],
-        }),
-        uploadDemoCtaResult: async () => {
-          accepted += 1;
-          return { id: "returned-1", status: "completed" };
-        },
-      },
-      async () => {
-        await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
-        dom.window.dispatchEvent(
-          new dom.window.MessageEvent("message", {
-            origin,
-            data: {
-              type: "hookforge:demo-cta-finished",
-              blob: new dom.window.Blob([new Uint8Array([0, 1, 2])], { type: "video/mp4" }),
-              name: "mockreel-s24.mp4",
-              generationId,
-            },
-          })
-        );
-        // Let the async listener run to completion before tearing the mount down.
-        await act(async () => {
-          await new Promise((r) => setTimeout(r, 20));
-        });
-      }
-    );
-    return accepted;
   }
 
   await check(
-    "the Product Demo + CTA step is absent when the instance has none configured",
+    "a finished render offers the native Demo + CTA editor",
     async (ctx) => {
-      await mountStudio(ctx, false);
-      if (demoCtaButton(ctx)) {
-        throw new Error(
-          "the step is offered on an instance with no Product Demo + CTA app, " +
-            "so a founder would be sent to a dead end"
-        );
-      }
-    }
-  );
-
-  await check(
-    "the Product Demo + CTA step is offered when it is configured, alongside the download",
-    async (ctx) => {
-      await mountStudio(ctx, true);
-      const cta = demoCtaButton(ctx);
-      if (!cta) throw new Error("the optional step is missing when it is available");
-      // "Use as-is" has to be there and has to be a real download. If the new
-      // step became the only way out, this app would have stopped being
-      // optional the moment it was turned on.
-      const asIs = [...ctx.container.querySelectorAll("a")].find(
-        (a) => (a.textContent || "").includes("Use this video as-is")
+      await mountStudio(ctx);
+      const open = [...ctx.container.querySelectorAll("a")].find((a) =>
+        (a.textContent || "").includes("Open in Demo + CTA")
       );
-      if (!asIs) throw new Error("there is no way to keep the video as it is");
-      // hasAttribute, not the value: a bare `download` renders as download="",
-      // which is falsy, so reading it would fail on a correct element.
-      if (!asIs.hasAttribute("download")) {
-        throw new Error("'Use this video as-is' is not a download");
-      }
-    }
-  );
-
-  // Clicks "Continue to Product Demo + CTA" and reports what the handler did to the
-  // popup. `openResult` is what window.open returns: a fake tab, or null for a
-  // blocked pop-up. The event order is the point - the tab has to be claimed
-  // inside the click, because a window.open after the link request is no longer
-  // user-initiated and gets silently blocked.
-  async function clickContinueToDemoCta(ctx, { openResult = "tab" } = {}) {
-    const events = [];
-    const originalOpen = dom.window.open;
-    const tab =
-      openResult === "blocked"
-        ? null
-        : {
-            location: {
-              replace: (u) => events.push(["replace", u]),
-            },
-            close: () => events.push(["close"]),
-          };
-    dom.window.open = (...args) => {
-      events.push(["open", args[0]]);
-      return tab;
-    };
-    try {
-      await withApi(
-        {
-          getDemoCtaConfig: async () => ({ available: true, origin: "https://demo-cta.example" }),
-          getGenerations: async () => ({
-            generations: [{ ...SEGMENT, video_url: "/api/media/videos/gen-1.mp4" }],
-          }),
-          getDemoCtaLink: async () => {
-            events.push(["link-resolved"]);
-            return {
-              url: "https://demo-cta.example/?src=x&gid=gen-1",
-              origin: "https://demo-cta.example",
-              expires_in: 3600,
-            };
-          },
-        },
-        async () => {
-          await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
-          const cta = demoCtaButton(ctx);
-          if (!cta) throw new Error("the optional step is missing, so there is nothing to click");
-          await act(async () => {
-            cta.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-          });
-          await act(async () => {
-            await new Promise((r) => setTimeout(r, 20));
-          });
-        }
-      );
-    } finally {
-      dom.window.open = originalOpen;
-    }
-    return events;
-  }
-
-  await check(
-    "the Product Demo + CTA tab is claimed inside the click, before the link is fetched",
-    async (ctx) => {
-      const events = await clickContinueToDemoCta(ctx);
-      const openIndex = events.findIndex(([name]) => name === "open");
-      const linkIndex = events.findIndex(([name]) => name === "link-resolved");
-      if (openIndex === -1) throw new Error("no tab was opened at all");
-      if (linkIndex !== -1 && linkIndex < openIndex) {
+      if (!open) {
         throw new Error(
-          "the tab was opened after the link request. That is not user-initiated " +
-            "any more, so a popup blocker stops it: the founder clicks, the button " +
-            "spins, no tab appears and nothing says why."
-        );
-      }
-      // Claimed blank, then aimed. Passing the URL to window.open would also be
-      // too late, and an about:blank target is the only thing available here.
-      if (events[openIndex][1] !== "") {
-        throw new Error(
-          `expected the tab to be claimed blank, got ${JSON.stringify(events[openIndex][1])}`
-        );
-      }
-      const replace = events.find(([name]) => name === "replace");
-      if (!replace) throw new Error("the claimed tab was never pointed at the link");
-      if (!String(replace[1]).startsWith("https://demo-cta.example/?")) {
-        throw new Error(`the tab was aimed somewhere unexpected: ${replace[1]}`);
-      }
-    }
-  );
-
-  await check(
-    "a blocked pop-up is reported instead of failing silently",
-    async (ctx) => {
-      const events = await clickContinueToDemoCta(ctx, { openResult: "blocked" });
-      if (!events.some(([name]) => name === "open")) {
-        throw new Error("the handler never tried to open a tab");
-      }
-      if (events.some(([name]) => name === "replace")) {
-        throw new Error("a blocked pop-up still went on to request the link");
-      }
-      if (!ctx.text().toLowerCase().includes("blocked")) {
-        throw new Error(
-          "the pop-up was blocked and nothing told the founder. A silent dead " +
-            "click is indistinguishable from the feature being broken."
+          "no native entry into the Demo + CTA editor on a finished render. " +
+            "The render is done and the editor exists, so a missing link means " +
+            "the panel regressed to render-only."
         );
       }
     }
   );
 
   await check(
-    "the studio's own download is untouched by the optional step",
+    "the studio's own download is untouched by the native entry",
     async (ctx) => {
-      await mountStudio(ctx, true);
+      await mountStudio(ctx);
       const download = [...ctx.container.querySelectorAll("a")].find((a) =>
         (a.textContent || "").includes("Download MP4")
       );
@@ -3035,88 +2869,123 @@ async function runDemoCtaChecks() {
   );
 
   await check(
-    "a returned clip from the Product Demo + CTA app is filed in History",
+    "no popup, opener or cross-origin message contract remains in the studio",
     async (ctx) => {
-      const accepted = await postReturn(ctx, {
-        origin: "https://demo-cta.example",
-        generationId: SEGMENT.id,
-      });
-      if (!accepted) {
+      await mountStudio(ctx);
+      const html = ctx.container.innerHTML;
+      for (const needle of [
+        "hookforge:demo-cta-finished",
+        "Continue to Product Demo + CTA",
+        "Bringing your video back",
+      ]) {
+        if (html.includes(needle)) {
+          throw new Error(
+            `handoff leftover still rendered: ${needle}. The editor is native ` +
+              "now; a popup or message listener here means the old architecture came back."
+          );
+        }
+      }
+    }
+  );
+
+  await check(
+    "the Demo + CTA page lists finished renders and opens each in the editor",
+    async (ctx) => {
+      await mountPicker(ctx, [COMPLETED]);
+      // By text, not testid: the harness shims Link down to a bare anchor and
+      // drops every prop but children, so a testid placed on the link cannot
+      // survive the mount. Text is what the founder reads anyway.
+      const open = [...ctx.container.querySelectorAll("a")].find((a) =>
+        (a.textContent || "").includes("Open in editor")
+      );
+      if (!open) {
         throw new Error(
-          "the finished clip was dropped. The other app is a different origin, so " +
-            "a listener that compares the sender against our own origin rejects " +
-            "every real return and this feature is dead in production while still " +
-            "looking fine locally."
+          "the page does not list the finished render. With no entry point, " +
+            "the sidebar link is a dead end."
         );
       }
     }
   );
 
   await check(
-    "a posted blob from any other origin is refused",
+    "Demo + CTA works on its own, without a Hook + Middle",
     async (ctx) => {
-      const accepted = await postReturn(ctx, {
-        origin: "https://attacker.example",
-        generationId: SEGMENT.id,
-      });
-      if (accepted) {
+      await mountPicker(ctx, []);
+      // The whole point of the sidebar entry: no generation, no finished render,
+      // and the editor is still there with a file picker as its input.
+      const input = ctx.container.querySelector('[data-testid="demo-cta-file-input"]');
+      if (!input) {
         throw new Error(
-          "a page on another origin filed a video into this founder's History. " +
-            "Any page can postMessage in here, so the sender has to be checked."
+          "no file input on the standalone editor. Requiring a Hook + Middle first " +
+            "would make this unreachable for anyone who just wants to wrap their own clip."
         );
+      }
+      // And it must not nag about a missing render, because none is needed.
+      if (ctx.text().includes("No finished render yet")) {
+        throw new Error(
+          "the standalone editor still claims a render is required, which is no longer true"
+        );
+      }
+      if (ctx.text().includes("Finish recording")) {
+        throw new Error("the export is gated on a render that was never made");
       }
     }
   );
 
   await check(
-    "a returned clip for a different render is refused",
+    "History offers Demo + CTA on a finished clip",
     async (ctx) => {
-      const accepted = await postReturn(ctx, {
-        origin: "https://demo-cta.example",
-        generationId: "some-other-generation",
-      });
-      if (accepted) {
-        throw new Error(
-          "a clip naming another render was filed against this one. The origin " +
-            "check alone cannot tell two tabs apart."
-        );
-      }
+      const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+      await withApi(
+        {
+          getGenerationHistory: async () => ({
+            generations: [{ ...COMPLETED, brand_name: "Test App", duration: 10 }],
+          }),
+          getAppProfiles: async () => ({ profiles: [PROFILE] }),
+          // A completed row mounts the variations panel's data fetch, which the
+          // base stub does not carry.
+          getVariationKinds: async () => ({ variations: [] }),
+        },
+        async () => {
+          await mount(GenerationHistory, { onChanged: () => {} })(ctx);
+          const entry = [...ctx.container.querySelectorAll("a")].find(
+            (a) => (a.textContent || "").trim() === "Demo + CTA"
+          );
+          if (!entry) {
+            throw new Error(
+              "History does not offer Demo + CTA on a finished clip. Without it, a " +
+                "clip you liked has no way onward except re-finding it in the studio."
+            );
+          }
+        }
+      );
     }
   );
 
   await check(
-    "a transient failure to reach the config does not hide the step",
+    "History does not offer Demo + CTA on a clip that is not finished",
     async (ctx) => {
-      const calls = await mountStudioWithFlakyConfig(ctx, 1);
-      if (calls < 2) {
-        throw new Error(
-          "the config was asked once and gave up. A failed request on mount is " +
-            "exactly how this step disappears for a whole page view with nothing " +
-            "to explain it."
-        );
-      }
-      if (!demoCtaButton(ctx)) {
-        throw new Error(
-          "the step stayed hidden after a single failed request, even though the " +
-            "next one succeeded"
-        );
-      }
-    }
-  );
-
-  await check(
-    "an unreachable config leaves the step hidden rather than offering a dead button",
-    async (ctx) => {
-      const calls = await mountStudioWithFlakyConfig(ctx, 99);
-      if (calls < 2) {
-        throw new Error("a permanently failing check was never retried");
-      }
-      if (demoCtaButton(ctx)) {
-        throw new Error(
-          "the step is offered on an instance whose config never answered, so the " +
-            "button leads nowhere"
-        );
-      }
+      const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+      await withApi(
+        {
+          getGenerationHistory: async () => ({
+            generations: [{ ...COMPLETED, id: "gen-failed", status: "failed", video_url: null, error: "boom" }],
+          }),
+          getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        },
+        async () => {
+          await mount(GenerationHistory, { onChanged: () => {} })(ctx);
+          const entry = [...ctx.container.querySelectorAll("a")].find(
+            (a) => (a.textContent || "").trim() === "Demo + CTA"
+          );
+          if (entry) {
+            throw new Error(
+              "Demo + CTA is offered on a failed render, which would open an editor " +
+                "with no source to wrap"
+            );
+          }
+        }
+      );
     }
   );
 }

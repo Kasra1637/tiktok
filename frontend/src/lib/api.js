@@ -252,21 +252,21 @@ export const api = {
   duplicateGeneration: (generationId) =>
     client.post(`/generations/${generationId}/duplicate`).then((r) => r.data),
 
-  // Optional Product Demo + CTA step. Entirely additive: nothing in the studio
-  // depends on it, and an instance without it configured reports
-  // available: false so the panel renders exactly as it does today.
-  getDemoCtaConfig: () => client.get("/studio/demo-cta").then((r) => r.data),
-  getDemoCtaLink: (generationId) =>
-    client.get(`/generations/${generationId}/demo-cta-link`).then((r) => r.data),
-  // The finished clip comes back from the other app as a Blob rather than a
-  // URL, so it is posted as multipart. FormData is passed straight through:
-  // the client sets the boundary itself, and setting it by hand is what breaks.
-  uploadDemoCtaResult: (generationId, blob, filename = "hookforge.mp4") => {
+  // Native Product Demo + CTA export. The editor lives inside HookForge, so the
+  // finished clip is posted as multipart from the same origin. FormData is
+  // passed straight through: the client sets the boundary itself, and setting
+  // it by hand is what breaks.
+  //
+  // `generationId` is optional. With one, the export is filed beside that render
+  // and inherits its lineage; without one it is saved as a standalone clip, which
+  // is the bring-your-own-footage path through the editor.
+  saveDemoCtaExport: (generationId, blob, filename = "demo-cta.mp4") => {
     const form = new FormData();
     form.append("file", blob, filename);
-    return client
-      .post(`/generations/${generationId}/demo-cta-result`, form)
-      .then((r) => r.data);
+    const path = generationId
+      ? `/generations/${generationId}/demo-cta-result`
+      : "/demo-cta-result";
+    return client.post(path, form).then((r) => r.data);
   },
 
   // History + manual performance

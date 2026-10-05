@@ -52,7 +52,15 @@ function loadModule(src = SRC) {
     throw new Error("found no top-level declarations in " + src);
   }
   const expose = `\n;module.exports = { ${[...names].join(", ")} };`;
-  const sandbox = { module: { exports: {} }, exports: {} };
+  // `process` is in the sandbox because app modules read `process.env.PUBLIC_URL`
+  // to build asset paths, and CRA inlines that at build time. Handing over the
+  // real object keeps the evaluated code identical to what ships; an undefined
+  // PUBLIC_URL is exactly what a plain dev server sees.
+  const sandbox = {
+    module: { exports: {} },
+    exports: {},
+    process: { env: { ...process.env } },
+  };
   vm.createContext(sandbox);
   vm.runInContext(stripped + expose, sandbox, { filename: SRC });
   return sandbox.module.exports;
@@ -547,6 +555,115 @@ check("a blank requirement never blocks",
   T.blockingRequirements([""], []).length === 0);
 check("a non-array requirement never blocks",
   T.blockingRequirements(null, []).length === 0);
+
+/**
+ * Native Product Demo + CTA engine math.
+ *
+ * The editor's zoom split — live sliders during preview, locked keyframes
+ * during export — is the one behavior here that fails silently: get it wrong
+ * and the preview lies about what the export will bake. These pin the pure
+ * helpers the canvas loop reads, plus the export naming the file carries into
+ * History, against the values the standalone app produced.
+ */
+const ZOOM_SRC = path.resolve(__dirname, "..", "src", "demoCta", "zoom.js");
+const DEMO_CONST_SRC = path.resolve(__dirname, "..", "src", "demoCta", "constants.js");
+const Z = loadModule(ZOOM_SRC);
+const DC = loadModule(DEMO_CONST_SRC);
+
+const LIVE = { scale: 2, offX: 10, offY: -5, handZoom: 1.5, handPanX: 0.2, handPanY: -0.1 };
+
+// No keyframes: the sliders are the truth, preview or export.
+check("no keyframes means live sliders during preview",
+  JSON.stringify(Z.getEffectiveZoom({ keyframes: [], live: LIVE, videoTime: 3, isExporting: false }))
+    === JSON.stringify({ vScale: 2, vOffX: 10, vOffY: -5, hZoom: 1.5, hPanX: 0.2, hPanY: -0.1 }));
+check("no keyframes means live sliders during export",
+  Z.getEffectiveZoom({ keyframes: [], live: LIVE, videoTime: 3, isExporting: true }).vScale === 2);
+
+const KF = [
+  { id: "a", time: 2, scale: 1.5, offX: 1, offY: 2, handZoom: 1, handPanX: 0, handPanY: 0 },
+  { id: "b", time: 5, scale: 2.5, offX: 3, offY: 4, handZoom: 2, handPanX: 0.5, handPanY: 0.5 },
+];
+
+// Before the first lock: preview shows the sliders so adjustments are visible,
+// export falls back to defaults so the file is deterministic.
+check("before the first keyframe the preview shows live sliders",
+  Z.getEffectiveZoom({ keyframes: KF, live: LIVE, videoTime: 1, isExporting: false }).vScale === 2);
+check("before the first keyframe the export uses defaults",
+  JSON.stringify(Z.getEffectiveZoom({ keyframes: KF, live: LIVE, videoTime: 1, isExporting: true }))
+    === JSON.stringify({ vScale: 1, vOffX: 0, vOffY: 0, hZoom: 1, hPanX: 0, hPanY: 0 }));
+
+// Between locks: the active lock, rigidly, in both modes.
+check("between keyframes the active lock applies",
+  Z.getEffectiveZoom({ keyframes: KF, live: LIVE, videoTime: 3, isExporting: false }).vScale === 1.5
+    && Z.getEffectiveZoom({ keyframes: KF, live: LIVE, videoTime: 3, isExporting: true }).vOffX === 1);
+check("the second lock takes over at its timestamp",
+  Z.getEffectiveZoom({ keyframes: KF, live: LIVE, videoTime: 6, isExporting: true }).vScale === 2.5);
+
+// Past the last lock: preview returns to the sliders, export keeps the lock.
+check("past the last keyframe the preview returns to live sliders",
+  Z.getEffectiveZoom({ keyframes: KF, live: LIVE, videoTime: 9, isExporting: false }).vScale === 2);
+check("past the last keyframe the export keeps the last lock",
+  Z.getEffectiveZoom({ keyframes: KF, live: LIVE, videoTime: 9, isExporting: true }).vScale === 2.5
+    && Z.getEffectiveZoom({ keyframes: KF, live: LIVE, videoTime: 9, isExporting: true }).hPanX === 0.5);
+
+// Capture: a lock within 0.05s updates in place, otherwise it appends.
+const captured = Z.captureZoomLock(KF, 2.02, { scale: 9, offX: 0, offY: 0, handZoom: 1, handPanX: 0, handPanY: 0 });
+check("a near-duplicate timestamp updates the lock in place",
+  captured.length === 2 && captured.some((k) => k.id === "a" && k.scale === 9));
+const appended = Z.captureZoomLock(KF, 3, { scale: 9, offX: 0, offY: 0, handZoom: 1, handPanX: 0, handPanY: 0 });
+check("a distinct timestamp appends a lock",
+  appended.length === 3 && appended.some((k) => k.time === 3));
+check("sorting never mutates the input",
+  (() => {
+    const unsorted = [KF[1], KF[0]];
+    const sorted = Z.sortKeyframes(unsorted);
+    return sorted[0].id === "a" && unsorted[0].id === "b";
+  })());
+check("removing a lock keeps the rest",
+  Z.removeZoomKeyframe(KF, "a").length === 1 && Z.removeZoomKeyframe(KF, "a")[0].id === "b");
+
+// Timeline ticks aim for roughly 6–10 visible marks.
+check("tick intervals follow duration",
+  Z.tickInterval(90) === 10 && Z.tickInterval(40) === 5 && Z.tickInterval(20) === 2
+    && Z.tickInterval(8) === 1 && Z.tickInterval(3) === 0.5);
+check("time formats as m:ss.d",
+  DC.formatTime(0) === "0:00.0" && DC.formatTime(65.25) === "1:05.2" && DC.formatTime(9.99) === "0:09.9");
+
+// Export naming carries the render facts and no product branding.
+check("export filenames stay neutral and unbranded",
+  DC.buildExportFilename({ device: "s24", preset: "tiktok", width: 1080, height: 1920, ext: "mp4" })
+    === "demo-cta-s24-tiktok-1080x1920.mp4");
+check("export filenames carry no superseded app branding",
+  !/mockreel|phoneframe|hookforge/i.test(
+    DC.buildExportFilename({ device: "s24", preset: "tiktok", width: 1080, height: 1920, ext: "mp4" })));
+check("export filenames sanitize hostile parts",
+  DC.buildExportFilename({ device: "S24 Ultra!", preset: "", width: 1080.7, height: 1920.2, ext: "webm" })
+    === "demo-cta-s24-ultra-preset-1081x1920.webm");
+check("mp4 is detected by prefix, everything else is webm",
+  DC.extensionForMime('video/mp4;codecs="avc1.42E01F,mp4a.40.2"') === "mp4"
+    && DC.extensionForMime("video/webm;codecs=vp9") === "webm");
+
+// MIME selection without a recorder fails closed rather than guessing.
+check("no recorder means no mime rather than a guess",
+  DC.selectExportMime({ transparent: false, exportFormat: "auto" }) === null);
+
+// Catalog parity with the standalone app: nothing dropped in the port.
+check("the device catalog survived the port",
+  DC.DEVICES.length === 7 && DC.DEVICES[0].id === "s24" && DC.DEVICES[6].id === "lg_g8");
+check("the preset catalog survived the port",
+  DC.PRESETS.length === 6 && DC.PRESETS[0].id === "tiktok" && DC.PRESETS[5].id === "source");
+check("backgrounds, animations, environments and accents survived the port",
+  DC.BACKGROUNDS.length === 8 && DC.ANIMATIONS.length === 6
+    && DC.ENVIRONMENTS.length === 5 && DC.ACCENT_SWATCHES.length === 4);
+check("defaults match the standalone app",
+  DC.DEFAULTS.device === "s24" && DC.DEFAULTS.preset === "tiktok" && DC.DEFAULTS.bg === "lavender"
+    && DC.DEFAULTS.anim === "float" && DC.DEFAULTS.scale === 0.82
+    && DC.DEFAULTS.hookDuration === 1.8 && DC.DEFAULTS.ctaDuration === 2
+    && DC.DEFAULTS.overlayAccent === "#c8ff2e" && DC.DEFAULTS.viewMode === "floating");
+check("slider ranges match the standalone app",
+  DC.RANGES.scale.min === 0.3 && DC.RANGES.videoScale.max === 3
+    && DC.RANGES.handPan.step === 0.005 && DC.RANGES.screen.step === 0.001
+    && DC.RANGES.hookDuration.min === 0.8 && DC.RANGES.ctaDuration.max === 5);
 
 console.log("\n" + "=".repeat(70));
 if (failures.length === 0) {

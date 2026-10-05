@@ -15,6 +15,7 @@ import GenerationHistory from "./pages/GenerationHistory";
 import BrandSetup from "./pages/BrandSetup";
 import AppProfileDetail from "./pages/AppProfileDetail";
 import CreateVideo from "./pages/CreateVideo";
+import DemoCtaStudio from "./pages/DemoCtaStudio";
 import AssetLibrary from "./pages/AssetLibrary";
 import { OnboardingProvider } from "./components/onboarding/OnboardingProvider";
 
@@ -75,6 +76,12 @@ function App() {
                         <Route path="/templates" element={<Navigate to="/create" replace />} />
                         <Route path="/templates/:templateId" element={<Navigate to="/create" replace />} />
                         <Route path="/create" element={<CreateVideo />} />
+                        {/* Native Product Demo + CTA editor. The picker lives at
+                            /demo-cta and the editor at /demo-cta/:generationId,
+                            so a finished render is the input and the export is
+                            saved beside it in History. */}
+                        <Route path="/demo-cta" element={<DemoCtaStudio />} />
+                        <Route path="/demo-cta/:generationId" element={<DemoCtaStudio />} />
                         <Route path="/brand" element={<BrandSetup />} />
                         {/* Generation History is the history view. */}
                         <Route path="/history" element={<GenerationHistory />} />

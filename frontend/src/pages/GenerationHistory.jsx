@@ -13,7 +13,7 @@ import { recordSignal, recordReason } from "../lib/feedback";
 import {
   History as HistoryIcon, Loader2, AlertTriangle, Download, Trash2, Archive,
   RotateCcw, GitBranch, RefreshCw, ChevronRight, Film, Star, TrendingUp,
-  Check, ThumbsDown, Info, Copy, X,
+  Check, ThumbsDown, Info, Copy, X, Smartphone,
 } from "lucide-react";
 
 function humanize(value) {
@@ -598,6 +598,16 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
         >
           <Copy className="h-3.5 w-3.5" /> Duplicate
         </Button>
+        {/* Only a finished clip has anything to wrap, so the entry rides
+            hasClip rather than status alone: offering it on a queued or failed
+            render would open an editor with no source. */}
+        {hasClip && (
+          <Button variant="ghost" size="sm" asChild data-testid={`demo-cta-history-${row.id}`}>
+            <Link to={`/demo-cta/${row.id}`} title="Wrap this clip in a phone mockup and add your close">
+              <Smartphone className="h-3.5 w-3.5" /> Demo + CTA
+            </Link>
+          </Button>
+        )}
         <span className="ml-auto flex items-center gap-1.5">
           <Button
             variant="ghost"
