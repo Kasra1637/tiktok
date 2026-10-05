@@ -10,7 +10,7 @@ import {
 } from "../lib/videoLength";
 import {
   Loader2, Clapperboard, AlertTriangle, Download, RotateCcw,
-  Play, Info, Clock, Layers,
+  Play, Info, Clock, Layers, Smartphone,
 } from "lucide-react";
 
 /**
@@ -72,6 +72,12 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [retryingStorage, setRetryingStorage] = useState(false);
+  // The optional Product Demo + CTA step. Both default to off: nothing is
+  // offered until the backend says the app is configured, so an instance
+  // without it renders exactly as it does today.
+  const [demoCtaAvailable, setDemoCtaAvailable] = useState(false);
+  const [startingDemoCta, setStartingDemoCta] = useState(false);
+  const [receivingDemoCta, setReceivingDemoCta] = useState(false);
   const timer = useRef(null);
 
   const projectId = project?.id;
@@ -106,6 +112,60 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
   // network-retry hole and leave the double-tap wide open, which is the one a
   // founder actually hits.
   const intentKey = useRef(null);
+
+  // Whether the optional Product Demo + CTA step exists on this instance.
+  // Asked once on mount and failing closed: if the call errors, the step stays
+  // hidden, so a broken config can never turn into a button that goes nowhere.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getDemoCtaConfig()
+      .then((data) => {
+        if (!cancelled) setDemoCtaAvailable(Boolean(data?.available));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // The return leg: the Product Demo + CTA app posts its finished clip back
+  // here when it exports.
+  //
+  // The origin is checked, not assumed. Any page can postMessage into this one,
+  // and a blob accepted on faith would be filed into a stranger's History.
+  useEffect(() => {
+    if (!demoCtaAvailable || !generation?.id) return undefined;
+    const onMessage = async (event) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data;
+      if (!data || data.type !== "hookforge:demo-cta-finished") return;
+      // The opener tells us which render it came from; refuse anything else, so a
+      // second tab cannot file against this one.
+      if (data.generationId && data.generationId !== generation.id) return;
+      if (!(data.blob instanceof Blob)) return;
+      setReceivingDemoCta(true);
+      try {
+        const result = await api.uploadDemoCtaResult(
+          generation.id,
+          data.blob,
+          data.name || "hookforge.mp4"
+        );
+        setNotice(
+          result
+            ? "Your Product Demo + CTA version is in History, beside the hook and the middle."
+            : "Your Product Demo + CTA version came back, but History could not confirm it. Reload to check."
+        );
+        onGenerationChange?.();
+      } catch (err) {
+        setError(getErrorMessage(err));
+      } finally {
+        setReceivingDemoCta(false);
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [demoCtaAvailable, generation?.id, onGenerationChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -283,6 +343,36 @@ const handleGenerate = async () => {
       setError(getErrorMessage(err));
     } finally {
       setRetryingStorage(false);
+    }
+  };
+
+  /**
+   * Continue into the Product Demo + CTA app with this clip.
+   *
+   * Opens it in a new tab rather than navigating, because the download stays
+   * usable here either way and leaving would lose the generation the founder is
+   * looking at.
+   *
+   * Deliberately WITHOUT `noopener`, because the finished clip comes back
+   * through `window.opener.postMessage` and a severed opener would drop it.
+   * That is the one place this product opens a cross-origin window, so it
+   * carries the risk the flag exists to manage; the target is a first-party
+   * origin we configure, and the message is validated against it on the way in
+   * (see the receiver's expected origin). The alternative — no return leg — was
+   * rejected because it strands the finished file in a tab the founder has to
+   * find and re-download by hand.
+   */
+  const handleContinueToDemoCta = async () => {
+    if (!generation?.id) return;
+    setStartingDemoCta(true);
+    setError(null);
+    try {
+      const { url } = await api.getDemoCtaLink(generation.id);
+      window.open(url, "_blank");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setStartingDemoCta(false);
     }
   };
 
@@ -581,6 +671,58 @@ const handleGenerate = async () => {
                   nothing is ever published for you.
                 </p>
               </div>
+
+              {/* The optional next step, and only ever offered. The download
+                  above is the finish line for anyone who does not want it: this
+                  panel adds nothing to what they already have, changes no gate,
+                  and takes nothing away. It answers a question the copy above
+                  already raises — "attach your own demo next" — by opening a
+                  tool that does exactly that, rather than leaving the founder
+                  to find it elsewhere.
+
+                  The whole block is absent when the instance has no Product
+                  Demo + CTA app configured, so an unconfigured deployment looks
+                  precisely as it does today. */}
+              {demoCtaAvailable && (
+                <div className="space-y-2 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-3">
+                  <span className="eyebrow block">Optional: add your demo and close</span>
+                  <p className="text-xs text-muted-foreground">
+                    Keep the video as it is, or carry it into Product Demo + CTA to wrap your demo
+                    in a phone mockup and add your own call to action.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="brand"
+                      size="sm"
+                      onClick={handleContinueToDemoCta}
+                      disabled={startingDemoCta || receivingDemoCta}
+                    >
+                      {startingDemoCta || receivingDemoCta ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Smartphone className="h-3.5 w-3.5" />
+                      )}
+                      {receivingDemoCta
+                        ? "Bringing your video back…"
+                        : "Continue to Product Demo + CTA"}
+                    </Button>
+                    <Button variant="secondary" size="sm" asChild>
+                      <a
+                        href={downloadUrl}
+                        download
+                        onClick={() => recordSignal("video_downloaded", "downloaded", {
+                          brand_profile_id: generation?.brand_profile_id || "",
+                          studio_project_id: generation?.studio_project_id || "",
+                          generation_id: generation?.id || "",
+                          template_id: generation?.template_id || "",
+                        })}
+                      >
+                        <Download className="h-3.5 w-3.5" /> Use this video as-is
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+              )}
               <RecordResultsNudge
                 generationId={generation?.id}
                 recorded={Boolean(generation?.performance)}

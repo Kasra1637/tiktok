@@ -251,6 +251,13 @@ const SUPPORTED_DURATIONS = [8, 10, 12, 15];
 
 const apiStub = {
   getStudioVideoModels: async () => ({ default: "minimax-h3", models: [CAPABILITY] }),
+  // The optional Product Demo + CTA step reports itself unavailable by default,
+  // which is the honest default and keeps every other check looking at the
+  // studio exactly as it is without this feature. The dedicated checks below
+  // turn it on explicitly.
+  getDemoCtaConfig: async () => ({ available: false, origin: "" }),
+  getDemoCtaLink: async () => ({ url: "https://demo-cta.example/?src=x", origin: "https://demo-cta.example", expires_in: 3600 }),
+  uploadDemoCtaResult: async () => ({ id: "returned-1", status: "completed" }),
   getGenerations: async () => ({ generations: [SEGMENT] }),
   pollGeneration: async () => SEGMENT,
   getTemplates: async () => ({ templates: [TEMPLATE] }),
@@ -2544,6 +2551,10 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
   console.log("");
   console.log("Mounting the App Profile detail page...");
   await runDeleteDialogChecks();
+
+  console.log("");
+  console.log("Checking the optional Product Demo + CTA step...");
+  await runDemoCtaChecks();
 }
 
 /**
@@ -2764,6 +2775,87 @@ async function runDeleteDialogChecks() {
       }
     );
   }
+}
+
+/**
+ * The optional Product Demo + CTA step.
+ *
+ * It is additive by construction, and these pin that rather than the feature.
+ * The studio's own finish line is the download above the new block; if the new
+ * block could remove, reorder or replace that, the panel would no longer be
+ * "optional" in any sense that matters to a founder who wanted none of it.
+ */
+async function runDemoCtaChecks() {
+  const demoCtaButton = (ctx) =>
+    [...ctx.container.querySelectorAll("button")].find((b) =>
+      (b.textContent || "").includes("Continue to Product Demo + CTA")
+    );
+
+  async function mountStudio(ctx, available) {
+    // Mounted directly rather than through the wizard, like the other
+    // GenerationPanel checks: the block under test only renders for a finished
+    // render, and reaching that through the wizard would be testing navigation
+    // instead of this.
+    await withApi(
+      {
+        getDemoCtaConfig: async () => ({ available, origin: "https://demo-cta.example" }),
+        getGenerations: async () => ({
+          generations: [{ ...SEGMENT, video_url: "/api/media/videos/gen-1.mp4" }],
+        }),
+      },
+      async () => {
+        await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+      }
+    );
+  }
+
+  await check(
+    "the Product Demo + CTA step is absent when the instance has none configured",
+    async (ctx) => {
+      await mountStudio(ctx, false);
+      if (demoCtaButton(ctx)) {
+        throw new Error(
+          "the step is offered on an instance with no Product Demo + CTA app, " +
+            "so a founder would be sent to a dead end"
+        );
+      }
+    }
+  );
+
+  await check(
+    "the Product Demo + CTA step is offered when it is configured, alongside the download",
+    async (ctx) => {
+      await mountStudio(ctx, true);
+      const cta = demoCtaButton(ctx);
+      if (!cta) throw new Error("the optional step is missing when it is available");
+      // "Use as-is" has to be there and has to be a real download. If the new
+      // step became the only way out, this app would have stopped being
+      // optional the moment it was turned on.
+      const asIs = [...ctx.container.querySelectorAll("a")].find(
+        (a) => (a.textContent || "").includes("Use this video as-is")
+      );
+      if (!asIs) throw new Error("there is no way to keep the video as it is");
+      // hasAttribute, not the value: a bare `download` renders as download="",
+      // which is falsy, so reading it would fail on a correct element.
+      if (!asIs.hasAttribute("download")) {
+        throw new Error("'Use this video as-is' is not a download");
+      }
+    }
+  );
+
+  await check(
+    "the studio's own download is untouched by the optional step",
+    async (ctx) => {
+      await mountStudio(ctx, true);
+      const download = [...ctx.container.querySelectorAll("a")].find((a) =>
+        (a.textContent || "").includes("Download MP4")
+      );
+      if (!download) throw new Error("the studio's own download is gone");
+      if (!download.getAttribute("href")?.includes("/api/media/videos/")) {
+        throw new Error(`the download points somewhere else: ${download.getAttribute("href")}`);
+      }
+    }
+  );
 }
 
 function stepPill(ctx, label) {
