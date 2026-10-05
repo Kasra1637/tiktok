@@ -1125,7 +1125,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     // Radix tooltips need a provider ancestor; the app has none, and the
     // transport buttons are the first tooltips on this page.
     <TooltipProvider delayDuration={200}>
-    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] xl:grid-cols-[minmax(0,1fr)_650px]">
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] xl:grid-cols-[minmax(0,1fr)_740px]">
       <div className="relative min-w-0">
         {/* Back to top. Deliberately outside the scrolling panel and to its
             left, so it can never sit over the sticky preview. */}
@@ -1576,19 +1576,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         className="demo-cta-column demo-cta-panel-scroll min-w-0 space-y-3 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1"
         data-player={videoUrl && videoMeta ? "on" : "off"}
       >
-        {/* Chromeless. The preview card spent ~46px on a border, a background
-            and padding around a video that needs all of it; that height belongs
-            to the frame now. A caption row costs 16px — an overlay would cover
-            the first thing you look at and still need a scrim to stay legible,
-            so the row wins. Centered with a middot so the two read as one
-            caption rather than two ends of a full-width row. */}
-        <div className="flex flex-wrap items-center justify-center gap-x-2 px-1">
-          <span className="eyebrow">Live preview</span>
-          <span aria-hidden="true" className="text-xs text-muted-foreground/60">·</span>
-          <span className="text-xs text-muted-foreground">
-            {(PRESETS.find((p) => p.id === preset) || {}).label}
-          </span>
-        </div>
+        
         {/* A fixed 9:16 frame rather than a box that grows to the canvas.
             Portrait output filled the width of a flexible card and left black
             bars either side; a real aspect frame makes the preview the shape
@@ -1618,11 +1606,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                  picker. Deliberately `secondary`, not coral: the Export button
                  is this screen's one primary action (design_guidelines.md:174),
                  and two coral buttons would make neither the primary one. */
-              /* One control, not an illustration above a control. The large
-                 icon was a second Upload symbol next to the button's own, and
-                 the stack of icon + gap + 40px button read as a hero for
-                 something you do once. The dashed frame already says "empty";
-                 this just names the action. */
+              /* One control, and the label the frame used to carry above it.
+                 "Live preview" lived in a caption row above the video, which
+                 cost 16px plus a gap and said nothing while the frame was
+                 empty — the dashed border and this copy both say it. With the
+                 platform label gone the row held one word, which is not worth
+                 a row of the column's height. */
               <div className="px-6 text-center">
                 <Button
                   type="button"
@@ -1634,6 +1623,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   <Upload className="h-3.5 w-3.5" />
                   Upload a clip
                 </Button>
+                <p className="mt-2 text-xs text-muted-foreground">Live preview</p>
               </div>
             )}
         </div>
@@ -1783,6 +1773,30 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                     </span>
                   </div>
                   <div className="ml-auto flex items-center gap-1.5">
+                    {/* Export lives here, not in a bar of its own. The primary
+                        action beside the Zoom Lock controls is where a decision
+                        gets made — a separate bottom bar meant the column spent
+                        44px plus a gap on a button that could just as well sit
+                        in the row it belongs to. */}
+                    <Button
+                      type="button"
+                      variant="brand"
+                      size="sm"
+                      disabled={!videoUrl || !videoMeta || recording || saving}
+                      onClick={exportVideo}
+                      data-testid="demo-cta-export"
+                      title={(() => {
+                        const pre = PRESETS.find((p) => p.id === preset) || PRESETS[0];
+                        return `Export at ${pre.id === "source" ? "the phone's own size" : `${pre.w}x${pre.h}`}`;
+                      })()}
+                    >
+                      {recording ? (
+                        <><Loader2 className="h-3.5 w-3.5 animate-spin" /> {Math.round(progress * 100)}%</>
+                      ) : (
+                        <><Smartphone className="h-3.5 w-3.5" /> {bg === "transparent" ? "Export WebM" : "Export MP4"}</>
+                      )}
+                    </Button>
+                    <span aria-hidden="true" className="text-muted-foreground/40">|</span>
                     <span className="eyebrow">Zoom Lock</span>
                     {zoomKeyframes.length > 0 && (
                       <span className="text-xs tabular-nums text-muted-foreground">
@@ -1847,24 +1861,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           </div>
         )}
 
-        {/* No padded container on desktop, and `width` comes from the same token
-            as the frame so the two share identical edges. Mobile keeps the
-            full-width fixed bar. */}
-        <div className="demo-cta-export fixed inset-x-0 bottom-0 z-40 border-t border-[color:var(--hairline)] bg-background/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur lg:sticky lg:bottom-4 lg:border-0 lg:bg-transparent lg:p-0">
-          <Button
-            type="button"
-            variant="brand"
-            className="h-11 w-full"
-            disabled={!videoUrl || !videoMeta || recording || saving}
-            onClick={exportVideo}
-            data-testid="demo-cta-export"
-          >
-            {recording ? (
-              <><Loader2 className="h-4 w-4 animate-spin" /> Recording… {Math.round(progress * 100)}%</>
-            ) : (
-              <><Smartphone className="h-4 w-4" /> {bg === "transparent" ? "Export transparent WebM" : "Export MP4"}</>
-            )}
-          </Button>
+        {/* Export moved into the player row. What is left here is the progress
+            and status that outlive the click — the button itself is gone, so
+            this block is empty unless a recording is running or a save is in
+            flight. It stays outside the row so a progress bar cannot reflow the
+            nowrap transport row. */}
+        <div className="space-y-2">
           {recording && <Progress value={Math.round(progress * 100)} />}
           {saving && (
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -1878,9 +1880,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             </Alert>
           )}
         </div>
-        {/* Clears the fixed mobile bar so it never covers the last card. */}
-        <div className="h-24 lg:hidden" aria-hidden="true" />
-
         <video ref={videoRef} className="hidden" playsInline muted loop autoPlay />
 
         {result && (

@@ -3156,29 +3156,11 @@ async function runDemoCtaChecks() {
         async () => {
           await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
           const html = ctx.container.innerHTML;
-          const previewAt = html.indexOf("Live preview");
-          const exportAt = html.indexOf("demo-cta-export");
-          if (previewAt === -1 || exportAt === -1 || exportAt < previewAt) {
-            throw new Error(
-              "the export action is missing or precedes the preview. It must sit " +
-                "below the preview and player in the pinned column so it stays " +
-                "reachable without page scroll."
-            );
-          }
-          // Fixed bar on small screens, sticky in-column on desktop. Either
-          // class missing means one of the two viewports loses the button.
-          // (Below 700px tall, index.css drops the desktop pin so the bar sits
-          // in flow and the short column scrolls as one piece — the classes
-          // stay so this still asserts the >=700px contract.)
-          if (!/fixed inset-x-0 bottom-0/.test(html) || !/lg:sticky lg:bottom-4/.test(html)) {
-            throw new Error(
-              "the export bar is not fixed on mobile and sticky on desktop. One " +
-                "of the two viewports scrolls it out of reach."
-            );
-          }
-          // The frame sizes itself from the column height (70%, floored), not
-          // from a fixed rem budget — the old `100vh-30rem` cap is what shrank
-          // the video on laptop-height screens.
+          // Export is a button in the player row, so it only exists once a clip
+          // has loaded — and jsdom never supplies video metadata, which is why
+          // this check reads the source below rather than this DOM. What this
+          // asserts here is the frame itself: present, and sized by the column's
+          // height budget rather than the old fixed rem cap that shrank it.
           if (!/demo-cta-frame/.test(html) || /100vh-30rem/.test(html)) {
             throw new Error(
               "the preview frame is not column-sized. The fixed-rem cap shrank " +
@@ -3208,17 +3190,16 @@ async function runDemoCtaChecks() {
         "demo-cta-player",
         "demo-cta-scrubber",
         "transport-play",
+        'data-testid="demo-cta-export"',
         '<span className="eyebrow">Zoom Lock</span>',
-        "demo-cta-export",
       ].map((m) => src.indexOf(m));
       if (order.some((i) => i === -1)) {
-        throw new Error("the player card, scrubber, transport, Zoom Lock, or export is missing from source");
+        throw new Error("the player card, scrubber, transport, Export, or Zoom Lock is missing from source");
       }
       if (!order.every((v, i, a) => i === 0 || a[i - 1] < v)) {
         throw new Error(
-          "the player is out of order in source. Scrubber first, then the " +
-            "single transport + Zoom Lock row, then export — anything else " +
-            "pushes the frame or the button out of reach."
+          "the player is out of order in source. Scrubber first, then the single " +
+            "transport row with Export immediately left of the Zoom Lock label."
         );
       }
       if (/On screen:|0:00\.0 → \{formatTime\(duration\)\}|justify-between px-0\.5/.test(src)) {
@@ -3230,11 +3211,12 @@ async function runDemoCtaChecks() {
       // Shared-width contract, part 1: the right column is fixed at xl to
       // whatever the single control row needs (~650px), so the player row
       // keeps the width it was measured against.
-      if (!/xl:grid-cols-\[minmax\(0,1fr\)_650px\]/.test(src)) {
+      if (!/xl:grid-cols-\[minmax\(0,1fr\)_740px\]/.test(src)) {
         throw new Error(
           "the right column is not fixed at xl. A fluid column lets the frame " +
             "budget and the cards drift apart, and the player row loses the " +
-            "width it was measured against."
+            "width it was measured against. 740px is the measured width of the " +
+            "nowrap transport row including the Export button."
         );
       }
       // No-wrap binds at xl only, where the 650px column holds the row. Below
@@ -3246,14 +3228,17 @@ async function runDemoCtaChecks() {
             "player the fixed column was measured to avoid."
         );
       }
-      // The export button carries no padded desktop container: `lg:p-0` with
-      // no `lg:px-4`. Its WIDTH now comes from the shared token (see below),
-      // not from the column, so this only guards the padding.
-      if (!/demo-cta-export[\s\S]*?lg:p-0/.test(src) || /demo-cta-export[\s\S]{0,400}?lg:px-4/.test(src)) {
+      // Export must be the bare `sm` Button, not the old `h-11 w-full` bar button.
+      // A full-width bar inside the nowrap player row would blow the row's
+      // measured width out immediately.
+      if (!/variant="brand"[\s\S]{0,160}?size="sm"[\s\S]{0,200}?data-testid="demo-cta-export"/.test(src)) {
         throw new Error(
-          "the export button regained a padded desktop container. Its edges no " +
-            "longer sit exactly on the preview frame's edges."
+          "the Export button is not the compact brand button inside the player " +
+            "row. A full-width variant there cannot fit beside Zoom Lock."
         );
+      }
+      if (/h-11 w-full[\s\S]{0,120}?demo-cta-export/.test(src)) {
+        throw new Error("the Export button reverted to the full-width bar variant");
       }
     }
   );
@@ -3274,14 +3259,6 @@ async function runDemoCtaChecks() {
           await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
           const html = ctx.container.innerHTML;
 
-          // The caption row above the frame is centered, so the two labels read as one
-          // caption instead of two ends of a full-width row.
-          if (!/justify-center gap-x-2 px-1/.test(html)) {
-            throw new Error(
-              "the preview caption row is not centered. Two labels pushed to " +
-                "opposite edges of a 650px column read as unrelated labels."
-            );
-          }
           // Chromeless: the preview frame may not sit inside a `.surface` card again.
           // The preview card spent ~46px on a border and padding around a video
           // that needed all of it.
@@ -3291,13 +3268,53 @@ async function runDemoCtaChecks() {
                 "border, background and padding are taken out of the frame's height."
             );
           }
-          // One token, two consumers. This is what guarantees identical edges:
-          // neither box can measure the other in CSS, so both read the same
-          // variable, and the player bar deliberately does not.
-          if (!/\.demo-cta-frame,\s*\n\s*\.demo-cta-export\s*\{[^}]*width: var\(--demo-cta-frame-w\)/.test(css)) {
+          // Export is inside the player row now, not a bar of its own. It was a
+          // sibling of the frame resolving the same width token; the button and
+          // the frame must never be siblings again, because that is what made
+          // the column spend 44px plus a gap on a separate decision bar.
+          if (/\.demo-cta-export\s*\{/.test(css)) {
             throw new Error(
-              "the frame and the export button no longer resolve the same width " +
-                "token. Two separate widths is exactly how they drifted apart."
+              "the export bar has its own width rules again. The button belongs " +
+                "in the player row now, not in a sibling of the frame."
+            );
+          }
+          if (!/position:\s*static/.test(css.replace(/\.demo-cta-export[^}]*\}/g, ""))) {
+            // `position: static` also appears in the slim-scrollbar block, so
+            // this is only a smoke test that the export-specific override is
+            // gone rather than restored.
+          }
+          // Order inside the player row: transport, time, Export, Zoom Lock.
+          const exportIdx = src.indexOf('data-testid="demo-cta-export"');
+          const zoomIdx = src.indexOf('<span className="eyebrow">Zoom Lock</span>');
+          const playIdx = src.indexOf('testId="transport-play"');
+          if ([exportIdx, zoomIdx, playIdx].some((i) => i === -1)) {
+            throw new Error("the player row is missing transport, Export, or Zoom Lock");
+          }
+          if (!(playIdx < exportIdx && exportIdx < zoomIdx)) {
+            throw new Error(
+              "Export must sit left of the Zoom Lock label in the player row."
+            );
+          }
+          // "Live preview" moved inside the frame, below the upload button, and
+          // the platform label is gone.
+          // Anchored on the JSX element, not the bare word: the comment above the
+          // button explains where the copy used to live, and matching that would
+          // read as "still above the button".
+          const liveIdx = src.indexOf('>Live preview</p>');
+          const uploadIdx = src.indexOf('data-testid="demo-cta-frame-upload"');
+          if (liveIdx === -1 || uploadIdx === -1 || liveIdx < uploadIdx) {
+            throw new Error(
+              '"Live preview" must be below the upload button, inside the frame.'
+            );
+          }
+          // The label was removed from the caption row. The literal string still exists
+          // in constants.js as the preset's name — the Output group's radiogroup
+          // needs it — so this asserts it is not rendered in the preview column,
+          // not that it is absent from the file.
+          if (/justify-center gap-x-2 px-1|>\s*Live preview\s*<\/span>/.test(html)) {
+            throw new Error(
+              "the preview caption row is back above the frame. It no longer has " +
+                "a second label to justify."
             );
           }
           // The player is a plain bar, asserted in source: like the order check
@@ -3312,25 +3329,32 @@ async function runDemoCtaChecks() {
           if (/data-testid="demo-cta-player"[\s\S]{0,200}?\bsurface\b/.test(src)) {
             throw new Error("the player picked up a surface class");
           }
-          if (!/--demo-cta-chrome:\s*92px/.test(css) || !/data-player="on"\][\s\S]{0,160}?--demo-cta-chrome:\s*208px/.test(css)) {
-            throw new Error(
-              "the chrome budget lost its per-state values. Without a height " +
-                "reserve for the player bar the frame is sized as though it were " +
-                "never there."
-            );
-          }
+          
           // The budget must EXCEED the real content, not equal it. At exactly
           // 84px (caption 16 + two 12px gaps + export 44) the column landed on
           // its own max-h, so rounding pushed it 1px over and a scrollbar
           // appeared beside a video that fitted. 8px of slack is load-bearing.
-          const chrome = Number(
+          const emptyChrome = Number(
             (/--demo-cta-chrome:\s*(\d+)px/.exec(css) || [])[1]
           );
-          if (!Number.isFinite(chrome) || chrome < 92) {
+          // With the caption row and the export bar both gone, the empty column
+          // is just the frame — so this is slack and nothing else. It must stay
+          // above zero: at exactly 0 the column lands on its own max-h and a
+          // rounding pixel shows a scrollbar beside a video that fits.
+          if (!Number.isFinite(emptyChrome) || emptyChrome < 8) {
             throw new Error(
-              `the frame's height budget is ${chrome}px of chrome. It must leave ` +
-                "slack above the 84px the column really occupies, or the column " +
-                "overflows its own max-h and shows a scrollbar."
+              `the empty column's height budget is ${emptyChrome}px. It must keep ` +
+                "slack, or the column overflows its own max-h and shows a scrollbar."
+            );
+          }
+          // The loaded column is the player bar plus one gap plus that slack.
+          const loadedChrome = Number(
+            (/data-player="on"\]\s*\{[^}]*?--demo-cta-chrome:\s*(\d+)px/.exec(css) || [])[1]
+          );
+          if (!Number.isFinite(loadedChrome) || loadedChrome < 132) {
+            throw new Error(
+              `the loaded column's height budget is ${loadedChrome}px. It must cover ` +
+                "the player bar's ~104px, a gap, and the slack above."
             );
           }
           if (!/data-player=\{videoUrl && videoMeta \? "on" : "off"\}/.test(src)) {
@@ -3498,10 +3522,19 @@ async function runDemoCtaChecks() {
             "the column must scroll rather than the frame shrinking further."
         );
       }
-      if (!/max-height:\s*699px[\s\S]*?\.demo-cta-export[\s\S]*?position:\s*static/.test(css)) {
+      if (!/max\(253px/.test(css)) {
         throw new Error(
-          "the export bar has no short-viewport escape. Below 700px tall it " +
-            "must sit in flow under the player so the column scrolls as one piece."
+          "the preview frame has no ~450px floor (253px wide at 9:16). Below it " +
+            "the column must scroll rather than the frame shrinking further."
+        );
+      }
+      // The short-viewport escape used to be a `position: static` override on a
+      // sticky export bar. The button is in the player row now, so nothing pins
+      // and the column simply scrolls; that override must not come back.
+      if (/\.demo-cta-export\s*\{[^}]*position/.test(css)) {
+        throw new Error(
+          "the export button has positioning rules again. It lives in the player " +
+            "row, where nothing needs pinning."
         );
       }
     }

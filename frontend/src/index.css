@@ -291,41 +291,37 @@ select option:checked {
 /* Demo + CTA sticky-column geometry.
  *
  * The right column caps at the viewport minus its own offsets
- * (`lg:max-h-[calc(100vh-3rem)]` in JSX) and holds three things: the frame, the
- * player bar, and the export button. The frame gets everything left over.
+ * (`lg:max-h-[calc(100vh-3rem)]` in JSX) and holds the frame, plus the player
+ * bar once a clip is loaded. The frame gets everything left over.
  *
- * That is expressed as ONE variable, `--demo-cta-frame-w`, because the frame
- * and the export button have to be exactly the same width with identical
- * edges, and neither can measure the other in CSS. The width is derived from
- * the height budget rather than a percentage of the column so the 9:16 ratio
- * is never distorted and the frame never leaves dead space beside it.
+ * `--demo-cta-frame-w` expresses that. The width is derived from the height
+ * budget rather than a percentage of the column, so the 9:16 ratio is never
+ * distorted and the frame never leaves dead space beside it. The column is a
+ * fixed 740px at xl, so this width is normally bounded by height, not by the
+ * track.
  *
- * `--demo-cta-chrome` is the height the frame does NOT get: the caption row
- * (16px), the 12px gaps, the export button (44px), and — only when a clip is
- * loaded — the player bar (104px). The bar's height is deliberately constant:
- * the zoom-keyframe strip keeps its 8px box when empty so locking a zoom does
- * not silently change the frame size.
+ * `--demo-cta-chrome` is the height the frame does NOT get. Only the player bar
+ * is real content now: the caption row went away when "Live preview" moved
+ * inside the frame, and the export button moved into the player row, so the
+ * empty column is just the frame plus slack. The bar's height is deliberately
+ * constant — the zoom-keyframe strip keeps its 8px box when empty — so locking a
+ * zoom cannot silently resize the video.
  *
  * 253px wide is 450px tall at 9:16: the floor below which the column scrolls
- * instead of the frame shrinking further. Mobile keeps a 45vh budget and a
- * full-width fixed export bar, because matching those is not the point there.
- *
- * Below 700px tall the export bar drops its desktop sticky pin and sits in
- * flow directly below the player, so the short column scrolls as one piece
- * rather than pinning the button over a frame it can no longer fit beside. */
+ * instead of the frame shrinking further. Mobile keeps a 45vh budget, and the
+ * player row wraps there because it cannot fit beside a 9:16 frame on a phone. */
 .demo-cta-column {
-    /* 92, not 84. The column's real non-frame content is the caption row (16)
-       plus two 12px gaps plus the 44px export button = 84px, and subtracting
-       exactly that from `100vh - 3rem` left the column landing precisely on its
-       own max-h — so sub-pixel rounding of a 9:16 ratio, or a one-pixel
-       border, put it 1px over and a scrollbar appeared beside a video that
-       fitted. The 8px is deliberate slack, not a fudge. */
-    --demo-cta-chrome: 92px;
+    /* 16px is slack, not content. Sub-pixel rounding of a 9:16 ratio, or a
+       one-pixel border, otherwise puts the column over its own max-h and a
+       scrollbar appears beside a video that fits. */
+    --demo-cta-chrome: 16px;
     --demo-cta-frame-w: min(100%, calc(45vh * 9 / 16));
 }
 .demo-cta-column[data-player="on"] {
-    /* Same 8px of slack over the player bar's 104px. */
-    --demo-cta-chrome: 208px;
+    /* With a clip loaded the column is frame + player bar (104px: scrubber 24,
+       gap 8, transport row 44, plus the row's own gap) + one 12px gap + the
+       16px of slack. */
+    --demo-cta-chrome: 140px;
 }
 .demo-cta-frame {
     width: var(--demo-cta-frame-w);
@@ -335,18 +331,11 @@ select option:checked {
     .demo-cta-column {
         --demo-cta-frame-w: min(100%, max(253px, calc((100vh - 3rem - var(--demo-cta-chrome)) * 9 / 16)));
     }
-    /* Same width, same edges, centered: the frame and the export button are
-       two consumers of one token, so they cannot drift apart. The player bar
-       stays full-column — deliberately a different width. */
-    .demo-cta-frame,
-    .demo-cta-export {
+    /* Width comes from the column height budget, so the 9:16 ratio is exact and
+       the frame is centred by its own margin rather than by a grid track. */
+    .demo-cta-frame {
         width: var(--demo-cta-frame-w);
         margin-inline: auto;
-    }
-}
-@media (min-width: 1024px) and (max-height: 699px) {
-    .demo-cta-export {
-        position: static;
     }
 }
 
