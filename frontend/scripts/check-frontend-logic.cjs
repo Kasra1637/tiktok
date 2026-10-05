@@ -37,7 +37,7 @@ function check(label, condition, detail) {
   }
 }
 
-function loadModule(src = SRC) {
+function loadModule(src = SRC, extraGlobals = {}) {
   const source = fs.readFileSync(src, "utf8");
   // Strip the ESM export keywords so the file can be evaluated as a script, and
   // re-expose whatever it declared. Only the export syntax changes; the code
@@ -60,6 +60,11 @@ function loadModule(src = SRC) {
     module: { exports: {} },
     exports: {},
     process: { env: { ...process.env } },
+    // Test-only globals (a stubbed MediaRecorder, say). The shipped code reads
+    // them as bare identifiers, which resolve against this sandbox rather than
+    // Node's global — so stubbing `global.X` in the test would silently test
+    // nothing. Anything passed here is explicit and visible at the call site.
+    ...extraGlobals,
   };
   vm.createContext(sandbox);
   vm.runInContext(stripped + expose, sandbox, { filename: SRC });
@@ -646,6 +651,34 @@ check("mp4 is detected by prefix, everything else is webm",
 // MIME selection without a recorder fails closed rather than guessing.
 check("no recorder means no mime rather than a guess",
   DC.selectExportMime({ transparent: false, exportFormat: "auto" }) === null);
+
+// Candidate order with a recorder that claims everything: High Level 4.0
+// first, because Baseline Level 3.1 cannot encode a 1080x1920 canvas and the
+// encoder rejects it at record time even though isTypeSupported passes it.
+// The stub goes through loadModule's sandbox — the shipped code reads the bare
+// `MediaRecorder` identifier, which resolves against the vm context, so a stub
+// on Node's global would silently test nothing.
+const DC_REC = loadModule(DEMO_CONST_SRC, {
+  MediaRecorder: { isTypeSupported: () => true },
+});
+check("mp4 candidates lead with a 1080p-capable level",
+  (() => {
+    const list = DC_REC.supportedExportMimes({ transparent: false, exportFormat: "auto" });
+    return list[0] === 'video/mp4;codecs="avc1.640028,mp4a.40.2"'
+      && list.indexOf('video/mp4;codecs="avc1.42E01F,mp4a.40.2"') > 0
+      && list[list.length - 1] === "video/webm"
+      && DC_REC.selectExportMime({ transparent: false, exportFormat: "auto" }) === list[0];
+  })());
+check("transparent and webm choices still prefer webm first",
+  (() => {
+    const t = DC_REC.supportedExportMimes({ transparent: true, exportFormat: "auto" });
+    const w = DC_REC.supportedExportMimes({ transparent: false, exportFormat: "webm" });
+    return t.every((m) => m.startsWith("video/webm")) && w[0].startsWith("video/webm");
+  })());
+check("a recorder that supports nothing yields no candidates",
+  DC_REC.supportedExportMimes
+    && loadModule(DEMO_CONST_SRC, { MediaRecorder: { isTypeSupported: () => false } })
+      .supportedExportMimes({ transparent: false, exportFormat: "auto" }).length === 0);
 
 // A broken recording must never become a download. These pin the pure half of
 // that gate: the size floor and the container sniff that run before a blob

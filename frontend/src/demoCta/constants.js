@@ -80,7 +80,6 @@ export const ACCENT_SWATCHES = ["#c8ff2e", "#ff4d8d", "#4dd8ff", "#ffffff"];
 
 export const DEFAULTS = {
   device: "s24",
-  frameColor: "black",
   preset: "tiktok",
   bg: "lavender",
   anim: "float",
@@ -124,9 +123,22 @@ export const RANGES = {
 
 export const BASE_PHONE_H = 1800;
 
+/**
+ * MP4 candidates, ordered by what can actually encode a 1080x1920 canvas.
+ *
+ * `avc1.42E01F` is H.264 Baseline Level 3.1, which tops out at 3600
+ * macroblocks per frame (1280x720). A 1080x1920 canvas is 8160. The encoder
+ * therefore rejects it with "configuration not supported" — but
+ * `MediaRecorder.isTypeSupported` only checks the codec string, never the
+ * resolution against the level, so it falsely passes and the failure surfaces
+ * asynchronously at record time. That exact sequence shipped a confusing error
+ * to a real export. High Level 4.0 (`avc1.640028`, 8192 macroblocks) fits, so
+ * it goes first; Baseline stays in the list as a last resort for small
+ * canvases rather than being dropped.
+ */
 export const MP4_CANDIDATES = [
-  'video/mp4;codecs="avc1.42E01F,mp4a.40.2"',
   'video/mp4;codecs="avc1.640028,mp4a.40.2"',
+  'video/mp4;codecs="avc1.42E01F,mp4a.40.2"',
   'video/mp4;codecs="h264,aac"',
   "video/mp4",
 ];
@@ -146,16 +158,23 @@ export const CAPTURE_FPS = 30;
 /**
  * MIME selection mirrors the standalone exporter: transparent forces WebM,
  * otherwise MP4 candidates come first unless WebM was explicitly chosen.
- * Returns null when the browser reports no supported candidate.
+ * Returns the full ordered list of supported candidates, not just the first:
+ * `isTypeSupported` can pass a configuration the encoder then rejects at
+ * record time (see MP4_CANDIDATES), so the exporter walks this list and falls
+ * back rather than failing on a lie the browser told.
  */
-export function selectExportMime({ transparent, exportFormat }) {
-  if (typeof MediaRecorder === "undefined" || !MediaRecorder.isTypeSupported) return null;
+export function supportedExportMimes({ transparent, exportFormat }) {
+  if (typeof MediaRecorder === "undefined" || !MediaRecorder.isTypeSupported) return [];
   const candidates = transparent
     ? WEBM_CANDIDATES
     : exportFormat !== "webm"
       ? [...MP4_CANDIDATES, ...WEBM_CANDIDATES]
       : [...WEBM_CANDIDATES, ...MP4_CANDIDATES];
-  return candidates.find((m) => MediaRecorder.isTypeSupported(m)) || null;
+  return candidates.filter((m) => MediaRecorder.isTypeSupported(m));
+}
+
+export function selectExportMime(opts) {
+  return supportedExportMimes(opts)[0] || null;
 }
 
 export function extensionForMime(mime) {

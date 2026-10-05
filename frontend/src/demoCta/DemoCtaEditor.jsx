@@ -47,8 +47,8 @@ import {
   extensionForMime,
   formatTime,
   isPlausibleRecordingSize,
-  selectExportMime,
   sniffRecordingContainer,
+  supportedExportMimes,
 } from "./constants";
 import { drawEndCard, drawHookOverlay, getEndCardBounds, getHookBounds, HOOK_FONT } from "./overlays";
 import { drawHandView, preloadHandViewImages } from "./handView";
@@ -296,7 +296,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const [loadingSource, setLoadingSource] = useState(true);
   const [videoMeta, setVideoMeta] = useState(null);
   const [device, setDevice] = useState(DEFAULTS.device);
-  const [frameColor, setFrameColor] = useState(DEFAULTS.frameColor);
   const [preset, setPreset] = useState(DEFAULTS.preset);
   const [bg, setBg] = useState(DEFAULTS.bg);
   const [anim, setAnim] = useState(DEFAULTS.anim);
@@ -883,7 +882,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         ctx.transform(1, tiltX * 0.8, tiltY * 0.6, 1, 0, 0);
 
         ctx.translate(-drawW / 2, -drawH / 2);
-        drawPhone(ctx, 0, 0, drawW, drawH, dev, video, videoFit, ez.vScale, ez.vOffX, ez.vOffY, frameColor);
+        drawPhone(ctx, 0, 0, drawW, drawH, dev, video, videoFit, ez.vScale, ez.vOffX, ez.vOffY);
         ctx.restore();
 
         ctx.save();
@@ -905,7 +904,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         const drawH = phoneH * fit;
         const x = (cw - drawW) / 2;
         const y = (ch - drawH) / 2;
-        drawPhone(ctx, x, y, drawW, drawH, dev, video, videoFit, ez.vScale, ez.vOffX, ez.vOffY, frameColor);
+        drawPhone(ctx, x, y, drawW, drawH, dev, video, videoFit, ez.vScale, ez.vOffX, ez.vOffY);
       }
       drawOverlays();
       rafRef.current = requestAnimationFrame(draw);
@@ -916,7 +915,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, frameColor, viewMode, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaOffsetX, ctaOffsetY, overlayAccent, zoomKeyframes]);
+  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaOffsetX, ctaOffsetY, overlayAccent, zoomKeyframes]);
 
   const seekVideo = (video, time) => new Promise((resolve) => {
     const done = () => { video.removeEventListener("seeked", done); resolve(); };
@@ -966,9 +965,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
 
     try {
       const transparent = viewMode !== "hand" && bg === "transparent";
-      const mime = selectExportMime({ transparent, exportFormat });
-      if (!mime) throw new Error("Your browser does not support video recording.");
-      const ext = extensionForMime(mime);
+      const mimes = supportedExportMimes({ transparent, exportFormat });
+      if (!mimes.length) throw new Error("Your browser does not support video recording.");
 
       // Pre-flight: an instant stop — zero duration, a canvas that never sized —
       // produces a valid-looking empty file that no player opens. Fail here with
@@ -1023,50 +1021,100 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         console.warn("Audio capture failed:", audioErr);
       }
 
-      const recorder = new MediaRecorder(stream, {
-        mimeType: mime,
-        videoBitsPerSecond: VIDEO_BITS_PER_SECOND,
-        audioBitsPerSecond: AUDIO_BITS_PER_SECOND,
-      });
-      const chunks = [];
-      recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-      const done = new Promise((res, rej) => {
-        // Without this, a mid-record mux failure resolves the blob anyway and
-        // the partial file is offered as a download. Rejecting here routes it
-        // to the catch below like any other failure.
-        recorder.onerror = (e) => {
-          const detail = e?.error?.message || e?.error?.name || "unknown recorder error";
-          rej(new Error(`The recording failed mid-capture (${detail}). Try again, or switch Export format to WebM in Output.`));
-        };
-        recorder.onstop = () => res(new Blob(chunks, { type: mime }));
-      });
+      // One attempt per supported MIME. A recorder-level failure — the encoder
+      // rejecting a configuration `isTypeSupported` passed, which is exactly
+      // what "configuration is not supported" means — advances to the next
+      // candidate instead of failing the export. Validation failures below do
+      // NOT retry: an empty capture is environmental, and every candidate would
+      // produce the same nothing at the cost of another full recording pass.
+      const recordAttempt = async (candidateMime) => {
+        const recorder = new MediaRecorder(stream, {
+          mimeType: candidateMime,
+          videoBitsPerSecond: VIDEO_BITS_PER_SECOND,
+          audioBitsPerSecond: AUDIO_BITS_PER_SECOND,
+        });
+        const chunks = [];
+        recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+        const done = new Promise((res, rej) => {
+          // Without this, a mid-record mux failure resolves the blob anyway and
+          // the partial file is offered as a download. Rejecting here routes it
+          // to the fallback below like any other recorder failure.
+          recorder.onerror = (e) => {
+            const detail = e?.error?.message || e?.error?.name || "unknown recorder error";
+            const err = new Error(`The recording failed mid-capture (${detail}). Trying the next format.`);
+            err.retryableRecorderError = true;
+            rej(err);
+          };
+          recorder.onstop = () => res(new Blob(chunks, { type: candidateMime }));
+        });
 
-      await seekVideo(video, 0);
-      await video.play();
-      // A 250ms timeslice: same accumulated output, but chunks flow during the
-      // capture instead of arriving only at stop, so a stalled recorder shows
-      // itself earlier.
-      recorder.start(250);
+        await seekVideo(video, 0);
+        await video.play();
+        setProgress(0);
+        try {
+          // A 250ms timeslice: same accumulated output, but chunks flow during
+          // the capture instead of arriving only at stop, so a stalled recorder
+          // shows itself earlier.
+          recorder.start(250);
+        } catch (e) {
+          const err = new Error(`This format was rejected before recording started (${e?.message || e}). Trying the next one.`);
+          err.retryableRecorderError = true;
+          throw err;
+        }
 
-      const duration = videoMeta.d;
-      const start = performance.now();
-      await new Promise((resolve) => {
-        const tick = () => {
-          const elapsed = (performance.now() - start) / 1000;
-          setProgress(Math.min(1, elapsed / duration));
-          if (video.ended || elapsed >= duration) resolve();
-          else requestAnimationFrame(tick);
-        };
-        tick();
-      });
+        const duration = videoMeta.d;
+        const start = performance.now();
+        const finished = new Promise((resolve) => {
+          const tick = () => {
+            const elapsed = (performance.now() - start) / 1000;
+            setProgress(Math.min(1, elapsed / duration));
+            if (video.ended || elapsed >= duration) resolve();
+            else requestAnimationFrame(tick);
+          };
+          tick();
+        });
+        try {
+          // If the recorder dies mid-capture, `done` rejects and this aborts
+          // the wait instead of sitting out the full duration for a dead take.
+          await Promise.race([finished, done]);
+        } finally {
+          // Guarded: stopping an already-inactive recorder throws
+          // InvalidStateError and masks the real failure with noise.
+          if (recorder.state !== "inactive") {
+            try {
+              recorder.stop();
+            } catch {
+              // Already handled through `done`.
+            }
+          }
+          video.pause();
+        }
+        return done;
+      };
 
-      // Guarded: if the recorder already errored and went inactive, stopping it
-      // throws InvalidStateError and masks the real failure with noise.
-      if (recorder.state !== "inactive") recorder.stop();
-      video.pause();
+      let blob = null;
+      let mime = null;
+      let encoderError = null;
+      for (const candidate of mimes) {
+        try {
+          blob = await recordAttempt(candidate);
+          mime = candidate;
+          encoderError = null;
+          break;
+        } catch (e) {
+          if (e && e.retryableRecorderError) {
+            encoderError = e;
+            continue;
+          }
+          throw e;
+        }
+      }
+      if (!blob) {
+        throw encoderError ?? new Error("Your browser does not support video recording.");
+      }
       video.loop = true;
       video.muted = true;
-      const blob = await done;
+      const ext = extensionForMime(mime);
 
       // Post-record validation. Everything below is about refusing to offer a
       // broken download: a file that fails here never gets a URL, a filename,
@@ -1344,35 +1392,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                     <option key={d.id} value={d.id}>{d.label}</option>
                   ))}
                 </select>
-                {/* 40px fixed, wrapping on its own terms. A `grid-cols-*` with
-                    `aspect-square` made these grow with the settings column,
-                    so a wider window silently grew every swatch. `shrink-0` is
-                    what makes them fixed instead. */}
-                <div className="space-y-2">
-                  <SubLabel>Frame color</SubLabel>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {[
-                      ["black", "#0d0d10", "Black"],
-                      ["white", "#f0f0f2", "White"],
-                    ].map(([id, color, title]) => (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => setFrameColor(id)}
-                        title={title}
-                        aria-label={title}
-                        aria-pressed={frameColor === id}
-                        style={{ background: color }}
-                        data-testid={`frame-color-${id}`}
-                        className={`h-10 w-10 shrink-0 rounded-full border-2 transition duration-150 ${
-                          frameColor === id
-                            ? "border-[color:var(--brand-indigo)] ring-2 ring-[color:var(--indigo-45)]"
-                            : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
-                        }`}
-                      />
-                    ))}
-                  </div>
-                </div>
               </div>
               <div className="space-y-2">
                 <SubLabel>Background</SubLabel>
@@ -2022,21 +2041,24 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
 
 // Local drawPhone port lives with the other canvas math so the preview loop
 // reads one module, not a second app.
-function drawPhone(ctx, x, y, w, h, dev, video, videoFit, videoScale, videoOffsetX, videoOffsetY, frameColor = "black") {
+// Frame color was removed as a control: every mockup renders the black frame.
+// The "white" branches below used to exist and are deliberately gone rather
+// than defaulted, so no future reader hunts for a control that sets them.
+function drawPhone(ctx, x, y, w, h, dev, video, videoFit, videoScale, videoOffsetX, videoOffsetY) {
   const radius = w * dev.radiusRatio;
   const bezel = w * dev.bezelRatio;
 
-  const bodyColor = frameColor === "white" ? "#f0f0f2" : dev.body;
-  const railColor = frameColor === "white" ? "#d8d8dc" : dev.rail;
+  const bodyColor = dev.body;
+  const railColor = dev.rail;
 
   ctx.save();
 
   ctx.save();
   roundRect(ctx, x, y, w, h, radius);
-  ctx.shadowColor = frameColor === "white" ? "rgba(0,0,0,0.25)" : "rgba(0,0,0,0.55)";
+  ctx.shadowColor = "rgba(0,0,0,0.55)";
   ctx.shadowBlur = w * 0.10;
   ctx.shadowOffsetY = w * 0.04;
-  ctx.fillStyle = frameColor === "white" ? "#e0e0e4" : "#000";
+  ctx.fillStyle = "#000";
   ctx.fill();
   ctx.restore();
 

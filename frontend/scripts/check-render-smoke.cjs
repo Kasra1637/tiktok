@@ -3417,19 +3417,30 @@ async function runDemoCtaChecks() {
         path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
         "utf8"
       );
-      // Three swatch groups: frame color, background, accent. All 40px and
-      // fixed — a grid with `aspect-square` grew them with the settings column.
+      // Two swatch groups: background and accent. Frame color was removed, so
+      // a third fixed-size group here means it came back. All 40px and fixed —
+      // a grid with `aspect-square` grew them with the settings column.
       const fixed = (src.match(/h-10 w-10 shrink-0/g) || []).length;
-      if (fixed < 3) {
+      if (fixed !== 2) {
         throw new Error(
-          `only ${fixed} of 3 swatch groups are fixed 40px. A stretchy grid makes ` +
-            "a wider window silently grow every swatch."
+          `found ${fixed} fixed-40px swatch groups, expected exactly 2 (background ` +
+            "and accent). A third is either the removed frame color returning, or " +
+            "a stretchy grid replacing a fixed row."
         );
       }
       if (/aspect-square overflow-hidden rounded-lg/.test(src)) {
         throw new Error("the background swatches are still a stretchy aspect-square grid");
       }
-      if ((src.match(/flex flex-wrap items-center gap-2/g) || []).length < 3) {
+      // Matched on control artifacts, not prose: the comment explaining the
+      // removal mentions frame color by name, and tripping on it would punish
+      // documentation for existing.
+      if (/frame-color-|setFrameColor|<SubLabel>Frame color/.test(src)) {
+        throw new Error(
+          "frame color is back. Every mockup renders the black frame; there is " +
+            "no control that sets anything else."
+        );
+      }
+      if ((src.match(/flex flex-wrap items-center gap-2/g) || []).length < 2) {
         throw new Error("the swatch rows are not flex-wrap with an 8px gap");
       }
       // Selected state has to be visible, and the ring must not use the default
@@ -3666,6 +3677,24 @@ async function runDemoCtaChecks() {
           throw new Error(
             `the export validation gate lost a piece: ${marker}. Without all of ` +
               "them a corrupt recording can reach the download link again."
+          );
+        }
+      }
+      // `isTypeSupported` passes configurations the encoder then rejects at
+      // record time (Baseline Level 3.1 cannot encode 1080x1920, but the check
+      // never looks at the resolution), so the exporter must walk the whole
+      // supported list instead of betting everything on the first answer. A
+      // recorder-level failure advances; anything else throws immediately.
+      for (const marker of [
+        "supportedExportMimes({ transparent, exportFormat })",
+        "for (const candidate of mimes)",
+        "retryableRecorderError",
+      ]) {
+        if (!src.includes(marker)) {
+          throw new Error(
+            `the encoder fallback lost a piece: ${marker}. Without it the export ` +
+              "fails outright on the first configuration the encoder rejects, " +
+              "instead of trying the next one."
           );
         }
       }
