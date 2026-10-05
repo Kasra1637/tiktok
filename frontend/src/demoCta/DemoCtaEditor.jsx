@@ -1506,21 +1506,26 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       {/* Sticky on the COLUMN, not on the preview card inside it. A sticky card
           bounded by a column that also holds the player and the export bar has
           almost no travel, which is exactly the bug this replaces: the video
-          scrolled off the top while the settings were still being adjusted. */}
-      <div className="min-w-0 space-y-3 lg:sticky lg:top-6">
-        <SectionCard title="Live preview" className="sticky top-0 z-10 !p-3 lg:top-6">
-          <div className="mb-2 flex items-center justify-end text-xs text-muted-foreground">
-            <span>{(PRESETS.find((p) => p.id === preset) || {}).label}</span>
-          </div>
+          scrolled off the top while the settings were still being adjusted.
+          The column caps at the viewport and scrolls internally when its
+          content (frame floor, player, export) exceeds it, so the frame never
+          has to shrink below ~400px tall to keep everything on screen. */}
+      <div className="min-w-0 space-y-3 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
+        <SectionCard
+          title="Live preview"
+          actions={<span className="text-xs text-muted-foreground">{(PRESETS.find((p) => p.id === preset) || {}).label}</span>}
+          className="!p-3"
+        >
           {/* A fixed 9:16 frame rather than a box that grows to the canvas.
               Portrait output filled the width of a flexible card and left black
               bars either side; a real aspect frame makes the preview the shape
               the export will be, and the empty state can share it.
-              `max-h` leaves room below for the player card and the export bar
-              so the export stays reachable without page scroll at 700px tall:
-              100vh minus card chrome, the player, and the export bar. */}
+              `.demo-cta-frame` sizes the frame from the column height — 70% of
+              the sticky column, floored at ~400px tall — so on laptop-height
+              screens the video is the priority and the player/export fit around
+              it instead of the frame shrinking to fit them. */}
           <div
-            className={`mx-auto flex aspect-[9/16] w-auto max-h-[45vh] max-w-full items-center justify-center overflow-hidden rounded-xl border lg:max-h-[calc(100vh-30rem)] ${
+            className={`demo-cta-frame mx-auto flex items-center justify-center overflow-hidden rounded-xl border ${
               videoUrl ? "border-[color:var(--hairline)] bg-black" : "border-dashed border-[color:var(--hairline-strong)] bg-secondary/20"
             }`}
           >
@@ -1545,28 +1550,31 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         </SectionCard>
 
         {videoUrl && videoMeta && (
-          <SectionCard title="Player">
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <div className="relative h-4 select-none">
+          <SectionCard title="Player" className="surface-compact" data-testid="demo-cta-player">
+            <div className="space-y-2">
+              {/* Scrubber first: tick marks and zoom zones stay clickable but lose
+                  their text labels — the readout lives once, beside the play
+                  button — so the whole block is a compact strip above the one
+                  control row instead of a tall timeline. */}
+              <div className="space-y-1" data-testid="demo-cta-scrubber">
+                <div className="relative h-3 select-none" role="group" aria-label="Seek to a time">
                   {ticks.map((t) => (
                     <button
                       key={t}
                       type="button"
                       onClick={() => handleSeek(t)}
-                      className="group absolute top-0 flex cursor-pointer flex-col items-center"
-                      style={{ left: `${(t / duration) * 100}%`, transform: "translateX(-50%)" }}
+                      title={formatTime(t)}
+                      aria-label={`Seek to ${formatTime(t)}`}
+                      className="group absolute top-0 flex h-3 w-4 -translate-x-1/2 cursor-pointer items-start justify-center"
+                      style={{ left: `${(t / duration) * 100}%` }}
                     >
-                      <div className="h-2 w-px bg-muted-foreground/30 transition group-hover:bg-muted-foreground/60" />
-                      <span className="mt-0.5 font-mono text-xs tabular-nums leading-none text-muted-foreground transition group-hover:text-muted-foreground">
-                        {formatTime(t)}
-                      </span>
+                      <span className="h-2 w-px bg-muted-foreground/30 transition group-hover:bg-muted-foreground/60" />
                     </button>
                   ))}
                 </div>
 
                 {zoomKeyframes.length > 0 && (
-                  <div className="relative h-3 overflow-hidden rounded-full bg-secondary/60">
+                  <div className="relative h-2 overflow-hidden rounded-full bg-secondary/60" role="img" aria-label={`${zoomKeyframes.length} zoom ${zoomKeyframes.length === 1 ? "lock" : "locks"}`}>
                     {sortedKeyframes.map((seg, i, sorted) => {
                       const end = sorted[i + 1]?.time ?? duration;
                       return (
@@ -1578,11 +1586,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                             width: `${((end - seg.time) / duration) * 100}%`,
                           }}
                           title={`${formatTime(seg.time)} → ${formatTime(end)}: ${seg.scale.toFixed(2)}x`}
-                        >
-                          {/* No inline label: at 12px a zoom readout overflows these
-                              narrow zone strips, so the value lives in the title
-                              tooltip instead. */}
-                        </div>
+                        />
                       );
                     })}
                   </div>
@@ -1626,14 +1630,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                     style={{ left: `calc(${duration > 0 ? (currentTime / duration) * 100 : 0}% - 8px)` }}
                   />
                 </div>
-
-                <div className="flex items-center justify-between px-0.5">
-                  <span className="font-mono text-xs tabular-nums text-muted-foreground">0:00.0</span>
-                  <span className="font-mono text-xs tabular-nums text-muted-foreground">{formatTime(duration)}</span>
-                </div>
               </div>
 
-<div className="flex items-center gap-2 pt-1">
+                {/* Single control row: transport on the left, Zoom Lock on the
+                    right. The time readout moved up here from below the
+                    scrubber so nothing reads twice. */}
+                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2">
                   <TransportButton
                     label={isPlaying ? "Pause" : "Play"}
                     onClick={togglePlayPause}
@@ -1641,7 +1643,35 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   >
                     {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                   </TransportButton>
-                  <div className="flex items-baseline gap-1.5">
+                  <TransportButton
+                    label="Back 1 second"
+                    onClick={() => handleSeek(Math.max(0, currentTime - 1))}
+                    testId="transport-back-1s"
+                  >
+                    <span className="font-mono text-xs">−1s</span>
+                  </TransportButton>
+                  <TransportButton
+                    label="Back 1 frame (1/30s)"
+                    onClick={() => handleSeek(Math.max(0, currentTime - 1 / 30))}
+                    testId="transport-back-frame"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </TransportButton>
+                  <TransportButton
+                    label="Forward 1 frame (1/30s)"
+                    onClick={() => handleSeek(Math.min(duration, currentTime + 1 / 30))}
+                    testId="transport-forward-frame"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </TransportButton>
+                  <TransportButton
+                    label="Forward 1 second"
+                    onClick={() => handleSeek(Math.min(duration, currentTime + 1))}
+                    testId="transport-forward-1s"
+                  >
+                    <span className="font-mono text-xs">+1s</span>
+                  </TransportButton>
+                  <div className="flex items-baseline gap-1.5 px-1">
                     <span className="font-mono text-sm font-medium tabular-nums tracking-tight">
                       {formatTime(currentTime)}
                     </span>
@@ -1651,58 +1681,32 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                     </span>
                   </div>
                   <div className="ml-auto flex items-center gap-1.5">
-                    <TransportButton
-                      label="Back 1 second"
-                      onClick={() => handleSeek(Math.max(0, currentTime - 1))}
-                      testId="transport-back-1s"
-                    >
-                      <span className="font-mono text-xs">−1s</span>
-                    </TransportButton>
-                    <TransportButton
-                      label="Back 1 frame (1/30s)"
-                      onClick={() => handleSeek(Math.max(0, currentTime - 1 / 30))}
-                      testId="transport-back-frame"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </TransportButton>
-                    <TransportButton
-                      label="Forward 1 frame (1/30s)"
-                      onClick={() => handleSeek(Math.min(duration, currentTime + 1 / 30))}
-                      testId="transport-forward-frame"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </TransportButton>
-                    <TransportButton
-                      label="Forward 1 second"
-                      onClick={() => handleSeek(Math.min(duration, currentTime + 1))}
-                      testId="transport-forward-1s"
-                    >
-                      <span className="font-mono text-xs">+1s</span>
-                    </TransportButton>
-                  </div>
-                </div>
-
-              <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="eyebrow">Zoom Lock</span>
-                  {zoomKeyframes.length > 0 && (
-                    <span className="text-xs text-muted-foreground">
-                      {zoomKeyframes.length} {zoomKeyframes.length === 1 ? "keyframe" : "keyframes"}
-                    </span>
-                  )}
-                  <span className="ml-auto flex items-center gap-1.5">
-                    <Button type="button" variant="secondary" size="sm" onClick={handleCaptureZoomLock}>
-                      + Lock at {formatTime(currentTime)}
+                    <span className="eyebrow">Zoom Lock</span>
+                    {zoomKeyframes.length > 0 && (
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {zoomKeyframes.length}
+                      </span>
+                    )}
+                    <Button type="button" variant="secondary" size="sm" onClick={handleCaptureZoomLock} title={`Lock the current zoom at ${formatTime(currentTime)}`}>
+                      + Lock
                     </Button>
                     {zoomKeyframes.length > 0 && (
                       <Button type="button" variant="ghost" size="sm" onClick={handleClearZoomKeyframes}>
                         Clear
                       </Button>
                     )}
-                  </span>
+                  </div>
                 </div>
+
+                {/* Locked segments disclose below the row so the card stays one
+                    scrubber plus one row until someone actually locks zooms. */}
                 {sortedKeyframes.length > 0 && (
-                  <div className="space-y-1.5">
+                  <details className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-1.5" data-testid="demo-cta-keyframes">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+                      <span>{sortedKeyframes.length} locked {sortedKeyframes.length === 1 ? "segment" : "segments"}</span>
+                      <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
+                    </summary>
+                    <div className="space-y-1.5 pb-1 pt-2">
                     {sortedKeyframes[0].time > 0.01 && (
                       <div className="flex items-center gap-2 rounded-lg border border-[color:var(--hairline)] bg-secondary/40 px-3 py-2">
                         <span className="font-mono text-xs text-muted-foreground">0:00.0 → {formatTime(sortedKeyframes[0].time)} • default (1.00x)</span>
@@ -1735,14 +1739,14 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                     <p className="pt-0.5 text-xs text-muted-foreground">
                       Pause → seek to exact time → adjust zoom → Lock. Each segment displays its locked zoom in the preview and export.
                     </p>
-                  </div>
+                    </div>
+                  </details>
                 )}
               </div>
-            </div>
           </SectionCard>
         )}
 
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[color:var(--hairline)] bg-background/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur lg:sticky lg:bottom-4 lg:rounded-2xl lg:border lg:bg-card/90 lg:px-4 lg:py-3">
+        <div className="demo-cta-export fixed inset-x-0 bottom-0 z-40 border-t border-[color:var(--hairline)] bg-background/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur lg:sticky lg:bottom-4 lg:rounded-2xl lg:border lg:bg-card/90 lg:px-4 lg:py-3">
           <Button
             type="button"
             variant="brand"

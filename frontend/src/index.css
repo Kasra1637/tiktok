@@ -288,6 +288,31 @@ select option:checked {
     padding: 16px;
 }
 
+/* Demo + CTA sticky-column geometry. The right column caps at the viewport
+ * minus its top/bottom offsets (`lg:max-h-[calc(100vh-3rem)]` in JSX), and the
+ * frame takes 70% of that height — width derived from height so the 9:16 ratio
+ * never distorts, clamped to the column width when the column is the limit.
+ * 225px wide is 400px tall at 9:16: the floor below which the column scrolls
+ * instead of the frame shrinking further. Mobile keeps the old 45vh budget.
+ *
+ * Below 700px tall the export bar drops its desktop sticky pin and sits in
+ * flow directly below the player, so the short column scrolls as one piece
+ * rather than pinning the button over a frame it can no longer fit beside. */
+.demo-cta-frame {
+    width: min(100%, calc(45vh * 9 / 16));
+    aspect-ratio: 9 / 16;
+}
+@media (min-width: 1024px) {
+    .demo-cta-frame {
+        width: min(100%, max(225px, calc((100vh - 3rem) * 0.7 * 9 / 16)));
+    }
+}
+@media (min-width: 1024px) and (max-height: 699px) {
+    .demo-cta-export {
+        position: static;
+    }
+}
+
 /* Interactive lift for cards. Transform + shadow only — never `all`. */
 .surface-interactive {
     transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1),

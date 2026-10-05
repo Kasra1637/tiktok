@@ -3072,14 +3072,92 @@ async function runDemoCtaChecks() {
           }
           // Fixed bar on small screens, sticky in-column on desktop. Either
           // class missing means one of the two viewports loses the button.
+          // (Below 700px tall, index.css drops the desktop pin so the bar sits
+          // in flow and the short column scrolls as one piece — the classes
+          // stay so this still asserts the >=700px contract.)
           if (!/fixed inset-x-0 bottom-0/.test(html) || !/lg:sticky lg:bottom-4/.test(html)) {
             throw new Error(
               "the export bar is not fixed on mobile and sticky on desktop. One " +
                 "of the two viewports scrolls it out of reach."
             );
           }
+          // The frame sizes itself from the column height (70%, floored), not
+          // from a fixed rem budget — the old `100vh-30rem` cap is what shrank
+          // the video on laptop-height screens.
+          if (!/demo-cta-frame/.test(html) || /100vh-30rem/.test(html)) {
+            throw new Error(
+              "the preview frame is not column-sized. The fixed-rem cap shrank " +
+                "the video to fit the player instead of the player fitting " +
+                "around the video."
+            );
+          }
         }
       );
+    }
+  );
+
+  await check(
+    "the player stacks scrubber, one control row, then export",
+    async () => {
+      // The player only mounts once a real clip supplies metadata, and jsdom
+      // has no video pipeline — so no DOM here ever contains it. This asserts
+      // the order in source instead: scrubber strip, then the single
+      // transport + Zoom Lock row, then export. A row that drifted above the
+      // scrubber or a player that drifted below export means the compact
+      // layout regressed, and no render test would notice.
+      const src = fs.readFileSync(
+        path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
+        "utf8"
+      );
+      const order = [
+        "demo-cta-player",
+        "demo-cta-scrubber",
+        "transport-play",
+        '<span className="eyebrow">Zoom Lock</span>',
+        "demo-cta-export",
+      ].map((m) => src.indexOf(m));
+      if (order.some((i) => i === -1)) {
+        throw new Error("the player card, scrubber, transport, Zoom Lock, or export is missing from source");
+      }
+      if (!order.every((v, i, a) => i === 0 || a[i - 1] < v)) {
+        throw new Error(
+          "the player is out of order in source. Scrubber first, then the " +
+            "single transport + Zoom Lock row, then export — anything else " +
+            "pushes the frame or the button out of reach."
+        );
+      }
+      if (/On screen:|0:00\.0 → \{formatTime\(duration\)\}|justify-between px-0\.5/.test(src)) {
+        throw new Error(
+          "a removed duplicate readout is back in the player. Time reads once, " +
+            "in the control row — the scrubber strip carries no text."
+        );
+      }
+    }
+  );
+
+  await check(
+    "short viewports scroll the column instead of shrinking the frame",
+    async () => {
+      // jsdom has no viewport to shrink, so this asserts the contract in the
+      // stylesheet: a ~400px frame floor and a static export below 700px tall.
+      // Without both, a short laptop window either crushes the video or pins
+      // the button over a column it no longer fits beside.
+      const css = fs.readFileSync(
+        path.join(__dirname, "..", "src", "index.css"),
+        "utf8"
+      );
+      if (!/\.demo-cta-frame[\s\S]*?max\(225px/.test(css)) {
+        throw new Error(
+          "the preview frame has no ~400px floor (225px wide at 9:16). Below it " +
+            "the column must scroll rather than the frame shrinking further."
+        );
+      }
+      if (!/max-height:\s*699px[\s\S]*?\.demo-cta-export[\s\S]*?position:\s*static/.test(css)) {
+        throw new Error(
+          "the export bar has no short-viewport escape. Below 700px tall it " +
+            "must sit in flow under the player so the column scrolls as one piece."
+        );
+      }
     }
   );
 
