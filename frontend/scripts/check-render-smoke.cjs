@@ -4270,6 +4270,60 @@ await check(
       }
     }
   );
+await check(
+    "both phone renderers share one fit, and neither paints a black void",
+    async () => {
+      // The arithmetic itself is unit-tested in check-frontend-logic against
+      // demoCta/fit.js. What is pinned HERE is the thing that let the bug exist:
+      // two renderers, two copies of the same maths, one of which implemented
+      // "fill" and one of which did not. So this asserts there is only one copy.
+      const editor = fs.readFileSync(
+        path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
+        "utf8"
+      );
+      const hand = fs.readFileSync(
+        path.join(__dirname, "..", "src", "demoCta", "handView.js"),
+        "utf8"
+      );
+      for (const [name, src] of [["DemoCtaEditor", editor], ["handView", hand]]) {
+        if (!src.includes("fitVideoToScreen(")) {
+          throw new Error(
+            `${name} does not use the shared fitVideoToScreen. A private copy of ` +
+              "this arithmetic is how fill worked in one view and did nothing in the other."
+          );
+        }
+        if (/videoFit === "contain"\s*\n?\s*\?/.test(src) || /Math\.(min|max)\(sw \/ vw, sh \/ vh\)/.test(src)) {
+          throw new Error(
+            `${name} has its own inline fit arithmetic again. Keep it in fit.js.`
+          );
+        }
+      }
+      // The screen behind the footage was hard-coded to #000, which is what
+      // turned any uncovered strip into a black band that read as a broken
+      // picture rather than as a deliberate pad.
+      for (const [name, src] of [["DemoCtaEditor", editor], ["handView", hand]]) {
+        if (/fillStyle = "#000";\s*\n\s*ctx\.fillRect\(s[xy], s[xy], sw, sh\)/.test(src)) {
+          throw new Error(
+            `${name} paints the screen pure black again. An uncovered strip has to ` +
+              "read as wallpaper, not as a blank picture."
+          );
+        }
+      }
+      // And the founder needs to be able to tell the three modes apart: "fill"
+      // read as a synonym for "cover" is the whole reason this went unnoticed.
+      if (!/VIDEO_FIT_HINTS/.test(editor)) {
+        throw new Error(
+          "the Video crop group does not explain what each mode does. Fill and " +
+            "Cover look identical until you have seen them side by side."
+        );
+      }
+      for (const mode of ["cover", "contain", "fill"]) {
+        if (!new RegExp(`${mode}: "`).test(editor.slice(editor.indexOf("VIDEO_FIT_HINTS")))) {
+          throw new Error(`VIDEO_FIT_HINTS is missing the "${mode}" entry.`);
+        }
+      }
+    }
+  );
 }
 
 function stepPill(ctx, label) {

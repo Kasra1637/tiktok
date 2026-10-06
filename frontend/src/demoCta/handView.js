@@ -7,6 +7,7 @@
  */
 
 import { DEFAULT_SCREEN, ENVIRONMENTS, HAND_IMAGE_URL } from "./constants";
+import { fitVideoToScreen } from "./fit";
 
 // Display corner radius and the notch cut-out, both measured from the same photo.
 const SCREEN_RADIUS_NORM = 0.032;
@@ -220,6 +221,7 @@ export function drawHandView(
   handZoom = 1,
   handPanX = 0,
   handPanY = 0,
+  screenBase = "#000",
 ) {
   const SCREEN = screenOverride ?? DEFAULT_SCREEN;
   const env = ENVIRONMENTS.find((e) => e.id === envId) ?? ENVIRONMENTS[0];
@@ -294,27 +296,30 @@ export function drawHandView(
     ctx.save();
     roundedRect(ctx, sx, sy, sw, sh, sr);
     ctx.clip();
-    ctx.fillStyle = "#000";
+    ctx.fillStyle = screenBase || "#000";
     ctx.fillRect(sx, sy, sw, sh);
 
     const vw = video.videoWidth;
     const vh = video.videoHeight;
-    let dw;
-    let dh;
-    if (videoFit === "fill") {
-      dw = sw;
-      dh = sh;
-    } else {
-      const base = videoFit === "contain"
-        ? Math.min(sw / vw, sh / vh)
-        : Math.max(sw / vw, sh / vh);
-      const s = base * videoScale;
-      dw = vw * s;
-      dh = vh * s;
+    // Shared with the floating phone, so the two cannot drift again — which is
+    // how "fill" ended up working in one view and silently doing nothing in the
+    // other.
+    const box = fitVideoToScreen({
+      fit: videoFit,
+      videoW: vw,
+      videoH: vh,
+      screenW: sw,
+      screenH: sh,
+      scale: videoScale,
+    });
+    // A null box skips the drawImage and nothing else — the notch below still
+    // belongs on the screen.
+    if (box) {
+      const { dw, dh } = box;
+      const ox = (videoOffsetX / 100) * Math.max(0, (dw - sw) / 2);
+      const oy = (videoOffsetY / 100) * Math.max(0, (dh - sh) / 2);
+      ctx.drawImage(video, sx + (sw - dw) / 2 + ox, sy + (sh - dh) / 2 + oy, dw, dh);
     }
-    const ox = (videoOffsetX / 100) * Math.max(0, (dw - sw) / 2);
-    const oy = (videoOffsetY / 100) * Math.max(0, (dh - sh) / 2);
-    ctx.drawImage(video, sx + (sw - dw) / 2 + ox, sy + (sh - dh) / 2 + oy, dw, dh);
 
     // Keep the phone's notch reading on top of the footage.
     const nx = handX + NOTCH.x * drawW;

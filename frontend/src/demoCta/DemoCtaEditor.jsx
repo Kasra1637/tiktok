@@ -53,6 +53,7 @@ import {
   supportedExportMimes,
 } from "./constants";
 import { drawEndCard, drawHookOverlay, getEndCardBounds, getHookBounds, HOOK_FONT } from "./overlays";
+import { fitVideoToScreen } from "./fit";
 import { drawHandView, preloadHandViewImages } from "./handView";
 import { captureZoomLock, getEffectiveZoom, removeZoomKeyframe, sortKeyframes, tickInterval } from "./zoom";
 
@@ -116,6 +117,17 @@ function probeRecordingPlays(blob) {
 // ui/input.jsx uses --indigo-35 border with a --indigo-15 ring. The page had
 // three more `rounded-[10px]` callers (transport buttons, the view-mode
 // segmented control, the platform preset); all four are now rounded-xl.
+// What each crop mode does to the clip, in words, because the three names look
+// interchangeable and are not. Cover crops, Contain pads, Fill stretches — and
+// only Fill exists to guarantee no uncovered strip, which is what it now does.
+// Copy says the trade-off rather than promising a result, so nobody picks a
+// mode expecting behaviour it does not have.
+const VIDEO_FIT_HINTS = {
+  cover: "Fills the screen and crops the overflow. Nothing blank is left.",
+  contain: "Shows the whole clip and pads the difference.",
+  fill: "Stretches the clip to the screen. No bars, but the shape can distort.",
+};
+
 const CONTROL_CLASS =
   "h-10 w-full appearance-none rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 text-sm text-foreground shadow-[var(--shadow-xs)] transition-colors outline-none hover:border-[color:var(--hairline-strong)] focus-visible:border-[color:var(--indigo-35)] focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-15)] disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -675,17 +687,22 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
 
       if (viewMode === "hand" && video) {
         const t = performance.now() / 1000;
-        drawHandView(ctx, cw, ch, video, envBg, t, videoFit, ez.vScale, ez.vOffX, ez.vOffY, { x: screenX, y: screenY, w: screenW, h: screenH }, ez.hZoom, ez.hPanX, ez.hPanY);
+        drawHandView(ctx, cw, ch, video, envBg, t, videoFit, ez.vScale, ez.vOffX, ez.vOffY, { x: screenX, y: screenY, w: screenW, h: screenH }, ez.hZoom, ez.hPanX, ez.hPanY, palette?.bg2);
         drawOverlays();
         rafRef.current = requestAnimationFrame(draw);
         return;
       }
 
       const isFloat = bg !== "transparent";
+      // Hoisted out of the float branch: both branches draw the phone, and both
+      // need the palette for the screen behind the footage. Left inside, the
+      // second call site referenced an identifier that did not exist in its
+      // scope — and `palette?.bg2` does not save that, optional chaining only
+      // guards a declared binding that happens to be nullish.
+      const palette = COLOR_PALETTES[bg] || COLOR_PALETTES.lavender;
 
       if (isFloat) {
         const t = performance.now() / 1000;
-        const palette = COLOR_PALETTES[bg] || COLOR_PALETTES.lavender;
 
         const bgGrad = ctx.createRadialGradient(cw * 0.5, ch * 0.4, 0, cw * 0.5, ch * 0.5, cw * 0.7);
         bgGrad.addColorStop(0, palette.bg2);
@@ -947,7 +964,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         ctx.transform(1, tiltX * 0.8, tiltY * 0.6, 1, 0, 0);
 
         ctx.translate(-drawW / 2, -drawH / 2);
-        drawPhone(ctx, 0, 0, drawW, drawH, dev, video, videoFit, ez.vScale, ez.vOffX, ez.vOffY);
+        drawPhone(ctx, 0, 0, drawW, drawH, dev, video, videoFit, ez.vScale, ez.vOffX, ez.vOffY, palette?.bg2);
         ctx.restore();
 
         ctx.save();
@@ -969,7 +986,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         const drawH = phoneH * fit;
         const x = (cw - drawW) / 2;
         const y = (ch - drawH) / 2;
-        drawPhone(ctx, x, y, drawW, drawH, dev, video, videoFit, ez.vScale, ez.vOffX, ez.vOffY);
+        drawPhone(ctx, x, y, drawW, drawH, dev, video, videoFit, ez.vScale, ez.vOffX, ez.vOffY, palette?.bg2);
       }
       drawOverlays();
       rafRef.current = requestAnimationFrame(draw);
@@ -1784,6 +1801,15 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 </select>
                 <ResetButton onClick={() => { setVideoFit("cover"); setVideoScale(1); setVideoOffsetX(0); setVideoOffsetY(0); }}>Reset</ResetButton>
               </div>
+              {/* What each mode actually does, and the source size it is doing it
+                  to. "Fill" reads as a synonym for "Cover" until you have seen
+                  them side by side, and picking Fill to remove a blank strip
+                  used to change nothing at all. Naming the consequence is the
+                  difference between a control and a guess. */}
+              <p className="text-xs text-muted-foreground">
+                {VIDEO_FIT_HINTS[videoFit] || VIDEO_FIT_HINTS.cover}
+                {videoMeta ? ` Source ${videoMeta.w}×${videoMeta.h}.` : ""}
+              </p>
               <ControlSlider label="Zoom" value={videoScale} min={RANGES.videoScale.min} max={RANGES.videoScale.max} step={RANGES.videoScale.step} onChange={setVideoScale} format={(v) => `${v.toFixed(2)}x`} />
               <ControlSlider label="H offset" value={videoOffsetX} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => setVideoOffsetX(Math.round(v))} format={(v) => `${Math.round(v)}%`} />
               <ControlSlider label="V offset" value={videoOffsetY} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => setVideoOffsetY(Math.round(v))} format={(v) => `${Math.round(v)}%`} />
@@ -2195,7 +2221,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
 // Frame color was removed as a control: every mockup renders the black frame.
 // The "white" branches below used to exist and are deliberately gone rather
 // than defaulted, so no future reader hunts for a control that sets them.
-function drawPhone(ctx, x, y, w, h, dev, video, videoFit, videoScale, videoOffsetX, videoOffsetY) {
+function drawPhone(ctx, x, y, w, h, dev, video, videoFit, videoScale, videoOffsetX, videoOffsetY, screenBase = "#000") {
   const radius = w * dev.radiusRatio;
   const bezel = w * dev.bezelRatio;
 
@@ -2255,25 +2281,41 @@ function drawPhone(ctx, x, y, w, h, dev, video, videoFit, videoScale, videoOffse
   ctx.save();
   roundRect(ctx, sx, sy, sw, sh, sr);
   ctx.clip();
-  ctx.fillStyle = "#000";
+  // The screen behind the footage is the phone's wallpaper, not a void. It was
+  // hard-coded to #000, so any strip the clip did not cover — Contain, a Zoom
+  // below 1, an offset, or a source taller than this screen — rendered as a
+  // black band that read as a broken picture rather than as deliberate. The
+  // palette is what the founder chose for the surrounding canvas, so the screen
+  // agreeing with it looks like one image instead of a video pasted on black.
+  ctx.fillStyle = screenBase || "#000";
   ctx.fillRect(sx, sy, sw, sh);
 
   if (video.readyState >= 2) {
-    const vw = video.videoWidth;
-    const vh = video.videoHeight;
-    let baseScale;
-    if (videoFit === "contain") baseScale = Math.min(sw / vw, sh / vh);
-    else baseScale = Math.max(sw / vw, sh / vh);
-    const s = baseScale * videoScale;
-    const dw = vw * s;
-    const dh = vh * s;
-    const maxOffX = Math.max(0, (dw - sw) / 2);
-    const maxOffY = Math.max(0, (dh - sh) / 2);
-    const offX = (videoOffsetX / 100) * maxOffX;
-    const offY = (videoOffsetY / 100) * maxOffY;
-    const dx = sx + (sw - dw) / 2 + offX;
-    const dy = sy + (sh - dh) / 2 + offY;
-    ctx.drawImage(video, dx, dy, dw, dh);
+    // One shared fit implementation — see demoCta/fit.js. This used to be a
+    // local `contain ? min : max`, which meant "fill" fell through to cover and
+    // did nothing, while the hand-held phone's copy of the same arithmetic did
+    // implement it. Same control, two behaviours.
+    const box = fitVideoToScreen({
+      fit: videoFit,
+      videoW: video.videoWidth,
+      videoH: video.videoHeight,
+      screenW: sw,
+      screenH: sh,
+      scale: videoScale,
+    });
+    // No early return on a null box: the notch and the screen sheen below still
+    // belong on a screen with nothing playing in it. Skipping the drawImage is
+    // the whole of the degenerate case.
+    if (box) {
+      const { dw, dh } = box;
+      const maxOffX = Math.max(0, (dw - sw) / 2);
+      const maxOffY = Math.max(0, (dh - sh) / 2);
+      const offX = (videoOffsetX / 100) * maxOffX;
+      const offY = (videoOffsetY / 100) * maxOffY;
+      const dx = sx + (sw - dw) / 2 + offX;
+      const dy = sy + (sh - dh) / 2 + offY;
+      ctx.drawImage(video, dx, dy, dw, dh);
+    }
   }
 
   ctx.fillStyle = "#000";

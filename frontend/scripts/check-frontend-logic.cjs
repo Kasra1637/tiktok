@@ -771,6 +771,72 @@ check("storage that throws still lets the tour be treated as unseen, then seen",
     return ST.hasSeenTour(seen, "create");
   })());
 
+// How a clip is fitted to the phone screen. The bug these exist for: "fill" was
+// unreachable in the floating phone because the only branch was
+// `contain ? min : max`, so the one control whose purpose is "no bars" silently
+// behaved like cover. The hand-held phone implemented it. These assert the
+// behaviour numerically so the two renderers cannot disagree again.
+const FIT = loadModule(path.resolve(__dirname, "..", "src", "demoCta", "fit.js"));
+// A 9:16 clip in a real s24 screen area: taller than the clip, so cover crops
+// the sides, contain pads top and bottom, and fill stretches.
+const SCREEN = { screenW: 916, screenH: 2083 };
+const CLIP = { videoW: 1080, videoH: 1920 };
+const fitOf = (fit, extra = {}) =>
+  FIT.fitVideoToScreen({ fit, ...CLIP, ...SCREEN, scale: 1, ...extra });
+
+check("fill stretches to the screen box instead of behaving like cover",
+  (() => {
+    const f = fitOf("fill");
+    // The whole point: exactly the screen, no gap, aspect ignored.
+    return f.dw === SCREEN.screenW && f.dh === SCREEN.screenH;
+  })());
+check("fill is genuinely different from cover for a mismatched aspect",
+  (() => {
+    // If these were equal, the bug is back. Cover overflows on width; fill does
+    // not overflow at all.
+    const cover = fitOf("cover");
+    const fill = fitOf("fill");
+    return cover.dw > SCREEN.screenW && fill.dw === SCREEN.screenW;
+  })());
+check("cover fills the screen and contain shows the whole clip",
+  (() => {
+    const cover = fitOf("cover");
+    const contain = fitOf("contain");
+    const coversBoth = cover.dw >= SCREEN.screenW && cover.dh >= SCREEN.screenH;
+    const containsBoth = contain.dw <= SCREEN.screenW && contain.dh <= SCREEN.screenH;
+    return coversBoth && containsBoth && contain.dw === SCREEN.screenW;
+  })());
+check("only contain leaves the screen uncovered",
+  (() => {
+    const gap = (fit) =>
+      FIT.leavesUncoveredScreen({ fit, ...CLIP, ...SCREEN, scale: 1 });
+    return gap("cover") === false && gap("fill") === false && gap("contain") === true;
+  })());
+check("an unknown fit mode falls back to cover rather than breaking",
+  (() => {
+    const weird = fitOf("nonsense");
+    return weird.dw === fitOf("cover").dw && weird.dh === fitOf("cover").dh;
+  })());
+check("zoom applies in every mode, and below 1 re-opens a gap in cover",
+  (() => {
+    const coverZoomedOut = fitOf("cover", { scale: 0.85 });
+    const fillZoomedOut = fitOf("fill", { scale: 0.85 });
+    const zoomed = coverZoomedOut.dw < fitOf("cover").dw;
+    return zoomed
+      && fillZoomedOut.dw === SCREEN.screenW * 0.85
+      && FIT.leavesUncoveredScreen({ fit: "cover", ...CLIP, ...SCREEN, scale: 0.85 }) === true;
+  })());
+check("missing dimensions produce no box rather than NaN geometry",
+  [{}, { videoW: 0, videoH: 1920 }, { videoW: 1080, videoH: 0 },
+   { ...CLIP, screenW: 0 }, { ...CLIP, screenH: 0 }].every((bad) =>
+    FIT.fitVideoToScreen({ fit: "cover", scale: 1, ...bad }) === null));
+check("a nonsense zoom is treated as 1 rather than blanking the screen",
+  (() => {
+    const zero = fitOf("cover", { scale: 0 });
+    const nan = fitOf("cover", { scale: NaN });
+    return zero.dw === fitOf("cover").dw && nan.dw === fitOf("cover").dw;
+  })());
+
 console.log("\n" + "=".repeat(70));
 if (failures.length === 0) {
   console.log("All frontend length/section logic behaves correctly.");
