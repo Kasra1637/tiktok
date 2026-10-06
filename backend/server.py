@@ -8021,9 +8021,9 @@ _DOWNLOAD_HEADERS = {
 }
 
 
-def _is_complete_mp4(path: Path, probe_bytes: int = 4096) -> bool:
+def _is_complete_mp4(path: Path) -> bool:
     """
-    Whether a file at least claims to be a finished MP4.
+    Whether a file at least claims to be a finished, playable MP4.
 
     A `moov` atom is the index every player seeks through, and for a
     non-fragmented file the provider writes it at the end -- so its absence is
@@ -8031,24 +8031,20 @@ def _is_complete_mp4(path: Path, probe_bytes: int = 4096) -> bool:
     small read and is the difference between "re-fetch this" and "hand the
     founder an unplayable file and call the render saved".
 
-    Not a full validity check and not pretending to be: it cannot detect a file
-    that carries a moov but is missing media data. It catches the failure that
-    actually happens here, which is a truncated download.
+    This used to carry its own probe, and that is how it went wrong twice. The
+    probe searched the first and last 4KB for the bytes "moov", but those four
+    bytes are the START of a box whose body is the sample tables -- tens of
+    kilobytes on a real render -- so on any file big enough to matter the tag
+    fell outside the window and a finished, playable clip was reported as
+    truncated. It also had no way to notice a file that kept its index but lost
+    its media.
+
+    Both problems are storage_service's to solve, so this delegates rather than
+    keeping a second copy that can drift again. It also means the download gate,
+    the freshness check, the retry pre-check and the upload gate all agree by
+    construction, rather than four call sites agreeing by luck.
     """
-    try:
-        if not path.is_file() or path.stat().st_size == 0:
-            return False
-        size = path.stat().st_size
-        with open(path, "rb") as fh:
-            head = fh.read(probe_bytes)
-            if size <= probe_bytes:
-                tail = b""
-            else:
-                fh.seek(-probe_bytes, os.SEEK_END)
-                tail = fh.read(probe_bytes)
-        return b"ftyp" in head and b"moov" in (head + tail)
-    except OSError:
-        return False
+    return storage_service.is_usable_video(path)
 
 
 def _http_video_source(value) -> str:

@@ -153,37 +153,125 @@ def video_content_type(path: Path) -> Optional[str]:
     return None
 
 
+def mp4_has_moov(path: Path) -> bool:
+    """
+    Whether a file carries a top-level `moov` atom, found by walking the box
+    chain rather than probing fixed windows.
+
+    Why not a head/tail probe: `moov` is the sample index every player seeks
+    through, and for a non-fragmented file the provider writes it LAST. The
+    four bytes spelling "moov" are the first four bytes *of that atom*, so for a
+    real render -- whose index runs to tens of kilobytes of sample tables -- the
+    tag sits well before the last 4KB of the file. A tail probe therefore cannot
+    see it, and every finished render was being rejected as "truncated" while
+    being perfectly playable. One of those renders, with a 9KB index, is the
+    reproduction in the tests for this function.
+
+    Walking by declared size reads 8 bytes per box regardless of file size, so
+    this stays cheap on a 50MB clip.
+
+    Handles the three awkward forms the format allows: a 64-bit size (the 32-bit
+    field reads 1 and the real length follows in 8 bytes), a size of 0 meaning
+    "extends to end of file", and a truncated or nonsensical size, which stops
+    the walk rather than trusting it.
+    """
+    try:
+        size = Path(path).stat().st_size
+    except OSError:
+        return False
+    if size < 8:
+        return False
+
+    offset = 0
+    try:
+        with Path(path).open("rb") as stream:
+            while offset + 8 <= size:
+                stream.seek(offset)
+                header = stream.read(8)
+                if len(header) < 8:
+                    return False
+                box_size = int.from_bytes(header[0:4], "big")
+                box_type = header[4:8]
+                if box_type == b"moov":
+                    return True
+                header_len = 8
+                if box_size == 1:
+                    if offset + 16 > size:
+                        return False
+                    extended = stream.read(8)
+                    if len(extended) < 8:
+                        return False
+                    box_size = int.from_bytes(extended, "big")
+                    header_len = 16
+                elif box_size == 0:
+                    box_size = size - offset
+                if box_size < header_len:
+                    # A box cannot be smaller than its own header. Trusting it
+                    # here would let offset go backwards or stand still and spin.
+                    return False
+                offset += box_size
+    except OSError:
+        return False
+    return False
+
+
+def _probe_decodable_video_packets(path: Path) -> Optional[bool]:
+    """
+    Whether ffprobe counts decodable video packets, or None if it cannot say.
+
+    None is a real answer and means "no opinion": ffprobe missing, not
+    executable, or timed out. Callers decide what an unknown is worth, because
+    the two containers do not treat it the same way (see is_usable_video).
+    """
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-count_packets", "-show_entries", "stream=nb_read_packets",
+             "-of", "json", str(path)],
+            capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+    try:
+        streams = json.loads(result.stdout or "{}").get("streams", [])
+    except ValueError:
+        return None
+    if result.returncode != 0 or not streams:
+        return False
+    try:
+        return int(streams[0].get("nb_read_packets") or 0) > 0
+    except (TypeError, ValueError):
+        return None
+
+
 def is_usable_video(path: Path) -> bool:
     """Reject incomplete containers without relying on a filename suffix."""
     kind = video_content_type(path)
     if kind == "video/mp4":
-        try:
-            size = path.stat().st_size
-            with path.open("rb") as stream:
-                head = stream.read(4096)
-                if size > 4096:
-                    stream.seek(-4096, os.SEEK_END)
-                    head += stream.read(4096)
-            return b"moov" in head
-        except OSError:
+        # Two independent questions, and both have to pass.
+        #
+        # Structural: is the index actually there? Found by walking the boxes,
+        # because no fixed window can see a large index at the end of a file.
+        #
+        # Depth: does it contain media a player can decode? A box walk proves a
+        # file is a well-formed MP4, not that it still has its samples -- and
+        # that gap is the one this check historically described as covered.
+        #
+        # An unknown from ffprobe does NOT reject here, and the asymmetry with
+        # WebM below is deliberate. MP4 has a real structural check standing
+        # behind the probe, so a missing binary loses depth and keeps the file.
+        # WebM has no equivalent -- MediaRecorder output can carry no duration
+        # header at all -- so there the probe is the only evidence and an
+        # unknown has to fail closed. Making ffprobe's absence able to discard a
+        # finished, paid render would be a worse bug than the one being fixed.
+        if not mp4_has_moov(path):
             return False
+        return _probe_decodable_video_packets(path) is not False
     if kind == "video/webm":
         # MediaRecorder WebM can have no duration header. Decodable video
         # packets, rather than a duration or an EBML header alone, prove reuse
         # is safe. ffprobe is already required by this app's video pipeline.
-        try:
-            result = subprocess.run(
-                ["ffprobe", "-v", "error", "-select_streams", "v:0",
-                 "-count_packets", "-show_entries", "stream=nb_read_packets",
-                 "-of", "json", str(path)],
-                capture_output=True, text=True, timeout=30,
-            )
-            streams = json.loads(result.stdout or "{}").get("streams", [])
-            return result.returncode == 0 and bool(streams) and int(
-                streams[0].get("nb_read_packets") or 0
-            ) > 0
-        except (OSError, ValueError, subprocess.TimeoutExpired):
-            return False
+        return _probe_decodable_video_packets(path) is True
     return False
 
 

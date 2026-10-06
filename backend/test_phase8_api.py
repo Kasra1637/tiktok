@@ -21,6 +21,8 @@ from fastapi import HTTPException
 BACKEND_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BACKEND_DIR))
 
+import mp4_samples  # noqa: E402
+
 ANON = "anonymous"
 OTHER_USER = "other-user"
 
@@ -69,11 +71,19 @@ async def _forbid_rescale(local_path):
 
 def _fake_mp4():
     """
-    The smallest byte string the download path will accept as a finished MP4:
-    an ftyp box up front and a moov at the end, which is where a real provider
-    writes it. Real ffmpeg is not needed to exercise the container check.
+    A finished, playable MP4 for the storage paths to accept.
+
+    A REAL encode, not a byte string. The completeness check now walks the box
+    chain and then asks ffprobe whether any video packets decode, and neither
+    question can be answered truthfully about a file containing no video. The
+    previous hand-assembled fixture -- an ftyp box, some zeros and a moov -- was
+    exactly the kind of file that let the real bug through: it satisfied a
+    4KB-window substring probe while sharing none of the properties that made a
+    genuine render get rejected.
+
+    The index is deliberately not at the front. See mp4_samples.
     """
-    return b"\x00\x00\x00\x18ftypmp42" + (b"\x00" * 256) + b"\x00\x00\x00\x08moov"
+    return mp4_samples.real_mp4()
 
 
 def _profile(api, name):
@@ -441,11 +451,64 @@ class TestMp4CompletenessCheck:
         """
         assert not api._is_complete_mp4(self._write(tmp_path, b"<html>404</html>" * 60))
 
-    def test_a_large_file_with_moov_at_the_end_passes(self, api, tmp_path):
-        # Reading only the head would call this truncated; the tail probe is
-        # exactly why a real 2K render is not rejected.
-        big = b"\x00\x00\x00\x18ftypmp42" + (b"\x00" * 200_000) + b"\x00\x00\x00\x08moov"
-        assert api._is_complete_mp4(self._write(tmp_path, big))
+    def test_a_large_index_at_the_end_passes(self, api, tmp_path):
+        """
+        The regression this whole class was missing.
+
+        The old check searched the first and last 4KB for the bytes "moov". Those
+        four bytes are the START of the index box, and on a real render the index
+        is thousands of bytes of sample tables -- so on any file big enough to
+        matter the tag sat further than 4KB from the end, outside the window, and
+        a finished playable clip was rejected as "truncated". The founder then saw
+        "download was truncated (not a complete MP4)" on a render that played
+        perfectly in a browser.
+
+        The previous version of this test built an EIGHT-byte moov, which fits
+        inside the tail window -- so it passed against the broken code and proved
+        nothing. The index has to be realistically large for the test to mean
+        anything.
+        """
+        big = mp4_samples.synthetic_mp4(moov_body=9000, media_bytes=200_000)
+        # Assert the fixture is the shape that broke the old code, so this test
+        # cannot quietly stop reproducing the bug.
+        tag_at = big.rfind(b"moov")
+        assert len(big) - tag_at > 4096, "fixture no longer has a distant index"
+        assert b"moov" not in big[:4096] + big[-4096:], "the old probe would pass it"
+        # The structural walk finds the index the window probe could not. Not
+        # `is_usable_video`, which must still reject this one: it is a
+        # well-formed container with no decodable video in it, and that
+        # distinction is the next test's job.
+        import storage_service
+        assert storage_service.mp4_has_moov(self._write(tmp_path, big)) is True
+
+    def test_a_well_formed_container_with_no_video_is_still_rejected(self, api, tmp_path):
+        """
+        The structural walk answers "is the index there", not "is there anything
+        to play". A box chain that is perfectly valid but holds no decodable
+        frames is what a transfer cut off mid-file can leave behind, and it has
+        to be refused rather than uploaded as a finished render.
+        """
+        import storage_service
+        hollow = mp4_samples.synthetic_mp4(moov_body=9000, media_bytes=200_000)
+        path = self._write(tmp_path, hollow)
+        assert storage_service.mp4_has_moov(path) is True, "precondition"
+        assert storage_service.is_usable_video(path) is False
+
+    def test_a_real_render_with_its_index_at_the_end_is_accepted(self, api, tmp_path):
+        """
+        The end-to-end version: a genuine encode, the layout the provider
+        actually produces, through the check the download path uses.
+        """
+        assert api._is_complete_mp4(self._write(tmp_path, mp4_samples.real_mp4()))
+
+    def test_a_truncated_real_render_is_rejected(self, api, tmp_path):
+        """
+        The depth check earning its place. A box walk cannot tell a clip that kept
+        its index but lost its samples, so ffprobe is asked whether any video
+        packets decode.
+        """
+        cut = mp4_samples.truncate(mp4_samples.real_mp4(), 0.4)
+        assert not api._is_complete_mp4(self._write(tmp_path, cut))
 
 
 class TestModelRequestLedger:

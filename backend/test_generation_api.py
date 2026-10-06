@@ -20,6 +20,8 @@ from fastapi import HTTPException
 BACKEND_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BACKEND_DIR))
 
+import mp4_samples  # noqa: E402
+
 ANON = "anonymous"
 OTHER_USER = "other-user"
 
@@ -1163,10 +1165,19 @@ class TestModelSelectionAtTheApiBoundary:
         assert "nothing has been charged" in detail
 
 
-# The smallest byte string the download path accepts as a finished MP4: an
-# ftyp box up front and a moov at the end, which is where a provider writes it
-# for a non-fragmented file. Real ffmpeg is not needed to exercise the check.
-_DL_MP4 = b"\x00\x00\x00\x18ftypmp42" + (b"\x00" * 256) + b"\x00\x00\x00\x08moov"
+# A genuinely playable clip for the download path to accept.
+#
+# This was a hand-assembled byte string -- an ftyp box, some zeros, an 8-byte
+# moov -- on the grounds that "real ffmpeg is not needed to exercise the
+# container check". That was true of the old check and is exactly why the real
+# bug survived: a fixture with an 8-byte index cannot express the thing that
+# broke, because the four bytes spelling "moov" are the start of a box whose body
+# is thousands of bytes of sample tables on an actual render.
+#
+# The download path now asks ffprobe whether any video packets decode, so a file
+# containing no video is correctly refused. That makes the fixture honest rather
+# than merely convenient. See mp4_samples.
+_DL_MP4 = mp4_samples.real_mp4()
 
 
 class TestClipDownload:
