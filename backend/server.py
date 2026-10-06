@@ -7418,6 +7418,66 @@ async def get_generation(generation_id: str, user_id: str = Depends(get_current_
     return _public_generation_detail(row)
 
 
+def health_database_report(active_backend: str | None) -> dict:
+    """
+    The database half of /api/health, as a pure function of the active backend.
+
+    Split out so the mapping can be asserted without standing up a cloud
+    database, and so the endpoint body stays about reading rows rather than
+    about deciding what they mean.
+
+    `durable` is the field to read. Only "turso" means writes survive a restart;
+    both local labels mean they do not, and on Render neither does. Reporting
+    anything else here is the one genuinely dangerous thing this endpoint could
+    say, because it is consulted precisely when someone has already lost data.
+    """
+    # An unset backend means the connection has not been opened yet. This
+    # endpoint always reads rows before calling this, so in practice it is set;
+    # the fallback only keeps a direct call honest.
+    backend = active_backend or "local-sqlite"
+    return {"database": backend, "durable": backend == "turso"}
+
+
+@api_router.get("/health")
+async def health(user_id: str = Depends(get_current_user_id)):
+    """
+    Where user data actually is right now, and how much of it there is.
+
+    This exists because "my profile and videos disappeared" has one cause that
+    is not deletion. When Turso is configured but unreachable, `get_db` falls
+    back to local SQLite so the app keeps serving — and on Render that file is
+    on an ephemeral disk, so it starts EMPTY. Every list then renders as "no
+    profiles", which reads exactly like the app deleting the founder's work. The
+    cloud copy is usually untouched; the process is simply pointed at the wrong
+    store.
+
+    That distinction is a one-glance question here and was previously only
+    answerable by digging through the deploy log, which is why the report above
+    kept arriving as "the app deleted my data". The backend is read AFTER the
+    counts below on purpose: `get_db` re-establishes `_ACTIVE_BACKEND` on every
+    connection, so the value that matters is the store THIS request just used,
+    not whatever the previous one happened to leave behind.
+
+    The counts are the other half — "ephemeral, and empty" and "ephemeral, and
+    holding 40 generations" need different responses, and only the numbers
+    distinguish them. Scoped to the caller's own rows so this cannot be used to
+    size up another account.
+
+    Authenticated, because it reports inventory. A founder can read it from the
+    browser console while signed in; an anonymous visitor learns nothing.
+    """
+    counts = {}
+    for table in ("brand_profiles", "studio_projects", "generations"):
+        try:
+            row = await _fetch_one(
+                f"SELECT COUNT(*) AS n FROM {table} WHERE user_id = ?", (user_id,)
+            )
+            counts[table] = int((row or {}).get("n") or 0)
+        except Exception as exc:  # a missing table is itself the answer
+            counts[table] = f"unavailable: {type(exc).__name__}"
+    return {"status": "ok", **health_database_report(_ACTIVE_BACKEND), "your_rows": counts}
+
+
 # --- Native Product Demo + CTA export ----------------------------------------
 #
 # The editor lives inside HookForge, on the same origin. There is no popup,

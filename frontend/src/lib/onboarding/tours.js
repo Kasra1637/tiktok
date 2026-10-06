@@ -7,10 +7,10 @@
 // limits: nothing is generated until the last step, publishing is always manual,
 // and the demo and the close are the founder's own footage.
 //
-// Tours auto-OPEN on every arrival of their route (see OnboardingProvider) —
-// there is no once-only seen-check — so copy is written to be skippable: every
-// step stands alone, and the shortest tour that still explains the page is the
-// right one.
+// Tours auto-OPEN on the first arrival at their route and not again (see
+// OnboardingProvider — a persisted seen-check, with "Show me around" as the
+// deliberate replay) — so copy is written to be skippable: every step stands
+// alone, and the shortest tour that still explains the page is the right one.
 //
 // Step shape:
 //   target: CSS selector string (may contain a comma-separated OR list of

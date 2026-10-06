@@ -716,6 +716,61 @@ check("slider ranges match the standalone app",
     && DC.RANGES.handPan.step === 0.005 && DC.RANGES.screen.step === 0.001
     && DC.RANGES.hookDuration.min === 0.8 && DC.RANGES.ctaDuration.max === 5);
 
+// Onboarding shows itself once. The rule lives in a pure module precisely so it
+// can be asserted as behaviour: a tour auto-opens the first time its route is
+// reached, never again on its own, and is always re-openable by hand.
+const ST = loadModule(path.resolve(__dirname, "..", "src", "lib", "onboarding", "seenTours.js"));
+function fakeStorage(initial) {
+  const data = new Map(Object.entries(initial || {}));
+  return {
+    getItem: (k) => (data.has(k) ? data.get(k) : null),
+    setItem: (k, v) => data.set(k, String(v)),
+    removeItem: (k) => data.delete(k),
+  };
+}
+check("a tour nobody has opened is not seen",
+  ST.hasSeenTour({}, "create") === false && ST.hasSeenTour({ create: 1 }, "create") === true);
+check("marking a tour seen persists it and is idempotent",
+  (() => {
+    const s = fakeStorage();
+    const once = ST.markTourSeen(s, {}, "create");
+    if (!ST.hasSeenTour(once, "create")) return false;
+    // Identity on the second call, so a state holder can skip re-rendering.
+    return ST.markTourSeen(s, once, "create") === once;
+  })());
+check("a seen tour survives a reload through storage",
+  (() => {
+    const s = fakeStorage();
+    ST.markTourSeen(s, {}, "create");
+    return ST.hasSeenTour(ST.readSeenTours(s), "create");
+  })());
+check("seen state is per tour, so one page does not suppress another",
+  (() => {
+    const s = fakeStorage();
+    const seen = ST.markTourSeen(s, {}, "create");
+    return ST.hasSeenTour(seen, "create") && !ST.hasSeenTour(seen, "brand");
+  })());
+// The failure that matters: unreadable state must read as EMPTY, never as
+// "everything seen". Reading it as full suppresses every tour forever and the
+// only symptom is onboarding that never appears again.
+check("corrupt or unexpected stored state reads as nothing seen",
+  ["not json at all", "[1,2,3]", '"a string"', "42", "null", "[]"].every((raw) => {
+    const s = fakeStorage({ [ST.SEEN_TOURS_STORAGE_KEY]: raw });
+    return Object.keys(ST.readSeenTours(s)).length === 0;
+  }));
+check("storage that throws still lets the tour be treated as unseen, then seen",
+  (() => {
+    const hostile = {
+      getItem() { throw new Error("denied"); },
+      setItem() { throw new Error("denied"); },
+    };
+    let seen = ST.readSeenTours(hostile);
+    if (ST.hasSeenTour(seen, "create")) return false;
+    // Must not throw: the tour opens, it just opens again next visit.
+    seen = ST.markTourSeen(hostile, seen, "create");
+    return ST.hasSeenTour(seen, "create");
+  })());
+
 console.log("\n" + "=".repeat(70));
 if (failures.length === 0) {
   console.log("All frontend length/section logic behaves correctly.");
