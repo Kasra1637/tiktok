@@ -273,13 +273,23 @@ const handleGenerate = async () => {
     setRetryingStorage(true);
     setError(null);
     try {
-      await api.retryGenerationStorage(generation.id);
+      const saved = await api.retryGenerationStorage(generation.id);
       // The endpoint returns only the save result, so re-read the row: the
       // alert above keys off storage_error, and only a fresh read clears it.
       const fresh = await api.getGeneration(generation.id);
       setGeneration(fresh);
       onGenerationChange?.(fresh);
-      setNotice("Durable copy saved.");
+      // "Durable copy saved." was a lie in one case. When the cloud upload fails
+      // the server falls back to serving the local file, and on this host local
+      // means the container's ephemeral disk -- so the clip plays now and is
+      // gone on the next deploy. That is not a durable save, and the founder
+      // has to be the one who decides whether to spend a retry on it.
+      const degraded = saved?.storage_error || fresh?.storage_error || "";
+      setNotice(
+        degraded
+          ? `Saved, but not durably: ${degraded}`
+          : "Durable copy saved."
+      );
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {

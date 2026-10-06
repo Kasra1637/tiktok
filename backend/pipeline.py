@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import sys
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -547,6 +548,15 @@ async def trim_video_exact(video_path: Path, seconds: float, out_path: Path) -> 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
         "ffmpeg", "-y",
+        # One thread, on purpose. This runs inside the web process on a host
+        # with 512MB shared between Python, Uvicorn and the DB connection, and
+        # libx264's frame-level threading is the largest single allocator here --
+        # a whole extra decode buffer per thread. Serialising costs a little
+        # wall-clock on a job that is already minutes long, and the alternative
+        # is Render OOM-killing the container, which takes the whole app down
+        # rather than just failing one save. The parallel saving is in the Modal
+        # worker, which is where it belongs.
+        "-threads", "1",
         "-i", str(source),
         "-t", f"{target:g}",
         "-c:v", "libx264",
@@ -602,7 +612,7 @@ async def replace_with_trimmed(video_path: Path, seconds: float) -> Optional[Pat
     source = Path(video_path)
     if not source.is_file():
         return None
-    temp = source.with_name(f".{source.stem}_trim{source.suffix}")
+    temp = source.with_name(f".{source.stem}_trim_{uuid.uuid4().hex}{source.suffix}")
     try:
         trimmed = await trim_video_exact(source, seconds, temp)
         if not trimmed:

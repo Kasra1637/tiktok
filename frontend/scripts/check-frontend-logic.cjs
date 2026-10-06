@@ -837,6 +837,27 @@ check("a nonsense zoom is treated as 1 rather than blanking the screen",
     return zero.dw === fitOf("cover").dw && nan.dw === fitOf("cover").dw;
   })());
 
+// What the founder is told when a request fails. The 502 rule is the one that
+// matters: our handlers always answer with a JSON detail, so a bodyless 502 came
+// from the edge -- the app restarting -- and reporting it as a raw status sends
+// people to retry work that never started.
+const EM = loadModule(path.resolve(__dirname, "..", "src", "lib", "errorMessage.js"));
+check("a handler's own detail is preferred over anything generic",
+  EM.errorMessageFor({ response: { status: 502, data: { detail: "Storage recovery failed." } } })
+    === "Storage recovery failed.");
+check("a bodyless 502 is reported as a restart, not as a raw status",
+  (() => {
+    const msg = EM.errorMessageFor({ response: { status: 502, data: "" } });
+    return msg.includes("restarted") && !msg.includes("502");
+  })());
+check("a bodyless 502 from an error with no data at all is still named",
+  EM.errorMessageFor({ response: { status: 502 } }).includes("restarted"));
+check("other statuses keep their own message",
+  EM.errorMessageFor({ message: "Request failed with status code 500" })
+    === "Request failed with status code 500");
+check("nothing usable falls back to a generic line",
+  EM.errorMessageFor({}) === "Something went wrong. Please try again.");
+
 console.log("\n" + "=".repeat(70));
 if (failures.length === 0) {
   console.log("All frontend length/section logic behaves correctly.");

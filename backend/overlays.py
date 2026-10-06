@@ -19,6 +19,7 @@ import logging
 import os
 import shlex
 import subprocess
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -358,6 +359,10 @@ def build_upscale_command(source: Path, output_path: Path) -> list:
 
     return [
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+        # Single-threaded for the same reason as trim_video_exact: this runs in
+        # the web process on a 512MB host, and per-thread decode buffers are the
+        # biggest thing ffmpeg allocates. A slower save beats an OOM restart.
+        "-threads", "1",
         "-i", str(source),
         "-filter_complex", graph,
         "-map", "[outv]", "-map", "0:a?",
@@ -639,7 +644,7 @@ def rescale_to_canvas_sync(video_path: Path, timeout: int = 600) -> tuple:
     source = Path(video_path)
     if not source.is_file():
         return None, ["Source clip is missing; the canvas resize was skipped."]
-    temp = source.with_name(f".{source.stem}_canvas{source.suffix}")
+    temp = source.with_name(f".{source.stem}_canvas_{uuid.uuid4().hex}{source.suffix}")
     try:
         argv = build_upscale_command(source, temp)
         try:

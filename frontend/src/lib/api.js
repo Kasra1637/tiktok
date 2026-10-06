@@ -1,6 +1,7 @@
 import axios from "axios";
 import { isClerkConfigured } from "./clerk";
 import { shouldRetryWithFreshToken, shouldForceSignIn } from "./authRecovery";
+import { errorMessageFor } from "./errorMessage";
 
 const BACKEND_URL = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/+$/, "");
 const API = `${BACKEND_URL}/api`;
@@ -303,10 +304,10 @@ export const api = {
   getFeedback: (params = {}) => client.get("/feedback", { params }).then((r) => r.data),
 };
 
-export const getErrorMessage = (err) => {
-  return (
-    err?.response?.data?.detail ||
-    err?.message ||
-    "Something went wrong. Please try again."
-  );
-};
+/**
+ * The message to show for a failed request.
+ *
+ * The rule lives in lib/errorMessage.js so it can be asserted directly rather
+ * than through a duplicated copy in a test harness.
+ */
+export const getErrorMessage = (err) => errorMessageFor(err);

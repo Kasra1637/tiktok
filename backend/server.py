@@ -105,6 +105,20 @@ TURSO_AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "").strip()
 # serially avoids the OOM restarts seen when multiple analyses overlap.
 _ytdlp_semaphore = asyncio.Semaphore(1)
 
+# Storage repairs, in flight right now, by generation id.
+#
+# Two things make this necessary. The work is heavy -- a full download plus two
+# ffmpeg passes -- and the client gives up after 10 minutes while the server can
+# legitimately take closer to 22, so a founder who clicks "Retry durable save"
+# again after a timeout starts a SECOND repair of the same clip rather than a
+# replacement of a failed one. They then share the generation's local file, and
+# two concurrent repairs are how a good clip gets replaced by a half-written one.
+#
+# A plain set is enough rather than a semaphore per id: the handlers are async on
+# one event loop, so there is no await between the check and the insert. It does
+# assume a single process -- with several workers each would guard its own share.
+_storage_repairs_in_flight: set[str] = set()
+
 
 # ---------------------------------------------------------------------------
 # SQLite helpers
@@ -8383,6 +8397,25 @@ async def retry_generation_storage(generation_id: str, user_id: str = Depends(ge
         )
 
     local_path = pipeline.VIDEOS_DIR / f"{generation_id}.mp4"
+    if generation_id in _storage_repairs_in_flight:
+        # Not an error so much as an answer: the work is already happening, and a
+        # second run would fight the first one for the same file.
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "A durable save for this render is already running. It can take a "
+                "few minutes; wait for it to finish rather than starting another."
+            ),
+        )
+    _storage_repairs_in_flight.add(generation_id)
+    try:
+        return await _run_storage_repair(row, generation_id, user_id, local_path)
+    finally:
+        _storage_repairs_in_flight.discard(generation_id)
+
+
+async def _run_storage_repair(row: dict, generation_id: str, user_id: str, local_path: Path):
+    """The body of a durable-save repair, run under the single-flight guard."""
     # Same test the helper uses, so this log line describes what will actually
     # happen rather than what is merely on disk.
     has_local = await asyncio.to_thread(storage_service.is_usable_video, local_path)
