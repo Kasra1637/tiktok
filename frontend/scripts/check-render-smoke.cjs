@@ -3271,6 +3271,55 @@ async function runDemoCtaChecks() {
   );
 
   await check(
+    "the editor opens a finished render only from its durable, fetchable copy",
+    async () => {
+      const src = fs.readFileSync(
+        path.join(__dirname, "..", "src", "pages", "DemoCtaStudio.jsx"),
+        "utf8"
+      );
+      // The broken pattern picks the provider's temporary link (needs a bearer
+      // token → 401); the durable copy is in r2_url, and every other consumer
+      // already uses durable-first.
+      if (src.match(/generation\.video_url \|r2_url|video_url \|r2_url/)) {
+        throw new Error(
+          "the editor prefers video_url over r2_url. video_url carries the " +
+            "provider's temporary link that returns 401 in the browser; " +
+            "durableMediaUrl must pick r2_url first."
+        );
+      }
+      // The load() path must choose the durable copy and refuse rows that
+      // expose only a provider link.
+      if (!src.includes("durableMediaUrl(row)")) {
+        throw new Error(
+          "the editor does not use durableMediaUrl to choose the source. It " +
+            "must always load from the durable copy and refuse rows with none."
+        );
+      }
+      // SourcePicker must not offer renders that have no fetchable copy: a
+      // row that only has the provider link (no durable r2_url, no local
+      // media path) is not openable and would only serve to 401.
+      if (!src.match(/r2_url\s*\|\|\s*\(\s*r\?\.video_url\s*\&\&\s*r\?\.video_url\.startsWith/)) {
+        throw new Error(
+          "the picker does not filter to rows with a durable fetchable copy. " +
+            "It must require r2_url or a local /api/media/videos/ path."
+        );
+      }
+      // The backend signs both stored media paths on the way out, so an R2
+      // upload failure (local fallback path in r2_url) is still openable.
+      const server = fs.readFileSync(
+        path.join(__dirname, "..", "..", "backend", "server.py"),
+        "utf8"
+      );
+      if (!server.match(/r2_url.*sign_stored_path|sign_stored_path.*r2_url/)) {
+        throw new Error(
+          "r2_url is not signed in _public_generation. A local fallback path " +
+            "in r2_url would 404 instead of playing."
+        );
+      }
+    }
+  );
+
+  await check(
     "the preview and the export button are chromeless and share one width",
     async (ctx) => {
       const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;

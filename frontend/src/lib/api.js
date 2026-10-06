@@ -11,6 +11,25 @@ export const mediaUrl = (path) => {
   return `${BACKEND_URL}${path.startsWith("/") ? path : `/${path}`}`;
 };
 
+/**
+ * The URL the editor can actually fetch, always the durable copy, never the
+ * provider's link.
+ *
+ * `r2_url` holds the finished clip the app saved: the durable R2 upload when
+ * it succeeded, or the /api/media/videos/{id}.mp4 path for a local fallback.
+ * `video_url` holds the provider's temporary link, and it is the only place
+ * that link floats: the browser can never fetch it, because it requires a
+ * bearer token and then expires. Never give a provider link to a fetch or a
+ * <video>.
+ */
+export const durableMediaUrl = (row) => {
+  const durable = row?.r2_url;
+  if (durable && durable.startsWith("http")) return mediaUrl(durable);
+  const local = durable || row?.video_url;
+  if (local && local.startsWith("/api/media/videos/")) return mediaUrl(local);
+  return null;
+};
+
 const client = axios.create({ baseURL: API, timeout: 120000 });
 
 /**

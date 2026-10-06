@@ -6843,10 +6843,10 @@ def _public_generation(row: dict) -> dict:
     The prompt is long and only useful when debugging a specific result, so
     it is returned by the detail endpoint but trimmed from list responses.
 
-    The video URL is signed here, in the one serializer every generation
+    The media URLs are signed here, in the one serializer every generation
     response passes through, rather than at each of the nine places that return
     one. Every list, detail, poll, retry and history response therefore hands
-    out a link that works, and there is no second path that can forget.
+    out links that work, and there is no second path that can forget.
     """
     out = dict(row)
     out["adjustments"] = out.get("adjustments") or []
@@ -6859,8 +6859,14 @@ def _public_generation(row: dict) -> dict:
     out["trim_to_seconds"] = int(out.get("trim_to_seconds") or 0)
     out.pop("prompt_used", None)
     # Stored unsigned so a row never holds a signature that outlives its own
-    # expiry; signed fresh on every read.
+    # expiry; signed fresh on every read. video_url and r2_url are both stored
+    # media paths, so both are signed here in the single serializer every
+    # generation response passes through. A provider render keeps only its
+    # temporary provider link in video_url and the durable copy in r2_url; a
+    # demo-cta export does the opposite, and signing on the way out makes both
+    # fetchable from the browser.
     out["video_url"] = media_signing.sign_stored_path(out.get("video_url"))
+    out["r2_url"] = media_signing.sign_stored_path(out.get("r2_url"))
     for key in ("video_urls", "unsigned_urls"):
         if isinstance(out.get(key), list):
             out[key] = [media_signing.sign_stored_path(u) for u in out[key]]

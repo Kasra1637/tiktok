@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import SectionCard from "../components/SectionCard";
 import EmptyState from "../components/EmptyState";
-import { api, getErrorMessage, mediaUrl } from "../lib/api";
+import { api, getErrorMessage, mediaUrl, durableMediaUrl } from "../lib/api";
 import { DemoCtaEditor } from "../demoCta/DemoCtaEditor";
 
 /**
@@ -36,7 +36,13 @@ function SourcePicker() {
       .getGenerationHistory({ status: "completed", limit: 50 })
       .then((data) => {
         if (cancelled) return;
-        const list = (data?.generations || []).filter((r) => r?.video_url || r?.r2_url);
+        // Only rows that actually carry a fetchable copy: an R2 URL, or a local
+        // /api/media/videos/{id}.mp4 path (a signed demo-cta export). A render
+        // that still only has its provider link is not openable from the
+        // browser, so omitting it avoids a 401 the user cannot recover from.
+        const list = (data?.generations || []).filter((r) =>
+          r?.r2_url || (r?.video_url && r?.video_url.startsWith("/api/media/videos/"))
+        );
         setRows(list);
       })
       .catch((err) => {
@@ -126,14 +132,26 @@ function EditorRoute({ generationId }) {
     api
       .getGeneration(generationId)
       .then((row) => {
-        if (!row || row.status !== "completed" || !(row.video_url || row.r2_url)) {
+        if (!row || row.status !== "completed") {
           setError(
             "This render is not a finished clip, so there is nothing to edit. Pick a completed render instead."
           );
           setGeneration(null);
           return;
         }
-        setGeneration(row);
+        // The fetchable copy must be durable. video_url carries the provider's
+        // temporary link for a provider render, which the browser can never
+        // fetch, so a row that has only that (no durable r2_url copy) is not
+        // openable even though the generator is "completed".
+        const sourceUrl = durableMediaUrl(row);
+        if (!sourceUrl) {
+          setError(
+            "This render has no durable copy the browser can open. Refresh for a fresh link, or choose a different render."
+          );
+          setGeneration(null);
+          return;
+        }
+        setGeneration({ ...row, sourceUrl });
       })
       .catch((err) => setError(getErrorMessage(err)));
   }, [generationId]);
@@ -159,9 +177,9 @@ function EditorRoute({ generationId }) {
     );
   }
 
-  // Local signed copy first, for the same reason the handoff preferred it: the
-  // paid clip stays off public bucket URLs wherever a signed local copy exists.
-  const sourceUrl = mediaUrl(generation.video_url || generation.r2_url);
+  // `load()` already chose the durable copy from the row, so the editor just
+  // uses what it was given.
+  const sourceUrl = generation.sourceUrl;
 
   return (
     <DemoCtaEditor

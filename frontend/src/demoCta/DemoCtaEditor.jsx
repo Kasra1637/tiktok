@@ -385,7 +385,15 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     (async () => {
       try {
         const res = await fetch(sourceUrl);
-        if (!res.ok) throw new Error(`The finished render returned ${res.status}. Reload to get a fresh link.`);
+        if (!res.ok) {
+          const auth = res.status === 401 || res.status === 403;
+          throw new Error(
+            auth
+              ? "This render's link requires a credential the browser can't send. " +
+                  "Refresh for a fresh link, or choose a different render."
+              : "The finished render returned an error. Refresh for a fresh link."
+          );
+        }
         const blob = await res.blob();
         if (cancelled) return;
         const url = URL.createObjectURL(blob);
@@ -440,7 +448,15 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     (async () => {
       try {
         const res = await fetch(sourceUrl);
-        if (!res.ok) throw new Error(`The finished render returned ${res.status}. Reload to get a fresh link.`);
+        if (!res.ok) {
+          const auth = res.status === 401 || res.status === 403;
+          throw new Error(
+            auth
+              ? "This render's link requires a credential the browser can't send. " +
+                  "Refresh for a fresh link, or choose a different render."
+              : "The finished render returned an error. Refresh for a fresh link."
+          );
+        }
         const blob = await res.blob();
         if (sourceObjectUrlRef.current) URL.revokeObjectURL(sourceObjectUrlRef.current);
         const url = URL.createObjectURL(blob);
