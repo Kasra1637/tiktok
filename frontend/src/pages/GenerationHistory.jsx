@@ -320,6 +320,11 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
   // <a download> cannot save it — handing either one the link produces a player
   // that never loads and a download that answers 401.
   const downloadUrl = recoveredUrl || durableMediaUrl(row);
+  // Poster thumbnail: a tiny JPEG served as an image, so the row shows a
+  // frame instantly without fetching video bytes. Missing poster (old rows,
+  // generation in flight) simply omits the attribute and the <video> behaves
+  // as before — a 404 poster must never break playback.
+  const posterUrl = row.poster_url ? mediaUrl(row.poster_url) : null;
   const composedUrl = row.composition?.r2_url || row.composition?.output_url;
   const hasClip = row.status === "completed" && Boolean(downloadUrl);
   // A finished render with no fetchable copy still gets the rail: the row has
@@ -463,7 +468,14 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
                 src={downloadUrl}
                 controls
                 playsInline
-                preload="metadata"
+                // Poster first: the thumbnail is a tiny JPEG image, so the row
+                // shows a frame without fetching video bytes. preload="none"
+                // means the clip itself loads only on Play — previously
+                // "metadata" fired a ranged video request per row on page load,
+                // which is what left some thumbnails blank on slow/expired
+                // sources. A missing poster simply omits the attribute.
+                preload="none"
+                poster={posterUrl || undefined}
                 onLoadedData={() => {
                   if (checkingRecovery) {
                     setCheckingRecovery(false);

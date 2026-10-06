@@ -98,6 +98,19 @@ def build_signed_path(filename: str, ttl_seconds: int = DEFAULT_TTL_SECONDS) -> 
     return f"/api/media/videos/{filename}?{_EXP_PARAM}={expires_at}&{_SIG_PARAM}={make_signature(filename, expires_at)}"
 
 
+def build_signed_poster_path(filename: str, ttl_seconds: int = DEFAULT_TTL_SECONDS) -> str:
+    """
+    The poster path for `filename` (e.g. `{id}.jpg`), carrying its own
+    signature and expiry.
+
+    Posters are thumbnails of paid renders, so they are signed like clips:
+    a `<img src>` cannot carry an Authorization header either. The signature
+    scheme is identical (filename:expiry); only the route prefix differs.
+    """
+    expires_at = int(time.time()) + int(ttl_seconds)
+    return f"/api/media/posters/{filename}?{_EXP_PARAM}={expires_at}&{_SIG_PARAM}={make_signature(filename, expires_at)}"
+
+
 def sign_stored_path(stored: str | None, ttl_seconds: int = DEFAULT_TTL_SECONDS) -> str | None:
     """
     Re-sign a media path that was persisted unsigned.

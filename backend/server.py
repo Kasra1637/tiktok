@@ -24,6 +24,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 import pipeline
 import storage_service
+import posters
 import template_library
 import claim_safety
 import media_signing
@@ -6919,6 +6920,47 @@ def _playback_url(row: dict) -> Optional[str]:
     return None
 
 
+def _poster_url(row: dict) -> Optional[str]:
+    """
+    Signed poster thumbnail for a completed generation, or None.
+
+    Deterministic from the id (`/api/media/posters/{id}.jpg`) so old rows
+    heal without a backfill: the poster route lazily generates/restores on
+    first hit. Only completed rows get one; anything else has no frame to
+    show. The frontend treats a missing poster as "no thumbnail yet" and the
+    <video> still plays — a 404 poster must never break playback.
+    """
+    try:
+        if (row or {}).get("status") != "completed":
+            return None
+        job_id = str((row or {}).get("id") or "").strip()
+        if not job_id:
+            return None
+        return media_signing.build_signed_poster_path(f"{job_id}.jpg")
+    except Exception:
+        return None
+
+
+async def _eager_poster(generation_id: str, user_id: str) -> None:
+    """
+    Best-effort poster generation right after a save.
+
+    Never raises and never fails the save: History still works without a
+    poster (the <video> falls back to metadata preload). Runs ffmpeg off the
+    event loop, then uploads the JPEG to R2 for durability.
+    """
+    try:
+        poster = await asyncio.to_thread(posters.ensure_poster, generation_id)
+        if poster is not None:
+            try:
+                await asyncio.to_thread(
+                    storage_service.upload_poster, user_id, generation_id, poster)
+            except Exception as exc:
+                logger.warning("Poster R2 upload failed for %s (%s)", generation_id, type(exc).__name__)
+    except Exception as exc:
+        logger.warning("Eager poster failed for %s (%s)", generation_id, type(exc).__name__)
+
+
 def _public_generation(row: dict) -> dict:
     """Serialize a generation row, hiding the stored prompt by default.
 
@@ -6950,6 +6992,7 @@ def _public_generation(row: dict) -> dict:
     out["video_url"] = media_signing.sign_stored_path(out.get("video_url"))
     out["r2_url"] = media_signing.sign_stored_path(out.get("r2_url"))
     out["playback_url"] = _playback_url(row)
+    out["poster_url"] = _poster_url(row)
     for key in ("video_urls", "unsigned_urls"):
         if isinstance(out.get(key), list):
             out[key] = [media_signing.sign_stored_path(u) for u in out[key]]
@@ -7686,12 +7729,14 @@ async def save_demo_cta_export(
         result_id,
         f" for generation {generation_id}" if generation_id else " with no parent",
     )
+    await _eager_poster(result_id, user_id)
     return {
         "id": result_id,
         "status": "completed",
         "parent_generation_id": parent["id"] if parent else None,
         "video_url": media_signing.build_signed_path(f"{result_id}.mp4"),
         "playback_url": media_signing.build_signed_path(f"{result_id}.mp4"),
+        "poster_url": media_signing.build_signed_poster_path(f"{result_id}.jpg"),
         "r2_url": r2_url,
     }
 
@@ -7998,6 +8043,9 @@ async def poll_generation(generation_id: str, user_id: str = Depends(get_current
             await _execute(
                 "UPDATE video_assets SET r2_url = ? WHERE job_id = ?", (stored_url, generation_id)
             )
+            # Poster is best-effort and off the critical path: History works
+            # without it, it just costs video bytes per thumbnail.
+            await _eager_poster(generation_id, user_id)
     elif status in ("failed", "error", "cancelled", "canceled"):
         message = str(response.get("error") or response.get("message") or "Generation failed.")
         await _execute(
@@ -8074,16 +8122,119 @@ def _http_video_source(value) -> str:
     return ""
 
 
+def provider_download_candidates(row: dict, fresh_url: str = "") -> list[tuple[str, str]]:
+    """
+    Every place this render's bytes could still come from, best first.
+
+    Why a list and not one URL
+    --------------------------
+    There are three, and they die independently:
+
+      1. the link the poll just handed back,
+      2. the `video_url` stored on the row -- a temporary provider link,
+      3. the content endpoint re-derived from `openrouter_job_id`.
+
+    (2) is the one that expires, and it is the one this used to pick first and
+    commit to. So a row whose stored link had lapsed failed the repair outright
+    even though (3) -- a stable path, authenticated with the same bearer token
+    the poll used -- would still have served the clip. The failure looked like
+    "this video is gone" when the video was sitting behind the next source in
+    the list.
+
+    Order is preference: freshest first, derived last because it costs a
+    derivation and is the last resort. Duplicates are collapsed, because a fresh
+    poll URL is very often byte-identical to the stored one and retrying a dead
+    link three times before falling through is exactly the wasted time this
+    removes.
+
+    Labels exist so a failure can say WHICH source refused, rather than
+    flattening three different answers into one sentence.
+
+    Native exports return nothing at all: a Demo + CTA export has no provider
+    rendition, and substituting its parent render would hand back a different
+    video than the founder exported. That exclusion is load-bearing.
+    """
+    if row.get("variation_kind") == "demo_cta":
+        return []
+    ordered = [
+        ("fresh poll link", fresh_url),
+        ("stored provider link", row.get("video_url")),
+        ("provider content endpoint", ai_service.video_content_url(
+            row.get("openrouter_job_id") or "")),
+    ]
+    seen: set[str] = set()
+    candidates: list[tuple[str, str]] = []
+    for label, raw in ordered:
+        url = _http_video_source(raw)
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        candidates.append((label, url))
+    return candidates
+
+
 def _recovery_sources(row: dict, fresh_url: str = "") -> tuple:
+    """
+    The durable copy, and the best provider source.
+
+    Kept as a pair because two callers want a yes/no "is anything reachable at
+    all" answer rather than the ordered list. The provider side delegates to
+    provider_download_candidates so the pre-check and the repair can never
+    disagree about what exists.
+    """
     durable = _http_video_source(row.get("r2_url"))
-    # Native exports have no provider rendition of their own. Never use a
-    # parent/job reference to replace the finished export with its source.
-    provider = ""
-    if row.get("variation_kind") != "demo_cta":
-        provider = (_http_video_source(fresh_url) or _http_video_source(row.get("video_url"))
-                    or _http_video_source(ai_service.video_content_url(
-                        row.get("openrouter_job_id") or "")))
-    return durable, provider
+    candidates = provider_download_candidates(row, fresh_url)
+    return durable, (candidates[0][1] if candidates else "")
+
+
+async def _probe_media_source(url: str, timeout: int = 20) -> str:
+    """
+    Whether a source would serve bytes RIGHT NOW, as one short word.
+
+    For the dry run, so "would repair" is a fact rather than a guess about a
+    string being non-empty. Three ways to be wrong in opposite directions, all
+    of which this is built against:
+
+      - It must send the same auth the real downloader sends. Without the bearer
+        token a perfectly good link answers 403 and the report declares a
+        recoverable video lost -- the exact failure this is meant to prevent.
+      - It must not pull the file. A server that ignores Range will happily
+        start streaming 50MB, so the response is streamed and abandoned after
+        the first chunk rather than read.
+      - It must distinguish "refused" from "unreachable". A DNS failure and a
+        403 need different conclusions about whether to wait.
+
+    Returns one of: alive, refused, missing, server-error, unreachable, unknown.
+    """
+    headers = dict(_DOWNLOAD_HEADERS)
+    headers.update(ai_service.provider_download_headers(url))
+    headers["Range"] = "bytes=0-0"
+    try:
+        async with httpx.AsyncClient(
+            timeout=timeout, follow_redirects=True, headers=headers
+        ) as client:
+            async with client.stream("GET", url) as response:
+                # Touch the body so a server that only errors on first byte is
+                # seen, then stop. One chunk is a few KB at most.
+                async for _chunk in response.aiter_bytes():
+                    break
+                code = response.status_code
+    except httpx.HTTPStatusError:
+        return "refused"
+    except Exception:
+        return "unreachable"
+    if code in (200, 206):
+        return "alive"
+    if code in (401, 403):
+        return "refused"
+    if code in (404, 410):
+        return "missing"
+    if code == 429:
+        # Rate limited is not a verdict on the link.
+        return "unknown"
+    if 500 <= code < 600:
+        return "server-error"
+    return "unknown"
 
 
 async def _download_generation_video(video_url: str, generation_id: str) -> tuple:
@@ -8243,7 +8394,10 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
     trim_note = ""
 
     fresh = not await asyncio.to_thread(storage_service.is_usable_video, local_path)
-    durable, provider = _recovery_sources(row, video_url)
+    # Durable only. The provider side is deliberately NOT taken from here: a
+    # single "best" URL is what made an expired stored link fatal, and the whole
+    # point of the repair is to walk the ordered list further down.
+    durable, _first_provider = _recovery_sources(row, video_url)
     cloud_error = None
     durable_error = None
     restored = False
@@ -8268,7 +8422,13 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
                 local_path = recovered
                 restored = True
         if not restored:
-            if not provider:
+            # Every remaining source, best first, until one serves bytes. Used
+            # to be a single URL: the stored provider link, which is the one
+            # that expires. A row whose stored link had lapsed therefore failed
+            # here outright even though the content endpoint re-derived from the
+            # job id would still have served the clip.
+            candidates = provider_download_candidates(row, video_url)
+            if not candidates:
                 failures = " ".join(value for value in (cloud_error, durable_error) if value)
                 if durable_error or (cloud_error and cloud_error not in (
                         "Cloud copy not found.", "Cloud storage is not configured.")):
@@ -8282,11 +8442,26 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
                     "so it cannot be recovered. Re-upload your saved export if you have it."
                 )
                 return None, detail + (f" {failures}" if failures else ""), 0
-            local_path, download_error = await _download_generation_video(provider, generation_id)
-            if not local_path:
+            attempts: list[str] = []
+            for label, url in candidates:
+                recovered, source_error = await _download_generation_video(url, generation_id)
+                if recovered:
+                    local_path = recovered
+                    if len(candidates) > 1:
+                        logger.info(
+                            "Generation %s: recovered via %s after %d earlier source(s) "
+                            "did not serve bytes",
+                            generation_id, label, len(attempts),
+                        )
+                    break
+                attempts.append(f"{label}: {source_error}")
+            else:
+                # Name every source and why it refused. One flattened sentence
+                # cannot distinguish "wait and retry" from "this is gone", which
+                # are the only two things the founder can do about it.
                 return None, (
-                    "The provider clip could not be downloaded for durable storage"
-                    f" ({download_error})."
+                    "The provider clip could not be downloaded for durable storage ("
+                    + "; ".join(attempts) + ")."
                 ), 0
 
     if fresh and not restored:
@@ -8458,9 +8633,11 @@ async def _run_storage_repair(row: dict, generation_id: str, user_id: str, local
         "UPDATE video_assets SET r2_url = ? WHERE job_id = ?", (stored_url, generation_id)
     )
     logger.info("Generation %s: saved copy recovered", generation_id)
+    await _eager_poster(generation_id, user_id)
     return {"id": generation_id,
             "r2_url": media_signing.sign_stored_path(stored_url),
             "playback_url": media_signing.build_signed_path(f"{generation_id}.mp4"),
+            "poster_url": media_signing.build_signed_poster_path(f"{generation_id}.jpg"),
             "storage_error": storage_error or None}
 
 
@@ -9864,6 +10041,7 @@ async def generation_history(
         entry["video_url"] = media_signing.sign_stored_path(entry.get("video_url"))
         entry["r2_url"] = media_signing.sign_stored_path(entry.get("r2_url"))
         entry["playback_url"] = _playback_url(row)
+        entry["poster_url"] = _poster_url(row)
         composition = await _fetch_one(
             "SELECT id, status, output_url, r2_url FROM overlay_compositions "
             "WHERE generation_id = ? ORDER BY created_at DESC LIMIT 1",
@@ -9914,7 +10092,12 @@ async def delete_generation(generation_id: str, user_id: str = Depends(get_curre
         storage_service.delete_video(user_id, generation_id)
     except Exception as e:
         logger.warning(f"R2 delete failed for generation {generation_id}: {e}")
-    for local in (pipeline.VIDEOS_DIR / f"{generation_id}.mp4",):
+    try:
+        storage_service.delete_poster(user_id, generation_id)
+    except Exception as e:
+        logger.warning(f"R2 poster delete failed for generation {generation_id}: {e}")
+    for local in (pipeline.VIDEOS_DIR / f"{generation_id}.mp4",
+                  posters.poster_path(generation_id)):
         try:
             if local.is_file():
                 local.unlink()
@@ -10471,6 +10654,80 @@ async def serve_video(filename: str, request: Request, sig: str = "", exp: str =
             "Content-Length": str(end - start + 1),
         },
     )
+
+
+# A poster filename, accepted or refused whole — same traversal discipline as
+# the video route: one segment, an id, a .jpg suffix, nothing else.
+_POSTER_FILENAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}\.jpg$")
+
+
+@app.get("/api/media/posters/{filename}")
+async def serve_poster(filename: str, sig: str = "", exp: str = ""):
+    """
+    Serve a generation's poster thumbnail so History can render it as an image.
+
+    Signed like video (an <img src> cannot carry auth either, and posters are
+    thumbnails of paid renders). Lazy: if no cached JPEG exists, build one
+    from the local clip, or restore the clip/poster from R2 via the row's
+    owner and then build it. A missing poster is a 404 the frontend treats as
+    "no thumbnail yet" — playback must never depend on it.
+    """
+    if not _POSTER_FILENAME_RE.match(filename or ""):
+        raise HTTPException(status_code=404, detail="Poster not found")
+    if not media_signing.verify(filename, exp, sig):
+        raise HTTPException(status_code=404, detail="Poster not found")
+
+    job_id = filename[:-4]
+    poster = posters.poster_path(job_id)
+    if posters.is_usable_poster(poster):
+        return FileResponse(
+            str(poster),
+            media_type="image/jpeg",
+            headers={"Cache-Control": "private, max-age=31536000, immutable"},
+        )
+
+    # Owner comes from our rows, never from the URL, like the video route.
+    row = await _fetch_one(
+        "SELECT id, user_id FROM generations WHERE id = ?", (job_id,))
+    if not row:
+        row = await _fetch_one(
+            "SELECT id, user_id FROM overlay_compositions WHERE id = ?", (job_id,))
+    if row and storage_service.is_configured():
+        try:
+            restored_poster = await asyncio.to_thread(
+                storage_service.download_poster, row["user_id"], row["id"], poster)
+            if restored_poster and posters.is_usable_poster(poster):
+                return FileResponse(
+                    str(poster),
+                    media_type="image/jpeg",
+                    headers={"Cache-Control": "private, max-age=31536000, immutable"},
+                )
+        except Exception as error:
+            logger.warning("Cloud poster read failed for %s (%s)", job_id, type(error).__name__)
+
+    video = pipeline.VIDEOS_DIR / f"{job_id}.mp4"
+    if not video.is_file() and row and storage_service.is_configured():
+        try:
+            await asyncio.to_thread(
+                storage_service.restore_video, row["user_id"], row["id"], video)
+        except Exception as error:
+            logger.warning("Cloud video restore for poster failed for %s (%s)", job_id, type(error).__name__)
+    generated = await asyncio.to_thread(posters.generate_poster, video, poster)
+    if generated and posters.is_usable_poster(poster):
+        # Cache it in the cloud for the next instance, but serve now even if
+        # the upload fails — the local file is what this response needs.
+        if row:
+            try:
+                await asyncio.to_thread(
+                    storage_service.upload_poster, row["user_id"], row["id"], poster)
+            except Exception as error:
+                logger.warning("Poster upload failed for %s (%s)", job_id, type(error).__name__)
+        return FileResponse(
+            str(poster),
+            media_type="image/jpeg",
+            headers={"Cache-Control": "private, max-age=31536000, immutable"},
+        )
+    raise HTTPException(status_code=404, detail="Poster not found")
 
 
 app.mount("/api/media", StaticFiles(directory=str(pipeline.STORAGE_DIR)), name="media")

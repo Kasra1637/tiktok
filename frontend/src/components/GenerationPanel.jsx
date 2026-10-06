@@ -328,6 +328,7 @@ const handleGenerate = async () => {
   const capability = models?.models?.find((m) => m.key === selectedModel);
   const inFlight = generation && (generation.status === "submitted" || generation.status === "generating");
   const downloadUrl = generation ? mediaUrl(generation.r2_url || generation.video_url) : null;
+  const posterUrl = generation?.poster_url ? mediaUrl(generation.poster_url) : null;
   // The length this project will render at, and whether the selected model can
   // do it in one pass. Shown before the click because the endpoint refuses
   // anything longer with a 400: the founder should read that here rather than
@@ -524,7 +525,8 @@ const handleGenerate = async () => {
                   src={downloadUrl}
                   controls
                   playsInline
-                  preload="metadata"
+                  preload="none"
+                  poster={posterUrl || undefined}
                   onError={() => setPreviewBroken(true)}
                   className="w-full max-w-[280px] rounded-xl border border-[color:var(--hairline)]"
                 />

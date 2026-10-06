@@ -125,6 +125,100 @@ def upload_video(user_id: str, job_id: str, video_path: Path) -> Optional[str]:
         return None
 
 
+def _poster_key(user_id: str, job_id: str) -> str:
+    """Build the R2 object key for a poster: {user_id}/{job_id}.jpg"""
+    return f"{user_id}/{job_id}.jpg"
+
+
+def upload_poster(user_id: str, job_id: str, poster_path: Path) -> bool:
+    """
+    Upload a poster JPEG to R2 for durability across deploys.
+
+    Returns True on success, False otherwise. Never raises for service
+    errors: the local poster still serves History on this instance.
+    """
+    if not is_configured():
+        return False
+    try:
+        if not poster_path or not Path(poster_path).is_file():
+            return False
+    except OSError:
+        return False
+    client = _get_client()
+    if not client:
+        return False
+    key = _poster_key(user_id, job_id)
+    try:
+        client.upload_file(
+            str(poster_path),
+            R2_BUCKET_NAME,
+            key,
+            ExtraArgs={
+                "ContentType": "image/jpeg",
+                "CacheControl": "public, max-age=31536000, immutable",
+            },
+        )
+        logger.info(f"Uploaded poster to R2: {key}")
+        return True
+    except ClientError as e:
+        logger.error(f"R2 poster upload failed for {key}: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error uploading poster to R2 {key}: {e}")
+        return False
+
+
+def download_poster(user_id: str, job_id: str, target: Path) -> bool:
+    """Download a poster from R2 to `target`. Validates it is a JPEG."""
+    client = _get_client()
+    if client is None:
+        return False
+    target = Path(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp = target.with_name(f".{target.name}.{uuid.uuid4().hex}.poster")
+    try:
+        client.download_file(R2_BUCKET_NAME, _poster_key(user_id, job_id), str(temp))
+        try:
+            if not temp.is_file() or temp.stat().st_size < 512:
+                return False
+            with temp.open("rb") as fh:
+                head = fh.read(2)
+            if head != b"\xff\xd8":
+                return False
+        except OSError:
+            return False
+        temp.replace(target)
+        return True
+    except ClientError as error:
+        if _missing_object(error):
+            return False
+        raise
+    finally:
+        try:
+            temp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def delete_poster(user_id: str, job_id: str) -> bool:
+    """Delete a poster from R2. True if deleted or absent, False on error."""
+    if not is_configured():
+        return False
+    client = _get_client()
+    if not client:
+        return False
+    key = _poster_key(user_id, job_id)
+    try:
+        client.delete_object(Bucket=R2_BUCKET_NAME, Key=key)
+        return True
+    except ClientError as e:
+        logger.error(f"R2 poster delete failed for {key}: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error deleting poster from R2 {key}: {e}")
+        return False
+
+
 def is_managed_url(value: str) -> bool:
     """Recognize our stable cloud locators, including the private S3 endpoint."""
     try:

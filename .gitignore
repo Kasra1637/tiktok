@@ -70,6 +70,9 @@ backend/storage/hookforge.db-shm
 # Saved hook template assets (generated at runtime per deployment)
 backend/storage/templates/
 
+# Poster thumbnails (generated at runtime per deployment, heal on demand)
+backend/storage/posters/
+
 # Archive files and large assets
 **/*.zip
 **/*.tar.gz
