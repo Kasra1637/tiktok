@@ -24,6 +24,7 @@ import { Progress } from "../components/ui/progress";
 import { Slider } from "../components/ui/slider";
 import { Switch } from "../components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
+import { useReducedMotion } from "framer-motion";
 import { SectionCard } from "../components/SectionCard";
 import { Chip } from "../components/Chip";
 import { api, getErrorMessage } from "../lib/api";
@@ -33,6 +34,7 @@ import {
   BACKGROUNDS,
   BASE_PHONE_H,
   CAPTURE_FPS,
+  EXPORT_AUDIO_GAIN,
   COLOR_PALETTES,
   DEFAULT_SCREEN,
   DEFAULTS,
@@ -243,11 +245,14 @@ function TransportButton({ label, onClick, disabled, children, testId }) {
  * - The export is saved straight into History as a child of that generation.
  *   The local download remains as a secondary action, never the only path.
  * - The file picker is the original import path, preserved. Entered from a
- *   Hook + Middle it is a fallback that swaps the source for this edit; entered
+ *   Hook + Story it is a fallback that swaps the source for this edit; entered
  *   from the sidebar with no generation it is the whole input, and the export
- *   is saved standalone. Either way it never creates a Hook + Middle.
+ *   is saved standalone. Either way it never creates a Hook + Story.
  */
 export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) {
+  // A programmatic scroll cannot be switched off by a Tailwind motion-reduce
+  // variant, so the preference is read here and honoured in JS.
+  const reduceMotion = useReducedMotion();
   // At most ONE group is open at a time. This panel describes one clip, and
   // eleven groups open at once made the settings column taller than the video
   // they were describing — the preview shrank to fit a wall of controls. One
@@ -351,6 +356,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const audioCtxRef = useRef(null);
   const audioSrcRef = useRef(null);
   const audioDestRef = useRef(null);
+  // The single gain stage between the media element and the recorder. Exists so
+  // the level written into the file and the level heard while recording are the
+  // same number, from one constant.
+  const audioGainRef = useRef(null);
   const isExportingRef = useRef(false);
   const zoomKeyframesRef = useRef([]);
   const liveZoomRef = useRef({
@@ -359,6 +368,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   });
   const sourceObjectUrlRef = useRef(null);
   const resultObjectUrlRef = useRef(null);
+  // The "Export ready" card, so a finished export can put itself in front of
+  // the founder. A ref rather than a scrollIntoView on mount because the card
+  // renders inside the PREVIEW column, which is its own scroll container at
+  // lg+ (lg:sticky lg:overflow-y-auto). Scrolling the window would move nothing
+  // there; scrollIntoView resolves whichever ancestor actually scrolls.
+  const resultCardRef = useRef(null);
 
   useEffect(() => {
     preloadHandViewImages();
@@ -369,6 +384,40 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       document.fonts.load(`700 100px ${HOOK_FONT}`).catch(() => {});
     }
   }, []);
+
+  /**
+   * Put a finished export in front of the founder.
+   *
+   * Tapping Export is a commitment of several seconds, and when it lands the
+   * result — the video, the Download button, and the History confirmation — is
+   * below the fold in the preview column. Without this the export appears to
+   * have done nothing, and the natural next action is to press Export again.
+   *
+   * Two triggers, because the card fills in over time: once when the recording
+   * lands (so the video and Download are visible immediately) and again when
+   * the save reaches History (so the "In History" badge and View in History
+   * are visible too). Keyed on those two values rather than run on every
+   * render, so a founder who scrolls away to look at something else is not
+   * yanked back on an unrelated state change.
+   *
+   * `block: "nearest"` scrolls the minimum distance that reveals the card. The
+   * preview column is height-capped and sticky at lg+, so "center" would move
+   * the phone frame out of view to satisfy the result card.
+   */
+  useEffect(() => {
+    if (!result) return;
+    const card = resultCardRef.current;
+    if (!card) return;
+    const behavior = reduceMotion ? "auto" : "smooth";
+    // rAF so the card has been laid out before we measure and scroll to it.
+    const raf = requestAnimationFrame(() => {
+      card.scrollIntoView({ behavior, block: "nearest", inline: "nearest" });
+    });
+    return () => cancelAnimationFrame(raf);
+    // `result` rather than `result?.url`: it is set once per export, so its
+    // identity changes exactly when a recording lands and when one is cleared,
+    // which is the behaviour being asked for here.
+  }, [result, saved?.id, reduceMotion]);
 
   // Pin the generation's bytes on mount so a signed URL expiring mid-edit
   // cannot pull the source out from under the canvas or the recorder. With no
@@ -979,6 +1028,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     setResult(null);
     isExportingRef.current = true;
 
+    // Hoisted above the try because the finally below has to undo both of them
+    // on every exit path, including a pre-flight throw that never got as far as
+    // creating either. An element left unmuted after a failed export is louder
+    // than the preview for the rest of the session.
+    let restoreAudio = null;
+    let stopMonitoring = null;
+
     try {
       const transparent = viewMode !== "hand" && bg === "transparent";
       const mimes = supportedExportMimes({ transparent, exportFormat });
@@ -996,9 +1052,14 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
 
       const stream = canvas.captureStream(CAPTURE_FPS);
       video.loop = false;
+      // Captured, not assumed: the element is the source of the export's audio
+      // and its own volume/muted are the first thing that can quietly lower it.
+      // Restored in the finally below, whichever way this leaves.
+      restoreAudio = { muted: video.muted, volume: video.volume };
       video.muted = false;
       video.volume = 1;
       let audioTrackAdded = false;
+      let audioPath = "none";
 
       try {
         const capturableVideo = video;
@@ -1008,6 +1069,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           stream.addTrack(track);
           audioTrackAdded = true;
         }
+        if (audioTrackAdded) audioPath = "element-captureStream";
       } catch (captureErr) {
         console.warn("Native audio capture failed:", captureErr);
       }
@@ -1024,17 +1086,63 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             audioSrcRef.current = ac.createMediaElementSource(video);
           }
           if (!audioDestRef.current) {
+            // The gain node is what makes the exported level the SAME level
+            // that is monitored: both the recorder and the speakers are fed
+            // from one node at EXPORT_AUDIO_GAIN, so "quieter than the
+            // preview" stops being expressible.
+            audioGainRef.current = ac.createGain();
+            audioGainRef.current.gain.value = EXPORT_AUDIO_GAIN;
             audioDestRef.current = ac.createMediaStreamDestination();
-            audioSrcRef.current.connect(audioDestRef.current);
-            audioSrcRef.current.connect(ac.destination);
+            audioSrcRef.current.connect(audioGainRef.current);
+            audioGainRef.current.connect(audioDestRef.current);
           }
           for (const track of audioDestRef.current.stream.getAudioTracks()) {
             stream.addTrack(track);
             audioTrackAdded = true;
           }
+          if (audioTrackAdded) audioPath = "webaudio-gain";
         }
       } catch (audioErr) {
         console.warn("Audio capture failed:", audioErr);
+      }
+
+      // Monitoring, on the same node that feeds the recorder, and only for as
+      // long as the recording runs. It used to connect to ac.destination once
+      // and stay connected forever, which meant the editor's audio behaviour
+      // changed permanently after the first export that took the WebAudio path
+      // — and left the preview audibly different from the file it produced.
+      if (audioPath === "webaudio-gain" && audioCtxRef.current) {
+        const ac = audioCtxRef.current;
+        try {
+          audioGainRef.current.connect(ac.destination);
+          stopMonitoring = () => {
+            try {
+              audioGainRef.current.disconnect(ac.destination);
+            } catch {
+              /* already disconnected */
+            }
+          };
+        } catch (monitorErr) {
+          console.warn("Audio monitoring unavailable:", monitorErr);
+        }
+      }
+
+      // One line that answers "was the level right?" next time it is reported.
+      // `enabled: false` on a recorded audio track is the failure mode that
+      // produces a quietly-wrong file, and it is invisible from the UI.
+      if (process.env.NODE_ENV !== "production") {
+        const recorded = stream.getAudioTracks().map((t) => ({
+          label: t.label,
+          enabled: t.enabled,
+          readyState: t.readyState,
+        }));
+        console.info("[demo-cta] export audio", {
+          path: audioPath,
+          element: { muted: video.muted, volume: video.volume },
+          gain: EXPORT_AUDIO_GAIN,
+          contextState: audioCtxRef.current?.state ?? null,
+          tracks: recorded,
+        });
       }
 
       // One attempt per supported MIME. A recorder-level failure — the encoder
@@ -1129,7 +1237,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         throw encoderError ?? new Error("Your browser does not support video recording.");
       }
       video.loop = true;
-      video.muted = true;
       const ext = extensionForMime(mime);
 
       // Post-record validation. Everything below is about refusing to offer a
@@ -1161,7 +1268,17 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       setError(e?.message || "The export could not be recorded.");
     } finally {
       isExportingRef.current = false;
-      if (video) { video.loop = true; video.muted = true; }
+      // Monitoring off before anything else, so a failed export cannot leave
+      // the editor permanently louder than the file it just refused to produce.
+      stopMonitoring?.();
+      if (video) {
+        video.loop = true;
+        // Restore what the element actually had, rather than assuming "muted".
+        // Hard-coding muted=true here is what made the second export of a
+        // session differ from the first.
+        video.muted = restoreAudio.muted;
+        video.volume = restoreAudio.volume;
+      }
       setRecording(false);
       setProgress(0);
     }
@@ -1296,7 +1413,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 This finished render is the input. Nothing is downloaded or uploaded to get it here.
               </p>
               <div className="flex flex-wrap items-center gap-2 text-xs">
-                <Badge variant="secondary">Hook + Middle</Badge>
+                <Badge variant="secondary">Hook + Story</Badge>
                 {videoMeta && <span className="text-muted-foreground">{videoMeta.w}x{videoMeta.h} • {videoMeta.d.toFixed(1)}s</span>}
               </div>
               {loadingSource && (
@@ -1347,7 +1464,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           </div>
           {sourceReplaced && generation && (
             <p className="text-xs text-muted-foreground">
-              Source replaced for this edit. The export is still filed under the selected Hook + Middle.
+              Source replaced for this edit. The export is still filed under the selected Hook + Story.
             </p>
           )}
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
@@ -1995,59 +2112,77 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             </Alert>
           )}
         </div>
-        <video ref={videoRef} className="hidden" playsInline muted loop autoPlay />
+        {/* Rendered but visually gone, NOT `display: none`. This element is the source
+          the recorder captures audio from, and a display:none media element is
+          one browsers are allowed to stop processing audio for — the frames
+          still reach the canvas, so the export looks right while its audio
+          comes back quiet or absent. 1px at zero opacity keeps it in the render
+          tree without putting a second video on screen. */}
+        <video
+          ref={videoRef}
+          className="pointer-events-none absolute h-px w-px opacity-0"
+          playsInline
+          muted
+          loop
+          autoPlay
+        />
 
         {result && (
-          <SectionCard title="Export ready">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>{result.mime.includes("mp4") ? "MP4" : "WebM"} • {(result.size / 1024 / 1024).toFixed(2)} MB</span>
-              {saved ? (
-                <Badge variant="secondary"><Check className="mr-1 h-2.5 w-2.5" /> In History</Badge>
-              ) : saving ? (
-                <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Saving…</span>
-              ) : null}
-            </div>
-            <video key={result.url} src={result.url} controls loop playsInline preload="auto" className="w-full rounded-xl border border-[color:var(--hairline)] bg-black" />
-            <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" size="sm" asChild>
-                <a
-                  href={result.url}
-                  download={result.name}
-                  onClick={() => recordSignal("video_downloaded", "downloaded", {
-                    brand_profile_id: generation?.brand_profile_id || "",
-                    studio_project_id: generation?.studio_project_id || "",
-                    generation_id: saved?.id || "",
-                    template_id: generation?.template_id || "",
-                  })}
-                >
-                  <Download className="h-3.5 w-3.5" /> Download {result.name}
-                </a>
-              </Button>
-              {saved ? (
-                <Button variant="brand" size="sm" asChild>
-                  <Link to="/history">View in History</Link>
+          /* A plain wrapper because SectionCard is a function component and
+             cannot receive a ref, and this card is the scroll target for the
+             auto-scroll above. */
+          <div ref={resultCardRef}>
+            <SectionCard title="Export ready">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{result.mime.includes("mp4") ? "MP4" : "WebM"} • {(result.size / 1024 / 1024).toFixed(2)} MB</span>
+                {saved ? (
+                  <Badge variant="secondary"><Check className="mr-1 h-2.5 w-2.5" /> In History</Badge>
+                ) : saving ? (
+                  <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Saving…</span>
+                ) : null}
+              </div>
+              <video key={result.url} src={result.url} controls loop playsInline preload="auto" className="w-full rounded-xl border border-[color:var(--hairline)] bg-black" />
+              <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" size="sm" asChild>
+                  <a
+                    href={result.url}
+                    download={result.name}
+                    onClick={() => recordSignal("video_downloaded", "downloaded", {
+                      brand_profile_id: generation?.brand_profile_id || "",
+                      studio_project_id: generation?.studio_project_id || "",
+                      generation_id: saved?.id || "",
+                      template_id: generation?.template_id || "",
+                    })}
+                  >
+                    <Download className="h-3.5 w-3.5" /> Download {result.name}
+                  </a>
                 </Button>
-              ) : (
-                <Button variant="secondary" size="sm" disabled={saving} onClick={() => result.blob && saveExport(result.blob, result.name)}>
-                  <RotateCcw className="h-3.5 w-3.5" /> {saving ? "Saving…" : "Save to History"}
-                </Button>
+                {saved ? (
+                  <Button variant="brand" size="sm" asChild>
+                    <Link to="/history">View in History</Link>
+                  </Button>
+                ) : (
+                  <Button variant="secondary" size="sm" disabled={saving} onClick={() => result.blob && saveExport(result.blob, result.name)}>
+                    <RotateCcw className="h-3.5 w-3.5" /> {saving ? "Saving…" : "Save to History"}
+                  </Button>
+                )}
+              </div>
+              {saveError && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>{saveError}</AlertDescription>
+                </Alert>
               )}
-            </div>
-            {saveError && (
-              <Alert variant="destructive">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>{saveError}</AlertDescription>
-              </Alert>
-            )}
-            {saved && (
-              <Alert>
-                <Info className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-                <AlertDescription>
-                  Saved beside the original Hook + Middle in History. The original is untouched and still downloadable.
-                </AlertDescription>
-              </Alert>
-            )}
-          </SectionCard>
+              {saved && (
+                <Alert>
+                  <Info className="h-4 w-4 text-[color:var(--brand-indigo)]" />
+                  <AlertDescription>
+                    Saved beside the original Hook + Story in History. The original is untouched and still downloadable.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </SectionCard>
+          </div>
         )}
       </div>
     </div>

@@ -16,7 +16,7 @@ import { DemoCtaEditor } from "../demoCta/DemoCtaEditor";
  * Two shapes, one page:
  *
  * - `/demo-cta` — the editor standalone, so Demo + CTA works without first
- *   generating a Hook + Middle. Finished renders are listed below it as a way
+ *   generating a Hook + Story. Finished renders are listed below it as a way
  *   in with a clip already attached.
  * - `/demo-cta/:generationId` — the same editor with that render pinned as the
  *   source and the export filed beside it in History.
@@ -24,7 +24,7 @@ import { DemoCtaEditor } from "../demoCta/DemoCtaEditor";
  * Reached from the sidebar, from a finished render in the studio, and from a
  * finished clip in History. At `/demo-cta` the editor opens standalone so it can
  * be used on its own footage, and the finished renders are offered underneath
- * as a way in with a Hook + Middle already attached.
+ * as a way in with a Hook + Story already attached.
  */
 function SourcePicker() {
   const [rows, setRows] = useState(null);
@@ -200,7 +200,7 @@ export function DemoCtaStudio() {
         title="Demo + CTA"
         description={
           generationId
-            ? "The finished Hook + Middle, wrapped in a phone mockup with your demo and close. The export lands beside the original in History."
+            ? "The finished Hook + Story, wrapped in a phone mockup with your demo and close. The export lands beside the original in History."
             : "Wrap your own clip—or a finished render—in a phone mockup. Exports save to History."
         }
       />

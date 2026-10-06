@@ -156,6 +156,30 @@ export const AUDIO_BITS_PER_SECOND = 192000;
 export const CAPTURE_FPS = 30;
 
 /**
+ * The one definition of "how loud this export is".
+ *
+ * Unity on purpose. The complaint this exists for is an export that came back
+ * quieter than what the founder heard, and the cause was that nothing in the
+ * pipeline said what the level WAS: the element was left to carry it, two
+ * different capture paths read it from two different places, and the level the
+ * founder heard and the level written into the file were only ever assumed to
+ * be the same number.
+ *
+ * Both paths now pass through a GainNode set to this value, so the monitored
+ * level and the recorded level are the same number by construction rather than
+ * by coincidence. Raise it here to make every export louder; there is no second
+ * place to change, which is the property that makes it trustworthy.
+ *
+ * One honest limit: this governs the WebAudio path. The browser's own
+ * `captureStream()` is preferred when it works, and that path records the
+ * element's own audio at whatever level the element is at — unity today,
+ * because the element is unmuted at volume 1 for the capture. So this constant
+ * is the level on both paths only while it is 1. Anything else, and the native
+ * path has to be routed through the graph to honour it too.
+ */
+export const EXPORT_AUDIO_GAIN = 1;
+
+/**
  * MIME selection mirrors the standalone exporter: transparent forces WebM,
  * otherwise MP4 candidates come first unless WebM was explicitly chosen.
  * Returns the full ordered list of supported candidates, not just the first:

@@ -675,10 +675,13 @@ const DemoCtaStudio = load("pages/DemoCtaStudio.jsx").default;
 // checked plan comes before the step that calls the model, and a set comparison
 // would pass just as happily if the render went back to fourth.
 //
-// The last step is "Hook & middle" rather than "Influencer hook" because that is
+// The last step is "Hook + Story" rather than "Influencer hook" because that is
 // what it produces: one render with two sections. The old label named the first
 // beat of a chain, and a step called "Influencer hook" whose output is a hook
-// plus a middle is a step that under-describes the thing being rendered.
+// plus a story is a step that under-describes the thing being rendered. "Story"
+// replaced "middle" on request: the section is the narrative that carries the
+// viewer to the demo, which is what the founder recognises it as, and "middle"
+// reads as filler between two more interesting things.
 // Five, not seven. "Assets" was a step whose only content was the photo upload,
 // and "Creative plan" was a step whose only content was a button whose result
 // you had to go to the next screen to read. Both are now part of the step they
@@ -692,7 +695,7 @@ const STEP_LABELS = [
   "Audience & goal",
   "Template & photo",
   "Review",
-  "Hook & middle",
+  "Hook + Story",
 ];
 
 // The one length every step must be able to state without a control anywhere.
@@ -1273,7 +1276,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          const pill = stepPill(ctx, "Hook & middle");
+          const pill = stepPill(ctx, "Hook + Story");
           await act(async () => {
             pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
           });
@@ -1328,7 +1331,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Hook & middle");
+          await openStep(ctx, "Hook + Story");
           const btn = renderButton(ctx);
           if (!btn.disabled) {
             throw new Error("the generate button is live with no strategy to render from");
@@ -1369,7 +1372,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Hook & middle");
+          await openStep(ctx, "Hook + Story");
           const btn = renderButton(ctx);
           await act(async () => {
             btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
@@ -1403,7 +1406,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Hook & middle");
+          await openStep(ctx, "Hook + Story");
           const btn = renderButton(ctx);
           if (!/Generate another/.test((btn.textContent || "").trim())) {
             throw new Error("expected a re-roll button when a generation already exists");
@@ -1460,7 +1463,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Hook & middle");
+          await openStep(ctx, "Hook + Story");
           const build = buttonByText(ctx, /Build the app-specific strategy|Rebuild strategy/);
           await act(async () => {
             build.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
@@ -1510,7 +1513,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Hook & middle");
+          await openStep(ctx, "Hook + Story");
         }
       );
     } finally {
@@ -1569,7 +1572,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Hook & middle");
+          await openStep(ctx, "Hook + Story");
           const rebuild = [...ctx.container.querySelectorAll("button")]
             .find((b) => (b.textContent || "").includes("Rebuild strategy"));
           if (!rebuild) throw new Error("no rebuild control on the last step");
@@ -1626,7 +1629,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Hook & middle");
+          await openStep(ctx, "Hook + Story");
           const rebuild = [...ctx.container.querySelectorAll("button")]
             .find((b) => (b.textContent || "").includes("Rebuild strategy"));
           if (!rebuild) throw new Error("no rebuild control on the last step");
@@ -1658,7 +1661,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
         { getStudioProject: async () => ({ ...BASE_PROJECT, script_version: 0, script: "" }) },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          const pill = stepPill(ctx, "Hook & middle");
+          const pill = stepPill(ctx, "Hook + Story");
           await act(async () => {
             pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
           });
@@ -3003,7 +3006,7 @@ async function runDemoCtaChecks() {
   );
 
   await check(
-    "Demo + CTA works on its own, without a Hook + Middle",
+    "Demo + CTA works on its own, without a Hook + Story",
     async (ctx) => {
       await mountPicker(ctx, []);
       // The whole point of the sidebar entry: no generation, no finished render,
@@ -3011,7 +3014,7 @@ async function runDemoCtaChecks() {
       const input = ctx.container.querySelector('[data-testid="demo-cta-file-input"]');
       if (!input) {
         throw new Error(
-          "no file input on the standalone editor. Requiring a Hook + Middle first " +
+          "no file input on the standalone editor. Requiring a Hook + Story first " +
             "would make this unreachable for anyone who just wants to wrap their own clip."
         );
       }
@@ -3847,6 +3850,150 @@ async function runDemoCtaChecks() {
           }
         }
       );
+    }
+  );
+await check(
+    "a finished export puts itself in view",
+    async () => {
+      // jsdom has no layout, so this cannot assert that the page actually
+      // scrolled. What it can pin is the shape that makes the scroll possible:
+      // the card carries a ref, the ref is scrolled into view, and it happens
+      // on the two transitions that matter. Without all three, tapping Export
+      // looks like it did nothing and the natural next action is to press it
+      // again.
+      const src = fs.readFileSync(
+        path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
+        "utf8"
+      );
+      for (const marker of [
+        "const resultCardRef = useRef(null)",
+        "ref={resultCardRef}",
+        "scrollIntoView",
+      ]) {
+        if (!src.includes(marker)) {
+          throw new Error(
+            `the post-export scroll lost a piece: ${marker}. Tapping Export ` +
+              "leaves the result below the fold with no indication it worked."
+          );
+        }
+      }
+      // scrollIntoView, not window.scrollTo: the card lives in the preview
+      // column, which is its own scroll container at lg+, so scrolling the
+      // window moves nothing where the user is looking.
+      if (/window\.scroll(To|IntoView)/.test(src)) {
+        throw new Error(
+          "the post-export scroll targets the window, but the Export ready card " +
+            "is inside the preview column's own scroll container."
+        );
+      }
+      // Both transitions: the recording landing, and the History save landing.
+      // Only the first leaves the "In History" badge and View in History unseen.
+      // Anchored to the call itself, not the bare method name: the name also occurs
+      // in a comment explaining the choice, and searching for it there slices
+      // the file from the wrong place and finds somebody else's array.
+      const scrollAt = src.indexOf("card.scrollIntoView(");
+      const tail = src.slice(scrollAt, scrollAt + 600);
+      const depMatch = tail.match(/\}, \[([^\]]*)\]\);/);
+      if (!depMatch || !depMatch[1].includes("result") || !depMatch[1].includes("saved?.id")) {
+        throw new Error(
+          "the post-export scroll must fire on both the recording landing and " +
+            "the History save landing, or the confirmation is never revealed. " +
+            `dependency array found: ${depMatch ? depMatch[1].trim() : "none"}`
+        );
+      }
+      // It must not fight the founder: reduced motion honoured, and the card
+      // has to be laid out before it is measured.
+      if (!src.includes("useReducedMotion")) {
+        throw new Error(
+          "the post-export scroll ignores prefers-reduced-motion. A programmatic " +
+            "smooth scroll cannot be switched off by a Tailwind motion-reduce variant."
+        );
+      }
+      if (!/requestAnimationFrame/.test(src)) {
+        throw new Error(
+          "the post-export scroll does not wait a frame, so it can measure the " +
+            "card before it has been laid out."
+        );
+      }
+    }
+  );
+
+  await check(
+    "the export's audio level is one defined number, not an accident",
+    async () => {
+      // The report this pins: a downloaded clip came back quieter than what the
+      // founder heard. There was no definition of "the level" anywhere — the
+      // element carried it, two capture paths read it from two places, and the
+      // monitored and recorded levels were assumed equal rather than made so.
+      const src = fs.readFileSync(
+        path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
+        "utf8"
+      );
+      const constants = fs.readFileSync(
+        path.join(__dirname, "..", "src", "demoCta", "constants.js"),
+        "utf8"
+      );
+
+      if (!/EXPORT_AUDIO_GAIN = 1/.test(constants)) {
+        throw new Error(
+          "EXPORT_AUDIO_GAIN is not unity. Both capture paths assume unity, and a " +
+            "gain the native captureStream path cannot honour makes the exported " +
+            "level diverge again."
+        );
+      }
+      // One gain node, feeding the recorder, so recorded == monitored.
+      for (const marker of [
+        "ac.createGain()",
+        "audioGainRef.current.gain.value = EXPORT_AUDIO_GAIN",
+        "audioGainRef.current.connect(audioDestRef.current)",
+      ]) {
+        if (!src.includes(marker)) {
+          throw new Error(
+            `the audio gain stage lost a piece: ${marker}. Without a single node ` +
+              "feeding the recorder, the exported level and the monitored level " +
+              "are different numbers that happen to look alike."
+          );
+        }
+      }
+      // Monitoring must be torn down. A permanent connection to
+      // ac.destination is what made the editor permanently louder than the
+      // file it produced, and it survived every later export.
+      if (!src.includes("stopMonitoring?.()") || !src.includes("disconnect(ac.destination)")) {
+        throw new Error(
+          "audio monitoring is never disconnected. The editor stays louder than " +
+            "the file it just produced, for the rest of the session."
+        );
+      }
+      // The element's own level is captured and put back, not assumed to be
+      // "muted" — a hard-coded restore made the second export of a session
+      // differ from the first.
+      if (!src.includes("restoreAudio = { muted: video.muted, volume: video.volume }")) {
+        throw new Error(
+          "the source element's audio state is not captured before recording, so " +
+            "it cannot be restored to what it actually was."
+        );
+      }
+      if (!/video\.muted = restoreAudio\.muted/.test(src) || !/video\.volume = restoreAudio\.volume/.test(src)) {
+        throw new Error(
+          "the source element's volume is not restored. Only muted was being put " +
+            "back, so the element's level drifted across exports."
+        );
+      }
+      // display:none is a licence for browsers to skip audio processing on a
+      // media element while still painting its frames to a canvas — which is
+      // exactly a file whose video looks right and whose audio is quiet.
+      if (/<video\s+ref=\{videoRef\}\s+className="hidden"/.test(src)) {
+        throw new Error(
+          "the recorded source element is display:none again. Browsers may stop " +
+            "processing its audio, producing a right-looking, quiet export."
+        );
+      }
+      if (!/ref=\{videoRef\}[\s\S]{0,120}?opacity-0/.test(src)) {
+        throw new Error(
+          "the recorded source element is not visually hidden via opacity. It has " +
+            "to stay in the render tree for its audio to be captured."
+        );
+      }
     }
   );
 }

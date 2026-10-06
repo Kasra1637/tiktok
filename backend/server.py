@@ -7535,7 +7535,7 @@ async def health(user_id: str = Depends(get_current_user_id)):
 #
 # The editor lives inside HookForge, on the same origin. There is no popup,
 # redirect, new tab, iframe, opener, postMessage, or cross-app link: the
-# completed Hook + Middle generation is the editor's input, and the exported
+# completed Hook + Story generation is the editor's input, and the exported
 # file is saved here as a child generation beside the original.
 #
 # This is storage, not generation. No model is called, nothing is submitted
@@ -7556,7 +7556,7 @@ async def save_demo_cta_export(
     Save the native Product Demo + CTA export into History.
 
     Two mounts on one handler, not two endpoints. The generation-scoped path
-    takes the finished Hook + Middle as its parent, so the export appears beside
+    takes the finished Hook + Story as its parent, so the export appears beside
     the original rather than replacing it — both downloads keep working and the
     lineage is recorded. The bare path is the same save with no parent, for
     someone who brought their own footage in through the editor rather than
@@ -7717,7 +7717,7 @@ def _require_current_strategy(project: dict) -> dict:
             status_code=409,
             detail=(
                 "This project has no video strategy yet. Build the strategy on the "
-                "Hook & middle step, then generate."
+                "Hook + Story step, then generate."
             ),
         )
     built_from = int(project.get("strategy_script_version") or 0)
@@ -7730,7 +7730,7 @@ def _require_current_strategy(project: dict) -> dict:
             status_code=409,
             detail=(
                 "The plan changed after this strategy was built, so the strategy no "
-                "longer describes what you reviewed. Rebuild it on the Hook & middle "
+                "longer describes what you reviewed. Rebuild it on the Hook + Story "
                 "step, then generate."
             ),
         )

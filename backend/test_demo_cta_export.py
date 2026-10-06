@@ -119,7 +119,7 @@ def _upload(name="hookforge-demo-cta.mp4", data=MP4_BYTES):
 class TestStandaloneExport:
     """
     The no-generation path: someone brings their own footage to the editor
-    without rendering a Hook + Middle first. Same save, same validation, same
+    without rendering a Hook + Story first. Same save, same validation, same
     signed playback, no parent.
     """
 

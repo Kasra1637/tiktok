@@ -44,7 +44,7 @@ import {
 
 // The order is the product, and it is deliberate.
 //
-//   profile -> angle -> template -> assets -> plan -> review -> hook & middle
+//   profile -> angle -> template -> assets -> plan -> review -> Hook + Story
 //
 // The script is written, checked for banned claims and read by the founder
 // BEFORE any video is rendered. The last step then renders the piece that
@@ -84,7 +84,7 @@ const STEPS = [
   { key: "angle", label: "Audience & goal", icon: Target },
   { key: "template", label: "Template & photo", icon: LayoutTemplate },
   { key: "review", label: "Review", icon: CheckCircle2 },
-  { key: "hook", label: "Hook & middle", icon: Sparkles },
+  { key: "hook", label: "Hook + Story", icon: Sparkles },
 ];
 
 function formatTemplateUse(n) {
@@ -1341,7 +1341,7 @@ export default function CreateVideo() {
       return (
         <StepShell
           icon={Sparkles}
-          title="Hook & middle"
+          title="Hook + Story"
           description="Render the piece from your approved plan: hook, then middle."
         >
           <div className="space-y-3">
@@ -1703,7 +1703,7 @@ export default function CreateVideo() {
       <PageHeader
         icon={Clapperboard}
         title="Create Video"
-        description="Hook + middle from an approved profile and template. You record the demo and close."
+        description="Hook + Story from an approved profile and template. You record the demo and close."
       />
 
       {/* Progress that tracks state rather than position.

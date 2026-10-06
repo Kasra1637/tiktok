@@ -46,7 +46,7 @@ export const TOURS = {
         target: '[data-testid="step-pill-profile"]',
         title: "The studio, in five steps",
         body:
-          "App Profile \u2192 Audience & goal \u2192 Template & photo \u2192 Review \u2192 Hook & middle. Jump between steps with these pills; only approved profiles get in, so every script builds on facts you have reviewed.",
+          "App Profile \u2192 Audience & goal \u2192 Template & photo \u2192 Review \u2192 Hook + Story. Jump between steps with these pills; only approved profiles get in, so every script builds on facts you have reviewed.",
       },
       {
         target: '[data-testid="step-pill-angle"]',
