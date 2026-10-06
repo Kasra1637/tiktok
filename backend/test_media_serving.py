@@ -422,6 +422,51 @@ class TestSignatureRequired:
         assert response.headers["cache-control"].startswith("private")
 
 
+class TestTheHistoryRowPlays:
+    """
+    The History row's player and its download both take `r2_url || video_url`,
+    and `r2_url` is where the local fallback lives when the upload to cloud
+    storage failed. Signing only video_url on that endpoint left the field the
+    browser actually asks for unsigned, so the now-signed route answered the
+    <video> with a 404 and the row said "Preview unavailable" instead of playing
+    a clip that was on disk the whole time.
+
+    This takes the URL the row hands the browser and makes the request a player
+    makes with it, rather than inspecting the string for a signature.
+    """
+
+    def test_the_url_the_row_hands_the_player_serves_the_clip(self, api):
+        from models import now_iso
+
+        gen_id = str(uuid.uuid4())
+        _write_clip(api, name=f"{gen_id}.mp4")
+        now = now_iso()
+        # The exact shape _persist_generation_clip records when
+        # storage_service.upload_video returns None: the provider's temporary
+        # link stays in video_url, and the durable copy becomes the local path.
+        _run(api._execute(
+            "INSERT INTO generations (id, model, duration, status, video_url, r2_url,"
+            " created_at, updated_at, user_id) VALUES (?, 'minimax-h3', 20, 'completed',"
+            " ?, ?, ?, ?, ?)",
+            (gen_id, "https://openrouter.invalid/temporary.mp4",
+             f"/api/media/videos/{gen_id}.mp4", now, now, ANON),
+        ))
+
+        row = _run(api.generation_history(user_id=ANON))["generations"][0]
+        # Exactly what the page picks, in the page's own order.
+        url = row["r2_url"] or row["video_url"]
+        assert url.startswith(f"/api/media/videos/{gen_id}.mp4?"), (
+            f"the row hands the player {url!r}, and the signed route refuses that"
+            " — an unsigned path 404s and the row shows 'Preview unavailable'"
+        )
+
+        response, body = _run(_serve_async(
+            api, f"{gen_id}.mp4", "bytes=0-99", query=url.split("?", 1)[1]))
+        assert response.status_code == 206
+        assert response.headers["accept-ranges"] == "bytes"
+        assert body == CLIP_BYTES[:100]
+
+
 class TestSigningHelpers:
     """The signing helpers on their own, without a request in the way."""
 

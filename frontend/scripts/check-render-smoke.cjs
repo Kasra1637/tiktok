@@ -461,6 +461,37 @@ function resolveFile(base) {
   throw new Error(`no module file for ${base}`);
 }
 
+/**
+ * The durable-source rule, evaluated from the real src/lib/api.js.
+ *
+ * The History and Demo + CTA checks mount against a stubbed `lib/api`, so a
+ * component would happily render from a copy of this rule that no longer
+ * matches what ships — and this is the rule that decides whether a clip plays
+ * at all. The function is read out of the source and evaluated, the same
+ * approach check-frontend-logic.cjs takes for videoLength.js and for the same
+ * reason: the assertion must be about the shipped code. A shape it cannot read
+ * is a failure, not a skip, because otherwise the mounts below would pass
+ * against a stub that has drifted.
+ */
+const durableMediaUrl = (() => {
+  const source = fs.readFileSync(path.join(SRC, "lib", "api.js"), "utf8");
+  // Located by its declaration and its closing brace rather than by a pattern:
+  // a regex over source is one escaping mistake away from matching nothing while
+  // looking correct, and a silent no-match would leave every mount below
+  // asserting against an `undefined` import.
+  const start = source.indexOf("export const durableMediaUrl = (row) => {");
+  const end = start === -1 ? -1 : source.indexOf("};", start);
+  if (start === -1 || end === -1) {
+    throw new Error(
+      "durableMediaUrl could not be read out of src/lib/api.js, so the durable-copy " +
+        "checks would be asserting against a stub instead of the shipped rule"
+    );
+  }
+  const decl = source.slice(start, end + 2).replace("export ", "");
+  // eslint-disable-next-line no-new-func
+  return new Function("mediaUrl", `${decl} return durableMediaUrl;`)((mediaPath) => mediaPath);
+})();
+
 function load(relPath) {
   const abs = resolveFile(path.join(SRC, relPath));
   if (cache.has(abs)) {
@@ -514,12 +545,17 @@ function load(relPath) {
     if (spec === "sonner") return { toast: { success: () => {}, error: () => {} } };
     if (spec.endsWith("lib/api")) {
       // Mirror the real getErrorMessage: checks assert on the surfaced text
-      // (e.g. a 409's detail), and a constant would swallow it.
+      // (e.g. a 409's detail), and a constant would swallow it. mediaUrl is
+      // identity because these mounts are about which URL is chosen, not about
+      // the backend prefix. durableMediaUrl is the real function, evaluated
+      // from source above, so the History checks cannot pass against a stub
+      // that no longer matches the shipped rule.
       return {
         api: apiStub,
         getErrorMessage: (err) =>
           err?.response?.data?.detail || err?.message || "error",
         mediaUrl: (p) => p,
+        durableMediaUrl,
       };
     }
     if (spec.endsWith("lib/feedback")) {
@@ -3943,6 +3979,111 @@ async function runDemoCtaChecks() {
       );
     }
   );
+await check(
+    "History plays the durable copy the API signed, not a stripped path",
+    async (ctx) => {
+      const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+      // The row a founder actually opens: the durable copy is the media path,
+      // and the API signs it on the way out. video_url still holds the
+      // provider's link, which is what raw `r2_url || video_url` order can end
+      // up reaching for, and what a stripped query string would leave behind.
+      const signed = "/api/media/videos/gen-durable.mp4?exp=1791302519&sig=abc123";
+      await withApi(
+        {
+          getGenerationHistory: async () => ({
+            generations: [
+              {
+                ...COMPLETED,
+                id: "gen-durable",
+                video_url: "https://openrouter.invalid/temporary.mp4",
+                r2_url: signed,
+              },
+            ],
+          }),
+          getAppProfiles: async () => ({ profiles: [PROFILE] }),
+          getVariationKinds: async () => ({ variations: [] }),
+        },
+        async () => {
+          await mount(GenerationHistory, { onChanged: () => {} })(ctx);
+          const player = ctx.container.querySelector("video");
+          if (!player) {
+            throw new Error(
+              "no player for a clip whose durable copy the API signed: the History " +
+                "preview is the screen this row exists for"
+            );
+          }
+          const src = player.getAttribute("src") || "";
+          if (!src.includes(signed)) {
+            throw new Error(
+              `the player is not using the signed durable copy the API handed it: ${src}`
+            );
+          }
+          const download = [...ctx.container.querySelectorAll("a")].find((a) =>
+            (a.textContent || "").includes("Download MP4")
+          );
+          if (!download || !(download.getAttribute("href") || "").includes(signed)) {
+            throw new Error(
+              "the download does not point at the same signed durable copy as the player"
+            );
+          }
+        }
+      );
+    }
+  );
+
+  await check(
+    "History never plays the provider's temporary link",
+    async (ctx) => {
+      const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+      // A finished render whose durable save failed before any copy was made:
+      // the only URL left is the provider's, which needs a bearer token the
+      // browser cannot send. There is nothing here a player could load and
+      // nothing a download could save, so offering either produces a dead
+      // player beside a button that answers 401 — and it says the copy is
+      // missing instead, with the one action that can repair it.
+      await withApi(
+        {
+          getGenerationHistory: async () => ({
+            generations: [
+              {
+                ...COMPLETED,
+                id: "gen-provider-only",
+                video_url: "https://openrouter.invalid/temporary.mp4",
+                r2_url: null,
+              },
+            ],
+          }),
+          getAppProfiles: async () => ({ profiles: [PROFILE] }),
+          getVariationKinds: async () => ({ variations: [] }),
+        },
+        async () => {
+          await mount(GenerationHistory, { onChanged: () => {} })(ctx);
+          const player = ctx.container.querySelector("video");
+          if (player) {
+            throw new Error(
+              "a player was mounted for a provider link the browser cannot fetch: " +
+                player.getAttribute("src")
+            );
+          }
+          const download = [...ctx.container.querySelectorAll("a")].find((a) =>
+            (a.textContent || "").includes("Download MP4")
+          );
+          if (download) {
+            throw new Error(
+              "a download was offered for a link the browser cannot fetch, so it 401s"
+            );
+          }
+          expectText(ctx, "No durable copy", "the row does not say the copy is missing");
+          expectText(
+            ctx,
+            "Retry durable save",
+            "the row offers no way to repair the missing copy"
+          );
+        }
+      );
+    }
+  );
+
 await check(
     "a finished export puts itself in view",
     async () => {

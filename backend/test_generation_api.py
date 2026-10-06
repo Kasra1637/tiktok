@@ -814,7 +814,10 @@ class TestListingAndCapabilities:
 
         History is the one worth watching: it builds its rows by hand instead of
         going through _public_generation, so it is the one most likely to miss
-        the signing, and its player sits on the page a founder uses most.
+        the signing, and its player sits on the page a founder uses most. It
+        takes `r2_url || video_url`, so both fields are asserted here: signing
+        only video_url is exactly how that row ended up saying "Preview
+        unavailable" for a clip whose durable copy was the local fallback path.
         """
         import media_signing
 
@@ -829,21 +832,25 @@ class TestListingAndCapabilities:
         })
         _run(api.poll_generation(gen["id"], ANON))
         # The poll stored a provider URL, which is not a media path and so has
-        # nothing to sign. Point the row at a real one so this exercises the
-        # signing rather than passing on an unrelated URL shape.
+        # nothing to sign. Point the row at real ones so this exercises the
+        # signing rather than passing on an unrelated URL shape. Both fields
+        # carry the path, which is the shape a render has when the upload to
+        # cloud storage failed and the local copy became the durable one.
+        media_path = f"/api/media/videos/{gen['id']}.mp4"
         _run(api._execute(
-            "UPDATE generations SET video_url = ? WHERE id = ?",
-            (f"/api/media/videos/{gen['id']}.mp4", gen["id"])))
+            "UPDATE generations SET video_url = ?, r2_url = ? WHERE id = ?",
+            (media_path, media_path, gen["id"])))
 
         def assert_plays(payload, label):
-            url = payload.get("video_url")
-            assert url and url.startswith("/api/media/videos/"), (
-                f"{label}: expected a media path, got {url!r}")
-            assert "?" in url, f"{label}: {url} carries no signature"
-            query = dict(p.split("=", 1) for p in url.split("?", 1)[1].split("&"))
-            assert media_signing.verify(
-                url.split("/")[-1].split("?", 1)[0], query["exp"], query["sig"]
-            ), f"{label}: the media route would reject {url}"
+            for field in ("video_url", "r2_url"):
+                url = payload.get(field)
+                assert url and url.startswith("/api/media/videos/"), (
+                    f"{label}: expected a media path in {field}, got {url!r}")
+                assert "?" in url, f"{label}: {field} ({url}) carries no signature"
+                query = dict(p.split("=", 1) for p in url.split("?", 1)[1].split("&"))
+                assert media_signing.verify(
+                    url.split("/")[-1].split("?", 1)[0], query["exp"], query["sig"]
+                ), f"{label}: the media route would reject {field} {url}"
 
         assert_plays(_run(api.get_generation(gen["id"], user_id=ANON)), "detail")
         assert_plays(

@@ -8864,9 +8864,15 @@ async def get_asset_usage(asset_id: str, user_id: str = Depends(get_current_user
         )
         # Signed for the same reason as everywhere else: this endpoint returns
         # raw generation rows rather than going through _public_generation, and
-        # the media route now rejects an unsigned one.
+        # the media route rejects an unsigned one. Both fields, so a consumer
+        # that reaches for r2_url (the durable copy) cannot be handed a 404 by
+        # a row that was signed on one field only.
         gens = [
-            {**g, "video_url": media_signing.sign_stored_path(g.get("video_url"))}
+            {
+                **g,
+                "video_url": media_signing.sign_stored_path(g.get("video_url")),
+                "r2_url": media_signing.sign_stored_path(g.get("r2_url")),
+            }
             for g in gens
         ]
         use["generations"] = gens
@@ -9739,10 +9745,15 @@ async def generation_history(
         entry = dict(row)
         entry["retryable"] = bool(entry.get("retryable"))
         # This endpoint builds its rows by hand rather than through
-        # _public_generation, so the video URL has to be signed here too.
-        # Without it the History row's player would get a 404 from the now-signed
-        # media route, which is a visible break in existing functionality.
+        # _public_generation, so both media paths have to be signed here too.
+        # Both, because this is the one row whose player and download take
+        # `r2_url || video_url`. Signing only video_url left the field the
+        # browser actually asks for unsigned, so the now-signed media route
+        # answered the <video> with a 404 — the "Preview unavailable" that
+        # appears instead of the clip whenever the durable copy is the local
+        # fallback path written when the R2 upload returned None.
         entry["video_url"] = media_signing.sign_stored_path(entry.get("video_url"))
+        entry["r2_url"] = media_signing.sign_stored_path(entry.get("r2_url"))
         composition = await _fetch_one(
             "SELECT id, status, output_url, r2_url FROM overlay_compositions "
             "WHERE generation_id = ? ORDER BY created_at DESC LIMIT 1",

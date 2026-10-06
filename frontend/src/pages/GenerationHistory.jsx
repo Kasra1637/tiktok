@@ -7,7 +7,7 @@ import { Badge } from "../components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import EmptyState from "../components/EmptyState";
-import { api, getErrorMessage, mediaUrl } from "../lib/api";
+import { api, getErrorMessage, durableMediaUrl, mediaUrl } from "../lib/api";
 import { FactChip, FactList } from "../components/FactChip";
 import { recordSignal, recordReason } from "../lib/feedback";
 import {
@@ -309,9 +309,19 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
   // leaving a player that looks loaded and does nothing.
   const [previewBroken, setPreviewBroken] = useState(false);
 
-  const downloadUrl = row.r2_url || row.video_url;
+  // The copy the browser can actually fetch, chosen by the same rule every
+  // other screen uses (see durableMediaUrl): the durable upload, or the signed
+  // local fallback path. It deliberately returns null for a row whose only URL
+  // is the provider's temporary link, because a <video> cannot play that and an
+  // <a download> cannot save it — handing either one the link produces a player
+  // that never loads and a download that answers 401.
+  const downloadUrl = durableMediaUrl(row);
   const composedUrl = row.composition?.r2_url || row.composition?.output_url;
   const hasClip = row.status === "completed" && Boolean(downloadUrl);
+  // A finished render with no fetchable copy still gets the rail: the row has
+  // to say the copy is missing and offer the repair, which is the only way a
+  // clip like that becomes playable again.
+  const showRail = row.status === "completed";
 
   const signalRefs = {
     brand_profile_id: row.brand_profile_id,
@@ -337,6 +347,13 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
     if (row.status !== "completed") return;
     api.getVariationKinds().then((d) => setVariationKinds(d.variations || [])).catch(() => {});
   }, [row.status]);
+
+  // A new URL means a new attempt. Every history response re-signs the media
+  // path, so a failure recorded against the previous signature must not keep
+  // the player hidden after the row is reloaded.
+  useEffect(() => {
+    setPreviewBroken(false);
+  }, [downloadUrl]);
 
   // Duplicating costs nothing and produces a draft, not a video, so it needs no
   // confirmation. The returned draft is opened directly: telling the founder a
@@ -389,6 +406,31 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
     }
   };
 
+  // The studio panel offers this repair, and History is where a broken clip is
+  // actually met, so the same action belongs here. Re-running storage re-fetches
+  // the provider's copy and re-uploads it, which is the only way a clip whose
+  // local copy was wiped by a redeploy becomes playable again. A refusal is
+  // specific ("no local copy and no provider link left"), so it is shown rather
+  // than flattened into a generic failure.
+  const handleRetryStorage = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api.retryGenerationStorage(row.id);
+      if (result?.storage_error) {
+        toast.success("Saved to this server's storage — download it to keep it.");
+      } else {
+        toast.success("Durable copy saved. This clip can be played here again.");
+      }
+      setPreviewBroken(false);
+      onChanged?.();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="surface rounded-2xl">
       {/* One grid for the whole row, and the clip gets a rail of its own.
@@ -401,47 +443,58 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
           a 9:16 clip wide enough to span 1150px would be two thousand pixels
           tall.
 
-          The grid only exists when there is a clip: a failed render has no
-          player, and forcing its error message into a 240px rail would make
-          the two states look like different components. */}
-      <div className={`grid gap-4 ${hasClip ? "sm:grid-cols-[minmax(0,240px)_minmax(0,1fr)]" : ""}`}>
-        {hasClip && (
+          The grid exists for a finished render: a clip, or the card that says
+          why there is no playable clip. A failed render has neither, and
+          forcing its error message into a 240px rail would make the two states
+          look like different components. */}
+      <div className={`grid gap-4 ${showRail ? "sm:grid-cols-[minmax(0,240px)_minmax(0,1fr)]" : ""}`}>
+        {showRail && (
           <div className="space-y-2">
-            {previewBroken ? (
-              /* Says what is actually true instead of leaving a dead control.
-                 A clip whose source cannot be played inline (an expired
-                 provider URL, a storage path that no longer resolves) used to
-                 render a player that looked loaded and did nothing, which reads
-                 as a bug in the app rather than a file that cannot be previewed
-                 here. The download is the way through either way. */
-              <div className="rounded-xl border border-dashed border-[color:var(--hairline-strong)] p-3">
-                <p className="text-sm">Preview unavailable</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  This clip cannot be played here. Download it to view.
-                </p>
-              </div>
-            ) : (
+            {downloadUrl && !previewBroken ? (
               <video
-                src={mediaUrl(downloadUrl)}
+                src={downloadUrl}
                 controls
                 playsInline
                 preload="metadata"
                 onError={() => setPreviewBroken(true)}
                 className="w-full rounded-lg border border-[color:var(--hairline)]"
               />
+            ) : (
+              /* Says what is actually true instead of leaving a dead control.
+                 Two different truths share this card, and conflating them was
+                 the bug: a copy exists but the browser would not play it (an
+                 expired signature, an object that is no longer there), or no
+                 copy exists at all because the durable save failed — and in the
+                 second case there is nothing to download either, so promising
+                 one was a dead end. The repair below is the way through both. */
+              <div className="rounded-xl border border-dashed border-[color:var(--hairline-strong)] p-3">
+                <p className="text-sm">
+                  {downloadUrl ? "Preview unavailable" : "No durable copy"}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {downloadUrl
+                    ? "This clip cannot be played here. Download it to view."
+                    : "This render finished without a copy the browser can open, so there is nothing to play or download yet."}
+                </p>
+              </div>
             )}
             {/* The download sits under the file it produces. It was the most
                 likely action on the card and it sat in a ten-item row at the
-                bottom, two lines away from the thing it acts on. */}
-            <Button variant="secondary" size="sm" className="w-full" asChild>
-              <a
-                href={mediaUrl(downloadUrl)}
-                download
-                onClick={() => recordSignal("video_downloaded", "downloaded", signalRefs)}
-              >
-                <Download className="h-3.5 w-3.5" /> Download MP4
-              </a>
-            </Button>
+                bottom, two lines away from the thing it acts on. It appears
+                only when there is a URL to fetch: a provider link cannot be
+                downloaded by a browser, so a button for one is a promise this
+                row cannot keep. */}
+            {downloadUrl && (
+              <Button variant="secondary" size="sm" className="w-full" asChild>
+                <a
+                  href={downloadUrl}
+                  download
+                  onClick={() => recordSignal("video_downloaded", "downloaded", signalRefs)}
+                >
+                  <Download className="h-3.5 w-3.5" /> Download MP4
+                </a>
+              </Button>
+            )}
             {composedUrl && (
               <Button variant="secondary" size="sm" className="w-full" asChild>
                 <a
@@ -451,6 +504,24 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
                 >
                   <Star className="h-3.5 w-3.5" /> With real visuals
                 </a>
+              </Button>
+            )}
+            {(!downloadUrl || previewBroken) && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full"
+                disabled={busy}
+                onClick={handleRetryStorage}
+                data-testid={`retry-storage-${row.id}`}
+                title="Re-fetch the finished render and save a durable copy, so it plays here"
+              >
+                {busy ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-3.5 w-3.5" />
+                )}
+                Retry durable save
               </Button>
             )}
           </div>
