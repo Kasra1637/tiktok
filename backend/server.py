@@ -6961,6 +6961,24 @@ async def _eager_poster(generation_id: str, user_id: str) -> None:
         logger.warning("Eager poster failed for %s (%s)", generation_id, type(exc).__name__)
 
 
+async def _schedule_poster(
+    background_tasks: BackgroundTasks, generation_id: str, user_id: str
+) -> None:
+    """
+    Poster work runs after the response, never inside it.
+
+    A save already spends an ffmpeg (trim/rescale) inside the request; running
+    the poster encode inline stacks a second one on a 512MB host, which is
+    what OOM-killed the container. On HTTP the work is deferred to
+    BackgroundTasks; direct (non-HTTP) callers such as tests pass None and run
+    it inline, which keeps them asserting the real path.
+    """
+    if background_tasks is not None:
+        background_tasks.add_task(_eager_poster, generation_id, user_id)
+        return
+    await _eager_poster(generation_id, user_id)
+
+
 def _public_generation(row: dict) -> dict:
     """Serialize a generation row, hiding the stored prompt by default.
 
@@ -7624,6 +7642,7 @@ async def save_demo_cta_export(
     file: UploadFile = File(...),
     generation_id: str | None = None,
     user_id: str = Depends(get_current_user_id),
+    background_tasks: BackgroundTasks = None,
 ):
     """
     Save the native Product Demo + CTA export into History.
@@ -7729,7 +7748,7 @@ async def save_demo_cta_export(
         result_id,
         f" for generation {generation_id}" if generation_id else " with no parent",
     )
-    await _eager_poster(result_id, user_id)
+    await _schedule_poster(background_tasks, result_id, user_id)
     return {
         "id": result_id,
         "status": "completed",
@@ -7952,7 +7971,11 @@ async def submit_project_generation(
 
 
 @api_router.post("/generations/{generation_id}/poll")
-async def poll_generation(generation_id: str, user_id: str = Depends(get_current_user_id)):
+async def poll_generation(
+    generation_id: str,
+    user_id: str = Depends(get_current_user_id),
+    background_tasks: BackgroundTasks = None,
+):
     """
     Refresh a generation's status and resolve a finished clip to a URL.
 
@@ -8044,8 +8067,9 @@ async def poll_generation(generation_id: str, user_id: str = Depends(get_current
                 "UPDATE video_assets SET r2_url = ? WHERE job_id = ?", (stored_url, generation_id)
             )
             # Poster is best-effort and off the critical path: History works
-            # without it, it just costs video bytes per thumbnail.
-            await _eager_poster(generation_id, user_id)
+            # without it, it just costs video bytes per thumbnail. Scheduled
+            # after the response so the save never stacks two ffmpegs.
+            await _schedule_poster(background_tasks, generation_id, user_id)
     elif status in ("failed", "error", "cancelled", "canceled"):
         message = str(response.get("error") or response.get("message") or "Generation failed.")
         await _execute(
@@ -8533,7 +8557,11 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
 
 
 @api_router.post("/generations/{generation_id}/storage/retry")
-async def retry_generation_storage(generation_id: str, user_id: str = Depends(get_current_user_id)):
+async def retry_generation_storage(
+    generation_id: str,
+    user_id: str = Depends(get_current_user_id),
+    background_tasks: BackgroundTasks = None,
+):
     """
     Retry durable storage for a completed generation.
 
@@ -8584,12 +8612,18 @@ async def retry_generation_storage(generation_id: str, user_id: str = Depends(ge
         )
     _storage_repairs_in_flight.add(generation_id)
     try:
-        return await _run_storage_repair(row, generation_id, user_id, local_path)
+        return await _run_storage_repair(row, generation_id, user_id, local_path, background_tasks)
     finally:
         _storage_repairs_in_flight.discard(generation_id)
 
 
-async def _run_storage_repair(row: dict, generation_id: str, user_id: str, local_path: Path):
+async def _run_storage_repair(
+    row: dict,
+    generation_id: str,
+    user_id: str,
+    local_path: Path,
+    background_tasks: BackgroundTasks = None,
+):
     """The body of a durable-save repair, run under the single-flight guard."""
     # Same test the helper uses, so this log line describes what will actually
     # happen rather than what is merely on disk.
@@ -8633,7 +8667,7 @@ async def _run_storage_repair(row: dict, generation_id: str, user_id: str, local
         "UPDATE video_assets SET r2_url = ? WHERE job_id = ?", (stored_url, generation_id)
     )
     logger.info("Generation %s: saved copy recovered", generation_id)
-    await _eager_poster(generation_id, user_id)
+    await _schedule_poster(background_tasks, generation_id, user_id)
     return {"id": generation_id,
             "r2_url": media_signing.sign_stored_path(stored_url),
             "playback_url": media_signing.build_signed_path(f"{generation_id}.mp4"),
@@ -10755,3 +10789,4 @@ if FRONTEND_BUILD_DIR.exists():
         if file_path.exists() and file_path.is_file():
             return FileResponse(str(file_path))
         return _spa_response()
+
