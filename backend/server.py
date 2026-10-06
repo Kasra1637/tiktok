@@ -2312,6 +2312,59 @@ def served_media_path(local_path) -> Optional[str]:
     return f"/api/media/{relative_path.as_posix()}"
 
 
+# React/webpack emit content-hashed bundle names (main.98727cf3.js,
+# main.a1b2c3d4e5.chunk.js) and hashed font/media files
+# (anton.4c1f0a9b.woff2). A file that is BOTH hashed and one of these build
+# outputs can never change meaning, so it is safe to cache forever.
+#
+# Both halves are required on purpose. Without the extension list, any file
+# with a long hex run in its name would be marked immutable — including a
+# replaceable asset — and would then take up to a year to reach anyone. Without
+# the hash requirement, an unhashed file copied verbatim out of public/ would be
+# pinned at deploy time.
+_HASHED_ASSET_RE = re.compile(
+    r"\.[0-9a-f]{8,}\.(?:[\w-]+\.)*(?:m?js|css|map|woff2?|ttf|eot)$",
+    re.IGNORECASE,
+)
+
+IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
+REVALIDATE_CACHE_CONTROL = "public, max-age=0, must-revalidate"
+# index.html must never be cached: it is the only file that points at the
+# current bundle hashes, so a stale copy is a stale app.
+SPASHELL_CACHE_CONTROL = "no-cache, no-store, must-revalidate"
+
+
+class _CacheHeaderStaticFiles(StaticFiles):
+    """StaticFiles that states how long a file may be cached.
+
+    Without an explicit Cache-Control, browsers fall back to heuristic caching
+    against Last-Modified and will happily keep an old index.html — which still
+    names the PREVIOUS deploy's bundle hashes. The result is an app that deploys
+    cleanly and appears not to have changed, because the shell that decides
+    which code to run is the one thing being served from cache. That is not
+    hypothetical here: it is why a sidebar reorder was visible in the deployed
+    bundle and not on screen.
+    """
+
+    def file_response(self, *args, **kwargs) -> Response:
+        response = super().file_response(*args, **kwargs)
+        path = getattr(self, "path", "")
+        name = os.path.basename(path) if path else ""
+        response.headers["Cache-Control"] = (
+            IMMUTABLE_CACHE_CONTROL
+            if _HASHED_ASSET_RE.search(name)
+            else REVALIDATE_CACHE_CONTROL
+        )
+        return response
+
+
+def _spa_response() -> Response:
+    return FileResponse(
+        str(FRONTEND_BUILD_DIR / "index.html"),
+        headers={"Cache-Control": SPASHELL_CACHE_CONTROL},
+    )
+
+
 def require_ai_configured():
     if not os.environ.get("OPENROUTER_API_KEY"):
         raise HTTPException(
@@ -10288,7 +10341,7 @@ FRONTEND_BUILD_DIR = Path(__file__).parent.parent / "frontend_build"
 if FRONTEND_BUILD_DIR.exists():
     app.mount(
         "/static",
-        StaticFiles(directory=str(FRONTEND_BUILD_DIR / "static")),
+        _CacheHeaderStaticFiles(directory=str(FRONTEND_BUILD_DIR / "static")),
         name="frontend_static",
     )
 
@@ -10297,4 +10350,4 @@ if FRONTEND_BUILD_DIR.exists():
         file_path = FRONTEND_BUILD_DIR / full_path
         if file_path.exists() and file_path.is_file():
             return FileResponse(str(file_path))
-        return FileResponse(str(FRONTEND_BUILD_DIR / "index.html"))
+        return _spa_response()
