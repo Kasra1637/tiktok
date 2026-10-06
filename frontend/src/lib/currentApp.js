@@ -1,7 +1,7 @@
 /**
  * Remembers which App Profile the founder is working on.
  *
- * Why this exists: the app you select in "Your app" lives in that page's React
+ * Why this exists: the app you select in App Profile lives in that page's React
  * state, so nothing else in the app can see it. The Asset Library, opened from
  * the sidebar at a plain `/assets`, therefore had no idea an app had been
  * chosen and dead-ended on "Choose an App Profile first". Storing the selection

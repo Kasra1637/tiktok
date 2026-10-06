@@ -719,7 +719,7 @@ export default function Landing() {
                   <Link to="/history" className="transition-colors hover:text-foreground">Generation History</Link>
                 </li>
                 <li>
-                  <Link to="/app-profiles" className="transition-colors hover:text-foreground">Your app</Link>
+                  <Link to="/app-profiles" className="transition-colors hover:text-foreground">App Profile</Link>
                 </li>
               </ul>
             </div>

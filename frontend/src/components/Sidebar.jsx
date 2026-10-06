@@ -18,17 +18,26 @@ import {
 /**
  * Sidebar navigation model.
  *
- * Ordering reflects the workflow: wrap your own clip, or a finished render, in
- * a phone mockup first, then make the video, the app it is for, the assets it
- * is generated from, and what you have already made. The retired Discover /
+ * Ordering is the dependency order of the product: the App Profile first,
+ * because everything else is made from it. Create Video refuses to run without
+ * an approved profile, and Demo + CTA inherits the app's angles and claims, so
+ * leading with either of those puts a screen in front of the founder whose
+ * inputs do not exist yet. Then the two things you make, then the assets they
+ * are generated from, then what you have already made. The retired Discover /
  * Saved Hooks / Research Archive / Trend Research / Analytics pages are gone, so
  * there is no Research group and no Insight link.
  *
- * Demo + CTA leads because it is the one screen that works with no input at
- * all: it takes a file you already have, or a finished render from the list
- * underneath it, so it is the shortest path to something to look at. Create
- * Video needs an approved app profile behind it, which is why "Your app" sits
- * above it and why it reads as the heavier of the two.
+ * App Profile leads rather than Create Video for that reason, and it is named
+ * for what the page actually holds. "Your app" described one app, while the page
+ * is the list of every app profile you have researched, approved and edited, and
+ * the product's own vocabulary everywhere else — the tour, the detail page, the
+ * database column — already says App Profile. A nav label that disagreed with
+ * the page it opens was the remaining inconsistency.
+ *
+ * Demo + CTA sits directly under it because it is the one screen that works
+ * with no input at all: it takes a file you already have, or a finished render
+ * from the list underneath it, so it stays the shortest path to something to
+ * look at for someone who is not starting from scratch.
  *
  * This was two labelled groups — "Create" and "Insight" — and both headings
  * are gone. "Insight" sat above exactly one link, so it read as a section with
@@ -46,9 +55,9 @@ import {
  * selectors for `document.querySelector`.
  */
 const NAV_ITEMS = [
+  { to: "/brand", label: "App Profile", icon: PenLine, testId: "brand-nav-link", hint: "Research, edit, approve" },
   { to: "/demo-cta", label: "Demo + CTA", icon: Smartphone, testId: "demo-cta-nav-link", hint: "Phone mockup and close" },
   { to: "/create", label: "Create Video", icon: Clapperboard, testId: "create-nav-link", hint: "Guided wizard" },
-  { to: "/brand", label: "Your app", icon: PenLine, testId: "brand-nav-link", hint: "Research, edit, approve" },
   { to: "/assets", label: "Asset Library", icon: Images, testId: "assets-nav-link", hint: "Character reference" },
   { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Everything you made" },
 ];

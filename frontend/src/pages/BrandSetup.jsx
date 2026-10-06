@@ -341,7 +341,7 @@ export default function BrandSetup() {
     <div className="mx-auto w-full max-w-6xl space-y-6">
       <PageHeader
         icon={Briefcase}
-        title="Your app"
+        title="App Profile"
         description="Research a mobile app, review the draft profile, then approve it — approved profiles power video scripts."
         actions={
           <div className="flex flex-wrap items-center gap-2">

@@ -240,7 +240,7 @@ the work happens:
 | Operations (`/operations`) | History (failures + Retry), per-generation endpoints |
 | Settings (`/settings`) | Studio footer (never-publishes line), History (entered-by-hand figures), Create Video (not-proven-performers note) |
 | Dashboard (`/`) | History (totals + failures + Retry), the sidebar (next steps). `/` redirects to `/create` |
-| App Profiles list (`/app-profiles`) | Your app (`/brand`) for research/edit/approve; the profile detail page survives for angles, templates, and per-app drafts. `/app-profiles` redirects to `/brand` |
+| App Profiles list (`/app-profiles`) | App Profile (`/brand`) for research/edit/approve; the profile detail page survives for angles, templates, and per-app drafts. `/app-profiles` redirects to `/brand` |
 | Analytics (`/analytics`) | Nowhere — deliberately. It reported the operator's own activity and what it cost them, and this product does not meter that. `/analytics` redirects to `/create` |
 ### Removed / demoted
 

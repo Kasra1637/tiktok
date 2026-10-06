@@ -2664,8 +2664,99 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
   await runDeleteDialogChecks();
 
   console.log("");
+  console.log("Checking the sidebar navigation model...");
+  await runSidebarNavChecks();
+
+  console.log("");
   console.log("Checking the native Product Demo + CTA editor...");
   await runDemoCtaChecks();
+}
+
+/**
+ * The sidebar's link list: its order and its one label.
+ *
+ * Source-level rather than mounted, and deliberately. Mounting Sidebar means
+ * shimming Clerk and the onboarding provider (useOnboarding throws outside its
+ * provider, and AccountButton pulls in @clerk/clerk-react), which is a lot of
+ * harness to assert a literal array. The list is a plain module-level constant
+ * with no logic in it, so reading it is not a weaker check here — it is the same
+ * check.
+ *
+ * Order is pinned as a whole sequence, the way STEP_LABELS is: the point is that
+ * App Profile comes FIRST, because everything else is generated from it and
+ * Create Video refuses to run without an approved one. A set comparison would
+ * pass just as happily with the profile back in the middle.
+ */
+async function runSidebarNavChecks() {
+  await check(
+    "App Profile leads the sidebar, and nothing still calls it \"Your app\"",
+    async () => {
+      const src = fs.readFileSync(
+        path.join(__dirname, "..", "src", "components", "Sidebar.jsx"),
+        "utf8"
+      );
+      const block = src.slice(src.indexOf("const NAV_ITEMS = ["));
+      const items = [...block.matchAll(/to:\s*"([^"]+)",\s*label:\s*"([^"]+)"/g)].map(
+        (m) => ({ to: m[1], label: m[2] })
+      );
+      if (items.length < 5) {
+        throw new Error(
+          `parsed ${items.length} nav items from Sidebar.jsx, expected 5. The ` +
+            "pattern no longer matches the model, so this check would pass on nothing."
+        );
+      }
+      if (items[0].to !== "/brand" || items[0].label !== "App Profile") {
+        throw new Error(
+          `the first sidebar link is ${items[0].label} (${items[0].to}), expected ` +
+            "App Profile (/brand). Everything else in the app is generated from " +
+            "the profile, so leading with a screen whose inputs do not exist yet " +
+            "opens on a dead end."
+        );
+      }
+      const expected = ["/brand", "/demo-cta", "/create", "/assets", "/history"];
+      const actual = items.map((i) => i.to);
+      if (actual.join("|") !== expected.join("|")) {
+        throw new Error(
+          `sidebar order is ${actual.join(" -> ")}, expected ${expected.join(" -> ")}`
+        );
+      }
+      // The label, everywhere it is user-visible. A nav item reading "App
+      // Profile" above a page titled "Your app" is the exact inconsistency this
+      // rename exists to remove, and it would come straight back.
+      const stale = [];
+      for (const rel of [
+        "src/components/Sidebar.jsx",
+        "src/pages/BrandSetup.jsx",
+        "src/pages/AppProfileDetail.jsx",
+        "src/pages/Landing.jsx",
+        "src/lib/onboarding/tours.js",
+      ]) {
+        const text = fs.readFileSync(path.join(__dirname, "..", rel), "utf8");
+        // Matched only where a label actually lives: a nav label, a page title,
+        // a tour label, or a JSX text node. A bare quoted mention is not enough,
+        // because the comment explaining WHY this was renamed has to be able to
+        // name the old thing — punishing documentation for existing would make
+        // the rename unreversible.
+        const labelSite =
+          /label:\s*"Your app"|title\s*[:=]\s*"Your app"|"Your app tour"|\/>\s*Your app\b/;
+        if (labelSite.test(text)) stale.push(rel);
+      }
+      if (stale.length) {
+        throw new Error(
+          `the old "Your app" label is back in: ${stale.join(", ")}. The page is ` +
+            "called App Profile everywhere else in the product."
+        );
+      }
+      // The route and testid must not move with the label: the onboarding tour
+      // and every existing deep link depend on them.
+      if (!/to: "\/brand", label: "App Profile", icon: PenLine, testId: "brand-nav-link"/.test(src)) {
+        throw new Error(
+          "the App Profile link changed its route or testId. brand-nav-link is " +
+            "referenced by convention and /brand by every existing deep link."
+        );
+      }
+    }
+  );
 }
 
 /**
@@ -2772,7 +2863,7 @@ async function runDeleteDialogChecks() {
         if (called !== PROFILE.id) {
           throw new Error(`deleteAppProfile was called with ${JSON.stringify(called)}`);
         }
-        // The profile list page is gone, so "Your app" is the only landing.
+        // The profile list page is gone, so the App Profile page is the only landing.
         const went = global.__SMOKE_NAVIGATIONS || [];
         if (!went.includes("/brand")) {
           throw new Error(`expected to land on /brand, navigated to ${JSON.stringify(went)}`);

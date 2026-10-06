@@ -91,7 +91,7 @@ export const TOURS = {
   // Targets BrandSetup — research, edit and approve an App Profile at /brand.
   brand: {
     id: "brand",
-    label: "Your app tour",
+    label: "App Profile tour",
     steps: [
       {
         target: '[data-testid="brand-url-card"]',
@@ -175,7 +175,7 @@ export const TOURS = {
     steps: [
       {
         target: '[data-testid="app-profile-header"]',
-        title: "Your app, in one place",
+        title: "Your app profile, in one place",
         body:
           "Draft or approved at a glance. New video deep-links the studio with this app preselected, and Edit opens the profile editor \u2014 everything below backs every video you make from this app.",
       },

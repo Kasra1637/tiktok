@@ -316,7 +316,7 @@ export default function AppProfileDetail() {
     setDeleteError(null);
     try {
       const res = await api.deleteAppProfile(profileId);
-      // There is no profile list page any more, so "Your app" is the only
+      // There is no profile list page any more, so the App Profile list is the only
       // landing. The toast is mounted globally, so it survives the navigation.
       const removed = res?.generations_removed || 0;
       toast.success(
@@ -361,7 +361,7 @@ export default function AppProfileDetail() {
             more, and the editor is where an app is created, approved and
             switched between, so that is the honest way back. */}
         <Link to="/brand">
-          <ArrowLeft className="h-3.5 w-3.5" /> Your app
+          <ArrowLeft className="h-3.5 w-3.5" /> App Profile
         </Link>
       </Button>
 
