@@ -308,6 +308,10 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
   // Set when the clip cannot be played inline, so the row can say so instead of
   // leaving a player that looks loaded and does nothing.
   const [previewBroken, setPreviewBroken] = useState(false);
+  const [recoveredUrl, setRecoveredUrl] = useState(null);
+  const [checkingRecovery, setCheckingRecovery] = useState(false);
+  const [recoveryStorageError, setRecoveryStorageError] = useState(null);
+  const [playerVersion, setPlayerVersion] = useState(0);
 
   // The copy the browser can actually fetch, chosen by the same rule every
   // other screen uses (see durableMediaUrl): the durable upload, or the signed
@@ -315,7 +319,7 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
   // is the provider's temporary link, because a <video> cannot play that and an
   // <a download> cannot save it — handing either one the link produces a player
   // that never loads and a download that answers 401.
-  const downloadUrl = durableMediaUrl(row);
+  const downloadUrl = recoveredUrl || durableMediaUrl(row);
   const composedUrl = row.composition?.r2_url || row.composition?.output_url;
   const hasClip = row.status === "completed" && Boolean(downloadUrl);
   // A finished render with no fetchable copy still gets the rail: the row has
@@ -417,13 +421,16 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
     setError(null);
     try {
       const result = await api.retryGenerationStorage(row.id);
-      if (result?.storage_error) {
-        toast.success("Saved to this server's storage — download it to keep it.");
-      } else {
-        toast.success("Durable copy saved. This clip can be played here again.");
-      }
+      const fresh = await api.getGeneration(row.id);
+      const nextUrl = durableMediaUrl(fresh) || mediaUrl(result?.playback_url);
+      if (!nextUrl) throw new Error("Storage recovered no playable source.");
+      setRecoveredUrl(nextUrl);
+      setRecoveryStorageError(result?.storage_error || null);
+      setPlayerVersion((version) => version + 1);
+      setCheckingRecovery(true);
       setPreviewBroken(false);
-      onChanged?.();
+      // Keep this row mounted until loadeddata confirms the recovered file
+      // actually decodes; an endpoint success alone is not playback success.
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -452,11 +459,23 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
           <div className="space-y-2">
             {downloadUrl && !previewBroken ? (
               <video
+                key={`${row.id}-${playerVersion}`}
                 src={downloadUrl}
                 controls
                 playsInline
                 preload="metadata"
-                onError={() => setPreviewBroken(true)}
+                onLoadedData={() => {
+                  if (checkingRecovery) {
+                    setCheckingRecovery(false);
+                    toast.success(recoveryStorageError
+                      ? "Video recovered locally. Download it now to keep a copy."
+                      : "Video recovered and ready to play.");
+                  }
+                }}
+                onError={() => {
+                  setPreviewBroken(true);
+                  setCheckingRecovery(false);
+                }}
                 className="w-full rounded-lg border border-[color:var(--hairline)]"
               />
             ) : (
@@ -473,10 +492,13 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {downloadUrl
-                    ? "This clip cannot be played here. Download it to view."
+                    ? "The saved video could not be loaded. Retry recovery to check its local and cloud copies."
                     : "This render finished without a copy the browser can open, so there is nothing to play or download yet."}
                 </p>
               </div>
+            )}
+            {checkingRecovery && (
+              <p className="text-xs text-muted-foreground" role="status">Checking recovered video…</p>
             )}
             {/* The download sits under the file it produces. It was the most
                 likely action on the card and it sat in a ten-item row at the
@@ -491,7 +513,7 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
                   download
                   onClick={() => recordSignal("video_downloaded", "downloaded", signalRefs)}
                 >
-                  <Download className="h-3.5 w-3.5" /> Download MP4
+                  <Download className="h-3.5 w-3.5" /> Download video
                 </a>
               </Button>
             )}

@@ -23,6 +23,7 @@ export const mediaUrl = (path) => {
  * <video>.
  */
 export const durableMediaUrl = (row) => {
+  if (row?.playback_url) return mediaUrl(row.playback_url);
   const durable = row?.r2_url;
   if (durable && durable.startsWith("http")) return mediaUrl(durable);
   const local = durable || row?.video_url;

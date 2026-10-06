@@ -3996,7 +3996,8 @@ await check(
                 ...COMPLETED,
                 id: "gen-durable",
                 video_url: "https://openrouter.invalid/temporary.mp4",
-                r2_url: signed,
+                r2_url: "https://account.r2.cloudflarestorage.com/private/clip.mp4",
+                playback_url: signed,
               },
             ],
           }),
@@ -4019,7 +4020,7 @@ await check(
             );
           }
           const download = [...ctx.container.querySelectorAll("a")].find((a) =>
-            (a.textContent || "").includes("Download MP4")
+            (a.textContent || "").includes("Download video")
           );
           if (!download || !(download.getAttribute("href") || "").includes(signed)) {
             throw new Error(
@@ -4066,7 +4067,7 @@ await check(
             );
           }
           const download = [...ctx.container.querySelectorAll("a")].find((a) =>
-            (a.textContent || "").includes("Download MP4")
+            (a.textContent || "").includes("Download video")
           );
           if (download) {
             throw new Error(
@@ -4083,6 +4084,47 @@ await check(
       );
     }
   );
+
+  await check("History retries its recovered source and waits for actual decoding", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const initial = "/api/media/videos/retry.mp4?sig=old";
+    const fresh = "/api/media/videos/retry.mp4?sig=fresh";
+    const calls = [];
+    await withApi({
+      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "retry", playback_url: initial }] }),
+      getAppProfiles: async () => ({ profiles: [] }),
+      getVariationKinds: async () => ({ variations: [] }),
+      retryGenerationStorage: async (id) => { calls.push(id); return { playback_url: fresh }; },
+      getGeneration: async () => ({ ...COMPLETED, id: "retry", playback_url: fresh }),
+    }, async () => {
+      await mount(GenerationHistory, {})(ctx);
+      await act(async () => ctx.container.querySelector("video").dispatchEvent(new dom.window.Event("error")));
+      expectText(ctx, "Retry durable save");
+      expectAbsent(ctx, "Download it to view.", "a failed source is not a guaranteed download");
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="retry-storage-retry"]'), "retry storage");
+      if (calls.join() !== "retry") throw new Error("retry did not target this video");
+      const player = ctx.container.querySelector("video");
+      if (!player || player.getAttribute("src") !== fresh) throw new Error("recovered playback URL was not loaded");
+      expectText(ctx, "Checking recovered video", "endpoint success must not claim playback success");
+      await act(async () => player.dispatchEvent(new dom.window.Event("loadeddata")));
+      expectAbsent(ctx, "Checking recovered video", "decode success must finish the recovery check");
+    });
+  });
+
+  await check("History surfaces recovery failure instead of claiming success", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    await withApi({
+      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "lost", video_url: null, r2_url: null }] }),
+      getAppProfiles: async () => ({ profiles: [] }),
+      getVariationKinds: async () => ({ variations: [] }),
+      retryGenerationStorage: async () => { throw new Error("No remaining cloud or local copy. Re-upload your export."); },
+    }, async () => {
+      await mount(GenerationHistory, {})(ctx);
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="retry-storage-lost"]'), "retry lost video");
+      expectText(ctx, "Re-upload your export", "recovery error must be visible");
+      if (ctx.container.querySelector("video")) throw new Error("failed recovery cannot mount a player");
+    });
+  });
 
 await check(
     "a finished export puts itself in view",

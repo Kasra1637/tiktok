@@ -11,13 +11,14 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlsplit
 
 import aiosqlite
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, APIRouter, BackgroundTasks, HTTPException, UploadFile, File, Form, Depends, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse, RedirectResponse
 from PIL import Image
 from starlette.middleware.cors import CORSMiddleware
 
@@ -6890,6 +6891,20 @@ async def mark_project_ready(project_id: str, user_id: str = Depends(get_current
 # ---------------------------------------------------------------------------
 # Generations (single-pass video production)
 # ---------------------------------------------------------------------------
+def _playback_url(row: dict) -> Optional[str]:
+    """The signed app route can serve local bytes or authorize private R2 reads.
+
+    The response names a possible saved source; only browser decoding proves
+    playability. Do not issue a link to a provider-only row without saved bytes.
+    """
+    if row.get("status") != "completed":
+        return None
+    if (row.get("r2_url") or str(row.get("video_url") or "").startswith("/api/media/videos/")
+            or (pipeline.VIDEOS_DIR / f"{row['id']}.mp4").is_file()):
+        return media_signing.build_signed_path(f"{row['id']}.mp4")
+    return None
+
+
 def _public_generation(row: dict) -> dict:
     """Serialize a generation row, hiding the stored prompt by default.
 
@@ -6920,6 +6935,7 @@ def _public_generation(row: dict) -> dict:
     # fetchable from the browser.
     out["video_url"] = media_signing.sign_stored_path(out.get("video_url"))
     out["r2_url"] = media_signing.sign_stored_path(out.get("r2_url"))
+    out["playback_url"] = _playback_url(row)
     for key in ("video_urls", "unsigned_urls"):
         if isinstance(out.get(key), list):
             out[key] = [media_signing.sign_stored_path(u) for u in out[key]]
@@ -7661,6 +7677,7 @@ async def save_demo_cta_export(
         "status": "completed",
         "parent_generation_id": parent["id"] if parent else None,
         "video_url": media_signing.build_signed_path(f"{result_id}.mp4"),
+        "playback_url": media_signing.build_signed_path(f"{result_id}.mp4"),
         "r2_url": r2_url,
     }
 
@@ -8034,6 +8051,31 @@ def _is_complete_mp4(path: Path, probe_bytes: int = 4096) -> bool:
         return False
 
 
+def _http_video_source(value) -> str:
+    try:
+        parsed = urlsplit(str(value or ""))
+        if parsed.scheme in ("http", "https") and parsed.netloc:
+            # A missing app-local file must not be fetched from the same dead URL.
+            if parsed.path.startswith("/api/media/videos/"):
+                return ""
+            return str(value)
+    except ValueError:
+        pass
+    return ""
+
+
+def _recovery_sources(row: dict, fresh_url: str = "") -> tuple:
+    durable = _http_video_source(row.get("r2_url"))
+    # Native exports have no provider rendition of their own. Never use a
+    # parent/job reference to replace the finished export with its source.
+    provider = ""
+    if row.get("variation_kind") != "demo_cta":
+        provider = (_http_video_source(fresh_url) or _http_video_source(row.get("video_url"))
+                    or _http_video_source(ai_service.video_content_url(
+                        row.get("openrouter_job_id") or "")))
+    return durable, provider
+
+
 async def _download_generation_video(video_url: str, generation_id: str) -> tuple:
     """Download a finished clip into storage/videos for reuse and R2 upload.
 
@@ -8060,7 +8102,10 @@ async def _download_generation_video(video_url: str, generation_id: str) -> tupl
     receives the account key. The legacy face-swap download has always sent
     it inline; this is that same header, applied to the studio path.
     """
-    target = pipeline.VIDEOS_DIR / f"{generation_id}.mp4"
+    if not _http_video_source(video_url):
+        return None, "No absolute HTTP(S) download source is available."
+    destination = pipeline.VIDEOS_DIR / f"{generation_id}.mp4"
+    target = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.download")
     target.parent.mkdir(parents=True, exist_ok=True)
     headers = dict(_DOWNLOAD_HEADERS)
     headers.update(ai_service.provider_download_headers(video_url))
@@ -8078,8 +8123,9 @@ async def _download_generation_video(video_url: str, generation_id: str) -> tupl
                         async for chunk in resp.aiter_bytes():
                             fh.write(chunk)
             if target.exists() and target.stat().st_size > 0:
-                if _is_complete_mp4(target):
-                    return target, None
+                if await asyncio.to_thread(storage_service.is_usable_video, target):
+                    target.replace(destination)
+                    return destination, None
                 # A truncated container: the stream ended early or the process
                 # died mid-write. Serving or uploading this would hand the
                 # founder a file that cannot play, and a size check cannot tell
@@ -8105,7 +8151,7 @@ async def _download_generation_video(video_url: str, generation_id: str) -> tupl
             logger.warning(
                 f"Could not download generation video {generation_id} "
                 f"(attempt {attempt}/{_DOWNLOAD_ATTEMPTS}): {last_detail} "
-                f"url={video_url[:160]} auth={'yes' if headers.get('Authorization') else 'no'}"
+                f"auth={'yes' if headers.get('Authorization') else 'no'}"
             )
             # A 401 on a URL we just authenticated for is our bug, not the
             # provider's, and it used to be indistinguishable from a genuinely
@@ -8114,20 +8160,19 @@ async def _download_generation_video(video_url: str, generation_id: str) -> tupl
             if code in (401, 403) and headers.get("Authorization"):
                 logger.error(
                     f"Provider clip for generation {generation_id} was refused WITH a "
-                    f"bearer token (HTTP {code}). The key is being sent to "
-                    f"{video_url[:160]} but rejected -- check OPENROUTER_API_KEY and "
+                    f"bearer token (HTTP {code}) -- check OPENROUTER_API_KEY and "
                     f"whether this URL belongs to the configured OpenRouter account."
                 )
             if code != 429 and 400 <= code < 500:
                 break
         except httpx.TransportError as e:
-            last_detail = f"{type(e).__name__}: {str(e)[:200]}"
+            last_detail = type(e).__name__
             logger.warning(
                 f"Could not download generation video {generation_id} "
                 f"(attempt {attempt}/{_DOWNLOAD_ATTEMPTS}): {last_detail}"
             )
         except Exception as e:
-            last_detail = f"{type(e).__name__}: {str(e)[:200]}"
+            last_detail = type(e).__name__
             logger.warning(
                 f"Could not download generation video {generation_id} "
                 f"(attempt {attempt}/{_DOWNLOAD_ATTEMPTS}): {last_detail}"
@@ -8174,7 +8219,7 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
     Reuses an existing local copy instead of re-downloading, so retrying after
     a pure upload failure costs one PUT rather than a full fetch, and a second
     poll of an already-saved generation costs nothing. "Existing" means
-    _is_complete_mp4, not merely present: a file left truncated by a killed
+    container validation, not merely present: a file left truncated by a killed
     process is worthless, and reusing one would persist a clip that cannot
     play. Trim and rescale therefore run ONLY on a fresh download: both are
     idempotent in principle, but running them twice would rewrite the canonical
@@ -8187,25 +8232,54 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
     storage_error = None
     trim_note = ""
 
-    fresh = not _is_complete_mp4(local_path)
+    fresh = not await asyncio.to_thread(storage_service.is_usable_video, local_path)
+    durable, provider = _recovery_sources(row, video_url)
+    cloud_error = None
+    durable_error = None
+    restored = False
+    if fresh and not video_url and storage_service.is_configured():
+        try:
+            recovered, cloud_error = await asyncio.to_thread(
+                storage_service.restore_video, user_id, generation_id, local_path)
+            restored = recovered is not None
+        except Exception as error:
+            cloud_error = "Cloud storage read failed (" + type(error).__name__ + ")."
+        if restored:
+            # These are already-delivered bytes: do not trim, rescale or upload
+            # them again. Keep the stable locator, never a presigned URL in DB.
+            return (row.get("r2_url") or storage_service.public_url(user_id, generation_id),
+                    None, int(row.get("duration") or 0))
     if fresh:
-        source = (
-            video_url
-            or row.get("video_url")
-            or ai_service.video_content_url(row.get("openrouter_job_id") or "")
-        )
-        if not source:
-            return None, (
-                "There is no local copy of this video and no provider link left "
-                "to fetch it from, so it cannot be recovered."
-            ), 0
-        local_path, download_error = await _download_generation_video(source, generation_id)
-        if not local_path:
-            return None, (
-                "The provider clip could not be downloaded for durable storage"
-                f" ({download_error})."
-            ), 0
+        # Private R2 locators are not HTTP download sources; authenticated reads
+        # above handle them. An external durable copy precedes the provider.
+        if durable and not storage_service.is_managed_url(durable):
+            recovered, durable_error = await _download_generation_video(durable, generation_id)
+            if recovered:
+                local_path = recovered
+                restored = True
+        if not restored:
+            if not provider:
+                failures = " ".join(value for value in (cloud_error, durable_error) if value)
+                if durable_error or (cloud_error and cloud_error not in (
+                        "Cloud copy not found.", "Cloud storage is not configured.")):
+                    return None, (
+                        "The saved copy could not be recovered right now. Retry recovery "
+                        "or check cloud storage access; this does not prove the video is lost. "
+                        + failures
+                    ), 0
+                detail = (
+                    "This video has no local copy and no recoverable cloud or provider copy, "
+                    "so it cannot be recovered. Re-upload your saved export if you have it."
+                )
+                return None, detail + (f" {failures}" if failures else ""), 0
+            local_path, download_error = await _download_generation_video(provider, generation_id)
+            if not local_path:
+                return None, (
+                    "The provider clip could not be downloaded for durable storage"
+                    f" ({download_error})."
+                ), 0
 
+    if fresh and not restored:
         # Apply the hook trim IN PLACE, before storage and before the row
         # records a length. The canonical path is also what an extension
         # bridges from (the previous clip's FINAL FRAME), so a trimmed
@@ -8252,7 +8326,8 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
                 f"rendered size."
             )
 
-    stored_url = storage_service.upload_video(user_id, generation_id, Path(local_path))
+    stored_url = await asyncio.to_thread(
+        storage_service.upload_video, user_id, generation_id, Path(local_path))
     if not stored_url:
         # R2 is unconfigured or the upload failed, but the local copy
         # survived and /api/media serves it. Record that instead of
@@ -8268,7 +8343,7 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
 
     # The row records the length the founder will actually get, not the
     # length that was asked of the model.
-    delivered_seconds = trim_to or int(row.get("duration") or 0)
+    delivered_seconds = int(row.get("duration") or 0) if restored else (trim_to or int(row.get("duration") or 0))
     return stored_url, storage_error or trim_note, delivered_seconds
 
 
@@ -8291,9 +8366,10 @@ async def retry_generation_storage(generation_id: str, user_id: str = Depends(ge
       failure was guaranteed to answer 409. That is how a finished render could
       sit finished and unrecoverable behind a "Retry durable save" button.
 
-    A row is only refused when there is genuinely nothing to work from: no local
-    copy AND no provider link. The provider content endpoint is derivable from
-    the job id, so a row that stored an empty video_url is still repairable.
+    Recovery checks the exact owner's R2 object before a provider source.
+    Relative media paths are local locators, never network download sources.
+    Native exports have no provider rendition and must never be substituted
+    with their parent render. If every copy is gone, re-upload is required.
 
     It no longer refuses when R2 is unconfigured. _persist_generation_clip falls
     back to serving the local copy, which is a watchable, downloadable result;
@@ -8313,14 +8389,14 @@ async def retry_generation_storage(generation_id: str, user_id: str = Depends(ge
     local_path = pipeline.VIDEOS_DIR / f"{generation_id}.mp4"
     # Same test the helper uses, so this log line describes what will actually
     # happen rather than what is merely on disk.
-    has_local = _is_complete_mp4(local_path)
-    source = row.get("video_url") or ai_service.video_content_url(row.get("openrouter_job_id") or "")
-    if not has_local and not source:
+    has_local = await asyncio.to_thread(storage_service.is_usable_video, local_path)
+    durable, source = _recovery_sources(row)
+    if not has_local and not durable and not source and not storage_service.is_configured():
         raise HTTPException(
             status_code=409,
             detail=(
-                "This video has no local copy and no provider link left to fetch it "
-                "from, so it cannot be recovered. Generating it again is the only way."
+                "This video has no local copy and no cloud or provider copy to recover, "
+                "so it cannot be recovered. Re-upload your saved export if you have it."
             ),
         )
 
@@ -8332,7 +8408,8 @@ async def retry_generation_storage(generation_id: str, user_id: str = Depends(ge
     try:
         stored_url, storage_error, _delivered = await _persist_generation_clip(row, user_id)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Storage retry failed: {str(e)[:200]}")
+        logger.error("Storage retry failed for %s (%s)", generation_id, type(e).__name__)
+        raise HTTPException(status_code=502, detail="Storage recovery failed. Please try again.")
 
     if not stored_url:
         # The helper already phrased this for the founder and knows which half
@@ -8351,8 +8428,11 @@ async def retry_generation_storage(generation_id: str, user_id: str = Depends(ge
     await _execute(
         "UPDATE video_assets SET r2_url = ? WHERE job_id = ?", (stored_url, generation_id)
     )
-    logger.info(f"Generation {generation_id}: durable copy repaired -> {stored_url}")
-    return {"id": generation_id, "r2_url": stored_url, "storage_error": storage_error or None}
+    logger.info("Generation %s: saved copy recovered", generation_id)
+    return {"id": generation_id,
+            "r2_url": media_signing.sign_stored_path(stored_url),
+            "playback_url": media_signing.build_signed_path(f"{generation_id}.mp4"),
+            "storage_error": storage_error or None}
 
 
 @api_router.post("/generations/{generation_id}/retry", status_code=202)
@@ -9754,6 +9834,7 @@ async def generation_history(
         # fallback path written when the R2 upload returned None.
         entry["video_url"] = media_signing.sign_stored_path(entry.get("video_url"))
         entry["r2_url"] = media_signing.sign_stored_path(entry.get("r2_url"))
+        entry["playback_url"] = _playback_url(row)
         composition = await _fetch_one(
             "SELECT id, status, output_url, r2_url FROM overlay_compositions "
             "WHERE generation_id = ? ORDER BY created_at DESC LIMIT 1",
@@ -10297,7 +10378,33 @@ async def serve_video(filename: str, request: Request, sig: str = "", exp: str =
         raise HTTPException(status_code=404, detail="Clip not found")
 
     video_path = pipeline.VIDEOS_DIR / filename
-    if not video_path.is_file():
+    if not video_path.is_file() or video_path.stat().st_size <= 0:
+        # Signature verification precedes all DB/object access. Derive owner and
+        # key from our records, not from an arbitrary URL supplied by a client.
+        row = await _fetch_one(
+            "SELECT id, user_id, r2_url FROM generations WHERE id = ?",
+            (filename[:-4],),
+        )
+        if not row:
+            row = await _fetch_one(
+                "SELECT id, user_id, r2_url FROM overlay_compositions WHERE id = ?",
+                (filename[:-4],),
+            )
+        if row and storage_service.is_configured():
+            try:
+                cloud_url = await asyncio.to_thread(
+                    storage_service.signed_read_url, row["user_id"], row["id"])
+            except Exception as error:
+                logger.warning("Cloud playback failed for %s (%s)", row["id"], type(error).__name__)
+                raise HTTPException(status_code=503, detail="Cloud video is temporarily unavailable")
+            if cloud_url:
+                return RedirectResponse(cloud_url, status_code=307,
+                                        headers={"Cache-Control": "private, no-store"})
+        if row:
+            external = _http_video_source(row.get("r2_url"))
+            if external and not storage_service.is_managed_url(external):
+                return RedirectResponse(external, status_code=307,
+                                        headers={"Cache-Control": "private, no-store"})
         raise HTTPException(status_code=404, detail="Clip not found")
     total = video_path.stat().st_size
     if total <= 0:
@@ -10305,7 +10412,7 @@ async def serve_video(filename: str, request: Request, sig: str = "", exp: str =
 
     base_headers = {
         "Accept-Ranges": "bytes",
-        "Content-Type": "video/mp4",
+        "Content-Type": storage_service.video_content_type(video_path) or "video/mp4",
         # Private, not public: the bytes never change, so the response can be
         # cached hard, but only by the client that was given a signed link.
         # `public` here would let a shared cache keep serving a paid render to
