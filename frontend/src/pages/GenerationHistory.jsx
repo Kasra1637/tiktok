@@ -312,6 +312,10 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
   const [checkingRecovery, setCheckingRecovery] = useState(false);
   const [recoveryStorageError, setRecoveryStorageError] = useState(null);
   const [playerVersion, setPlayerVersion] = useState(0);
+  // Set when a stranded row was re-checked and the provider is genuinely still
+  // rendering. Distinct from `error`: this is a successful check that found the
+  // render unfinished, not a failed action, so it must not read as one.
+  const [strandedNote, setStrandedNote] = useState(null);
 
   // The copy the browser can actually fetch, chosen by the same rule every
   // other screen uses (see durableMediaUrl): the durable upload, or the signed
@@ -330,7 +334,14 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
   // A finished render with no fetchable copy still gets the rail: the row has
   // to say the copy is missing and offer the repair, which is the only way a
   // clip like that becomes playable again.
-  const showRail = row.status === "completed";
+  //
+  // A row stranded in `generating` gets it too. Those are not in-flight renders:
+  // they are rows whose render finished at the provider while the app was down,
+  // so nothing ever polled them and they kept the status forever. They are
+  // invisible here otherwise -- no rail, no player, no repair -- which is how a
+  // paid render could sit finished and unreachable with no affordance at all.
+  const stuckGenerating = row.status === "generating" && !row.video_url;
+  const showRail = row.status === "completed" || stuckGenerating;
 
   const signalRefs = {
     brand_profile_id: row.brand_profile_id,
@@ -412,6 +423,42 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
       } catch (err) {
         setError(getErrorMessage(err));
       }
+    }
+  };
+
+  // Resolve a row stranded in `generating`. This is NOT the storage repair: that
+  // endpoint refuses any row that has not completed (server.py:8632), and a
+  // stranded row never did, so it would answer 409 forever. Polling is the only
+  // path that can move it -- the provider may already hold a finished clip, and
+  // the poll handler is what downloads it, uploads to R2 and flips the status.
+  const handleRecheckStranded = async () => {
+    setBusy(true);
+    setError(null);
+    setStrandedNote(null);
+    try {
+      const updated = await api.pollGeneration(row.id);
+      if (updated.status === "submitted" || updated.status === "generating") {
+        // Genuinely still rendering at the provider. Say so plainly rather than
+        // claiming a fix, and keep the row visible so it can be checked again.
+        setStrandedNote(
+          "Checked just now — the provider is still rendering this. Try again shortly."
+        );
+        onChanged?.();
+        return;
+      }
+      const fresh = await api.getGeneration(row.id);
+      const nextUrl = durableMediaUrl(fresh);
+      if (nextUrl) {
+        setRecoveredUrl(nextUrl);
+        setPlayerVersion((version) => version + 1);
+        setCheckingRecovery(true);
+        setPreviewBroken(false);
+      }
+      onChanged?.();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -500,17 +547,26 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
                  one was a dead end. The repair below is the way through both. */
               <div className="rounded-xl border border-dashed border-[color:var(--hairline-strong)] p-3">
                 <p className="text-sm">
-                  {downloadUrl ? "Preview unavailable" : "No durable copy"}
+                  {stuckGenerating
+                    ? "Still marked as generating"
+                    : downloadUrl
+                      ? "Preview unavailable"
+                      : "No durable copy"}
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {downloadUrl
-                    ? "The saved video could not be loaded. Retry recovery to check its local and cloud copies."
-                    : "This render finished without a copy the browser can open, so there is nothing to play or download yet."}
+                  {stuckGenerating
+                    ? "This render may already be finished at the provider — nothing has checked since it was submitted. Check again to fetch it."
+                    : downloadUrl
+                      ? "The saved video could not be loaded. Retry recovery to check its local and cloud copies."
+                      : "This render finished without a copy the browser can open, so there is nothing to play or download yet."}
                 </p>
               </div>
             )}
             {checkingRecovery && (
               <p className="text-xs text-muted-foreground" role="status">Checking recovered video…</p>
+            )}
+            {strandedNote && (
+              <p className="text-xs text-muted-foreground" role="status">{strandedNote}</p>
             )}
             {/* The download sits under the file it produces. It was the most
                 likely action on the card and it sat in a ten-item row at the
@@ -540,7 +596,25 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
                 </a>
               </Button>
             )}
-            {(!downloadUrl || previewBroken) && (
+            {stuckGenerating && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full"
+                disabled={busy}
+                onClick={handleRecheckStranded}
+                data-testid={`recheck-stranded-${row.id}`}
+                title="Ask the provider whether this render finished, and fetch it if it did"
+              >
+                {busy ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-3.5 w-3.5" />
+                )}
+                Check again
+              </Button>
+            )}
+            {!stuckGenerating && (!downloadUrl || previewBroken) && (
               <Button
                 variant="secondary"
                 size="sm"
