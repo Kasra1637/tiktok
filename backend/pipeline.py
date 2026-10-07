@@ -105,7 +105,7 @@ async def fetch_video_metadata(tiktok_url: str) -> dict:
         "duration": data.get("duration") or 0,
         "thumbnail_url": _pick_thumbnail(data),
         "timestamp": data.get("timestamp") or 0,
-        # Defaults for fields only available via Apify
+        # Fields only a scraper would fill; yt-dlp leaves them at defaults
         "direct_video_url": "",
         "hashtags": [],
         "song_id": "",
@@ -128,11 +128,7 @@ async def fetch_video_metadata(tiktok_url: str) -> dict:
 
 
 async def fetch_creator_videos(handle: str, limit: int = 10) -> list:
-    """Fetch the latest `limit` videos for a creator handle. Uses Apify if configured, else yt-dlp."""
-    import apify_tiktok
-    if apify_tiktok.is_configured():
-        return await apify_tiktok.fetch_creator_videos(handle, limit)
-
+    """Fetch the latest `limit` videos for a creator handle via yt-dlp."""
     # Fallback: yt-dlp (may be unreliable)
     cmd = YTDLP_CMD + [
         "--flat-playlist", "--playlist-end", str(limit),
@@ -166,7 +162,7 @@ async def fetch_creator_videos(handle: str, limit: int = 10) -> list:
             "duration": data.get("duration") or 0,
             "thumbnail_url": _pick_thumbnail(data),
             "timestamp": data.get("timestamp") or 0,
-            # These fields are only available via Apify; set defaults for yt-dlp fallback
+            # Fields only a scraper would fill; yt-dlp leaves them at defaults
             "direct_video_url": "",
             "hashtags": [],
             "song_id": "",
@@ -187,6 +183,59 @@ async def fetch_creator_videos(handle: str, limit: int = 10) -> list:
             "creator_total_likes": 0,
         })
     return results
+
+
+async def fetch_subtitles(subtitles_url: str) -> Optional[str]:
+    """
+    Fetch subtitle/transcript text from a subtitle URL.
+    Returns the raw WebVTT/subtitle text, or None if fetch fails.
+
+    Moved here from the deleted apify_tiktok module: this is a plain HTTP GET
+    of a URL the video record already carries, not an Apify API call, and
+    historical rows may still hold one. New rows always carry "" (see above),
+    so this path goes quiet on its own.
+    """
+    if not subtitles_url:
+        return None
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(subtitles_url)
+            if resp.status_code == 200:
+                return resp.text
+    except Exception as e:
+        logger.warning(f"Failed to fetch subtitles from {subtitles_url}: {e}")
+    return None
+
+
+def parse_webvtt_to_text(vtt_content: str) -> str:
+    """
+    Parse WebVTT subtitle content into plain text (just the spoken words).
+    Strips timing information and formatting cues.
+    """
+    if not vtt_content:
+        return ""
+
+    import re
+    lines = vtt_content.strip().splitlines()
+    text_lines = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("WEBVTT"):
+            continue
+        if line.startswith("NOTE"):
+            continue
+        if "-->" in line:
+            continue
+        if line.isdigit():
+            continue
+        clean = re.sub(r"<[^>]+>", "", line)
+        if clean.strip():
+            text_lines.append(clean.strip())
+
+    return " ".join(text_lines)
 
 
 async def download_and_extract_via_modal(
@@ -241,8 +290,9 @@ async def download_and_extract_via_modal(
 
 async def download_video(tiktok_url: str, direct_video_url: str = "") -> Path:
     """
-    Download a TikTok video. Tries direct_video_url first (from Apify scraper),
-    falls back to yt-dlp if direct URL is unavailable or fails.
+    Download a TikTok video. Tries direct_video_url first (a stored CDN link,
+    when an older video record carries one), falls back to yt-dlp if the
+    direct URL is unavailable or fails.
     """
     vhash = url_hash(tiktok_url)
     out_path = VIDEOS_DIR / f"{vhash}.mp4"

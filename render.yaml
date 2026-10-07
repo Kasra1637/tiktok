@@ -26,8 +26,6 @@ services:
       #     and the only copy sits on the ephemeral disk until the next deploy.
       - key: OPENROUTER_API_KEY
         sync: false
-      - key: APIFY_API_TOKEN
-        sync: false
       - key: PORT
         value: "8080"
       - key: CLERK_JWKS_URL

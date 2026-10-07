@@ -3,8 +3,7 @@ DB-backed tests for feedback, research, and operations.
 
 The properties worth pinning: feedback reasons must belong to their event,
 research drafts must be unpublished and must never carry a source reference,
-manual performance must never be reported as verified, and research must fail
-loudly rather than silently returning nothing when Apify is unconfigured.
+and manual performance must never be reported as verified.
 """
 import asyncio
 import importlib
@@ -33,7 +32,6 @@ def api():
     os.environ["TURSO_DATABASE_URL"] = ""
     os.environ["OPENROUTER_API_KEY"] = "test-key-not-real"
     os.environ["CLERK_JWKS_URL"] = ""
-    os.environ["APIFY_API_TOKEN"] = ""  # research must degrade loudly
 
     if "server" in sys.modules:
         del sys.modules["server"]

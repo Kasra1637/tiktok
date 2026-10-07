@@ -2743,8 +2743,8 @@ def trend_evidence_sentence(evidence) -> str:
     """
     Render a template's anonymous trend aggregate as one prompt sentence.
 
-    Kept here rather than imported from research_abstraction so the strategy
-    path does not pull in the Apify-facing modules; the format is a small
+    Kept here rather than imported from a research helper so the strategy
+    path does not pull in extra modules; the format is a small
     contract between the scan and the prompt, and the two sides assert the same
     fields in the same way.
 

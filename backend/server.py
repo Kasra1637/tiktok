@@ -3351,7 +3351,7 @@ async def face_swap_generate_hook_video(
         # reference_video_path to None, which makes use_aleph_edit False and
         # downgrades this generation to the generative fallback model with
         # NO error surfaced — exactly the "used MiniMax instead of Aleph"
-        # symptom this is fixing. Re-download from the original source (Apify
+        # symptom this is fixing. Re-download from the original source (a stored
         # direct_video_url first, then tiktok_url via yt-dlp) so Aleph stays
         # available whenever the video record itself still exists.
         video_record = await _fetch_one("SELECT * FROM videos WHERE id = ?", (video_id.strip(),))
@@ -4440,10 +4440,9 @@ async def _build_music_context(video: Optional[dict]):
             "song_duration": video.get("song_duration", 0),
         }
     if video.get("subtitles_url"):
-        import apify_tiktok
-        raw_vtt = await apify_tiktok.fetch_subtitles(video["subtitles_url"])
+        raw_vtt = await pipeline.fetch_subtitles(video["subtitles_url"])
         if raw_vtt:
-            transcript_text = apify_tiktok.parse_webvtt_to_text(raw_vtt)
+            transcript_text = pipeline.parse_webvtt_to_text(raw_vtt)
     hashtags = video.get("hashtags", []) if isinstance(video.get("hashtags"), list) else []
     return music_context, transcript_text, hashtags
 
@@ -10337,11 +10336,6 @@ async def list_feedback(
     return {"feedback": rows, "summary": feedback_mod.summarize(rows)}
 
 
-# _apify_configured() used to live here, reporting whether the Apify integration
-# was configured for the Settings page. That page is gone, this was its only
-# caller, and apify_tiktok.is_configured() still exists for anyone who needs it.
-
-
 # GET /api/dashboard is gone with the Dashboard page. It aggregated totals,
 # unapproved profiles, research drafts and recent failures, all of which
 # are already served where the work happens: GET /api/generations with a
@@ -10361,21 +10355,10 @@ async def list_feedback(
 
 @api_router.get("/")
 async def root():
-    import apify_tiktok
     return {
         "message": "HookForge API",
         "ai_configured": bool(os.environ.get("OPENROUTER_API_KEY")),
-        "apify_configured": apify_tiktok.is_configured(),
     }
-
-
-@api_router.get("/debug/apify-test")
-async def debug_apify_test():
-    """Diagnostic endpoint: test the Apify actor connection."""
-    import apify_tiktok
-    if not apify_tiktok.is_configured():
-        return {"error": "APIFY_API_TOKEN not set"}
-    return {"status": "configured", "actor": apify_tiktok.ACTOR_ID}
 
 
 # ---------------------------------------------------------------------------
@@ -10412,13 +10395,6 @@ async def on_startup():
         logger.warning(
             "OPENROUTER_API_KEY is not set. The app will run, but AI features "
             "(hook analysis, face swap, video generation) will return 503 until it is set."
-        )
-    import apify_tiktok
-    if not apify_tiktok.is_configured():
-        logger.warning(
-            "APIFY_API_TOKEN is not set. The Discovery feed and keyword search will fall back "
-            "to yt-dlp, which is frequently blocked by TikTok and will likely return zero "
-            "results (empty feed / 'No results found'). Set APIFY_API_TOKEN to fix this."
         )
     # What OpenRouter will actually accept, compared against what the catalog
     # claims. Unauthenticated and free, so it costs nothing to run on every boot.

@@ -66,7 +66,6 @@ All optional except `OPENROUTER_API_KEY` if you want AI features. Copy
 | Variable | Purpose |
 |---|---|
 | `OPENROUTER_API_KEY` | **Required** for research, angles, scripts, video |
-| `APIFY_API_TOKEN` | Trend Research. Without it, research fails with a clear 503 |
 | `CLERK_JWKS_URL` | Optional. Unset means auth is disabled (all access is `anonymous`) |
 | `PUBLIC_BASE_URL` | Public HTTPS origin; required for V2V references |
 | `R2_*` | Durable video storage. Unset means videos don't survive a redeploy |
@@ -130,7 +129,6 @@ pixel-exact and cannot drift.
 | `research_abstraction.py` | Trend data → abstract template drafts |
 | `pipeline.py` | yt-dlp / ffmpeg / Modal media pipeline |
 | `storage_service.py` | Cloudflare R2 |
-| `apify_tiktok.py` | Public TikTok data (Clockworks actor) |
 | `viral_detection.py` | Engagement ranking |
 
 ### Data model
@@ -197,8 +195,6 @@ Other constraints:
 - **Text overlays are only as good as the plan.** They come from the reviewed
   plan, never invented at composition time — which is correct for claim safety
   but means a poor plan yields a poor caption.
-- **Trend Research needs `APIFY_API_TOKEN`.** Without it, scans fail loudly
-  rather than returning an empty result that would read as "nothing found".
 
 ---
 

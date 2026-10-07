@@ -105,3 +105,9 @@ credentials.json
 *.key
 .credentials
 frontend/node_modules/.cache/default-development/8.pack
+
+# Cloud Run service spec. Once the <FILL: ...> placeholders are replaced this file
+# holds live credentials for Turso, R2 and Modal, and unlike service.yaml's
+# secretKeyRef entries those are plain values with no reference to protect them.
+# The committed template shape (service.yaml.template) documents the structure.
+service.yaml
