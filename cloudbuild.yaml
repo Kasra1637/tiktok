@@ -1,0 +1,58 @@
+# Cloud Build pipeline: HookForge -> Cloud Run
+#
+# Builds the root Dockerfile (frontend CRA build + Python runtime in one image),
+# then pushes it to Artifact Registry so Cloud Run can deploy it.
+#
+# The Clerk publishable key is pulled from Secret Manager via `availableSecrets`
+# and passed as a --build-arg, because CRA inlines process.env.REACT_APP_* at
+# BUILD time (see Dockerfile ARG REACT_APP_CLERK_PUBLISHABLE_KEY). It cannot be
+# supplied at runtime: a build without it produces a bundle with auth disabled,
+# which looks like a blank page rather than a config error.
+#
+# Reading it from Secret Manager rather than a trigger substitution keeps the key
+# out of build logs and out of the trigger configuration in the console.
+#
+# $PROJECT_ID and $COMMIT_SHA are built-in Cloud Build substitutions, so this
+# file works in any project without hardcoding a project ID.
+
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - Dockerfile
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/hookforge/hookforge:$COMMIT_SHA
+      # The value arrives as an env var from availableSecrets below. Using it as
+      # a build-arg (rather than a plain substitution) keeps it out of the
+      # trigger's configuration UI and out of `gcloud builds submit` echoes.
+      - --build-arg
+      - REACT_APP_CLERK_PUBLISHABLE_KEY=$CLERK_PUBLISHABLE_KEY
+      - .
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/hookforge/hookforge:$COMMIT_SHA
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/hookforge/hookforge:$COMMIT_SHA
+
+# The build installs ffmpeg via apt, pip installs requirements plus yt-dlp, and
+# runs a full yarn production build. That comfortably exceeds Cloud Build's 10
+# minute default on a cold cache, so give it room.
+timeout: 1800s
+
+# Runtime secrets for Cloud Run are referenced when the service is created in
+# the console; only the build-time key is needed here.
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/CLERK_PUBLISHABLE_KEY/versions/latest
+      env: CLERK_PUBLISHABLE_KEY
+
+substitutions:
+  # Must match the Artifact Registry repository region. A mismatch fails the
+  # push with a confusing cross-registry error.
+  _REGION: us-west1
