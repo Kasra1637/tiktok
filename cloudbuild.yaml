@@ -56,3 +56,16 @@ substitutions:
   # Must match the Artifact Registry repository region. A mismatch fails the
   # push with a confusing cross-registry error.
   _REGION: us-west1
+
+# Logs go to Cloud Logging only, with nothing archived to a GCS bucket.
+#
+# This is required, not an optimization. The project's default logs bucket is
+# owned by the default compute service account, so a build that runs as the
+# user-managed `hookforge-build` account cannot write to it. Cloud Build rejects
+# any build that names a service account without a logs bucket, a regional
+# user-owned bucket, or explicit CLOUD_LOGGING_ONLY/NONE logging.
+#
+# Nothing is lost: build logs remain visible in the console and via
+# `gcloud builds log`.
+options:
+  logging: CLOUD_LOGGING_ONLY
