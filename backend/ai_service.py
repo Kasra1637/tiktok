@@ -194,6 +194,52 @@ VIDEO_MODELS = {
         "resolution": "720p",
         "supports_combined_refs": False,
     },
+    # HeyGen Video: general-purpose short-form business video (brand moments,
+    # product demos) with synthesized audio in a single call — dialogue,
+    # ambience and effects — from a prompt, a first-frame image, or
+    # references. The first catalog entry besides Hailuo 3 with real audio.
+    #
+    # Facts below come from OpenRouter's own video model endpoint
+    # (GET /api/v1/videos/models), verified live at entry time:
+    #   supported_resolutions  480p, 768p, 2K  -> 768p. Deliberately not 2K:
+    #     the live price SKUs charge 2K at 3x 768p ($0.09/s vs $0.03/s) for
+    #     detail no render has proven real, and 480p sits below TikTok's
+    #     720x1280 floor. 768p is the cheapest credible tier; revisit 2K only
+    #     on render evidence.
+    #   supported_durations  5-15  -> min 5 / max 15, exactly the studio's
+    #     floor and ceiling, so no new trim edge cases.
+    #   supported_frame_images  first_frame only  -> the photo rides as the
+    #     opening frame, the same treatment as H3 Max and both Groks.
+    #   generate_audio  false (accepted, defaults off), NOT null  -> the field
+    #     is sendable, and the studio defaults to requesting audio whenever
+    #     the provider offers it (server.py). If real clips come back silent
+    #     or the field is ever refused, flip supports_native_audio to False.
+    #
+    # supports_references starts False on purpose despite the listing
+    # accepting references in general: H3 Max taught that a listed field the
+    # serving provider 400s is a paid failure, and only a live refs render
+    # proves acceptance. Identity still flows via identity_via_first_frame,
+    # so nothing about the founder's face is lost by starting here.
+    #
+    # Opt-in, default stays Hailuo 3: audio + 768p at a third of the listed
+    # 2K price is a default-challenger on paper, but likeness is unproven
+    # until the first renders. Promote only on evidence.
+    "heygen-video-1": {
+        "id": "heygen/heygen-video-1",
+        "name": "HeyGen Video",
+        "description": (
+            "Business-video renderer with synthesized audio in one call — "
+            "dialogue, ambience and effects — from your photo as the first "
+            "frame. 768p, 5-15s. For talking-head hooks and demos. Opt-in."
+        ),
+        "max_duration": 15,
+        "min_duration": 5,
+        "supports_references": False,
+        "supports_native_audio": True,  # listed as accepted; studio requests it by default
+        "supports_v2v_motion": False,
+        "resolution": "768p",
+        "supports_combined_refs": False,
+    },
 }
 # Default for new template-studio generations. The provider remains
 # configurable through VIDEO_MODEL_DEFAULT and VIDEO_MODEL_ALLOWLIST, but

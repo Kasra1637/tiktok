@@ -96,7 +96,7 @@ class TestCapabilities:
         clip rather than making one.
         """
         keys = [c["key"] for c in vp.list_capabilities()]
-        assert keys == ["minimax-h3", "minimax-h3-max", "grok-imagine-video", "grok-imagine-video-lite"]
+        assert keys == ["minimax-h3", "minimax-h3-max", "grok-imagine-video", "grok-imagine-video-lite", "heygen-video-1"]
         assert "aleph-2" not in keys
         for cap in vp.list_capabilities():
             assert cap["is_video_editor"] is False
@@ -195,6 +195,54 @@ class TestCapabilities:
         assert cap["max_reference_images"] == 0
         assert vp.accepts_identity_reference("grok-imagine-video-lite") is True
 
+    def test_heygen_video_is_opt_in_and_not_the_default(self):
+        """
+        Audio + listed 2K makes this a default-challenger on paper, but paper
+        is not evidence: likeness and 2K reality are unproven until the first
+        renders. Listing it must not move production spend, so the default
+        stays Hailuo 3 and explicit requests are honoured, not swapped.
+        """
+        assert vp.is_studio_eligible("heygen-video-1") is True
+        assert vp.default_model_key() == "minimax-h3"
+        assert vp.resolve("heygen-video-1")[0] == "heygen-video-1"
+
+    def test_heygen_video_is_registered_at_its_real_id(self):
+        cap = vp.capability("heygen-video-1")
+        assert cap["id"] == "heygen/heygen-video-1"
+        assert cap["max_duration"] == 15
+        assert cap["min_duration"] == 5
+
+    def test_heygen_video_requests_768p_not_2k(self):
+        """
+        2K is listed but costs 3x 768p per the live price SKUs ($0.09/s vs
+        $0.03/s) for detail no render has proven real. 768p is the cheapest
+        credible tier and is equally drift-clean; revisit 2K only on render
+        evidence.
+        """
+        assert vp.capability("heygen-video-1")["resolution"] == "768p"
+
+    def test_heygen_video_requests_native_audio(self):
+        """
+        The endpoint accepts generate_audio for this model (listed, defaults
+        off), so the catalog declares it and the studio sends it by default —
+        the second audio-capable entry after Hailuo 3. If real clips come
+        back silent or the field is refused, this is the flag to flip.
+        """
+        assert vp.capability("heygen-video-1")["supports_native_audio"] is True
+
+    def test_heygen_video_takes_identity_as_first_frame(self):
+        """
+        Conservative start: first-frame only with reference counts at 0, the
+        proven-safe shape from H3 Max. The listing accepts references in
+        general, but only a live refs render proves the serving provider does
+        — enabling input_references later is a data-only flip.
+        """
+        cap = vp.capability("heygen-video-1")
+        assert cap["supports_first_frame"] is True
+        assert cap["supports_last_frame"] is False
+        assert cap["max_reference_images"] == 0
+        assert vp.accepts_identity_reference("heygen-video-1") is True
+
     def test_an_removed_provider_falls_back_to_the_default(self):
         """
         Providers get retired, and generation rows or a founder's saved model
@@ -202,7 +250,7 @@ class TestCapabilities:
         existed, capability() and resolve() must degrade to a working provider
         rather than raise or 400.
         """
-        for gone in ("heygen-avatar-iv", "heygen-video-1", "some-retired-model"):
+        for gone in ("heygen-avatar-iv", "heygen-video-9", "some-retired-model"):
             assert vp.is_known(gone) is False
             assert vp.is_studio_eligible(gone) is False
             assert vp.capability(gone)["key"] == vp.default_model_key()
@@ -429,6 +477,24 @@ class TestHailuo3MaxPayload:
                                              generate_audio=True))
         assert seen[0]["model"] == "minimax/hailuo-3"
         assert seen[0]["resolution"] == "2K"
+        assert seen[0]["generate_audio"] is True
+
+    def test_heygen_sends_768p_and_audio(self, monkeypatch):
+        """
+        The whole point of the entry: the endpoint accepts generate_audio, so
+        asking for audio must reach the payload alongside 768p — unlike every
+        other opt-in, which omits the field.
+        """
+        import asyncio
+
+        import ai_service
+
+        seen = self._capture(monkeypatch)
+        asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
+                                             duration=10, model="heygen-video-1",
+                                             generate_audio=True))
+        assert seen[0]["model"] == "heygen/heygen-video-1"
+        assert seen[0]["resolution"] == "768p"
         assert seen[0]["generate_audio"] is True
 
     def test_face_rides_as_first_frame_not_references(self, monkeypatch, tmp_path):

@@ -60,6 +60,14 @@ def _healthy_records() -> dict:
             "generate_audio": None,
             "allowed_passthrough_parameters": [],
         },
+        "heygen/heygen-video-1": {
+            "id": "heygen/heygen-video-1",
+            "supported_resolutions": ["480p", "768p", "2K"],
+            "supported_durations": list(range(5, 16)),
+            "supported_frame_images": ["first_frame"],
+            "generate_audio": False,
+            "allowed_passthrough_parameters": [],
+        },
     }
 
 
@@ -114,6 +122,23 @@ class TestCompareCatalogToLive:
         del live["x-ai/grok-imagine-video-1.5-lite"]
         problems = pc.compare_catalog_to_live(live)
         assert any("1.5-lite" in p and "no longer listed" in p for p in problems)
+
+    def test_heygen_audio_accepted_means_no_drift(self):
+        """
+        HeyGen lists generate_audio as accepted-but-off (False, not null), so
+        a catalog entry requesting audio is consistent — the drift rule only
+        fires when the field is absent entirely (null) while we claim it.
+        """
+        assert pc.compare_catalog_to_live(_healthy_records()) == []
+
+    def test_a_withdrawn_heygen_model_is_reported(self):
+        """
+        Retirement tripwire for the fifth entry.
+        """
+        live = _healthy_records()
+        del live["heygen/heygen-video-1"]
+        problems = pc.compare_catalog_to_live(live)
+        assert any("heygen" in p and "no longer listed" in p for p in problems)
 
     def test_empty_durations_is_reported(self):
         """

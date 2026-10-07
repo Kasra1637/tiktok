@@ -136,6 +136,32 @@ _CAPABILITY_NOTES = {
             "Hailuo 3 is still the default."
         ),
     },
+    "heygen-video-1": {
+        "vertical": True,
+        # Conservative start despite the listing accepting references: H3 Max
+        # proved a listed field the serving provider 400s, and only a live
+        # refs render proves acceptance. The count is 0 and identity rides
+        # the opening frame; enabling input_references later is a data-only
+        # flip once proven.
+        "max_reference_images": 0,
+        "max_reference_videos": 0,
+        "max_reference_audio": 0,
+        "supports_first_frame": True,
+        "supports_last_frame": False,
+        "identity_via_first_frame": True,
+        # No documented prompt ceiling for this model; the lowest figure in
+        # the catalog (Grok's 4,096) until the first live render settles it
+        # from the submit log.
+        "prompt_char_limit": 4096,
+        "notes": (
+            "Business-video renderer with synthesized audio in one call at "
+            "768p, 5-15s — the only entry besides Hailuo 3 with real audio, "
+            "at a third of its listed 2K price. "
+            "For talking-head hooks and demos. References start at "
+            "first-frame-only until a live render proves the provider "
+            "accepts them. Opt-in: Hailuo 3 is still the default."
+        ),
+    },
     "aleph-2": {
         "vertical": True,
         "max_reference_images": 0,
@@ -177,10 +203,17 @@ _CAPABILITY_NOTES = {
 # is a free read and states the fields each model actually accepts, so a
 # provider quietly dropping something shows up in the log instead of in a
 # founder's failed render.
-# Grok Imagine Video Lite joins at the end as the cheapest opt-in: same photo
-# as first-frame anchor, same silent 720p trade as its sibling, distilled for
-# speed and price. Listing it does not move the default, which stays Hailuo 3.
-STUDIO_ELIGIBLE = ("minimax-h3", "minimax-h3-max", "grok-imagine-video", "grok-imagine-video-lite")
+# Grok Imagine Video Lite joins as the cheapest opt-in: same photo as
+# first-frame anchor, same silent 720p trade as its sibling, distilled for
+# speed and price.
+#
+# HeyGen Video joins at the end as the fifth opt-in: the only entry besides
+# Hailuo 3 with real audio, at 768p (a third of its listed 2K price for
+# unproven extra detail). Same first-frame identity anchor
+# as the Groks; references stay first-frame-only until a live render proves
+# the provider accepts them. Listing it does not move the default, which
+# stays Hailuo 3 — promote only on evidence from the first renders.
+STUDIO_ELIGIBLE = ("minimax-h3", "minimax-h3-max", "grok-imagine-video", "grok-imagine-video-lite", "heygen-video-1")
 
 # The hook length used when nothing states one. 5s is the lowest length the
 # current provider can render, so it needs no trim; a template's own
