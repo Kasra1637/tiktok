@@ -535,7 +535,12 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
                   setPreviewBroken(true);
                   setCheckingRecovery(false);
                 }}
-                className="w-full rounded-lg border border-[color:var(--hairline)]"
+                className="mx-auto max-h-[300px] w-full rounded-lg border border-[color:var(--hairline)] object-contain sm:max-h-[340px]"
+                // Capped, not cropped: a 9:16 clip in an uncapped full-width box
+                // runs ~430px tall and stretches the whole card, leaving the
+                // right column mostly empty. object-contain letterboxes it on
+                // the dark background instead, which also tames the player on
+                // mobile where the rail spans the full width.
               />
             ) : (
               /* Says what is actually true instead of leaving a dead control.
@@ -743,68 +748,72 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
               </div>
             </div>
           )}
+          {/* Navigation and row actions, in the same bordered-group language as
+              the verdict above, instead of a full-width bar below the card. The
+              bar stretched short cards and left the right column half empty
+              beside a tall 9:16 player; the group fills that space with the
+              actions that belong to the render. Archive and Delete keep their
+              labels at the heading's right edge, separated from Details by the
+              gap, so they still cannot be reached by muscle memory on the way
+              to them. */}
+          <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-3">
+            <span className="eyebrow flex items-center justify-between gap-2">
+              <span>Work with this render</span>
+              <span className="flex items-center gap-1.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy || row.status === "archived"}
+                  onClick={() => act(() => api.archiveGeneration(row.id))}
+                >
+                  <Archive className="h-3.5 w-3.5" /> Archive
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => act(() => api.deleteGeneration(row.id))}
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Delete
+                </Button>
+              </span>
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button variant="ghost" size="sm" onClick={loadChildren}>
+                <GitBranch className="h-3.5 w-3.5" /> Variations
+                {children.length > 0 && ` (${children.length})`}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() => setShowDetails(true)}
+                data-testid="generation-details-button"
+              >
+                <Info className="h-3.5 w-3.5" /> Details
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={handleDuplicate}
+                title="Copy this setup unchanged into a new draft, for a fresh render of the same video"
+              >
+                <Copy className="h-3.5 w-3.5" /> Duplicate
+              </Button>
+              {/* Only a finished clip has anything to wrap, so the entry rides
+                  hasClip rather than status alone: offering it on a queued or failed
+                  render would open an editor with no source. */}
+              {hasClip && (
+                <Button variant="ghost" size="sm" asChild data-testid={`demo-cta-history-${row.id}`}>
+                  <Link to={`/demo-cta/${row.id}`} title="Wrap this clip in a phone mockup and add your close">
+                    <Smartphone className="h-3.5 w-3.5" /> Demo + CTA
+                  </Link>
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
-
-      {/* One action bar per card, and it carries no file actions.
-
-          Downloads moved up beside the clip, and the verdict controls above.
-          What is left is navigation on the left and the destructive pair held
-          at the right edge, so Archive and Delete cannot be reached by muscle
-          memory on the way to Details. The hairline separates acting on the row
-          from reading it, which is what the variations panel below already
-          does. */}
-      <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-[color:var(--hairline)] pt-3">
-        <Button variant="ghost" size="sm" onClick={loadChildren}>
-          <GitBranch className="h-3.5 w-3.5" /> Variations
-          {children.length > 0 && ` (${children.length})`}
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={busy}
-          onClick={() => setShowDetails(true)}
-          data-testid="generation-details-button"
-        >
-          <Info className="h-3.5 w-3.5" /> Details
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={busy}
-          onClick={handleDuplicate}
-          title="Copy this setup unchanged into a new draft, for a fresh render of the same video"
-        >
-          <Copy className="h-3.5 w-3.5" /> Duplicate
-        </Button>
-        {/* Only a finished clip has anything to wrap, so the entry rides
-            hasClip rather than status alone: offering it on a queued or failed
-            render would open an editor with no source. */}
-        {hasClip && (
-          <Button variant="ghost" size="sm" asChild data-testid={`demo-cta-history-${row.id}`}>
-            <Link to={`/demo-cta/${row.id}`} title="Wrap this clip in a phone mockup and add your close">
-              <Smartphone className="h-3.5 w-3.5" /> Demo + CTA
-            </Link>
-          </Button>
-        )}
-        <span className="ml-auto flex items-center gap-1.5">
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={busy || row.status === "archived"}
-            onClick={() => act(() => api.archiveGeneration(row.id))}
-          >
-            <Archive className="h-3.5 w-3.5" /> Archive
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={busy}
-            onClick={() => act(() => api.deleteGeneration(row.id))}
-          >
-            <Trash2 className="h-3.5 w-3.5" /> Delete
-          </Button>
-        </span>
       </div>
 
       {showDetails && (
