@@ -82,4 +82,4 @@ substitutions:
   # Clerk publishable key (pk_live_... or pk_test_...), from
   # Render's REACT_APP_CLERK_PUBLISHABLE_KEY or dashboard.clerk.com -> API Keys.
   # Public by design -- see the header comment.
-  _CLERK_PUBLISHABLE_KEY: PASTE_CLERK_PUBLISHABLE_KEY_HERE
+  _CLERK_PUBLISHABLE_KEY: "pk_test_a25vd24tbWF5Zmx5LTQ4LmNsZXJrLmFjY291bnRzLmRldiQ"
