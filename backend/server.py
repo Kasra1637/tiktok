@@ -10706,6 +10706,105 @@ async def serve_video(filename: str, request: Request, sig: str = "", exp: str =
     )
 
 
+def _iter_r2_object(body, chunk_size: int = 256 * 1024):
+    """
+    Stream an open boto3 body in fixed chunks.
+
+    `body.read()` with no size would pull the whole clip into this process at
+    once, which on a 4GiB instance is real money for a file that may not even be
+    playable. Chunked, so memory stays flat no matter the clip size. The body is
+    always closed, including on a client disconnect mid-stream.
+    """
+    try:
+        while True:
+            chunk = body.read(chunk_size)
+            if not chunk:
+                break
+            yield chunk
+    finally:
+        body.close()
+
+
+@app.get("/api/media/videos/{filename}/download")
+async def download_video_clip(filename: str, sig: str = "", exp: str = ""):
+    """
+    Send a clip to the browser as a file save rather than a page load.
+
+    Why this route exists rather than an <a download> on the playback URL: a
+    durable clip usually lives in R2, so `r2_url` is an ABSOLUTE cross-origin
+    URL. Browsers ignore the `download` attribute on cross-origin hrefs, so that
+    button opened the file in a tab (or navigated away) instead of saving it --
+    the one action the row exists to offer, silently not doing its job.
+
+    A same-origin path through here fixes that unconditionally: `download` is
+    honored, and Content-Disposition: attachment makes it a save even if the
+    attribute is ignored.
+
+    Bytes transit this process, which they did not when R2 redirected straight to
+    the browser. That is the deliberate trade: it costs egress from the container
+    instead of a client-side blob (which buffers the same bytes in the tab and
+    leaks an object URL per download), and at this app's volume it is immaterial.
+
+    Signature auth and the 404-on-refusal rule are identical to serve_video --
+    the filename IS the generation id, so this must not be enumerable. Declared
+    after it for the same registration-order reason, and it is a longer path, so
+    the video route matches first for plain playback requests.
+    """
+    if not _VIDEO_FILENAME_RE.match(filename or ""):
+        raise HTTPException(status_code=404, detail="Clip not found")
+    if not media_signing.verify(filename, exp, sig):
+        raise HTTPException(status_code=404, detail="Clip not found")
+
+    disposition = f'attachment; filename="{Path(filename).name}"'
+    # Local copy first: it is the same bytes the player just streamed, and it
+    # avoids an R2 round trip entirely when the container still holds the clip.
+    local_path = pipeline.VIDEOS_DIR / filename
+    if local_path.is_file() and local_path.stat().st_size > 0:
+        total = local_path.stat().st_size
+        return StreamingResponse(
+            _iter_file_range(local_path, 0, total - 1),
+            media_type=storage_service.video_content_type(local_path) or "video/mp4",
+            headers={
+                "Content-Length": str(total),
+                "Content-Disposition": disposition,
+                # Private, immutable, and explicitly not a byte range: a download
+                # is always the whole file. Advertising ranges here would let a
+                # client resume mid-file and assemble something that was never
+                # the stored object.
+                "Cache-Control": "private, max-age=3600",
+                "Accept-Ranges": "none",
+            },
+        )
+
+    row = await _fetch_one(
+        "SELECT id, user_id, r2_url FROM generations WHERE id = ?",
+        (filename[:-4],),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Clip not found")
+
+    try:
+        opened = await asyncio.to_thread(
+            storage_service.open_video_for_download, row["user_id"], row["id"]
+        )
+    except storage_service.CloudObjectMissing:
+        raise HTTPException(status_code=404, detail="Clip not found")
+    if opened is None:
+        raise HTTPException(status_code=404, detail="Clip not found")
+
+    total, body = opened
+    return StreamingResponse(
+        _iter_r2_object(body),
+        media_type="video/mp4",
+        headers={
+            "Content-Length": str(total),
+            "Content-Disposition": disposition,
+            "Cache-Control": "private, max-age=3600",
+            "Accept-Ranges": "none",
+        },
+    )
+
+
 # A poster filename, accepted or refused whole — same traversal discipline as
 # the video route: one segment, an id, a .jpg suffix, nothing else.
 _POSTER_FILENAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}\.jpg$")

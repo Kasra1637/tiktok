@@ -31,6 +31,11 @@ from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
+
+class CloudObjectMissing(Exception):
+    """A specific object is absent, as opposed to storage being unusable."""
+
+
 # Configuration from environment
 R2_ACCOUNT_ID = os.environ.get("R2_ACCOUNT_ID", "").strip()
 R2_ACCESS_KEY_ID = os.environ.get("R2_ACCESS_KEY_ID", "").strip()
@@ -404,6 +409,43 @@ def signed_read_url(user_id: str, job_id: str, ttl_seconds: int = 900) -> Option
                 "ResponseContentType": content_type},
         ExpiresIn=max(60, min(int(ttl_seconds), 3600)),
     )
+
+
+def open_video_for_download(user_id: str, job_id: str):
+    """
+    Open the owner's clip for streaming, returning (total_bytes, open_body).
+
+    Distinct from signed_read_url: that hands the browser a presigned URL to
+    fetch directly, which is right for playback but not for a download -- the
+    `download` attribute is ignored cross-origin, so the save has to originate
+    same-origin and the bytes have to pass through the app.
+
+    Probes with a one-byte ranged GET first so a missing object raises here,
+    before the response is committed and the browser has started a save it
+    cannot complete. Returns None when storage is unconfigured; raises
+    CloudObjectMissing when the object is genuinely absent. Service errors
+    propagate -- they are not "missing", and swallowing them here would report a
+    reachable file as gone.
+    """
+    client = _get_client()
+    if client is None:
+        return None
+    key = _object_key(user_id, job_id)
+    try:
+        head = client.get_object(Bucket=R2_BUCKET_NAME, Key=key, Range="bytes=0-0")
+    except ClientError as error:
+        if _missing_object(error):
+            raise CloudObjectMissing(key) from error
+        raise
+    try:
+        total = int(head["ContentRange"].rsplit("/", 1)[-1])
+    except (KeyError, IndexError, ValueError) as error:
+        head["Body"].close()
+        raise CloudObjectMissing(key) from error
+    head["Body"].close()
+
+    body = client.get_object(Bucket=R2_BUCKET_NAME, Key=key)["Body"]
+    return total, body
 
 
 def restore_video(user_id: str, job_id: str, target: Path) -> tuple:

@@ -422,6 +422,176 @@ class TestSignatureRequired:
         assert response.headers["cache-control"].startswith("private")
 
 
+class TestTheDownloadRoute:
+    """
+    /api/media/videos/{name}.mp4/download exists because the History row's
+    Download button did not save anything.
+
+    A finished clip normally lives in R2, so the row's durable URL is an
+    ABSOLUTE cross-origin link -- and browsers ignore the `download` attribute
+    on cross-origin hrefs. The button therefore opened the video in a tab instead
+    of saving it: silently, on the one action the row exists to offer.
+
+    The route is same-origin and sets Content-Disposition, so a save happens
+    whether or not the attribute is honored. These pin the parts that could
+    quietly regress: the headers that make it a save, and the signature rule,
+    which must be exactly as strict as the playback route because the filename
+    IS the generation id.
+    """
+
+    def _download(self, api, filename="clip.mp4", query=None):
+        query = query if query is not None else _signed(filename)
+        return _run(api.download_video_clip(filename, **_query(query)))
+
+    def test_a_local_clip_comes_back_as_an_attachment(self, api):
+        _write_clip(api)
+        response = self._download(api)
+        assert response.status_code == 200
+        disposition = response.headers["content-disposition"]
+        assert disposition.startswith("attachment"), disposition
+        # The filename must be quoted and plain: an unquoted value lets a
+        # malicious one break out of the header, and this is the only header
+        # that decides what lands on the user's disk.
+        assert 'filename="clip.mp4"' in disposition, disposition
+
+    def test_the_bytes_are_exactly_the_stored_file(self, api):
+        _write_clip(api)
+        response = self._download(api)
+        assert response.headers["content-length"] == str(len(CLIP_BYTES))
+        # _iter_file_range is an async generator: the response only streams
+        # inside the event loop, so the bytes are collected through the same
+        # helper the other streaming assertions use.
+        assert _run(_body(response)) == CLIP_BYTES
+
+    def test_it_does_not_advertise_byte_ranges(self, api):
+        """
+        A download is always the whole file. Advertising ranges here would let a
+        client resume mid-object and assemble something the app never stored,
+        while `none` also keeps the player from reusing this URL to seek.
+        """
+        _write_clip(api)
+        assert self._download(api).headers["accept-ranges"] == "none"
+
+    def test_an_unsigned_download_is_refused(self, api):
+        """Same rule as playback: no signature, no bytes -- 404, not 403."""
+        _write_clip(api)
+        with pytest.raises(HTTPException) as err:
+            _run(api.download_video_clip("clip.mp4", sig="", exp=""))
+        assert err.value.status_code == 404
+
+    def test_a_signature_for_another_clip_does_not_download_this_one(self, api):
+        _write_clip(api)
+        _write_clip(api, name="other.mp4", data=b"other-bytes")
+        signed_for_other = media_signing.build_signed_path("other.mp4")
+        with pytest.raises(HTTPException) as err:
+            _run(api.download_video_clip(
+                "clip.mp4", **_query(signed_for_other.split("?", 1)[1])))
+        assert err.value.status_code == 404
+
+    def test_a_filename_outside_the_id_pattern_is_refused(self, api):
+        """
+        The route sits next to a StaticFiles mount and the filename comes off the
+        wire. Traversal has to die here, exactly as it does for playback.
+        """
+        with pytest.raises(HTTPException) as err:
+            _run(api.download_video_clip("../../secret.mp4", **_query(
+                _signed("../../secret.mp4"))))
+        assert err.value.status_code == 404
+
+    def test_a_missing_clip_with_no_row_is_a_404(self, api):
+        """
+        No local file and no DB row: nothing to serve, and nothing to say.
+
+        The local file is removed explicitly because the fixture's VIDEOS_DIR is
+        module-scoped and shared, so a clip written by an earlier test here would
+        otherwise answer this one from disk and hide the row-lookup path.
+        """
+        _write_clip(api).unlink()
+        with pytest.raises(HTTPException) as err:
+            self._download(api)
+        assert err.value.status_code == 404
+
+
+class TestStorageServiceDownload:
+    """
+    The R2 half, where the durable copy actually lives in production.
+
+    open_video_for_download probes with a one-byte ranged GET before returning a
+    body, so a missing object fails while the response is still uncommitted --
+    after the browser has begun a save it cannot finish, that failure would
+    arrive mid-stream as a broken file instead.
+    """
+
+    def _client(self, total=None, head=True):
+        class Body:
+            def __init__(self, payload=b""):
+                self._payload = payload
+                self.closed = False
+
+            def read(self, _n=None):
+                return self._payload
+
+            def close(self):
+                self.closed = True
+
+        class Client:
+            def __init__(self):
+                self.calls = []
+
+            def get_object(self, **kw):
+                self.calls.append(kw)
+                if head and "Range" in kw:
+                    return {"ContentRange": f"bytes 0-0/{total}", "Body": Body(b"\x00")}
+                return {"Body": Body(b"real-bytes")}
+
+        return Client()
+
+    def test_it_returns_the_total_size_and_an_open_body(self, monkeypatch):
+        import storage_service
+
+        client = self._client(total=99)
+        monkeypatch.setattr(storage_service, "_get_client", lambda: client)
+        monkeypatch.setattr(storage_service, "R2_BUCKET_NAME", "bucket")
+        total, body = storage_service.open_video_for_download("owner", "job")
+        assert total == 99
+        assert body.read() == b"real-bytes"
+
+    def test_the_probe_is_bounded_to_one_byte(self, monkeypatch):
+        """
+        The existence check must not read the object. A server that ignores
+        Range would happily stream a whole clip into this process during what is
+        meant to be a metadata lookup.
+        """
+        import storage_service
+
+        client = self._client(total=5_000_000)
+        monkeypatch.setattr(storage_service, "_get_client", lambda: client)
+        storage_service.open_video_for_download("owner", "job")
+        assert client.calls[0]["Range"] == "bytes=0-0"
+
+    def test_unconfigured_storage_returns_none(self, monkeypatch):
+        import storage_service
+
+        monkeypatch.setattr(storage_service, "_get_client", lambda: None)
+        assert storage_service.open_video_for_download("owner", "job") is None
+
+    def test_a_missing_object_raises_rather_than_returning_nothing(self, monkeypatch):
+        """
+        Distinct from "storage is unusable": the caller maps this to a 404,
+        where a swallowed error would claim a reachable file is gone.
+        """
+        import storage_service
+        from botocore.exceptions import ClientError
+
+        class Missing:
+            def get_object(self, **_kw):
+                raise ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
+
+        monkeypatch.setattr(storage_service, "_get_client", lambda: Missing())
+        with pytest.raises(storage_service.CloudObjectMissing):
+            storage_service.open_video_for_download("owner", "job")
+
+
 class TestTheHistoryRowPlays:
     """
     The History row's player and its download both take `r2_url || video_url`,

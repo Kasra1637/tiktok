@@ -32,6 +32,32 @@ export const durableMediaUrl = (row) => {
   return null;
 };
 
+/**
+ * A same-origin URL that saves the clip as a file.
+ *
+ * The playback href cannot be reused directly. A durable clip usually lives in
+ * R2, so `r2_url` is an ABSOLUTE cross-origin URL, and browsers ignore the
+ * `download` attribute on cross-origin hrefs -- the button opened the video in
+ * a tab instead of saving it. `playback_url` is the signed same-origin app
+ * route, which is always preferred here for that reason.
+ *
+ * The signature is minted server-side from MEDIA_URL_SECRET and cannot be
+ * computed in the browser, so the signed path is reused and `/download` is
+ * spliced in ahead of the query string rather than re-signed here.
+ *
+ * Returns null when there is no playable same-origin source, so a caller can
+ * omit the button rather than offer one that cannot save.
+ */
+export const downloadMediaUrl = (row) => {
+  const signed = row?.playback_url;
+  if (signed) return mediaUrl(signed.replace(/(\.mp4)(\?|$)/, "$1/download$2"));
+  const durable = durableMediaUrl(row);
+  if (durable && durable.startsWith("/api/media/videos/")) {
+    return durable.replace(/(\.mp4)(\?|$)/, "$1/download$2");
+  }
+  return null;
+};
+
 const client = axios.create({ baseURL: API, timeout: 120000 });
 
 /**

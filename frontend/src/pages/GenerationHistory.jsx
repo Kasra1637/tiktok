@@ -7,11 +7,11 @@ import { Badge } from "../components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import EmptyState from "../components/EmptyState";
-import { api, getErrorMessage, durableMediaUrl, mediaUrl } from "../lib/api";
+import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } from "../lib/api";
 import { FactChip, FactList } from "../components/FactChip";
 import { recordSignal, recordReason } from "../lib/feedback";
 import {
-  History as HistoryIcon, Loader2, AlertTriangle, Download, Trash2, Archive,
+  History as HistoryIcon, Loader2, AlertTriangle, Download, Trash2,
   RotateCcw, GitBranch, RefreshCw, ChevronRight, Film, Star, TrendingUp,
   Check, ThumbsDown, Info, Copy, X, Smartphone,
 } from "lucide-react";
@@ -324,6 +324,11 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
   // <a download> cannot save it — handing either one the link produces a player
   // that never loads and a download that answers 401.
   const downloadUrl = recoveredUrl || durableMediaUrl(row);
+  // The save button needs a same-origin URL, which the playback href is not
+  // whenever the durable copy sits in R2. `recoveredUrl` is already same-origin
+  // (it comes from a retry that returned a signed playback path), so it is
+  // reused as-is; otherwise a signed path is spliced for the download route.
+  const saveUrl = recoveredUrl || downloadMediaUrl(row);
   // Poster thumbnail: a tiny JPEG served as an image, so the row shows a
   // frame instantly without fetching video bytes. Missing poster (old rows,
   // generation in flight) simply omits the attribute and the <video> behaves
@@ -573,23 +578,39 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
             {strandedNote && (
               <p className="text-xs text-muted-foreground" role="status">{strandedNote}</p>
             )}
-            {/* The download sits under the file it produces. It was the most
-                likely action on the card and it sat in a ten-item row at the
-                bottom, two lines away from the thing it acts on. It appears
-                only when there is a URL to fetch: a provider link cannot be
-                downloaded by a browser, so a button for one is a promise this
-                row cannot keep. */}
-            {downloadUrl && (
+            {/* Download and Delete sit together under the clip: both act on the
+                file itself, so they read as one group. Delete used to be held
+                at the far edge of the card with Archive, so it could not be
+                reached by muscle memory on the way to Details -- a real
+                safeguard. It is deliberately not that far now: it sits directly
+                under the preview it destroys, one deliberate click away, and
+                the label is unabbreviated so it reads as what it does. Archive
+                is gone from this page, which leaves Delete as the only
+                destructive act here.
+                Download points at downloadMediaUrl, the same-origin route that
+                forces a save. The playback href was cross-origin whenever the
+                durable copy was in R2, and browsers ignore `download` there, so
+                the button opened a tab instead of saving the file. */}
+            {saveUrl && (
               <Button variant="secondary" size="sm" className="w-full" asChild>
                 <a
-                  href={downloadUrl}
+                  href={saveUrl}
                   download
                   onClick={() => recordSignal("video_downloaded", "downloaded", signalRefs)}
                 >
-                  <Download className="h-3.5 w-3.5" /> Download video
+                  <Download className="h-3.5 w-3.5" /> Download
                 </a>
               </Button>
             )}
+            <Button
+              variant="secondary"
+              size="sm"
+              className="w-full"
+              disabled={busy}
+              onClick={() => act(() => api.deleteGeneration(row.id))}
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Delete
+            </Button>
             {composedUrl && (
               <Button variant="secondary" size="sm" className="w-full" asChild>
                 <a
@@ -748,36 +769,19 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
               </div>
             </div>
           )}
-          {/* Navigation and row actions, in the same bordered-group language as
-              the verdict above, instead of a full-width bar below the card. The
-              bar stretched short cards and left the right column half empty
-              beside a tall 9:16 player; the group fills that space with the
-              actions that belong to the render. Archive and Delete keep their
-              labels at the heading's right edge, separated from Details by the
-              gap, so they still cannot be reached by muscle memory on the way
-              to them. */}
+          {/* Navigation actions, in the same bordered-group language as the verdict
+              above, instead of a full-width bar below the card. The bar
+              stretched short cards and left the right column half empty beside
+              a tall 9:16 player; the group fills that space with the actions
+              that belong to the render.
+
+              Archive and Delete both left this page. They acted on the FILE,
+              not the navigation, and the rail under the clip now holds Delete
+              beside Download where the thing being destroyed is visible. The
+              status filter still offers "archived", so a row archived before
+              this change remains findable — just not archivable again. */}
           <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-3">
-            <span className="eyebrow flex items-center justify-between gap-2">
-              <span>Work with this render</span>
-              <span className="flex items-center gap-1.5">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy || row.status === "archived"}
-                  onClick={() => act(() => api.archiveGeneration(row.id))}
-                >
-                  <Archive className="h-3.5 w-3.5" /> Archive
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => act(() => api.deleteGeneration(row.id))}
-                >
-                  <Trash2 className="h-3.5 w-3.5" /> Delete
-                </Button>
-              </span>
-            </span>
+            <span className="eyebrow block">Work with this render</span>
             <div className="flex flex-wrap items-center gap-1.5">
               <Button variant="ghost" size="sm" onClick={loadChildren}>
                 <GitBranch className="h-3.5 w-3.5" /> Variations
