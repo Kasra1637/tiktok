@@ -47,9 +47,16 @@ timeout: 1800s
 
 # Runtime secrets for Cloud Run are referenced when the service is created in
 # the console; only the build-time key is needed here.
+#
+# The project ID is written out rather than referenced as $PROJECT_ID on
+# purpose. If this path fails to resolve, Cloud Build drops the whole secret
+# binding and then fails with a misleading message about
+# "CLERK_PUBLISHABLE_KEY is not a valid built-in substitution" -- it reports the
+# symptom at line 31, not the cause here. Spelling the project out means a wrong
+# guess fails at this line with a message that names Secret Manager.
 availableSecrets:
   secretManager:
-    - versionName: projects/$PROJECT_ID/secrets/CLERK_PUBLISHABLE_KEY/versions/latest
+    - versionName: projects/hookforge-prod/secrets/CLERK_PUBLISHABLE_KEY/versions/latest
       env: CLERK_PUBLISHABLE_KEY
 
 substitutions:
