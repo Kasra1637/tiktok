@@ -96,7 +96,7 @@ class TestCapabilities:
         clip rather than making one.
         """
         keys = [c["key"] for c in vp.list_capabilities()]
-        assert keys == ["minimax-h3", "minimax-h3-max", "grok-imagine-video"]
+        assert keys == ["minimax-h3", "minimax-h3-max", "grok-imagine-video", "grok-imagine-video-lite"]
         assert "aleph-2" not in keys
         for cap in vp.list_capabilities():
             assert cap["is_video_editor"] is False
@@ -150,6 +150,50 @@ class TestCapabilities:
         assert cap["supports_last_frame"] is False
         assert cap["max_reference_images"] == 0
         assert vp.accepts_identity_reference("grok-imagine-video") is True
+
+    def test_grok_imagine_video_lite_is_opt_in_and_not_the_default(self):
+        """
+        The distilled sibling joins as a fourth opt-in for cheap drafts.
+        Listing it must not move production spend: the default stays Hailuo 3,
+        and naming it explicitly is honoured rather than silently swapped.
+        """
+        assert vp.is_studio_eligible("grok-imagine-video-lite") is True
+        assert vp.default_model_key() == "minimax-h3"
+        assert vp.resolve("grok-imagine-video-lite")[0] == "grok-imagine-video-lite"
+
+    def test_grok_imagine_video_lite_is_registered_at_its_real_id(self):
+        cap = vp.capability("grok-imagine-video-lite")
+        assert cap["id"] == "x-ai/grok-imagine-video-1.5-lite"
+        assert cap["max_duration"] == 15
+        assert cap["min_duration"] == 5
+
+    def test_grok_imagine_video_lite_is_720p_not_1080p(self):
+        """
+        OpenRouter lists 480p/720p/1080p for the lite model, but lite-1080p
+        is upscaled 720p at ~4.7x the per-second price — cost without detail.
+        720p is the honest, cheap choice, matching its sibling.
+        """
+        assert vp.capability("grok-imagine-video-lite")["resolution"] == "720p"
+
+    def test_grok_imagine_video_lite_does_not_request_native_audio(self):
+        """
+        generate_audio is unlisted for this model family, so the field is
+        false and the studio omits it. Clips come back silent, as with both
+        siblings. If a real clip arrives with sound, this is the flag to flip.
+        """
+        assert vp.capability("grok-imagine-video-lite")["supports_native_audio"] is False
+
+    def test_grok_imagine_video_lite_takes_identity_as_first_frame(self):
+        """
+        Same treatment as its sibling: first-frame only, reference count 0,
+        identity selected via identity_via_first_frame rather than a reference
+        list.
+        """
+        cap = vp.capability("grok-imagine-video-lite")
+        assert cap["supports_first_frame"] is True
+        assert cap["supports_last_frame"] is False
+        assert cap["max_reference_images"] == 0
+        assert vp.accepts_identity_reference("grok-imagine-video-lite") is True
 
     def test_an_removed_provider_falls_back_to_the_default(self):
         """

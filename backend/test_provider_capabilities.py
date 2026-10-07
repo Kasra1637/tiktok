@@ -52,6 +52,14 @@ def _healthy_records() -> dict:
             "generate_audio": None,
             "allowed_passthrough_parameters": [],
         },
+        "x-ai/grok-imagine-video-1.5-lite": {
+            "id": "x-ai/grok-imagine-video-1.5-lite",
+            "supported_resolutions": ["480p", "720p", "1080p"],
+            "supported_durations": list(range(1, 16)),
+            "supported_frame_images": ["first_frame"],
+            "generate_audio": None,
+            "allowed_passthrough_parameters": [],
+        },
     }
 
 
@@ -96,6 +104,16 @@ class TestCompareCatalogToLive:
         del live["x-ai/grok-imagine-video"]
         problems = pc.compare_catalog_to_live(live)
         assert any("no longer listed" in p for p in problems)
+
+    def test_a_withdrawn_lite_model_is_reported(self):
+        """
+        Same retirement tripwire for the fourth entry: withdrawing the lite
+        model must name it, not pass silent because the sibling still matches.
+        """
+        live = _healthy_records()
+        del live["x-ai/grok-imagine-video-1.5-lite"]
+        problems = pc.compare_catalog_to_live(live)
+        assert any("1.5-lite" in p and "no longer listed" in p for p in problems)
 
     def test_empty_durations_is_reported(self):
         """

@@ -112,6 +112,30 @@ _CAPABILITY_NOTES = {
             "is still the default."
         ),
     },
+    "grok-imagine-video-lite": {
+        "vertical": True,
+        # Same treatment as its sibling: no reference-image support is listed,
+        # so the photo rides as the opening frame only. The count is 0 and
+        # accepts_identity_reference() must not read it as permission to send
+        # an input_references list.
+        "max_reference_images": 0,
+        "max_reference_videos": 0,
+        "max_reference_audio": 0,
+        "supports_first_frame": True,
+        "supports_last_frame": False,
+        "identity_via_first_frame": True,
+        # Same family and tooling as the sibling, so the same documented
+        # 4,096 character figure. The first live render settles it: read
+        # prompt_chars from the submit log and correct this to what the
+        # provider actually accepts.
+        "prompt_char_limit": 4096,
+        "notes": (
+            "Distilled Grok Imagine: faster and cheaper than its sibling at the "
+            "same 720p, 1-15s, silent trade. The cheap option for drafts and "
+            "second scripts; scaled to 1080x1920 on the way out. Opt-in: "
+            "Hailuo 3 is still the default."
+        ),
+    },
     "aleph-2": {
         "vertical": True,
         "max_reference_images": 0,
@@ -153,7 +177,10 @@ _CAPABILITY_NOTES = {
 # is a free read and states the fields each model actually accepts, so a
 # provider quietly dropping something shows up in the log instead of in a
 # founder's failed render.
-STUDIO_ELIGIBLE = ("minimax-h3", "minimax-h3-max", "grok-imagine-video")
+# Grok Imagine Video Lite joins at the end as the cheapest opt-in: same photo
+# as first-frame anchor, same silent 720p trade as its sibling, distilled for
+# speed and price. Listing it does not move the default, which stays Hailuo 3.
+STUDIO_ELIGIBLE = ("minimax-h3", "minimax-h3-max", "grok-imagine-video", "grok-imagine-video-lite")
 
 # The hook length used when nothing states one. 5s is the lowest length the
 # current provider can render, so it needs no trim; a template's own

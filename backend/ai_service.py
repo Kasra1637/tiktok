@@ -161,6 +161,39 @@ VIDEO_MODELS = {
         "resolution": "720p",
         "supports_combined_refs": False,
     },
+    # Grok Imagine Video 1.5 Lite: the distilled, faster/cheaper sibling of
+    # Grok Imagine Video, served on the same OpenRouter key and endpoint.
+    # Same shape as its sibling (photo as opening frame, no native audio),
+    # so it joins as a fourth opt-in for cheap drafts and second scripts.
+    #
+    # Facts below come from OpenRouter's own model page for
+    # x-ai/grok-imagine-video-1.5-lite: 480p/720p/1080p, 1-15s clips,
+    # first-frame image steering, vertical ratios included. Resolution is
+    # 720p, not 1080p, on purpose: OpenRouter renders lite-1080p as upscaled
+    # 720p at ~4.7x the per-second price, so 1080p buys cost without detail.
+    # min_duration mirrors the sibling (5) rather than the provider floor (1)
+    # until a first live render proves shorter renders work through the
+    # studio's trim logic.
+    #
+    # generate_audio is unlisted for this model family, so
+    # supports_native_audio is False and the studio omits the field. If a
+    # real clip comes back with sound, that is the flag to flip.
+    "grok-imagine-video-lite": {
+        "id": "x-ai/grok-imagine-video-1.5-lite",
+        "name": "Grok Imagine Video Lite",
+        "description": (
+            "Distilled Grok Imagine: faster, cheaper drafts with your photo "
+            "opening the clip as its first frame. 720p, 1-15s, no native "
+            "audio. For cheap drafts and second scripts. Opt-in."
+        ),
+        "max_duration": 15,
+        "min_duration": 5,
+        "supports_references": False,
+        "supports_native_audio": False,  # generate_audio unlisted; omit the field
+        "supports_v2v_motion": False,
+        "resolution": "720p",
+        "supports_combined_refs": False,
+    },
 }
 # Default for new template-studio generations. The provider remains
 # configurable through VIDEO_MODEL_DEFAULT and VIDEO_MODEL_ALLOWLIST, but

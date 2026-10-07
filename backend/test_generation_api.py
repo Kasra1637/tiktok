@@ -889,7 +889,7 @@ class TestListingAndCapabilities:
         """
         result = _run(api.list_studio_video_models())
         keys = [m["key"] for m in result["models"]]
-        assert keys == ["minimax-h3", "minimax-h3-max", "grok-imagine-video"]
+        assert keys == ["minimax-h3", "minimax-h3-max", "grok-imagine-video", "grok-imagine-video-lite"]
         assert "aleph-2" not in keys
         assert result["default"] == "minimax-h3"
 
