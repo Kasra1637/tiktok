@@ -3,19 +3,41 @@
 # Builds the root Dockerfile (frontend CRA build + Python runtime in one image),
 # then pushes it to Artifact Registry so Cloud Run can deploy it.
 #
-# The Clerk publishable key is pulled from Secret Manager via `availableSecrets`
-# and passed as a --build-arg, because CRA inlines process.env.REACT_APP_* at
-# BUILD time (see Dockerfile ARG REACT_APP_CLERK_PUBLISHABLE_KEY). It cannot be
-# supplied at runtime: a build without it produces a bundle with auth disabled,
-# which looks like a blank page rather than a config error.
+# The Clerk publishable key is a BUILD-time input, not a runtime one: CRA inlines
+# process.env.REACT_APP_* into the bundle when it compiles, so the key has to be
+# present during `yarn build` (see the ARG in Dockerfile) and cannot be supplied
+# when the container starts.
 #
-# Reading it from Secret Manager rather than a trigger substitution keeps the key
-# out of build logs and out of the trigger configuration in the console.
+# It is passed as a plain substitution rather than through Secret Manager,
+# because a Clerk *publishable* key (pk_live_/pk_test_) is public by design --
+# Clerk ships it to every browser that loads the app, so anyone can read it from
+# the served bundle regardless of where the build gets it from. Secret Manager
+# would have implied protection that does not exist for this value, and cost
+# three failed builds learning that the binding did not resolve.
 #
-# $PROJECT_ID and $COMMIT_SHA are built-in Cloud Build substitutions, so this
-# file works in any project without hardcoding a project ID.
+# The actual key value lives in the private env files below, not in this file.
+# `verify-build-key` fails the build outright if it was ever overwritten with the
+# placeholder, which is deliberate: an empty key does NOT fail the build, it
+# produces a bundle with sign-in silently disabled and a blank page (see
+# frontend/src/lib/clerk.js). Failing loudly is the only safe default.
 
 steps:
+  # Cheap guard, runs in ~2s, and fails before the multi-minute image build
+  # rather than after it.
+  - id: verify-build-key
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        if [ -z "${_CLERK_PUBLISHABLE_KEY}" ] || \
+           [ "${_CLERK_PUBLISHABLE_KEY}" = "PASTE_CLERK_PUBLISHABLE_KEY_HERE" ]; then
+          echo "ERROR: _CLERK_PUBLISHABLE_KEY is unset or still the placeholder."
+          echo "The frontend would build with authentication silently disabled."
+          exit 1
+        fi
+        echo "Clerk publishable key present (${#_CLERK_PUBLISHABLE_KEY} chars, value not logged)."
+
   - id: build
     name: gcr.io/cloud-builders/docker
     args:
@@ -24,11 +46,8 @@ steps:
       - Dockerfile
       - -t
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/hookforge/hookforge:$COMMIT_SHA
-      # The value arrives as an env var from availableSecrets below. Using it as
-      # a build-arg (rather than a plain substitution) keeps it out of the
-      # trigger's configuration UI and out of `gcloud builds submit` echoes.
       - --build-arg
-      - REACT_APP_CLERK_PUBLISHABLE_KEY=$CLERK_PUBLISHABLE_KEY
+      - REACT_APP_CLERK_PUBLISHABLE_KEY=${_CLERK_PUBLISHABLE_KEY}
       - .
 
   - id: push
@@ -45,25 +64,6 @@ images:
 # minute default on a cold cache, so give it room.
 timeout: 1800s
 
-# Runtime secrets for Cloud Run are referenced when the service is created in
-# the console; only the build-time key is needed here.
-#
-# The project ID is written out rather than referenced as $PROJECT_ID on
-# purpose. If this path fails to resolve, Cloud Build drops the whole secret
-# binding and then fails with a misleading message about
-# "CLERK_PUBLISHABLE_KEY is not a valid built-in substitution" -- it reports the
-# symptom at line 31, not the cause here. Spelling the project out means a wrong
-# guess fails at this line with a message that names Secret Manager.
-availableSecrets:
-  secretManager:
-    - versionName: projects/hookforge-prod/secrets/CLERK_PUBLISHABLE_KEY/versions/latest
-      env: CLERK_PUBLISHABLE_KEY
-
-substitutions:
-  # Must match the Artifact Registry repository region. A mismatch fails the
-  # push with a confusing cross-registry error.
-  _REGION: us-west1
-
 # Logs go to Cloud Logging only, with nothing archived to a GCS bucket.
 #
 # This is required, not an optimization. The project's default logs bucket is
@@ -71,8 +71,15 @@ substitutions:
 # user-managed `hookforge-build` account cannot write to it. Cloud Build rejects
 # any build that names a service account without a logs bucket, a regional
 # user-owned bucket, or explicit CLOUD_LOGGING_ONLY/NONE logging.
-#
-# Nothing is lost: build logs remain visible in the console and via
-# `gcloud builds log`.
 options:
   logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  # Must match the Artifact Registry repository region. A mismatch fails the
+  # push with a confusing cross-registry error.
+  _REGION: us-west1
+
+  # Clerk publishable key (pk_live_... or pk_test_...), from
+  # Render's REACT_APP_CLERK_PUBLISHABLE_KEY or dashboard.clerk.com -> API Keys.
+  # Public by design -- see the header comment.
+  _CLERK_PUBLISHABLE_KEY: PASTE_CLERK_PUBLISHABLE_KEY_HERE
