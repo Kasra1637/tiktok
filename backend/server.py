@@ -106,6 +106,18 @@ TURSO_AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "").strip()
 # serially avoids the OOM restarts seen when multiple analyses overlap.
 _ytdlp_semaphore = asyncio.Semaphore(1)
 
+# One local ffmpeg encode at a time, box-wide.
+#
+# Every ffmpeg argv in this repo is capped at -threads 1, and that bounds each
+# spike — but it does not bound overlap: a poll-save trim/rescale, an overlay
+# compose, and a poster encode can still run concurrently across requests,
+# and stacked encodes are what OOM-killed the container. This gate serializes
+# entry to all of them (trim + rescale in _persist_generation_clip, compose in
+# _render_overlay_composition, poster generation eager and lazy). Network work
+# (downloads, R2 uploads) stays outside it — only the encode holds the slot.
+# Same single-process assumption as _storage_repairs_in_flight above.
+_FFMPEG_SLOT = asyncio.Semaphore(1)
+
 # Storage repairs, in flight right now, by generation id.
 #
 # Two things make this necessary. The work is heavy -- a full download plus two
@@ -6950,7 +6962,11 @@ async def _eager_poster(generation_id: str, user_id: str) -> None:
     event loop, then uploads the JPEG to R2 for durability.
     """
     try:
-        poster = await asyncio.to_thread(posters.ensure_poster, generation_id)
+        # Shares the box-wide encode gate: a poster encode must never overlap
+        # a save trim/rescale or a compose, even though it runs after the
+        # response and off the event loop.
+        async with _FFMPEG_SLOT:
+            poster = await asyncio.to_thread(posters.ensure_poster, generation_id)
         if poster is not None:
             try:
                 await asyncio.to_thread(
@@ -8070,13 +8086,28 @@ async def poll_generation(
             # without it, it just costs video bytes per thumbnail. Scheduled
             # after the response so the save never stacks two ffmpegs.
             await _schedule_poster(background_tasks, generation_id, user_id)
-    elif status in ("failed", "error", "cancelled", "canceled"):
-        message = str(response.get("error") or response.get("message") or "Generation failed.")
+    elif status in ("failed", "error", "cancelled", "canceled", "expired"):
+        # "expired" is terminal but arrived here as infinite "generating":
+        # OpenRouter lists it in the status enum, yet it matched none of the
+        # failure branches, so the row polled forever with no banner. Name it
+        # plainly: the provider discarded the job, its clip is not
+        # recoverable, and retrying renders it anew (a fresh render, not a
+        # repair — recovery of this clip is no longer possible).
+        if status == "expired":
+            message = (
+                "The provider discarded this render job before it could be "
+                "saved (expired). Its clip is no longer recoverable; retrying "
+                "renders it anew."
+            )
+            retryable = 1
+        else:
+            message = str(response.get("error") or response.get("message") or "Generation failed.")
+            retryable = 1 if generation_planning.is_recoverable_error(message) else 0
         await _execute(
             "UPDATE generations SET status = 'failed', error = ?, retryable = ?, completed_at = ?, "
             "updated_at = ? WHERE id = ?",
-            (message[:1000], 1 if generation_planning.is_recoverable_error(message) else 0,
-             now, now, generation_id),
+            (message[:1000], retryable,
+             now_iso(), now_iso(), generation_id),
         )
     else:
         await _execute(
@@ -8488,52 +8519,57 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
                     + "; ".join(attempts) + ")."
                 ), 0
 
+    # One encode at a time box-wide (see _FFMPEG_SLOT): trim and rescale are
+    # sequential here, but a concurrent compose or poster encode from another
+    # request would stack on top of them. R2 upload below stays outside the
+    # gate — network, not encode.
     if fresh and not restored:
-        # Apply the hook trim IN PLACE, before storage and before the row
-        # records a length. The canonical path is also what an extension
-        # bridges from (the previous clip's FINAL FRAME), so a trimmed
-        # hook that sat beside the full render as a sidecar would make
-        # every continuation resume from a frame the viewer never saw.
-        if trim_to > 0:
-            trimmed = await pipeline.replace_with_trimmed(local_path, trim_to)
-            if trimmed:
-                local_path = trimmed
-                trim_note = f"Cut down to {trim_to}s."
-                logger.info(
-                    f"Generation {generation_id}: hook trimmed to {trim_to}s "
-                    f"(rendered at a length the provider cannot go below)"
-                )
-            else:
-                # Keep the full render rather than lose it, and say so:
-                # the delivered clip is longer than was asked for.
-                storage_error = (
-                    f"Could not cut the hook down to {trim_to}s, so it is "
-                    f"delivered at its full rendered length."
-                )
-                logger.warning(
-                    f"Generation {generation_id}: trim to {trim_to}s failed; "
-                    f"delivering the untrimmed render."
-                )
+        async with _FFMPEG_SLOT:
+            # Apply the hook trim IN PLACE, before storage and before the row
+            # records a length. The canonical path is also what an extension
+            # bridges from (the previous clip's FINAL FRAME), so a trimmed
+            # hook that sat beside the full render as a sidecar would make
+            # every continuation resume from a frame the viewer never saw.
+            if trim_to > 0:
+                trimmed = await pipeline.replace_with_trimmed(local_path, trim_to)
+                if trimmed:
+                    local_path = trimmed
+                    trim_note = f"Cut down to {trim_to}s."
+                    logger.info(
+                        f"Generation {generation_id}: hook trimmed to {trim_to}s "
+                        f"(rendered at a length the provider cannot go below)"
+                    )
+                else:
+                    # Keep the full render rather than lose it, and say so:
+                    # the delivered clip is longer than was asked for.
+                    storage_error = (
+                        f"Could not cut the hook down to {trim_to}s, so it is "
+                        f"delivered at its full rendered length."
+                    )
+                    logger.warning(
+                        f"Generation {generation_id}: trim to {trim_to}s failed; "
+                        f"delivering the untrimmed render."
+                    )
 
-        # Deliver on the platform's canvas. The cheaper providers render
-        # below it -- Grok Imagine Video at 720p -- and a founder posting to
-        # TikTok wants 1080x1920 rather than whatever the model emitted.
-        # Applied after the trim so the scaled clip is the canonical file:
-        # it is what an extension would bridge from, and what both the
-        # captioned and the plain download then serve.
-        #
-        # Soft by design. A plain bilinear scale adds no detail, so failing
-        # here costs resolution and nothing else, and the un-rescaled clip
-        # is still a watchable video.
-        rescaled, rescale_warnings = await overlays.rescale_to_canvas(local_path)
-        if rescaled:
-            local_path = rescaled
-        elif rescale_warnings:
-            logger.warning(
-                f"Generation {generation_id}: canvas resize failed "
-                f"({rescale_warnings[0]}); the clip is delivered at its "
-                f"rendered size."
-            )
+            # Deliver on the platform's canvas. The cheaper providers render
+            # below it -- Grok Imagine Video at 720p -- and a founder posting to
+            # TikTok wants 1080x1920 rather than whatever the model emitted.
+            # Applied after the trim so the scaled clip is the canonical file:
+            # it is what an extension would bridge from, and what both the
+            # captioned and the plain download then serve.
+            #
+            # Soft by design. A plain bilinear scale adds no detail, so failing
+            # here costs resolution and nothing else, and the un-rescaled clip
+            # is still a watchable video.
+            rescaled, rescale_warnings = await overlays.rescale_to_canvas(local_path)
+            if rescaled:
+                local_path = rescaled
+            elif rescale_warnings:
+                logger.warning(
+                    f"Generation {generation_id}: canvas resize failed "
+                    f"({rescale_warnings[0]}); the clip is delivered at its "
+                    f"rendered size."
+                )
 
     stored_url = await asyncio.to_thread(
         storage_service.upload_video, user_id, generation_id, Path(local_path))
@@ -9704,7 +9740,11 @@ async def _render_overlay_composition(composition_id: str, user_id: str) -> dict
         }
 
     output = pipeline.VIDEOS_DIR / f"{composition_id}.mp4"
-    result, warnings = overlays.compose(source, output, spec)
+    # Gated like every other encode (see _FFMPEG_SLOT): this is a full
+    # re-encode sharing the box with saves and posters. The call itself stays
+    # synchronous, exactly as before — only entry is serialized.
+    async with _FFMPEG_SLOT:
+        result, warnings = overlays.compose(source, output, spec)
 
     if not result:
         message = "; ".join(warnings) or "Overlay render failed."
@@ -10746,7 +10786,10 @@ async def serve_poster(filename: str, sig: str = "", exp: str = ""):
                 storage_service.restore_video, row["user_id"], row["id"], video)
         except Exception as error:
             logger.warning("Cloud video restore for poster failed for %s (%s)", job_id, type(error).__name__)
-    generated = await asyncio.to_thread(posters.generate_poster, video, poster)
+    # Gated (see _FFMPEG_SLOT): a lazy poster from a History stampede must
+    # queue behind an in-flight save encode rather than stack on it.
+    async with _FFMPEG_SLOT:
+        generated = await asyncio.to_thread(posters.generate_poster, video, poster)
     if generated and posters.is_usable_poster(poster):
         # Cache it in the cloud for the next instance, but serve now even if
         # the upload fails — the local file is what this response needs.

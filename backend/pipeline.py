@@ -468,6 +468,10 @@ async def concat_videos(paths: list, out_path: Path) -> Optional[Path]:
         )
         cmd = [
             "ffmpeg", "-y",
+            # Capped like every other call site: per-thread decode buffers are
+            # the largest single allocator on the 512MB host, and an uncapped
+            # concat overlapping a save is an OOM kill.
+            "-threads", "1",
             "-f", "concat",
             "-safe", "0",
             "-i", str(list_path),

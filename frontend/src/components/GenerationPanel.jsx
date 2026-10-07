@@ -143,18 +143,39 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
   // every mount — which the app-wide ErrorBoundary turned into a blank screen
   // on every route. scripts/check-render-smoke.cjs mounts this component, so
   // that class of ordering mistake fails the gate instead of shipping.
+  // Consecutive poll failures and the generation they belong to. One failed
+  // poll used to kill the loop outright: a single 502 during a container
+  // restart left "Generating..." frozen beside a message promising the page
+  // checks back on its own — while nothing checked anything. Transient
+  // failures now stay silent and keep polling; only a sustained outage (five
+  // in a row) escalates to the error banner. The id guard resets the count
+  // when tracking moves to a different generation, so an old outage cannot
+  // spend a new render's tolerance.
+  const pollFailures = useRef(0);
+  const pollingId = useRef(null);
+  const MAX_POLL_FAILURES = 5;
   const schedulePoll = useCallback((id) => {
+    if (pollingId.current !== id) {
+      pollingId.current = id;
+      pollFailures.current = 0;
+    }
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
       try {
         const updated = await api.pollGeneration(id);
+        pollFailures.current = 0;
         setGeneration(updated);
         onGenerationChange?.(updated);
         if (updated.status === "submitted" || updated.status === "generating") {
           schedulePoll(id);
         }
       } catch (err) {
-        setError(getErrorMessage(err));
+        pollFailures.current += 1;
+        if (pollFailures.current >= MAX_POLL_FAILURES) {
+          setError(getErrorMessage(err));
+        } else {
+          schedulePoll(id);
+        }
       }
     }, POLL_INTERVAL_MS);
   }, [onGenerationChange]);

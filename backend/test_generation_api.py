@@ -581,6 +581,22 @@ class TestPolling:
         result = _run(api.poll_generation(gen["id"], ANON))
         assert result["status"] == "generating"
 
+    def test_expired_is_terminal_not_endless_generating(self, api, monkeypatch):
+        """
+        OpenRouter lists "expired" in its status enum, but it matched none of
+        the failure branches — so the row polled forever with no banner.
+        Expired is terminal: the provider discarded the job, its clip is not
+        recoverable, and the message must say retrying renders anew rather
+        than repairing this one.
+        """
+        gen = self._submitted(api, monkeypatch, "Poll Expired")
+        _mock_poll(api, monkeypatch, {"status": "expired"})
+        result = _run(api.poll_generation(gen["id"], ANON))
+        assert result["status"] == "failed"
+        assert result["retryable"] is True
+        assert "expired" in result["error"]
+        assert "renders it anew" in result["error"]
+
     def test_completed_generation_short_circuits(self, api, monkeypatch):
         gen = self._submitted(api, monkeypatch, "Poll Done")
         _mock_poll(api, monkeypatch, {"status": "completed", "unsigned_urls": ["u"]})

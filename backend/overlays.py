@@ -581,7 +581,10 @@ def build_ffmpeg_command(
         graph = f"{graph};{audio_graph}"
 
     image_count = len(spec.get("images") or [])
-    argv = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error"]
+    # One thread, on purpose: per-thread decode buffers are the largest thing
+    # ffmpeg allocates, and an uncapped overlay encode overlapping a save is
+    # what OOM-killed the 512MB host. Same budget as every other call site.
+    argv = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-threads", "1"]
     argv += ["-i", str(base_video)]
     # Each overlay input is declared exactly once, in the same order the
     # filter graph indexes them. Images are looped so a still overlay covers

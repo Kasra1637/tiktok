@@ -984,6 +984,39 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     expectText(ctx, "Durable copy saved", "a successful storage retry is not confirmed");
   });
 
+  await check("a transient poll failure neither stops the loop nor raises the banner", async (ctx) => {
+    // One failed poll used to kill the loop outright: a single 502 during a
+    // container restart froze "Generating..." beside a message promising the
+    // page checks back on its own. Transient failures now stay silent and
+    // keep polling; only a sustained outage escalates. Two intervals (~13s)
+    // prove the second poll still fires and no banner appeared.
+    const GenerationPanel = load("components/GenerationPanel.jsx").default;
+    let polls = 0;
+    const generating = { ...SEGMENT, id: "gen-poll", status: "generating" };
+    await withApi(
+      {
+        getGenerations: async () => ({ generations: [generating] }),
+        pollGeneration: async () => {
+          polls += 1;
+          if (polls === 1) throw new Error("edge 502");
+          return generating;
+        },
+      },
+      async () => {
+        await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+        await act(async () => {
+          await new Promise((r) => setTimeout(r, 13500));
+        });
+        if (polls < 2) {
+          throw new Error(
+            "one failed poll stopped the loop: the second poll never fired"
+          );
+        }
+        expectAbsent(ctx, "edge 502", "a transient poll failure raised the banner");
+      }
+    );
+  });
+
   await check("GenerationPanel blocks generation while a claim is prohibited", async (ctx) => {
     await mount(GenerationPanel, {
       project: {

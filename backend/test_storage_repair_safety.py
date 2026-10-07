@@ -174,6 +174,79 @@ class TestFfmpegIsBounded:
         assert argv[argv.index("-crf") + 1] == "20"
         assert "+faststart" in " ".join(argv)
 
+    def test_the_compose_asks_for_one_thread(self, tmp_path):
+        """
+        The overlay compose was the one uncapped call site: a full re-encode
+        at preset medium with default threads, overlapping a save, is what
+        OOM-killed the container.
+        """
+        argv, _ = overlays.build_ffmpeg_command(
+            tmp_path / "b.mp4", tmp_path / "o.mp4", {}, 10, None)
+        assert argv[argv.index("-threads") + 1] == "1"
+
+    def test_the_concat_asks_for_one_thread(self, tmp_path):
+        """concat_videos builds its argv inline, so read it back off the mock."""
+        first = tmp_path / "a.mp4"
+        second = tmp_path / "b.mp4"
+        first.write_bytes(mp4_samples.real_mp4())
+        second.write_bytes(mp4_samples.real_mp4())
+        seen = {}
+
+        async def fake_run_cmd(cmd, timeout=None):
+            seen["cmd"] = cmd
+            raise RuntimeError("stop before ffmpeg runs")
+
+        real = pipeline.run_cmd
+        pipeline.run_cmd = fake_run_cmd
+        try:
+            asyncio.run(pipeline.concat_videos([first, second], tmp_path / "out.mp4"))
+        finally:
+            pipeline.run_cmd = real
+        cmd = seen["cmd"]
+        assert cmd[cmd.index("-threads") + 1] == "1"
+
+
+class TestEncodeGate:
+    """
+    One local ffmpeg encode at a time, box-wide.
+
+    Capping threads bounds each spike; it does not bound overlap. A poll-save
+    trim/rescale, an overlay compose and a poster encode could still run
+    concurrently across requests, and stacked encodes OOM-killed the 512MB
+    container. _FFMPEG_SLOT serializes entry to all of them.
+    """
+
+    def test_the_gate_allows_exactly_one_holder(self, api):
+        async def main():
+            inside = 0
+            peak = 0
+
+            async def holder():
+                nonlocal inside, peak
+                async with api._FFMPEG_SLOT:
+                    inside += 1
+                    peak = max(peak, inside)
+                    await asyncio.sleep(0.05)
+                    inside -= 1
+
+            await asyncio.gather(*[holder() for _ in range(5)])
+            return peak
+
+        assert asyncio.run(main()) == 1
+
+    def test_every_encode_site_holds_the_gate(self, api):
+        """
+        A new encode path that bypasses the gate reintroduces the overlap by
+        accident. Pin all four call sites the way the smoke suite pins its
+        markers: by name, in source.
+        """
+        import inspect
+
+        assert "_FFMPEG_SLOT" in inspect.getsource(api._persist_generation_clip)
+        assert "_FFMPEG_SLOT" in inspect.getsource(api._render_overlay_composition)
+        assert "_FFMPEG_SLOT" in inspect.getsource(api._eager_poster)
+        assert "_FFMPEG_SLOT" in inspect.getsource(api.serve_poster)
+
 
 class TestSingleFlight:
     def test_a_second_repair_is_refused_while_one_runs(self, api, monkeypatch):
