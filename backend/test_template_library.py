@@ -233,7 +233,7 @@ class TestClampDuration:
 
     def test_supported_durations_are_single_pass_lengths(self):
         assert tl.SUPPORTED_DURATIONS == [8, 10, 12, 15]
-        assert tl.DEFAULT_DURATION == 10
+        assert tl.DEFAULT_DURATION == 15
 
     def test_exact_supported_value_passes_through(self):
         assert tl.clamp_duration(12, model_max=30) == 12

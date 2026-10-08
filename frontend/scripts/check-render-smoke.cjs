@@ -330,7 +330,7 @@ const TEMPLATE = {
   camera_pacing: "Steady.",
   content_slots: { app_feature: "Task timer" },
   required_assets: ["character_reference"],
-  default_duration: 10,
+  default_duration: 15,
   hook_seconds: 3,
   is_usable: true,
 };
@@ -549,7 +549,7 @@ function load(relPath) {
       // every call re-runs the effect forever and the page never settles.
       return {
         __esModule: true,
-        Link: ({ children }) => React.createElement("a", { href: "#" }, children),
+        Link: ({ children, to, ...props }) => React.createElement("a", { ...props, href: to }, children),
         useNavigate: () => (...args) => {
           // Rest params, not `arguments`: arrows do not bind their own, so
           // `arguments` here would leak the requireShim spec string instead
@@ -565,6 +565,23 @@ function load(relPath) {
         // could never be exercised.
         useParams: () => global.__SMOKE_ROUTE_PARAMS || {},
         useLocation: () => ({ pathname: "/create", search: searchParams().toString() }),
+      };
+    }
+    // Exercise the real AuthControls branches without contacting Clerk or
+    // changing the shipped configuration. Only landing auth-state checks use this.
+    if (global.__SMOKE_LANDING_AUTH && spec.endsWith("lib/clerk")) {
+      return { isClerkConfigured: global.__SMOKE_LANDING_AUTH !== "no-auth" };
+    }
+    if (global.__SMOKE_LANDING_AUTH && spec === "@clerk/clerk-react") {
+      const trigger = (kind) => ({ children }) => React.cloneElement(children, {
+        onClick: () => global.__SMOKE_AUTH_ACTIONS.push(kind),
+      });
+      return {
+        SignedIn: ({ children }) => global.__SMOKE_LANDING_AUTH === "signed-in" ? children : null,
+        SignedOut: ({ children }) => global.__SMOKE_LANDING_AUTH === "signed-out" ? children : null,
+        SignInButton: trigger("sign-in"),
+        SignUpButton: trigger("sign-up"),
+        UserButton: () => React.createElement("button", { "aria-label": "Account" }, "Account"),
       };
     }
     if (spec === "sonner") return { toast: { success: () => {}, error: () => {} } };
@@ -2164,7 +2181,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     }
     // The two sections, with the remainder spelled out. A hook boundary that did
     // not add up to the piece would be a plan that does not add up either.
-    if (!new RegExp(`a 3s hook,\\s*then a 7s middle`).test(text)) {
+    if (!new RegExp(`a 3s hook,\\s*then a 12s middle`).test(text)) {
       throw new Error("the Audience step does not split the piece into its two sections");
     }
     // Why there is nothing to choose.
@@ -2876,32 +2893,119 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     expectAbsent(ctx, "picks up from the last frame", "the seam frame is not sent");
     expectAbsent(ctx, "written description of the scene", "there is no seam to describe around");
     expectAbsent(ctx, "may drift", "no clip can drift from another, because there is only one");
-    // The honest replacements have to actually be there, or a future edit could
-    // satisfy the checks above by deleting the claims outright. The handoff is
-    // the disclosure that replaces the continuity claim: the generated video
-    // stops on purpose, and what follows it is the founder's own footage.
-    expectText(ctx, "The Middle Is Built to Stop", "the handoff is disclosed, not hidden");
-    expectText(ctx, "You attach the demo", "the demo is described as the founder's own recording");
+    const copy = ctx.text().replace(/\s+/g, " ").toLowerCase();
+    for (const unsupported of [
+      /free until the render|cost nothing|free trial|unlimited renders/,
+      /cost me a (saturday|coffee)|400 views/,
+      /(?:ten|six|18) (?:curated )?(?:openers|openings|structures|templates)/,
+      /see what each video earned|success rate, failures and rework/,
+      /guaranteed (?:views|downloads|sales|likeness)|guarantees? virality/,
+      /nothing (?:is )?generated until you render/,
+      /the presenter is you|your real face|the only face in your video/,
+    ]) {
+      if (unsupported.test(copy)) throw new Error(`unsupported landing promise: ${unsupported}`);
+    }
+    expectText(ctx, "limitations", "template fit is not presented as proven performance");
+    expectText(ctx, "Matches to your banned claims block generation", "the claim gate is disclosed");
   });
 
-  // The call to action and the product demo are the two things the generated
-  // video does not contain, and both used to be advertised as features of it.
-  await check("Landing does not promise a call to action or a generated demo", async (ctx) => {
+  // Demo + CTA now supports user-authored end cards. A blanket ban on those
+  // words hid a real capability; scope the guarantees to each output instead.
+  await check("Landing separates generated stories from real footage and editor overlays", async (ctx) => {
     await mount(Landing)(ctx);
-    // The acronym was the affordance on screen: an end-card badge, a "CTA
-    // pattern" row, a close written into the copy. Spelling the phrase out to
-    // say the close is the founder's own is honest and stays.
-    expectAbsent(ctx, "CTA", "the acronym still appears as an offered capability");
-    expectAbsent(ctx, "end card", "the server no longer composes an end card");
-    expectAbsent(ctx, "end-card", "the server no longer composes an end card");
-    expectAbsent(ctx, "ready to post", "the render is not a finished, postable video");
-    expectAbsent(ctx, "No camera, no editor, no source footage", "the founder records the demo");
-    expectAbsent(ctx, "skip the shoot", "the founder records the demo");
-    // What the product actually delivers, and the handoff.
-    expectText(ctx, "A hook, and a middle", "the two sections are not described as features");
-    expectText(ctx, "You finish the video", "the assembly step is not described as the founder's");
-    expectText(ctx, "Record your demo", "the demo is described as the founder's own recording");
+    const text = (id) => {
+      const block = ctx.container.querySelector(`[data-testid="${id}"]`);
+      if (!block) throw new Error(`missing capability disclosure: ${id}`);
+      return block.textContent.replace(/\s+/g, " ");
+    };
+    const generation = text("landing-capability-generation");
+    const editor = text("landing-capability-editor");
+    const review = text("landing-capability-review");
+    for (const phrase of ["one AI-generated clip", "demo and closing message are not generated footage", "Record the demo yourself"]) {
+      if (!generation.includes(phrase)) throw new Error(`missing generation boundary: ${phrase}`);
+    }
+    for (const phrase of ["one source clip at a time", "an end card you write", "Combine separate clips in your own editor", "does not assemble them for you"]) {
+      if (!editor.includes(phrase)) throw new Error(`missing editor boundary: ${phrase}`);
+    }
+    if (!review.includes("not a guarantee that every claim is correct")) throw new Error("claim checks presented as factual certification");
+    const answers = [...ctx.container.querySelectorAll('[data-testid="landing-questions"] details')].map((e) => e.textContent.replace(/\s+/g, " "));
+    for (const pattern of [
+      /own video.*don’t need to generate a Hook \+ Story first/,
+      /not a recording of you or a clone of your voice/,
+      /Audio depends.*some models produce silent clips/,
+      /MP4 or WebM depending on your browser/,
+      /publish them yourself.*manually logged, not synced from TikTok/,
+    ]) {
+      if (!answers.some((a) => pattern.test(a))) throw new Error(`missing buyer disclosure: ${pattern}`);
+    }
+    expectNone(ctx, ["ready to post", "No camera, no editor, no source footage", "skip the shoot"], "a real product demo remains the user's own footage");
   });
+
+  await check("Landing headings, workflow, and navigation have real destinations", async (ctx) => {
+    await mount(Landing)(ctx);
+    const h1 = ctx.container.querySelectorAll("h1");
+    if (h1.length !== 1 || h1[0].textContent.trim().length < 20) throw new Error("expected one meaningful H1");
+    const steps = [...ctx.container.querySelectorAll('[data-testid="landing-how-it-works"] h3')];
+    if (steps.length !== 5) throw new Error("expected five workflow steps");
+    const workflow = ctx.container.querySelector('[data-testid="landing-how-it-works"]').textContent;
+    for (const phrase of ["approve the facts", "Set a goal", "presenter photo", "mark the project ready", "publish them yourself"]) {
+      if (!workflow.includes(phrase)) throw new Error(`missing workflow action: ${phrase}`);
+    }
+    for (const link of ctx.container.querySelectorAll('a[href^="#"]')) {
+      const target = link.getAttribute("href").slice(1);
+      if (!target || !ctx.container.querySelector(`[id="${target}"]`)) throw new Error(`broken landing anchor: ${target}`);
+    }
+    for (const route of ["/create", "/demo-cta", "/brand", "/history", "/privacy", "/terms"]) {
+      if (!ctx.container.querySelector(`a[href="${route}"]`)) throw new Error(`missing product/legal link: ${route}`);
+    }
+    if (ctx.container.querySelector("a button, button a")) throw new Error("landing actions must not nest interactive elements");
+    const questions = ctx.container.querySelectorAll('[data-testid="landing-questions"] details');
+    if (questions.length !== 5 || [...questions].some((q) => !q.querySelector("summary") || !q.querySelector("p")?.textContent)) throw new Error("buyer questions are incomplete");
+  });
+
+  for (const authState of ["signed-out", "signed-in", "no-auth"]) {
+    await check(`Landing actions work in ${authState} mode`, async (ctx) => {
+      const modules = ["pages/Landing.jsx", "components/auth/AuthControls.jsx", "lib/clerk.js"];
+      const saved = modules.map((p) => [resolveFile(path.join(SRC, p)), cache.get(resolveFile(path.join(SRC, p)))]);
+      global.__SMOKE_LANDING_AUTH = authState;
+      global.__SMOKE_AUTH_ACTIONS = [];
+      modules.forEach((p) => cache.delete(resolveFile(path.join(SRC, p))));
+      try {
+        await mount(load("pages/Landing.jsx").default)(ctx);
+        const headerAction = ctx.container.querySelectorAll('[data-testid="landing-enter-app-button"]');
+        if (headerAction.length !== 1) throw new Error("expected exactly one header action");
+        if (authState === "signed-out") {
+          for (const section of ["header", '[data-testid="landing-hero"]', '[data-testid="landing-final-cta"]']) {
+            const button = ctx.container.querySelector(`${section} button` + (section === "header" ? '[data-testid="landing-enter-app-button"]' : ""));
+            if (!button) throw new Error(`missing sign-up action: ${section}`);
+            await act(async () => button.click());
+          }
+          const signIn = [...ctx.container.querySelectorAll("header button")].find((b) => b.textContent.trim() === "Sign In");
+          if (!signIn) throw new Error("missing sign-in action");
+          await act(async () => signIn.click());
+          const heroSignIn = [...ctx.container.querySelectorAll('[data-testid="landing-hero"] button')].find((b) => b.textContent.trim() === "Sign in");
+          if (!heroSignIn) throw new Error("missing mobile-friendly sign-in action");
+          await act(async () => heroSignIn.click());
+          if (global.__SMOKE_AUTH_ACTIONS.join(",") !== "sign-up,sign-up,sign-up,sign-in,sign-in") throw new Error("auth actions did not reach the correct triggers");
+        } else {
+          if (headerAction[0].closest("a")?.getAttribute("href") !== "/create") throw new Error("header action loops to landing");
+          for (const section of ["landing-hero", "landing-final-cta"]) {
+            const link = ctx.container.querySelector(`[data-testid="${section}"] a[href="/create"]`);
+            if (!link || !link.textContent.includes("Create Video")) throw new Error(`missing creation action: ${section}`);
+          }
+          if (ctx.text().includes("Create your first video")) throw new Error("signed-out actions leaked into an authenticated view");
+        }
+        if (!ctx.container.querySelector('[data-testid="landing-final-cta"] a[href="/demo-cta"]')) throw new Error("missing standalone editor action");
+      } finally {
+        await act(async () => ctx.root.render(null));
+        delete global.__SMOKE_LANDING_AUTH;
+        delete global.__SMOKE_AUTH_ACTIONS;
+        for (const [abs, entry] of saved) {
+          if (entry) cache.set(abs, entry); else cache.delete(abs);
+        }
+      }
+    });
+  }
 
   // Every live route a tour can fire on, and the page component that route
   // serves. "/app-profiles/abc" stands in for the :id parameter; the assets
@@ -4392,12 +4496,13 @@ await check(
               `the player is not using the signed durable copy the API handed it: ${src}`
             );
           }
-          const download = [...ctx.container.querySelectorAll("a")].find((a) =>
-            (a.textContent || "").includes("Download video")
+          const download = [...ctx.container.querySelectorAll("a[download]")].find((a) =>
+            (a.textContent || "").trim() === "Download"
           );
-          if (!download || !(download.getAttribute("href") || "").includes(signed)) {
+          const expectedDownload = signed.replace(".mp4?", ".mp4/download?");
+          if (!download || download.getAttribute("href") !== expectedDownload) {
             throw new Error(
-              "the download does not point at the same signed durable copy as the player"
+              "the download must use the dedicated same-origin route and preserve the playback signature"
             );
           }
         }

@@ -226,7 +226,7 @@ class TestAssetLibrary:
                           label="Founder face")
         assert created["kind"] == "character_reference"
         assert Path(created["file_path"]).is_file()
-        assert created["media_url"].endswith(created["id"])
+        assert created["media_url"].startswith(f"/api/media/assets/{created['id']}")
         assert created["label"] == "Founder face"
         # Stored under this profile's own folder.
         assert profile["id"] in created["file_path"]

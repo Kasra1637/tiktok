@@ -111,6 +111,18 @@ def build_signed_poster_path(filename: str, ttl_seconds: int = DEFAULT_TTL_SECON
     return f"/api/media/posters/{filename}?{_EXP_PARAM}={expires_at}&{_SIG_PARAM}={make_signature(filename, expires_at)}"
 
 
+def build_signed_asset_path(asset_id: str, ttl_seconds: int = DEFAULT_TTL_SECONDS) -> str:
+    """
+    The asset path for `asset_id`, carrying its own signature and expiry.
+
+    Asset URLs are signed like clips so an <img src> cannot be used without
+    a valid signature. The signature scheme is identical (filename:expiry);
+    only the route prefix differs.
+    """
+    expires_at = int(time.time()) + int(ttl_seconds)
+    return f"/api/media/assets/{asset_id}?{_EXP_PARAM}={expires_at}&{_SIG_PARAM}={make_signature(asset_id, expires_at)}"
+
+
 def sign_stored_path(stored: str | None, ttl_seconds: int = DEFAULT_TTL_SECONDS) -> str | None:
     """
     Re-sign a media path that was persisted unsigned.

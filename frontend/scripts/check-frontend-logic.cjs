@@ -93,7 +93,7 @@ console.log("=".repeat(70));
 // uses when neither the project nor the template states one, and it has to be a
 // length the one eligible model can actually render in a single pass.
 console.log("\nDEFAULT_DURATION - the fallback, not a user choice");
-check("it is 10s", L.DEFAULT_DURATION === 10, L.DEFAULT_DURATION);
+check("it is 15s", L.DEFAULT_DURATION === 15, L.DEFAULT_DURATION);
 check("the fallback is inside the only eligible model's single pass",
   !L.exceedsSinglePass(L.DEFAULT_DURATION, MINIMAX), L.DEFAULT_DURATION);
 check("the fallback is also inside a longer model's single pass",

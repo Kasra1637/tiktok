@@ -188,7 +188,7 @@ function RecommendationCard({ r, selected, onSelect }) {
       )}
       {reasons.length > 0 && (
         <div className="mt-2 space-y-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
             Why it fits
           </p>
           {reasons.map((reason, i) => (
@@ -198,11 +198,11 @@ function RecommendationCard({ r, selected, onSelect }) {
       )}
       {limits.length > 0 && (
         <div className="mt-2 space-y-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
             Before you use it
           </p>
           {limits.map((limitation, i) => (
-            <p key={`l-${i}`} className="text-[11px] text-muted-foreground/80">{limitation}</p>
+            <p key={`l-${i}`} className="text-[11px] text-muted-foreground">{limitation}</p>
           ))}
         </div>
       )}

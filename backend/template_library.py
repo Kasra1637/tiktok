@@ -153,7 +153,7 @@ _DEFAULT_EVIDENCE_NOTE = (
 # template declares one for its mechanic and the strategy may settle lower, but
 # never higher. See `clamp_duration`.
 SUPPORTED_DURATIONS = [8, 10, 12, 15]
-DEFAULT_DURATION = 10
+DEFAULT_DURATION = 15
 
 # The longest piece any supported model can produce in one pass. 15s is
 # minimax-h3's real ceiling, and a piece is one render — so this is a hard
@@ -205,7 +205,7 @@ CURATED_TEMPLATES = [
         "visual_style": "fast_cuts_high_contrast",
         "camera_pacing": "quick handheld, hard cut on the beat, no slow build",
         "required_assets": ["character_reference"],
-        "default_duration": 10,
+        "default_duration": 15,
         "content_slots": {
             "pattern_beat": "the unexpected visual beat",
             "situation": "the situation the beat came from",
@@ -233,7 +233,7 @@ CURATED_TEMPLATES = [
         "visual_style": "talking_head_with_broll",
         "camera_pacing": "steady, eye-level, hold on the presenter's face for the cost",
         "required_assets": ["character_reference"],
-        "default_duration": 12,
+        "default_duration": 15,
         "content_slots": {
             "question": "the pain-point question",
             "cost": "what it actually costs to ignore",
@@ -260,7 +260,7 @@ CURATED_TEMPLATES = [
         "visual_style": "direct_to_camera_hard_cut",
         "camera_pacing": "still frame, one hard cut, no build",
         "required_assets": ["character_reference"],
-        "default_duration": 10,
+        "default_duration": 15,
         "content_slots": {
             "instruction": "the thing to stop doing",
             "cost": "what the habit actually costs",
@@ -287,7 +287,7 @@ CURATED_TEMPLATES = [
         "visual_style": "talking_head_intimate",
         "camera_pacing": "hold the beat, slow push, no cut on a reveal that isn't coming",
         "required_assets": ["character_reference"],
-        "default_duration": 12,
+        "default_duration": 15,
         "content_slots": {
             "regret": "the regret framing",
             "before": "the harder version of their day",
@@ -315,7 +315,7 @@ CURATED_TEMPLATES = [
         "visual_style": "talking_head_counted_on_screen_space",
         "camera_pacing": "one beat per cut, hold each mistake a beat longer than feels right",
         "required_assets": ["character_reference"],
-        "default_duration": 10,
+        "default_duration": 15,
         "content_slots": {
             "count": "how many, stated in the hook",
             "first_mistake": "the mistake that lands in the middle",
@@ -343,7 +343,7 @@ CURATED_TEMPLATES = [
         "visual_style": "first_person_vlog",
         "camera_pacing": "handheld, continuous, no establishing shot",
         "required_assets": ["character_reference"],
-        "default_duration": 12,
+        "default_duration": 15,
         "content_slots": {
             "scenario": "the second-person situation",
             "friction": "the specific thing that goes wrong in it",
@@ -371,7 +371,7 @@ CURATED_TEMPLATES = [
         "visual_style": "tight_talking_head",
         "camera_pacing": "no cuts, one long take, framing gets tighter",
         "required_assets": ["character_reference"],
-        "default_duration": 10,
+        "default_duration": 15,
         "content_slots": {
             "claim": "the unsupported claim",
             "pressure": "what makes it doubtful",
@@ -399,7 +399,7 @@ CURATED_TEMPLATES = [
         "visual_style": "direct_to_camera",
         "camera_pacing": "locked frame, one cut, no music swell",
         "required_assets": ["character_reference"],
-        "default_duration": 12,
+        "default_duration": 15,
         "content_slots": {
             "position": "the contradicted position",
             "justification": "the presenter's own experience of it",
@@ -427,7 +427,7 @@ CURATED_TEMPLATES = [
         "visual_style": "present_day_then_memory",
         "camera_pacing": "clean present-tense, then one soft cut back",
         "required_assets": ["character_reference"],
-        "default_duration": 12,
+        "default_duration": 15,
         "content_slots": {
             "changed": "what changed, stated in the hook",
             "before": "the specific before",

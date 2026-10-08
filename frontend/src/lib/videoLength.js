@@ -29,13 +29,11 @@
 /**
  * How long a fresh project is when nothing states a length.
  *
- * 10s is a real choice, not a round number: it is the middle of the supported
- * set, it is the library's DEFAULT_DURATION, and it is comfortably inside the
- * single-pass ceiling of the one studio-eligible model (minimax-h3 caps at
- * 15s). A longer default would be refused outright rather than split, so a
- * default that could not be rendered would make the very first click fail.
+ * 15s is the single-pass ceiling of the studio-eligible model (minimax-h3 caps
+ * at 15s). It is the top of the supported set, so a fresh project always fits
+ * in one render.
  */
-export const DEFAULT_DURATION = 10;
+export const DEFAULT_DURATION = 15;
 
 // The hook is a boundary, not a render length. The whole piece is rendered at
 // one duration and the hook is simply where the middle begins, so these are

@@ -9674,7 +9674,7 @@ def _public_asset(row: dict) -> dict:
     out = dict(row)
     out["rights_confirmed"] = bool(out.get("rights_confirmed"))
     if out.get("file_path"):
-        out["media_url"] = f"/api/media/assets/{out['id']}"
+        out["media_url"] = media_signing.build_signed_asset_path(out["id"])
     return out
 
 
@@ -11490,6 +11490,68 @@ async def serve_poster(filename: str, sig: str = "", exp: str = ""):
             headers={"Cache-Control": "private, max-age=31536000, immutable"},
         )
     raise HTTPException(status_code=404, detail="Poster not found")
+
+
+@app.get("/api/media/assets/{asset_id}")
+async def serve_asset(asset_id: str, request: Request, sig: str = "", exp: str = ""):
+    """
+    Serve a character reference asset so the template card and Review step
+    can display the founder's photo. Signed like videos so a raw URL cannot
+    be guessed — the filename IS the asset id, and the signature proves
+    the founder authorized this specific asset view.
+    """
+    if not GENERATED_ID_RE.match(asset_id or ""):
+        raise HTTPException(status_code=404, detail="Asset not found")
+    if not media_signing.verify(asset_id, exp, sig):
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    # First check if the asset exists in DB and belongs to the requester.
+    # We don't have a user_id in the URL, so we derive owner from the row.
+    row = await _fetch_one(
+        "SELECT id, brand_profile_id, user_id, file_path, content_type "
+        "FROM assets WHERE id = ?",
+        (asset_id,)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    # The asset belongs to a brand profile. The founder can view it if they
+    # own that profile. Since the URL is signed, the signature itself is
+    # the authorization — the signer must have known the asset id.
+    # But we also verify the row exists and the file is present.
+
+    # First try local file
+    file_path = Path(row.get("file_path") or "")
+    if file_path.is_file():
+        return FileResponse(
+            str(file_path),
+            media_type=row.get("content_type") or "image/jpeg",
+            headers={"Cache-Control": "private, max-age=31536000, immutable"},
+        )
+
+    # If not local but R2 is configured, try restoring from cloud
+    if storage_service.is_configured():
+        try:
+            # Need to find the profile_id for storage path
+            profile = await _fetch_one(
+                "SELECT id FROM brand_profiles WHERE id = ?", (row["brand_profile_id"],)
+            )
+            if profile:
+                target_dir = _asset_dir(profile["id"])
+                target_dir.mkdir(parents=True, exist_ok=True)
+                local_path = target_dir / f"{asset_id}{Path(row.get('file_path') or '').suffix}"
+                await asyncio.to_thread(
+                    storage_service.download_asset, row["user_id"], asset_id, local_path)
+                if local_path.is_file():
+                    return FileResponse(
+                        str(local_path),
+                        media_type=row.get("content_type") or "image/jpeg",
+                        headers={"Cache-Control": "private, max-age=31536000, immutable"},
+                    )
+        except Exception as error:
+            logger.warning("Cloud asset restore failed for %s (%s)", asset_id, type(error).__name__)
+
+    raise HTTPException(status_code=404, detail="Asset not found")
 
 
 app.mount("/api/media", StaticFiles(directory=str(pipeline.STORAGE_DIR)), name="media")
