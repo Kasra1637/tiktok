@@ -8789,6 +8789,118 @@ async def retry_generation(generation_id: str, user_id: str = Depends(get_curren
     )
 
 
+# ---------------------------------------------------------------------------
+# Stranded-render sweep
+# ---------------------------------------------------------------------------
+#
+# A render is only ever resolved by polling: poll_generation is the single path
+# that turns a finished provider job into a durable clip (download, trim/rescale,
+# R2 upload, status flip). Nothing else does it.
+#
+# That left a real gap. Polling happens in exactly one place -- the studio
+# GenerationPanel, on a project page, for that project's newest row -- so a
+# render whose container died mid-flight was never polled again by anything. The
+# provider finished it, the money was spent, the bytes existed at the provider,
+# and the row sat at `generating` indefinitely. Two paid renders (a HeyGen and a
+# Grok Lite) spent four days that way, invisible in History: no error, no retry
+# affordance, because `retry_generation_storage` refuses any row that has not
+# completed, and the UI's repair button is gated on a durable copy existing.
+#
+# So the reconcile has to be server-side and cannot depend on anyone visiting the
+# right page. This runs once per container start, which on Cloud Run means every
+# cold start -- and with min-instances 0 that is exactly when a killed render
+# needs picking up.
+#
+# The threshold is deliberately far above the slowest render (~22 min). Polling
+# sooner would call the provider for rows that are legitimately still rendering,
+# for no gain: a sweep that races the real thing teaches nothing and spends calls.
+
+_STRANDED_SWEEP_MIN_AGE_SECONDS = 30 * 60
+
+# A sweep runs against the whole table, so it is bounded. A backlog larger than
+# this drains across successive starts rather than in one pass -- a single cold
+# start firing dozens of repairs at once is the exact overload the ffmpeg gate
+# exists to prevent.
+_STRANDED_SWEEP_MAX_ROWS = 10
+
+
+async def _sweep_stranded_generations(
+    min_age_seconds: int = _STRANDED_SWEEP_MIN_AGE_SECONDS,
+    limit: int = _STRANDED_SWEEP_MAX_ROWS,
+) -> int:
+    """
+    Poll renders stranded in `generating` by a dead container. Returns rows fixed.
+
+    Oldest first, deliberately. A row that has been stranded longest has the
+    highest chance its provider link has lapsed, so the rows most at risk are the
+    ones worth spending the limited passes on. `created_at` rather than
+    `updated_at`: a poll bumps `updated_at` on every visit, so a row polled
+    repeatedly would look fresh forever and never qualify again.
+
+    Only rows that actually reached the provider are considered. A row with no
+    `openrouter_job_id` was never submitted, so there is nothing to reconcile --
+    polling it would fail forever and burn a slot.
+    """
+    cutoff = (
+        datetime.now(timezone.utc) - timedelta(seconds=max(0, int(min_age_seconds)))
+    ).isoformat()
+    rows = await _fetch_all(
+        "SELECT id, user_id, openrouter_job_id FROM generations "
+        "WHERE status IN ('submitted', 'generating') "
+        "AND openrouter_job_id IS NOT NULL AND openrouter_job_id != '' "
+        "AND COALESCE(created_at, requested_at, started_at) < ? "
+        "ORDER BY COALESCE(created_at, requested_at, started_at) ASC LIMIT ?",
+        (cutoff, max(1, int(limit))),
+    )
+    if not rows:
+        return 0
+
+    logger.info(
+        "Stranded-render sweep: %d row(s) in flight for over %ds",
+        len(rows),
+        int(min_age_seconds),
+    )
+
+    fixed = 0
+    for row in rows:
+        generation_id = row.get("id")
+        # Skip anything a founder is already repairing by hand. _run_storage_repair
+        # holds this set for the same reason; two passes over one clip is how a
+        # good download becomes a half-written file.
+        if generation_id in _storage_repairs_in_flight:
+            logger.info("Stranded sweep: %s already being repaired, skipping", generation_id)
+            continue
+        _storage_repairs_in_flight.add(generation_id)
+        try:
+            # poll_generation owns the whole resolve path, including the ffmpeg
+            # gate via _persist_generation_clip -- so this inherits every guard
+            # rather than re-implementing a lighter, unsafe version of it.
+            # The row's own user_id, not the caller's. poll_generation reads and
+            # writes rows scoped by user_id, so passing the wrong owner would find
+            # nothing and report the row as unreconciled. Literal "anonymous"
+            # matches what auth.py falls back to when no key is configured.
+            updated = await poll_generation(
+                generation_id, user_id=row.get("user_id") or "anonymous"
+            )
+            if updated and updated.get("status") == "completed":
+                fixed += 1
+                logger.info("Stranded sweep: recovered %s from the provider", generation_id)
+        except Exception as e:
+            # One bad row must not abandon the rest of the sweep, and must not
+            # propagate into startup -- an exception here would mark the deploy
+            # failed for a reconciliation nicety.
+            logger.warning(
+                "Stranded sweep: %s did not reconcile (%s: %s)",
+                generation_id, type(e).__name__, str(e)[:200],
+            )
+        finally:
+            _storage_repairs_in_flight.discard(generation_id)
+
+    if fixed:
+        logger.info("Stranded sweep: recovered %d of %d stranded render(s)", fixed, len(rows))
+    return fixed
+
+
 def _current_safety_report(project: dict, profile: dict) -> dict:
     """
     Recompute the claim verdict from the project as it stands right now.
@@ -10405,6 +10517,30 @@ async def on_startup():
         await provider_capabilities.check_provider_drift()
     except Exception as e:  # defensive: the helper already swallows its own
         logger.warning(f"Provider capability check did not complete: {e}")
+
+    # Reconcile renders stranded by a dead container (see _sweep_stranded_generations).
+    # As a background task, NOT awaited, for two reasons: a sweep that polls a
+    # provider and runs ffmpeg would hold the cold start open for minutes and
+    # Cloud Run counts request-serving latency, and it must never be able to fail
+    # a deploy. Worst case it is skipped, exactly as it was before this existed.
+    asyncio.create_task(_sweep_stranded_generations_safely())
+
+
+async def _sweep_stranded_generations_safely():
+    """
+    The startup entry point: the sweep, with nothing able to escape it.
+
+    Every uncaught exception in a task is logged by the loop and otherwise lost
+    with a traceback that never reaches the deploy log — which is how a sweep bug
+    would present as "the feature just silently doesn't run". A crash here is
+    logged as one line, and startup continues regardless.
+    """
+    try:
+        await _sweep_stranded_generations()
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        logger.warning(f"Stranded-render sweep did not complete ({type(e).__name__}: {e})")
 
 
 # ---------------------------------------------------------------------------
