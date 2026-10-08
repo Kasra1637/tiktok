@@ -8,6 +8,7 @@ import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import EmptyState from "../components/EmptyState";
 import SafetyPanel from "../components/SafetyPanel";
+import CaptionEditor from "../components/CaptionEditor";
 import HookContinuityPanel from "../components/HookContinuityPanel";
 import GenerationPanel from "../components/GenerationPanel";
 import AssetLibrary from "./AssetLibrary";
@@ -1726,6 +1727,15 @@ export default function CreateVideo() {
                 />
               </div>
             </div>
+
+            {/* The text burned into the finished video, which the founder
+                has never been able to read or edit on this step. The captions
+                are checked like the script — claims and feature-list framing —
+                so they sit directly above the panel that would flag them. */}
+            <CaptionEditor
+              value={editValue("overlays", [])}
+              onChange={(next) => setEdits({ ...edits, overlays: next })}
+            />
 
             <span className="eyebrow block">Checks</span>
             <SafetyPanel

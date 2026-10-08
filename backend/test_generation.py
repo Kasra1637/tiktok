@@ -1702,3 +1702,101 @@ class TestOpeningPatternInterrupt:
             duration=12, assets={}, plan={"hook_seconds": 3}, prompt_budget=4096,
         )
         assert len(prompt) <= 4096
+
+
+class TestBindSpokenWords:
+    """The spoken words are the founder's approved words, verbatim.
+
+    The strategy prompt also asks the model for its own section scripts, and
+    those drafts reached the provider as "spoken, performed naturally" — so a
+    founder could approve outcome-framed words on the Review step and hear the
+    model's paraphrase in the render. Binding runs after the model call and
+    rewrites the two section scripts from the plan, and these tests pin that
+    the words that reach the video model are the approved ones.
+    """
+
+    def _strategy(self, hook_script="Model wrote this hook.", middle_script="Model wrote this middle."):
+        return {
+            "hook_line": "Model wrote a hook line.",
+            "segments": [
+                {"index": 0, "role": "hook", "seconds": 3, "goal": "stop",
+                 "script": hook_script, "action": "look up"},
+                {"index": 1, "role": "middle", "seconds": 7, "goal": "develop",
+                 "script": middle_script, "action": "count"},
+            ],
+        }
+
+    def test_hook_and_middle_take_the_approved_words(self):
+        import ai_service
+        plan = {
+            "hook_line": "Do you know what triggers your emotions?",
+            "script": "Most evenings blur together. Yours ends with one sentence written down.",
+        }
+        bound, overflow = ai_service.bind_spoken_words(self._strategy(), plan, 3, 10)
+        assert bound["hook_line"] == plan["hook_line"]
+        assert bound["segments"][0]["script"] == plan["hook_line"]
+        assert bound["segments"][1]["script"] == plan["script"]
+        assert overflow == {}
+        # Delivery stays the model's: the binding touches words, not action.
+        assert bound["segments"][1]["action"] == "count"
+
+    def test_the_caller_keeps_its_own_words(self):
+        """Binding returns a copy — persisting the caller's dict unbound would
+        mean the stored strategy says one thing while the words spoken say
+        another, which is exactly the drift being removed."""
+        import ai_service
+        strategy = self._strategy()
+        plan = {"hook_line": "Approved hook.", "script": "Approved middle."}
+        bound, _ = ai_service.bind_spoken_words(strategy, plan, 3, 10)
+        assert strategy["segments"][1]["script"] == "Model wrote this middle."
+        assert bound["segments"][1]["script"] == "Approved middle."
+
+    def test_a_script_opening_with_its_hook_line_does_not_stutter(self):
+        import ai_service
+        plan = {
+            "hook_line": "Do you know what triggers your emotions?",
+            "script": "Do you know what triggers your emotions? I never used to notice mine.",
+        }
+        bound, _ = ai_service.bind_spoken_words(self._strategy(), plan, 3, 10)
+        assert bound["segments"][1]["script"] == "I never used to notice mine."
+
+    def test_an_overlong_script_is_cut_at_a_sentence_and_reported(self):
+        import ai_service
+        script = "First sentence that fits. " + "x" * 500 + " Final payoff sentence."
+        bound, overflow = ai_service.bind_spoken_words(
+            self._strategy(), {"hook_line": "Hook.", "script": script}, 3, 10
+        )
+        assert overflow["dropped_chars"] > 0
+        assert overflow["budget"] == ai_service.spoken_budget(7)
+        assert bound["segments"][1]["script"] == "First sentence that fits."
+        # The budget is per-second, not flat: a longer middle speaks more.
+        assert ai_service.spoken_budget(7) > ai_service.spoken_budget(3)
+
+    def test_no_plan_means_no_binding_and_no_overflow(self):
+        """A strategy built without a plan keeps the model's words.
+
+        No approval exists to bind to, and reporting overflow of nothing would
+        be a false alarm — so both the words and the record stay untouched."""
+        import ai_service
+        strategy = self._strategy()
+        bound, overflow = ai_service.bind_spoken_words(strategy, None, 3, 10)
+        assert bound["segments"][1]["script"] == "Model wrote this middle."
+        assert overflow == {}
+
+    def test_bound_words_reach_the_provider_verbatim(self):
+        """The end-to-end leg: approved plan words in, identical spoken lines in
+        the real segment prompt. This is the user-visible guarantee, asserted
+        against the prompt text rather than the strategy dict."""
+        import ai_service
+        plan = {
+            "hook_line": "Do you know what triggers your emotions?",
+            "script": "Most evenings blur together. Yours ends with one sentence written down.",
+        }
+        bound, _ = ai_service.bind_spoken_words(self._strategy(), plan, 3, 10)
+        prompt = gp.build_segment_prompt(
+            strategy=bound, profile={"brand_name": "Vocolens"}, template={},
+            duration=10, assets={}, plan={"hook_seconds": 3},
+            prompt_budget=16384,
+        )
+        assert f'The spoken hook line, delivered on camera: "{plan["hook_line"]}"' in prompt
+        assert f'spoken, performed naturally: "{plan["script"]}"' in prompt

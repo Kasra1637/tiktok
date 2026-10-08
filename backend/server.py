@@ -44,6 +44,7 @@ from ai_service import (
     strip_html_to_text, remix_chat_turn, empty_remix_brief, VIDEO_MODELS, DEFAULT_VIDEO_MODEL,
     analyze_image_for_hook, TEXT_MODEL, VISION_MODEL,
     generate_video_strategy, normalize_strategy, generate_brand_templates,
+    bind_spoken_words,
 )
 from models import (
     BrandContextRequest, GenerateVideoRequest,
@@ -6431,6 +6432,25 @@ def _public_project(row: dict) -> dict:
         except (json.JSONDecodeError, TypeError):
             strategy = {}
     out["strategy"] = strategy if isinstance(strategy, dict) else {}
+    # How much of the approved script cannot be spoken in the middle's seconds.
+    # Recomputed, never stored: it is a pure function of (plan, seconds), so a
+    # hand-edited strategy cannot drop it and the founder edits that change the
+    # answer are reflected immediately. Empty when everything fits — or when
+    # there is nothing to speak.
+    plan_words = {
+        "hook_line": out.get("hook_line"),
+        "script": out.get("script"),
+    }
+    if (plan_words["hook_line"] or plan_words["script"]) and out["strategy"]:
+        _bound, overflow = bind_spoken_words(
+            dict(out["strategy"]),
+            plan_words,
+            out.get("hook_seconds") or 3,
+            out.get("duration_seconds") or 0,
+        )
+        out["spoken_overflow"] = overflow
+    else:
+        out["spoken_overflow"] = {}
     return out
 
 
@@ -8192,9 +8212,40 @@ def _require_claims_clear(project: dict, profile: dict) -> dict:
         blocking = [b.get("claim") for b in report.get("blocking", []) if b.get("claim")]
         raise HTTPException(
             status_code=409,
-            detail="Fix prohibited claims before generating: " + ", ".join(blocking[:3]),
+            detail="Fix the wording before generating: " + ", ".join(blocking[:3]),
         )
     return report
+
+
+def _require_spoken_words_fit(project: dict) -> dict:
+    """
+    Refuse a render whose approved script cannot be spoken within the piece.
+
+    The middle's seconds hold a fixed number of characters; anything past that
+    would be silently dropped from the words reaching the video model — and the
+    tail is usually the payoff sentence. This is recomputed from the live row,
+    not read from a stored verdict, for the same reason the claim verdict is:
+    App Profile and plan edits must not be able to strand an approval. Returns
+    the overflow record ({} when everything fits).
+    """
+    _bound, overflow = bind_spoken_words(
+        _project_strategy(project),
+        {"hook_line": (project or {}).get("hook_line"), "script": (project or {}).get("script")},
+        ((project or {}).get("hook_seconds") or 3),
+        ((project or {}).get("duration_seconds") or 0),
+    )
+    if overflow.get("dropped_chars"):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"{overflow['dropped_chars']} characters of your approved script do not fit "
+                f"in a {overflow['middle_seconds']}s middle (spoken budget: "
+                f"{overflow['budget']} characters). Shorten the script or choose a "
+                "longer template, then rebuild the strategy so the spoken words "
+                "come from the trimmed script."
+            ),
+        )
+    return overflow
 
 
 def _require_current_strategy(project: dict) -> dict:
@@ -8281,6 +8332,12 @@ async def _require_renderable_project(project_id: str, user_id: str) -> tuple:
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
     _require_current_strategy(project)
+    # After the strategy's freshness, because a strategy built from an older
+    # script is describing words this one replaces: refusing on overflow first
+    # would blame the script for a strategy that is about to be invalidated
+    # anyway. Without a strategy the fallback path speaks the plan verbatim,
+    # so there is nothing to drop and nothing to gate.
+    _require_spoken_words_fit(project)
     return project, profile, template
 
 
@@ -9443,7 +9500,9 @@ async def generate_project_strategy(
     # know what to record, and passing it on would put a feature instruction back
     # into a video that is not allowed to demonstrate anything.
     approved_plan = None
-    if int(row.get("script_version") or 0) > 0 and str(row.get("script") or "").strip():
+    if int(row.get("script_version") or 0) > 0 and (
+        str(row.get("script") or "").strip() or str(row.get("hook_line") or "").strip()
+    ):
         approved_plan = {
             "hook_line": row.get("hook_line") or "",
             "script": row.get("script") or "",
@@ -9508,6 +9567,18 @@ async def generate_project_strategy(
     # The strategy carries the words that will actually be spoken, so it goes
     # through exactly the same claim check as the plan. A banned claim in the
     # hook line is still a banned claim, and generation is gated on this.
+    #
+    # Before that, the spoken words are rewritten from the founder's approved
+    # plan. The model writes its own section drafts, and those drafts reached
+    # the provider as "spoken, performed naturally" — so a founder could
+    # approve outcome-framed words on the Review step and hear the model's
+    # paraphrase in the render. Binding here makes the checked words and the
+    # spoken words the same words, and makes a regenerated strategy the fix for
+    # an old or drifted one.
+    if approved_plan:
+        strategy, _overflow = bind_spoken_words(
+            strategy, approved_plan, hook_seconds, total_duration
+        )
     merged = dict(row)
     merged["strategy"] = strategy
     report = claim_safety.build_safety_report(merged, profile)

@@ -161,12 +161,108 @@ class TestRiskPatterns:
             "describes the viewer" in w["reason"] for w in report["risk_warnings"]
         )
 
-    def test_functional_framing_is_clean(self):
-        """The product rule: describe what the app does, not the viewer."""
-        report = cs.build_safety_report(
-            plan(script="A low-friction journal with short prompts and reminders."), PROFILE
+class TestFeatureFraming:
+    def test_spoken_inventory_blocks(self):
+        """A feature list in the spoken words is a hard failure, not a warning.
+
+        This is the shipped Vocolens failure: "you can track your emotional
+        states and uncover your triggers through voice journaling and mood
+        tracking" is two coordinated verbs and two coordinated product nouns,
+        and it reached a video because nothing downstream read the words.
+        """
+        report = cs.build_safety_report(plan(script=(
+            "With Vocolens, you can track your emotional states and uncover "
+            "your triggers through voice journaling and mood tracking."
+        )), PROFILE)
+        assert report["passed"] is False
+        assert any(
+            "instead of the outcome" in b["reason"] for b in report["blocking"]
         )
+
+    def test_coordinate_two_capabilities_blocks(self):
+        report = cs.build_safety_report(
+            plan(script="You can log your mood and track your sleep automatically."),
+            PROFILE,
+        )
+        assert report["passed"] is False
+
+    def test_caption_inventory_blocks(self):
+        report = cs.build_safety_report(
+            plan(script="A finish you can feel.", overlays=[
+                {"start": 0, "end": 2, "text": "Mood tracking and reminders"},
+            ]),
+            PROFILE,
+        )
+        assert report["passed"] is False
+
+    def test_outcome_framing_is_clean(self):
+        report = cs.build_safety_report(
+            plan(script="Tomorrow looks like one list, not nine. You stop carrying it in your head."),
+            PROFILE,
+        )
+        assert report["passed"] is True
         assert report["risk_warnings"] == []
+
+    def test_functional_mention_only_warns(self):
+        """One accurate noun is ordinary copy and stays a warning.
+
+        Refusing to render over "a journal" would teach the founder to ignore
+        the panel, which is how a blocking tier loses its authority.
+        """
+        report = cs.build_safety_report(
+            plan(script="It lets you track what you did today, so the week reads at a glance."),
+            PROFILE,
+        )
+        assert report["passed"] is True
+        assert any(
+            "what it changes for the viewer" in w["reason"]
+            for w in report["risk_warnings"]
+        )
+
+    def test_a_named_app_is_not_an_inventory(self):
+        """A flat list of content words is not a capability list.
+
+        "One short prompt, a voice note, and a reminder" enumerates content
+        nouns, none of them a capability verb or product feature — and this
+        is the base fixture's script, so it also proves the ordinary suite
+        fixtures still pass through the new tier.
+        """
+        report = cs.build_safety_report(plan(), PROFILE)
+        assert report["passed"] is True
+        assert not any(
+            "instead of the outcome" in b["reason"] for b in report["blocking"]
+        )
+
+    def test_production_direction_cannot_block(self):
+        """The wider walk deliberately never feeds the blocking tier.
+
+        A scene lock is made of comma lists ("camera angle, lighting and
+        wardrobe"); refusing a render for describing a room would strand every
+        project in the system.
+        """
+        report = cs.build_safety_report(plan(
+            script="A finish you can feel.",
+            visual_direction="Camera angle, lighting and wardrobe are locked",
+            voice_direction="Steady, unhurried and quiet",
+        ), PROFILE)
+        assert report["passed"] is True
+
+    def test_strategy_section_inventory_blocks(self):
+        """The actual spoken words live in the strategy, not the plan.
+
+        The founder's approved Review script may be clean while the model's own
+        section script lists features. Checking the plan alone would pass it.
+        """
+        base = plan(script="A finish you can feel.")
+        base["strategy"] = {
+            "hook_line": "Stop carrying it.",
+            "segments": [
+                {"role": "hook", "script": "Stop carrying it."},
+                {"role": "middle", "script": "Track your mood and log your habits with reminders and analytics."},
+            ],
+        }
+        report = cs.build_safety_report(base, PROFILE)
+        assert report["passed"] is False
 
 
 class TestReportShape:

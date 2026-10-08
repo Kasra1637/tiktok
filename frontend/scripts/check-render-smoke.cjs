@@ -1129,6 +1129,42 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     expectText(ctx, "3s", "the hook boundary did not render");
   });
 
+  // The words the viewer hears, per section. The panel showed the goal ("stop
+  // the scroll") and the action but never the spoken line itself, so a founder
+  // could review a strategy whose middle read as a feature list and never see
+  // it. Each section's script is asserted separately: one line rendering while
+  // the other is dropped is the silent gap this closes.
+  await check("the strategy review shows what is said in each section", async (ctx) => {
+    await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+    expectText(ctx, "What is said here", "the spoken words are not on the review");
+    for (const [role, words] of [
+      ["hook", STRATEGY.segments[0].script],
+      ["middle", STRATEGY.segments[1].script],
+    ]) {
+      if (!ctx.container.querySelector(`[data-testid="section-spoken-${role}"]`)) {
+        throw new Error(`the ${role} section renders no spoken line`);
+      }
+      if (!ctx.text().includes(words)) {
+        throw new Error(`the ${role} section's spoken words did not render`);
+      }
+    }
+  });
+
+  // A middle longer than its seconds is cut before it is spoken, and the tail
+  // is usually the payoff. The record is recomputed from the live plan on
+  // every read, so the panel asserts both the number and the fix.
+  await check("the strategy review warns when approved words do not fit the middle", async (ctx) => {
+    await mount(HookContinuityPanel, {
+      project: {
+        ...PROJECT_WITH_STRATEGY,
+        spoken_overflow: { dropped_chars: 42, budget: 154, middle_seconds: 7 },
+      },
+    })(ctx);
+    expectText(ctx, "does not all fit in the middle", "the overflow warning did not render");
+    expectText(ctx, "42 characters", "the overflow warning does not state how much is lost");
+    expectText(ctx, "Shorten the script", "the overflow warning does not name the fix");
+  });
+
   // The property the running-total and coverage checks used to protect: nothing
   // on this panel can start a second job, approve anything, or join
   // anything. It is a review surface, and "no controls" is the whole contract.
@@ -1253,6 +1289,17 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     // the middle is built to stop where the presenter reaches for their phone.
     expectText(ctx, "Attach your own demo", "the founder's own demo is not described");
     expectText(ctx, "add your own call to action", "the founder's own close is not described");
+  });
+
+  // The old copy claimed captions came from the approved script. They did not
+  // and do not: they are the plan's own on-screen text, edited on Review. The
+  // lie mattered because on a silent render the captions are the only words
+  // the viewer gets, and a founder who believed they echoed the script had no
+  // reason to check them.
+  await check("GenerationPanel credits the founder's captions, not the script", async (ctx) => {
+    await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+    expectAbsent(ctx, "Captions use your approved script", "the caption source is still misattributed");
+    expectText(ctx, "the on-screen text you wrote on Review", "the caption source is not stated");
   });
 
   // -------------------------------------------------------------------------
@@ -1925,6 +1972,51 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
       }
     } finally {
       global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  // The burned-in captions are the only text a silent render ever shows, and
+  // the Review step had no editor for them: the text was AI-written, unseen
+  // and uneditable. Editing one must reach the project through the same save
+  // as every other review field, and the server normalizes it from there.
+  await check("Review edits captions and saves them with the plan", async (ctx) => {
+    const updates = [];
+    await withApi(
+      {
+        getStudioProject: async () => ({
+          ...PROJECT_WITH_STRATEGY,
+          overlays: [{ start: 0, end: 2, text: "one list" }],
+        }),
+        updateStudioProject: async (id, payload) => {
+          updates.push(payload);
+          return PROJECT_WITH_STRATEGY;
+        },
+      },
+      async () => {
+        global.__SMOKE_PARAMS = "?project=p1";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Review");
+          const input = ctx.container.querySelector('[data-testid="caption-text-0"]');
+          if (!input || input.value !== "one list") {
+            throw new Error("Review does not show the saved caption text for editing");
+          }
+          await typeInto(ctx, input, "one finished list", "cannot edit the caption text");
+          const save = [...ctx.container.querySelectorAll("button")]
+            .find((b) => (b.textContent || "").trim() === "Save edits");
+          if (!save) throw new Error("Review offers no save for the caption edit");
+          await act(async () => {
+            save.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {});
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+    const sent = updates.map((p) => p.overlays).find((o) => o !== undefined);
+    if (!sent || sent[0]?.text !== "one finished list") {
+      throw new Error("the caption edit was not saved to the project");
     }
   });
 

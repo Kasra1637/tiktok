@@ -2842,10 +2842,124 @@ def _normalize_sections(raw) -> list:
     return sections
 
 
+# ---------------------------------------------------------------------------
+#
+# The spoken words are the founder's approved words, not the model's draft.
+#
+# The strategy receives the approved plan as fixed material and is built to
+# deliver it — but the prompt asked the model for its own `segments[].script`
+# lines as well, because a section also needs to be *scored* (goal, action,
+# delivery). Those drafts reached the provider as "spoken, performed
+# naturally", so a founder could approve outcome-framed words on the Review
+# step and hear the model's paraphrase in the render.
+#
+# `bind_spoken_words` closes that: after the strategy is generated and
+# normalized, the two section scripts are rewritten from the plan's approved
+# words. The hook says the approved hook line. The middle says the approved
+# script, minus a duplicated hook-line prefix, cut to what the middle's seconds
+# can actually speak. What the model keeps is everything a plan cannot express:
+# the on-camera action, the scene and the performance, which is why this runs
+# after the model call rather than instead of it.
+
+# Spoken pace used only to size approved words to a section: ~3.7 words/sec.
+SPOKEN_CHARS_PER_SECOND = 22
+
+
+def spoken_budget(seconds) -> int:
+    """Characters of speech that fit a section of `seconds`."""
+    try:
+        secs = float(seconds or 0)
+    except (TypeError, ValueError):
+        secs = 0.0
+    return max(60, int(round(secs * SPOKEN_CHARS_PER_SECOND)))
+
+
+def trim_to_sentence(text: str, limit: int):
+    """
+    The longest prefix of `text` that fits `limit` and stops at a sentence.
+
+    Returns (kept, dropped). A mid-sentence cut would lop the payoff — usually
+    the last sentence — and a hard cut mid-word is a visible fault in a line
+    someone has to debug, so the order is: sentence boundary, then word
+    boundary, then a hard cut only when neither exists.
+    """
+    text = str(text or "").strip()
+    if not text or limit <= 0 or len(text) <= limit:
+        return text, 0
+    window = text[:limit]
+    cut = max(window.rfind("."), window.rfind("!"), window.rfind("?"))
+    if cut >= 0:
+        kept = window[: cut + 1].strip()
+    else:
+        space = window.rfind(" ")
+        kept = (window[:space] if space > 0 else window).strip()
+    return kept, len(text) - len(kept)
+
+
+def bind_spoken_words(strategy: dict, plan, hook_seconds=3, total_seconds=12):
+    """
+    Rewrite the strategy's spoken words from the plan's approved words.
+
+    Returns (strategy, overflow). `overflow` is {} when everything fits and
+    {"dropped_chars", "budget", "middle_seconds"} when the approved script is
+    longer than the middle can speak. That record is recomputed, not stored: it
+    is a pure function of (plan, seconds), so the render gate and the public
+    project serializer can derive it fresh and a strategy PATCH cannot drop it.
+
+    When there is no approved plan, nothing is rebound — a strategy built
+    without one keeps the model's words, which is the legacy path, and no
+    overflow is reported because there is nothing to overflow.
+
+    The returned strategy is a copy: binding mutates the sections, and the
+    caller's dict must not gain words it did not ask for.
+    """
+    import copy
+
+    if not isinstance(strategy, dict):
+        return strategy, {}
+    hook_line = ""
+    middle_text = ""
+    if isinstance(plan, dict):
+        hook_line = str(plan.get("hook_line") or "").strip()
+        script = str(plan.get("script") or "").strip()
+        low = script.lower()
+        hook_low = hook_line.lower()
+        if hook_low and low.startswith(hook_low):
+            # The plan's script opens with its own hook line. Spoken over both
+            # sections that stutters, so the middle starts after it.
+            script = script[len(hook_line):].lstrip(" ,.!?;:-").strip()
+        middle_text = script
+    if not hook_line and not middle_text:
+        return strategy, {}
+
+    strategy = copy.deepcopy(strategy)
+    middle_seconds = max(1, (total_seconds or 0) - (hook_seconds or 0))
+    budget = spoken_budget(middle_seconds)
+    kept, dropped = trim_to_sentence(middle_text, budget)
+
+    sections = strategy.get("segments")
+    if isinstance(sections, list):
+        if hook_line:
+            if len(sections) > 0 and isinstance(sections[0], dict):
+                sections[0]["script"] = hook_line
+            if len(sections) > 1 and isinstance(sections[1], dict):
+                sections[1]["script"] = kept
+        elif len(sections) > 1 and isinstance(sections[1], dict):
+            sections[1]["script"] = kept
+    if hook_line:
+        strategy["hook_line"] = hook_line
+
+    overflow = (
+        {"dropped_chars": dropped, "budget": budget, "middle_seconds": middle_seconds}
+        if dropped
+        else {}
+    )
+    return strategy, overflow
+
+
 def strategy_text(strategy: dict) -> str:
     """
     Flatten every human-readable string in a strategy.
-
     Used by claim safety so the strategy's own wording — the hook line, the
     spoken script, the promises — is checked exactly like the plan's is. A
     banned claim that appears only in the strategy is still a banned claim.

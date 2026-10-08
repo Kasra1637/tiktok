@@ -1592,3 +1592,82 @@ class TestTrendEvidenceReachesTheStrategy:
         assert "Do not chase the number itself" in prompt
         assert "do not pad the hook to fill time" in prompt
         assert "do not" in prompt and "state or imply a view" in prompt
+
+
+class TestSpokenWordsGate:
+    """The render refuses words the founder cannot actually speak.
+
+    Two separate refusals share this gate. The framing check (a feature
+    inventory in the spoken lines) lives in claim_safety and reaches the
+    render through the recomputed verdict; the overflow check below is the
+    second half — approved words that do not fit the middle's seconds would
+    otherwise be silently dropped from the provider prompt, and the tail is
+    usually the payoff sentence.
+    """
+
+    def _project(self, script, **overrides):
+        row = {
+            "hook_line": "Do you know what triggers your emotions?",
+            "script": script,
+            "hook_seconds": 3,
+            "duration_seconds": 10,
+            "strategy": {
+                "hook_line": "Do you know what triggers your emotions?",
+                "segments": [
+                    {"role": "hook", "script": "Do you know what triggers your emotions?"},
+                    {"role": "middle", "script": script},
+                ],
+            },
+        }
+        row.update(overrides)
+        return row
+
+    def test_a_fitting_script_carries_no_overflow(self):
+        import server
+        out = server._public_project(self._project(
+            "Most evenings blur together. Yours ends with one sentence written down."
+        ))
+        assert out["spoken_overflow"] == {}
+
+    def test_an_overlong_script_is_reported_with_its_budget(self):
+        import server
+        out = server._public_project(self._project(
+            "First sentence that fits. " + "x" * 500 + " Final payoff sentence."
+        ))
+        overflow = out["spoken_overflow"]
+        assert overflow["dropped_chars"] > 0
+        assert overflow["budget"] == 154  # 7s middle at ~3.7 words/sec
+        assert overflow["middle_seconds"] == 7
+
+    def test_overflow_refuses_the_render_with_the_fix_named(self):
+        import server
+        with pytest.raises(Exception) as exc:
+            server._require_spoken_words_fit(self._project(
+                "First sentence that fits. " + "x" * 500 + " Final payoff sentence."
+            ))
+        assert getattr(exc.value, "status_code", None) == 409
+        assert "do not fit" in str(exc.value.detail)
+        assert "Shorten the script" in str(exc.value.detail)
+        assert "rebuild the strategy" in str(exc.value.detail)
+
+    def test_a_fitting_script_passes_the_gate(self):
+        import server
+        overflow = server._require_spoken_words_fit(self._project(
+            "Most evenings blur together. Yours ends with one sentence written down."
+        ))
+        assert overflow == {}
+
+    def test_a_feature_inventory_refuses_the_render(self):
+        """The user-visible half of the guarantee: the spoken words of a real
+        posted video were a feature list, so the gate must fire on that shape
+        through the recomputed verdict, not just in a unit test of patterns."""
+        import server
+        project = self._project(
+            "With Vocolens, you can track your emotional states and uncover "
+            "your triggers through voice journaling and mood tracking."
+        )
+        report = server._safety_report_for(project, {})
+        assert report["passed"] is False
+        with pytest.raises(Exception) as exc:
+            server._require_claims_clear(project, {})
+        assert getattr(exc.value, "status_code", None) == 409

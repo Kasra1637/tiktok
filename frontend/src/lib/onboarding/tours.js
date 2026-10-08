@@ -77,7 +77,7 @@ export const TOURS = {
         target: '[data-testid="step-pill-hook"]',
         title: "The one render step",
         body:
-          "Build the app-specific strategy first \u2014 free, and it is what makes the render about your app rather than a generic take. Then one render of the hook and the middle, with captions from your approved script.",
+          "Build the app-specific strategy first \u2014 free, and it is what makes the render about your app rather than a generic take. Then one render of the hook and the middle, with captions from the on-screen text you wrote on Review.",
       },
       {
         target: '[data-testid="create-no-autopost-note"]',

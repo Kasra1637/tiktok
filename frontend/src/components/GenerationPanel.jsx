@@ -611,7 +611,7 @@ const handleGenerate = async () => {
                 <p className="text-xs text-muted-foreground">
                   This file is the hook and the middle, ending where viewers reach for their
                   phones. Attach your own demo next, then add your own call to action. Captions
-                  use your approved script; nothing is published for you.
+                  come from the on-screen text you wrote on Review, nothing is published for you.
                 </p>
               </div>
 

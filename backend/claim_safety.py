@@ -88,6 +88,65 @@ DISCLOSURE_MARKERS = (
     "disclaimer",
 )
 
+# ---------------------------------------------------------------------------
+#
+# Framing: what the viewer hears described as a list of what the app contains.
+#
+# Every other family here checks a CLAIM — that a statement is true, earned or
+# permitted. This one checks a SHAPE, and it exists because the whole outcome
+# layer above it (profile outcome_statements, mechanism_beat, payoff_beat, the
+# template outcome line) is an input. A prompt that says "translate every
+# feature into its resulting benefit" is advice, not a guarantee: a model told
+# that keeps the feature list and appends an adjective. Nothing downstream
+# caught it, and the rendered video said "you can track your emotional states
+# and uncover your triggers through voice journaling and mood tracking" — a
+# feature inventory, spoken, in the founder's own app.
+#
+# Two tiers, because the honest cases are not the same shape as the failure:
+#
+#   FRAMING_PATTERNS — wording that only describes function. A warning. Legitimate
+#     copy can name one thing the app does ("a journal you talk to"), so this
+#     never blocks: refusing to render over a single accurate noun teaches the
+#     founder to ignore the panel.
+#
+#   FEATURE_ENUMERATION_PATTERNS — two or more capabilities listed in one breath.
+#     This blocks. The rule is not that features are forbidden; it is that a list
+#     is not an outcome. A run of coordinated verbs or coordinated product nouns
+#     ("track X and log Y", "voice journaling and mood tracking") is the failure
+#     mode itself, and no honest benefit sentence reads like one.
+#
+# Matched against normalize() output, so punctuation is already stripped: that
+# is what lets the noun patterns key on "journaling and tracking" rather than
+# enumerating every comma variant.
+
+FRAMING_PATTERNS = [
+    # "X lets you <bare capability verb>" with no consequence attached. The
+    # capability verbs are the ones that name an action performed ON the user or
+    # the app rather than a change they get.
+    r"\b(?:lets? you|allows? you|enables? you|helps? you)\s+"
+    r"(?:track|log|record|monitor|measure|capture|list|categoris|categoriz)\w*\b",
+    # "you can <capability verb>" is the shape the shipped Vocolens script used.
+    r"\byou can\s+(?:track|log|record|monitor|measure|capture)\w*\s+\w+",
+    # An explicit inventory, however short.
+    r"\b(?:its|the)\s+features?\s+(?:are|include|let you|capable)",
+    r"\bfeatures?\s+(?:like|such as|including)\b",
+]
+
+FEATURE_ENUMERATION_PATTERNS = [
+    # Two coordinated capability verbs on one clause: "track X and uncover Y".
+    # The verb list is the tell — an outcome sentence does not coordinate two
+    # different things the app records.
+    r"\b(?:track|log|record|monitor|measure|capture)\w*\b[^.!?]{0,60}?"
+    r"\band\s+(?:you\s+)?(?:can\s+)?(?:track|log|record|monitor|measure|capture|uncover|see|get)\w*\b",
+    # Two coordinated product nouns. "-ing" and the analytics/reminder family are
+    # the nouns that name a capability; "and" is the join.
+    r"\b\w+ing\s+and\s+\w+(?:ing|ers?|ies|ance)\b",
+    r"\b(?:tracking|logging|reminders?|analytics|dashboard|widgets?|sync|export)\s+"
+    r"and\s+(?:tracking|logging|reminders?|analytics|dashboard|widgets?|sync|export|\w+ing)\b",
+    # Three bare comma-separated items: "A, B and C".
+    r"\b\w+,\s+\w+,?\s+and\s+\w+\b",
+]
+
 _WHITESPACE = re.compile(r"\s+")
 _PUNCT = re.compile(r"[^\w\s%$]")
 
@@ -137,6 +196,49 @@ def _plan_fields(plan: dict):
 def script_text(plan: dict) -> str:
     """Flattened, normalized plan text used for phrase matching."""
     return normalize(" \n ".join(_plan_fields(plan or {})))
+
+
+def spoken_text(plan: dict) -> str:
+    """
+    Only the words a viewer actually hears or reads, normalized.
+
+    Separate from `script_text` on purpose. That function walks everything the
+    founder reads, including `visual_direction`, `voice_direction`,
+    `sound_direction` and the strategy's `scene` / `performance` lock — and a
+    scene lock is *made of* comma lists ("camera angle, lighting and wardrobe").
+    A framing rule applied to that would refuse nearly every render for
+    describing a room, so the blocking tier needs the narrower surface: the hook
+    line, the script, both beat texts, the strategy's spoken hook line and its
+    two section scripts, and the burned-in overlay text.
+
+    Everything else is production direction. A warning on it is informative; a
+    block is wrong, because no viewer ever hears "tilt slightly left".
+    """
+    plan = plan or {}
+    parts: list = []
+
+    def add(value):
+        if isinstance(value, str) and value.strip():
+            parts.append(value.strip())
+
+    add(plan.get("hook_line"))
+    add(plan.get("script"))
+    for beat in plan.get("beat_timeline") or []:
+        if isinstance(beat, dict):
+            add(beat.get("text") or beat.get("beat"))
+
+    strategy = plan.get("strategy")
+    if isinstance(strategy, dict):
+        add(strategy.get("hook_line"))
+        for section in strategy.get("segments") or []:
+            if isinstance(section, dict):
+                add(section.get("script"))
+
+    for overlay in plan.get("overlays") or []:
+        if isinstance(overlay, dict):
+            add(overlay.get("text"))
+
+    return normalize(" \n ".join(parts))
 
 
 def _contains(haystack: str, needle: str) -> bool:
@@ -224,12 +326,68 @@ def find_risk_patterns(text: str) -> list:
     return warnings
 
 
+def detect_feature_framing(text: str) -> list:
+    """
+    Spoken or on-screen copy that inventories the app instead of describing what
+    it changes for the viewer.
+
+    A warning, not a block. One accurate noun ("a journal you talk to") is
+    ordinary copy, and a panel that refuses to render over it is a panel the
+    founder learns to ignore — which is how the claim warnings already work and
+    why this joins them rather than `blocking`.
+    """
+    blob = normalize(text)
+    warnings: list = []
+    for pattern in FRAMING_PATTERNS:
+        match = re.search(pattern, blob)
+        if match:
+            warnings.append({
+                "claim": match.group(0),
+                "reason": (
+                    "states what the app does rather than what it changes for the "
+                    "viewer"
+                ),
+            })
+            break
+    return warnings
+
+
+def detect_feature_enumeration(text: str) -> list:
+    """
+    Two or more capabilities listed in one breath. This blocks.
+
+    The distinction from the warning above is length of list, not sentiment: a
+    single capability described plainly is copy, and a run of them is a product
+    page read aloud. Nothing after this point would catch it — the model wrote
+    it, the founder reads a summary in the review, and the video says it — so
+    this is the last place the video can be refused.
+
+    Only high-confidence shapes are listed. A looser rule here would refuse
+    renders over honest copy, and a gate that cries wolf gets disabled.
+    """
+    blob = normalize(text)
+    hits: list = []
+    for pattern in FEATURE_ENUMERATION_PATTERNS:
+        match = re.search(pattern, blob)
+        if not match:
+            continue
+        hits.append({
+            "claim": match.group(0),
+            "reason": (
+                "lists the app's features instead of the outcome it gives the "
+                "viewer"
+            ),
+        })
+    return hits
+
+
 def detect_sensitive_targeting(text: str) -> list:
     """
     Copy that diagnoses or labels the viewer rather than describing the app.
 
-    The product rule is functional framing: describe what the app does, not
-    what condition the viewer is assumed to have. This is a warning, not a
+    Naming one accurate thing the app does is ordinary copy and stays legal --
+    `detect_feature_framing` draws that line. Assuming a condition of the viewer
+    is not, because the research never established it. This is a warning, not a
     hard block, because legitimate copy can mention a category name.
     """
     blob = normalize(text)
@@ -251,18 +409,27 @@ def build_safety_report(plan: dict, profile: dict) -> dict:
 
     Returns:
         {
-          "passed": bool,            # False blocks generation
-          "blocking": [...],         # banned claims / hard failures
+"passed": bool,            # False blocks generation
+          "blocking": [...],         # banned claims / feature inventories
           "claims_used": [...],      # verified against claims_approved
           "unverified": [...],       # from claims_review
-            "risk_warnings": [...],    # regulated / guaranteed / testimonial
-            "sources_used": [...],     # which profile fields fed the plan
-            "self_declared_claims": [...],  # what the model said it used
+            "risk_warnings": [...],    # regulated / guaranteed / testimonial /
+                                       # functional-without-benefit
+          "sources_used": [...],     # which profile fields fed the plan
+          "self_declared_claims": [...],  # what the model said it used
         }
 
     `passed` is False only for hard failures. Warnings are returned but do
     not block, so the founder keeps editorial control over tone while
     prohibited claims can never reach a video.
+
+    Two kinds of hard failure, deliberately: a claim the founder banned, and a
+    spoken inventory of the app's features. The second is here because the
+    outcome layer — profile outcome statements, mechanism and payoff beats, the
+    template outcome line — is enforced only by prompt advice, and advice does
+    not survive contact with a model that wants to be helpful. A list of
+    capabilities is the one shape that reliably survives that, and by the time it
+    is a video the founder is watching it rather than deciding it.
 
     There is deliberately no price check. The App Profile no longer carries
     pricing, so there is nothing to verify a stated price against — and a check
@@ -272,12 +439,22 @@ def build_safety_report(plan: dict, profile: dict) -> dict:
     never to put one on screen.
     """
     text = script_text(plan)
+    spoken = spoken_text(plan)
     self_declared = [
         str(c) for c in ((plan or {}).get("claims_used") or []) if str(c).strip()
     ]
 
     blocking = find_banned_violations(text, profile.get("claims_banned"))
-    risk_warnings = find_risk_patterns(text) + detect_sensitive_targeting(text)
+    # The framing tier, deliberately split by surface: blocking reads only the
+    # spoken words (see `spoken_text` for why the wider walk cannot be used
+    # here), while the warning may read all of it, since naming the app is a
+    # legitimate thing to do in copy and only wrong in a bare inventory.
+    blocking += detect_feature_enumeration(spoken)
+    risk_warnings = (
+        find_risk_patterns(text)
+        + detect_sensitive_targeting(text)
+        + detect_feature_framing(spoken)
+    )
 
     used = find_used_claims(text, profile.get("claims_approved"))
     unverified = find_unverified_claims(text, profile.get("claims_review"))

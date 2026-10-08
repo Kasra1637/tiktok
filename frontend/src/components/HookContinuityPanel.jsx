@@ -138,6 +138,19 @@ function SectionRow({ section }) {
       {section.action && (
         <p className="text-sm text-muted-foreground">What they do: {section.action}</p>
       )}
+      {/* The words the viewer hears, which is the entire point of this panel
+          and was missing from it. These are the founder's approved words: the
+          strategy is built to deliver the plan, so after a rebuild the hook
+          line and the two section scripts come from it verbatim. Before a
+          rebuild — a strategy built before the binding existed — they are the
+          model's drafts, which is why this line stays even when the words
+          read like a draft: it is what will be sent, not what was approved. */}
+      {typeof section.script === "string" && section.script.trim() && (
+        <p className="text-sm" data-testid={`section-spoken-${section.role}`}>
+          <span className="font-medium">What is said here: </span>
+          {section.script.trim()}
+        </p>
+      )}
     </li>
   );
 }
@@ -448,6 +461,27 @@ export function HookContinuityPanel({ project, onProjectChange }) {
               no closing card: attach your own demo after the middle, add your close after that, and
               post the result yourself.
             </p>
+            {/* Words that do not fit are not spoken. The middle's seconds hold a
+                fixed number of characters, and anything past that is dropped
+                from the prompt the model reads — usually the payoff sentence,
+                which is the last thing the founder wrote. Blocking this in the
+                render gate is what stops the spend; showing it here is what
+                stops the surprise. The record is recomputed from the live plan
+                on every read, so it cannot go stale. */}
+            {project?.spoken_overflow?.dropped_chars > 0 && (
+              <Alert data-testid="spoken-overflow-warning">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Your script does not all fit in the middle</AlertTitle>
+                <AlertDescription>
+                  {project.spoken_overflow.dropped_chars} characters of your approved script
+                  do not fit in a {project.spoken_overflow.middle_seconds}s middle
+                  (spoken budget: {project.spoken_overflow.budget} characters). Anything
+                  past that is not spoken in the render. Shorten the script, or pick a
+                  longer template and rebuild the strategy so the spoken words come
+                  from the trimmed script.
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
         </div>
       )}
