@@ -1157,7 +1157,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     await mount(HookContinuityPanel, {
       project: {
         ...PROJECT_WITH_STRATEGY,
-        spoken_overflow: { dropped_chars: 42, budget: 154, middle_seconds: 7 },
+        spoken_overflow: { dropped_chars: 42, budget: 105, middle_seconds: 7 },
       },
     })(ctx);
     expectText(ctx, "does not all fit in the middle", "the overflow warning did not render");
@@ -1306,7 +1306,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     expectText(ctx, "the on-screen text you wrote on Review", "the caption source is not stated");
   });
 
-  // Words that do not fit are not spoken, and the gate refuses the render ΓÇö so
+  // Words that do not fit are not spoken, and the gate refuses the render — so
   // the button has to be disabled with the fix named, not enabled into a 409.
   // An enabled Generate under a blocking overflow warning is the gate working
   // and the UI lying about it.
@@ -1314,7 +1314,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     await mount(GenerationPanel, {
       project: {
         ...PROJECT_WITH_STRATEGY,
-        spoken_overflow: { dropped_chars: 42, budget: 154, middle_seconds: 7 },
+        spoken_overflow: { dropped_chars: 42, budget: 105, middle_seconds: 7 },
       },
     })(ctx);
     const generate = [...ctx.container.querySelectorAll("button")]
@@ -2047,7 +2047,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
 
   // The partition the render actually speaks: what fits, what is dropped, and
   // the one-click trim that resolves the overflow warning. Trimming to the
-  // shown kept line has to save exactly that line ΓÇö it is the server's own
+  // shown kept line has to save exactly that line — it is the server's own
   // bound text, so anything else would reintroduce the drift the binding
   // removed.
   await check("Review shows the spoken partition and trims to what fits", async (ctx) => {
@@ -2059,7 +2059,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
           ...PROJECT_WITH_STRATEGY,
           script: `${kept} ${"x".repeat(200)}`,
           spoken_middle: kept,
-          spoken_overflow: { dropped_chars: 200, budget: 154, middle_seconds: 7 },
+          spoken_overflow: { dropped_chars: 200, budget: 105, middle_seconds: 7 },
         }),
         updateStudioProject: async (id, payload) => {
           updates.push(payload);
@@ -2337,14 +2337,14 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     // because opening it only revealed plain text.
     global.__SMOKE_PARAMS = "";
     const FOUR_REASONS = [
-      "Built for 'create curiosity' ΓÇö leaves them wanting the answer.",
-      "Lands with Health & Fitness viewers before the app is even named ΓÇö framed for how they talk about the problem.",
+      "Built for 'create curiosity' — leaves them wanting the answer.",
+      "Lands with Health & Fitness viewers before the app is even named — framed for how they talk about the problem.",
       "Tailored for Vocolens - generated from this app's approved profile.",
-      "Aimed at anxious, night-owls ΓÇö they're already in the situation this opens on.",
+      "Aimed at anxious, night-owls — they're already in the situation this opens on.",
     ];
     const THREE_LIMITS = [
       "Needs character reference.",
-      "Framed for Productivity rather than Health & Fitness ΓÇö the opening will need rewording.",
+      "Framed for Productivity rather than Health & Fitness — the opening will need rewording.",
       "Rejected or replaced 2 time(s) for this app.",
     ];
     await withApi(

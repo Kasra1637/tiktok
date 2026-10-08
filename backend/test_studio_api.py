@@ -1639,7 +1639,7 @@ class TestSpokenWordsGate:
         ))
         overflow = out["spoken_overflow"]
         assert overflow["dropped_chars"] > 0
-        assert overflow["budget"] == 154  # 7s middle at ~3.7 words/sec
+        assert overflow["budget"] == 105  # 7s middle at ~15 chars/sec, natural pace
         assert overflow["middle_seconds"] == 7
         # The trim target: exactly the kept prefix, so trimming to it and
         # saving is stable — rebinding the trimmed script yields the same words.
