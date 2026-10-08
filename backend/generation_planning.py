@@ -463,10 +463,11 @@ def build_single_pass_prompt(
         )
         sections.append(
             f"The rest of the {duration} seconds are the middle: they develop the hook through "
-            f"the situation, the friction, or the reaction, and they end on the moment the "
-            f"presenter reaches for their phone. This is the last thing in the video — the "
-            f"founder records their own product demo and adds their own call to action after "
-            f"it, so do not film the app being used, do not show a screen, and do not ask the "
+            f"the situation, the friction, or the reaction, then the mechanism as the resulting "
+            f"benefit, then the payoff stating the outcome directly — in that order — and they end "
+            f"on the moment the presenter reaches for their phone. This is the last thing in the "
+            f"video — the founder records their own product demo and adds their own call to action "
+            f"after it, so do not film the app being used, do not show a screen, and do not ask the "
             f"viewer to do anything."
         )
 
@@ -831,6 +832,8 @@ def strategy_brief(strategy: dict) -> str:
     have been absorbed, so a single render cannot drift into a generic
     advertisement. The feature is named as subject matter only: what this app is
     about is what the middle is set in, not an instruction to film it working.
+    The mechanism and payoff lines are the middle's pitch moments in order:
+    benefit-framed how-it-helps first, the outcome stated directly last.
     """
     strategy = strategy or {}
     parts = []
@@ -848,7 +851,9 @@ def strategy_brief(strategy: dict) -> str:
 
     pillars = [_clip(p, 100) for p in (strategy.get("messaging_pillars") or []) if str(p).strip()]
     if pillars:
-        parts.append("Messaging that must be delivered: " + "; ".join(pillars[:4]))
+        # Outcome-framed by construction: the strategy prompt asks for
+        # benefits here, never the feature spec, so the label says outcomes.
+        parts.append("Outcomes that must be delivered: " + "; ".join(pillars[:4]))
 
     feature = _clip(strategy.get("primary_feature"), 200)
     if feature:
@@ -863,6 +868,16 @@ def strategy_brief(strategy: dict) -> str:
     outcome = _clip(strategy.get("desired_outcome"), 200)
     if outcome:
         parts.append(f"Outcome the viewer should expect: {outcome}")
+
+    mechanism = _clip(strategy.get("mechanism_beat"), 200)
+    if mechanism:
+        # Benefit-framed how-it-works, not a filming order: the render shows
+        # the situation the mechanism belongs to, the words carry the benefit.
+        parts.append(f"Mechanism, as the resulting benefit (describe, never film working): {mechanism}")
+
+    payoff = _clip(strategy.get("payoff_beat"), 200)
+    if payoff:
+        parts.append(f"Payoff, stated directly as the last thing said: {payoff}")
 
     diff = _clip(strategy.get("differentiation_beat"), 200)
     if diff:

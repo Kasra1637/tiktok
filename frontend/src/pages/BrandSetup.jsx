@@ -25,6 +25,7 @@ const EMPTY_FORM = {
   proof_moment: "",
   viewer_objections: "",
   desired_outcomes: "",
+  outcome_statements: "",
   competitors: "",
   target_audience: "",
   ideal_customer_profile: "",
@@ -83,6 +84,41 @@ function textToObjections(text) {
   return out;
 }
 
+/**
+ * outcome_statements round-trips as four lines per statement.
+ *
+ * Same blank-line-separated block form as objections: the outcome, who feels
+ * it, the source feature named verbatim, and how it helps in benefit terms.
+ * Four lines are required because an outcome without its source feature is
+ * exactly the unlinked benefit phrasing the flat outcomes list already
+ * carries — the link is the field.
+ */
+const OUTCOME_LINES = 4;
+
+function outcomesToText(statements) {
+  if (!Array.isArray(statements)) return statements || "";
+  return statements
+    .map((s) => [s?.outcome, s?.who_feels_it, s?.from_feature, s?.how_it_helps].join("\n"))
+    .join("\n\n");
+}
+
+function textToOutcomes(text) {
+  const blocks = (text || "").split(/\n\s*\n/);
+  const out = [];
+  for (const block of blocks) {
+    const lines = block.split("\n").map((l) => l.trim());
+    while (lines.length && !lines[lines.length - 1]) lines.pop();
+    if (lines.length < OUTCOME_LINES) continue;
+    out.push({
+      outcome: lines[0],
+      who_feels_it: lines[1],
+      from_feature: lines[2],
+      how_it_helps: lines.slice(3).join(" ").trim(),
+    });
+  }
+  return out;
+}
+
 /** One list item per line — for entries that themselves contain commas. */
 function linesToText(items) {
   if (Array.isArray(items)) return items.join("\n");
@@ -112,6 +148,7 @@ function profileToForm(data) {
     proof_moment: data.proof_moment || "",
     viewer_objections: objectionsToText(data.viewer_objections),
     desired_outcomes: productsToText(data.desired_outcomes),
+    outcome_statements: outcomesToText(data.outcome_statements),
     competitors: productsToText(data.competitors),
     target_audience: data.target_audience || "",
     ideal_customer_profile: data.ideal_customer_profile || "",
@@ -280,6 +317,7 @@ export default function BrandSetup() {
         proof_moment: form.proof_moment,
         viewer_objections: textToObjections(form.viewer_objections),
         desired_outcomes: textToProducts(form.desired_outcomes),
+        outcome_statements: textToOutcomes(form.outcome_statements),
         competitors: textToProducts(form.competitors),
         target_audience: form.target_audience,
         ideal_customer_profile: form.ideal_customer_profile,
@@ -645,6 +683,29 @@ export default function BrandSetup() {
                   onChange={handleFieldChange("desired_outcomes")}
                   placeholder="Comma-separated, e.g. Consistent journaling habit"
                   data-testid="app-outcomes-field"
+                />
+              </Field>
+
+              {/* The pitch material. Four lines per statement, separated by a
+                  blank line — outcome / who feels it / source feature named
+                  verbatim / how it helps in benefit terms. The link is the
+                  field: without the source feature the video can only list
+                  features, and approval requires at least one statement. */}
+              <Field
+                label="Feature-to-outcome statements"
+                hint="Four lines per statement, blank line between: the benefit / who feels it / the feature it comes from / how it helps. These become the video's pitch."
+              >
+                <Textarea
+                  value={form.outcome_statements}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, outcome_statements: e.target.value }))
+                  }
+                  placeholder={
+                    "Fall asleep without checking your phone\nNight-time scrollers\nSleep timer\nThe wind-down starts itself so there is no reason to pick the phone back up\n\n" +
+                    "Wake up knowing what matters today\nOverloaded planners\nMorning brief\nOne glance replaces the whole list-scroll"
+                  }
+                  className="min-h-[140px]"
+                  data-testid="app-outcome-statements-field"
                 />
               </Field>
 

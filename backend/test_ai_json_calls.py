@@ -257,7 +257,8 @@ class TestStrategyBudget:
                 "emotional_triggers": ["t"], "hook_concept": "c",
                 "hook_line": "h", "hook_promise": "p", "hook_action": "a",
                 "messaging_pillars": ["m"], "primary_feature": "f",
-                "desired_outcome": "o", "differentiation_beat": "b",
+                "desired_outcome": "o", "mechanism_beat": "mb",
+                "payoff_beat": "pb", "differentiation_beat": "b",
                 "scene": {"environment": "kitchen"},
                 "performance": {"movement": "still"},
                 "segments": [{"index": 0, "role": "hook", "seconds": 3,
@@ -297,6 +298,79 @@ class TestStrategyBudget:
         assert "Say what the face does, never what the face is" in prompt
         assert "may run to about 45 words" in prompt
 
+    def test_the_prompt_frames_the_pitch_as_outcomes_not_features(self, monkeypatch):
+        """
+        The middle earns the download by describing what changes for the
+        viewer, not what the app contains. The prompt has to demand the
+        translation explicitly -- "focus on benefits" alone kept the feature
+        list and appended adjectives -- and it has to scope the outcome
+        language to the mechanism and payoff moments, never the hook.
+        """
+        import ai_service
+
+        captured = {}
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return {
+                "strategy_summary": "s", "audience_problem": "p",
+                "emotional_triggers": ["t"], "hook_concept": "c",
+                "hook_line": "h", "hook_promise": "p", "hook_action": "a",
+                "messaging_pillars": ["m"], "primary_feature": "f",
+                "desired_outcome": "o", "mechanism_beat": "mb",
+                "payoff_beat": "pb", "differentiation_beat": "b",
+                "scene": {"environment": "kitchen"},
+                "performance": {"movement": "still"},
+                "segments": [{"index": 0, "role": "hook", "seconds": 3,
+                              "goal": "g", "script": "s", "action": "a"},
+                             {"index": 1, "role": "middle", "seconds": 17,
+                              "goal": "g", "script": "s", "action": "a"}],
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        asyncio.run(ai_service.generate_video_strategy(
+            profile={
+                "brand_name": "Sleeply",
+                "brand_description": "A sleep app.",
+                "app_category": "Health & Fitness",
+                "core_features": ["sleep timer"],
+                "desired_outcomes": ["Falling asleep faster"],
+                "outcome_statements": [{
+                    "outcome": "fall asleep without checking your phone",
+                    "who_feels_it": "night-time scrollers",
+                    "from_feature": "sleep timer",
+                    "how_it_helps": "the wind-down starts itself",
+                }],
+            },
+            template={"name": "T", "hook_seconds": 3},
+            hook_seconds=3,
+        ))
+        prompt = captured["prompt"]
+
+        for requirement in (
+            # The translate step, with the worked example.
+            "Translate every feature",
+            "helps you fall asleep",
+            "without checking your phone",
+            # The two pitch moments, in order, scoped to the middle.
+            "MECHANISM moment",
+            "PAYOFF moment",
+            "the hook has neither",
+            "The hook stays attention-only",
+            # Source precedence: linked statements first, derivation last.
+            "outcome_statements first",
+            "Never invent an outcome",
+            # Benefits, not promises: the existing guarantee rule governs.
+            "Benefits, not promises",
+        ):
+            assert requirement in prompt, f"pitch rule missing: {requirement}"
+        # The schema asks for the moments, so the model must write them back.
+        assert '"mechanism_beat"' in prompt
+        assert '"payoff_beat"' in prompt
+        # primary_feature stays the feature: it grounds the video, it does
+        # not pitch it.
+        assert '"primary_feature": "the ONE feature this video shows' in prompt
+
     def test_a_fully_populated_prompt_stays_under_a_ceiling(self, monkeypatch):
         """
         The guard I promised and did not write the first time.
@@ -323,7 +397,8 @@ class TestStrategyBudget:
                 "emotional_triggers": ["t"], "hook_concept": "c",
                 "hook_line": "h", "hook_promise": "p", "hook_action": "a",
                 "messaging_pillars": ["m"], "primary_feature": "f",
-                "desired_outcome": "o", "differentiation_beat": "b",
+                "desired_outcome": "o", "mechanism_beat": "mb",
+                "payoff_beat": "pb", "differentiation_beat": "b",
                 "cta_strategy": "c", "scene": {"environment": "kitchen"},
                 "performance": {"movement": "still"},
                 "segments": [{"index": 0, "role": "hook", "seconds": 5,
@@ -349,6 +424,18 @@ class TestStrategyBudget:
                 "problems_solved": eight,
                 "icp_segments": eight,
                 "desired_outcomes": eight,
+                # Six linked statements: the normalizer's cap, so the worst
+                # case rather than a generous one. Leaving this out would
+                # understate the real maximum now that every prompt carries it.
+                "outcome_statements": [
+                    {
+                        "outcome": f"Benefit number {i} in the viewer's own terms",
+                        "who_feels_it": "hospital nurses working rotating shifts",
+                        "from_feature": "item 1",
+                        "how_it_helps": f"How the solution works as a benefit, number {i}",
+                    }
+                    for i in range(6)
+                ],
                 "competitors": eight,
                 "known_limitations": "iOS and Android only; no offline mode yet.",
                 "must_not_show": eight,
@@ -421,20 +508,22 @@ class TestStrategyBudget:
         ))
 
         prompt = captured["prompt"]
-        # Measured worst case, with every list at its cap, six viewer objections
-        # and the anonymous trend aggregate: 16,150 chars. The ceiling sits just
-        # above at 17,500.
+        # Measured worst case, with every list at its cap, six viewer objections,
+        # six outcome statements and the anonymous trend aggregate: 20,675 chars.
+        # The ceiling sits just above at 21,500.
         #
-        # The number has moved twice now -- 13,692 before the objections, 15,226
-        # after -- and it moved *because* the fixture was corrected, not because
-        # the ceiling was raised. Two earlier versions of this test used a
-        # round number picked without measuring and let a real inflation through,
-        # so the figure quoted in the failure message is the one to trust.
-        CEILING = 17_500
+        # The number has moved three times now -- 13,692 before the objections,
+        # 15,226 after, 20,675 after the outcome layer (linked statements in
+        # every prompt plus the pitch rules that consume them) -- and it moved
+        # *because* the fixture was corrected, not because the ceiling was
+        # raised. Two earlier versions of this test used a round number picked
+        # without measuring and let a real inflation through, so the figure
+        # quoted in the failure message is the one to trust.
+        CEILING = 21_500
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling (measured "
-            f"worst case 16,150). Every field added here is a value the model must "
+            f"worst case 20,675). Every field added here is a value the model must "
             f"write back, and a truncated strategy is a 502 the founder cannot fix."
         )
 
@@ -513,6 +602,12 @@ class TestStrategyEndpointError:
             brand_description="A focus timer for people who stall on starting.",
             core_features=["Task timer", "Reminders"],
             usage_moments=["Starting a task they have been avoiding"],
+            outcome_statements=[{
+                "outcome": "Starting without stalling on setup",
+                "who_feels_it": "people who stall on starting",
+                "from_feature": "Task timer",
+                "how_it_helps": "The timer starts in one tap so there is nothing to set up",
+            }],
         ), user_id="anonymous"))
         _run(api.approve_app_profile(
             profile_id=profile["id"], payload=ApproveAppProfileRequest(),

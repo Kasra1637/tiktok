@@ -279,18 +279,19 @@ REQUIRED_APP_PROFILE_KEYS = {
     "brand_name", "brand_description", "app_category", "niche", "platforms",
     "core_features", "primary_use_cases", "problems_solved",
     "target_audience", "ideal_customer_profile",
-    "icp_segments", "desired_outcomes", "differentiation", "competitors",
+    "icp_segments", "desired_outcomes", "outcome_statements",
+    "differentiation", "competitors",
     "known_limitations", "must_not_show", "usage_moments", "proof_moment",
     "viewer_objections", "tone_voice", "claims_approved", "claims_review",
     "claims_banned",
 }
 
-# Phrase lists, which are lists of strings. viewer_objections is deliberately
-# NOT here: it is a list of objects, so this normalizer would str() each one
-# into an unreadable dict repr and the dedicated _normalize_objection_list below
-# would then discard every entry as malformed — which is exactly what happened
-# for as long as the key was included. It has its own normalizer, called after
-# this loop.
+# Phrase lists, which are lists of strings. viewer_objections and
+# outcome_statements are deliberately NOT here: they are lists of objects, so
+# this normalizer would str() each one into an unreadable dict repr and the
+# dedicated normalizers below would then discard every entry as malformed —
+# which is exactly what happened for as long as viewer_objections was
+# included. Each has its own normalizer, called after this loop.
 APP_PROFILE_LIST_KEYS = (
     "platforms", "core_features", "primary_use_cases", "problems_solved",
     "icp_segments", "desired_outcomes", "competitors", "must_not_show",
@@ -1791,6 +1792,20 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         '  "ideal_customer_profile": "2-4 sentences: who they are, what they struggle with, where they spend time online",\n'
         '  "icp_segments": ["2-4 segments as one-liners: label, functional need, hook promise"],\n'
         '  "desired_outcomes": ["outcomes users want from the app"],\n'
+        # Objects rather than phrases, because a pitch needs the feature an
+        # outcome comes from: "fall asleep without checking your phone" only
+        # converts when the script knows it belongs to the sleep timer rather
+        # than to a generic bedtime claim. Flat desired_outcomes stays as the
+        # fallback list; these triples are the beat-level material.
+        '  "outcome_statements": [{"outcome": "the resulting benefit, phrased as what '
+        'changes in the user\'s life or how they feel after using it (e.g. helps you fall '
+        'asleep without checking your phone -- never the feature spec itself, e.g. never '
+        'has a sleep timer)", "who_feels_it": "who gets this outcome, functional need '
+        'only, never a sensitive trait or diagnosis", "from_feature": "the core_features '
+        'entry this outcome comes from, named verbatim", "how_it_helps": "how the solution '
+        'works, framed as the resulting benefit rather than the mechanism (e.g. the wind-down '
+        'starts itself so there is no reason to pick the phone back up -- never a spec, '
+        'never a guarantee)"}],\n'
         '  "differentiation": "2-4 sentences on what sets this app apart",\n'
         '  "competitors": ["named competitor apps if inferable, else empty"],\n'
         '  "known_limitations": "material limitations a promo must not contradict (platforms, feature gaps)",\n'
@@ -1821,6 +1836,15 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         "ratings, download counts, or features. Do NOT report pricing, plan names or trial "
         "terms — the App Profile deliberately carries no price, and no generated video may "
         "state one. Put anything uncertain in claims_review, never in claims_approved. "
+        # The outcome layer is what lets every later prompt pitch benefits
+        # instead of listing features, so it has its own completeness bar:
+        # one statement per core feature the sources actually evidence, each
+        # benefit-phrased and tied with from_feature. An outcome no feature
+        # supports is an invented claim, not an outcome.
+        "Write 3-6 outcome_statements, one per evidenced core feature. Each outcome and "
+        "how_it_helps must be benefit phrasing a viewer would recognise from their own "
+        "life, never a restatement of the feature spec, never a guaranteed result, and "
+        "never a banned claim. from_feature must name a core_features entry verbatim. "
         "Keep every list to 8 items max. Return ONLY valid JSON."
     )
 
@@ -1831,7 +1855,9 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
             {"role": "user", "content": prompt},
         ],
         "temperature": 0.3,
-        "max_tokens": 3000,
+        # 4000 rather than 3000: outcome_statements adds up to six objects to
+        # the schema, and a reply cut off mid-object fails the whole research.
+        "max_tokens": 4000,
     }
 
     async with httpx.AsyncClient(timeout=90) as client:
@@ -1862,6 +1888,12 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
     # with a missing honest_answer is worse than no objection, because the arc
     # has nothing to aim at.
     _normalize_objection_list(result)
+
+    # Same treatment for the outcome layer: an outcome without its source
+    # feature is exactly the unlinked benefit phrasing the flat list already
+    # carries, and a how_it_helps that restates the spec is a feature wearing
+    # benefit clothes. Both are dropped rather than repaired.
+    _normalize_outcome_statements(result)
 
     return result
 
@@ -1897,6 +1929,46 @@ def _normalize_objection_list(result: dict) -> None:
             continue
         kept.append(triple)
     result["viewer_objections"] = kept
+
+
+def _normalize_outcome_statements(result: dict) -> None:
+    """
+    Coerce the model reply's outcome_statements into usable linked entries.
+
+    The founder's schema and the database store this as a JSON list of objects,
+    so everything downstream — angles, brand templates, plan, strategy — can
+    rely on the outcome-to-feature link being present rather than re-deriving
+    it from two flat lists at each read.
+
+    A malformed entry is dropped whole: an outcome with no source feature
+    cannot be traced back to anything evidenced, and a how_it_helps that only
+    restates the spec would pitch the feature list the whole layer exists to
+    replace. Guilt by association is avoided the other way too — entries are
+    never repaired into guesses.
+    """
+    raw = result.get("outcome_statements")
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            raw = []
+    if not isinstance(raw, list):
+        result["outcome_statements"] = []
+        return
+    kept = []
+    for item in raw[:6]:
+        if not isinstance(item, dict):
+            continue
+        entry = {
+            "outcome": str(item.get("outcome") or "").strip()[:300],
+            "who_feels_it": str(item.get("who_feels_it") or "").strip()[:200],
+            "from_feature": str(item.get("from_feature") or "").strip()[:200],
+            "how_it_helps": str(item.get("how_it_helps") or "").strip()[:300],
+        }
+        if not entry["outcome"] or not entry["from_feature"]:
+            continue
+        kept.append(entry)
+    result["outcome_statements"] = kept
 
 
 async def generate_content_angles(profile: dict, max_angles: int = 8) -> list:
@@ -1941,6 +2013,9 @@ async def generate_content_angles(profile: dict, max_angles: int = 8) -> list:
         "audience": profile.get("target_audience") or "(unstated)",
         "icp_segments": _list("icp_segments"),
         "outcomes": _list("desired_outcomes"),
+        # Kept linked so an angle's app_feature choice can stay on the
+        # evidenced outcome pair instead of re-deriving it.
+        "outcome_statements": profile.get("outcome_statements") or [],
         "differentiators": profile.get("differentiation") or "(unstated)",
         "competitors": _list("competitors"),
         "limitations": profile.get("known_limitations") or "(none recorded)",
@@ -2143,6 +2218,7 @@ async def generate_brand_templates(
         "audience": profile.get("target_audience") or "(unstated)",
         "icp_segments": _list("icp_segments"),
         "outcomes": _list("desired_outcomes"),
+        "outcome_statements": profile.get("outcome_statements") or [],
         "differentiators": profile.get("differentiation") or "(unstated)",
         "competitors": _list("competitors"),
         "voice": profile.get("tone_voice") or "(unstated)",
@@ -2314,6 +2390,10 @@ async def generate_creative_plan(
         "use_cases": _list("primary_use_cases"),
         "problems": _list("problems_solved"),
         "desired_outcomes": _list("desired_outcomes"),
+        # Objects, kept linked: the middle's closing beat voices one of these
+        # outcomes directly, and the from_feature link is what keeps it tied
+        # to something evidenced rather than floating as a generic benefit.
+        "outcome_statements": profile.get("outcome_statements") or [],
         "differentiators": profile.get("differentiation") or "(unstated)",
         # The plan prompt never saw the competitor list, while the strategy
         # prompt did -- so the one document the founder now reads and approves
@@ -2403,7 +2483,10 @@ async def generate_creative_plan(
         "- The hook stops the scroll in its opening seconds. The middle develops it: the "
         "situation, the pain, the reaction, the action, or the transition that naturally "
         f"leads into the product. It ends at the moment the viewer would reach for the app, "
-        f"and not one beat later. The generated piece is {duration_seconds} seconds; anything "
+        f"and not one beat later. The middle's closing beat voices the outcome directly in "
+        f"the viewer's own terms -- take it from VERIFIED APP FACTS outcome_statements "
+        f"first (its outcome field), then the flat desired_outcomes, and only when both are "
+        f"empty derive a benefit from a feature. The generated piece is {duration_seconds} seconds; anything "
         "after it is the founder's own footage.\n"
         "- NEVER write a product demonstration into either beat. Do not film the app in use, "
         "do not show a screen, and do not narrate what the app does while something unrelated "
@@ -2546,7 +2629,8 @@ def _enforce_two_sections(beats: list, hook_seconds: int) -> list:
 REQUIRED_STRATEGY_KEYS = {
     "strategy_summary", "audience_problem", "emotional_triggers", "hook_concept",
     "hook_line", "hook_promise", "hook_action", "messaging_pillars",
-    "primary_feature", "desired_outcome", "differentiation_beat",
+    "primary_feature", "desired_outcome", "mechanism_beat", "payoff_beat",
+    "differentiation_beat",
     "scene", "performance", "segments",
 }
 # What is missing on purpose, beyond hook_dialogue and character below:
@@ -2657,6 +2741,8 @@ _STRATEGY_TEXT_LIMITS = {
     "hook_dialogue": 400,
     "primary_feature": 400,
     "desired_outcome": 400,
+    "mechanism_beat": 400,
+    "payoff_beat": 400,
     "differentiation_beat": 400,
 }
 
@@ -2696,7 +2782,8 @@ def normalize_strategy(raw: dict) -> dict:
         for key in (
             "strategy_summary", "audience_problem", "hook_concept", "hook_line",
             "hook_promise", "hook_action", "hook_dialogue", "primary_feature",
-            "desired_outcome", "differentiation_beat",
+            "desired_outcome", "mechanism_beat", "payoff_beat",
+            "differentiation_beat",
         )
     }
     result["emotional_triggers"] = _clean_strategy_list(raw.get("emotional_triggers"), 200)
@@ -2870,6 +2957,10 @@ async def generate_video_strategy(
         "audience": profile.get("target_audience") or "(unstated)",
         "icp_segments": _list("icp_segments"),
         "outcomes": _list("desired_outcomes"),
+        # Passed as objects, not flattened: each entry already links an
+        # outcome to its source feature, so the pitch rules below can use the
+        # link instead of re-deriving it from two flat lists.
+        "outcome_statements": profile.get("outcome_statements") or [],
         "differentiators": profile.get("differentiation") or "(unstated)",
         "competitors": _list("competitors"),
         "limitations": profile.get("known_limitations") or "(none recorded)",
@@ -3054,9 +3145,11 @@ async def generate_video_strategy(
         '  "hook_promise": "what the hook promises the viewer in the next few seconds",\n'
         '  "hook_action": "the opening physical performance: ordered, timed beats across face, gaze, head, shoulders, hands and props, already moving in frame one",\n'
         '  "hook_dialogue": "the exact words spoken in the hook, or the delivery direction if none",\n'
-        '  "messaging_pillars": ["2-4 things the video must land, derived from this app\'s real features"],\n'
+        '  "messaging_pillars": ["2-4 viewer outcomes/benefits the video must land, each translated from a real feature -- what changes in the viewer\'s life or how they feel after using it, never the feature spec itself"],\n'
         f'  "primary_feature": "the ONE feature this video shows, from the facts above",\n'
         '  "desired_outcome": "the viewer outcome, described as a change the app supports, never a guarantee",\n'
+        '  "mechanism_beat": "how this app\'s solution works, framed entirely as the resulting benefit to the viewer (draw on the outcome_statements how_it_helps above) -- never a spec, never filmed working",\n'
+        '  "payoff_beat": "the outcome stated directly in the viewer\'s own terms (draw on the outcome_statements outcome above) -- the last thing said before the reach for the phone",\n'
         '  "differentiation_beat": "how this app differs from what the viewer would otherwise reach for",\n'
         '  "scene": {\n'
         f'    "camera_angle": "the exact camera position and angle, e.g. eye-level handheld 1m away",\n'
@@ -3201,6 +3294,34 @@ async def generate_video_strategy(
         "alternative they are living with or the cost of doing nothing, so the objection is "
         "answered by the situation on screen rather than by a list of features. Two sections "
         "cannot carry every objection, so use the ones this audience would actually have.\n"
+        # Outcome-framed pitch. The middle earns the download by describing
+        # what changes for the viewer, not what the app contains — so the
+        # pitch moments translate each feature into its resulting benefit
+        # BEFORE writing. Stated as an ordered procedure rather than a vibe,
+        # because a model told only to "focus on benefits" keeps the feature
+        # list and appends adjectives.
+        "- Translate every feature this video touches into its resulting benefit before "
+        "writing a word of the middle: what changes in the viewer's life, or how they "
+        "feel after using it. Instead of has a sleep timer, write helps you fall asleep "
+        "without checking your phone. messaging_pillars, mechanism_beat and payoff_beat "
+        "carry benefits only — the feature spec itself appears nowhere in them.\n"
+        "- The middle has two pitch moments, in this order, and the hook has neither. "
+        "The MECHANISM moment frames how the solution works as the resulting "
+        "benefit (use the outcome_statements how_it_helps): never a spec, never the app "
+        "filmed working. The PAYOFF moment states the outcome directly in the viewer's "
+        "own terms (use the outcome_statements outcome) and is the last thing said "
+        "before the reach for the phone. "
+        "The hook stays attention-only: no outcome and no feature language in the opening.\n"
+        # Source precedence. The profile already links outcomes to features,
+        # so the only honest order is linked statements first, flat list
+        # second, derivation last — and derivation is still derivation, never
+        # invention.
+        "- Take each outcome from VERIFIED APP FACTS outcome_statements first, via its "
+        "from_feature link. Only when outcome_statements is empty use the flat outcomes "
+        "list, and only when that is empty too derive a benefit from core_features. "
+        "Never invent an outcome no source supports. "
+        "Benefits, not promises: the no-guaranteed-outcome rule below governs every one "
+        "of these lines.\n"
         # The trend section, when present. Phrased as a bias toward a shape the
         # data supports, never as a target: a view count is an observation about
         # someone else's video, and a model told to "beat 500K" will pad.

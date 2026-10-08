@@ -461,6 +461,34 @@ export default function AppProfileDetail() {
             <ListBlock label="Primary use cases" items={list(profile?.primary_use_cases)} />
             <ListBlock label="Problems solved" items={list(profile?.problems_solved)} />
             <ListBlock label="Desired outcomes" items={list(profile?.desired_outcomes)} />
+            {Array.isArray(profile?.outcome_statements) && profile.outcome_statements.length > 0 && (
+              <div className="space-y-2">
+                <span className="eyebrow block">Feature-to-outcome statements</span>
+                {profile.outcome_statements.map((s, i) => (
+                  <div
+                    key={`${s.outcome}-${i}`}
+                    className="rounded-xl border border-[color:var(--hairline)] p-3 text-sm"
+                  >
+                    <p className="font-medium">{s.outcome}</p>
+                    {s.who_feels_it && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Who feels it: {s.who_feels_it}
+                      </p>
+                    )}
+                    {s.from_feature && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        From: {s.from_feature}
+                      </p>
+                    )}
+                    {s.how_it_helps && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        How it helps: {s.how_it_helps}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
             <ListBlock label="Competitor apps" items={list(profile?.competitors)} />
             <Field label="Differentiators" value={profile?.differentiation} />
             <Field label="Known limitations" value={profile?.known_limitations} />

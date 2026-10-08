@@ -68,6 +68,12 @@ def _profile(api, name="Export", approved=False):
         brand_description="One list instead of eleven.",
         core_features=["One shared list"],
         primary_use_cases=["Evening reflection"],
+        outcome_statements=[{
+            "outcome": "One list instead of eleven",
+            "who_feels_it": "people juggling lists",
+            "from_feature": "One shared list",
+            "how_it_helps": "Everything lands in one place so nothing needs reconciling",
+        }],
     ), user_id=ANON))
     if approved:
         from models import ApproveAppProfileRequest

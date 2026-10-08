@@ -57,7 +57,7 @@ from models import (
     OverlayCompositionRequest, CreateVariationRequest, PerformanceEntryRequest,
     FeedbackRequest,
     GenerateStrategyRequest,
-    APP_PROFILE_LIST_FIELDS, APP_PROFILE_OBJECT_LIST_FIELDS,
+    APP_PROFILE_LIST_FIELDS,
     APP_PROFILE_EDITABLE_FIELDS,
     STUDIO_EDITABLE_FIELDS, STUDIO_TEXT_FIELDS,
     now_iso, row_to_dict,
@@ -483,6 +483,7 @@ async def init_db():
                 usage_moments TEXT,
                 proof_moment TEXT,
                 viewer_objections TEXT,
+                outcome_statements TEXT,
                 claims_approved TEXT,
                 claims_review TEXT,
                 claims_banned TEXT,
@@ -1031,7 +1032,7 @@ async def init_db():
             "platforms", "core_features", "primary_use_cases",
             "problems_solved", "icp_segments", "desired_outcomes", "competitors",
             "known_limitations", "must_not_show", "usage_moments", "proof_moment",
-            "viewer_objections", "claims_approved", "claims_review",
+            "viewer_objections", "outcome_statements", "claims_approved", "claims_review",
             "claims_banned", "ctas", "video_themes", "status",
             "approved_at", "last_research_at", "research_sources",
             "pending_research",
@@ -2250,6 +2251,11 @@ def _normalize_objection_value(value) -> list:
         return []
     kept = []
     for item in value[:6]:
+        # FastAPI hands us pydantic models, not dicts: dump first, or every
+        # entry from a real request fails the isinstance check below and the
+        # field saves as empty despite the founder filling it in.
+        if hasattr(item, "model_dump"):
+            item = item.model_dump()
         if not isinstance(item, dict):
             continue
         triple = {
@@ -2263,13 +2269,62 @@ def _normalize_objection_value(value) -> list:
     return kept
 
 
+def _normalize_outcome_value(value) -> list:
+    """
+    Coerce a client-supplied outcome_statements value into stored entries.
+
+    The API accepts a list of OutcomeStatement-shaped dicts, a list of dicts
+    with missing keys, or a JSON string of either (the editor round-trips the
+    field through text). A malformed entry is dropped whole rather than kept
+    as a half-answer: an outcome with no source feature leaves every later
+    prompt guessing the mapping, which is how pitches decay into feature
+    lists — and a how_it_helps that only restates the spec is a feature
+    wearing benefit clothes.
+
+    Deliberately NOT _normalize_str_list, for the same reason as the
+    objection triples above.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return []
+    if not isinstance(value, list):
+        return []
+    kept = []
+    for item in value[:6]:
+        # Same pydantic reality as the objection triples above: a real
+        # request carries models, so dump before the dict check.
+        if hasattr(item, "model_dump"):
+            item = item.model_dump()
+        if not isinstance(item, dict):
+            continue
+        entry = {
+            "outcome": str(item.get("outcome") or "").strip()[:300],
+            "who_feels_it": str(item.get("who_feels_it") or "").strip()[:200],
+            "from_feature": str(item.get("from_feature") or "").strip()[:200],
+            "how_it_helps": str(item.get("how_it_helps") or "").strip()[:300],
+        }
+        if not entry["outcome"] or not entry["from_feature"]:
+            continue
+        kept.append(entry)
+    return kept
+
+
 def _brand_update_parts(updates: dict) -> tuple:
     """Split a profile update dict into (SET clauses, values), JSON-encoding lists."""
     set_clauses = []
     values = []
     for key, value in updates.items():
-        if key in APP_PROFILE_OBJECT_LIST_FIELDS:
+        # Object lists each have their own normalizer: the objection triples
+        # and the outcome entries share a shape (list of dicts) but not a
+        # contract, so one normalizer cannot serve both.
+        if key == "viewer_objections":
             value = json.dumps(_normalize_objection_value(value))
+        elif key == "outcome_statements":
+            value = json.dumps(_normalize_outcome_value(value))
         elif key in APP_PROFILE_LIST_FIELDS:
             value = json.dumps(_normalize_str_list(value))
         set_clauses.append(f"{key} = ?")
@@ -4810,10 +4865,11 @@ async def create_brand(payload: BrandProfileCreateRequest, user_id: str = Depend
              core_features, primary_use_cases, problems_solved,
              icp_segments, desired_outcomes, competitors, known_limitations,
              must_not_show, usage_moments, proof_moment, viewer_objections,
+             outcome_statements,
              claims_approved, claims_review, claims_banned,
              status, version)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (brand_id, website or None, name, payload.brand_description or "",
          payload.niche or "",
          payload.target_audience or "", payload.ideal_customer_profile or "",
@@ -4835,6 +4891,7 @@ async def create_brand(payload: BrandProfileCreateRequest, user_id: str = Depend
          json.dumps(_normalize_str_list(payload.usage_moments)),
          payload.proof_moment or "",
           json.dumps(_normalize_objection_value(payload.viewer_objections)),
+         json.dumps(_normalize_outcome_value(payload.outcome_statements)),
          json.dumps(_normalize_str_list(payload.claims_approved)),
          json.dumps(_normalize_str_list(payload.claims_review)),
          json.dumps(_normalize_str_list(payload.claims_banned)),
@@ -5033,10 +5090,11 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
              core_features, primary_use_cases, problems_solved,
              icp_segments, desired_outcomes, competitors, known_limitations,
              must_not_show, usage_moments, proof_moment, viewer_objections,
+             outcome_statements,
              claims_approved, claims_review, claims_banned,
              status, version, last_research_at, research_sources)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (brand_id, website, profile.get("brand_name") or "Untitled app",
 
          profile.get("brand_description") or "", profile.get("niche") or "",
@@ -5058,6 +5116,7 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
          json.dumps(profile.get("usage_moments") or []),
          profile.get("proof_moment") or "",
           json.dumps(_normalize_objection_value(profile.get("viewer_objections"))),
+         json.dumps(_normalize_outcome_value(profile.get("outcome_statements"))),
          json.dumps(profile.get("claims_approved") or []),
          json.dumps(profile.get("claims_review") or []),
          json.dumps(profile.get("claims_banned") or []),
@@ -5279,6 +5338,27 @@ def _approval_gaps(profile: dict, pending: Optional[dict] = None) -> list:
                 return True
         return False
 
+    def _outcome_statements(key: str) -> bool:
+        # The outcome layer is stored as a JSON list of linked entries, but a
+        # founder editing by hand (or an older client) may send a JSON string,
+        # so both shapes count. What matters is at least one entry with both
+        # halves of the link: an outcome nobody can trace to a feature leaves
+        # every later prompt guessing the mapping.
+        value = merged.get(key)
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except (json.JSONDecodeError, TypeError):
+                return False
+        if not isinstance(value, list):
+            return False
+        return any(
+            isinstance(item, dict)
+            and str(item.get("outcome") or "").strip()
+            and str(item.get("from_feature") or "").strip()
+            for item in value
+        )
+
     checks = (
         ("a one-line description of what the app does", _text("brand_description")),
         ("at least one core feature", _list("core_features")),
@@ -5290,6 +5370,14 @@ def _approval_gaps(profile: dict, pending: Optional[dict] = None) -> list:
         (
             "at least one thing people use it for",
             _any_list("usage_moments", "primary_use_cases", "problems_solved"),
+        ),
+        # The outcome layer is what lets the strategy pitch benefits instead
+        # of listing features, so a profile without a single linked outcome
+        # would approve straight into the fallback path. One linked entry is
+        # the minimum — the research prompt asks for 3-6.
+        (
+            "at least one outcome statement linking a feature to its benefit",
+            _outcome_statements("outcome_statements"),
         ),
     )
     return [label for label, ok in checks if not ok]

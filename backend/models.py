@@ -19,6 +19,7 @@ def row_to_dict(row, columns: list) -> dict:
         "support_urls", "platforms", "core_features", "primary_use_cases",
         "problems_solved", "icp_segments", "desired_outcomes", "competitors",
         "must_not_show", "usage_moments", "viewer_objections",
+        "outcome_statements",
         "claims_approved", "claims_review", "claims_banned",
         "ctas", "video_themes", "research_sources", "pending_research",
         # Hook Template Library (hook_templates) structured fields
@@ -108,7 +109,7 @@ APP_PROFILE_LIST_FIELDS = (
 # Lists of objects. Same JSON text column, but the members cannot go through
 # _normalize_str_list: that flattens a dict to its "label"/"name" key, which
 # these triples do not have, so every entry would serialize to "".
-APP_PROFILE_OBJECT_LIST_FIELDS = ("viewer_objections",)
+APP_PROFILE_OBJECT_LIST_FIELDS = ("viewer_objections", "outcome_statements")
 
 APP_PROFILE_TEXT_FIELDS = (
     "website_url", "appstore_url", "play_url", "notes", "brand_name",
@@ -133,6 +134,22 @@ class ViewerObjection(BaseModel):
     objection: str = ""
     what_they_do_now: str = ""
     honest_answer: str = ""
+
+
+class OutcomeStatement(BaseModel):
+    """
+    One feature translated into its resulting benefit, linked to its source.
+
+    `from_feature` is the field that makes the layer usable downstream: an
+    outcome without its source feature leaves every prompt guessing the
+    mapping, which is how pitches decay into feature lists. `how_it_helps`
+    feeds the mechanism moment (benefit-framed how-it-works); `outcome`
+    feeds the payoff moment (the benefit stated directly).
+    """
+    outcome: str = ""
+    who_feels_it: str = ""
+    from_feature: str = ""
+    how_it_helps: str = ""
 
 
 class BrandProfileCreateRequest(BaseModel):
@@ -171,6 +188,7 @@ class BrandProfileCreateRequest(BaseModel):
     usage_moments: Optional[List[str]] = None
     proof_moment: Optional[str] = ""
     viewer_objections: Optional[List[ViewerObjection]] = None
+    outcome_statements: Optional[List[OutcomeStatement]] = None
     claims_approved: Optional[List[str]] = None
     claims_review: Optional[List[str]] = None
     claims_banned: Optional[List[str]] = None
@@ -204,6 +222,7 @@ class BrandProfileUpdateRequest(BaseModel):
     usage_moments: Optional[List[str]] = None
     proof_moment: Optional[str] = None
     viewer_objections: Optional[List[ViewerObjection]] = None
+    outcome_statements: Optional[List[OutcomeStatement]] = None
     claims_approved: Optional[List[str]] = None
     claims_review: Optional[List[str]] = None
     claims_banned: Optional[List[str]] = None

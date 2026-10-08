@@ -91,6 +91,12 @@ def _profile(api, name):
         brand_description="A focus timer for people who stall on starting.",
         core_features=["Task timer", "Reminders"],
         usage_moments=["Starting a task they have been avoiding"],
+        outcome_statements=[{
+            "outcome": "Starting without stalling on setup",
+            "who_feels_it": "people who stall on starting",
+            "from_feature": "Task timer",
+            "how_it_helps": "The timer starts in one tap so there is nothing to set up",
+        }],
     ), user_id=ANON))
     _run(api.approve_app_profile(
         profile_id=p["id"], payload=ApproveAppProfileRequest(), user_id=ANON))
@@ -170,6 +176,12 @@ class TestApproveAppProfile:
         brand_description="A focus timer for people who stall on starting.",
         core_features=["Task timer", "Reminders"],
         usage_moments=["Starting a task they have been avoiding"],
+        outcome_statements=[{
+            "outcome": "Starting without stalling on setup",
+            "who_feels_it": "people who stall on starting",
+            "from_feature": "Task timer",
+            "how_it_helps": "The timer starts in one tap so there is nothing to set up",
+        }],
     ), user_id=ANON))
         assert profile["status"] == "draft"
         approved = _run(api.approve_app_profile(
@@ -865,6 +877,12 @@ class TestLibraryDraftGating:
             brand_description="A focus timer for people who stall on starting.",
             core_features=["Task timer", "Reminders"],
             usage_moments=["Starting a task they have been avoiding"],
+            outcome_statements=[{
+                "outcome": "Starting without stalling on setup",
+                "who_feels_it": "people who stall on starting",
+                "from_feature": "Task timer",
+                "how_it_helps": "The timer starts in one tap so there is nothing to set up",
+            }],
         ), user_id=ANON))
         _run(api.approve_app_profile(
             profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=ANON))
@@ -885,6 +903,12 @@ class TestLibraryDraftGating:
             brand_description="A focus timer for people who stall on starting.",
             core_features=["Task timer", "Reminders"],
             usage_moments=["Starting a task they have been avoiding"],
+            outcome_statements=[{
+                "outcome": "Starting without stalling on setup",
+                "who_feels_it": "people who stall on starting",
+                "from_feature": "Task timer",
+                "how_it_helps": "The timer starts in one tap so there is nothing to set up",
+            }],
         ), user_id=ANON))
         _run(api.approve_app_profile(
             profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=ANON))

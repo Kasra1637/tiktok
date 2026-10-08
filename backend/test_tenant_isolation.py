@@ -55,9 +55,10 @@ def _a_profile(api, name, user_id):
     """A profile carrying the fields approval requires.
 
     _approval_gaps in server.py refuses to approve a profile with no
-    description, no core features, and nothing describing what the app is used
-    for. Test profiles need the same, or every test that approves one is
-    asserting the gap check rather than what it meant to check.
+    description, no core features, nothing describing what the app is used
+    for, and no outcome statement linking a feature to its benefit. Test
+    profiles need the same, or every test that approves one is asserting the
+    gap check rather than what it meant to check.
     """
     from models import BrandProfileCreateRequest
     return _run(api.create_brand(payload=BrandProfileCreateRequest(
@@ -65,6 +66,12 @@ def _a_profile(api, name, user_id):
         brand_description=f"{name} description",
         core_features=["One-tap logging"],
         usage_moments=["Logging a shift without paperwork"],
+        outcome_statements=[{
+            "outcome": "Walking out on time",
+            "who_feels_it": "nurses on rotating shifts",
+            "from_feature": "One-tap logging",
+            "how_it_helps": "One tap logs the whole shift so handover writes itself",
+        }],
     ), user_id=user_id))
 
 
@@ -266,6 +273,12 @@ class TestApprovalNeedsAProfileWorthApproving:
                 brand_name=f"Described by {field}",
                 brand_description="Shift logging for healthcare workers.",
                 core_features=["One-tap shift logging"],
+                outcome_statements=[{
+                    "outcome": "Walking out on time",
+                    "who_feels_it": "nurses on rotating shifts",
+                    "from_feature": "One-tap shift logging",
+                    "how_it_helps": "One tap logs the whole shift so handover writes itself",
+                }],
                 **{field: ["Clocking on and off"]},
             ), user_id=ANON))
             assert _run(api.approve_app_profile(
@@ -286,6 +299,12 @@ class TestApprovalNeedsAProfileWorthApproving:
             brand_description="A timer.",
             core_features=["One timer"],
             problems_solved=["Starting late"],
+            outcome_statements=[{
+                "outcome": "Starting without stalling",
+                "who_feels_it": "people who start late",
+                "from_feature": "One timer",
+                "how_it_helps": "One tap starts it so there is nothing to set up",
+            }],
         ), user_id=ANON))
         assert _run(api.approve_app_profile(
             profile_id=profile["id"],

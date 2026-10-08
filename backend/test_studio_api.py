@@ -53,6 +53,12 @@ def _approved_profile(api, name="Studio App", **kwargs):
         brand_description="A focus timer for people who stall on starting.",
         core_features=kwargs.get("core_features", ["Task timer", "Reminders"]),
         usage_moments=["Starting a task they have been avoiding"],
+        outcome_statements=[{
+            "outcome": "Starting without stalling on setup",
+            "who_feels_it": "people who stall on starting",
+            "from_feature": "Task timer",
+            "how_it_helps": "The timer starts in one tap so there is nothing to set up",
+        }],
         claims_approved=kwargs.get("claims_approved", ["works offline"]),
         claims_review=kwargs.get("claims_review", ["4.8 star rating"]),
         claims_banned=kwargs.get("claims_banned", ["cures anxiety", "guaranteed results"]),
@@ -850,7 +856,8 @@ class TestReadyGate:
                 "hook_line": "You do not have a focus problem.",
                 "hook_promise": "p", "hook_action": "a",
                 "messaging_pillars": ["m"], "primary_feature": "f",
-                "desired_outcome": "o", "differentiation_beat": "b",
+                "desired_outcome": "o", "mechanism_beat": "mb",
+                "payoff_beat": "pb", "differentiation_beat": "b",
                 "cta_strategy": "c",
                 "scene": {"environment": "kitchen"},
                 "performance": {"movement": "still"},
@@ -1058,7 +1065,8 @@ class _StrategyCapture:
                 "emotional_triggers": ["t"], "hook_concept": "c",
                 "hook_line": "h", "hook_promise": "p", "hook_action": "a",
                 "messaging_pillars": ["m"], "primary_feature": "f",
-                "desired_outcome": "o", "differentiation_beat": "b",
+                "desired_outcome": "o", "mechanism_beat": "mb",
+                "payoff_beat": "pb", "differentiation_beat": "b",
                 "scene": {"environment": "kitchen"},
                 "performance": {"movement": "still"},
                 # Exactly two sections, as the schema asks for. `cta_strategy`
@@ -1333,6 +1341,115 @@ class TestObjectionFieldSurvivesASave:
         assert "viewer_objections" in APP_PROFILE_EDITABLE_FIELDS
         assert "viewer_objections" in APP_PROFILE_OBJECT_LIST_FIELDS
         assert "viewer_objections" not in APP_PROFILE_LIST_FIELDS
+
+
+class TestOutcomeStatementsSurviveASave:
+    """
+    Same save-path coverage as the objection triples: outcome_statements is a
+    second list-of-objects field, so it needs its own normalizer on the way
+    in, JSON encoding on the way to the TEXT column, and membership in the
+    editable tuple — or the editor's key is silently dropped and the approval
+    gate can never pass for a hand-built profile.
+    """
+
+    STATEMENTS = [{
+        "outcome": "Fall asleep without checking your phone",
+        "who_feels_it": "night-time scrollers",
+        "from_feature": "Sleep timer",
+        "how_it_helps": "The wind-down starts itself so there is no reason to pick the phone back up",
+    }]
+
+    def test_extraction_keeps_linked_entries(self):
+        import ai_service
+        result = {"outcome_statements": [dict(self.STATEMENTS[0])]}
+        ai_service._normalize_outcome_statements(result)
+        assert len(result["outcome_statements"]) == 1
+        assert result["outcome_statements"][0]["from_feature"] == "Sleep timer"
+
+    def test_extraction_drops_entries_with_no_source_feature(self):
+        """
+        An outcome nobody can trace to a feature leaves every later prompt
+        guessing the mapping, which is how pitches decay into feature lists.
+        """
+        import ai_service
+        result = {"outcome_statements": [
+            {"outcome": "Sleep better", "who_feels_it": "everyone"},
+        ]}
+        ai_service._normalize_outcome_statements(result)
+        assert result["outcome_statements"] == []
+
+    def test_extraction_is_capped(self):
+        import ai_service
+        result = {"outcome_statements": [
+            {"outcome": f"o{i}", "from_feature": "Sleep timer"} for i in range(20)
+        ]}
+        ai_service._normalize_outcome_statements(result)
+        assert len(result["outcome_statements"]) == 6
+
+    def test_the_phrase_list_normalizer_leaves_it_alone(self):
+        """
+        The viewer_objections bug, guarded for the second object list: if this
+        key ever lands in APP_PROFILE_LIST_KEYS, the generic loop str()'s each
+        dict and the entry normalizer drops every one as malformed.
+        """
+        import ai_service
+        assert "outcome_statements" not in ai_service.APP_PROFILE_LIST_KEYS
+
+    def test_update_parts_encodes_it_as_json(self):
+        import server
+        _clauses, values = server._brand_update_parts(
+            {"outcome_statements": self.STATEMENTS})
+        assert isinstance(values[0], str)
+        decoded = json.loads(values[0])
+        assert decoded[0]["outcome"] == "Fall asleep without checking your phone"
+        assert decoded[0]["from_feature"] == "Sleep timer"
+
+    def test_update_parts_accepts_a_json_string(self):
+        """The editor round-trips this field through text, so both shapes arrive."""
+        import server
+        _clauses, values = server._brand_update_parts(
+            {"outcome_statements": json.dumps(self.STATEMENTS)})
+        assert json.loads(values[0])[0]["how_it_helps"].startswith("The wind-down")
+
+    def test_update_parts_drops_a_half_built_entry(self):
+        import server
+        _clauses, values = server._brand_update_parts({"outcome_statements": [
+            {"outcome": "Sleep better", "who_feels_it": "everyone"},
+        ]})
+        assert json.loads(values[0]) == []
+
+    def test_it_is_editable(self):
+        from models import (
+            APP_PROFILE_EDITABLE_FIELDS, APP_PROFILE_LIST_FIELDS,
+            APP_PROFILE_OBJECT_LIST_FIELDS,
+        )
+        assert "outcome_statements" in APP_PROFILE_EDITABLE_FIELDS
+        assert "outcome_statements" in APP_PROFILE_OBJECT_LIST_FIELDS
+        assert "outcome_statements" not in APP_PROFILE_LIST_FIELDS
+
+    def test_approval_refuses_a_profile_with_no_outcome_statement(self, api):
+        """
+        The strategy pitches benefits instead of listing features, so a
+        profile with no linked outcome would approve straight into the
+        fallback path. The gate names the gap like the others.
+        """
+        from models import BrandProfileCreateRequest, ApproveAppProfileRequest
+        profile = _run(api.create_brand(payload=BrandProfileCreateRequest(
+            brand_name="No Outcomes",
+            brand_description="A focus timer for people who stall on starting.",
+            core_features=["Task timer", "Reminders"],
+            usage_moments=["Starting a task they have been avoiding"],
+        ), user_id=ANON))
+        with pytest.raises(HTTPException) as err:
+            _run(api.approve_app_profile(
+                profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=ANON))
+        assert err.value.status_code == 409
+        assert "outcome" in str(err.value.detail).lower()
+
+    def test_approval_passes_with_one_linked_statement(self, api):
+        profile = _approved_profile(api, "Outcomes OK")
+        assert profile["status"] == "approved"
+        assert profile["outcome_statements"][0]["from_feature"] == "Task timer"
 
 
 class TestPlanPromptSeesCompetitors:
