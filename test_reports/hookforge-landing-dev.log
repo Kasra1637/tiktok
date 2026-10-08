@@ -1,0 +1,536 @@
+yarn run v1.22.22
+$ craco start
+Attempting to bind to HOST environment variable: 127.0.0.1
+If this was unintentional, check that you haven't mistakenly set it in your shell.
+Learn more here: https://cra.link/advanced-config
+
+(node:26268) [DEP0176] DeprecationWarning: fs.F_OK is deprecated, use fs.constants.F_OK instead
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Starting the development server...
+
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 632:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 647) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\pages\CreateVideo.jsx
+  Line 633:9:  The 'visibleRecommendations' conditional could make the dependencies of useEffect Hook (at line 648) change on every render. To fix this, wrap the initialization of 'visibleRecommendations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m

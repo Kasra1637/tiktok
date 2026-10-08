@@ -48,6 +48,12 @@ os.environ.setdefault("CLERK_JWKS_URL", "")
 
 import server  # noqa: E402
 
+# The dry run's decision, kept in a module that imports nothing. This file loads
+# .env and boots the server at import time, so anything of substance in it could
+# otherwise only be tested with a live app and whatever keys the developer's
+# machine happened to have.
+from recovery_report import recovery_verdict  # noqa: E402
+
 
 async def _candidates() -> list:
     return await server._fetch_all(
@@ -57,6 +63,40 @@ async def _candidates() -> list:
         "WHERE status = 'completed' AND storage_error IS NOT NULL AND storage_error != '' "
         "ORDER BY created_at ASC"
     )
+
+
+def describe_recovery(server, row, probe=True):
+    """
+    The per-row dry-run report: what this row has, and what it would use.
+
+    Probes each candidate for real by default, because "would repair" is worth
+    nothing if it is a guess about a string being non-empty -- which is exactly
+    what it used to be. `--no-probe` skips the network pass.
+
+    The decision itself lives in recovery_report so it can be asserted without
+    booting this script, which loads .env and imports the server at module scope.
+    """
+    lines = [f"    error : {row.get('storage_error')}"]
+    local = server.pipeline.VIDEOS_DIR / f"{row['id']}.mp4"
+    usable = server._is_complete_mp4(local)
+    lines.append(f"    local : {'usable copy on disk' if usable else 'none usable'}")
+
+    candidates = server.provider_download_candidates(row)
+    statuses = []
+    for label, url in candidates:
+        verdict = None
+        if probe:
+            verdict = asyncio.run(server._probe_media_source(url))
+        lines.append(f"    source: {label} -> {verdict or 'not checked'}")
+        statuses.append((label, verdict))
+    if not candidates:
+        lines.append("    source: (none)")
+
+    verdict_text, unrecoverable = recovery_verdict(
+        usable, row.get("variation_kind") == "demo_cta", statuses
+    )
+    lines.append(f"    verdict: {verdict_text}")
+    return "\n".join(lines), unrecoverable
 
 
 async def main() -> int:
@@ -76,6 +116,14 @@ async def main() -> int:
     parser.add_argument(
         "--db", default="",
         help="Point at a specific SQLite file instead of the configured one.",
+    )
+    parser.add_argument(
+        "--no-probe", action="store_true",
+        help=(
+            "Do not contact each source during --dry-run. Without it the report "
+            "checks whether a link still serves bytes, so 'would repair' is a "
+            "fact rather than a guess about a non-empty URL string."
+        ),
     )
     args = parser.parse_args()
 
@@ -117,25 +165,17 @@ async def main() -> int:
     for row in rows:
         label = f"{row['id'][:8]} {row.get('model') or '?'} {row.get('duration') or '?'}s"
         print(f"--- {label}")
-        print(f"    error : {row['storage_error']}")
-        print(f"    video : {row.get('video_url') or '(none stored)'}")
-        print(f"    job   : {row.get('openrouter_job_id') or '(none)'}")
 
         if args.dry_run:
-            local = server.pipeline.VIDEOS_DIR / f"{row['id']}.mp4"
-            usable = server._is_complete_mp4(local)
-            link = bool(
-                row.get("video_url")
-                or server.ai_service.video_content_url(row.get("openrouter_job_id") or "")
-            )
-            if not usable and not link:
-                print("    verdict: UNRECOVERABLE (no local copy, no provider link)")
+            report, unrecoverable = describe_recovery(server, row, probe=not args.no_probe)
+            print(report)
+            if unrecoverable:
                 skipped += 1
-            else:
-                source = "local copy" if usable else "re-fetch from provider"
-                print(f"    verdict: would repair via {source}")
             print()
             continue
+
+        print(f"    error : {row['storage_error']}")
+        print(f"    job   : {row.get('openrouter_job_id') or '(none)'}")
 
         try:
             result = await server.retry_generation_storage(row["id"], row["user_id"])
