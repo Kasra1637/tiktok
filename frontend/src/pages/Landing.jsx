@@ -7,145 +7,87 @@ import {
   AccountButton,
 } from "../components/auth/AuthControls";
 import {
-  Sparkles, Search, Clapperboard, Globe, Film,
-  TrendingUp, ArrowRight, Zap, Target, Layers,
-  FileText, BadgeAlert, MessageSquareQuote, ChartLine,
-  X, Check, Wand2, Briefcase, LayoutTemplate, ShieldCheck, Video,
+  Sparkles, Clapperboard, Film, ArrowRight, Zap, Target,
+  FileText, X, Check, Wand2, Briefcase, LayoutTemplate, ShieldCheck, Video,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 
 const FEATURES = [
   {
     icon: Briefcase,
-    title: "Every video starts from your app",
+    title: "Start with your app’s facts",
     description:
-      "Paste your links in once. We read what your app does and who it is really for, so that no video starts as a template with your name typed in.",
+      "Research your website and store listings, or add the details yourself. Review and approve one profile to use across your videos.",
   },
   {
     icon: Target,
-    title: "One choice steers everything",
+    title: "Make your message specific",
     description:
-      "Say who you're talking to and what you want them to do. That single choice shapes the hook, the promise and the middle.",
+      "Choose a goal, then add an audience angle if you want a tighter focus. Build the story around the problem your app solves.",
   },
   {
     icon: LayoutTemplate,
-    title: "Ten curated openers, one already picked",
+    title: "Find an opening that fits",
     description:
-      "The best fit for your app and goal is preselected. Swap in one click, and every card says why it fits and where it falls short.",
-  },
-  {
-    icon: Wand2,
-    title: "No blind picks",
-    description:
-      "Each one shows its score, why it fits your app, and its limits. I never ask you to take my word for it.",
+      "Compare templates recommended for your app and goal. See the fit score, reasons, and limitations before you choose.",
   },
   {
     icon: FileText,
-    title: "Free until the render",
+    title: "Make the script your own",
     description:
-      "The script, the shot plan and the strategy cost nothing. Read all three, rewrite any word — nothing is generated until you ask for the render.",
+      "Edit the hook, script, tone, and creative directions before rendering. A separate demo brief helps you plan what to record.",
   },
   {
     icon: Clapperboard,
-    title: "A hook, and a middle",
+    title: "Start with a photo, not a shoot",
     description:
-      "The first seconds stop the scroll. The middle makes the case, and stops right where your demo takes over. One render, no seams or assembly.",
-  },
-  {
-    icon: MessageSquareQuote,
-    title: "Answers why they haven't downloaded",
-    description:
-      "The middle works through the objections you get in the comments, one at a time, and never cramming two answers into one breath.",
-  },
-  {
-    icon: Film,
-    title: "No fake screenshots. Ever.",
-    description:
-      "No drawn interfaces, no made-up numbers, no generated demo. Captions come only from the script you approved.",
+      "Use a presenter photo to guide an AI-generated Hook + Story. Review the result before using it—this is generated footage, not a recording of you.",
   },
   {
     icon: ShieldCheck,
-    title: "Your banned list is law",
+    title: "Catch flagged claims early",
     description:
-      "Your script is re-checked on every edit and again at the render. Anything on your never-use list blocks the render outright, so it cannot slip through a revision.",
+      "Review claim warnings alongside your script. Matches to your banned claims block generation; you still make the final factual review.",
   },
   {
-    icon: Layers,
-    title: "The presenter is you",
+    icon: Film,
+    title: "Give your footage a polished frame",
     description:
-      "One photo carries the entire piece. No avatar, no voice clone, no stand-in, and just the one photo, so nobody is ever in doubt whose face it is.",
-  },
-  {
-    icon: ChartLine,
-    title: "Every post teaches the next one",
-    description:
-      "Log what each video has actually done. What worked for this app shows up beside the next one we recommend.",
-  },
-  {
-    icon: TrendingUp,
-    title: "See what each video earned",
-    description:
-      "Success rate, failures and rework, broken down by app, opening, model, and audience.",
-  },
-  {
-    icon: Check,
-    title: "Skip it and it sinks",
-    description:
-      "Swap away from an opening and it slides down the list. Use one and it keeps climbing. Your taste becomes our ranking.",
-  },
-  {
-    icon: BadgeAlert,
-    title: "Receipts on every render",
-    description:
-      "The exact prompt sent, the claim check as it stands, the model, plus any error. Audit it all.",
-  },
-  {
-    icon: Zap,
-    title: "Where your openings come from",
-    description:
-      "Ten structures we wrote by ourselves, ranked by what your own posts actually did. No scraping of creators, no borrowed faces, no invented results.",
+      "Bring a clip to Demo + CTA. Choose a phone mockup, adjust framing and zoom, and add your own hook text and end card.",
   },
   {
     icon: Video,
-    title: "You finish the video",
+    title: "Keep your next idea within reach",
     description:
-      "Download the hook and the middle. Record your demo, add your close and post it. We never touch your account.",
+      "Revisit clips in History, make a draft variation, and record results by hand. Review each new draft before generating another video.",
   },
 ];
-
-
-
 
 const FLOW_STEPS = [
   {
     step: "1",
-    label: "Paste",
-    icon: Briefcase,
-    detail: "Your links. We read what your app does, then write the profile for you to approve.",
+    label: "Introduce your app",
+    detail: "Add your website or store links—or enter the details yourself. Review the profile and approve the facts.",
   },
   {
     step: "2",
-    label: "Choose",
-    icon: Target,
-    detail: "Who you're talking to, and what you want them to do. I rank openings to match.",
+    label: "Choose your message",
+    detail: "Set a goal for the video. Add an audience angle if you want to focus on a specific problem or use case.",
   },
   {
     step: "3",
-    label: "Read",
-    icon: FileText,
-    detail: "Your photo. Read the script, the shot plan and the strategy. Edit any line — nothing runs until you say so.",
+    label: "Pick a template",
+    detail: "Compare recommendations and their limitations. Choose an opening and add your presenter photo.",
   },
   {
     step: "4",
-    label: "Render",
-    icon: Layers,
-    detail: "One render: the hook, then a middle that stops where you reach for the phone.",
+    label: "Review, then generate",
+    detail: "Edit the script and directions, review flagged claims, and mark the project ready. Start the video render when you’re happy with the plan.",
   },
   {
     step: "5",
-    label: "Finish",
-    icon: Video,
-    detail: "Record your demo and add your close, then post it wherever your audience is.",
+    label: "Show the real product",
+    detail: "Record your demo. Style footage in Demo + CTA, then download your clips and publish them yourself.",
   },
 ];
 
@@ -158,29 +100,23 @@ const FLOW_STEPS = [
  * quietly flatters the product.
  */
 const WEEK_WITHOUT = [
-  "Book the shoot. Lose an afternoon, and hope the light was good.",
-  "Write the script yourself, then read it back and hate how it sounds.",
-  "Film it four times because the first one had you squinting.",
-  "Pay someone to edit it, then wonder all night about those 3 seconds.",
-  "Post it, get 400 views, and blame the algorithm for all of it.",
-  "Do the whole thing again next week, from scratch, on one hook.",
+  "Describe your app from scratch whenever you start a new script.",
+  "Guess which opening fits your app and people you want to reach.",
+  "Start with a blank script and work out the story as you go.",
+  "Search your folders for clips and notes from your earlier posts.",
 ];
 
 const WEEK_WITH = [
-  "Paste the link. We read your app and write the profile for you.",
-  "Pick who is watching. We write six openings, then you take the best.",
-  "Read it, change any line you like, and nothing runs at all.",
-  "Render the hook and the middle, then add your own demo and a close.",
-  "Post it, log the views, and let them shape the very next one.",
-  "Next week it is the same profile, already knowing what worked.",
+  "Reuse your app profile you have already reviewed and approved.",          "Compare the openings with fit scores, reasons, and limitations.",
+  "Review an editable script before you start the video render.",
+  "Find your clips and manually logged results together in History.",
 ];
-
 
 const NAV_LINKS = [
   { href: "#how-it-works", label: "How it works" },
-  { href: "#your-week", label: "Your week" },
+  { href: "#your-week", label: "Why HookForge" },
   { href: "#features", label: "What you get" },
-  { href: "#pipeline", label: "How it's made" },
+  { href: "#pipeline", label: "Your control" },
 ];
 
 /** Soft drifting color fields behind the hero. Decorative only. */
@@ -223,85 +159,55 @@ function Aurora() {
 
 const PIPELINE_BLOCKS = [
   {
-    icon: Globe,
-    tone: "indigo",
-    kicker: "Intelligence",
-    title: "Read Before We Write",
-    body: (
-      <>
-        Your links become a profile: what the app does, who it is for, and what you may claim.
-        You approve it before anything is generated, and no refresh quietly overwrites wording.
-      </>
-    ),
-  },
-  {
     icon: Clapperboard,
     tone: "coral",
-    kicker: "Generation",
-    title: "Two Sections, One Render",
-    body: (
-      <>
-        The hook is the first few seconds. The middle develops it, then ends at the moment the
-        presenter would reach for their phone, which is exactly where your own demo picks up.
-        One job, one file, with sound wherever the model supports it.
-      </>
-    ),
-  },
-  {
-    icon: Layers,
-    tone: "coral",
-    kicker: "The Handoff",
-    title: "The Middle Is Built to Stop",
-    body: (
-      <>
-        There is no product demo and no closing card in the generated footage, on purpose: the
-        plan works out what you should record and hands it to you as a note, and the video ends
-        on the frame your demo continues from. You attach the demo, add your close, and post it.
-      </>
-    ),
+    kicker: "Hook + Story",
+    title: "Generate the opening, keep the demo real",
+    body: "Create one AI-generated clip: an opening hook followed by the story. Your real app demo and closing message are not generated footage. Record the demo yourself, using the separate brief as a guide.",
   },
   {
     icon: Film,
     tone: "indigo",
-    kicker: "Finishing",
-    title: "The Scene Is Built Around You",
-    body: (
-      <>
-        Your photograph is the only visual input, and the room, the light, and the framing get
-        locked once for the whole piece, so the hook and the middle cannot disagree about where
-        this is happening. Captions layer on afterwards, taken from the script you approved.
-      </>
-    ),
+    kicker: "Demo + CTA",
+    title: "Put your own footage in the spotlight",
+    body: "Style one source clip at a time—your own recording or a finished Hook + Story. Add a floating or hand-held phone mockup, framing and zoom, plus hook text and an end card you write. Combine separate clips in your own editor when needed; Demo + CTA does not assemble them for you.",
   },
   {
-    icon: Search,
+    icon: ShieldCheck,
     tone: "indigo",
-    kicker: "On trust",
-    title: "Curated, Not Proven.",
-    body: (
-      <>
-        Every opening ships as a written structure, not a promise. We tell you plainly when
-        we have no numbers behind one yet, so you can judge it on the post you can see.
-      </>
-    ),
+    kicker: "Your review",
+    title: "Stay in charge of the message",
+    body: "Approve your app profile and review the script before rendering. Claim checks flag language to revisit, not a guarantee that every claim is correct. Review the finished clip, download it, and choose where and when to publish.",
   },
 ];
 
-
-
-
-const MODELS = [
-  { label: "Words & analysis", value: "gpt-4o-mini — your profile, angles, openings, scripts, and shot plans" },
-  { label: "Video", value: "MiniMax H3 by default — 2K picture, native sound — or H3 Max for sharper prompt adherence at 768p, or Grok for a silent 720p clip when you want a fast second take. One render of up to 15 seconds either way; each template declares the length its mechanic suits. Your pick sticks." },
-  { label: "Finishing touches", value: "Captions, layered on precisely" },
-  { label: "Provenance", value: "No scraped creators, no lifted scripts, no invented numbers. The only face in your video is the one photo that you chose." },
+const QUESTIONS = [
+  {
+    question: "Can I use footage I already have?",
+    answer: "Yes. Open Demo + CTA with your own video, including a screen recording. You don’t need to generate a Hook + Story first.",
+  },
+  {
+    question: "Can I change the script before generating?",
+    answer: "Yes. Edit the hook, script, tone, and creative directions, then review the claim check and mark the project ready. Starting the video render is a separate action.",
+  },
+  {
+    question: "Does the video use my real face and voice?",
+    answer: "Your photo guides the AI presenter; it is not a recording of you or a clone of your voice. Check the likeness and delivery in the finished clip before using it.",
+  },
+  {
+    question: "Will my clip have sound, and how can I export it?",
+    answer: "Audio depends on the video model you choose; some models produce silent clips. Demo + CTA exports MP4 or WebM depending on your browser and settings. Transparent exports use WebM.",
+  },
+  {
+    question: "Does HookForge post or track results for me?",
+    answer: "No. Download your videos and publish them yourself. You can enter views, likes, comments, shares, and saves in History, along with notes and your own verdict. Results are manually logged, not synced from TikTok.",
+  },
 ];
-
 
 
 function SectionHeading({ eyebrow, title, lede, id }) {
   return (
-    <div className="mx-auto mb-12 max-w-2xl text-center" id={id}>
+    <div className="mx-auto mb-12 max-w-2xl scroll-mt-24 text-center" id={id}>
       {eyebrow && (
         <span className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-[color:var(--hairline)] bg-[color:var(--indigo-6)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-[color:var(--brand-indigo)]">
           {eyebrow}
@@ -329,7 +235,7 @@ export default function Landing() {
             <span className="font-display text-lg font-bold tracking-tight">HookForge</span>
           </Link>
 
-          <nav className="hidden items-center gap-1 md:flex">
+          <nav aria-label="Landing page" className="hidden items-center gap-1 lg:flex">
             {NAV_LINKS.map((l) => (
               <a
                 key={l.href}
@@ -344,7 +250,7 @@ export default function Landing() {
           <div className="flex items-center gap-2">
             <UnauthedOnly>
               <SignInTrigger>
-                <button className="rounded-xl px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-[color:var(--indigo-6)] hover:text-foreground">
+                <button className="hidden rounded-xl px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-[color:var(--indigo-6)] hover:text-foreground sm:inline-flex">
                   Sign In
                 </button>
               </SignInTrigger>
@@ -355,7 +261,7 @@ export default function Landing() {
                   is kept because it marks the page's one primary action. */}
               <SignUpTrigger>
                 <Button
-                  className="gap-2 rounded-xl bg-[color:var(--brand-indigo)] px-4 text-sm font-semibold text-white shadow-[var(--glow-indigo)] hover:bg-[color:var(--brand-indigo-dark)]"
+                  className="gap-2 rounded-xl bg-[color:var(--brand-indigo)] px-4 text-sm font-semibold text-black shadow-[var(--glow-indigo)] hover:bg-[color:var(--brand-indigo-dark)]"
                   data-testid="landing-enter-app-button"
                 >
                   Get Started <ArrowRight className="h-4 w-4" />
@@ -363,14 +269,13 @@ export default function Landing() {
               </SignUpTrigger>
             </UnauthedOnly>
             <AuthedOnly>
-              <Link to="/">
-                <Button
-                  className="gap-2 rounded-xl bg-[color:var(--brand-indigo)] px-4 text-sm font-semibold text-white shadow-[var(--glow-indigo)] hover:bg-[color:var(--brand-indigo-dark)]"
-                  data-testid="landing-enter-app-button"
-                >
-                  Enter App <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
+              <Button
+                asChild
+                className="gap-2 rounded-xl bg-[color:var(--brand-indigo)] px-4 text-sm font-semibold text-black shadow-[var(--glow-indigo)] hover:bg-[color:var(--brand-indigo-dark)]"
+                data-testid="landing-enter-app-button"
+              >
+                <Link to="/create">Create Video <ArrowRight className="h-4 w-4" /></Link>
+              </Button>
               <AccountButton />
             </AuthedOnly>
           </div>
@@ -386,17 +291,18 @@ export default function Landing() {
             className="animate-fade-up font-display text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-[4.5rem]"
             style={{ animationDelay: "60ms" }}
           >
-            <span className="text-shine">I finally made my own launch video.</span>
+            <span className="text-shine">Give your app a story</span>
             <br />
-            <span className="text-gradient-brand">Starring you.</span>
+            <span className="text-gradient-brand">worth watching.</span>
           </h1>
 
           <p
             className="animate-fade-up mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl"
             style={{ animationDelay: "120ms" }}
           >
-            Paste your links. Approve what it found. Read every word. Then film
-            the demo and post it tonight.
+            Turn your app’s features into an editable script and an AI-generated Hook + Story
+            using your photo. Bring your own footage to Demo + CTA for phone mockups,
+            on-screen text, and an end card.
           </p>
 
           <div
@@ -407,51 +313,54 @@ export default function Landing() {
               <SignUpTrigger>
                 <Button
                   size="lg"
-                  className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-white shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
+                  className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-black shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
                 >
-                  <Sparkles className="h-5 w-5" /> Make my first video
+                  <Sparkles className="h-5 w-5" /> Create your first video
                 </Button>
               </SignUpTrigger>
-              <SignInTrigger>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="w-full gap-2.5 rounded-xl border-[color:var(--hairline-strong)] bg-[color:var(--indigo-4)] px-8 py-6 text-base font-semibold backdrop-blur-sm hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] sm:w-auto"
-                >
-                  I already have an account
-                </Button>
-              </SignInTrigger>
             </UnauthedOnly>
             <AuthedOnly>
-              <Link to="/create" className="w-full sm:w-auto">
-                <Button
-                  size="lg"
-                  className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-white shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
-                >
-                  <Sparkles className="h-5 w-5" /> Go to App
-                </Button>
-              </Link>
+              <Button
+                asChild
+                size="lg"
+                className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-black shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
+              >
+                <Link to="/create"><Sparkles className="h-5 w-5" /> Create Video</Link>
+              </Button>
             </AuthedOnly>
+            <Button
+              size="lg"
+              variant="outline"
+              asChild
+              className="w-full rounded-xl border-[color:var(--hairline-strong)] bg-[color:var(--indigo-4)] px-8 py-6 text-base font-semibold hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] sm:w-auto"
+            >
+              <a href="#how-it-works">See how it works</a>
+            </Button>
           </div>
+
+          <UnauthedOnly>
+            <p className="mt-5 text-sm text-muted-foreground">
+              Already have an account?{" "}
+              <SignInTrigger>
+                <button className="font-semibold text-[color:var(--brand-indigo)] hover:underline">Sign in</button>
+              </SignInTrigger>
+            </p>
+          </UnauthedOnly>
 
           <div
             className="animate-fade-up mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground"
             style={{ animationDelay: "220ms" }}
           >
             <span className="inline-flex items-center gap-1.5">
-              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> You approve every word
+              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Review before rendering
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Your real face
+              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Keep your real demo
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Nothing auto-posts
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Nothing generated until you render
+              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Publish on your terms
             </span>
           </div>
-
         </div>
       </section>
 
@@ -460,8 +369,8 @@ export default function Landing() {
         <SectionHeading
           id="how-it-works"
           eyebrow="How it works"
-          title="From your link to your own promo"
-          lede="Five steps, and only one of them is you on camera. That step is your demo, and I would not hand it to a model."
+          title="From app facts to your next story"
+          lede="Build the opening around what your app does. Review the message before you turn it into video."
         />
 
         <div className="relative">
@@ -496,13 +405,13 @@ export default function Landing() {
         <SectionHeading
           id="your-week"
           eyebrow="The difference"
-          title="What your week looks like"
-          lede="Same app either way. One version cost me a Saturday, the other cost me a coffee."
+          title="Spend less effort starting from scratch"
+          lede="Keep your app’s facts, creative choices, and past work close by—so your next idea has somewhere to start."
         />
 
         <div className="grid gap-5 lg:grid-cols-2">
           <div className="surface rounded-2xl">
-            <span className="eyebrow">The old way</span>
+            <span className="eyebrow">Starting from scratch</span>
             <ul className="mt-5 space-y-3.5">
               {WEEK_WITHOUT.map((line) => (
                 <li key={line} className="flex gap-3 text-sm leading-relaxed text-muted-foreground">
@@ -536,9 +445,9 @@ export default function Landing() {
       <section className="relative z-10 mx-auto max-w-6xl px-5 pb-24" data-testid="landing-features">
         <SectionHeading
           id="features"
-          eyebrow="Everything in between"
-          title="You bring a link and a photo"
-          lede="We write and then render everything up to the moment you reach for your phone. Every one of those five steps is yours to redo."
+          eyebrow="What you get"
+          title="A clearer way to tell your app’s story"
+          lede="From the first idea to the clip you review, keep the message grounded in your product and shaped by you."
         />
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -559,12 +468,12 @@ export default function Landing() {
       </section>
 
       {/* ---------- Pipeline ---------- */}
-      <section className="relative z-10 mx-auto max-w-5xl px-5 pb-24">
+      <section className="relative z-10 mx-auto max-w-5xl px-5 pb-24" data-testid="landing-capabilities">
         <SectionHeading
           id="pipeline"
-          eyebrow="Under the hood"
-          title="How it gets made"
-          lede="What happens between your link and a post you are happy to make."
+          eyebrow="Your control"
+          title="Your story. Your real product."
+          lede="Generate the opening, show the real app, and decide what makes the final cut."
         />
 
         <div className="space-y-4">
@@ -573,6 +482,7 @@ export default function Landing() {
             return (
               <div
                 key={block.title}
+                data-testid={`landing-capability-${block.kicker === "Hook + Story" ? "generation" : block.kicker === "Demo + CTA" ? "editor" : "review"}`}
                 className="surface surface-interactive rounded-2xl"
               >
                 <div className="flex flex-col gap-4 sm:flex-row sm:gap-5">
@@ -607,31 +517,24 @@ export default function Landing() {
             );
           })}
 
-          {/* Models used — table-like layout reads better than a bullet list */}
-          <div className="surface rounded-2xl">
-            <div className="flex flex-col gap-4 sm:flex-row sm:gap-5">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[color:var(--coral-25)] bg-[color:var(--coral-12)]">
-                <Layers className="h-5 w-5 text-[color:var(--brand-coral)]" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <span className="eyebrow text-[color:var(--brand-coral)]">Stack</span>
-                <h3 className="font-display mt-1 text-base font-semibold sm:text-lg">The Engine Room</h3>
-                <dl className="mt-4 divide-y divide-border/60">
-                  {MODELS.map((m) => (
-                    <div key={m.label} className="grid gap-1 py-2.5 sm:grid-cols-[180px_1fr] sm:gap-4">
-                      <dt className="font-display text-sm font-semibold text-foreground">{m.label}</dt>
-                      <dd className="text-sm leading-relaxed text-muted-foreground">{m.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
+          <div className="surface rounded-2xl" data-testid="landing-questions">
+            <h3 className="font-display text-lg font-semibold">A few things worth knowing</h3>
+            <div className="mt-4 divide-y divide-border/60">
+              {QUESTIONS.map((q) => (
+                <details key={q.question} className="py-4">
+                  <summary className="cursor-pointer font-display text-sm font-semibold text-foreground">
+                    {q.question}
+                  </summary>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{q.answer}</p>
+                </details>
+              ))}
             </div>
           </div>
         </div>
       </section>
 
       {/* ---------- Final CTA ---------- */}
-      <section className="relative z-10 mx-auto max-w-4xl px-5 pb-24">
+      <section className="relative z-10 mx-auto max-w-4xl px-5 pb-24" data-testid="landing-final-cta">
         <div className="border-gradient relative rounded-3xl p-[1px]">
           <div className="surface-glass relative overflow-hidden rounded-3xl px-6 py-12 text-center sm:px-12 sm:py-16">
             <div className="spotlight-indigo absolute inset-0" aria-hidden="true" />
@@ -640,52 +543,40 @@ export default function Landing() {
                 <Zap className="h-3 w-3" /> Ready when you are
               </span>
               <h2 className="font-display mt-5 text-3xl font-bold tracking-tight sm:text-4xl">
-                Your next promo is one photo away.
+                Make your next app story.
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">
-                Paste your link. Approve the profile. Pick your goal and opening. You get
-                a hook and a middle starring you, then film the demo, add the close and
-                post it.
+                Start with your app’s facts and a message you want to share. Review the script,
+                generate your Hook + Story, and keep the real product at the heart of your demo.
               </p>
               <div className="mt-9 flex flex-col items-center justify-center gap-3.5 sm:flex-row">
                 <UnauthedOnly>
                   <SignUpTrigger>
                     <Button
                       size="lg"
-                      className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-white shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
+                      className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-black shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
                     >
-                      <Sparkles className="h-5 w-5" /> Make my first video
+                      <Sparkles className="h-5 w-5" /> Create your first video
                     </Button>
                   </SignUpTrigger>
-                  <SignInTrigger>
-                    <Button
-                      size="lg"
-                      variant="outline"
-                      className="w-full gap-2.5 rounded-xl border-[color:var(--hairline-strong)] bg-[color:var(--indigo-4)] px-8 py-6 text-base font-semibold hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] sm:w-auto"
-                    >
-                      I already have an account
-                    </Button>
-                  </SignInTrigger>
                 </UnauthedOnly>
                 <AuthedOnly>
-                  <Link to="/" className="w-full sm:w-auto">
-                    <Button
-                      size="lg"
-                      className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-white shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
-                    >
-                      <Sparkles className="h-5 w-5" /> Enter App
-                    </Button>
-                  </Link>
-                  <Link to="/brand" className="w-full sm:w-auto">
-                    <Button
-                      size="lg"
-                      variant="outline"
-                      className="w-full gap-2.5 rounded-xl border-[color:var(--hairline-strong)] bg-[color:var(--indigo-4)] px-8 py-6 text-base font-semibold hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] sm:w-auto"
-                    >
-                      <Globe className="h-5 w-5" /> Open your app profile
-                    </Button>
-                  </Link>
+                  <Button
+                    asChild
+                    size="lg"
+                    className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-black shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
+                  >
+                    <Link to="/create"><Sparkles className="h-5 w-5" /> Create Video</Link>
+                  </Button>
                 </AuthedOnly>
+                <Button
+                  asChild
+                  size="lg"
+                  variant="outline"
+                  className="w-full gap-2.5 rounded-xl border-[color:var(--hairline-strong)] bg-[color:var(--indigo-4)] px-8 py-6 text-base font-semibold hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] sm:w-auto"
+                >
+                  <Link to="/demo-cta"><Film className="h-5 w-5" /> Style your own footage</Link>
+                </Button>
               </div>
             </div>
           </div>
@@ -704,8 +595,8 @@ export default function Landing() {
                 <span className="font-display text-base font-bold tracking-tight">HookForge</span>
               </div>
               <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted-foreground">
-                The hook and the middle, made from a link and a photo. You film the demo, add
-                the close, and post it yourself.
+                App stories grounded in your product. Generate a Hook + Story, style your
+                own footage, and publish on your terms.
               </p>
             </div>
 
@@ -719,7 +610,10 @@ export default function Landing() {
                   <Link to="/history" className="transition-colors hover:text-foreground">Generation History</Link>
                 </li>
                 <li>
-                  <Link to="/app-profiles" className="transition-colors hover:text-foreground">App Profile</Link>
+                  <Link to="/brand" className="transition-colors hover:text-foreground">App Profile</Link>
+                </li>
+                <li>
+                  <Link to="/demo-cta" className="transition-colors hover:text-foreground">Demo + CTA</Link>
                 </li>
               </ul>
             </div>
@@ -739,10 +633,10 @@ export default function Landing() {
 
           <div className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-border/50 pt-6 sm:flex-row">
             <p className="text-xs text-muted-foreground">
-              &copy; {new Date().getFullYear()} HookForge. Built for mobile app founders.
+              &copy; {new Date().getFullYear()} HookForge. Built for mobile-app founders and marketers.
             </p>
-              <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Wand2 className="h-3 w-3 text-[color:var(--brand-indigo)]" /> Template studio with manual publishing
+            <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Wand2 className="h-3 w-3 text-[color:var(--brand-indigo)]" /> Your message. Your final say.
             </p>
           </div>
         </div>
