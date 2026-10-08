@@ -578,39 +578,47 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
             {strandedNote && (
               <p className="text-xs text-muted-foreground" role="status">{strandedNote}</p>
             )}
-            {/* Download and Delete sit together under the clip: both act on the
-                file itself, so they read as one group. Delete used to be held
-                at the far edge of the card with Archive, so it could not be
-                reached by muscle memory on the way to Details -- a real
-                safeguard. It is deliberately not that far now: it sits directly
-                under the preview it destroys, one deliberate click away, and
-                the label is unabbreviated so it reads as what it does. Archive
-                is gone from this page, which leaves Delete as the only
-                destructive act here.
+            {/* Download and Delete on one row: both act on this file, and stacking them
+                cost a full-width button each in a 240px rail. Download takes
+                the slack because it is what the row is for; Delete is
+                fixed-width so the two stay aligned at any rail width.
                 Download points at downloadMediaUrl, the same-origin route that
                 forces a save. The playback href was cross-origin whenever the
                 durable copy was in R2, and browsers ignore `download` there, so
-                the button opened a tab instead of saving the file. */}
-            {saveUrl && (
-              <Button variant="secondary" size="sm" className="w-full" asChild>
-                <a
-                  href={saveUrl}
-                  download
-                  onClick={() => recordSignal("video_downloaded", "downloaded", signalRefs)}
+                the button opened a tab instead of saving the file.
+
+                Delete sits beside it deliberately, not parked at the far edge:
+                it destroys the clip previewed directly above, one click away.
+                That muscle-memory safeguard is gone by request, so the label is
+                spelled out and the icon is tinted rather than neutral -- it
+                should read as destructive at a glance. */}
+            <div className="flex items-center gap-1.5">
+              {saveUrl && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 flex-1 px-2 text-muted-foreground"
+                  asChild
                 >
-                  <Download className="h-3.5 w-3.5" /> Download
-                </a>
+                  <a
+                    href={saveUrl}
+                    download
+                    onClick={() => recordSignal("video_downloaded", "downloaded", signalRefs)}
+                  >
+                    <Download className="h-3.5 w-3.5" /> Download
+                  </a>
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-muted-foreground hover:text-destructive"
+                disabled={busy}
+                onClick={() => act(() => api.deleteGeneration(row.id))}
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Delete
               </Button>
-            )}
-            <Button
-              variant="secondary"
-              size="sm"
-              className="w-full"
-              disabled={busy}
-              onClick={() => act(() => api.deleteGeneration(row.id))}
-            >
-              <Trash2 className="h-3.5 w-3.5" /> Delete
-            </Button>
+            </div>
             {composedUrl && (
               <Button variant="secondary" size="sm" className="w-full" asChild>
                 <a
@@ -737,10 +745,17 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
               kind of action from moving a file or deleting a row. It used to be
               a text fragment sitting inline between two buttons, so it read as
               a label for whatever came next rather than a question. In its own
-              bordered group with a heading, it asks to be answered — which is
-              the point of asking. */}
+              group with a heading, it asks to be answered — which is the point
+              of asking.
+
+              Two bordered boxes stacked here competed with the clip for
+              attention: the card is about the video, and these are a footer.
+              Both are now borderless, so the preview is the only boxed thing on
+              the row, and the groups read as quiet text under it. The headings
+              stay, because they are what makes the verdict a question and the
+              navigation a list rather than a pile of buttons. */}
           {row.status === "completed" && (
-            <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-3">
+            <div className="space-y-2 pt-1">
               <span className="eyebrow block">How did this turn out?</span>
               <div className="flex flex-wrap items-center gap-1.5">
                 <Button
@@ -780,7 +795,7 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
               beside Download where the thing being destroyed is visible. The
               status filter still offers "archived", so a row archived before
               this change remains findable — just not archivable again. */}
-          <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-3">
+          <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
             <span className="eyebrow block">Work with this render</span>
             <div className="flex flex-wrap items-center gap-1.5">
               <Button variant="ghost" size="sm" onClick={loadChildren}>
