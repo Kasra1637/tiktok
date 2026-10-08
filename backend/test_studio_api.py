@@ -1628,6 +1628,9 @@ class TestSpokenWordsGate:
             "Most evenings blur together. Yours ends with one sentence written down."
         ))
         assert out["spoken_overflow"] == {}
+        # The Review step shows this partition and trims to it, so it has to be
+        # the bound middle text rather than a second implementation of the rule.
+        assert out["spoken_middle"] == "Most evenings blur together. Yours ends with one sentence written down."
 
     def test_an_overlong_script_is_reported_with_its_budget(self):
         import server
@@ -1638,6 +1641,9 @@ class TestSpokenWordsGate:
         assert overflow["dropped_chars"] > 0
         assert overflow["budget"] == 154  # 7s middle at ~3.7 words/sec
         assert overflow["middle_seconds"] == 7
+        # The trim target: exactly the kept prefix, so trimming to it and
+        # saving is stable — rebinding the trimmed script yields the same words.
+        assert out["spoken_middle"] == "First sentence that fits."
 
     def test_overflow_refuses_the_render_with_the_fix_named(self):
         import server
@@ -1647,7 +1653,7 @@ class TestSpokenWordsGate:
             ))
         assert getattr(exc.value, "status_code", None) == 409
         assert "do not fit" in str(exc.value.detail)
-        assert "Shorten the script" in str(exc.value.detail)
+        assert "Trim it on the Review step" in str(exc.value.detail)
         assert "rebuild the strategy" in str(exc.value.detail)
 
     def test_a_fitting_script_passes_the_gate(self):

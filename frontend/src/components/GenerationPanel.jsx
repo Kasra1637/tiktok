@@ -77,7 +77,13 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
 
   const projectId = project?.id;
   const ready = project?.status === "ready_for_generation";
-  const blocked = project?.safety_report && project.safety_report.passed === false;
+  const claimBlocked = project?.safety_report && project.safety_report.passed === false;
+  // The render gate refuses words that cannot be spoken in the piece's seconds,
+  // and that verdict is recomputed from the live plan — so the button has to
+  // answer to it too. Without this the founder clicks an enabled Generate into
+  // a 409, which is the gate working and the UI lying about it.
+  const overflowBlocked = (project?.spoken_overflow?.dropped_chars || 0) > 0;
+  const blocked = claimBlocked || overflowBlocked;
   // A render follows the strategy, so one must exist and must match the plan it
   // was built from. Both checks are the same ones the server makes, so the
   // button is disabled for the real reason instead of letting the founder click
@@ -401,12 +407,23 @@ const handleGenerate = async () => {
           Mark the project ready for generation to enable production.
         </p>
       )}
-      {blocked && (
+      {claimBlocked && (
         <Alert variant="destructive">
           <AlertTitle>Prohibited claim present</AlertTitle>
           <AlertDescription>
             Fix the flagged claim in the script above. Generation is blocked until the claim
             check passes.
+          </AlertDescription>
+        </Alert>
+      )}
+      {overflowBlocked && (
+        <Alert variant="destructive" data-testid="generate-overflow-blocked">
+          <AlertTitle>Script too long for this piece</AlertTitle>
+          <AlertDescription>
+            {project.spoken_overflow.dropped_chars} characters of your approved script do not
+            fit in a {project.spoken_overflow.middle_seconds}s middle. Trim it on the Review
+            step — the middle&apos;s spoken words are shown there, with a button that keeps
+            only what fits — then rebuild the strategy and generate.
           </AlertDescription>
         </Alert>
       )}

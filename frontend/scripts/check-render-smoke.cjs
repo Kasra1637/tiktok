@@ -1162,7 +1162,11 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     })(ctx);
     expectText(ctx, "does not all fit in the middle", "the overflow warning did not render");
     expectText(ctx, "42 characters", "the overflow warning does not state how much is lost");
-    expectText(ctx, "Shorten the script", "the overflow warning does not name the fix");
+    expectText(ctx, "Trim it on the Review step", "the overflow warning does not name the fix");
+    // A trim is a plan edit: the strategy built before it stops describing the
+    // plan, and the render refuses it. The copy has to say the rebuild is the
+    // next step, or the founder trims, generates, and meets a second refusal.
+    expectText(ctx, "rebuild the strategy", "the overflow warning does not say a rebuild follows the trim");
   });
 
   // The property the running-total and coverage checks used to protect: nothing
@@ -1300,6 +1304,27 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
     expectAbsent(ctx, "Captions use your approved script", "the caption source is still misattributed");
     expectText(ctx, "the on-screen text you wrote on Review", "the caption source is not stated");
+  });
+
+  // Words that do not fit are not spoken, and the gate refuses the render ΓÇö so
+  // the button has to be disabled with the fix named, not enabled into a 409.
+  // An enabled Generate under a blocking overflow warning is the gate working
+  // and the UI lying about it.
+  await check("GenerationPanel disables Generate while words do not fit", async (ctx) => {
+    await mount(GenerationPanel, {
+      project: {
+        ...PROJECT_WITH_STRATEGY,
+        spoken_overflow: { dropped_chars: 42, budget: 154, middle_seconds: 7 },
+      },
+    })(ctx);
+    const generate = [...ctx.container.querySelectorAll("button")]
+      .find((b) => /Generate/.test(b.textContent || ""));
+    if (!generate) throw new Error("the generate control is missing");
+    if (!generate.disabled) {
+      throw new Error("Generate stays enabled while approved words do not fit");
+    }
+    expectText(ctx, "Script too long for this piece", "the overflow block does not name the stop");
+    expectText(ctx, "Trim it on the Review", "the overflow block does not name the fix");
   });
 
   // -------------------------------------------------------------------------
@@ -2017,6 +2042,60 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     const sent = updates.map((p) => p.overlays).find((o) => o !== undefined);
     if (!sent || sent[0]?.text !== "one finished list") {
       throw new Error("the caption edit was not saved to the project");
+    }
+  });
+
+  // The partition the render actually speaks: what fits, what is dropped, and
+  // the one-click trim that resolves the overflow warning. Trimming to the
+  // shown kept line has to save exactly that line ΓÇö it is the server's own
+  // bound text, so anything else would reintroduce the drift the binding
+  // removed.
+  await check("Review shows the spoken partition and trims to what fits", async (ctx) => {
+    const kept = "Most evenings blur together.";
+    const updates = [];
+    await withApi(
+      {
+        getStudioProject: async () => ({
+          ...PROJECT_WITH_STRATEGY,
+          script: `${kept} ${"x".repeat(200)}`,
+          spoken_middle: kept,
+          spoken_overflow: { dropped_chars: 200, budget: 154, middle_seconds: 7 },
+        }),
+        updateStudioProject: async (id, payload) => {
+          updates.push(payload);
+          return PROJECT_WITH_STRATEGY;
+        },
+      },
+      async () => {
+        global.__SMOKE_PARAMS = "?project=p1";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Review");
+          expectText(ctx, "What the middle will say", "the spoken partition is not shown");
+          expectText(ctx, kept, "the kept spoken line is not shown");
+          expectText(ctx, "rebuild the strategy", "the trim does not say a rebuild follows");
+          expectText(ctx, "Not spoken:", "the dropped tail is not shown");
+          const trim = ctx.container.querySelector('[data-testid="spoken-trim"]');
+          if (!trim) throw new Error("Review offers no trim for the overflowing script");
+          await act(async () => {
+            trim.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {});
+          const save = [...ctx.container.querySelectorAll("button")]
+            .find((b) => (b.textContent || "").trim() === "Save edits");
+          if (!save) throw new Error("Review offers no save for the trimmed script");
+          await act(async () => {
+            save.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {});
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+    const sent = updates.map((p) => p.script).find((s) => s !== undefined);
+    if (sent !== kept) {
+      throw new Error(`the trim did not save the kept line: ${JSON.stringify(sent)}`);
     }
   });
 

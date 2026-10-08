@@ -6449,8 +6449,18 @@ def _public_project(row: dict) -> dict:
             out.get("duration_seconds") or 0,
         )
         out["spoken_overflow"] = overflow
+        # The middle's spoken words, exactly as the render will receive them.
+        # The Review step shows this partition and trims to it, so it has to be
+        # the bound text rather than a second implementation of the rule.
+        _sections = _bound.get("segments") or []
+        out["spoken_middle"] = (
+            _sections[1].get("script", "")
+            if len(_sections) > 1 and isinstance(_sections[1], dict)
+            else ""
+        )
     else:
         out["spoken_overflow"] = {}
+        out["spoken_middle"] = ""
     return out
 
 
@@ -8240,9 +8250,10 @@ def _require_spoken_words_fit(project: dict) -> dict:
             detail=(
                 f"{overflow['dropped_chars']} characters of your approved script do not fit "
                 f"in a {overflow['middle_seconds']}s middle (spoken budget: "
-                f"{overflow['budget']} characters). Shorten the script or choose a "
-                "longer template, then rebuild the strategy so the spoken words "
-                "come from the trimmed script."
+                f"{overflow['budget']} characters). Trim it on the Review step, then "
+                "rebuild the strategy so the spoken words come from the trimmed script. "
+                "A trim is a plan edit, so the strategy built before it no longer "
+                "describes the plan."
             ),
         )
     return overflow

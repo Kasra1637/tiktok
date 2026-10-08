@@ -1610,6 +1610,56 @@ export default function CreateVideo() {
                 className="min-h-[160px]"
               />
             </div>
+            {/* What of this script the middle can actually speak, and what it
+                cannot. The middle's seconds hold a fixed number of characters;
+                anything past that is dropped from the words reaching the video
+                model, usually the payoff sentence. The kept line below is the
+                server's own bound text, not a second implementation of the
+                rule, so trimming to it is exact: what you keep here is what a
+                rebuild would speak. Saving a trim bumps the plan version, so the
+                strategy is rebuilt afterwards. Shown only once a strategy exists — without one the
+                fallback speaks the plan verbatim and there is no partition. */}
+            {project?.strategy?.hook_line && typeof project?.spoken_middle === "string" && project.spoken_middle && (
+              <div className="space-y-1.5 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4" data-testid="spoken-partition">
+                <span className="eyebrow block">What the middle will say</span>
+                <p className="text-sm">{project.spoken_middle}</p>
+                {(() => {
+                  const current = String(editValue("script", "") || "");
+                  const kept = project.spoken_middle;
+                  const tail = current.startsWith(kept) ? current.slice(kept.length).trim() : "";
+                  if (!tail) {
+                    return (
+                      <p className="text-xs text-muted-foreground">
+                        Your whole script fits in the middle — every word above is spoken.
+                      </p>
+                    );
+                  }
+                  return (
+                    <>
+                      <p className="text-sm text-muted-foreground">
+                        <span className="font-medium">Not spoken: </span>{tail}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {current.length - kept.length} characters past the middle&apos;s spoken
+                        budget. Keeping only what fits rewrites the script to the line above.
+                        Saving it is a plan edit, so afterwards rebuild the strategy — the
+                        rebuild is free — or the render will refuse the stale strategy.
+                      </p>
+                      <div>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          data-testid="spoken-trim"
+                          onClick={() => setEdits({ ...edits, script: kept })}
+                        >
+                          Keep only what fits
+                        </Button>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
             {/* `cta` and `feature_emphasis` used to sit here as two editable
                 fields. Neither is writable any more and neither is returned, so
                 leaving the inputs would have looked like editing something and

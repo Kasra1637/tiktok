@@ -166,6 +166,11 @@ export function HookContinuityPanel({ project, onProjectChange }) {
   const assets = project?.assets || [];
   const hasCharacter = assets.some((a) => a.kind === "character_reference");
   const blocked = project?.safety_report && project.safety_report.passed === false;
+  // Same render gate as the Generate button's: words that cannot be spoken in
+  // the piece's seconds refuse the render, recomputed from the live plan. The
+  // founder is stopped here too, so the block has to name the Review-step fix
+  // rather than only appearing as a strategy-panel warning below.
+  const overflowBlocked = (project?.spoken_overflow?.dropped_chars || 0) > 0;
   // The strategy is built from one specific version of the plan. Edit the plan
   // afterwards and the strategy is describing a video that is no longer the
   // approved one, so this reads the flag the server already computes rather
@@ -312,6 +317,17 @@ export function HookContinuityPanel({ project, onProjectChange }) {
         </Alert>
         );
       })()}
+      {overflowBlocked && !blocked && (
+        <Alert variant="destructive">
+          <AlertTitle>Script too long for this piece</AlertTitle>
+          <AlertDescription>
+            Trim the script on the Review step — the middle&apos;s spoken words are shown
+            there, with a button that keeps only what fits. Then rebuild the strategy
+            here, because a trim is a plan edit. Rendering is blocked until every approved
+            word fits in the piece&apos;s seconds.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
         <Button
@@ -467,7 +483,9 @@ export function HookContinuityPanel({ project, onProjectChange }) {
                 which is the last thing the founder wrote. Blocking this in the
                 render gate is what stops the spend; showing it here is what
                 stops the surprise. The record is recomputed from the live plan
-                on every read, so it cannot go stale. */}
+                on every read, so it cannot go stale. Trim it on the Review
+                step: the middle's spoken words are shown there, with a button
+                that keeps only what fits. */}
             {project?.spoken_overflow?.dropped_chars > 0 && (
               <Alert data-testid="spoken-overflow-warning">
                 <AlertTriangle className="h-4 w-4" />
@@ -476,9 +494,10 @@ export function HookContinuityPanel({ project, onProjectChange }) {
                   {project.spoken_overflow.dropped_chars} characters of your approved script
                   do not fit in a {project.spoken_overflow.middle_seconds}s middle
                   (spoken budget: {project.spoken_overflow.budget} characters). Anything
-                  past that is not spoken in the render. Shorten the script, or pick a
-                  longer template and rebuild the strategy so the spoken words come
-                  from the trimmed script.
+                  past that is not spoken in the render. Trim it on the Review step —
+                  the spoken words are shown there with a button that keeps only what
+                  fits — then rebuild the strategy here. Or pick a longer template and
+                  rebuild.
                 </AlertDescription>
               </Alert>
             )}
