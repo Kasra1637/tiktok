@@ -7,6 +7,7 @@ persistence, and that a failed attempt is never silently overwritten.
 """
 import asyncio
 import importlib
+import io
 import json
 import os
 import sys
@@ -16,6 +17,7 @@ from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
+from PIL import Image
 
 BACKEND_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BACKEND_DIR))
@@ -1068,6 +1070,116 @@ class TestStudioIdentityReference:
             project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
         archived = _run(api.archive_generation(gen["id"], ANON))
         assert archived["status"] == "archived"
+
+
+class TestHeyGenOpeningKeyframe:
+    @staticmethod
+    def _png_bytes(color):
+        output = io.BytesIO()
+        Image.new("RGB", (4, 4), color).save(output, format="PNG")
+        return output.getvalue()
+
+    def _mock_keyframe(self, api, monkeypatch, scenes, swaps):
+        async def fake_scene(brief, *, session_id):
+            scenes.append({"brief": brief, "session_id": session_id})
+            return self._png_bytes((11, 22, 33))
+
+        async def fake_swap(*, target_image_path, source_face_path, session_id,
+                            customization_prompt=""):
+            swaps.append({
+                "target": str(target_image_path),
+                "source": str(source_face_path),
+                "session_id": session_id,
+            })
+            assert Path(target_image_path).is_file()
+            assert Path(source_face_path).is_file()
+            return self._png_bytes((44, 55, 66))
+
+        monkeypatch.setattr(api, "generate_opening_scene_image", fake_scene)
+        monkeypatch.setattr(api, "generate_face_swap", fake_swap)
+
+    def test_heygen_submits_a_composite_opening_frame(self, api, monkeypatch):
+        from models import StudioGenerationRequest
+        project, _, _ = _ready_project(api, "HeyGen Keyframe", duration=10)
+        original_face = Path((project.get("assets") or [])[0].get("file_path"))
+        calls = _mock_submit(api, monkeypatch)
+        scenes, swaps = [], []
+        self._mock_keyframe(api, monkeypatch, scenes, swaps)
+
+        result = _run(api.submit_project_generation(
+            project_id=project["id"],
+            payload=StudioGenerationRequest(
+                model="heygen-video-1",
+                duration_seconds=10,
+                generate_audio=True,
+                idempotency_key="heygen-keyframe-1",
+            ),
+            user_id=ANON))
+
+        assert result["model"] == "heygen-video-1"
+        assert len(calls) == 1
+        assert len(scenes) == 1
+        assert len(swaps) == 1
+        assert "kitchen" in scenes[0]["brief"]
+        frame = Path(calls[0].get("reference_image_path"))
+        assert frame.is_file()
+        assert frame.parent.name == "opening"
+        assert frame != original_face
+        assert "uploads" not in frame.parts
+        assert calls[0].get("input_references") is None
+        stored = _run(api._fetch_one(
+            "SELECT origin, target_image_url, image_bytes FROM generated_images "
+            "WHERE origin = 'opening_keyframe' ORDER BY created_at DESC LIMIT 1"))
+        assert stored["target_image_url"].startswith("opening-keyframe:")
+        assert stored["image_bytes"]
+
+    def test_heygen_idempotent_repeat_reuses_the_keyframe(self, api, monkeypatch):
+        from models import StudioGenerationRequest
+        project, _, _ = _ready_project(api, "HeyGen Keyframe Repeat", duration=10)
+        calls = _mock_submit(api, monkeypatch)
+        scenes, swaps = [], []
+        self._mock_keyframe(api, monkeypatch, scenes, swaps)
+        payload = StudioGenerationRequest(
+            model="heygen-video-1",
+            duration_seconds=10,
+            idempotency_key="heygen-keyframe-repeat",
+        )
+
+        first = _run(api.submit_project_generation(
+            project_id=project["id"], payload=payload, user_id=ANON))
+        repeat = _run(api.submit_project_generation(
+            project_id=project["id"], payload=payload, user_id=ANON))
+
+        assert repeat["id"] == first["id"]
+        assert repeat["idempotent_replay"] is True
+        assert len(calls) == 1
+        assert len(scenes) == 1
+        assert len(swaps) == 1
+
+    def test_heygen_keyframe_failure_happens_before_video_spend(self, api, monkeypatch):
+        from models import StudioGenerationRequest
+        project, _, _ = _ready_project(api, "HeyGen Keyframe Failure", duration=10)
+        calls = _mock_submit(api, monkeypatch)
+
+        async def fail_scene(brief, *, session_id):
+            raise RuntimeError("scene model unavailable")
+
+        monkeypatch.setattr(api, "generate_opening_scene_image", fail_scene)
+        with pytest.raises(HTTPException) as err:
+            _run(api.submit_project_generation(
+                project_id=project["id"],
+                payload=StudioGenerationRequest(
+                    model="heygen-video-1",
+                    duration_seconds=10,
+                    idempotency_key="heygen-keyframe-failure",
+                ),
+                user_id=ANON))
+
+        assert err.value.status_code == 502
+        assert "opening scene" in str(err.value.detail).lower()
+        assert not calls
+        rows = _run(api.list_generations(studio_project_id=project["id"], user_id=ANON))
+        assert rows["generations"] == []
 
 
 class TestModelSelectionAtTheApiBoundary:

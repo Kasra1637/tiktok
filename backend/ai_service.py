@@ -196,8 +196,8 @@ VIDEO_MODELS = {
     },
     # HeyGen Video: general-purpose short-form business video (brand moments,
     # product demos) with synthesized audio in a single call — dialogue,
-    # ambience and effects — from a prompt, a first-frame image, or
-    # references. The first catalog entry besides Hailuo 3 with real audio.
+    # ambience and effects — from a prompt and a generated composite opening
+    # frame. The first catalog entry besides Hailuo 3 with real audio.
     #
     # Facts below come from OpenRouter's own video model endpoint
     # (GET /api/v1/videos/models), verified live at entry time:
@@ -208,8 +208,9 @@ VIDEO_MODELS = {
     #     on render evidence.
     #   supported_durations  5-15  -> min 5 / max 15, exactly the studio's
     #     floor and ceiling, so no new trim edge cases.
-    #   supported_frame_images  first_frame only  -> the photo rides as the
-    #     opening frame, the same treatment as H3 Max and both Groks.
+    #   supported_frame_images  first_frame only  -> a generated composite
+    #     opening frame is submitted, not the raw uploaded photo. The photo
+    #     remains the identity source for that composite.
     #   generate_audio  false (accepted, defaults off), NOT null  -> the field
     #     is sendable, and the studio defaults to requesting audio whenever
     #     the provider offers it (server.py). If real clips come back silent
@@ -229,8 +230,9 @@ VIDEO_MODELS = {
         "name": "HeyGen Video",
         "description": (
             "Business-video renderer with synthesized audio in one call — "
-            "dialogue, ambience and effects — from your photo as the first "
-            "frame. 768p, 5-15s. For talking-head hooks and demos. Opt-in."
+            "dialogue, ambience and effects — opening in a generated scene "
+            "with the founder integrated. 768p, 5-15s. For talking-head "
+            "hooks and demos. Opt-in."
         ),
         "max_duration": 15,
         "min_duration": 5,
@@ -782,6 +784,42 @@ async def _call_image_generation_with_retry(
     raise last_error or RuntimeError(f"{context} failed after {max_retries} attempts.")
 
     raise last_error or RuntimeError(f"{context} failed after {max_retries} attempts.")
+
+
+async def generate_opening_scene_image(scene_brief: str, *, session_id: str) -> bytes:
+    """Generate a strategy-derived opening-scene still without an identity photo.
+
+    The founder's uploaded background must not reach this image: identity is
+    integrated afterwards by generate_face_swap(). Keeping scene creation and
+    identity separate is what allows a first-frame provider to start in the
+    generated environment instead of starting from the uploaded photograph.
+    """
+    brief = str(scene_brief or "").strip()
+    if not brief:
+        raise RuntimeError("Opening-scene generation needs a strategy-derived brief.")
+    payload = {
+        "model": IMAGE_GEN_MODEL,
+        "prompt": (
+            "TASK: Generate one photorealistic vertical 9:16 opening still for a "
+            "mobile-app promotional video. This is the literal first frame that a "
+            "video model will animate forward from, so composition, wardrobe, "
+            "props, lighting, camera angle, and opening action must already be "
+            "correct.\n\n"
+            f"{brief}\n\n"
+            "OUTPUT: one photorealistic 9:16 still, no app interface, no text, "
+            "no logos, no captions, and no watermarks."
+        ),
+        "resolution": "2K",
+        "aspect_ratio": "9:16",
+        "n": 1,
+    }
+
+    return await _call_image_generation_with_retry(
+        payload=payload,
+        context=f"Opening scene generation ({session_id})",
+        max_retries=1,
+        timeout=600,
+    )
 
 
 async def analyze_hook(frame_paths: list, session_id: str, music_context: dict = None, transcript_text: str = "") -> dict:

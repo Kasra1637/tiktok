@@ -447,9 +447,9 @@ const handleGenerate = async () => {
           the length is a statement rather than a plan: what it is, and whether
           the chosen model can produce it at all. */}
       <p className="text-xs text-muted-foreground">
-        One render of {pieceSeconds}s, in two sections: a short hook, then a middle that develops
-        it and stops where you would reach for your phone.
-        {ceiling > 0 && ` ${capability?.name || "This model"} produces at most ${ceiling}s in one pass.`}
+        One render of {pieceSeconds}s in two parts: hook, then middle, ending where viewers
+        would reach for their phones.
+        {ceiling > 0 && ` ${capability?.name || "This model"} allows up to ${ceiling}s per pass.`}
       </p>
       {tooLong && (
         <Alert>
@@ -609,10 +609,9 @@ const handleGenerate = async () => {
               <div className="space-y-1 rounded-xl border border-[color:var(--hairline)] p-3">
                 <span className="eyebrow block">What you have, and what is left</span>
                 <p className="text-xs text-muted-foreground">
-                  The file above is the hook and the middle. It ends where you would reach for your
-                  phone. Attach your own demo next, add your own call to action after that, then
-                  post it — captions, if you want them, come from the script you approved, and
-                  nothing is ever published for you.
+                  This file is the hook and the middle, ending where viewers reach for their
+                  phones. Attach your own demo next, then add your own call to action. Captions
+                  use your approved script; nothing is published for you.
                 </p>
               </div>
 
@@ -626,10 +625,8 @@ const handleGenerate = async () => {
               <div className="space-y-2 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-3">
                 <span className="eyebrow block">Product Demo + CTA</span>
                 <p className="text-xs text-muted-foreground">
-                  Keep the video as it is, or open this finished render in the
-                  native Demo + CTA editor to wrap your demo in a phone mockup
-                  and add your own call to action. The export is saved beside
-                  the original in History.
+                  Use this video as is, or open it in Demo + CTA to add your demo in a phone
+                  mockup and your call to action. Exports save beside the original in History.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="brand" size="sm" asChild>

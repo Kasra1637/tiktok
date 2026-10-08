@@ -230,12 +230,12 @@ class TestCapabilities:
         """
         assert vp.capability("heygen-video-1")["supports_native_audio"] is True
 
-    def test_heygen_video_takes_identity_as_first_frame(self):
+    def test_heygen_video_integrates_identity_into_a_generated_first_frame(self):
         """
-        Conservative start: first-frame only with reference counts at 0, the
-        proven-safe shape from H3 Max. The listing accepts references in
-        general, but only a live refs render proves the serving provider does
-        — enabling input_references later is a data-only flip.
+        HeyGen no longer receives the raw uploaded photo as first_frame.
+        Identity is still accepted, but submission integrates it into a
+        strategy-derived opening scene so the provider starts in the generated
+        environment rather than the uploaded background.
         """
         cap = vp.capability("heygen-video-1")
         assert cap["supports_first_frame"] is True
@@ -279,6 +279,64 @@ class TestCapabilities:
             "supports_first_frame", "supports_last_frame", "notes",
         ):
             assert field in cap
+
+
+class TestHeyGenOpeningKeyframeBrief:
+    def test_brief_carries_the_approved_scene_and_opening_action(self):
+        brief = gp.build_heygen_opening_keyframe_brief(
+            strategy={
+                "hook_concept": "Name the blank page",
+                "hook_action": "Look straight down the lens while lifting a notebook.",
+                "scene": {
+                    "environment": "kitchen",
+                    "background": "wood table",
+                    "setting": "morning",
+                    "lighting": "warm window light",
+                    "camera_angle": "eye level",
+                    "framing": "medium close-up",
+                    "wardrobe": "teal scrubs",
+                    "props": "notebook",
+                },
+                "performance": {"movement": "lean forward"},
+            },
+            duration=12,
+        )
+
+        for required in (
+            "vertical",
+            "kitchen",
+            "wood table",
+            "morning",
+            "warm window light",
+            "eye level",
+            "medium close-up",
+            "teal scrubs",
+            "notebook",
+            "lifting a notebook",
+            "lean forward",
+            "app interface",
+            "text",
+            "uploaded photograph",
+        ):
+            assert required in brief
+
+    def test_brief_falls_back_to_plan_and_template_details(self):
+        plan_brief = gp.build_heygen_opening_keyframe_brief(
+            strategy={},
+            plan={"visual_direction": "Close on hands, then a screen recording."},
+            template={},
+            duration=10,
+        )
+        template_brief = gp.build_heygen_opening_keyframe_brief(
+            strategy={},
+            plan={},
+            template={"opening_structure": "Name the mistake."},
+            duration=10,
+        )
+
+        assert "10-second" in plan_brief
+        assert "Close on hands" in plan_brief
+        assert "Name the mistake" in template_brief
 
 
 class TestHailuo3MaxIsOptIn:
@@ -534,8 +592,49 @@ class TestHailuo3MaxPayload:
 
         seen = self._capture(monkeypatch)
         asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
-                                             duration=10, model="not-a-real-model"))
+                                              duration=10, model="not-a-real-model"))
         assert seen[0]["model"] == "minimax/hailuo-3"
+
+
+class TestOpeningSceneImage:
+    def test_scene_generation_sends_no_uploaded_photo(self, monkeypatch):
+        import asyncio
+
+        import ai_service
+
+        seen = []
+
+        async def fake_call(payload, context, max_retries, timeout):
+            seen.append(payload)
+            return b"scene-bytes"
+
+        monkeypatch.setattr(ai_service, "_call_image_generation_with_retry", fake_call)
+        result = asyncio.run(
+            ai_service.generate_opening_scene_image(
+                "Approved kitchen setting.", session_id="test-opening"
+            )
+        )
+
+        assert result == b"scene-bytes"
+        assert len(seen) == 1
+        assert seen[0]["model"] == ai_service.IMAGE_GEN_MODEL
+        assert "input_references" not in seen[0]
+        assert "Approved kitchen setting." in seen[0]["prompt"]
+        assert seen[0]["aspect_ratio"] == "9:16"
+
+    def test_scene_generation_refuses_an_empty_brief(self, monkeypatch):
+        import asyncio
+
+        import ai_service
+
+        async def fail_call(*args, **kwargs):
+            raise AssertionError("empty brief must not reach the image model")
+
+        monkeypatch.setattr(ai_service, "_call_image_generation_with_retry", fail_call)
+        with pytest.raises(RuntimeError):
+            asyncio.run(
+                ai_service.generate_opening_scene_image("   ", session_id="test-opening")
+            )
 
 
 class TestDurationPlanning:

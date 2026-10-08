@@ -492,6 +492,28 @@ const durableMediaUrl = (() => {
   return new Function("mediaUrl", `${decl} return durableMediaUrl;`)((mediaPath) => mediaPath);
 })();
 
+// The History download helper must also be the shipped implementation: it
+// chooses the signed same-origin download route rather than reusing a
+// cross-origin playback href.
+const downloadMediaUrl = (() => {
+  const source = fs.readFileSync(path.join(SRC, "lib", "api.js"), "utf8");
+  const start = source.indexOf("export const downloadMediaUrl = (row) => {");
+  const end = start === -1 ? -1 : source.indexOf("};", start);
+  if (start === -1 || end === -1) {
+    throw new Error(
+      "downloadMediaUrl could not be read out of src/lib/api.js, so the History " +
+        "checks would be asserting against a stub instead of the shipped rule"
+    );
+  }
+  const decl = source.slice(start, end + 2).replace("export ", "");
+  // eslint-disable-next-line no-new-func
+  return new Function(
+    "mediaUrl",
+    "durableMediaUrl",
+    `${decl} return downloadMediaUrl;`
+  )((mediaPath) => mediaPath, durableMediaUrl);
+})();
+
 function load(relPath) {
   const abs = resolveFile(path.join(SRC, relPath));
   if (cache.has(abs)) {
@@ -556,6 +578,7 @@ function load(relPath) {
           err?.response?.data?.detail || err?.message || "error",
         mediaUrl: (p) => p,
         durableMediaUrl,
+        downloadMediaUrl,
       };
     }
     if (spec.endsWith("lib/feedback")) {

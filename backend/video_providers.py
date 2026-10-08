@@ -140,9 +140,9 @@ _CAPABILITY_NOTES = {
         "vertical": True,
         # Conservative start despite the listing accepting references: H3 Max
         # proved a listed field the serving provider 400s, and only a live
-        # refs render proves acceptance. The count is 0 and identity rides
-        # the opening frame; enabling input_references later is a data-only
-        # flip once proven.
+        # refs render proves acceptance. The count is 0 and identity is
+        # integrated into a generated opening scene; enabling input_references
+        # later is a data-only flip once proven.
         "max_reference_images": 0,
         "max_reference_videos": 0,
         "max_reference_audio": 0,
@@ -157,9 +157,8 @@ _CAPABILITY_NOTES = {
             "Business-video renderer with synthesized audio in one call at "
             "768p, 5-15s — the only entry besides Hailuo 3 with real audio, "
             "at a third of its listed 2K price. "
-            "For talking-head hooks and demos. References start at "
-            "first-frame-only until a live render proves the provider "
-            "accepts them. Opt-in: Hailuo 3 is still the default."
+            "For talking-head hooks and demos. Opens in the generated scene "
+            "with the founder integrated. Opt-in: Hailuo 3 is still the default."
         ),
     },
     "aleph-2": {
@@ -209,9 +208,9 @@ _CAPABILITY_NOTES = {
 #
 # HeyGen Video joins at the end as the fifth opt-in: the only entry besides
 # Hailuo 3 with real audio, at 768p (a third of its listed 2K price for
-# unproven extra detail). Same first-frame identity anchor
-# as the Groks; references stay first-frame-only until a live render proves
-# the provider accepts them. Listing it does not move the default, which
+# unproven extra detail). Unlike the Groks, its identity anchor is a generated
+# opening scene with the founder integrated, rather than the raw uploaded
+# photo. Listing it does not move the default, which
 # stays Hailuo 3 — promote only on evidence from the first renders.
 STUDIO_ELIGIBLE = ("minimax-h3", "minimax-h3-max", "grok-imagine-video", "grok-imagine-video-lite", "heygen-video-1")
 

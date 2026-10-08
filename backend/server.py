@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import io
 import json
 import logging
@@ -37,7 +38,7 @@ import provider_capabilities
 import ai_service
 import feedback as feedback_mod
 from ai_service import (
-    analyze_hook, generate_customized_preview, generate_face_swap, generate_video_prompt,
+    analyze_hook, generate_customized_preview, generate_face_swap, generate_opening_scene_image, generate_video_prompt,
     generate_video, poll_video_job, analyze_brand_from_text, analyze_app_profile,
     generate_content_angles, generate_creative_plan,     generate_remix_script,
     strip_html_to_text, remix_chat_turn, empty_remix_brief, VIDEO_MODELS, DEFAULT_VIDEO_MODEL,
@@ -7213,6 +7214,231 @@ async def _studio_identity_references(
     return reference_path
 
 
+_HEYGEN_KEYFRAME_MODEL = "heygen-video-1"
+_HEYGEN_KEYFRAME_ORIGIN = "opening_keyframe"
+
+
+def _uses_generated_opening_frame(model_key: str) -> bool:
+    """Whether this model starts from a generated composite opening frame.
+
+    HeyGen-only by current product decision. Other first-frame models keep
+    sending the cropped founder photo as first_frame.
+    """
+    return (model_key or "") == _HEYGEN_KEYFRAME_MODEL
+
+
+def _heygen_opening_keyframe_material(
+    *,
+    project_id: str,
+    model_key: str,
+    strategy_version: int,
+    idempotency_key: str,
+    prompt: str,
+    face_path: Path,
+) -> dict:
+    face_file = Path(face_path)
+    if not face_file.is_file():
+        raise HTTPException(
+            status_code=502,
+            detail="The founder face file disappeared before HeyGen's opening frame could be built.",
+        )
+    try:
+        face_bytes = face_file.read_bytes()
+    except OSError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="The founder face file could not be read before HeyGen's opening frame could be built.",
+        ) from exc
+    if not face_bytes:
+        raise HTTPException(
+            status_code=502,
+            detail="The founder face file is empty, so HeyGen's opening frame was not built.",
+        )
+    return {
+        "project_id": project_id or "",
+        "model_key": model_key or "",
+        "strategy_version": int(strategy_version or 0),
+        "idempotency_key": (idempotency_key or "").strip(),
+        "prompt_sha256": hashlib.sha256(str(prompt or "").encode("utf-8")).hexdigest(),
+        "face_sha256": hashlib.sha256(face_bytes).hexdigest(),
+    }
+
+
+def _heygen_opening_keyframe_stable_key(material: dict) -> str:
+    return hashlib.sha256(
+        json.dumps(material, sort_keys=True).encode("utf-8")
+    ).hexdigest()[:32]
+
+
+def _heygen_opening_keyframe_paths(stable_key: str) -> tuple:
+    directory = pipeline.GENERATED_DIR / "opening"
+    return directory / f"{stable_key}-base.png", directory / f"{stable_key}.png"
+
+
+def _normalize_opening_keyframe_bytes(data: bytes, context: str) -> bytes:
+    if not isinstance(data, (bytes, bytearray, memoryview)) or not bytes(data):
+        raise RuntimeError(f"{context} returned no image.")
+    try:
+        with Image.open(io.BytesIO(bytes(data))) as image:
+            normalized = image.convert("RGB")
+            output = io.BytesIO()
+            normalized.save(output, format="PNG")
+    except Exception as exc:
+        raise RuntimeError(f"{context} returned an unreadable image.") from exc
+    return output.getvalue()
+
+
+async def _heygen_opening_keyframe(
+    *,
+    face_path: Path,
+    strategy: Optional[dict],
+    plan: Optional[dict],
+    template: Optional[dict],
+    duration: int,
+    project_id: str,
+    brand_profile_id: str,
+    template_id: str,
+    strategy_version: int,
+    idempotency_key: str,
+    prompt: str,
+    user_id: str,
+    generation_id: str,
+) -> Path:
+    """Build or reuse a HeyGen opening frame with the founder already in-scene.
+
+    The raw uploaded photo is never sent to HeyGen. A strategy-derived scene is
+    generated first, then the founder's cropped face is integrated into it. The
+    composite becomes first_frame, so the provider starts in the generated
+    environment rather than briefly showing the uploaded background.
+    """
+    from face_crop import bound_for_submit
+
+    material = _heygen_opening_keyframe_material(
+        project_id=project_id,
+        model_key=_HEYGEN_KEYFRAME_MODEL,
+        strategy_version=strategy_version,
+        idempotency_key=idempotency_key,
+        prompt=prompt,
+        face_path=face_path,
+    )
+    stable_key = _heygen_opening_keyframe_stable_key(material)
+    target_ref = f"opening-keyframe:{stable_key}"
+    base_path, final_path = _heygen_opening_keyframe_paths(stable_key)
+    final_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        existing = await _fetch_one(
+            "SELECT id, image_bytes FROM generated_images "
+            "WHERE origin = ? AND target_image_url = ? "
+            "ORDER BY created_at DESC LIMIT 1",
+            (_HEYGEN_KEYFRAME_ORIGIN, target_ref),
+        )
+    except Exception as exc:
+        logger.warning("Opening-keyframe lookup failed; rebuilding: %s", exc)
+        existing = None
+    if existing and existing.get("image_bytes"):
+        try:
+            _restore_generated_image(final_path, existing.get("image_bytes"))
+            reused = bound_for_submit(final_path)
+            logger.info("Reused HeyGen opening keyframe %s", stable_key)
+            return reused
+        except (OSError, ValueError) as exc:
+            logger.warning("Stored HeyGen opening keyframe was unusable; rebuilding: %s", exc)
+
+    brief = generation_planning.build_heygen_opening_keyframe_brief(
+        strategy=strategy,
+        plan=plan,
+        template=template,
+        duration=duration,
+    )
+    session_id = f"heygen-opening-{generation_id}"
+    try:
+        scene_bytes = await _log_model_call(
+            "opening_scene",
+            "image",
+            ai_service.IMAGE_GEN_MODEL,
+            lambda: generate_opening_scene_image(brief, session_id=session_id),
+            user_id,
+            brand_profile_id=brand_profile_id,
+            studio_project_id=project_id,
+            generation_id=generation_id,
+            template_id=template_id,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "HeyGen's generated opening scene failed before any video was "
+                f"submitted. Please try again. ({str(exc)[:150]})"
+            ),
+        ) from exc
+    try:
+        normalized_scene = _normalize_opening_keyframe_bytes(scene_bytes, "Opening scene")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    temporary_base = base_path.with_name(f"{base_path.stem}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary_base.write_bytes(normalized_scene)
+        temporary_base.replace(base_path)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="HeyGen's opening scene could not be saved before video submission.",
+        ) from exc
+    bounded_base = bound_for_submit(base_path)
+
+    try:
+        composite_bytes = await _log_model_call(
+            "opening_face_integration",
+            "image",
+            ai_service.FACE_SWAP_MODEL,
+            lambda: generate_face_swap(
+                target_image_path=bounded_base,
+                source_face_path=Path(face_path),
+                session_id=session_id,
+            ),
+            user_id,
+            brand_profile_id=brand_profile_id,
+            studio_project_id=project_id,
+            generation_id=generation_id,
+            template_id=template_id,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "HeyGen's opening face integration failed before any video was "
+                f"submitted. Please try again. ({str(exc)[:150]})"
+            ),
+        ) from exc
+    try:
+        normalized_composite = _normalize_opening_keyframe_bytes(
+            composite_bytes, "Opening face integration"
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    temporary_final = final_path.with_name(f"{final_path.stem}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary_final.write_bytes(normalized_composite)
+        temporary_final.replace(final_path)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="HeyGen's opening frame could not be saved before video submission.",
+        ) from exc
+    await _record_generated_image(
+        image_id=str(uuid.uuid4()),
+        origin=_HEYGEN_KEYFRAME_ORIGIN,
+        target_image_url=target_ref,
+        user_id=user_id,
+        job_id=generation_id,
+        image_bytes=normalized_composite,
+    )
+    final_frame = bound_for_submit(final_path)
+    logger.info("Built HeyGen opening keyframe %s", stable_key)
+    return final_frame
+
+
 async def _submit_generation(
     project: dict,
     profile: dict,
@@ -7328,6 +7554,14 @@ async def _submit_generation(
             ),
         )
 
+    # Stamp the strategy version whenever the project has one, not only when a
+    # strategy was passed in, so the generation record says which strategy it
+    # was rendered under. It is resolved here because a generated HeyGen
+    # opening keyframe is also keyed to the strategy that produced it.
+    project_strategy = _project_strategy(project)
+    has_strategy = bool((strategy or project_strategy or {}).get("hook_line"))
+    strategy_version = int(project.get("strategy_version") or 0) if has_strategy else 0
+
     # Avatar influencer: the attached character_reference rides along as the
     # identity guide, following the proven legacy face-swap mechanics (identity
     # image + prompt lock, no V2V video involved). WHICH request field carries
@@ -7343,10 +7577,16 @@ async def _submit_generation(
     face_path = await _studio_identity_references(
         project.get("assets") or [], model_key, user_id, template
     )
-    if face_path is not None and video_providers.capability(model_key).get(
+    if _uses_generated_opening_frame(model_key) and face_path is not None:
+        # HeyGen's composite is built after the idempotency check. Leave the
+        # provider frame empty here so no code path can accidentally send the
+        # raw founder photo.
+        reference_image_path: Optional[Path] = None
+        studio_references = None
+    elif face_path is not None and video_providers.capability(model_key).get(
         "identity_via_first_frame"
     ):
-        reference_image_path: Optional[Path] = face_path
+        reference_image_path = face_path
         studio_references = None
     else:
         reference_image_path = None
@@ -7354,9 +7594,9 @@ async def _submit_generation(
             [_identity_reference_payload(face_path)] if face_path is not None else None
         )
     # No seam frame, no clip reference, no continuity plan to honour: there is
-    # only ever one render, so there is never a previous clip to anchor to. The
-    # founder's photograph is the single visual anchor, and it is attached above
-    # on its own terms.
+    # only ever one render, so there is never a previous clip to anchor to. For
+    # other first-frame models, the founder's photograph remains the single
+    # visual anchor; HeyGen's generated composite replaces it below.
     continuity_frame = None
 
     generation_id = str(uuid.uuid4())
@@ -7366,12 +7606,6 @@ async def _submit_generation(
     # generations from before this change still carry a record of how they were
     # built.
     #
-    # Stamp the strategy version whenever the project has one, not only when a
-    # strategy was passed in, so the generation record says which strategy it
-    # was rendered under.
-    project_strategy = _project_strategy(project)
-    has_strategy = bool((strategy or project_strategy or {}).get("hook_line"))
-    strategy_version = int(project.get("strategy_version") or 0) if has_strategy else 0
     # How long the clip will be cut down to once it lands, 0 for no trim.
     #
     # Always 0 now. The trim existed so a sub-floor HOOK could be rendered at
@@ -7408,6 +7642,32 @@ async def _submit_generation(
             existing = _public_generation(already)
             existing["idempotent_replay"] = True
             return existing
+
+    # HeyGen alone starts from a generated composite opening frame. The cropped
+    # founder photo remains the identity source, but it is integrated into the
+    # approved scene before submission and is never sent as first_frame. Other
+    # first-frame models intentionally keep the existing photo-first-frame path.
+    if (
+        face_path is not None
+        and _uses_generated_opening_frame(model_key)
+        and video_providers.capability(model_key).get("identity_via_first_frame")
+    ):
+        reference_image_path = await _heygen_opening_keyframe(
+            face_path=face_path,
+            strategy=strategy,
+            plan=project,
+            template=template,
+            duration=seconds,
+            project_id=project["id"],
+            brand_profile_id=project.get("brand_profile_id") or "",
+            template_id=project.get("template_id") or "",
+            strategy_version=strategy_version,
+            idempotency_key=claim_key,
+            prompt=prompt,
+            user_id=user_id,
+            generation_id=generation_id,
+        )
+        studio_references = None
 
     try:
         await _execute(
