@@ -622,6 +622,9 @@ async def init_db():
                 default_duration INTEGER,
                 content_slots TEXT,
                 example_preview TEXT,
+                -- Viewer-facing outcome line for the picker card. Display
+                -- only: never read into a plan or render prompt.
+                outcome TEXT,
                 version INTEGER DEFAULT 1,
                 archived INTEGER DEFAULT 0,
                 is_favorite INTEGER DEFAULT 0,
@@ -1057,7 +1060,7 @@ async def init_db():
             # both columns, so a fresh one has to match.
             "middle_structure", "continuation_structure", "cta_pattern", "visual_style",
             "camera_pacing", "required_assets", "content_slots", "evidence_note",
-            "trend_evidence",
+            "trend_evidence", "outcome",
             "origin", "review_status",
         ):
             if col not in template_cols:
@@ -1287,9 +1290,9 @@ async def init_db():
                    (id, name, category, notes, app_categories, audiences, objective,
                      opening_structure, hook_seconds, middle_structure, visual_style,
                      camera_pacing, required_assets, default_duration,
-                     content_slots, evidence_note, version, archived, is_favorite,
+                     content_slots, evidence_note, outcome, version, archived, is_favorite,
                      origin, review_status, times_used, created_at, updated_at, user_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     str(uuid.uuid4()), tpl["name"],
                     template_library.normalize_category(tpl["category"]), "",
@@ -1301,6 +1304,7 @@ async def init_db():
                     tpl["camera_pacing"], json.dumps(tpl.get("required_assets") or []),
                     int(tpl["default_duration"] or 10),
                     json.dumps(tpl.get("content_slots") or {}), tpl.get("evidence_note") or "",
+                    tpl.get("outcome") or "",
                     1, 0, 0, "curated", "approved", 0, now, now, "system",
                 ),
             )
@@ -1331,7 +1335,8 @@ async def init_db():
             desired_slots = json.dumps(tpl.get("content_slots") or {})
             cursor = await conn.execute(
                 """SELECT opening_structure, hook_seconds, middle_structure,
-                          visual_style, camera_pacing, content_slots, default_duration
+                          visual_style, camera_pacing, content_slots, default_duration,
+                          outcome
                      FROM hook_templates
                     WHERE origin = 'curated' AND LOWER(TRIM(name)) = ?""",
                 (tpl["name"].strip().lower(),),
@@ -1370,6 +1375,22 @@ async def init_db():
                     now, tpl["name"].strip().lower(),
                 ),
             )
+            # Outcome copy is display-only: it never reaches a plan or render
+            # prompt, so it converges here WITHOUT the version bump above. A
+            # bump would mark every project built against the old row as built
+            # against a different structure over a card headline. Guarded the
+            # same way, so a converged row costs one comparison per boot.
+            # (A missing row cannot happen — the seed loop above inserts it —
+            # and an UPDATE matching nothing is a harmless no-op anyway.)
+            desired_outcome = tpl.get("outcome") or ""
+            stored_outcome = current[7] if current is not None else None
+            if stored_outcome != desired_outcome:
+                await conn.execute(
+                    """UPDATE hook_templates
+                        SET outcome = ?, updated_at = ?
+                        WHERE origin = 'curated' AND LOWER(TRIM(name)) = ?""",
+                    (desired_outcome, now, tpl["name"].strip().lower()),
+                )
 
         # Face-only library. Every curated template requires exactly
         # ["character_reference"] — the face that anchors every video — and
@@ -5273,14 +5294,14 @@ async def _ensure_objective_templates(
     for draft in drafts:
         await _execute(
             """INSERT INTO hook_templates
-               (id, name, category, app_categories, audiences, objective,
-                opening_structure, hook_seconds, middle_structure,
-                visual_style, camera_pacing, required_assets,
-                default_duration, content_slots, evidence_note, version,
-                archived, is_favorite, origin, review_status, times_used,
-                brand_profile_id, created_at, updated_at, user_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0,
-                       'custom', 'approved', 0, ?, ?, ?, ?)""",
+                (id, name, category, app_categories, audiences, objective,
+                 opening_structure, hook_seconds, middle_structure,
+                 visual_style, camera_pacing, required_assets,
+                 default_duration, content_slots, evidence_note, outcome, version,
+                 archived, is_favorite, origin, review_status, times_used,
+                 brand_profile_id, created_at, updated_at, user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0,
+                        'custom', 'approved', 0, ?, ?, ?, ?)""",
             (str(uuid.uuid4()), draft["name"], draft["category"],
              json.dumps([profile.get("app_category") or ""] if profile.get("app_category") else []),
              json.dumps([profile.get("target_audience") or ""] if profile.get("target_audience") else []),
@@ -5289,9 +5310,10 @@ async def _ensure_objective_templates(
              draft.get("visual_style") or "",
              draft.get("camera_pacing") or "", json.dumps(["character_reference"]),
              draft.get("default_duration") or template_library.DEFAULT_DURATION,
-             json.dumps(draft.get("content_slots") or {}),
-             f"Generated for {profile.get('brand_name') or 'this app'} from its approved profile.",
-             profile_id, now, now, user_id),
+              json.dumps(draft.get("content_slots") or {}),
+              f"Generated for {profile.get('brand_name') or 'this app'} from its approved profile.",
+              str(draft.get("outcome") or "")[:300],
+              profile_id, now, now, user_id),
         )
     logger.info(
         f"Generated {len(drafts)} brand templates for profile {profile_id} "
@@ -5809,6 +5831,10 @@ def _public_library_template(template: dict) -> dict:
     public["audiences"] = public.get("audiences") or []
     public["required_assets"] = public.get("required_assets") or []
     public["content_slots"] = public.get("content_slots") or {}
+    # Rows written before the outcome column existed (and tailored rows from
+    # before it was generated) carry NULL: the card falls back rather than
+    # rendering nothing where the headline goes.
+    public["outcome"] = public.get("outcome") or ""
     # A library template is usable only once reviewed. Curated rows ship
     # approved; research drafts must be published by an operator.
     public["is_library_template"] = bool(public.get("opening_structure"))
@@ -5967,7 +5993,9 @@ def _score_template_for_angle(
     to tags, plus funnel stages implied by the angle kind), the core problem
     (normalized to problem tags), and the main feature. Matching is tag
     overlap via recommendation_tags, never brittle full-string equality.
-    Reasons describe structure only - no performance claims.
+    Reasons describe what the footage DOES for the viewer — where it leaves
+    them — which is still a structural claim about the video, not a promise
+    about what it will earn. No performance claims, ever.
     """
     score = 0.0
     weighted = []  # (weight, reason), sorted by weight at the end
@@ -6000,12 +6028,18 @@ def _score_template_for_angle(
     if objective and tpl_objective:
         if tpl_objective == objective:
             score += 3.0
-            add(3.0, f"Built for the '{objective.replace('_', ' ')}' objective.")
+            # The objective name stays in the sentence: it is the goal the
+            # founder picked, and the clause after it is what the footage
+            # does about that goal. See OBJECTIVE_OUTCOMES.
+            add(3.0, f"Built for '{objective.replace('_', ' ')}' — "
+                     f"{template_library.OBJECTIVE_OUTCOMES.get(objective, 'serves the goal you picked')}.")
         else:
             score += 0.5
             add(
                 0.5,
-                f"Designed for '{tpl_objective.replace('_', ' ')}', close to your '{objective.replace('_', ' ')}' goal.",
+                f"Made for '{tpl_objective.replace('_', ' ')}' — "
+                f"{template_library.OBJECTIVE_OUTCOMES.get(tpl_objective, 'serves that goal')}; "
+                f"close to your '{objective.replace('_', ' ')}' goal.",
             )
 
     profile_category = (profile.get("app_category") or profile.get("niche") or "").strip()
@@ -6014,15 +6048,17 @@ def _score_template_for_angle(
         hit = next((c for c in tpl_categories if c in key or key in c), None)
         if hit:
             score += 2.5
-            add(2.5, f"Suited to the '{profile_category}' category.")
+            add(2.5, f"Lands with {profile_category} viewers before the app is even named — "
+                     f"framed for how they talk about the problem.")
             matched["category"] = hit
         else:
             limitations.append(
-                f"Curated for {', '.join(tpl_categories)} rather than {profile_category}; expect to adapt the framing."
+                f"Framed for {', '.join(tpl_categories)} rather than {profile_category} — "
+                f"the opening will need rewording."
             )
     if profile_category and not tpl_categories:
         score += 1.0
-        add(1.0, "Category-agnostic, so it adapts to any app.")
+        add(1.0, "Carries no category assumptions, so it fits this app without reframing.")
 
     # ---- Audience: people from the profile/angle, plus the funnel stage
     # the angle kind implies. Curated templates tag funnel stage; profiles
@@ -6035,13 +6071,13 @@ def _score_template_for_angle(
         overlap = sorted(app_audience_tags & tpl_audience_tags)
         if overlap:
             score += 1.0
-            add(1.0, f"Matches your audience: {', '.join(overlap)}.")
+            add(1.0, f"Aimed at {', '.join(overlap)} — they're already in the situation this opens on.")
             matched["audience_tags"] = overlap
             if len(overlap) >= 2:
                 score += 0.5
     elif app_audience_tags and not tpl_audience_tags:
         score += 0.5
-        add(0.5, "No audience restrictions, so it works for yours.")
+        add(0.5, "Open to anyone, so it reaches viewers outside your usual audience too.")
 
     # ---- Problem: the core problem from the angle or the profile research.
     problem_text = (angle.get("user_problem") or "").strip()
@@ -6066,7 +6102,8 @@ def _score_template_for_angle(
         ) or tpl_objective == "address_user_problem"
         if overlap:
             score += 1.0
-            add(1.0, f"Built around the problem you target: {', '.join(overlap)}.")
+            add(1.0, f"Names {', '.join(overlap)} in the first seconds, so the viewer "
+                     f"recognises themselves before your app appears.")
             matched["problem_tags"] = overlap
             if len(overlap) >= 2:
                 score += 0.5
@@ -6074,30 +6111,32 @@ def _score_template_for_angle(
             score += 0.5
             add(0.5, "Opens on the viewer's problem, which is what this angle leads with.")
 
-    # ---- Angle-kind / structure affinity (unchanged, structural) ----
+    # ---- Angle-kind / structure affinity. The weights are unchanged; only
+    # the sentences changed. Each one now leads with what the viewer gets
+    # rather than the name of the structure that delivers it.
     angle_kind = (angle.get("kind") or "").strip()
     if angle_kind:
         demo_categories = {"demo", "tutorial", "reveal"}
         story_categories = {"story", "pov", "before-after"}
         if angle_kind in ("feature_demonstration", "fast_tutorial") and template.get("category") in demo_categories:
             score += 2.0
-            add(2.0, "Demonstrates a feature on screen, which is what this angle needs.")
+            add(2.0, "Opens where your feature lives, so the demo you attach answers a question the viewer is already holding.")
         elif angle_kind in ("founder_story", "daily_life_use_case") and template.get("category") in story_categories:
             score += 2.0
-            add(2.0, "Narrative structure suits a story-led angle.")
+            add(2.0, "Someone on camera lives it rather than describing it — a story-led angle needs a person, not a pitch.")
         elif angle_kind in ("problem_solution", "common_mistake") and template.get("category") in (
             "pain-point-question", "contrarian", "listicle", "pattern-interrupt"
         ):
             score += 2.0
-            add(2.0, "Direct-problem structure matches this angle.")
+            add(2.0, "Your angle leads with the problem, and so does the first line of this.")
         elif angle_kind in ("competitor_alternative", "product_comparison") and template.get("category") == "social-proof":
             score += 2.0
-            add(2.0, "Comparison structure fits a side-by-side angle.")
+            add(2.0, "Leaves the two options side by side on screen, which is what a side-by-side angle needs.")
         elif angle_kind in ("objection_handling", "privacy_pricing_differentiation") and template.get("category") in (
             "contrarian", "social-proof", "curiosity-gap"
         ):
             score += 1.5
-            add(1.5, "Works well for answering an objection head-on.")
+            add(1.5, "Asks the doubt out loud and leaves it standing — your demo is what answers it.")
         else:
             score += 0.5
 
@@ -6117,7 +6156,12 @@ def _score_template_for_angle(
         )
         if hit:
             score += 1.0
-            add(1.0, f"Has a content slot that fits '{hit}' - your main feature.")
+            # The match is still a token hit on the slot values — that is the
+            # honest signal. What changed is the sentence: it names what the
+            # viewer gets (the feature as the reason they stayed) instead of
+            # naming the field that matched (the content slot).
+            add(1.0, f"Puts '{hit}' at the centre of the piece — your main feature "
+                     f"arrives as the reason they stayed, not as a bullet.")
             matched["feature_keyword"] = hit
 
     if angle.get("claims_to_respect"):

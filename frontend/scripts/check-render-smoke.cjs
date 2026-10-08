@@ -321,6 +321,7 @@ const TEMPLATE = {
   name: "Name the misdiagnosis",
   category: "pain-point-question",
   objective: "address_user_problem",
+  outcome: "Hears what they thought was wrong named out loud, then stays for the correction.",
   opening_structure: "Open by naming what they think is wrong.",
   middle_structure: "Then correct it, and stop at the reach for the phone.",
   visual_style: "Talking head.",
@@ -2111,14 +2112,14 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     // because opening it only revealed plain text.
     global.__SMOKE_PARAMS = "";
     const FOUR_REASONS = [
-      "Built for the 'create curiosity' objective.",
-      "Suited to the 'Health & Fitness' category.",
+      "Built for 'create curiosity' ΓÇö leaves them wanting the answer.",
+      "Lands with Health & Fitness viewers before the app is even named ΓÇö framed for how they talk about the problem.",
       "Tailored for Vocolens - generated from this app's approved profile.",
-      "Matches your audience: anxious, night-owls.",
+      "Aimed at anxious, night-owls ΓÇö they're already in the situation this opens on.",
     ];
     const THREE_LIMITS = [
       "Needs character reference.",
-      "Curated for Productivity rather than Health & Fitness.",
+      "Framed for Productivity rather than Health & Fitness ΓÇö the opening will need rewording.",
       "Rejected or replaced 2 time(s) for this app.",
     ];
     await withApi(
@@ -2165,6 +2166,13 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     // The toggle is gone entirely, in either state.
     if (/Show all \d+ more/i.test(text) || /Show less/i.test(text)) {
       throw new Error("the expand toggle is still present; reasons should always be visible");
+    }
+
+    // The outcome is the card's lead line: what the viewer ends up with,
+    // above the evidence for the pick. A card without it is a template
+    // described only by its mechanics again.
+    if (!text.includes(TEMPLATE.outcome)) {
+      throw new Error("the template outcome headline is not rendered on the card");
     }
 
     // A reason is the case FOR the template and a limitation is the caveat ON

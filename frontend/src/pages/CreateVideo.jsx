@@ -125,6 +125,13 @@ function RecommendationCard({ r, selected, onSelect }) {
     typeof r.template.example_preview === "string" && r.template.example_preview.trim()
       ? r.template.example_preview.trim()
       : "";
+  // The viewer-facing outcome, when the row carries one. Curated rows always
+  // do; tailored rows do once regenerated. Rendered as the card's lead line
+  // in body weight so the first thing read is the result, not the mechanic.
+  const outcome =
+    typeof r.template.outcome === "string" && r.template.outcome.trim()
+      ? r.template.outcome.trim()
+      : "";
   return (
     <div
       role="button"
@@ -167,6 +174,11 @@ function RecommendationCard({ r, selected, onSelect }) {
           {selected && <Check className="h-4 w-4 text-[color:var(--brand-indigo)]" />}
         </span>
       </div>
+      {outcome && (
+        <p className="mt-1 text-sm text-foreground/90" data-testid="template-outcome">
+          {outcome}
+        </p>
+      )}
       {example && (
         <p className="mt-1 text-xs text-foreground/80">
           <span className="text-muted-foreground">Sounds like: </span>
@@ -1333,6 +1345,12 @@ export default function CreateVideo() {
                     </Badge>
                   )}
                 </div>
+                {/* The outcome leads; the mechanic badge above stays as the
+                    secondary label. Director-speak (opening_structure) follows
+                    in muted text for the founder who wants the how. */}
+                {typeof template.outcome === "string" && template.outcome.trim() && (
+                  <p className="mt-1 text-sm text-foreground/90">{template.outcome.trim()}</p>
+                )}
                 <p className="mt-1 text-xs text-muted-foreground">{template.opening_structure}</p>
                 <TemplateShape template={template} />
                 {/* The requirement is stated in one line rather than as a

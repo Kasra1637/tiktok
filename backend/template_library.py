@@ -84,6 +84,30 @@ VIDEO_OBJECTIVES = [
     "feel_seen_and_understood",
 ]
 
+# What each campaign objective leaves the viewer with, in the viewer's terms.
+#
+# This is what the recommender says when a template serves an objective: the
+# outcome, not the taxonomy. Each clause describes what the footage DOES —
+# where it leaves the person watching — never what it will earn. No reach,
+# no conversion, no performance claim of any kind, which is the same honesty
+# rule the evidence note follows. Keyed to VIDEO_OBJECTIVES above; the
+# scorer falls back to a neutral clause for anything outside the vocabulary.
+OBJECTIVE_OUTCOMES = {
+    "explain_app": "walks them into what the app is without a feature list",
+    "demonstrate_feature": "keeps them watching long enough to see it work",
+    "create_curiosity": "leaves them wanting the answer",
+    "address_user_problem": "gets them naming the problem out loud",
+    "compare_alternative": "puts the choice in front of them honestly",
+    "introduce_new_app": "gets them to recognise it and remember it",
+    "build_awareness": "puts the app in their head as familiar",
+    "educate_viewers": "leaves them with one thing they got wrong",
+    "achieve_desired_outcome": "shows the outcome as reachable",
+    "overcome_viewer_doubt": "takes the doubt seriously instead of dismissing it",
+    "ease_daily_moment": "makes the daily moment feel lighter",
+    "avoid_common_mistake": "catches them before the mistake",
+    "feel_seen_and_understood": "makes them feel described, not sold to",
+}
+
 # Content angles, per the product spec. Angles are app-specific and get
 # generated per App Profile; this list is the controlled set of kinds.
 CONTENT_ANGLE_KINDS = [
@@ -159,6 +183,11 @@ CURATED_TEMPLATES = [
     {
         "name": "Pattern Interrupt",
         "category": "pattern-interrupt",
+        # Viewer-facing, not structural: what the person watching ends up
+        # with. Every curated template carries one so the picker can lead
+        # with the result instead of the mechanic. No performance claims --
+        # the evidence-note rule applies here too.
+        "outcome": "Stops mid-scroll on something they can't explain, then stays to work out what it meant.",
         "app_categories": [],
         "audiences": ["cold_audience", "scrollers"],
         "objective": "create_curiosity",
@@ -186,6 +215,7 @@ CURATED_TEMPLATES = [
     {
         "name": "Pain-Point Question",
         "category": "pain-point-question",
+        "outcome": "Hears their own frustration said out loud by someone else, and stops pretending it's manageable.",
         "app_categories": [],
         "audiences": ["cold_audience", "targeted_audience"],
         "objective": "address_user_problem",
@@ -213,6 +243,7 @@ CURATED_TEMPLATES = [
     {
         "name": "Stop Doing This",
         "category": "contrarian",
+        "outcome": "Gets told, flatly, that what they're doing is costing them — and can't argue with it.",
         "app_categories": [],
         "audiences": ["cold_audience", "scrollers"],
         "objective": "create_curiosity",
@@ -239,6 +270,7 @@ CURATED_TEMPLATES = [
     {
         "name": "I Wish I Knew This Earlier",
         "category": "curiosity-gap",
+        "outcome": "Recognises a version of their own past they'd rather not relive.",
         "app_categories": [],
         "audiences": ["targeted_audience", "existing_users"],
         "objective": "create_curiosity",
@@ -265,6 +297,7 @@ CURATED_TEMPLATES = [
     {
         "name": "Three Mistakes",
         "category": "listicle",
+        "outcome": "Catches themselves making the first mistake, before the second one is even named.",
         "app_categories": [],
         "audiences": ["cold_audience", "targeted_audience"],
         "objective": "educate_viewers",
@@ -292,6 +325,7 @@ CURATED_TEMPLATES = [
     {
         "name": "POV Scenario",
         "category": "pov",
+        "outcome": "Is inside their own worst-case day and sees the exact moment it turns around.",
         "app_categories": [],
         "audiences": ["cold_audience", "scrollers"],
         "objective": "address_user_problem",
@@ -319,6 +353,7 @@ CURATED_TEMPLATES = [
     {
         "name": "Curiosity Gap",
         "category": "curiosity-gap",
+        "outcome": "Left holding an unanswered claim, still thinking about it after the scroll.",
         "app_categories": [],
         "audiences": ["cold_audience", "scrollers"],
         "objective": "create_curiosity",
@@ -346,6 +381,7 @@ CURATED_TEMPLATES = [
     {
         "name": "Contrarian Statement",
         "category": "contrarian",
+        "outcome": "Takes a side against what they assumed, and owes the video a watch to defend it.",
         "app_categories": [],
         "audiences": ["cold_audience", "scrollers"],
         "objective": "create_curiosity",
@@ -373,6 +409,7 @@ CURATED_TEMPLATES = [
     {
         "name": "Short Transformation Story",
         "category": "before-after",
+        "outcome": "Sees the version of themselves they've outgrown, and what made the difference.",
         "app_categories": [],
         "audiences": ["targeted_audience", "existing_users"],
         "objective": "address_user_problem",
@@ -400,6 +437,7 @@ CURATED_TEMPLATES = [
     {
         "name": "Day in the Life",
         "category": "story",
+        "outcome": "Recognises their own ordinary day as worth watching, and the one moment it could go better.",
         "app_categories": [],
         "audiences": ["targeted_audience", "existing_users"],
         "objective": "build_awareness",

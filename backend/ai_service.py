@@ -2160,6 +2160,10 @@ def normalize_brand_template(raw: dict) -> Optional[dict]:
     slots.pop("cta", None)
     slots.pop("call_to_action", None)
     slots.pop("next_action", None)
+    # Viewer-facing outcome line for the picker card. Optional: a template
+    # without one is still usable, so a missing field degrades to no headline
+    # rather than invented copy. Never repaired — same rule as everything else.
+    outcome = str(raw.get("outcome") or "").strip()[:300]
     return {
         "name": name,
         "category": normalize_category(raw.get("category")),
@@ -2173,6 +2177,7 @@ def normalize_brand_template(raw: dict) -> Optional[dict]:
         "camera_pacing": str(raw.get("camera_pacing") or "").strip()[:300],
         "content_slots": slots,
         "default_duration": duration,
+        "outcome": outcome,
     }
 
 
@@ -2284,7 +2289,8 @@ async def generate_brand_templates(
         '  "visual_style": "the look, presenter-led",\n'
         '  "camera_pacing": "camera behaviour",\n'
         '  "content_slots": {"the_concrete_beat": "the concrete beat this structure turns on", "the_moment": "where the viewer would reach for the app"},\n'
-        '  "default_duration": 10\n'
+        '  "default_duration": 10,\n'
+        '  "outcome": "what the viewer ends up with from this structure, one sentence, viewer-facing (e.g. hears their own frustration said out loud) -- never the mechanic, never a guaranteed result",\n'
         "}\n"
         "Rules: use ONLY facts present above. Never invent a feature, price, rating, "
         "review, testimonial, or guaranteed outcome. Never use a banned claim. Vary "

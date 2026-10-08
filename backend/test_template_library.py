@@ -166,6 +166,37 @@ class TestCuratedSeeds:
             assert row["review_status"] == "approved"
             assert row["archived"] == 0
 
+    def test_every_template_carries_a_viewer_outcome(self):
+        """
+        The picker leads each card with what the viewer ends up with, so a
+        template without one is described only by its mechanics again.
+        """
+        for tpl in tl.CURATED_TEMPLATES:
+            assert isinstance(tpl.get("outcome"), str) and tpl["outcome"].strip(), (
+                f"{tpl.get('name')} has no outcome"
+            )
+
+    def test_outcomes_are_distinct_per_template(self):
+        """
+        One shared sentence across templates would make the picker read as
+        ten copies of the same promise. Each mechanic earns its own outcome.
+        """
+        outcomes = [tpl["outcome"].strip() for tpl in tl.CURATED_TEMPLATES]
+        assert len(set(outcomes)) == len(outcomes)
+
+    def test_outcomes_name_no_mechanic_and_claim_nothing(self):
+        """
+        An outcome that says "hook", "slot" or "structure" is the feature
+        list wearing outcome clothes; one that says "proven" or "guaranteed"
+        is a performance claim with no data behind it. Both fail the wording
+        rule from the product spec.
+        """
+        for tpl in tl.CURATED_TEMPLATES:
+            lowered = tpl["outcome"].lower()
+            for banned in ("hook", "slot", "structure", "template",
+                           "proven", "guaranteed", "viral"):
+                assert banned not in lowered, f"{tpl['name']} outcome uses {banned!r}"
+
 
 class TestVocabularies:
     def test_twelve_content_angle_kinds(self):
@@ -437,6 +468,28 @@ class TestBrandTemplateNormalization:
         })
         assert good["middle_structure"] == "Name the friction, then stop at the reach."
 
+    def test_an_outcome_line_survives_normalization(self):
+        """
+        Tailored templates carry the same picker headline as curated ones. A
+        missing outcome degrades to no headline rather than invented copy, so
+        it is optional — but a supplied one must survive, capped.
+        """
+        import ai_service
+        good = ai_service.normalize_brand_template({
+            "name": "T", "opening_structure": "Open.",
+            "outcome": "Stays to work out what it meant.",
+        })
+        assert good["outcome"] == "Stays to work out what it meant."
+        missing = ai_service.normalize_brand_template({
+            "name": "T", "opening_structure": "Open.",
+        })
+        assert missing["outcome"] == ""
+        long = ai_service.normalize_brand_template({
+            "name": "T", "opening_structure": "Open.",
+            "outcome": "x" * 500,
+        })
+        assert len(long["outcome"]) == 300
+
 
 class TestBrandTemplatePrompt:
     """
@@ -506,6 +559,9 @@ class TestBrandTemplatePrompt:
         assert "screenshots" in prompt
         assert "double-quote" in prompt
         assert "required_assets" not in prompt
+        # The picker headline: tailored templates carry the same outcome line
+        # as curated ones, or the regenerated set renders mechanics again.
+        assert '"outcome"' in prompt
 
     def test_prompt_targets_the_selected_objective(self, monkeypatch):
         import asyncio

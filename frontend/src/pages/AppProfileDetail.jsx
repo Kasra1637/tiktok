@@ -668,21 +668,29 @@ export default function AppProfileDetail() {
               </p>
             ) : (
               <div className="space-y-2">
-                {recommendations.map((r) => (
-                  <Link
-                    key={r.template.id}
-                    to={`/create?profile=${profileId}&template=${r.template.id}`}
-                    className="block rounded-xl border border-[color:var(--hairline)] p-3 transition-colors hover:border-[color:var(--indigo-35)]"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium">{r.template.name}</span>
-                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-                    </div>
-                    {r.why_it_fits?.[0] && (
-                      <p className="mt-1 text-xs text-muted-foreground">{r.why_it_fits[0]}</p>
-                    )}
-                  </Link>
-                ))}
+                {recommendations.map((r) => {
+                  // The outcome is the one-line pitch for this row; the top
+                  // reason is the fallback for rows that predate it.
+                  const line =
+                    (typeof r.template.outcome === "string" && r.template.outcome.trim()) ||
+                    r.why_it_fits?.[0] ||
+                    "";
+                  return (
+                    <Link
+                      key={r.template.id}
+                      to={`/create?profile=${profileId}&template=${r.template.id}`}
+                      className="block rounded-xl border border-[color:var(--hairline)] p-3 transition-colors hover:border-[color:var(--indigo-35)]"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium">{r.template.name}</span>
+                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                      </div>
+                      {line && (
+                        <p className="mt-1 text-xs text-muted-foreground">{line}</p>
+                      )}
+                    </Link>
+                  );
+                })}
                 <Link
                   to={`/create?profile=${profileId}`}
                   className="block pt-1 text-center text-xs font-medium text-[color:var(--brand-indigo)] hover:underline"
