@@ -2073,6 +2073,12 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
             { template: ORDERED_TEMPLATES[1], score: 5, why_it_fits: ["ok"], limitations: [] },
           ],
         }),
+        ensureObjectiveTemplates: async () => ({
+          templates: ORDERED_TEMPLATES,
+          generated: false,
+          objective: "address_user_problem",
+          error: null,
+        }),
       },
       async () => {
         await mount(CreateVideo, {})(ctx);
@@ -2128,6 +2134,12 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
               suggested_duration: TEMPLATE.default_duration,
             },
           ],
+        }),
+        ensureObjectiveTemplates: async () => ({
+          templates: [ORDERED_TEMPLATES[0]],
+          generated: false,
+          objective: "address_user_problem",
+          error: null,
         }),
       },
       async () => {
@@ -2187,6 +2199,12 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
               suggested_duration: TEMPLATE.default_duration,
             },
           ],
+        }),
+        ensureObjectiveTemplates: async () => ({
+          templates: [ORDERED_TEMPLATES[1]],
+          generated: false,
+          objective: "address_user_problem",
+          error: null,
         }),
       },
       async () => {
@@ -2332,6 +2350,12 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
               ];
           return { recommendations: rows };
         },
+        ensureObjectiveTemplates: async () => ({
+          templates: ORDERED_TEMPLATES,
+          generated: false,
+          objective: "address_user_problem",
+          error: null,
+        }),
       },
       async () => {
         await mount(CreateVideo, {})(ctx);
@@ -2389,6 +2413,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
       }
     );
     expectText(ctx, "still work", "the attached generation error was not surfaced");
+    expectText(ctx, "Name the misdiagnosis", "the curated fallback is hidden on a tailoring failure");
   });
 
   await check("wizard requests tailored templates for the chosen objective", async (ctx) => {
@@ -2417,6 +2442,65 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     }
     if (seen[0].profileId !== "b1") {
       throw new Error(`wrong profile sent: ${JSON.stringify(seen[0].profileId)}`);
+    }
+  });
+
+  await check("pre-made templates stay hidden until the tailored set is ready", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    const PREMADE = { ...TEMPLATE, id: "t-premade", name: "Premade Pick" };
+    const CUSTOM = {
+      ...TEMPLATE,
+      id: "t-custom",
+      name: "Custom Pick",
+      brand_profile_id: "b1",
+      objective: "address_user_problem",
+      origin: "custom",
+    };
+    let releaseTailoring;
+    const tailoringGate = new Promise((resolve) => {
+      releaseTailoring = resolve;
+    });
+    await withApi(
+      {
+        getTemplates: async () => ({ templates: [PREMADE, CUSTOM] }),
+        getTemplateRecommendations: async () => ({
+          recommendations: [
+            { template: PREMADE, score: 9, why_it_fits: ["popular"], limitations: [] },
+            { template: CUSTOM, score: 8, why_it_fits: ["Tailored for Taskly"], limitations: [] },
+          ],
+        }),
+        ensureObjectiveTemplates: async () => tailoringGate,
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openTemplateStep(ctx);
+        const waiting = ctx.text();
+        if (!waiting.includes("Tailoring templates")) {
+          throw new Error("the step does not say it is tailoring before showing templates");
+        }
+        if (waiting.includes("Premade Pick") || waiting.includes("Custom Pick")) {
+          throw new Error("template cards are shown before the tailored set is ready");
+        }
+        await act(async () => {
+          releaseTailoring({
+            templates: [CUSTOM],
+            generated: true,
+            objective: "address_user_problem",
+            error: null,
+          });
+        });
+        await act(async () => {});
+      }
+    );
+    const ready = ctx.text();
+    if (!ready.includes("Custom Pick")) {
+      throw new Error("the tailored custom template is not shown once ready");
+    }
+    if (!ready.includes("Tailored for this app")) {
+      throw new Error("the ready list is not labelled as the tailored set");
+    }
+    if (ready.includes("Premade Pick")) {
+      throw new Error("a pre-made template is shown alongside the tailored set");
     }
   });
 

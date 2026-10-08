@@ -379,6 +379,8 @@ export default function CreateVideo() {
   const [facets, setFacets] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
   const [recError, setRecError] = useState(null);
+  const [recKey, setRecKey] = useState("");
+  const [tailored, setTailored] = useState({ key: "", templates: [] });
   const [templates, setTemplates] = useState([]);
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -493,39 +495,41 @@ export default function CreateVideo() {
   // choice could be silently replaced by whatever ranked first that time, which
   // discarded the adjustment the click was overriding.
   const templateChosenByHand = useRef(false);
+  const recRequestRef = useRef(0);
 
   const loadRecommendations = useCallback(
     async (pid, aid) => {
       if (!pid) return;
+      // Recommendations are keyed to the exact profile/angle/objective that
+      // requested them. A slow response for a previous key must never populate
+      // the step the founder is now reading, and rows for a previous key must
+      // not linger while the new key loads.
+      const request = ++recRequestRef.current;
+      const key = `${pid || ""}:${aid || ""}:${objective || ""}`;
+      setRecKey(key);
+      setRecommendations([]);
+      setRecError(null);
       try {
         const rec = await api.getTemplateRecommendations(pid, {
           angle_id: aid || undefined,
           objective: objective || undefined,
           limit: 6,
         });
+        if (recRequestRef.current !== request) return;
         const rows = rec.recommendations || [];
+        setRecKey(key);
         setRecommendations(rows);
         setRecError(null);
-        // Preselect the top pick when the founder has not chosen for
-        // themselves. Deliberately not "on every reload": a reload must never
-        // move a selection the founder made, so the only condition is that
-        // nothing is selected and nothing has ever been hand-picked.
-        //
-        // setTemplateId is called with a function so the check reads the value
-        // at the time this response lands rather than a value captured when the
-        // request was made — otherwise a slow response could overwrite a pick
-        // made while it was in flight.
-        if (rows.length > 0) {
-          setTemplateId((current) => {
-            if (current || templateChosenByHand.current) return current;
-            return rows[0].template.id;
-          });
-        }
+        // Preselection moved to its own effect below: it must wait until the
+        // tailored set for this key is ready, otherwise the top curated card
+        // is picked before the custom templates exist.
       } catch (err) {
+        if (recRequestRef.current !== request) return;
         // An empty list used to mean three different things: nothing ranked,
         // nothing compatible, or the request failed. The third one stranded the
         // founder in front of a step that looked merely thin, so the reason is
         // shown rather than absorbed.
+        setRecKey(key);
         setRecommendations([]);
         setRecError(getErrorMessage(err));
       }
@@ -548,6 +552,7 @@ export default function CreateVideo() {
 
   const runTailoring = useCallback(async (regenerate) => {
     if (!profileId || !objective) return;
+    const key = `${profileId}:${objective}`;
     setTailoring(true);
     setTailorError(null);
     try {
@@ -555,14 +560,24 @@ export default function CreateVideo() {
         objective,
         ...(regenerate ? { regenerate: true } : {}),
       });
+      // A response for a previous profile/objective must not mark the current
+      // step ready: that is exactly how pre-made cards appeared before the
+      // current app's custom set existed.
+      if (tailorKeyRef.current !== key) return;
+      setTailored({
+        key,
+        templates: Array.isArray(res?.templates) ? res.templates : [],
+      });
       if (res.generated) {
         await loadRecommendations(profileId, angleId);
       }
       if (res.error) setTailorError(res.error);
     } catch (err) {
+      if (tailorKeyRef.current !== key) return;
+      setTailored({ key, templates: [] });
       setTailorError(getErrorMessage(err));
     } finally {
-      setTailoring(false);
+      if (tailorKeyRef.current === key) setTailoring(false);
     }
   }, [profileId, objective, angleId, loadRecommendations]);
 
@@ -573,6 +588,51 @@ export default function CreateVideo() {
     tailorKeyRef.current = key;
     runTailoring(false);
   }, [step, profileId, objective, runTailoring]);
+
+  // Template cards stay hidden until this profile/objective has its own custom
+  // set. Recommendations otherwise arrive first and show pre-made cards before
+  // the tailored templates exist. On a tailoring failure with no custom set,
+  // the ranked curated fallback is shown instead of an empty step.
+  const tailorKey = profileId && objective ? `${profileId}:${objective}` : "";
+  const recRequestKey = `${profileId || ""}:${angleId || ""}:${objective || ""}`;
+  const tailoredReady = Boolean(
+    tailorKey && tailored.key === tailorKey && tailored.templates.length > 0
+  );
+  const tailorFallbackVisible = Boolean(
+    tailorKey &&
+      tailored.key === tailorKey &&
+      tailored.templates.length === 0 &&
+      tailorError &&
+      !tailoring
+  );
+  const recommendationsVisible = Boolean(
+    objective &&
+      recKey &&
+      recKey === recRequestKey &&
+      (tailoredReady || tailorFallbackVisible)
+  );
+  // Once the custom set is ready, only its templates are shown. The ranked
+  // curated fallback remains available when tailoring fails with no custom
+  // set, so a model outage does not strand the step.
+  const tailoredIds = new Set(
+    (tailored.templates || []).map((t) => t?.id).filter(Boolean)
+  );
+  const visibleRecommendations = !recommendationsVisible
+    ? []
+    : tailoredReady
+      ? recommendations.filter((r) => tailoredIds.has(r?.template?.id))
+      : recommendations;
+
+  // Preselect the top pick only once its key is displayable. Deliberately not
+  // "on every reload": a reload must never move a selection the founder made,
+  // so the only conditions are that nothing is selected and nothing has ever
+  // been hand-picked.
+  useEffect(() => {
+    if (!recommendationsVisible) return;
+    if (templateId || templateChosenByHand.current) return;
+    if (visibleRecommendations.length === 0) return;
+    setTemplateId(visibleRecommendations[0].template.id);
+  }, [visibleRecommendations, recommendationsVisible, templateId]);
 
   const selectProfile = async (id) => {
     setSelectedProfileId(id);
@@ -1223,7 +1283,7 @@ export default function CreateVideo() {
             {tailorError && !tailoring && (
               <p className="text-xs text-muted-foreground">{tailorError}</p>
             )}
-            {objective && recommendations.length === 0 && (
+            {objective && recommendationsVisible && visibleRecommendations.length === 0 && (
               <div className="rounded-xl border border-[color:var(--hairline)] p-4">
                 <p className="text-sm">No templates recommended for this app yet.</p>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -1233,11 +1293,13 @@ export default function CreateVideo() {
                 </p>
               </div>
             )}
-            {objective && recommendations.length > 0 && (
+            {objective && recommendationsVisible && visibleRecommendations.length > 0 && (
               <div className="space-y-2">
-                <span className="eyebrow block">Recommended</span>
+                <span className="eyebrow block">
+                  {tailoredReady ? "Tailored for this app" : "Recommended"}
+                </span>
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                {recommendations.map((r) => (
+                {visibleRecommendations.map((r) => (
                   <RecommendationCard
                     key={r.template.id}
                     r={r}
