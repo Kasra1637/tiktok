@@ -221,6 +221,8 @@ const STRATEGY = {
   messaging_pillars: ["one thing at a time"],
   primary_feature: "Task timer",
   desired_outcome: "A finished day.",
+  mechanism_beat: "It counts the time for you instead of you counting it.",
+  payoff_beat: "Tomorrow looks like one list, not nine.",
   differentiation_beat: "Others track time; this finishes tasks.",
   scene: { camera_angle: "eye level", lighting: "morning window" },
   performance: { movement: "still", voice_delivery: "unhurried" },
@@ -1080,6 +1082,46 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     expectText(ctx, "develop it, stop at the reach", "the middle's goal did not render");
   });
 
+  // The three outcome fields already govern the whole render -- the segment
+  // prompt is assembled from them -- and this panel printed none of them, so
+  // the framing that produced the video was invisible to the founder reading
+  // it. Each is asserted separately: one row rendering while the other two are
+  // dropped is exactly the silent gap this closes.
+  await check("the strategy review shows what the viewer ends up with", async (ctx) => {
+    await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+    expectText(ctx, "What the viewer ends up with", "the outcome framing is not on the review");
+    for (const [label, value] of [
+      ["The change this supports", STRATEGY.desired_outcome],
+      ["How it works, as a benefit", STRATEGY.mechanism_beat],
+      ["The last thing said", STRATEGY.payoff_beat],
+    ]) {
+      if (!ctx.text().includes(label)) throw new Error(`missing outcome row label: ${label}`);
+      if (!ctx.text().includes(value)) throw new Error(`missing outcome row value: ${label}`);
+    }
+    // Framed as a change the app supports, never a target it is held to.
+    expectText(ctx, "not a result this video can promise", "the outcome block reads as a guarantee");
+  });
+
+  // A strategy generated before these fields existed has none of them, and an
+  // empty block headed "What the viewer ends up with" is worse than nothing:
+  // it implies an outcome exists and was withheld.
+  await check("a strategy with no outcome fields renders no outcome block", async (ctx) => {
+    await mount(HookContinuityPanel, {
+      project: {
+        ...PROJECT_WITH_STRATEGY,
+        strategy: {
+          ...STRATEGY,
+          desired_outcome: "",
+          mechanism_beat: "",
+          payoff_beat: "",
+        },
+      },
+    })(ctx);
+    if (ctx.text().includes("What the viewer ends up with")) {
+      throw new Error("an empty outcome block is rendered as if an outcome were withheld");
+    }
+  });
+
   await check("the strategy review shows the hook boundary from the plan", async (ctx) => {
     await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
     // The strategy plans its opening beat at 3s, so the boundary between the two
@@ -1857,6 +1899,18 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
       if (!text.includes("written to this length")) {
         throw new Error("Review does not explain that the timeline is tied to this length");
       }
+      // The outcome the picked template was chosen for, above the words. The
+      // plan step showed the hook and the script with no statement of what
+      // they were meant to leave the viewer with, so there was nothing on
+      // screen to tell a founder whether the words still served the pick.
+      if (!text.includes("What this is aiming to leave them with")) {
+        throw new Error("Review does not state the outcome the template is aiming at");
+      }
+      if (!text.includes(TEMPLATE.outcome)) {
+        throw new Error("Review does not show the template's outcome line");
+      }
+      // Same honesty rule as the card: a framing, not a promise about results.
+      expectText(ctx, "not a result this video can promise", "the Review outcome reads as a guarantee");
       // The stale-timeline affordance and its two former relatives: an editable
       // length select, and a "regenerating the plan will use Ns" note.
       expectNone(ctx, [

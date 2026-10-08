@@ -1575,6 +1575,25 @@ export default function CreateVideo() {
               </div>
             )}
             <span className="eyebrow block">Script</span>
+            {/* What the chosen template is aiming to leave them with, above the
+                hook and script it was picked to carry. The plan step showed the
+                words and nothing about their intent, so a founder reading a
+                hook had no way to tell whether it served the outcome the
+                template was chosen for or was about to drift off it. Read-only
+                and from the template, not the plan: it does not change when the
+                script is edited, and regenerating the plan rewrites the words
+                rather than the aim. Renders nothing for a tailored template
+                generated before outcomes existed. */}
+            {typeof template?.outcome === "string" && template.outcome.trim() && (
+              <div className="rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4">
+                <span className="eyebrow block">What this is aiming to leave them with</span>
+                <p className="mt-1 text-sm">{template.outcome.trim()}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  The outcome this template is built for, in the viewer&apos;s terms. The script
+                  below is written to it — a framing, not a result this video can promise.
+                </p>
+              </div>
+            )}
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Hook line</label>
               <Input

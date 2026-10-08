@@ -5,7 +5,7 @@ import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage } from "../lib/api";
 import { plannedSections } from "../lib/videoLength";
 import {
-  Loader2, AlertTriangle, Info, MapPin, ShieldQuestion, Sparkles,
+  Loader2, AlertTriangle, Info, MapPin, ShieldQuestion, Sparkles, Target,
 } from "lucide-react";
 
 /**
@@ -64,6 +64,12 @@ const ACRONYMS = {
 
 function strategyLabel(key) {
   if (STRATEGY_LABELS[key]) return STRATEGY_LABELS[key];
+  // A label containing a space is display copy, not a machine key. The outcome
+  // rows pass their own wording ("How it works, as a benefit") because
+  // title-casing one of those gives "How It Works, As A Benefit" — the
+  // snake_case transform exists to rescue model keys, and those are gone by
+  // this point in the file.
+  if (String(key).includes(" ")) return String(key);
   return String(key)
     .split("_")
     .filter(Boolean)
@@ -373,6 +379,29 @@ export function HookContinuityPanel({ project, onProjectChange }) {
             <span className="eyebrow">Why this works for this app</span>
             <p className="text-sm">{strategy.strategy_summary}</p>
           </div>
+          {/* The three outcome fields, shown because they already govern the
+              whole render (generation_planning reads them into the segment
+              prompt) and were invisible here: the summary above is one
+              paragraph, so "the viewer should end up able to do X", "here is
+              how it works, as a benefit" and "here is the payoff line" were
+              written and read by the model and never by the founder.
+
+              Framed as a change the app supports, never a result it promises —
+              the same rule the template outcome line and the evidence note
+              follow, so the wording has to be the founder's reading of it
+              rather than a target. Rows drop out when empty (StrategyBlock),
+              which is what an existing project built before these fields were
+              generated gets: nothing shown until the strategy is rebuilt. */}
+          <StrategyBlock
+            title="What the viewer ends up with"
+            description="How this app is framed for the person watching: the change it supports, how it works stated as a benefit, and the payoff line. This is the framing the render is written from — not a result this video can promise."
+            icon={Target}
+            rows={[
+              ["The change this supports", strategy.desired_outcome],
+              ["How it works, as a benefit", strategy.mechanism_beat],
+              ["The last thing said", strategy.payoff_beat],
+            ]}
+          />
           {/* There is no "person" block, and deliberately so. It used to sit
               here listing the model's guess at the founder's face, hair, age and
               wardrobe, under a heading that called it locked for every segment —
