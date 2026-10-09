@@ -1541,8 +1541,8 @@ class TestSpokenBudgetReachesThePlanPrompt:
 
     The failure this closes: the plan schema asked for "the full spoken script"
     with no length, so the model routinely wrote 238+ characters for a 7s
-    middle (a 105-character budget), and the founder first learned the script
-    was too long at the render gate — after approving it. The gate itself does
+    middle (a 140-character budget at the current pace), and the founder first
+    learned the script was too long at the render gate — after approving it. The gate itself does
     not need a test here (TestSpokenWordsGate covers it); what needs asserting
     is that the request is now sized to the budget that gate enforces, at its
     cause.
@@ -1595,15 +1595,15 @@ class TestSpokenBudgetReachesThePlanPrompt:
         ))
         prompt = json.dumps(captured["messages"])
         # The exact numbers the render gate would derive downstream (7s middle
-        # at 15 chars/sec = 105; spoken_budget floors at 60). If the prompt and
+        # at 20 chars/sec = 140, and the 3s hook floors at 60). If the prompt and
         # the gate ever disagree again, this fails first.
         assert "SPOKEN BUDGET" in prompt
-        assert "105 characters for the rest of the script" in prompt
+        assert "140 characters for the rest of the script" in prompt
         assert "first 3s" in prompt
         assert "60 characters for the hook line" in prompt
 
     def test_the_budget_tracks_the_template_declared_hook(self, monkeypatch):
-        """A 3s hook on a 15s piece squeezes the middle to 12s / 180 chars."""
+        """A 3s hook on a 15s piece squeezes the middle to 12s / 240 chars at the current pace."""
         import ai_service
         captured = self._capture(monkeypatch)
         asyncio.run(ai_service.generate_creative_plan(
@@ -1613,7 +1613,7 @@ class TestSpokenBudgetReachesThePlanPrompt:
             duration_seconds=15,
         ))
         prompt = json.dumps(captured["messages"])
-        assert "180 characters for the rest of the script" in prompt
+        assert "240 characters for the rest of the script" in prompt
         # And the two ceilings must never collide: the hook budget is on the
         # hook line, the middle budget on the remainder after it.
         assert "60 characters for the hook line" in prompt
@@ -1691,7 +1691,9 @@ class TestPlanArrivalClamp:
     """
 
     def _over_budget_plan(self):
-        # Well past any budget: a 15s piece is a 12s middle, ~180 characters.
+        # Well past any budget: a 15s piece is a 12s middle, 240 characters at
+        # 20 chars/sec. The margin below is deliberately wide -- the fixture has
+        # to stay over-budget if the pace is ever retuned again.
         return {
             **FAKE_PLAN,
             "hook_line": "Stop writing empty pages",
@@ -1699,7 +1701,8 @@ class TestPlanArrivalClamp:
                 "Stop writing empty pages. Taskly gives you one short prompt and a "
                 "reminder. It works offline, and it never nags you about the streak. "
                 "The blank page loses its grip by the end of the first sentence, and "
-                "that is the whole point of the thing you are looking at right now."
+                "that is the whole point of the thing you are looking at right now. "
+                "The timer starts when you do, and stops when you stop."
             ),
         }
 
@@ -1902,7 +1905,7 @@ class TestSpokenWordsGate:
         ))
         overflow = out["spoken_overflow"]
         assert overflow["dropped_chars"] > 0
-        assert overflow["budget"] == 105  # 7s middle at ~15 chars/sec, natural pace
+        assert overflow["budget"] == 140  # 7s middle at the current 20 chars/sec pace
         assert overflow["middle_seconds"] == 7
         # The trim target: exactly the kept prefix, so trimming to it and
         # saving is stable — rebinding the trimmed script yields the same words.

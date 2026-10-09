@@ -2493,12 +2493,13 @@ def _normalize_sections(raw) -> list:
 # the on-camera action, the scene and the performance, which is why this runs
 # after the model call rather than instead of it.
 
-# Spoken pace used only to size approved words to a section. Conversational
-# speech runs about 150 words per minute, roughly 2.5 words a second, or about
-# 15 characters a second counting spaces. The earlier 22 chars/sec allowed
-# roughly 220 words per minute, so the approved words would have been squeezed
-# into the piece at a rushed pace that a viewer hears as hurried delivery.
-SPOKEN_CHARS_PER_SECOND = 15
+# Spoken pace used only to size approved words to a section. Brisk delivery
+# runs about 200 words per minute, roughly 3.3 words a second, or about
+# 20 characters a second counting spaces. The earlier 15 chars/sec sized for
+# a conversational 150 words per minute, which left TikTok-length pieces with
+# little room for the payoff sentence; the still-earlier 22 allowed roughly
+# 220 words per minute, which a viewer hears as hurried delivery.
+SPOKEN_CHARS_PER_SECOND = 20
 
 
 def spoken_budget(seconds) -> int:
