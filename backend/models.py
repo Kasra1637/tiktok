@@ -61,12 +61,6 @@ class BrandContextRequest(BaseModel):
     use_original_sound: bool = False
 
 
-class GenerateVideoRequest(BaseModel):
-    image_ids: List[str] = []
-    edited_prompt: Optional[str] = None
-    duration_seconds: Optional[int] = None
-
-
 class AnalyzeBrandUrlRequest(BaseModel):
     url: str
 
@@ -226,16 +220,6 @@ class BrandProfileUpdateRequest(BaseModel):
     claims_approved: Optional[List[str]] = None
     claims_review: Optional[List[str]] = None
     claims_banned: Optional[List[str]] = None
-
-
-class GenerateRemixScriptRequest(BaseModel):
-    duration_seconds: int = 30
-    use_original_sound: bool = False
-
-
-class RemixChatMessageRequest(BaseModel):
-    """A single user turn in the conversational remix chat for a customization."""
-    message: str
 
 
 # ---------------------------------------------------------------------------
@@ -404,9 +388,6 @@ class StudioGenerationRequest(BaseModel):
     duration_seconds is the whole piece. It must fit one pass on the chosen
     model; a longer request is refused rather than split or shortened, because
     the founder's own demo and call to action are what make a longer video now.
-
-    Distinct from the legacy GenerateVideoRequest, which carries face-swap
-    image ids and an edited prompt for the exact-match flow.
 
     model: optional provider key. When omitted the configured default is
         used. An unknown key is refused with a 400 rather than quietly rendered

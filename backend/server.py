@@ -508,7 +508,7 @@ async def init_db():
             -- (frames/) or a saved template thumbnail (templates/) rather
             -- than at an arbitrary upload.
             --
-            -- origin: 'face_swap' | 'customize'
+            -- origin: 'customize' for previews derived from a saved hook frame.
             CREATE TABLE IF NOT EXISTS generated_images (
                 id TEXT PRIMARY KEY,
                 origin TEXT,
@@ -1537,11 +1537,10 @@ async def init_db():
         # already generated would be unusable for video generation after the
         # deploy, because the gate requires a provenance row.
         #
-        # Face-swap variants recover their target from the job's result_json;
-        # customization previews from the frame each was built on. Images whose
-        # recovered target is an upload (produced before targets were
-        # restricted) are backfilled honestly and will be refused by the gate —
-        # that is the intended outcome, not a bug.
+        # Customization previews recover their target from the frame each was
+        # built on. Images whose recovered target is an upload (produced before
+        # targets were restricted) are backfilled honestly and will be refused
+        # by the gate — that is the intended outcome, not a bug.
         cursor = await conn.execute("SELECT COUNT(*) FROM generated_images")
         (existing_rows,) = await cursor.fetchone()
         if not existing_rows:
@@ -1711,30 +1710,6 @@ ALLOWED_TARGET_PREFIXES = ("/api/media/frames/", "/api/media/templates/")
 GENERATED_ID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
-
-
-async def _record_generated_image(
-    image_id: str,
-    origin: str,
-    target_image_url: str,
-    user_id: str,
-    job_id: str = "",
-    image_bytes: bytes = b"",
-):
-    """
-    Register a generated image's provenance and durable PNG backup.
-
-    The local generated/ file is only a cache: containers can restart and
-    horizontally scaled instances do not share it. Video generation can
-    restore image_bytes on demand, while provenance remains the authority for
-    deciding whether the image is allowed to become a video.
-    """
-    await _execute(
-        """INSERT OR REPLACE INTO generated_images
-           (id, origin, job_id, target_image_url, user_id, image_bytes, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (image_id, origin, job_id, target_image_url, user_id, image_bytes, now_iso()),
-    )
 
 
 def _restore_generated_image(image_path: Path, image_bytes: bytes) -> None:
@@ -2948,11 +2923,6 @@ def _template_thumbnail_source(video: dict, analysis: dict) -> Optional[Path]:
 # Generates a brand-customized video prompt from the hook analysis context +
 # brand profile (via URL or saved), then submits to video generation with
 # the face-swapped image as first_frame.
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-# Customization / face-swap preview
 # ---------------------------------------------------------------------------
 
 
