@@ -461,25 +461,6 @@ const handleGenerate = async () => {
         </div>
       )}
 
-      {/* One render, one job. There is no second pass to arrange afterwards, so
-          the length is a statement rather than a plan: what it is, and whether
-          the chosen model can produce it at all. */}
-      <p className="text-xs text-muted-foreground">
-        One render of {pieceSeconds}s in two parts: hook, then middle, ending where viewers
-        would reach for their phones.
-        {ceiling > 0 && ` ${capability?.name || "This model"} allows up to ${ceiling}s per pass.`}
-      </p>
-      {tooLong && (
-        <Alert>
-          <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-          <AlertDescription>
-            {capability?.name || "This model"} cannot render {pieceSeconds}s in one pass, so the
-            request will be refused. Pick a different template — each one declares its own length —
-            or a model that reaches {pieceSeconds}s.
-          </AlertDescription>
-        </Alert>
-      )}
-
       <Button
         variant="brand"
         onClick={handleGenerate}
@@ -676,12 +657,7 @@ const handleGenerate = async () => {
             </div>
           )}
 
-          {inFlight && (
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" /> Working — this page checks back on its own.
-            </p>
-          )}
-        </div>
+          </div>
       )}
     </div>
   );

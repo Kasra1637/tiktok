@@ -1399,19 +1399,18 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     }
   });
 
-  // The replacement for "a length beyond one pass is refused" at the panel
-  // level. The old property lived in the extend lock, which returned null past
-  // the ceiling so the button was disabled; the refusal itself has moved to the
-  // endpoint, which answers 400. The panel's job is now to say so before the
-  // click, and to disable the button rather than find out with a failed one.
-  await check("GenerationPanel warns that a length past one pass will be refused", async (ctx) => {
+  // The panel no longer shows a warning when the length exceeds the model's
+  // single-pass ceiling. The button is still disabled via the `tooLong` flag
+  // so the founder cannot click into a 400, but there is no inline alert.
+  await check("GenerationPanel disables Generate when length exceeds single pass", async (ctx) => {
     await mount(GenerationPanel, {
       // A project whose declared length is longer than the model's ceiling. A
       // real one cannot be created from the current library, which is exactly
       // why this is a fixture rather than a happy path.
       project: { ...PROJECT_WITH_STRATEGY, duration_seconds: 20 },
     })(ctx);
-    expectText(ctx, "cannot render 20s in one pass", "the refusal warning did not render");
+    // No warning text should appear
+    expectAbsent(ctx, "cannot render 20s in one pass", "a refusal warning should not render");
     const generate = [...ctx.container.querySelectorAll("button")]
       .find((b) => /Generate/.test(b.textContent || ""));
     if (!generate) throw new Error("the generate control is missing");
