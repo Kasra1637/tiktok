@@ -433,11 +433,6 @@ const handleGenerate = async () => {
               </option>
             ))}
           </select>
-          {capability && (
-            <p className="text-xs text-muted-foreground">
-              {capability.notes}
-            </p>
-          )}
         </div>
       )}
 
