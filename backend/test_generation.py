@@ -1589,6 +1589,60 @@ class TestBindSpokenWords:
         assert bound["segments"][1]["script"] == "Model wrote this middle."
         assert overflow == {}
 
+    def test_a_paraphrased_opening_hook_is_not_spent_twice(self):
+        """The hook must be found in the script even when the model introduces it.
+
+        The plan's script is the whole piece, so it normally opens with the hook
+        line. Matching was an exact prefix test, so "So, <hook line>? ..." kept
+        that copy in the middle: the hook was spoken twice and its characters
+        were charged to the middle's seconds, which the render then reports as
+        an overflow the founder is asked to fix.
+        """
+        import ai_service
+        hook = "Do you know what triggers your emotions?"
+        plan = {
+            "hook_line": hook,
+            "script": f"So, {hook} I never used to notice mine.",
+        }
+        part = ai_service.partition_spoken_words(plan, 3, 10)
+        assert part["middle_text"] == "I never used to notice mine."
+        bound, overflow = ai_service.bind_spoken_words(self._strategy(), plan, 3, 10)
+        assert bound["segments"][0]["script"] == hook
+        assert bound["segments"][1]["script"] == "I never used to notice mine."
+        assert overflow == {}
+
+    def test_a_middle_that_merely_mentions_the_hook_is_left_alone(self):
+        """Only a leading sentence is the hook. A longer first sentence that
+        happens to contain the hook's words is the middle, and cutting it would
+        delete the founder's actual words."""
+        import ai_service
+        hook = "Save more."
+        middle = "Saving more is what I do every payday, once I stopped guessing."
+        plan = {"hook_line": hook, "script": middle}
+        part = ai_service.partition_spoken_words(plan, 3, 10)
+        assert part["middle_text"] == middle
+
+    def test_partition_is_the_one_rule_the_clamp_and_the_gate_share(self):
+        """The arrival clamp and the render gate must not disagree.
+
+        The clamp decides a stored script fits; the gate decides the same script
+        fits. If they were separate arithmetic, a plan could be stored short
+        enough for one and refused by the other, and the founder would have no
+        action that resolves it.
+        """
+        import ai_service
+        plan = {
+            "hook_line": "Hook line here.",
+            "script": "Hook line here. " + "Filler sentence. " * 40 + "The payoff.",
+        }
+        part = ai_service.partition_spoken_words(plan, 3, 12)
+        assert part["dropped_chars"] > 0
+        # Whatever the clamp kept is what the gate recomputes as fitting.
+        stored = {"hook_line": part["hook_line"], "script": f"{part['hook_line']} {part['kept']}"}
+        again = ai_service.partition_spoken_words(stored, 3, 12)
+        assert again["dropped_chars"] == 0
+        assert again["kept"] == part["kept"]
+
     def test_bound_words_reach_the_provider_verbatim(self):
         """The end-to-end leg: approved plan words in, identical spoken lines in
         the real segment prompt. This is the user-visible guarantee, asserted

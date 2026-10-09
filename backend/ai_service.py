@@ -2532,6 +2532,110 @@ def trim_to_sentence(text: str, limit: int):
     return kept, len(text) - len(kept)
 
 
+def _normalize_spoken(text: str) -> str:
+    """
+    Lowercase, drop punctuation, collapse whitespace. For comparing words only.
+
+    Two strings that would be spoken identically normalize to the same string,
+    which is what lets the hook line be found in a script that introduces it
+    rather than starting with it verbatim.
+    """
+    chars = []
+    for ch in str(text or "").lower():
+        chars.append(ch if ch.isalnum() else " ")
+    return " ".join("".join(chars).split())
+
+
+def _first_sentence(text: str) -> str:
+    """
+    The opening sentence of `text`, or all of it when it has no terminator.
+
+    A terminator only ends the sentence when what follows is a space, an
+    earlier abbreviation's period ("Dr. Smith") is left alone, and the closing
+    mark is included so a lead-in is cut with the rest.
+    """
+    stripped = str(text or "").strip()
+    for index, ch in enumerate(stripped):
+        if ch not in ".!?":
+            continue
+        following = stripped[index + 1: index + 2]
+        if following == "" or following in " \n\t":
+            return stripped[: index + 1]
+    return stripped
+
+
+def strip_leading_hook(hook_line: str, script: str) -> str:
+    """
+    Remove the hook line from the front of the script, returning what is left.
+
+    The plan's `script` is written as the whole piece, so it normally opens with
+    the hook line. Leaving that copy in means the middle speaks the hook a
+    second time, and the hook's characters are then charged to the middle's
+    budget -- which the render reports as an overflow and refuses.
+
+    This used to be an exact `startswith` test, so any introduction defeated it
+    ("So, <hook line>? ..." is the same words, differently opened). The hook is
+    therefore matched at the sentence, on normalized text, and the first
+    sentence is treated as the hook when it carries the hook's words and is
+    little more than a lead-in to them. A script that does not open with the
+    hook at all is left completely alone: its two sections are separate texts,
+    and nothing needs removing.
+    """
+    hook = _normalize_spoken(hook_line)
+    body = str(script or "").strip()
+    if not hook or not body:
+        return body
+
+    normalized = _normalize_spoken(body)
+    if normalized.startswith(hook):
+        return body[len(str(hook_line).strip()):].lstrip(" ,.!?;:-")
+
+    opening = _first_sentence(body)
+    opening_normalized = _normalize_spoken(opening)
+    # The lead-in tolerance is deliberately small. A first sentence that merely
+    # contains the hook somewhere is far more likely to be the middle than the
+    # hook, and cutting it would delete the founder's actual words.
+    lead_in = len(hook) + 30
+    if hook in opening_normalized and len(opening_normalized) <= lead_in:
+        return body[len(opening):].lstrip(" ,.!?;:-")
+    return body
+
+
+def partition_spoken_words(plan, hook_seconds=3, total_seconds=12) -> dict:
+    """
+    The single rule for how the approved words divide between hook and middle.
+
+    Returns hook_line, the middle as written, the part of the middle that fits
+    its seconds, and how many characters did not. Every consumer reads this:
+    the plan clamp that sizes a freshly generated script, the binding that
+    rewrites a strategy's spoken lines, and the render gate that refuses an
+    over-length script. A second implementation of the arithmetic here would
+    mean a plan the clamp called short and the gate calls long, which is the one
+    disagreement a founder cannot act on.
+
+    `total_seconds` and `hook_seconds` must be passed exactly as the render gate
+    passes them, or the two will not agree on what fits.
+    """
+    hook_line = ""
+    script = ""
+    if isinstance(plan, dict):
+        hook_line = str(plan.get("hook_line") or "").strip()
+        script = str(plan.get("script") or "").strip()
+
+    middle_text = strip_leading_hook(hook_line, script)
+    middle_seconds = max(1, int(total_seconds or 0) - int(hook_seconds or 0))
+    budget = spoken_budget(middle_seconds)
+    kept, dropped = trim_to_sentence(middle_text, budget)
+    return {
+        "hook_line": hook_line,
+        "middle_text": middle_text,
+        "kept": kept,
+        "dropped_chars": dropped,
+        "budget": budget,
+        "middle_seconds": middle_seconds,
+    }
+
+
 def bind_spoken_words(strategy: dict, plan, hook_seconds=3, total_seconds=12):
     """
     Rewrite the strategy's spoken words from the plan's approved words.
@@ -2553,25 +2657,14 @@ def bind_spoken_words(strategy: dict, plan, hook_seconds=3, total_seconds=12):
 
     if not isinstance(strategy, dict):
         return strategy, {}
-    hook_line = ""
-    middle_text = ""
-    if isinstance(plan, dict):
-        hook_line = str(plan.get("hook_line") or "").strip()
-        script = str(plan.get("script") or "").strip()
-        low = script.lower()
-        hook_low = hook_line.lower()
-        if hook_low and low.startswith(hook_low):
-            # The plan's script opens with its own hook line. Spoken over both
-            # sections that stutters, so the middle starts after it.
-            script = script[len(hook_line):].lstrip(" ,.!?;:-").strip()
-        middle_text = script
+    part = partition_spoken_words(plan, hook_seconds, total_seconds)
+    hook_line = part["hook_line"]
+    middle_text = part["middle_text"]
     if not hook_line and not middle_text:
         return strategy, {}
 
     strategy = copy.deepcopy(strategy)
-    middle_seconds = max(1, (total_seconds or 0) - (hook_seconds or 0))
-    budget = spoken_budget(middle_seconds)
-    kept, dropped = trim_to_sentence(middle_text, budget)
+    kept = part["kept"]
 
     sections = strategy.get("segments")
     if isinstance(sections, list):
@@ -2586,8 +2679,12 @@ def bind_spoken_words(strategy: dict, plan, hook_seconds=3, total_seconds=12):
         strategy["hook_line"] = hook_line
 
     overflow = (
-        {"dropped_chars": dropped, "budget": budget, "middle_seconds": middle_seconds}
-        if dropped
+        {
+            "dropped_chars": part["dropped_chars"],
+            "budget": part["budget"],
+            "middle_seconds": part["middle_seconds"],
+        }
+        if part["dropped_chars"]
         else {}
     )
     return strategy, overflow

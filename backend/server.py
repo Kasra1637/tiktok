@@ -44,7 +44,7 @@ from ai_service import (
     strip_html_to_text,
     TEXT_MODEL,
     generate_video_strategy, normalize_strategy, generate_brand_templates,
-    bind_spoken_words,
+    bind_spoken_words, spoken_budget,
 )
 from models import (
     AnalyzeBrandUrlRequest, AppProfileResearchRequest, ApproveAppProfileRequest,
@@ -656,6 +656,12 @@ async def init_db():
                 tone TEXT,
                 hook_line TEXT,
                 script TEXT,
+                -- How many characters the arrival clamp cut from the model's
+                -- script because it would not fit the middle's seconds. Kept so
+                -- the Review step can say the script is shorter than the model
+                -- wrote rather than leaving the founder to wonder. 0 or NULL
+                -- means the plan fitted as written.
+                plan_trimmed_chars INTEGER DEFAULT 0,
                 beat_timeline TEXT,
                 visual_direction TEXT,
                 feature_emphasis TEXT,
@@ -1188,6 +1194,12 @@ async def init_db():
             # used to receive. Additive: existing rows get NULL, which reads as
             # "no brief recorded" and simply shows an empty field on Review.
             ("studio_projects", "demo_brief", "TEXT"),
+            # How many characters the arrival clamp removed from the model's
+            # script to fit the middle's seconds, so Review can report the trim.
+            # Existing rows get NULL, which reads as 0: nothing was trimmed.
+            # Written only by the plan endpoint, and never by a project PATCH,
+            # so a founder edit cannot quietly clear the record of a trim.
+            ("studio_projects", "plan_trimmed_chars", "INTEGER DEFAULT 0"),
             # Idempotency for the one render. A repeated key returns the
             # generation already created for it instead of running a second
             # job. Existing rows get NULL, which means "no key supplied" and
@@ -4700,6 +4712,20 @@ def _public_project(row: dict) -> dict:
     else:
         out["spoken_overflow"] = {}
         out["spoken_middle"] = ""
+    # What the arrival clamp cut from this plan, and the budget it cut against.
+    # Reported from the stored count rather than recomputed from the script,
+    # because after the clamp the stored script fits by construction: the count
+    # is the only record that anything was removed.
+    trimmed = int(out.get("plan_trimmed_chars") or 0)
+    if trimmed:
+        middle_seconds = max(1, (out.get("duration_seconds") or 0) - (out.get("hook_seconds") or 3))
+        out["plan_trim"] = {
+            "dropped_chars": trimmed,
+            "middle_seconds": middle_seconds,
+            "budget": spoken_budget(middle_seconds),
+        }
+    else:
+        out["plan_trim"] = {}
     return out
 
 
@@ -5193,6 +5219,39 @@ async def generate_plan(
         logger.error(f"Creative plan generation failed for project {project_id}: {e}")
         raise HTTPException(status_code=502, detail=f"AI plan generation failed. Please try again. ({str(e)[:150]})")
 
+    # Size the model's script to the piece before anything reads it. The prompt
+    # states this budget (ai_service.generate_creative_plan), but a prompt asks
+    # and nothing checked the answer: an over-length plan was stored whole, the
+    # founder read it on Review with nothing wrong on screen, and the first
+    # sign of it was the render gate refusing with a "trim your script" message
+    # naming a fix the studio did not offer. The clamp is the fix at its cause,
+    # and it runs here — before claim safety and before the write — so the
+    # words stored, checked and rendered are one set of words.
+    #
+    # hook_seconds and total_seconds are passed exactly as _require_spoken_words_fit
+    # passes them. A clamp that assumed a different section split would produce
+    # a plan the gate still calls over-length.
+    clamp = ai_service.partition_spoken_words(
+        plan, int(row.get("hook_seconds") or 3), duration
+    )
+    trimmed_chars = int(clamp["dropped_chars"] or 0)
+    if trimmed_chars:
+        # The stored script keeps both sections, because that is what the field
+        # has always meant and what the founder reads it as: the hook line, then
+        # the part of the middle that fits. Re-storing it this way means the
+        # gate's own partition finds the same boundary and finds nothing left
+        # over.
+        fitted = dict(plan)
+        fitted["hook_line"] = clamp["hook_line"]
+        fitted["script"] = (
+            f"{clamp['hook_line']} {clamp['kept']}".strip() if clamp["hook_line"] else clamp["kept"]
+        )
+        plan = fitted
+        logger.info(
+            f"Plan for project {project_id} was {trimmed_chars} characters over the "
+            f"{clamp['middle_seconds']}s spoken budget ({clamp['budget']}); trimmed on arrival"
+        )
+
     report = claim_safety.build_safety_report(plan, profile)
     summary = claim_safety.summarize(report)
 
@@ -5208,13 +5267,14 @@ async def generate_plan(
              demo_brief = ?, overlays = ?, voice_direction = ?, sound_direction = ?,
              safety_report = ?, safety_summary = ?, objective = ?,
              duration_seconds = ?, tone = ?, script_version = script_version + 1,
+             plan_trimmed_chars = ?,
              status = 'draft', updated_at = ?
            WHERE id = ? AND user_id = ?""",
         (plan["hook_line"], plan["script"], json.dumps(plan["beat_timeline"]),
          plan["visual_direction"], plan["demo_brief"], json.dumps(plan["overlays"]),
          plan["voice_direction"], plan["sound_direction"],
-         json.dumps(report), summary, objective, duration, tone or None, now,
-         project_id, user_id),
+         json.dumps(report), summary, objective, duration, tone or None,
+         trimmed_chars, now, project_id, user_id),
     )
     logger.info(
         f"Generated plan for project {project_id} (script v{int(row.get('script_version') or 0) + 1}) — {summary}"
@@ -6245,10 +6305,9 @@ def _require_spoken_words_fit(project: dict) -> dict:
             detail=(
                 f"{overflow['dropped_chars']} characters of your approved script do not fit "
                 f"in a {overflow['middle_seconds']}s middle (spoken budget: "
-                f"{overflow['budget']} characters). Trim it on the Review step, then "
-                "rebuild the strategy so the spoken words come from the trimmed script. "
-                "A trim is a plan edit, so the strategy built before it no longer "
-                "describes the plan."
+                f"{overflow['budget']} characters). Regenerate the plan — it is trimmed to "
+                "fit on arrival — or shorten the script on the Review step and rebuild the "
+                "strategy so the spoken words come from the shorter script."
             ),
         )
     return overflow

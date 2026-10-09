@@ -1058,6 +1058,40 @@ export default function CreateVideo() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleGeneratePlan is a render-scoped closure, same as handleGenerateStrategy in the auto-build below; the key ref guards re-fires, and listing it would re-run the effect on every render.
   }, [step, busy, canGenerate, objective, profileId, templateId, angleId, tone, project?.id, project?.script_version]);
 
+  // Review reads the project's words, so it must read them from the server
+  // rather than trust whatever the wizard last held. An eager draft update
+  // issued while the plan was still being written can resolve after it, which
+  // leaves the editors showing a copy of the row from before the plan landed:
+  // an empty Hook line and Script above a plan that the render step can count
+  // characters in. Re-fetching on entry makes this step authoritative.
+  //
+  // Keyed on the row's own version stamps, so a later write re-syncs, and
+  // guarded by a ref so a refetch cannot loop against its own result. Unsaved
+  // edits always win: the founder's words are never overwritten by a read.
+  const reviewSynced = useRef("");
+  const editsRef = useRef(edits);
+  useEffect(() => {
+    editsRef.current = edits;
+  }, [edits]);
+  useEffect(() => {
+    if (step !== 3 || !project?.id || busy) return;
+    const key = `${project.id}:${project.updated_at || ""}:${project.script_version || 0}`;
+    if (reviewSynced.current === key) return;
+    reviewSynced.current = key;
+    let cancelled = false;
+    api
+      .getStudioProject(project.id)
+      .then((fresh) => {
+        if (cancelled || !fresh) return;
+        if (Object.keys(editsRef.current).length > 0) return;
+        setProject(fresh);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [step, project?.id, project?.updated_at, project?.script_version, busy]);
+
   /* Progress state, derived rather than tracked. A founder can reach any step
      from any other, so nothing here can be a counter that advances — the pills
      have to be recomputed from what actually exists, or they go stale the moment
@@ -1698,6 +1732,24 @@ if (step === 3) {
                 </p>
               </div>
             )}
+            {/* The arrival clamp, reported. A generated script is measured against the
+                middle's seconds and cut to fit before it is stored, so a plan
+                arrives renderable rather than needing a repair. When that
+                happened the founder is told, with the size of the cut: their
+                script is shorter than the model wrote it, and silence about
+                that reads as the studio losing words. */}
+            {project?.plan_trim?.dropped_chars > 0 && (
+              <div className="rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] p-4" data-testid="plan-trimmed-note">
+                <p className="text-sm">
+                  I shortened your script by {project.plan_trim.dropped_chars} characters so it
+                  fits the {project.plan_trim.middle_seconds}-second middle
+                  {project.plan_trim.budget
+                    ? ` (${project.plan_trim.budget} characters is what that many seconds holds)`
+                    : ""}
+                  . Everything above is spoken exactly as written.
+                </p>
+              </div>
+            )}
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Hook line</label>
               <Input
@@ -1713,15 +1765,18 @@ if (step === 3) {
                 className="min-h-[160px]"
               />
             </div>
-            {/* What of this script the middle can actually speak, and what it
-                cannot. The middle's seconds hold a fixed number of characters;
-                anything past that is dropped from the words reaching the video
-                model, usually the payoff sentence. The kept line below is the
-                server's own bound text, not a second implementation of the
-                rule, so trimming to it is exact: what you keep here is what a
-                rebuild would speak. Saving a trim bumps the plan version, so the
-                strategy is rebuilt afterwards. Shown only once a strategy exists — without one the
-                fallback speaks the plan verbatim and there is no partition. */}
+            {/* What the middle can actually speak, and what it cannot. The middle's
+                seconds hold a fixed number of characters; anything past that is
+                dropped from the words reaching the video model, usually the
+                payoff sentence. The kept line below is the server's own bound
+                text rather than a second implementation of the rule, so what is
+                named here is exactly what a render speaks.
+
+                There is no trim control. A generated script is sized to fit
+                before it is ever stored (the arrival clamp), so the founder is
+                never handed a broken plan to repair by hand — and if they write
+                their own over-length words, regenerating the plan is the fix,
+                not a second button beside their own editor. */}
             {project?.strategy?.hook_line && typeof project?.spoken_middle === "string" && project.spoken_middle && (
               <div className="space-y-1.5 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4" data-testid="spoken-partition">
                 <span className="eyebrow block">What the middle will say</span>
@@ -1738,27 +1793,12 @@ if (step === 3) {
                     );
                   }
                   return (
-                    <>
-                      <p className="text-sm text-muted-foreground">
-                        <span className="font-medium">Not spoken: </span>{tail}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {current.length - kept.length} characters past the middle&apos;s spoken
-                        budget. Keeping only what fits rewrites the script to the line above.
-                        Saving it is a plan edit, so afterwards rebuild the strategy — the
-                        rebuild is free — or the render will refuse the stale strategy.
-                      </p>
-                      <div>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          data-testid="spoken-trim"
-                          onClick={() => setEdits({ ...edits, script: kept })}
-                        >
-                          Keep only what fits
-                        </Button>
-                      </div>
-                    </>
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium">Not spoken: </span>{tail}{" "}
+                      {current.length - kept.length} characters past the middle&apos;s spoken
+                      budget. Regenerate the plan to have it rewritten to fit, or shorten the
+                      script above and rebuild the strategy.
+                    </p>
                   );
                 })()}
               </div>

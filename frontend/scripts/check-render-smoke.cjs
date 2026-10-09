@@ -1296,7 +1296,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     })(ctx);
     expectText(ctx, "does not all fit in the middle", "the overflow warning did not render");
     expectText(ctx, "42 characters", "the overflow warning does not state how much is lost");
-    expectText(ctx, "Trim it on the Review step", "the overflow warning does not name the fix");
+    expectText(ctx, "Regenerate plan", "the overflow warning does not name the fix");
     // A trim is a plan edit: the strategy built before it stops describing the
     // plan, and the render refuses it. The copy has to say the rebuild is the
     // next step, or the founder trims, generates, and meets a second refusal.
@@ -1458,7 +1458,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
       throw new Error("Generate stays enabled while approved words do not fit");
     }
     expectText(ctx, "Script too long for this piece", "the overflow block does not name the stop");
-    expectText(ctx, "Trim it on the Review", "the overflow block does not name the fix");
+    expectText(ctx, "Regenerate plan", "the overflow block does not name the fix");
   });
 
   // -------------------------------------------------------------------------
@@ -2179,14 +2179,13 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     }
   });
 
-  // The partition the render actually speaks: what fits, what is dropped, and
-  // the one-click trim that resolves the overflow warning. Trimming to the
-  // shown kept line has to save exactly that line — it is the server's own
-  // bound text, so anything else would reintroduce the drift the binding
-  // removed.
-  await check("Review shows the spoken partition and trims to what fits", async (ctx) => {
+  // The partition the render actually speaks: what fits, and what is dropped.
+  // There is deliberately no trim control. A generated script is measured and
+  // cut to fit before it is stored, so the founder is never handed a broken
+  // plan to repair by hand — and the overflow this block reports can now only
+  // come from their own edit, which the copy names as such.
+  await check("Review shows the spoken partition without offering a manual trim", async (ctx) => {
     const kept = "Most evenings blur together.";
-    const updates = [];
     await withApi(
       {
         getStudioProject: async () => ({
@@ -2195,10 +2194,6 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
           spoken_middle: kept,
           spoken_overflow: { dropped_chars: 200, budget: 105, middle_seconds: 7 },
         }),
-        updateStudioProject: async (id, payload) => {
-          updates.push(payload);
-          return PROJECT_WITH_STRATEGY;
-        },
       },
       async () => {
         global.__SMOKE_PARAMS = "?project=p1";
@@ -2207,30 +2202,153 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
           await openStep(ctx, "Review");
           expectText(ctx, "What the middle will say", "the spoken partition is not shown");
           expectText(ctx, kept, "the kept spoken line is not shown");
-          expectText(ctx, "rebuild the strategy", "the trim does not say a rebuild follows");
           expectText(ctx, "Not spoken:", "the dropped tail is not shown");
-          const trim = ctx.container.querySelector('[data-testid="spoken-trim"]');
-          if (!trim) throw new Error("Review offers no trim for the overflowing script");
-          await act(async () => {
-            trim.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-          });
-          await act(async () => {});
-          const save = [...ctx.container.querySelectorAll("button")]
-            .find((b) => (b.textContent || "").trim() === "Save edits");
-          if (!save) throw new Error("Review offers no save for the trimmed script");
-          await act(async () => {
-            save.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-          });
-          await act(async () => {});
+          expectText(
+            ctx,
+            "Regenerate the plan",
+            "the overflow does not name the automatic fix",
+          );
+          if (ctx.container.querySelector('[data-testid="spoken-trim"]')) {
+            throw new Error("Review still offers a manual trim control");
+          }
         } finally {
           global.__SMOKE_PARAMS = "";
         }
       }
     );
-    const sent = updates.map((p) => p.script).find((s) => s !== undefined);
-    if (sent !== kept) {
-      throw new Error(`the trim did not save the kept line: ${JSON.stringify(sent)}`);
-    }
+  });
+
+  // The arrival clamp, reported. The founder's script is shorter than the model
+  // wrote it, and silence about that reads as the studio losing words — so the
+  // size of the cut is stated, and the note says what was removed is not
+  // dropped at render.
+  await check("Review reports a script that was trimmed on arrival", async (ctx) => {
+    await withApi(
+      {
+        getStudioProject: async () => ({
+          ...PROJECT_WITH_STRATEGY,
+          plan_trim: { dropped_chars: 111, middle_seconds: 12, budget: 180 },
+        }),
+      },
+      async () => {
+        global.__SMOKE_PARAMS = "?project=p1";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Review");
+          const note = ctx.container.querySelector('[data-testid="plan-trimmed-note"]');
+          if (!note) throw new Error("a trimmed plan is not reported to the founder");
+          const text = note.textContent || "";
+          if (!text.includes("111")) {
+            throw new Error(`the trim note does not size the cut: ${JSON.stringify(text)}`);
+          }
+          if (!text.includes("12-second middle")) {
+            throw new Error(`the trim note does not name the middle it fits: ${JSON.stringify(text)}`);
+          }
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
+  // Review must read the words from the server, not from whatever the wizard
+  // last held: an eager draft update issued while the plan was still being
+  // written can resolve after it, leaving the editors on a pre-plan copy of
+  // the row — an empty script above a plan the render step can count in.
+  await check("Review re-reads the project so the editors are not stale", async (ctx) => {
+    let fetched = 0;
+    await withApi(
+      {
+        // The wizard's copy is empty; the server's row carries the plan. Only a
+        // refetch can reconcile the two, so this is what proves the fix.
+        getStudioProject: async () => {
+          fetched += 1;
+          return {
+            ...PROJECT_WITH_STRATEGY,
+            hook_line: "Hook line from the server",
+            script: "Script text from the server",
+          };
+        },
+      },
+      async () => {
+        global.__SMOKE_PARAMS = "?project=p1";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Review");
+          await act(async () => {});
+          await act(async () => {});
+          if (fetched === 0) {
+            throw new Error("Review never re-read the project from the server");
+          }
+          expectText(
+            ctx,
+            "Script text from the server",
+            "the script editor did not adopt the server's copy",
+          );
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
+  // And it must not fight the founder: a refetch that lands while they have
+  // unsaved edits must not overwrite the words they are writing.
+  await check("Review never overwrites unsaved edits with a refetch", async (ctx) => {
+    let resolveProject;
+    // The deep-link load that opens the wizard resolves normally, so the page
+    // reaches Review on its own. Only the re-read the fix performs is held, so
+    // the two never race each other and the held read is unambiguously the one
+    // under test.
+    let calls = 0;
+    await withApi(
+      {
+        getStudioProject: async () => {
+          calls += 1;
+          if (calls === 1) return PROJECT_WITH_STRATEGY;
+          // Every later read is held on a promise, so it can be released AFTER
+          // the founder has typed — the only ordering where the guard against
+          // clobbering unsaved edits is testable at all.
+          return new Promise((resolve) => {
+            resolveProject = () =>
+              resolve({ ...PROJECT_WITH_STRATEGY, script: "Text from the server" });
+          });
+        },
+      },
+      async () => {
+        global.__SMOKE_PARAMS = "?project=p1";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          // The pills are matched by label, and "Review" is a substring of
+          // nothing here — but the deferred read below has to be armed by the
+          // time the step opens, so the step is opened first and only then is
+          // the read left hanging for the edit to race.
+          await openStep(ctx, "Review");
+          await act(async () => {});
+          if (!resolveProject) {
+            throw new Error("Review never requested the project it should re-read");
+          }
+          // Type into the script box, then let the in-flight read resolve.
+          const box = [...ctx.container.querySelectorAll("textarea")].find((t) =>
+            (t.value || "").includes("You do not have a focus problem"),
+          );
+          if (!box) throw new Error("Review has no script editor to type into");
+          const setter = Object.getOwnPropertyDescriptor(
+            dom.window.HTMLTextAreaElement.prototype,
+            "value"
+          ).set;
+          setter.call(box, "My own unsaved words");
+          box.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+          await act(async () => {});
+          resolveProject();
+          await act(async () => {});
+          await act(async () => {});
+          expectText(ctx, "My own unsaved words", "the refetch discarded an unsaved edit");
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
   });
 
   // The whole-wizard version of the above. A length control on one step is

@@ -1678,6 +1678,113 @@ class TestTrendEvidenceReachesTheStrategy:
         assert "do not" in prompt and "state or imply a view" in prompt
 
 
+class TestPlanArrivalClamp:
+    """
+    A generated script is measured against the middle's seconds before it is
+    stored.
+
+    The prompt has always stated this budget and nothing checked the answer, so
+    an over-length plan was stored whole: the founder read it on Review with
+    nothing wrong on screen, and the first sign of it was the render gate
+    refusing with a fix the studio did not offer. These pin that the plan now
+    arrives renderable.
+    """
+
+    def _over_budget_plan(self):
+        # Well past any budget: a 15s piece is a 12s middle, ~180 characters.
+        return {
+            **FAKE_PLAN,
+            "hook_line": "Stop writing empty pages",
+            "script": (
+                "Stop writing empty pages. Taskly gives you one short prompt and a "
+                "reminder. It works offline, and it never nags you about the streak. "
+                "The blank page loses its grip by the end of the first sentence, and "
+                "that is the whole point of the thing you are looking at right now."
+            ),
+        }
+
+    def test_an_over_budget_plan_is_stored_already_trimmed(self, api, monkeypatch):
+        import ai_service
+        plan = self._over_budget_plan()
+        _patch_plan(monkeypatch, api, plan)
+        from models import GeneratePlanRequest
+        profile = _approved_profile(api, "Clamp Store")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        result = _run(api.generate_plan(project_id=project["id"],
+                                        payload=GeneratePlanRequest(), user_id=ANON))
+        assert result["plan_trim"]["dropped_chars"] > 0
+        # The stored script is measured, not merely reported.
+        part = ai_service.partition_spoken_words(
+            result, result["hook_seconds"] or 3, result["duration_seconds"] or 0
+        )
+        assert part["dropped_chars"] == 0
+        assert len(result["script"]) < len(plan["script"])
+
+    def test_a_clamped_plan_passes_the_render_gate(self, api, monkeypatch):
+        """The whole point: no dead end. What the clamp stored must be what the
+        gate would have accepted, or the founder is back to a 409."""
+        import server
+        _patch_plan(monkeypatch, api, self._over_budget_plan())
+        from models import GeneratePlanRequest
+        profile = _approved_profile(api, "Clamp Gate")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        result = _run(api.generate_plan(project_id=project["id"],
+                                        payload=GeneratePlanRequest(), user_id=ANON))
+        assert server._require_spoken_words_fit({
+            "hook_line": result["hook_line"],
+            "script": result["script"],
+            "hook_seconds": result["hook_seconds"],
+            "duration_seconds": result["duration_seconds"],
+            "strategy": {"segments": [{"role": "hook"}, {"role": "middle"}]},
+        }) == {}
+        # And nothing is reported as un-spoken on a freshly generated plan.
+        assert result["spoken_overflow"] == {}
+
+    def test_a_fitting_plan_records_no_trim(self, api, monkeypatch):
+        _patch_plan(monkeypatch, api, FAKE_PLAN)
+        from models import GeneratePlanRequest
+        profile = _approved_profile(api, "Clamp Clean")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        result = _run(api.generate_plan(project_id=project["id"],
+                                        payload=GeneratePlanRequest(), user_id=ANON))
+        assert result["plan_trim"] == {}
+        assert result["script"] == FAKE_PLAN["script"]
+
+    def test_regenerating_clears_a_previous_trim(self, api, monkeypatch):
+        """The note is about the plan in hand. After a regenerate the plan is a
+        different one, and leaving the old count would tell the founder their
+        fresh script is short when it may not be."""
+        from models import GeneratePlanRequest
+        profile = _approved_profile(api, "Clamp Reset")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        _patch_plan(monkeypatch, api, self._over_budget_plan())
+        first = _run(api.generate_plan(project_id=project["id"],
+                                       payload=GeneratePlanRequest(), user_id=ANON))
+        assert first["plan_trim"]["dropped_chars"] > 0
+        _patch_plan(monkeypatch, api, FAKE_PLAN)
+        second = _run(api.generate_plan(project_id=project["id"],
+                                        payload=GeneratePlanRequest(), user_id=ANON))
+        assert second["plan_trim"] == {}
+
+    def test_a_founder_edit_cannot_erase_the_record_of_a_trim(self, api, monkeypatch):
+        from models import GeneratePlanRequest, UpdateStudioProjectRequest
+        _patch_plan(monkeypatch, api, self._over_budget_plan())
+        profile = _approved_profile(api, "Clamp Edit")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        _run(api.generate_plan(project_id=project["id"],
+                               payload=GeneratePlanRequest(), user_id=ANON))
+        after = _run(api.update_studio_project(
+            project_id=project["id"],
+            payload=UpdateStudioProjectRequest(script="Shortened by hand."),
+            user_id=ANON))
+        assert after["plan_trim"]["dropped_chars"] > 0
+
+
 class TestSpokenWordsGate:
     """The render refuses words the founder cannot actually speak.
 
@@ -1737,7 +1844,10 @@ class TestSpokenWordsGate:
             ))
         assert getattr(exc.value, "status_code", None) == 409
         assert "do not fit" in str(exc.value.detail)
-        assert "Trim it on the Review step" in str(exc.value.detail)
+        # The old wording pointed at a Review button that does not exist. A
+        # generated plan is trimmed on arrival, so the honest fix for a
+        # hand-edited script is to shorten it or regenerate.
+        assert "Regenerate the plan" in str(exc.value.detail)
         assert "rebuild the strategy" in str(exc.value.detail)
 
     def test_a_fitting_script_passes_the_gate(self):

@@ -483,9 +483,10 @@ export function HookContinuityPanel({ project, onProjectChange }) {
                 which is the last thing the founder wrote. Blocking this in the
                 render gate is what stops the spend; showing it here is what
                 stops the surprise. The record is recomputed from the live plan
-                on every read, so it cannot go stale. Trim it on the Review
-                step: the middle's spoken words are shown there, with a button
-                that keeps only what fits. */}
+                on every read, so it cannot go stale. A generated plan is
+                trimmed to fit on arrival, so this is your own edit above:
+                shorten it on Review, or regenerate the plan, then rebuild the
+                strategy here. */}
             {project?.spoken_overflow?.dropped_chars > 0 && (
               <Alert data-testid="spoken-overflow-warning">
                 <AlertTriangle className="h-4 w-4" />
@@ -494,10 +495,10 @@ export function HookContinuityPanel({ project, onProjectChange }) {
                   {project.spoken_overflow.dropped_chars} characters of your approved script
                   do not fit in a {project.spoken_overflow.middle_seconds}s middle
                   (spoken budget: {project.spoken_overflow.budget} characters). Anything
-                  past that is not spoken in the render. Trim it on the Review step —
-                  the spoken words are shown there with a button that keeps only what
-                  fits — then rebuild the strategy here. Or pick a longer template and
-                  rebuild.
+                  past that is not spoken in the render. Shorten it on the Review
+                  step, or press Regenerate plan there — a generated plan is trimmed
+                  to fit on arrival — then rebuild the strategy here. Or pick a
+                  longer template and rebuild.
                 </AlertDescription>
               </Alert>
             )}

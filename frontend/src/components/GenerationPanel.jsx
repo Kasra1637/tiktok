@@ -421,9 +421,10 @@ const handleGenerate = async () => {
           <AlertTitle>Script too long for this piece</AlertTitle>
           <AlertDescription>
             {project.spoken_overflow.dropped_chars} characters of your approved script do not
-            fit in a {project.spoken_overflow.middle_seconds}s middle. Trim it on the Review
-            step — the middle&apos;s spoken words are shown there, with a button that keeps
-            only what fits — then rebuild the strategy and generate.
+            fit in a {project.spoken_overflow.middle_seconds}s middle. A generated
+            plan is trimmed to fit on arrival, so this is your own edit above —
+            shorten it, or press Regenerate plan on the Review step, then rebuild the
+            strategy and generate.
           </AlertDescription>
         </Alert>
       )}
