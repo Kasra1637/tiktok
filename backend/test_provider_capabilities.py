@@ -44,22 +44,6 @@ def _healthy_records() -> dict:
             "generate_audio": False,
             "allowed_passthrough_parameters": ["aigc_watermark"],
         },
-        "x-ai/grok-imagine-video": {
-            "id": "x-ai/grok-imagine-video",
-            "supported_resolutions": ["480p", "720p"],
-            "supported_durations": list(range(1, 16)),
-            "supported_frame_images": ["first_frame"],
-            "generate_audio": None,
-            "allowed_passthrough_parameters": [],
-        },
-        "x-ai/grok-imagine-video-1.5-lite": {
-            "id": "x-ai/grok-imagine-video-1.5-lite",
-            "supported_resolutions": ["480p", "720p", "1080p"],
-            "supported_durations": list(range(1, 16)),
-            "supported_frame_images": ["first_frame"],
-            "generate_audio": None,
-            "allowed_passthrough_parameters": [],
-        },
         "heygen/heygen-video-1": {
             "id": "heygen/heygen-video-1",
             "supported_resolutions": ["480p", "768p", "2K"],
@@ -72,9 +56,9 @@ def _healthy_records() -> dict:
 
 
 def _live(**overrides) -> dict:
-    """Healthy fixture with one model's fields overridden."""
+    """Healthy fixture with the HeyGen entry's fields overridden."""
     live = _healthy_records()
-    live["x-ai/grok-imagine-video"].update(overrides)
+    live["heygen/heygen-video-1"].update(overrides)
     return live
 
 
@@ -101,27 +85,9 @@ class TestCompareCatalogToLive:
         founder pays for the attempt and gets nothing.
         """
         problems = pc.compare_catalog_to_live(_live(supported_resolutions=["480p"]))
-        assert any("720p" in p and "grok" in p for p in problems)
+        assert any("768p" in p and "heygen" in p for p in problems)
 
-    def test_a_withdrawn_model_is_reported(self):
-        """
-        A provider quietly retiring a model is the case nothing else catches:
-        it stays selectable in the dropdown and every render is refused.
-        """
-        live = _healthy_records()
-        del live["x-ai/grok-imagine-video"]
-        problems = pc.compare_catalog_to_live(live)
-        assert any("no longer listed" in p for p in problems)
 
-    def test_a_withdrawn_lite_model_is_reported(self):
-        """
-        Same retirement tripwire for the fourth entry: withdrawing the lite
-        model must name it, not pass silent because the sibling still matches.
-        """
-        live = _healthy_records()
-        del live["x-ai/grok-imagine-video-1.5-lite"]
-        problems = pc.compare_catalog_to_live(live)
-        assert any("1.5-lite" in p and "no longer listed" in p for p in problems)
 
     def test_heygen_audio_accepted_means_no_drift(self):
         """
@@ -160,7 +126,7 @@ class TestCompareCatalogToLive:
 
     def test_a_duration_beyond_the_provider_ceiling_is_reported(self):
         live = _healthy_records()
-        live["x-ai/grok-imagine-video"]["supported_durations"] = list(range(1, 11))
+        live["heygen/heygen-video-1"]["supported_durations"] = list(range(1, 11))
         problems = pc.compare_catalog_to_live(live)
         assert any("longest is 10s" in p for p in problems)
 
@@ -171,10 +137,12 @@ class TestCompareCatalogToLive:
         case is silent -- and a model that DID list audio while we claimed it
         could not happen here, because we never send the field for Grok.
         """
-        # Consistent: provider says unlisted, catalog declines audio.
-        assert pc.compare_catalog_to_live(_live(generate_audio=None)) == []
-        # Also consistent: provider starts accepting audio, we still decline,
-        # so the studio keeps omitting the field and nothing breaks.
+        # HeyGen's catalog entry requests audio, so the provider stopping
+        # to list the field entirely is drift the boot check must report.
+        problems = pc.compare_catalog_to_live(_live(generate_audio=None))
+        assert any("heygen" in p and "generate_audio" in p for p in problems)
+        # Consistent: provider lists the field (accepted, off or on).
+        assert pc.compare_catalog_to_live(_live(generate_audio=False)) == []
         assert pc.compare_catalog_to_live(_live(generate_audio=True)) == []
 
     def test_a_new_required_passthrough_is_reported(self):

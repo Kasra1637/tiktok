@@ -930,7 +930,13 @@ export default function CreateVideo() {
     }
   };
 
-  const canGenerate = Boolean(profileId && templateId);
+  // A template can be selected either via URL param (templateId) or stored
+  // on the project (project.template_id). The URL param wins when present
+  // because it reflects the founder's current intent; the project's value is
+  // a fallback for cases like auto-generation on Review where the URL param
+  // hasn't been set yet but the project already knows its template.
+  const effectiveTemplateId = templateId || project?.template_id;
+  const canGenerate = Boolean(profileId && effectiveTemplateId);
 
   // Face-only product: every template requires exactly the character
   // reference, and the backend refuses a generation without one (see
@@ -943,13 +949,14 @@ export default function CreateVideo() {
   // yet" and "you still owe this template a photograph" are different problems
   // and the founder needs to be told which one they have. The split lives in
   // a tested helper rather than inline here.
-  const missingIdentity = template
-    ? blockingRequirements(template.required_assets, project?.assets)
+  const effectiveTemplate = template || project?.template_id ? { ...template, id: template?.id || project?.template_id } : null;
+  const missingIdentity = effectiveTemplate
+    ? blockingRequirements(effectiveTemplate.required_assets, project?.assets)
     : [];
   // Server-side refusal is the guarantee; this is the early warning. Not folded
   // into canGenerate, because "you have not chosen a template yet" and "you
   // still owe this template a photograph" are different problems.
-  const blockedOnAssets = Boolean(template) && missingIdentity.length > 0;
+  const blockedOnAssets = Boolean(effectiveTemplate) && missingIdentity.length > 0;
   // What the generated piece is and how long it will be — a statement, not a
   // control. Once a project exists its own number is the authority, because
   // that is the length the plan's beat timeline was written to and the length
@@ -993,14 +1000,16 @@ export default function CreateVideo() {
   // declarations the way the other effects do.
   const planAutoAttempted = useRef("");
   useEffect(() => {
-    if (step !== 3 || busy || !canGenerate || blockedOnAssets || !objective) return;
+    // The plan needs a profile, a template and a goal. The character photo is
+    // required to RENDER, not to write the plan, so it does not gate this.
+    if (step !== 3 || busy || !canGenerate || !objective) return;
     if (project?.script_version) return;
     const key = `${profileId}:${templateId}:${angleId || ""}:${objective || ""}:${tone || ""}`;
     if (planAutoAttempted.current === key) return;
     planAutoAttempted.current = key;
     handleGeneratePlan();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleGeneratePlan is a render-scoped closure, same as handleGenerateStrategy in the auto-build below; the key ref guards re-fires, and listing it would re-run the effect on every render.
-  }, [step, busy, canGenerate, blockedOnAssets, objective, profileId, templateId, angleId, tone, project?.id, project?.script_version]);
+  }, [step, busy, canGenerate, objective, profileId, templateId, angleId, tone, project?.id, project?.script_version]);
 
   /* Progress state, derived rather than tracked. A founder can reach any step
      from any other, so nothing here can be a counter that advances — the pills
@@ -1498,24 +1507,30 @@ export default function CreateVideo() {
       );
     }
 
-    if (step === 3) {
+if (step === 3) {
       return (
         <StepShell
           icon={CheckCircle2}
           title="Review the plan"
           description="Write your script here, then check every claim in it. Free — nothing is generated until you open the next step."
         >
-        {!project?.script_version ? (
-          /* The plan button. This was a step of its own that held nothing but
-             this button, so a founder pressed it and was immediately told to go
-             to the next screen to see the result. It is now the top of the step
-             that reads the result. */
+        {!project?.script_version && !busy ? (
+          /* Plan is being generated. Show loading state. */
           <div className="space-y-3 rounded-xl border border-[color:var(--hairline)] p-4">
-            {!templateId && (
-              <p className="text-sm text-muted-foreground">
-                Choose a template first.
-              </p>
-            )}
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm font-medium">Generating your plan…</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Writing hook, script, shots, and demo note.
+            </p>
+          </div>
+        ) : !project?.script_version ? (
+          /* Plan generation failed or blocked. Show error and retry button. */
+          <div className="space-y-3 rounded-xl border border-[color:var(--hairline)] p-4">
+            <p className="text-sm text-muted-foreground">
+              Could not generate plan automatically. Check requirements and try again.
+            </p>
             <MissingRequirements
               identity={missingIdentity}
               onGoToTemplatePhoto={scrollToTemplatePhoto}
@@ -1523,7 +1538,7 @@ export default function CreateVideo() {
             <Button
               variant="brand"
               onClick={handleGeneratePlan}
-              disabled={busy || !canGenerate || blockedOnAssets}
+              disabled={busy || !canGenerate}
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               Generate the plan

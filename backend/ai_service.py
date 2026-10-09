@@ -39,9 +39,9 @@ logger = logging.getLogger(__name__)
 
 # Models
 VISION_MODEL = "openai/gpt-4o-mini"
-IMAGE_GEN_MODEL = "google/gemini-2.5-flash-image"
-FACE_SWAP_MODEL = "google/gemini-3.1-flash-image"  # Gemini 3.1 Flash Image — reliable face identity transfer, up to 14 input references, up to 4K
 TEXT_MODEL = "openai/gpt-4o-mini"
+# Image generation model for opening scene stills. Uses a dedicated image model
+# rather than a video model, since the opening frame is a single still image.
 
 # Video generation models.
 # The template studio's providers. MiniMax H3 is the default: 2K picture,
@@ -50,22 +50,6 @@ TEXT_MODEL = "openai/gpt-4o-mini"
 # entry below. A video is ONE render either way, so a request longer than
 # the model's single-pass ceiling is refused rather than truncated.
 VIDEO_MODELS = {
-    "aleph-2": {
-        "id": "runway/aleph-2",
-        "name": "Runway Aleph 2.0",
-        "description": (
-            "In-context video EDITOR (not generation) — edits a supplied clip "
-            "directly rather than generating from a prompt. Retained only for "
-            "legacy records; not usable by the template studio."
-        ),
-        "max_duration": 30,
-        "min_duration": 2,
-        "supports_references": True,
-        "supports_native_audio": False,
-        "supports_v2v_motion": False,  # not motion transfer — direct video editing
-        "resolution": "1080p",
-        "is_video_editor": True,  # fundamentally different request shape — see generate_video()
-    },
     "minimax-h3": {
         "id": "minimax/hailuo-3",
         "name": "MiniMax H3",
@@ -117,86 +101,9 @@ VIDEO_MODELS = {
         "resolution": "768p",
         "supports_combined_refs": False,
     },
-    # Grok Imagine Video: a prompt-to-video renderer that takes the founder's
-    # photograph as the opening frame, in the same shape as the Hailuo entries.
-    #
-    # Facts below come from OpenRouter's own video model endpoint
-    # (GET /api/v1/videos/models), which is a free read and states the
-    # accepted fields per model. provider_capabilities.check_provider_drift
-    # re-reads it at boot and warns if what we assert here stops matching.
-    #
-    # Three of its declared values drove this entry:
-    #   supported_resolutions  480p, 720p  -> 720p, and nothing else. An
-    #     unlisted resolution is a 400, which is the same constraint that shaped
-    #     the H3 Max entry.
-    #   supported_frame_images  first_frame only  -> the photo rides as the
-    #     opening frame, never as a reference list.
-    #   allowed_passthrough_parameters  []  -> no provider.options block, so
-    #     there is no undocumented required field waiting to refuse a render.
-    #
-    # generate_audio is unlisted for this model, so supports_native_audio is
-    # False and the studio omits the field entirely rather than sending an
-    # unlisted parameter. Clips are therefore expected to be silent, the same
-    # trade H3 Max already makes. If a real clip comes back with sound, that is
-    # the flag to flip.
-    #
-    # Opt-in, not default: 720p rather than the 2K the default model gives,
-    # with no native audio. At the 10-12s these templates render that is a
-    # visibly softer clip, which is why Hailuo 3 stays the default and this is
-    # the model to try a second script on. The downloads are scaled to the
-    # 1080x1920 canvas on the way out.
-    "grok-imagine-video": {
-        "id": "x-ai/grok-imagine-video",
-        "name": "Grok Imagine Video",
-        "description": (
-            "Prompt-to-video with your photo opening the clip as its first "
-            "frame. 720p, 1-15s, no native audio. A softer, quieter take than "
-            "the default. Opt-in."
-        ),
-        "max_duration": 15,
-        "min_duration": 5,
-        "supports_references": False,
-        "supports_native_audio": False,  # generate_audio unlisted; omit the field
-        "supports_v2v_motion": False,
-        "resolution": "720p",
-        "supports_combined_refs": False,
-    },
-    # Grok Imagine Video 1.5 Lite: the distilled, faster/cheaper sibling of
-    # Grok Imagine Video, served on the same OpenRouter key and endpoint.
-    # Same shape as its sibling (photo as opening frame, no native audio),
-    # so it joins as a fourth opt-in for cheap drafts and second scripts.
-    #
-    # Facts below come from OpenRouter's own model page for
-    # x-ai/grok-imagine-video-1.5-lite: 480p/720p/1080p, 1-15s clips,
-    # first-frame image steering, vertical ratios included. Resolution is
-    # 720p, not 1080p, on purpose: OpenRouter renders lite-1080p as upscaled
-    # 720p at ~4.7x the per-second price, so 1080p buys cost without detail.
-    # min_duration mirrors the sibling (5) rather than the provider floor (1)
-    # until a first live render proves shorter renders work through the
-    # studio's trim logic.
-    #
-    # generate_audio is unlisted for this model family, so
-    # supports_native_audio is False and the studio omits the field. If a
-    # real clip comes back with sound, that is the flag to flip.
-    "grok-imagine-video-lite": {
-        "id": "x-ai/grok-imagine-video-1.5-lite",
-        "name": "Grok Imagine Video Lite",
-        "description": (
-            "Distilled Grok Imagine: faster, cheaper drafts with your photo "
-            "opening the clip as its first frame. 720p, 1-15s, no native "
-            "audio. For cheap drafts and second scripts. Opt-in."
-        ),
-        "max_duration": 15,
-        "min_duration": 5,
-        "supports_references": False,
-        "supports_native_audio": False,  # generate_audio unlisted; omit the field
-        "supports_v2v_motion": False,
-        "resolution": "720p",
-        "supports_combined_refs": False,
-    },
-    # HeyGen Video: general-purpose short-form business video (brand moments,
+# HeyGen Video: general-purpose short-form business video (brand moments,
     # product demos) with synthesized audio in a single call — dialogue,
-    # ambience and effects — from a prompt and a generated composite opening
+    # ambience and effects — from a prompt and the founder's photo as the first
     # frame. The first catalog entry besides Hailuo 3 with real audio.
     #
     # Facts below come from OpenRouter's own video model endpoint
@@ -208,9 +115,8 @@ VIDEO_MODELS = {
     #     on render evidence.
     #   supported_durations  5-15  -> min 5 / max 15, exactly the studio's
     #     floor and ceiling, so no new trim edge cases.
-    #   supported_frame_images  first_frame only  -> a generated composite
-    #     opening frame is submitted, not the raw uploaded photo. The photo
-    #     remains the identity source for that composite.
+    #   supported_frame_images  first_frame only  -> the cropped founder photo
+    #     is sent as the first frame, the same path as the other models.
     #   generate_audio  false (accepted, defaults off), NOT null  -> the field
     #     is sendable, and the studio defaults to requesting audio whenever
     #     the provider offers it (server.py). If real clips come back silent
@@ -300,69 +206,6 @@ APP_PROFILE_LIST_KEYS = (
 )
 
 
-def _build_face_swap_prompt(customization_prompt: str = "") -> str:
-    """Build the shared target-performance-first contract for image face swaps."""
-    customization = customization_prompt.strip()
-    customization_instruction = ""
-    if customization:
-        customization_instruction = (
-            " CUSTOMIZATION: Apply this request only to the scene, clothing, environment, or visual "
-            f"style: {customization}."
-        )
-
-    return (
-        "TASK: This is a LOCAL EDIT of IMAGE 1, not a new photo. IMAGE 1 is the fixed base canvas — "
-        "same pixels, same framing, same zoom level, same everything — EXCEPT the face region, which "
-        "gets replaced with the identity from IMAGE 2. Do not regenerate the scene. Do not reframe, "
-        "recrop, or zoom differently than IMAGE 1. Edit the face region only.\n\n"
-        "This edit has TWO requirements that are EQUALLY MANDATORY. Both must be true in the output, "
-        "with neither one allowed to weaken the other:\n\n"
-        "REQUIREMENT A — IDENTITY COMES FROM IMAGE 2: The face in the output is IMAGE 2's face, not "
-        "IMAGE 1's. Transfer from IMAGE 2: facial bone structure, jawline and chin shape, cheekbones, "
-        "brow ridge, nose anatomy, intrinsic eye shape, eye color, intrinsic lip shape and fullness, "
-        "skin tone, and hairstyle. FAIL CONDITION: the output is still recognizable as IMAGE 1's person.\n\n"
-        "REQUIREMENT B — EXPRESSION, POSE, AND SCENE COME FROM IMAGE 1: Every other visual property "
-        "must be copied from IMAGE 1 exactly, then rendered using IMAGE 2's facial anatomy from "
-        "Requirement A. This includes: head orientation and tilt; gaze direction; eye openness and "
-        "eyelid aperture; eyebrow position; MOUTH POSE — if IMAGE 1's mouth is closed, the output's "
-        "mouth is closed; if IMAGE 1's mouth is open, the output's mouth is open at the same degree; "
-        "jaw opening; reaction/emotion intensity; body pose and position; hand position and gestures; "
-        "clothing; background and every object in it; lighting direction; camera angle; and framing/zoom "
-        "level (do not crop tighter or wider than IMAGE 1). FAIL CONDITION: the mouth pose, head angle, "
-        "gaze, framing, pose, or background differs from IMAGE 1, or IMAGE 2's own expression leaked "
-        "into the output instead of being replaced by IMAGE 1's expression.\n\n"
-        "Think of this as: IMAGE 2's person was standing exactly where IMAGE 1's person was standing, "
-        "made exactly the same expression and gesture IMAGE 1's person was making, in the exact same "
-        "room, at the exact same camera distance, and someone took IMAGE 1 at that instant instead.\n\n"
-        "TEXT OVERLAYS: Remove ALL text overlays, captions, watermarks, and visual text elements that appear "
-        "in the first image. The output must have a clean image with NO on-screen text, no subtitles, no "
-        "branded overlays, no emoji overlays, and no caption graphics. "
-        "HAIRSTYLE: Also replace the hairstyle from the first image with the hairstyle of the person in the "
-        "second image — match its hair color, length, texture (straight, wavy, or curly), volume, and parting "
-        "exactly as shown in the second image. Do not keep the hairstyle, hair color, or hair length that was "
-        "originally in the first image. SKIN TONE CONSISTENCY (MANDATORY): The second image's face "
-        "establishes the EXCLUSIVE skin color reference for the ENTIRE body. Every square centimeter of "
-        "visible skin — face, neck, ears, chest, shoulders, upper arms, forearms, hands, fingers, legs, "
-        "feet, and any other exposed area — MUST match the exact skin color and undertone from the second "
-        "image's face. Do NOT retain the original body's skin tone from the first image anywhere. "
-        "The skin must appear as one continuous, uniform tone across the whole person as if they were born "
-        "with that skin color. There must be zero visible boundary, hard edge, or color shift at the "
-        "jawline, neck, collar, shoulders, or any transition between face and body. Apply the scene's "
-        "natural lighting and shadows on top of this matched skin tone, but the underlying base pigment "
-        "must be identical everywhere — face, body, limbs, hands, all one person's natural skin color."
-        f"{customization_instruction}"
-        " Customization applies only to scene, clothing, environment, and visual style — it must never "
-        "change the identity from IMAGE 2, and must never change the expression being re-performed "
-        "from IMAGE 1.\n\n"
-        "FINAL CHECK BEFORE OUTPUT — verify BOTH, neither is optional: "
-        "(1) Is the face IMAGE 2's person, not IMAGE 1's? "
-        "(2) Is everything else — mouth pose, head angle, gaze, pose, hand position, clothing, "
-        "background, camera angle, and framing/zoom — an exact match to IMAGE 1, not to IMAGE 2 and "
-        "not a new scene? "
-        "If either check fails, discard the result and redo it. A result that passes (1) but fails (2) "
-        "is just as wrong as a result that fails (1) — this is a local edit of IMAGE 1, not a new "
-        "photograph of IMAGE 2's person."
-    )
 
 
 def _headers():
@@ -787,40 +630,6 @@ async def _call_image_generation_with_retry(
     raise last_error or RuntimeError(f"{context} failed after {max_retries} attempts.")
 
 
-async def generate_opening_scene_image(scene_brief: str, *, session_id: str) -> bytes:
-    """Generate a strategy-derived opening-scene still without an identity photo.
-
-    The founder's uploaded background must not reach this image: identity is
-    integrated afterwards by generate_face_swap(). Keeping scene creation and
-    identity separate is what allows a first-frame provider to start in the
-    generated environment instead of starting from the uploaded photograph.
-    """
-    brief = str(scene_brief or "").strip()
-    if not brief:
-        raise RuntimeError("Opening-scene generation needs a strategy-derived brief.")
-    payload = {
-        "model": IMAGE_GEN_MODEL,
-        "prompt": (
-            "TASK: Generate one photorealistic vertical 9:16 opening still for a "
-            "mobile-app promotional video. This is the literal first frame that a "
-            "video model will animate forward from, so composition, wardrobe, "
-            "props, lighting, camera angle, and opening action must already be "
-            "correct.\n\n"
-            f"{brief}\n\n"
-            "OUTPUT: one photorealistic 9:16 still, no app interface, no text, "
-            "no logos, no captions, and no watermarks."
-        ),
-        "resolution": "2K",
-        "aspect_ratio": "9:16",
-        "n": 1,
-    }
-
-    return await _call_image_generation_with_retry(
-        payload=payload,
-        context=f"Opening scene generation ({session_id})",
-        max_retries=1,
-        timeout=600,
-    )
 
 
 async def analyze_hook(frame_paths: list, session_id: str, music_context: dict = None, transcript_text: str = "") -> dict:
@@ -940,92 +749,8 @@ async def analyze_hook(frame_paths: list, session_id: str, music_context: dict =
     return analysis
 
 
-async def generate_customized_preview(
-    reference_frame_path: Path,
-    person_photo_path: Path,
-    mode: str,
-    customization_prompt: str,
-    session_id: str,
-) -> bytes:
-    """Generate a customized face-swapped preview with the configured face-swap model.
-
-    The scene reference is sent FIRST and framed as "the image to edit"; the
-    cropped identity photo is sent SECOND as "the new face to use". This edit-
-    style framing (vs. a generic "generate me in this scene" instruction) is
-    what actually gets these image-editing models to replace the face instead
-    of just reproducing the scene reference's original face — see git history
-    (bcbf905, fe70420, 48c1082) for prior instances of this same failure mode
-    across different underlying models.
-    """
-    # Crop the person photo to just the face region before sending to the model.
-    cropped_person_path = crop_face_from_path(person_photo_path)
-
-    # Use OpenRouter's dedicated Images API with explicit identity + scene references.
-    payload = {
-        "model": FACE_SWAP_MODEL,
-        "prompt": _build_face_swap_prompt(
-            customization_prompt if mode == "custom" else ""
-        ),
-        "input_references": [
-            {"type": "image_url", "image_url": {"url": image_data_uri(reference_frame_path)}},
-            {"type": "image_url", "image_url": {"url": image_data_uri(cropped_person_path)}},
-        ],
-        "resolution": "2K",
-        "aspect_ratio": "9:16",
-        "n": 1,
-    }
-
-    return await _call_image_generation_with_retry(
-        payload=payload,
-        context="Customized preview generation",
-        max_retries=1,
-        timeout=600,
-    )
 
 
-async def generate_face_swap(
-    target_image_path: Path,
-    source_face_path: Path,
-    session_id: str,
-    customization_prompt: str = "",
-) -> bytes:
-    """
-    Standalone identity-preserving scene edit through OpenRouter's Images API.
-
-    The target scene is sent FIRST and framed as "the image to edit"; the
-    cropped source identity is sent SECOND as "the new face to use". Sending
-    the scene as reference 1 with a generic "generate me in this scene"
-    instruction (the previous approach) made these image-editing models treat
-    the scene reference as authoritative and reproduce it — including its
-    original face — largely ignoring the uploaded face. Framing this as a
-    direct, local edit of image 1 using image 2's face is what actually
-    swaps the identity. See git history (bcbf905, fe70420, 48c1082) for prior
-    instances of this same failure mode across different underlying models.
-
-    Optional customization_prompt lets the user request changes to clothing,
-    environment, or other scene elements while keeping the identity swap intact.
-    """
-    # Crop the source face image to just the face region before sending to the model.
-    cropped_source_path = crop_face_from_path(source_face_path)
-
-    payload = {
-        "model": FACE_SWAP_MODEL,
-        "prompt": _build_face_swap_prompt(customization_prompt),
-        "input_references": [
-            {"type": "image_url", "image_url": {"url": image_data_uri(target_image_path)}},
-            {"type": "image_url", "image_url": {"url": image_data_uri(cropped_source_path)}},
-        ],
-        "resolution": "2K",
-        "aspect_ratio": "9:16",
-        "n": 1,
-    }
-
-    return await _call_image_generation_with_retry(
-        payload=payload,
-        context="Face swap",
-        max_retries=1,
-        timeout=600,
-    )
 
 
 async def generate_video_prompt(analysis: dict, brand_context: dict, target_duration: int, session_id: str, music_context: dict = None, transcript_text: str = "", use_original_sound: bool = False) -> dict:
@@ -1211,111 +936,6 @@ async def analyze_image_for_hook(image_path: Path, session_id: str) -> dict:
         return {}
 
 
-async def _edit_video_with_aleph(
-    prompt: str,
-    source_video_url: Optional[str],
-    face_anchor_path: Optional[Path],
-    model_id: str,
-    min_dur: int,
-    max_dur: int,
-) -> dict:
-    """
-    Submit a video EDIT job to Runway Aleph 2.0 via OpenRouter.
-
-    Unlike generative models (MiniMax H3), Aleph does not synthesize
-    a new scene — it takes the actual source video and applies ONLY the named
-    edit, preserving every pixel it wasn't told to change (body movement,
-    hand gestures, camera angle, clothing, background, timing). This is why
-    it's used for the default "replicate this exact hook" flow instead of the
-    generative models: there's no scene to regenerate, no motion to guess at.
-
-    Request shape (best-effort mapping onto OpenRouter's normalized video
-    schema, since Aleph is exposed as a video-output model there like any
-    other): the video TO EDIT is sent as a video_url reference inside
-    input_references (the only video-input slot in OpenRouter's schema), and
-    the face-swapped still is sent as a frame_images entry pinned to
-    frame_type="first_frame" so Aleph anchors the target identity to the
-    opening frame and carries it through the rest of the clip. If OpenRouter's
-    actual routing for Aleph differs from this, the resulting 400 error body
-    will name the expected field — same iterative approach used to fix the
-    Seedance 2.5 resolution and TaskTypeConstraint issues.
-
-    Raises RuntimeError if no source video is available — Aleph has nothing
-    to edit without one; callers should fall back to a generative model.
-    """
-    if not source_video_url:
-        raise RuntimeError(
-            "Runway Aleph 2.0 requires a source video to edit — no reference "
-            "video is available for this generation. Fall back to MiniMax H3 instead."
-        )
-
-    payload = {
-        "model": model_id,
-        "prompt": prompt,
-        "duration": max(min_dur, min(3, max_dur)),
-        "resolution": "1080p",
-        "aspect_ratio": "9:16",
-        "input_references": [
-            {
-                "type": "video_url",
-                "video_url": {"url": source_video_url},
-            }
-        ],
-    }
-
-    if face_anchor_path and face_anchor_path.exists():
-        payload["frame_images"] = [
-            {
-                "type": "image_url",
-                "image_url": {"url": image_data_uri(face_anchor_path)},
-                "frame_type": "first_frame",
-            }
-        ]
-
-    logger.info(
-        f"Submitting video EDIT (Runway Aleph 2.0): duration={payload['duration']}s, "
-        f"has_source_video=True, has_face_anchor={bool(payload.get('frame_images'))}, "
-        f"model={model_id}"
-    )
-
-    async with httpx.AsyncClient(timeout=90) as client:
-        last_error = None
-        for attempt in range(2):
-            try:
-                resp = await client.post(f"{OPENROUTER_BASE}/videos", headers=_headers(), json=payload)
-            except httpx.TimeoutException as e:
-                last_error = RuntimeError(f"Video edit timed out: {e}")
-                if attempt == 0:
-                    logger.warning("Aleph video edit attempt 1 timed out, retrying...")
-                    await asyncio.sleep(2)
-                    continue
-                raise last_error
-
-            if resp.status_code in (502, 503, 429) and attempt == 0:
-                logger.warning(
-                    f"Aleph video edit attempt 1 got HTTP {resp.status_code}: "
-                    f"{resp.text[:200]} — retrying..."
-                )
-                await asyncio.sleep(3)
-                continue
-
-            if resp.status_code >= 400:
-                error_text = resp.text[:500]
-                logger.error(f"Aleph video edit submission failed: HTTP {resp.status_code}: {error_text}")
-                raise RuntimeError(f"Video edit failed (HTTP {resp.status_code}): {error_text}")
-            break
-
-        data = resp.json()
-        job_id = data.get("id") or data.get("generation_id") or ""
-        logger.info(
-            f"Aleph video edit submitted: job_id={job_id}, status={data.get('status')}, "
-            f"polling_url={data.get('polling_url')}"
-        )
-        if not job_id:
-            logger.error(f"Aleph video edit returned no job ID. Full response: {resp.text[:1000]}")
-            raise RuntimeError("Video edit returned no job ID.")
-        data["id"] = job_id
-        return data
 
 
 # Provider error signatures that mean "this input will never be accepted".
@@ -1422,22 +1042,6 @@ async def generate_video(
     max_dur = model_config["max_duration"]
     min_dur = model_config.get("min_duration", 1)
     supports_combined = model_config.get("supports_combined_refs", False)
-
-    # === Runway Aleph 2.0: video EDITOR, not a generator ===
-    # Aleph doesn't synthesize a new scene from a prompt — it edits the actual
-    # source video pixel-for-pixel, changing only what the prompt names. This
-    # requires reference_video_url (the real hook clip to edit) AND a face
-    # anchor image. It has its own request/response handling below because
-    # the semantics differ fundamentally from generative models.
-    if model_config.get("is_video_editor"):
-        return await _edit_video_with_aleph(
-            prompt=prompt,
-            source_video_url=reference_video_url,
-            face_anchor_path=reference_image_path,
-            model_id=model_id,
-            min_dur=model_config.get("min_duration", 2),
-            max_dur=max_dur,
-        )
 
     payload = {
         "model": model_id,
@@ -3781,115 +3385,6 @@ def empty_remix_brief() -> dict:
     }
 
 
-async def remix_chat_turn(
-    analysis: dict,
-    video: dict,
-    conversation_history: list,
-    existing_brief: dict,
-    session_id: str,
-) -> dict:
-    """
-    One turn of the conversational "remix this video for my brand" chat.
-    Acts like a creative strategist: it checks audience fit between the
-    original hook's implied audience and the brand described so far, asks
-    focused clarifying questions (one or two at a time, not a checklist
-    dump), and incrementally builds a structured brief. `conversation_history`
-    is a list of {"role": "user"|"assistant", "content": str} in chronological
-    order (the latest user message is the last entry). `existing_brief`
-    carries forward fields already captured in prior turns so the model only
-    needs to fill in gaps or apply corrections, not restart from scratch.
-    """
-    system_message = (
-        "You are an expert short-form video creative strategist helping a user remix a viral TikTok hook for "
-        "their own brand/product. You already know exactly what makes the ORIGINAL video's hook work (given "
-        "below) and who it likely targets. Your job, turn by turn, is to:\n"
-        "1. Briefly acknowledge what the user is asking for.\n"
-        "2. Proactively sanity-check AUDIENCE FIT between the original video's implied audience and the "
-        "brand/product described so far - call out if it's a strong match, a stretch, or a mismatch, and why, "
-        "in 2-4 sentences. Use a checkmark or note when the fit is good.\n"
-        "3. Ask ONLY the 1-2 most important missing clarifying questions next (never a long checklist) - things "
-        "like the specific goal (installs, awareness, sales), what's most unique/compelling about the offer, or "
-        "who exactly the target customer is - whichever is least clear so far.\n"
-        "4. Keep responses conversational, concise (under ~120 words), and genuinely helpful - never robotic or "
-        "overly formal boilerplate.\n"
-        "As you go, maintain a structured brief in the background with whatever the user has told you so far. "
-        "Only set ready_to_generate=true once you have a reasonably clear sense of the brand/product, the goal, "
-        "and the target audience (either stated or reasonably inferred) - or the user explicitly says to proceed/"
-        "skip further questions. Respond with STRICT JSON only, no markdown fences, no extra commentary."
-    )
-
-    history_lines = []
-    for turn in conversation_history:
-        role_label = "User" if turn.get("role") == "user" else "Assistant"
-        history_lines.append(f"{role_label}: {turn.get('content', '')}")
-    history_text = "\n".join(history_lines) if history_lines else "(no messages yet)"
-
-    prompt = (
-        "Original viral video context:\n"
-        f"- Title: {video.get('title') or '(unknown)'}\n"
-        f"- Niche: {video.get('niche') or '(unknown)'}\n"
-        f"- Hook summary: {analysis.get('hook_summary')}\n"
-        f"- Replicable mechanics: {analysis.get('replicable_mechanics')}\n\n"
-        "Brief captured so far from this conversation (empty strings/lists = not yet known):\n"
-        f"{json.dumps(existing_brief, ensure_ascii=False)}\n\n"
-        "Conversation so far (latest user message is last):\n"
-        f"{history_text}\n\n"
-        "Return ONLY a JSON object with this exact schema:\n"
-        "{\n"
-        '  "reply": "your conversational reply to the user for this turn, following the instructions above",\n'
-        '  "brief": {\n'
-        '    "brand_name": "string, best known brand/product name, or empty string",\n'
-        '    "brand_goal": "string, the goal of the video (e.g. drive installs), or empty string",\n'
-        '    "brand_details": "string, what the brand/product offers and what the video should communicate, or empty string",\n'
-        '    "brand_overview": "string, 1-3 sentence overview of the brand, or empty string",\n'
-        '    "unique_selling_propositions": ["short bullet", "..."] concrete USPs mentioned so far, or empty list,\n'
-        '    "brand_voice_tone": "string describing desired voice/tone, or empty string",\n'
-        '    "target_audience": "string describing the target audience, or empty string"\n'
-        "  },\n"
-        '  "ready_to_generate": boolean, true only once enough context exists to write a strong video prompt\n'
-        "}\n"
-        "Carry forward every field from the existing brief unless this conversation clearly updates it. "
-        "Return ONLY valid JSON."
-    )
-
-    payload = {
-        "model": TEXT_MODEL,
-        "messages": [
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": prompt},
-        ],
-        "temperature": 0.5,
-        "max_tokens": 2000,
-    }
-
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-
-    full_text = data["choices"][0]["message"]["content"]
-    result = _parse_json_response(full_text, "Remix chat")
-
-    missing = REQUIRED_REMIX_CHAT_KEYS - set(result.keys())
-    if missing:
-        logger.error(f"Remix chat missing fields {missing}. Raw text: {full_text[:1500]!r}")
-        raise RuntimeError(f"Remix chat response missing required fields: {missing}")
-
-    brief = result.get("brief") or {}
-    if not isinstance(brief, dict):
-        brief = {}
-    merged_brief = empty_remix_brief()
-    merged_brief.update(existing_brief or {})
-    for key in REMIX_BRIEF_KEYS:
-        if key in brief and brief[key]:
-            merged_brief[key] = brief[key]
-    if not isinstance(merged_brief.get("unique_selling_propositions"), list):
-        merged_brief["unique_selling_propositions"] = (
-            [str(merged_brief["unique_selling_propositions"])] if merged_brief.get("unique_selling_propositions") else []
-        )
-    result["brief"] = merged_brief
-
-    return result
 
 
 def strip_html_to_text(html: str) -> str:

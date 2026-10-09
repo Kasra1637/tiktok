@@ -54,11 +54,6 @@ class TestProviderResolution:
         assert key == "minimax-h3"
         assert "unknown" in reason
 
-    def test_resolve_refuses_video_editors(self):
-        """Aleph edits a clip; the template workflow has no clip to edit."""
-        key, reason = vp.resolve("aleph-2")
-        assert key != "aleph-2"
-        assert "cannot generate from a prompt" in reason
 
     def test_resolve_defaults_when_no_model_named(self):
         key, reason = vp.resolve(None)
@@ -96,104 +91,20 @@ class TestCapabilities:
         clip rather than making one.
         """
         keys = [c["key"] for c in vp.list_capabilities()]
-        assert keys == ["minimax-h3", "minimax-h3-max", "grok-imagine-video", "grok-imagine-video-lite", "heygen-video-1"]
+        assert keys == ["minimax-h3", "minimax-h3-max", "heygen-video-1"]
         assert "aleph-2" not in keys
         for cap in vp.list_capabilities():
             assert cap["is_video_editor"] is False
 
-    def test_grok_imagine_video_is_opt_in_and_not_the_default(self):
-        """
-        Adding a cheap provider must not move production spend onto it. Grok is
-        listed so a founder can render the same script for about half the cost,
-        and the default stays Hailuo 3 because it is the only model here that
-        renders 2K with native audio.
-        """
-        assert vp.is_studio_eligible("grok-imagine-video") is True
-        assert vp.default_model_key() == "minimax-h3"
-        assert vp.resolve(None)[0] == "minimax-h3"
-        # Named explicitly, it is honoured rather than silently swapped.
-        assert vp.resolve("grok-imagine-video")[0] == "grok-imagine-video"
 
-    def test_grok_imagine_video_is_registered_at_its_real_id(self):
-        cap = vp.capability("grok-imagine-video")
-        assert cap["id"] == "x-ai/grok-imagine-video"
-        assert cap["max_duration"] == 15
-        assert cap["min_duration"] == 5
 
-    def test_grok_imagine_video_is_720p_not_2k(self):
-        """
-        OpenRouter lists 480p and 720p only for this model and rejects an
-        unlisted value, so 2K would 400 on every render. The same constraint
-        that shaped the H3 Max entry. Downloaded clips are scaled to 1080x1920
-        on the way out, which is a real scale rather than added detail.
-        """
-        assert vp.capability("grok-imagine-video")["resolution"] == "720p"
-        assert vp.capability("minimax-h3")["resolution"] == "2K"
 
-    def test_grok_imagine_video_does_not_request_native_audio(self):
-        """
-        generate_audio is not among this model's accepted parameters, so the
-        field is false on its catalog entry and the studio omits it rather than
-        sending an unlisted parameter. Clips come back silent, as with H3 Max.
-        """
-        assert vp.capability("grok-imagine-video")["supports_native_audio"] is False
 
-    def test_grok_imagine_video_takes_identity_as_first_frame(self):
-        """
-        OpenRouter lists first_frame as its only supported frame image, so the
-        founder's photo rides exactly the way H3 Max's does. Its reference
-        count is 0, which must not be read as permission to send a reference
-        list -- that is what identity_via_first_frame selects.
-        """
-        cap = vp.capability("grok-imagine-video")
-        assert cap["supports_first_frame"] is True
-        assert cap["supports_last_frame"] is False
-        assert cap["max_reference_images"] == 0
-        assert vp.accepts_identity_reference("grok-imagine-video") is True
 
-    def test_grok_imagine_video_lite_is_opt_in_and_not_the_default(self):
-        """
-        The distilled sibling joins as a fourth opt-in for cheap drafts.
-        Listing it must not move production spend: the default stays Hailuo 3,
-        and naming it explicitly is honoured rather than silently swapped.
-        """
-        assert vp.is_studio_eligible("grok-imagine-video-lite") is True
-        assert vp.default_model_key() == "minimax-h3"
-        assert vp.resolve("grok-imagine-video-lite")[0] == "grok-imagine-video-lite"
 
-    def test_grok_imagine_video_lite_is_registered_at_its_real_id(self):
-        cap = vp.capability("grok-imagine-video-lite")
-        assert cap["id"] == "x-ai/grok-imagine-video-1.5-lite"
-        assert cap["max_duration"] == 15
-        assert cap["min_duration"] == 5
 
-    def test_grok_imagine_video_lite_is_720p_not_1080p(self):
-        """
-        OpenRouter lists 480p/720p/1080p for the lite model, but lite-1080p
-        is upscaled 720p at ~4.7x the per-second price — cost without detail.
-        720p is the honest, cheap choice, matching its sibling.
-        """
-        assert vp.capability("grok-imagine-video-lite")["resolution"] == "720p"
 
-    def test_grok_imagine_video_lite_does_not_request_native_audio(self):
-        """
-        generate_audio is unlisted for this model family, so the field is
-        false and the studio omits it. Clips come back silent, as with both
-        siblings. If a real clip arrives with sound, this is the flag to flip.
-        """
-        assert vp.capability("grok-imagine-video-lite")["supports_native_audio"] is False
 
-    def test_grok_imagine_video_lite_takes_identity_as_first_frame(self):
-        """
-        Same treatment as its sibling: first-frame only, reference count 0,
-        identity selected via identity_via_first_frame rather than a reference
-        list.
-        """
-        cap = vp.capability("grok-imagine-video-lite")
-        assert cap["supports_first_frame"] is True
-        assert cap["supports_last_frame"] is False
-        assert cap["max_reference_images"] == 0
-        assert vp.accepts_identity_reference("grok-imagine-video-lite") is True
 
     def test_heygen_video_is_opt_in_and_not_the_default(self):
         """
@@ -281,62 +192,6 @@ class TestCapabilities:
             assert field in cap
 
 
-class TestHeyGenOpeningKeyframeBrief:
-    def test_brief_carries_the_approved_scene_and_opening_action(self):
-        brief = gp.build_heygen_opening_keyframe_brief(
-            strategy={
-                "hook_concept": "Name the blank page",
-                "hook_action": "Look straight down the lens while lifting a notebook.",
-                "scene": {
-                    "environment": "kitchen",
-                    "background": "wood table",
-                    "setting": "morning",
-                    "lighting": "warm window light",
-                    "camera_angle": "eye level",
-                    "framing": "medium close-up",
-                    "wardrobe": "teal scrubs",
-                    "props": "notebook",
-                },
-                "performance": {"movement": "lean forward"},
-            },
-            duration=12,
-        )
-
-        for required in (
-            "vertical",
-            "kitchen",
-            "wood table",
-            "morning",
-            "warm window light",
-            "eye level",
-            "medium close-up",
-            "teal scrubs",
-            "notebook",
-            "lifting a notebook",
-            "lean forward",
-            "app interface",
-            "text",
-            "uploaded photograph",
-        ):
-            assert required in brief
-
-    def test_brief_falls_back_to_plan_and_template_details(self):
-        plan_brief = gp.build_heygen_opening_keyframe_brief(
-            strategy={},
-            plan={"visual_direction": "Close on hands, then a screen recording."},
-            template={},
-            duration=10,
-        )
-        template_brief = gp.build_heygen_opening_keyframe_brief(
-            strategy={},
-            plan={},
-            template={"opening_structure": "Name the mistake."},
-            duration=10,
-        )
-
-        assert "10-second" in plan_brief
-        assert "Close on hands" in plan_brief
-        assert "Name the mistake" in template_brief
 
 
 class TestHailuo3MaxIsOptIn:
@@ -596,45 +451,6 @@ class TestHailuo3MaxPayload:
         assert seen[0]["model"] == "minimax/hailuo-3"
 
 
-class TestOpeningSceneImage:
-    def test_scene_generation_sends_no_uploaded_photo(self, monkeypatch):
-        import asyncio
-
-        import ai_service
-
-        seen = []
-
-        async def fake_call(payload, context, max_retries, timeout):
-            seen.append(payload)
-            return b"scene-bytes"
-
-        monkeypatch.setattr(ai_service, "_call_image_generation_with_retry", fake_call)
-        result = asyncio.run(
-            ai_service.generate_opening_scene_image(
-                "Approved kitchen setting.", session_id="test-opening"
-            )
-        )
-
-        assert result == b"scene-bytes"
-        assert len(seen) == 1
-        assert seen[0]["model"] == ai_service.IMAGE_GEN_MODEL
-        assert "input_references" not in seen[0]
-        assert "Approved kitchen setting." in seen[0]["prompt"]
-        assert seen[0]["aspect_ratio"] == "9:16"
-
-    def test_scene_generation_refuses_an_empty_brief(self, monkeypatch):
-        import asyncio
-
-        import ai_service
-
-        async def fail_call(*args, **kwargs):
-            raise AssertionError("empty brief must not reach the image model")
-
-        monkeypatch.setattr(ai_service, "_call_image_generation_with_retry", fail_call)
-        with pytest.raises(RuntimeError):
-            asyncio.run(
-                ai_service.generate_opening_scene_image("   ", session_id="test-opening")
-            )
 
 
 class TestDurationPlanning:
@@ -1315,16 +1131,6 @@ class TestPerProviderPromptBudget:
         assert gp.build_segment_prompt(**kwargs, prompt_budget="nonsense") == baseline
         assert gp.build_segment_prompt(**kwargs, prompt_budget=-5) == baseline
 
-    def test_grok_ceiling_is_the_documented_maximum(self):
-        """
-        Grok's ceiling is its own documented 4,096, not carried over from
-        Hailuo's measured 7,000 and not guessed below it now that the prompt
-        fits. Guessing lower only discards app detail for nothing.
-        """
-        h3 = vp.capability("minimax-h3").get("prompt_char_limit")
-        grok = vp.capability("grok-imagine-video").get("prompt_char_limit")
-        assert h3 == 6800
-        assert grok == 4096
 
     def test_the_budget_leaves_the_condensed_path_for_tight_providers_only(self):
         kwargs = self._verbose_kwargs()

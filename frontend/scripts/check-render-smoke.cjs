@@ -862,6 +862,35 @@ async function main() {
     }
   });
 
+  await check("the plan is written before a character photo is attached", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    // The plan needs a profile, a template and a goal. The photo is required to
+    // render, so it must not stop the plan from being written on Review.
+    const plans = [];
+    await withApi(
+      {
+        createStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "", assets: [] }),
+        updateStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "", assets: [] }),
+        generatePlan: async (id, payload) => {
+          plans.push(payload);
+          return PROJECT_WITH_STRATEGY;
+        },
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openTemplateStep(ctx);
+        await act(async () => {});
+        await act(async () => {});
+        await openStep(ctx, "Review");
+        await act(async () => {});
+        await act(async () => {});
+        if (plans.length === 0) {
+          throw new Error("Review did not write the plan while the character photo was missing");
+        }
+      }
+    );
+  });
+
   await check("the plan is generated from the step that reviews it", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     // Entering Review with a ready draft and no plan generates it without a

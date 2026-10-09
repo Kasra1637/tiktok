@@ -79,63 +79,6 @@ _CAPABILITY_NOTES = {
             "still the default."
         ),
     },
-    "grok-imagine-video": {
-        "vertical": True,
-        # OpenRouter lists no reference-image support for this model: the photo
-        # rides as the opening frame only. So the count is 0 and
-        # accepts_identity_reference() must not read it as permission to send
-        # an input_references list -- that is what identity_via_first_frame is
-        # for, and it is the same treatment H3 Max gets.
-        "max_reference_images": 0,
-        "max_reference_videos": 0,
-        "max_reference_audio": 0,
-        "supports_first_frame": True,
-        "supports_last_frame": False,
-        "identity_via_first_frame": True,
-        # NOT MEASURED for this provider. Its own tooling documents a 4,096
-        # character prompt maximum, and OpenRouter publishes no limit at all, so
-        # this is set at the documented figure rather than below it — the
-        # condensing and the variable budget now make that ceiling reachable,
-        # and guessing lower only throws away app-specific detail for nothing.
-        #
-        # The first live render settles it: read prompt_chars from the submit log
-        # and correct this to what the provider actually accepts, rather than
-        # raising it on optimism.
-        "prompt_char_limit": 4096,
-        "notes": (
-            "720p (not 2K), 1-15s per generation, and no native audio -- "
-            "generate_audio is not among its accepted parameters, so the studio "
-            "omits it and clips come back silent, as with H3 Max. 720p is a "
-            "visibly softer clip than the default, so this is the quick option "
-            "for trying a second script, not a replacement for the default. "
-            "Downloads are scaled to 1080x1920 on the way out. Opt-in: Hailuo 3 "
-            "is still the default."
-        ),
-    },
-    "grok-imagine-video-lite": {
-        "vertical": True,
-        # Same treatment as its sibling: no reference-image support is listed,
-        # so the photo rides as the opening frame only. The count is 0 and
-        # accepts_identity_reference() must not read it as permission to send
-        # an input_references list.
-        "max_reference_images": 0,
-        "max_reference_videos": 0,
-        "max_reference_audio": 0,
-        "supports_first_frame": True,
-        "supports_last_frame": False,
-        "identity_via_first_frame": True,
-        # Same family and tooling as the sibling, so the same documented
-        # 4,096 character figure. The first live render settles it: read
-        # prompt_chars from the submit log and correct this to what the
-        # provider actually accepts.
-        "prompt_char_limit": 4096,
-        "notes": (
-            "Distilled Grok Imagine: faster and cheaper than its sibling at the "
-            "same 720p, 1-15s, silent trade. The cheap option for drafts and "
-            "second scripts; scaled to 1080x1920 on the way out. Opt-in: "
-            "Hailuo 3 is still the default."
-        ),
-    },
     "heygen-video-1": {
         "vertical": True,
         # Conservative start despite the listing accepting references: H3 Max
@@ -161,22 +104,6 @@ _CAPABILITY_NOTES = {
             "with the founder integrated. Opt-in: Hailuo 3 is still the default."
         ),
     },
-    "aleph-2": {
-        "vertical": True,
-        "max_reference_images": 0,
-        "max_reference_videos": 1,
-        "max_reference_audio": 0,
-        "supports_first_frame": False,
-        "supports_last_frame": False,
-        # Editors take a clip rather than a prompt, and are not studio-eligible.
-        "prompt_char_limit": 6800,
-        "notes": (
-            "In-context video EDITOR, not a generator: it edits a supplied "
-            "clip and preserves everything the prompt does not name. Cannot "
-            "create a video from a prompt, and has no native audio. Retained "
-            "for the legacy exact-match flow only; not usable by the studio."
-        ),
-    },
 }
 
 # Providers the template workflow can actually drive. Aleph is excluded
@@ -189,30 +116,7 @@ _CAPABILITY_NOTES = {
 # on either and compare. Order here does not decide the default — that is
 # ai_service.DEFAULT_VIDEO_MODEL, and it stays Hailuo 3. Listing a second model
 # only makes it selectable in the studio's model dropdown.
-#
-# Grok Imagine Video joins as the lighter opt-in: it takes the same photo
-# as the same first-frame anchor as H3 Max and declares no passthrough
-# parameters at all, so there is no undocumented field that could refuse a
-# render. It trades 2K and native audio for 720p and silence, which makes it
-# the model to try a second script on. Listing it does not move the default,
-# which stays Hailuo 3.
-#
-# Every value asserted about it is checked at boot against OpenRouter's live
-# model list by provider_capabilities.check_provider_drift -- that endpoint
-# is a free read and states the fields each model actually accepts, so a
-# provider quietly dropping something shows up in the log instead of in a
-# founder's failed render.
-# Grok Imagine Video Lite joins as the cheapest opt-in: same photo as
-# first-frame anchor, same silent 720p trade as its sibling, distilled for
-# speed and price.
-#
-# HeyGen Video joins at the end as the fifth opt-in: the only entry besides
-# Hailuo 3 with real audio, at 768p (a third of its listed 2K price for
-# unproven extra detail). Unlike the Groks, its identity anchor is a generated
-# opening scene with the founder integrated, rather than the raw uploaded
-# photo. Listing it does not move the default, which
-# stays Hailuo 3 — promote only on evidence from the first renders.
-STUDIO_ELIGIBLE = ("minimax-h3", "minimax-h3-max", "grok-imagine-video", "grok-imagine-video-lite", "heygen-video-1")
+STUDIO_ELIGIBLE = ("minimax-h3", "minimax-h3-max", "heygen-video-1")
 
 # The hook length used when nothing states one. 5s is the lowest length the
 # current provider can render, so it needs no trim; a template's own
