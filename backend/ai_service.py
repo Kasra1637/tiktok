@@ -136,9 +136,9 @@ VIDEO_MODELS = {
         "name": "HeyGen Video",
         "description": (
             "Business-video renderer with synthesized audio in one call — "
-            "dialogue, ambience and effects — opening in a generated scene "
-            "with the founder integrated. 768p, 5-15s. For talking-head "
-            "hooks and demos. Opt-in."
+            "dialogue, ambience and effects. The cropped founder photo is "
+            "sent as the first frame, the same path as the other models. "
+            "768p, 5-15s. For talking-head hooks and demos. Opt-in."
         ),
         "max_duration": 15,
         "min_duration": 5,

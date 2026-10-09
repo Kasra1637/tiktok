@@ -83,9 +83,9 @@ _CAPABILITY_NOTES = {
         "vertical": True,
         # Conservative start despite the listing accepting references: H3 Max
         # proved a listed field the serving provider 400s, and only a live
-        # refs render proves acceptance. The count is 0 and identity is
-        # integrated into a generated opening scene; enabling input_references
-        # later is a data-only flip once proven.
+        # refs render proves acceptance. The count is 0 and identity rides as
+        # the opening frame instead, the same path as the other models;
+        # enabling input_references later is a data-only flip once proven.
         "max_reference_images": 0,
         "max_reference_videos": 0,
         "max_reference_audio": 0,
@@ -100,8 +100,9 @@ _CAPABILITY_NOTES = {
             "Business-video renderer with synthesized audio in one call at "
             "768p, 5-15s — the only entry besides Hailuo 3 with real audio, "
             "at a third of its listed 2K price. "
-            "For talking-head hooks and demos. Opens in the generated scene "
-            "with the founder integrated. Opt-in: Hailuo 3 is still the default."
+            "For talking-head hooks and demos. The cropped founder photo is "
+            "sent as the first frame, the same path as the other models. "
+            "Opt-in: Hailuo 3 is still the default."
         ),
     },
 }

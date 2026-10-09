@@ -165,16 +165,15 @@ worst bugs in that path (an orphaned filter chain, a 600-second output) exited
 | Model | Single pass | Notes |
 |---|---|---|
 | `minimax-h3` | 5–15s | 2K, native audio. **Cannot** combine `frame_images` with `input_references`. 20s and 30s need a second generation. |
-| `grok-imagine-video-1.5-lite` *(opt-in)* | 5–15s | Distilled Grok Imagine: faster, cheaper drafts at 720p, silent, photo as first frame. For cheap drafts and second scripts. |
-| `heygen-video-1` *(opt-in)* | 5–15s | Business-video renderer with synthesized audio in one call, 768p, and a generated scene-matched opening frame with the founder integrated. For talking-head hooks and demos. |
-| `seedance-2.5` *(default)* | 4–30s | 720p, native audio, up to 50 multimodal references, first-frame guidance. The longest single pass available. |
-| `runway/aleph-2` | — | **Editor, not a generator.** Refused by this workflow: it edits an existing clip and cannot generate from a prompt. Legacy flow only. |
+| `minimax-h3-max` *(opt-in)* | 5–15s | 768p (not 2K), faster with tighter prompt adherence; the audio flag is not sent for this model. Photo as first frame. |
+| `heygen-video-1` *(opt-in)* | 5–15s | Business-video renderer with synthesized audio in one call, 768p. The cropped founder photo is sent as the first frame, the same path as the other models. For talking-head hooks and demos. |
 
 Other constraints:
 
-- **720p vs 2K.** Seedance outputs 720p, MiniMax 2K. A 20s video on the
-  default model means a 15s generation plus a 5s extension, which can show a
-  visible join. Set `VIDEO_MODEL_DEFAULT=seedance-2.5` for 20s/30s in one pass.
+- **768p vs 2K.** MiniMax H3 renders 2K; H3 Max and HeyGen render 768p, which is
+  still above TikTok's 720×1280 floor but visibly softer after the 1080×1920
+  re-export. A request longer than 15s is refused rather than split — the
+  founder attaches their own demo and call to action to cover it.
 - **Vertical is assumed.** Every model here is driven at 9:16.
 - **No cost reporting at all.** The product does not meter what a render costs
   the operator. No generation row, no model-request row and no API response
@@ -249,7 +248,7 @@ is **demoted** to the Research nav group and kept working:
 | Route | Was | Now |
 |---|---|---|
 | `/discover` | primary entry | Research group |
-| `/face-swap` | primary creation | Route removed; the backend helpers (`face_crop.py`, AI service face functions) remain for Trend Research and legacy comparison |
+| `/face-swap` | primary creation | Route removed; the photo-crop helper (`face_crop.py`) remains for the first-frame crop |
 | `/bookmarks` | Hook Templates | Research group (Saved Hooks) |
 | `/history` | exact-match history | **Generation History** (old one at `/legacy-history`) |
 
