@@ -6,11 +6,18 @@ The escaping rules are the highest-risk part: they were wrong twice during
 development (Windows drive-letter colons, and drawtext's deeper % parsing),
 and both failures were silent or opaque. These tests pin the behaviour.
 """
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
 
 import overlays
+
+FFMPEG = shutil.which("ffmpeg")
+needs_ffmpeg = pytest.mark.skipif(
+    not FFMPEG, reason="ffmpeg not on PATH"
+)
 
 
 class TestEscaping:
@@ -450,3 +457,147 @@ optional form is the only one that works for both.
         overlays.rescale_to_canvas_sync(source)
         leftovers = [p.name for p in tmp_path.iterdir() if p.name.startswith(".")]
         assert leftovers == []
+
+
+class TestHookMiddleCut:
+    """
+    The hook-to-middle cut: a zoom-punch with a lateral reframe at the hook
+    boundary, ramped over a quarter second and held for the rest of the piece.
+
+    One render covers the whole piece, so there is no edit point to cut at --
+    without this the video sits on one static angle throughout. Done in ffmpeg
+    rather than the prompt for the same reason captions are: the model cannot
+    be trusted with frame-exact timing, and it either drifts or ignores the
+    instruction.
+    """
+
+    def test_no_transition_key_means_no_cut(self):
+        graph, _, _ = overlays.build_filter_graph({}, 12, None)
+        assert "concat=" not in graph
+        assert "[cut]" not in graph
+
+    def test_zero_or_invalid_boundary_means_no_cut(self):
+        for at in (0, -1, "", None, "soon"):
+            graph, _, _ = overlays.build_filter_graph({"transition": {"at": at}}, 12, None)
+            assert "[cut]" not in graph, f"at={at!r} produced a cut"
+
+    def test_boundary_too_close_to_either_end_means_no_cut(self):
+        """A move with no room on one side would start before the first frame
+        or finish past the last one, so it is skipped, not rendered half."""
+        for at in (0.1, 0.3, 11.7, 11.9, 12.0, 99):
+            graph, _, _ = overlays.build_filter_graph({"transition": {"at": at}}, 12, None)
+            assert "[cut]" not in graph, f"at={at} produced a cut"
+
+    def test_cut_splits_at_the_boundary_and_rejoins(self):
+        graph, _, _ = overlays.build_filter_graph({"transition": {"at": 3.0}}, 12, None)
+        assert "[bg0]split=2[pre0][post0]" in graph
+        assert "[pre0]trim=end=3.000,setpts=PTS-STARTPTS[pre]" in graph
+        assert "[post0]trim=start=3.000,setpts=PTS-STARTPTS" in graph
+        assert "[pre][post]concat=n=2:v=1:a=0[cut]" in graph
+
+    def test_ramp_is_relative_to_the_cut_not_the_file(self):
+        """
+        The post-boundary half is re-based with setpts, so its timestamps start
+        at zero. A ramp written against the absolute boundary time would fire
+        the move seconds into the middle instead of on its first frame -- the
+        one silent misplacement this whole feature exists to avoid.
+        """
+        graph, _, _ = overlays.build_filter_graph({"transition": {"at": 3.0}}, 12, None)
+        assert "min(max(t/0.25,0),1)" in graph
+        assert "t-3.000" not in graph
+
+    def test_scale_reevaluates_every_frame(self):
+        """Without eval=frame, scale evaluates its expressions once and the
+        quarter-second ramp never runs -- the graph renders fine and the cut
+        silently never happens."""
+        graph, _, _ = overlays.build_filter_graph({"transition": {"at": 3.0}}, 12, None)
+        assert ":eval=frame" in graph
+
+    def test_cut_feeds_the_layers_downstream(self):
+        """The cut reframes the footage, not the captions: layers drawn after
+        it stay put while the camera appears to move."""
+        spec = {
+            "transition": {"at": 3.0},
+            "captions": [{"text": "hi", "start": 0, "end": 12}],
+        }
+        graph, _, _ = overlays.build_filter_graph(spec, 12, "C:/f.ttf")
+        assert "[cut]drawtext=" in graph
+
+    def test_plan_hook_seconds_become_the_cut(self):
+        spec = overlays.build_spec_from_plan({"hook_seconds": 3, "overlays": []})
+        assert spec["transition"] == {"at": 3.0}
+
+    def test_missing_hook_seconds_means_no_cut(self):
+        for plan in ({}, {"hook_seconds": 0}, {"hook_seconds": "soon"}):
+            spec = overlays.build_spec_from_plan({**plan, "overlays": []})
+            assert spec["transition"] is None
+
+
+@needs_ffmpeg
+class TestHookMiddleCutRender:
+    """
+    The graph above is only half the proof: expressions can parse and still do
+    the wrong thing on real frames. Rendered against synthetic footage with
+    audio, asserting the cut lands where it should and touches nothing else.
+    """
+
+    def _clip(self, path: Path, seconds: float = 4.0):
+        subprocess.run(
+            [FFMPEG, "-y", "-hide_banner", "-loglevel", "error",
+             "-f", "lavfi", "-i", f"testsrc=duration={seconds}:size=540x960:rate=30",
+             "-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}",
+             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest",
+             str(path)],
+            check=True,
+        )
+
+    def _render(self, source: Path, out: Path, spec: dict, duration: float):
+        argv, _ = overlays.build_ffmpeg_command(source, out, spec, duration, None)
+        proc = subprocess.run(argv, capture_output=True, text=True)
+        assert proc.returncode == 0, (proc.stderr or "")[-500:]
+        assert out.is_file()
+
+    def _frame(self, video: Path, at: float, size: str = "160x284") -> bytes:
+        out = video.with_name(f"{video.stem}_{at}.raw")
+        subprocess.run(
+            [FFMPEG, "-y", "-hide_banner", "-loglevel", "error",
+             "-ss", str(at), "-i", str(video),
+             "-frames:v", "1", "-s", size, "-pix_fmt", "rgb24",
+             "-f", "rawvideo", str(out)],
+            check=True,
+        )
+        return out.read_bytes()
+
+    @staticmethod
+    def _difference(first: bytes, second: bytes) -> float:
+        return sum(a != b for a, b in zip(first, second)) / len(first)
+
+    def _has_audio(self, path: Path) -> bool:
+        proc = subprocess.run(
+            [shutil.which("ffprobe"), "-v", "error", "-select_streams", "a",
+             "-show_entries", "stream=codec_name",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+            capture_output=True, text=True,
+        )
+        return bool((proc.stdout or "").strip())
+
+    def test_cut_moves_the_frame_and_nothing_else(self, tmp_path):
+        """
+        Frames well before the boundary are pixel-identical to the uncut
+        render (the hook plays untouched); frames after the ramp differ
+        strongly (the angle visibly changed); duration and audio survive.
+        """
+        source = tmp_path / "src.mp4"
+        self._clip(source)
+        plain = tmp_path / "plain.mp4"
+        cut = tmp_path / "cut.mp4"
+        self._render(source, plain, {}, 4.0)
+        self._render(source, cut, {"transition": {"at": 2.0}}, 4.0)
+
+        assert overlays.probe_duration(cut) == pytest.approx(4.0, abs=0.1)
+        assert self._has_audio(cut)
+
+        before = self._difference(self._frame(plain, 0.5), self._frame(cut, 0.5))
+        assert before < 0.02, f"hook frames changed before the cut: {before:.1%}"
+        after = self._difference(self._frame(plain, 3.0), self._frame(cut, 3.0))
+        assert after > 0.25, f"middle frames did not move after the cut: {after:.1%}"

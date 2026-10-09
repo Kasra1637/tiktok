@@ -34,6 +34,25 @@ BRAND_DEEP = "#6A3FC0"
 CANVAS_WIDTH = 1080
 CANVAS_HEIGHT = 1920
 
+# The hook-to-middle cut. One render covers the whole piece, so there is no
+# edit point to cut at -- but a piece that never changes angle reads as one
+# static shot, and the hook-to-middle boundary is where attention needs
+# re-hooking. This is a deterministic zoom-punch with a lateral reframe,
+# ramped over a quarter second at the boundary and held for the rest of the
+# piece: a sudden cut to a tighter, reframed angle, not a wobble that returns.
+# Time-based (t), not frame-based (n), so it lands identically at any fps.
+#
+# Done here rather than in the prompt for the same reason captions are: the
+# model cannot be trusted with frame-exact timing, and a prompt asking for "a
+# cut at 3 seconds" drifts. ffmpeg lands it on the frame.
+TRANSITION_RAMP_SECONDS = 0.25
+TRANSITION_ZOOM = 0.12
+TRANSITION_SHIFT = 0.35
+# A boundary needs room on both sides for the ramp. Closer to either end than
+# this, the move would start before the first frame or finish past the last
+# one, so the transition is skipped instead of rendered half.
+TRANSITION_EDGE_MARGIN = 0.3
+
 # Safe areas as a fraction of the frame, leaving room for platform UI.
 SAFE_MARGIN_X = 0.08
 SAFE_MARGIN_Y = 0.10
@@ -388,6 +407,7 @@ def build_filter_graph(spec: dict, duration: float, font_path: Optional[str] = N
             "images":    [{"path","start","end","position","scale","opacity","rounded"}],
             "videos":    [{"path","start","end","position","scale"}],
             "end_card":  {"start","end","text","subtext","color"},
+            "transition": {"at": seconds} | None,
         }
         duration: base clip length in seconds; windows are clamped to it.
         font_path: resolved font file. When None and captions or an end card
@@ -421,6 +441,46 @@ def build_filter_graph(spec: dict, duration: float, font_path: Optional[str] = N
     # frame size.
     graph += canvas_fit_chain("0:v", "bg0")
     current = "bg0"
+
+    # ---- Hook-to-middle cut (zoom-punch + reframe) ----
+    # Applied to the footage itself, before any layer, so captions stay put
+    # while the camera appears to move. `eval=frame` is load-bearing: without
+    # it scale evaluates its expressions once and the ramp never runs. crop's
+    # x/y evaluate per frame already. Commas inside min()/max() must stay
+    # inside the single quotes, or the graph parser reads them as filter
+    # separators -- the same quoting the overlay `enable` expressions use.
+    #
+    # The post-boundary half is re-based with setpts, so its timestamps start
+    # at zero and the ramp below is relative to the cut, not to the file.
+    # Reading it as absolute time would fire the move RAMP seconds into the
+    # middle instead of at its first frame.
+    transition = spec.get("transition") or {}
+    try:
+        cut_at = float(transition.get("at", 0) or 0)
+    except (TypeError, ValueError):
+        cut_at = 0
+    # Needs room on both sides for the ramp: too close to either end and the
+    # move would start before the first frame or finish past the last one.
+    latest = (duration or 0) - TRANSITION_EDGE_MARGIN
+    if TRANSITION_EDGE_MARGIN < cut_at < latest:
+        ramp = f"min(max(t/{TRANSITION_RAMP_SECONDS},0),1)"
+        # Split at the boundary: the hook plays untouched, the middle gets the
+        # punch. trim is frame-accurate on decoded frames; setpts re-bases each
+        # half so concat joins them gaplessly. Audio is mapped separately and
+        # never passes through here, so it is unaffected.
+        graph.append(f"[bg0]split=2[pre0][post0]")
+        graph.append(f"[pre0]trim=end={cut_at:.3f},setpts=PTS-STARTPTS[pre]")
+        graph.append(
+            f"[post0]trim=start={cut_at:.3f},setpts=PTS-STARTPTS,"
+            f"scale=w='trunc(iw*(1+{TRANSITION_ZOOM}*{ramp})/2)*2'"
+            f":h='trunc(ih*(1+{TRANSITION_ZOOM}*{ramp})/2)*2'"
+            f":eval=frame,"
+            f"crop={CANVAS_WIDTH}:{CANVAS_HEIGHT}"
+            f":x='(in_w-out_w)/2-{ramp}*(in_w-out_w)*{TRANSITION_SHIFT}'"
+            f":y='(in_h-out_h)/2'[post]"
+        )
+        graph.append("[pre][post]concat=n=2:v=1:a=0[cut]")
+        current = "cut"
 
     # ---- Image layers (screenshots, logos, product shots) ----
     for index, item in enumerate(spec.get("images") or []):
@@ -750,6 +810,15 @@ def build_spec_from_plan(plan: dict) -> dict:
         "audios": [],
         "end_card": None,
     }
+    # The hook-to-middle cut. The project knows its own boundary; the graph
+    # clamps it against the probed clip length and skips it when there is no
+    # room, so a missing or legacy hook length degrades to no cut rather than a
+    # broken graph. JSON-safe, like everything else the composition stores.
+    try:
+        hook_at = float(plan.get("hook_seconds") or 0)
+    except (TypeError, ValueError):
+        hook_at = 0
+    spec["transition"] = {"at": hook_at} if hook_at > 0 else None
 
     for overlay in (plan.get("overlays") or [])[:12]:
         if not isinstance(overlay, dict):
