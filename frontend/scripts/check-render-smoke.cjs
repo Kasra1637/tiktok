@@ -2733,6 +2733,31 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!text.includes("Fit 9.5")) {
       throw new Error("the fit score is not shown on the card");
     }
+
+    // The first reason is the verdict and the rest is detail: the server sorts
+    // strongest-first, so reasons[0] is the decision and the others are its
+    // evidence. Rendering all four identically left the founder unable to tell
+    // which was which.
+    const verdict = ctx.container.querySelector('[data-testid="template-fit-verdict"]');
+    if (!verdict) {
+      throw new Error("the top fit reason is not styled as the card's verdict");
+    }
+    if (!verdict.textContent.includes(FOUR_REASONS[0])) {
+      throw new Error("the verdict is not the strongest (first) reason");
+    }
+    // The caveat block is a container of its own, so a limitation can never
+    // read as one more reason. Shape, not color, does the separating: amber
+    // reads as an error state on this page.
+    const caveatLabel = [...ctx.container.querySelectorAll("p")].find((p) =>
+      (p.textContent || "").includes("Before you use it")
+    );
+    if (!caveatLabel) {
+      throw new Error("the limitations have no caveat label");
+    }
+    const caveatBox = caveatLabel.closest("div");
+    if (!caveatBox || !/border-l-2/.test(caveatBox.className || "")) {
+      throw new Error("the limitations are not grouped inside the caveat container");
+    }
   });
 
   await check("a card with no reasons or limitations shows neither block", async (ctx) => {
@@ -2770,6 +2795,48 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
     if (!text.includes("Fit 5")) {
       throw new Error("the fit score is missing");
+    }
+  });
+
+  await check("a one-reason card shows the verdict with no detail list", async (ctx) => {
+    // One reason means the detail list has nothing to hold; rendering an empty
+    // <ul> would leave a stray marker row and confuse the verdict/detail split.
+    global.__SMOKE_PARAMS = "";
+    await withApi(
+      {
+        getTemplates: async () => ({ templates: ORDERED_TEMPLATES }),
+        getTemplateRecommendations: async () => ({
+          recommendations: [
+            {
+              template: ORDERED_TEMPLATES[0],
+              score: 9,
+              why_it_fits: ["Built for 'create curiosity' — leaves them wanting the answer."],
+              limitations: [],
+              suggested_duration: TEMPLATE.default_duration,
+            },
+          ],
+        }),
+        ensureObjectiveTemplates: async () => ({
+          templates: [ORDERED_TEMPLATES[0]],
+          generated: false,
+          objective: "address_user_problem",
+          error: null,
+        }),
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openTemplateStep(ctx);
+      }
+    );
+    const verdict = ctx.container.querySelector('[data-testid="template-fit-verdict"]');
+    if (!verdict) {
+      throw new Error("the single reason is not styled as the verdict");
+    }
+    if (verdict.closest("ul")) {
+      throw new Error("the verdict is nested inside the detail list");
+    }
+    if (ctx.container.querySelector('[data-testid="template-fit-verdict"] ~ ul')) {
+      throw new Error("a one-reason card renders an empty detail list");
     }
   });
 

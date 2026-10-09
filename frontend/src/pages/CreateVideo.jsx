@@ -122,6 +122,11 @@ function RecommendationCard({ r, selected, onSelect }) {
   const reasons = Array.isArray(r.why_it_fits) ? r.why_it_fits : [];
   const limits = Array.isArray(r.limitations) ? r.limitations : [];
   const score = Number(r.score);
+  // The server sorts reasons strongest-first and sends only the strings, so
+  // the first reason IS the verdict and the rest is supporting detail. Shown
+  // that way rather than as four identical paragraphs, which left the founder
+  // unable to tell the decision from its evidence.
+  const [verdict, ...detail] = reasons;
   const example =
     typeof r.template.example_preview === "string" && r.template.example_preview.trim()
       ? r.template.example_preview.trim()
@@ -187,22 +192,48 @@ function RecommendationCard({ r, selected, onSelect }) {
         </p>
       )}
       {reasons.length > 0 && (
-        <div className="mt-2 space-y-1">
+        <div className="mt-2 space-y-1.5">
           <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
             Why it fits
           </p>
-          {reasons.map((reason, i) => (
-            <p key={`r-${i}`} className="text-xs text-muted-foreground">{reason}</p>
-          ))}
+          {/* The verdict: the strongest match, in body weight with the same
+              tick the step pills use for "positive", so it reads as the reason
+              rather than one of several. */}
+          <p
+            className="flex items-start gap-1.5 text-sm text-foreground"
+            data-testid="template-fit-verdict"
+          >
+            <Check aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />
+            <span>{verdict}</span>
+          </p>
+          {/* Supporting detail: muted, marked as a list, tighter leading. A
+              single-reason card renders the verdict alone with no list. */}
+          {detail.length > 0 && (
+            <ul className="space-y-1">
+              {detail.map((reason, i) => (
+                <li
+                  key={`r-${i + 1}`}
+                  className="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground"
+                >
+                  <span aria-hidden="true" className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-current opacity-60" />
+                  <span>{reason}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
       {limits.length > 0 && (
-        <div className="mt-2 space-y-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+        // A caveat, not evidence: inset with a left hairline border and a muted
+        // warning mark, so shape separates it from the reasons above. Never
+        // amber -- on this page amber reads as an error state.
+        <div className="mt-2 space-y-1 border-l-2 border-[color:var(--hairline)] pl-2.5">
+          <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            <AlertTriangle aria-hidden="true" className="h-3 w-3" />
             Before you use it
           </p>
           {limits.map((limitation, i) => (
-            <p key={`l-${i}`} className="text-[11px] text-muted-foreground">{limitation}</p>
+            <p key={`l-${i}`} className="text-[11px] leading-relaxed text-muted-foreground">{limitation}</p>
           ))}
         </div>
       )}
