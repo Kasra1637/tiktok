@@ -2289,7 +2289,7 @@ async def generate_brand_templates(
         '  "visual_style": "the look, presenter-led",\n'
         '  "camera_pacing": "camera behaviour",\n'
         '  "content_slots": {"the_concrete_beat": "the concrete beat this structure turns on", "the_moment": "where the viewer would reach for the app"},\n'
-        '  "default_duration": 10,\n'
+        '  "default_duration": 15,\n'
         '  "outcome": "what the viewer ends up with from this structure, one sentence, viewer-facing (e.g. hears their own frustration said out loud) -- never the mechanic, never a guaranteed result",\n'
         "}\n"
         "Rules: use ONLY facts present above. Never invent a feature, price, rating, "
@@ -2297,7 +2297,12 @@ async def generate_brand_templates(
         "the categories and objectives — not ten variations of one idea. "
         f"hook_seconds is {MIN_HOOK_SECONDS}-{MAX_HOOK_SECONDS}; default_duration is one of "
         f"{', '.join(str(d) for d in SUPPORTED_DURATIONS)} seconds, and it is the length of the "
-        "whole generated piece, not of a video the viewer finishes. "
+        "whole generated piece, not of a video the viewer finishes. Always set "
+        f"default_duration to {max(SUPPORTED_DURATIONS)} seconds: a shorter piece has a "
+        "smaller middle, and the plan's spoken words are budgeted to what that middle can "
+        "speak, so a shorter template silently cuts the payoff sentence. Only when this "
+        "structure's mechanic physically cannot hold a longer piece (for example a single "
+        "visual beat with nothing to develop) may a lower value be used. "
         "Never use double-quote characters inside any string value. Return ONLY valid JSON."
     )
 
@@ -2417,6 +2422,16 @@ async def generate_creative_plan(
         MIN_HOOK_SECONDS, min(MAX_HOOK_SECONDS, int(template.get("hook_seconds") or 3))
     )
 
+    # The words are budgeted to the piece's seconds, at the same natural pace
+    # the render gate and the Review step use. Stating the number in the prompt
+    # is what makes the script the founder approves the script that renders:
+    # the gate that refuses an over-length script downstream names this same
+    # budget, so asking for less here is the fix at its cause rather than a
+    # trim the founder keeps getting sent back to do.
+    middle_seconds = max(1, int(duration_seconds or 0) - int(hook_seconds or 0))
+    middle_budget = spoken_budget(middle_seconds)
+    hook_budget = spoken_budget(hook_seconds)
+
     structure = {
         "template_name": template.get("name") or "(no template)",
         "hook_category": template.get("category") or "(unstated)",
@@ -2494,6 +2509,19 @@ async def generate_creative_plan(
         f"first (its outcome field), then the flat desired_outcomes, and only when both are "
         f"empty derive a benefit from a feature. The generated piece is {duration_seconds} seconds; anything "
         "after it is the founder's own footage.\n"
+        # The spoken budget, in characters, is the same number the render gate
+        # imposes downstream (hook spoken separately over the opening beat, the
+        # rest over the middle). A script past it is not shortened gracefully at
+        # render time: the render gate refuses and sends the founder back to
+        # trim by hand, and the trimmed-away text is usually the payoff
+        # sentence. Sizing the request is the fix at its cause.
+        f"- SPOKEN BUDGET: the hook line is spoken over the first {hook_seconds}s and the rest of "
+        f"the script over the {middle_seconds}s middle. At natural spoken pace that is at most "
+        f"{hook_budget} characters for the hook line and {middle_budget} characters for the rest of "
+        "the script, counted after the hook line is removed. Treat these as hard ceilings, not "
+        "targets: write tight enough to land under them with room to spare, and put the "
+        "payoff sentence INSIDE the middle budget, not after it. Anything past either ceiling "
+        "is not spoken in the video and the render is refused until it is cut.\n"
         "- NEVER write a product demonstration into either beat. Do not film the app in use, "
         "do not show a screen, and do not narrate what the app does while something unrelated "
         "happens on camera. Showing the working product is the founder's recording, attached "

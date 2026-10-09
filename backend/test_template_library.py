@@ -573,3 +573,24 @@ class TestBrandTemplatePrompt:
         assert len(result) == 10
         assert "demonstrate_feature" in captured["prompt"]
         assert "must serve that objective" in captured["prompt"]
+
+    def test_prompt_seeds_the_schema_example_at_the_full_length(self, monkeypatch):
+        """
+        The failure this closes: the schema example read "default_duration": 10,
+        and the model copied the example, so every custom template landed at
+        10s. With a 3s hook that is a 7s middle — a 105-character spoken budget
+        — and plans written for the piece kept overflowing the render gate.
+        The example is the strongest anchor in a JSON-schema prompt, so it has
+        to show the ceiling, and the rule has to say why shorter is worse.
+        """
+        import asyncio
+        import ai_service
+        captured = self._capture(monkeypatch, self._reply(1))
+        asyncio.run(ai_service.generate_brand_templates(
+            {"brand_name": "Taskly", "core_features": ["timer"]}, [], count=1))
+        prompt = captured["prompt"]
+        assert '"default_duration": 15,' in prompt
+        assert "Always set default_duration to 15 seconds" in prompt
+        assert "silently cuts the payoff sentence" in prompt
+
+

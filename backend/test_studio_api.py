@@ -1535,6 +1535,90 @@ class TestPlanPromptSeesCompetitors:
         assert "never put a competitor's name" in prompt
 
 
+class TestSpokenBudgetReachesThePlanPrompt:
+    """
+    The plan prompt states, in characters, exactly what the middle can speak.
+
+    The failure this closes: the plan schema asked for "the full spoken script"
+    with no length, so the model routinely wrote 238+ characters for a 7s
+    middle (a 105-character budget), and the founder first learned the script
+    was too long at the render gate — after approving it. The gate itself does
+    not need a test here (TestSpokenWordsGate covers it); what needs asserting
+    is that the request is now sized to the budget that gate enforces, at its
+    cause.
+    """
+
+    def _capture(self, monkeypatch):
+        import ai_service
+        captured = {}
+
+        class _Resp:
+            status_code = 200
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"choices": [{"message": {"content": json.dumps({
+                    "hook_line": "h", "script": "s", "beat_timeline": [],
+                    "visual_direction": "v",
+                    "demo_brief": "Record yourself tapping the timer once.",
+                    "overlays": [], "voice_direction": "vd",
+                    "sound_direction": "sd",
+                })}}]}
+
+        class _AsyncClient:
+            def __init__(self, *a, **k):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            async def post(self, url, **kwargs):
+                captured["messages"] = (kwargs.get("json") or {}).get("messages")
+                return _Resp()
+
+        monkeypatch.setattr(ai_service.httpx, "AsyncClient", _AsyncClient)
+        return captured
+
+    def test_the_prompt_carries_the_middle_budget_for_the_real_seconds(self, monkeypatch):
+        import ai_service
+        captured = self._capture(monkeypatch)
+        asyncio.run(ai_service.generate_creative_plan(
+            profile={"brand_name": "ShiftLog"},
+            template={"name": "T", "hook_seconds": 3},
+            objective="address_user_problem",
+            duration_seconds=10,  # 7s middle — the shape that produced the error
+        ))
+        prompt = json.dumps(captured["messages"])
+        # The exact numbers the render gate would derive downstream (7s middle
+        # at 15 chars/sec = 105; spoken_budget floors at 60). If the prompt and
+        # the gate ever disagree again, this fails first.
+        assert "SPOKEN BUDGET" in prompt
+        assert "105 characters for the rest of the script" in prompt
+        assert "first 3s" in prompt
+        assert "60 characters for the hook line" in prompt
+
+    def test_the_budget_tracks_the_template_declared_hook(self, monkeypatch):
+        """A 3s hook on a 15s piece squeezes the middle to 12s / 180 chars."""
+        import ai_service
+        captured = self._capture(monkeypatch)
+        asyncio.run(ai_service.generate_creative_plan(
+            profile={"brand_name": "ShiftLog"},
+            template={"name": "T", "hook_seconds": 3},
+            objective="address_user_problem",
+            duration_seconds=15,
+        ))
+        prompt = json.dumps(captured["messages"])
+        assert "180 characters for the rest of the script" in prompt
+        # And the two ceilings must never collide: the hook budget is on the
+        # hook line, the middle budget on the remainder after it.
+        assert "60 characters for the hook line" in prompt
+
+
 class TestTrendEvidenceReachesTheStrategy:
     """The gap this closes: virality_score reached no generation prompt."""
 
