@@ -1063,6 +1063,14 @@ export default function CreateVideo() {
     setEdits((prev) => ({ ...prev, tone: value }));
   };
 
+  // The goal the plan is written toward: the wizard's own choice wins, and the
+  // draft's stored goal is the fallback so landing on Review with a complete
+  // draft always auto-fires — even when this session's state lost the choice
+  // (pill-jump, reload) while the server row kept it. Without the fallback the
+  // step shows the goal picker and waits, although everything the plan needs
+  // is already decided.
+  const effectiveObjective = objective || project?.objective || "";
+
   // Auto-generate the plan on entering Review with a ready draft that has
   // none yet. The step exists to READ the plan, so arriving to an empty step
   // plus a button was a wasted click on every first pass. Same gates as the
@@ -1078,14 +1086,24 @@ export default function CreateVideo() {
   useEffect(() => {
     // The plan needs a profile, a template and a goal. The character photo is
     // required to RENDER, not to write the plan, so it does not gate this.
-    if (step !== 3 || busy || !canGenerate || !objective) return;
+    if (step !== 3 || busy || !canGenerate) return;
+    if (!objective && project?.objective) {
+      // The draft already holds the goal but this session's state does not:
+      // adopt it so the gates below read one consistent choice and the plan
+      // starts on arrival. Returned from, not fallen through, because the
+      // state update re-runs this effect and the fire happens there — firing
+      // here would send the draft's goal while `objective` is still empty.
+      setObjective(project.objective);
+      return;
+    }
+    if (!objective) return;
     if (project?.script_version) return;
     const key = `${profileId}:${templateId}:${angleId || ""}:${objective || ""}:${tone || ""}`;
     if (planAutoAttempted.current === key) return;
     planAutoAttempted.current = key;
     handleGeneratePlan();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleGeneratePlan is a render-scoped closure, same as handleGenerateStrategy in the auto-build below; the key ref guards re-fires, and listing it would re-run the effect on every render.
-  }, [step, busy, canGenerate, objective, profileId, templateId, angleId, tone, project?.id, project?.script_version]);
+  }, [step, busy, canGenerate, objective, profileId, templateId, angleId, tone, project?.id, project?.script_version, project?.objective]);
 
   // Review reads the project's words, so it must read them from the server
   // rather than trust whatever the wizard last held. An eager draft update
@@ -1673,10 +1691,12 @@ if (step === 3) {
               Writes hook, script, shots, and demo note. Editable below.
             </p>
           </div>
-        ) : !project?.script_version && (busy || loading || (canGenerate && objective)) ? (
+        ) : !project?.script_version && (busy || loading || (canGenerate && effectiveObjective)) ? (
           /* No plan and nothing wrong: an attempt is in flight, the draft is
              still loading, or every input is present and the auto effect fires
-             next. Only these three cases may show a spinner. */
+             next — reading the stored goal too, so a draft that already holds
+             one spins instead of flashing the picker. Only these three cases
+             may show a spinner. */
           <div className="space-y-3 rounded-xl border border-[color:var(--hairline)] p-4">
             <div className="flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -1726,9 +1746,9 @@ if (step === 3) {
         ) : (
           <div className="space-y-4">
             {/* Regenerating replaces a plan that may have been edited and
-                approved. Stating the version is not enough next to a button
-                that discards it, so it asks — the same rule as the strategy
-                rebuild, and for the same reason. */}
+                approved, so it asks first — the same rule as the strategy
+                rebuild, and for the same reason. No version helper beside it:
+                the button's own confirm states what is discarded. */}
             {project?.script_version > 0 && (
               <div className="flex flex-wrap items-center gap-2">
                 <Button
@@ -1761,9 +1781,6 @@ if (step === 3) {
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                   Regenerate plan
                 </Button>
-                <p className="text-xs text-muted-foreground">
-                  Plan v{project.script_version}. Regenerating replaces it and bumps the version.
-                </p>
               </div>
             )}
             <span className="eyebrow block">Script</span>
