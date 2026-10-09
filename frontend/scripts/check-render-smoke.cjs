@@ -383,8 +383,8 @@ const apiStub = {
   getStudioProject: async () => PROJECT_WITH_STRATEGY,
   // A create returns a fresh draft with no plan and no strategy, exactly as
   // the server does. The stub used to return a fully-planned project, which
-  // the eager create adopts and which hides the "Generate the plan" button
-  // behind a plan the founder never wrote.
+  // the eager create adopts and which hides the auto-generation this suite
+  // is about behind a plan the founder never wrote.
   createStudioProject: async () => ({ ...BASE_PROJECT }),
   updateStudioProject: async () => PROJECT_WITH_STRATEGY,
   detachAsset: async () => BASE_PROJECT,
@@ -929,20 +929,108 @@ async function main() {
           throw new Error("Review did not generate the plan on entry");
         }
         const text = ctx.text();
-        // Either the fresh plan is already showing, or the fallback button is
-        // still there mid-flight — both mean the step owns its plan rather
+        // Either the fresh plan is already showing, or the step is mid-flight
+        // with its generating state — both mean the step owns its plan rather
         // than bouncing the founder elsewhere for it.
         const showingPlan = text.includes("Hook line");
-        const generate = [...ctx.container.querySelectorAll("button")]
-          .find((b) => /Generate the plan/.test((b.textContent || "").trim()));
-        if (!showingPlan && !generate) {
-          throw new Error("Review neither shows the fresh plan nor offers to generate it");
+        const midFlight = text.includes("Generating your plan");
+        if (!showingPlan && !midFlight) {
+          throw new Error("Review neither shows the fresh plan nor generates it");
         }
         if (text.includes("No plan yet")) {
           throw new Error("Review still bounces to a separate plan step for its own plan");
         }
       }
     );
+  });
+
+  await check("Review without a goal asks for it instead of spinning forever", async (ctx) => {
+    // Pills allow reaching Review before a goal exists (or opening a draft
+    // whose objective is empty). The auto effect cannot fire without one, so
+    // the step must say so and offer the picker — never the generating
+    // spinner, which previously showed while nothing was en route.
+    global.__SMOKE_PARAMS = "?project=p1";
+    const plans = [];
+    try {
+      await withApi(
+        {
+          getStudioProject: async () => ({ ...BASE_PROJECT, objective: "", assets: [] }),
+          createStudioProject: async () => ({ ...BASE_PROJECT, objective: "", assets: [] }),
+          updateStudioProject: async (id, patch) => ({ ...BASE_PROJECT, objective: "", assets: [], ...patch }),
+          generatePlan: async (id, payload) => {
+            plans.push(payload);
+            return PROJECT_WITH_STRATEGY;
+          },
+        },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Review");
+          await act(async () => {});
+          await act(async () => {});
+          if (plans.length !== 0) {
+            throw new Error("Review fired a plan with no goal to write it from");
+          }
+          if (ctx.text().includes("Generating your plan")) {
+            throw new Error("Review shows the generating spinner while blocked on the missing goal");
+          }
+          const select = ctx.container.querySelector("select#review-objective");
+          if (!select) {
+            throw new Error("Review does not offer the goal picker when the goal is missing");
+          }
+          // Choosing the goal writes the same state the Audience step writes,
+          // so the plan must start with no button press.
+          const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLSelectElement.prototype, "value").set;
+          setter.call(select, "address_user_problem");
+          select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+          await act(async () => {});
+          await act(async () => {});
+          if (plans.length === 0) {
+            throw new Error("choosing the goal on Review did not start the plan on its own");
+          }
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("a failed plan offers retry instead of spinning forever", async (ctx) => {
+    // A rejected generation used to leave the spinner up with no way back:
+    // the auto latch rightly refuses to re-fire, and the only button lived
+    // behind a state the failure could not reach.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi(
+        {
+          getStudioProject: async () => ({ ...BASE_PROJECT, assets: [] }),
+          createStudioProject: async () => ({ ...BASE_PROJECT, assets: [] }),
+          updateStudioProject: async () => ({ ...BASE_PROJECT, assets: [] }),
+          generatePlan: async () => {
+            throw new Error("provider unavailable in this check");
+          },
+        },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Review");
+          await act(async () => {});
+          await act(async () => {});
+          await act(async () => {});
+          if (ctx.text().includes("Generating your plan")) {
+            throw new Error("Review still shows the generating spinner after the plan failed");
+          }
+          const retry = [...ctx.container.querySelectorAll("button")]
+            .find((b) => /Try again/.test((b.textContent || "").trim()));
+          if (!retry) {
+            throw new Error("Review offers no retry after the plan failed");
+          }
+          if (retry.disabled) {
+            throw new Error("the retry is disabled even though profile, template and goal are present");
+          }
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
   });
 
   // -------------------------------------------------------------------------

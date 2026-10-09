@@ -287,6 +287,39 @@ function MissingRequirements({ identity, onGoToTemplatePhoto }) {
   );
 }
 
+/**
+ * The goal picker, offered on Review when the plan is blocked on it. Same
+ * options as the Audience & goal step; choosing one writes it into the same
+ * state, so the auto effect fires and the plan starts with no button press.
+ */
+function ReviewGoalPicker({ value, onPick, options }) {
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor="review-objective" className="text-sm font-medium">
+        What is this video for? <span className="text-muted-foreground">(required)</span>
+      </label>
+      <div className="relative">
+        <select
+          id="review-objective"
+          value={value}
+          onChange={(e) => onPick(e.target.value)}
+          aria-required="true"
+          className="w-full appearance-none rounded-xl border border-[color:var(--hairline)] bg-transparent py-2.5 pl-3 pr-10 text-sm transition-colors hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)] focus:border-[color:var(--indigo-35)]"
+        >
+          <option value="">Choose an objective</option>
+          {(options || []).map((o) => (
+            <option key={o} value={o}>{humanize(o)}</option>
+          ))}
+        </select>
+        <ChevronDown
+          aria-hidden="true"
+          className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+        />
+      </div>
+    </div>
+  );
+}
+
 function StepShell({ icon: Icon, title, description, children }) {
   return (
     <div className="space-y-4">
@@ -399,6 +432,13 @@ export default function CreateVideo() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // A plan attempt ran and failed (or draft creation refused). While true,
+  // Review shows the retry path instead of the generating spinner: without
+  // this the failure state is indistinguishable from an attempt in flight,
+  // and the spinner spins forever because the auto latch (below) rightly
+  // refuses to re-fire the same selection-set on its own. Cleared whenever a
+  // new attempt starts.
+  const [planFailed, setPlanFailed] = useState(false);
 
   const [selectedProfileId, setSelectedProfileId] = useState(params.get("profile") || "");
   const [angleId, setAngleId] = useState(params.get("angle") || "");
@@ -811,7 +851,13 @@ export default function CreateVideo() {
 
   const handleGeneratePlan = async () => {
     const ready = await createProject();
-    if (!ready) return;
+    if (!ready) {
+      // createProject already reported the error above. Record the outcome
+      // so Review offers the retry instead of the generating spinner.
+      setPlanFailed(true);
+      return;
+    }
+    setPlanFailed(false);
     setBusy(true);
     setError(null);
     try {
@@ -856,6 +902,7 @@ export default function CreateVideo() {
       setStep(3);
     } catch (err) {
       setError(getErrorMessage(err));
+      setPlanFailed(true);
     } finally {
       setBusy(false);
     }
@@ -990,12 +1037,12 @@ export default function CreateVideo() {
   // Auto-generate the plan on entering Review with a ready draft that has
   // none yet. The step exists to READ the plan, so arriving to an empty step
   // plus a button was a wasted click on every first pass. Same gates as the
-  // manual button below (a template, a goal, the photo, nothing in flight):
-  // without them there is nothing to write the plan from, and the box keeps
-  // its button as the retry path after a failure. One attempt per
-  // selection-set, keyed on everything the plan is written from: a failed
-  // generation must not loop, and regenerating an existing plan stays a
-  // deliberate, confirmed click. Placed after the renderability consts above:
+  // manual retry below (a profile, a template, a goal, nothing in flight):
+  // without them there is nothing to write the plan from. When a gate is
+  // unmet the step names the missing input instead of spinning; a failed
+  // attempt sets planFailed and offers the retry, and the latch below means
+  // a failure never loops. Regenerating an existing plan stays a deliberate,
+  // confirmed click. Placed after the renderability consts above:
   // the dep array reads them during render, so this cannot live above their
   // declarations the way the other effects do.
   const planAutoAttempted = useRef("");
@@ -1512,39 +1559,80 @@ if (step === 3) {
         <StepShell
           icon={CheckCircle2}
           title="Review the plan"
-          description="Write your script here, then check every claim in it. Free — nothing is generated until you open the next step."
+          description="Your plan writes itself here. Read it, edit anything, then check every claim in it. Free — nothing is generated until you open the next step."
         >
-        {!project?.script_version && !busy ? (
-          /* Plan is being generated. Show loading state. */
-          <div className="space-y-3 rounded-xl border border-[color:var(--hairline)] p-4">
-            <div className="flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-sm font-medium">Generating your plan…</span>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Writing hook, script, shots, and demo note.
-            </p>
-          </div>
-        ) : !project?.script_version ? (
-          /* Plan generation failed or blocked. Show error and retry button. */
+        {!project?.script_version && planFailed && !busy ? (
+          /* A plan attempt ran and failed. The page-level error above says why;
+             this offers the retry. Manual and enabled: the auto latch already
+             consumed this selection-set, so nothing here fires on its own. The
+             photo is not listed: it is required to render, never to plan. */
           <div className="space-y-3 rounded-xl border border-[color:var(--hairline)] p-4">
             <p className="text-sm text-muted-foreground">
-              Could not generate plan automatically. Check requirements and try again.
+              The plan didn't generate. Fix what's missing below, then try again — still free.
             </p>
-            <MissingRequirements
-              identity={missingIdentity}
-              onGoToTemplatePhoto={scrollToTemplatePhoto}
-            />
+            {!objective && (
+              <ReviewGoalPicker value={objective} onPick={setObjective} options={facets?.objectives || []} />
+            )}
             <Button
               variant="brand"
               onClick={handleGeneratePlan}
-              disabled={busy || !canGenerate}
+              disabled={busy || !canGenerate || !objective}
             >
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              Generate the plan
+              <Sparkles className="h-4 w-4" />
+              Try again
             </Button>
             <p className="text-xs text-muted-foreground">
-              Free. Writes hook, script, shots, and demo note. Editable below.
+              Writes hook, script, shots, and demo note. Editable below.
+            </p>
+          </div>
+        ) : !project?.script_version && (busy || loading || (canGenerate && objective)) ? (
+          /* No plan and nothing wrong: an attempt is in flight, the draft is
+             still loading, or every input is present and the auto effect fires
+             next. Only these three cases may show a spinner. */
+          <div className="space-y-3 rounded-xl border border-[color:var(--hairline)] p-4">
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm font-medium">
+                {loading && !busy ? "Loading your draft…" : "Generating your plan…"}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {loading && !busy
+                ? "Picking up where you left off."
+                : "Writing hook, script, shots, and demo note."}
+            </p>
+          </div>
+        ) : !project?.script_version ? (
+          /* No plan and the auto effect cannot fire: a profile, a template or
+             the goal is missing. Name it and fix it here — choosing the goal
+             starts the plan on its own, no button press. */
+          <div className="space-y-3 rounded-xl border border-[color:var(--hairline)] p-4">
+            <p className="text-sm text-muted-foreground">
+              The plan writes itself once it has an App Profile, a template and a goal. Still missing:
+            </p>
+            <ul className="space-y-2 text-sm">
+              {!profileId && (
+                <li>
+                  <Button variant="secondary" size="sm" onClick={() => setStep(0)}>
+                    Choose an App Profile
+                  </Button>
+                </li>
+              )}
+              {!effectiveTemplateId && (
+                <li>
+                  <Button variant="secondary" size="sm" onClick={() => setStep(2)}>
+                    Pick a template
+                  </Button>
+                </li>
+              )}
+              {!objective && (
+                <li>
+                  <ReviewGoalPicker value={objective} onPick={setObjective} options={facets?.objectives || []} />
+                </li>
+              )}
+            </ul>
+            <p className="text-xs text-muted-foreground">
+              Nothing to press — the plan starts on its own once the above is set.
             </p>
           </div>
         ) : (
