@@ -185,6 +185,7 @@ export const api = {
   approveAppProfile: (id, applyPending = true) =>
     client.post(`/app-profiles/${id}/approve`, { apply_pending: applyPending }).then((r) => r.data),
   refreshAppProfile: (id) => client.post(`/app-profiles/${id}/refresh`).then((r) => r.data),
+  regenerateEverything: (id) => client.post(`/app-profiles/${id}/regenerate-everything`).then((r) => r.data),
 
   // Content angles (per App Profile)
   getContentAngles: (profileId) =>

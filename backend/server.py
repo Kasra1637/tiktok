@@ -3638,6 +3638,43 @@ def _approval_gaps(profile: dict, pending: Optional[dict] = None) -> list:
     return [label for label, ok in checks if not ok]
 
 
+async def _auto_generate_content_angles(profile: dict, user_id: str) -> None:
+    """
+    Best-effort content angle generation after a profile is approved.
+
+    Runs in the background; failures are logged but don't block the approval
+    response. Angles are derived data — if generation fails the founder can
+    still use the profile and regenerate later.
+    """
+    try:
+        angles = await _log_model_call(
+            "content_angles", "text", TEXT_MODEL,
+            lambda: generate_content_angles(profile),
+            user_id,
+            brand_profile_id=profile.get("id"),
+        )
+    except Exception as e:
+        logger.warning(f"Auto content angle generation failed for profile {profile.get('id')}: {e}")
+        return
+
+    await _execute("DELETE FROM content_angles WHERE brand_profile_id = ?", (profile.get("id"),))
+    now = now_iso()
+    for rank, angle in enumerate(angles):
+        angle_id = str(uuid.uuid4())
+        await _execute(
+            """INSERT INTO content_angles
+               (id, brand_profile_id, kind, label, target_audience, user_problem,
+                 hook_promise, app_feature, desired_emotion,
+                 claims_to_respect, rank, created_at, user_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (angle_id, profile.get("id"), angle["kind"], angle["label"],
+             angle["target_audience"], angle["user_problem"], angle["hook_promise"],
+             angle["app_feature"], angle["desired_emotion"],
+             json.dumps(angle["claims_to_respect"]), rank, now, user_id),
+        )
+    logger.info(f"Auto-generated %d content angle(s) for profile {profile.get('id')}", len(angles))
+
+
 @api_router.post("/app-profiles/{profile_id}/approve")
 async def approve_app_profile(
     profile_id: str, payload: ApproveAppProfileRequest, user_id: str = Depends(get_current_user_id)
@@ -3698,9 +3735,11 @@ async def approve_app_profile(
                 tuple(values) + (user_id,),
             )
             logger.info(f"Approved App Profile {profile_id} (version {(existing.get('version') or 1) + 1})")
-            return await _fetch_one(
+            approved_profile = await _fetch_one(
                 "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
             )
+            await _auto_generate_content_angles(approved_profile, user_id)
+            return approved_profile
 
     # No pending proposal (or the founder skipped applying it): approving the
     # draft as it stands is itself a legal UPDATE, so the status flip commits
@@ -3714,9 +3753,82 @@ async def approve_app_profile(
         (now, now, profile_id, user_id),
     )
     logger.info(f"Approved App Profile {profile_id} (draft as-is, version {existing.get('version') or 1})")
-    return await _fetch_one(
+    approved_profile = await _fetch_one(
         "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
     )
+    await _auto_generate_content_angles(approved_profile, user_id)
+    return approved_profile
+
+
+@api_router.post("/app-profiles/{profile_id}/regenerate-everything", status_code=201)
+async def regenerate_everything(profile_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Regenerate everything for an App Profile: re-research, re-approve, regenerate angles.
+
+    This is the single "regenerate everything" action. It:
+    1. Re-runs research from the profile's URLs
+    2. Applies the fresh research (bumps version, clears pending)
+    3. Auto-generates content angles from the updated profile
+
+    Replaces the need for per-section regenerate buttons.
+    """
+    require_ai_configured()
+    existing = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="App Profile not found")
+
+    # Step 1: Re-research from URLs
+    urls: dict = {}
+    if existing.get("website_url"):
+        urls["website"] = (existing["website_url"], APP_RESEARCH_CAPS["website"])
+    if existing.get("appstore_url"):
+        urls["app_store"] = (existing["appstore_url"], APP_RESEARCH_CAPS["app_store"])
+    if existing.get("play_url"):
+        urls["google_play"] = (existing["play_url"], APP_RESEARCH_CAPS["google_play"])
+    stored_support = existing.get("support_urls") or []
+    for u in stored_support:
+        if isinstance(u, str) and u.strip():
+            urls.setdefault("support", []).append((u.strip(), APP_RESEARCH_CAPS["support"]))
+
+    research = await analyze_brand_from_sources(urls, existing.get("brand_name") or "")
+    if not research or not isinstance(research, dict):
+        raise HTTPException(status_code=502, detail="Research returned no usable data.")
+
+    # Step 2: Apply the research (like approve with apply_pending)
+    apply = {k: v for k, v in research.items() if k in APP_PROFILE_EDITABLE_FIELDS and v not in (None, "", [])}
+    now = now_iso()
+    if apply:
+        set_clauses, values = _brand_update_parts(apply)
+        set_clauses.append("pending_research = NULL")
+        set_clauses.append("version = ?")
+        values.append((existing.get("version") or 1) + 1)
+        set_clauses.append("status = 'approved'")
+        set_clauses.append("approved_at = ?")
+        values.append(now)
+        set_clauses.append("updated_at = ?")
+        values.append(now)
+        values.append(profile_id)
+        await _execute(
+            f"UPDATE brand_profiles SET {', '.join(set_clauses)} WHERE id = ? AND user_id = ?",
+            tuple(values) + (user_id,),
+        )
+    else:
+        # Still bump version and refresh timestamps even if no fields changed
+        await _execute(
+            "UPDATE brand_profiles SET version = ?, approved_at = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+            ((existing.get("version") or 1) + 1, now, now, profile_id, user_id),
+        )
+
+    # Step 3: Auto-generate content angles from the updated profile
+    updated_profile = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+    await _auto_generate_content_angles(updated_profile, user_id)
+
+    logger.info(f"Regenerated everything for App Profile {profile_id}")
+    return updated_profile
 
 
 @api_router.post("/app-profiles/{profile_id}/refresh")

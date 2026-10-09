@@ -17,7 +17,7 @@ import PageHeader from "../components/PageHeader";
 import { api, getErrorMessage } from "../lib/api";
 import {
   Briefcase, Loader2, AlertTriangle, ArrowLeft, Sparkles, Target,
-  ShieldAlert, Lightbulb, ChevronRight, Video, Trash2,
+  ShieldAlert, Lightbulb, ChevronRight, Video, Trash2, RefreshCw,
 } from "lucide-react";
 
 /** Read an array-or-empty field into a clean list. */
@@ -200,7 +200,7 @@ export default function AppProfileDetail() {
   const [recommendations, setRecommendations] = useState([]);
   const [recError, setRecError] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
+  const [regeneratingEverything, setRegeneratingEverything] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -271,17 +271,20 @@ export default function AppProfileDetail() {
     if (profile) loadRecommendations();
   }, [profile, loadRecommendations]);
 
-  const handleGenerateAngles = async () => {
-    setGenerating(true);
+  const handleRegenerateEverything = async () => {
+    setRegeneratingEverything(true);
     setError(null);
     try {
-      const data = await api.generateContentAngles(profileId);
-      setAngles(data.angles || []);
-      setNotice(`Generated ${data.angles?.length || 0} content angles.`);
+      const updated = await api.regenerateEverything(profileId);
+      setProfile(updated);
+      // Reload angles after regeneration
+      const a = await api.getContentAngles(profileId).catch(() => ({ angles: [] }));
+      setAngles(a.angles || []);
+      setNotice("Regenerated everything: research, approval, and content angles.");
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
-      setGenerating(false);
+      setRegeneratingEverything(false);
     }
   };
 
@@ -414,6 +417,18 @@ export default function AppProfileDetail() {
                 New video
               </Link>
             </Button>
+            {approved && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleRegenerateEverything}
+                disabled={regeneratingEverything}
+                title="Re-research, re-approve, and regenerate content angles"
+              >
+                {regeneratingEverything ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                Regenerate everything
+              </Button>
+            )}
           </div>
         }
       />
@@ -618,27 +633,15 @@ export default function AppProfileDetail() {
           </div>
 
           <div className="surface space-y-3 rounded-2xl" data-testid="app-profile-angles">
-            <div className="flex items-center justify-between gap-2">
-              <span className="eyebrow flex items-center gap-1.5">
-                <Target className="h-3 w-3" />
-                Content angles
-              </span>
-              <Button
-                variant="brand"
-                size="sm"
-                onClick={handleGenerateAngles}
-                disabled={generating || !approved}
-                title={approved ? undefined : "Approve the profile first"}
-              >
-                {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                {angles.length ? "Regenerate" : "Generate"}
-              </Button>
-            </div>
+            <span className="eyebrow flex items-center gap-1.5">
+              <Target className="h-3 w-3" />
+              Content angles
+            </span>
 
             {angles.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 {approved
-                  ? "Generate angles to see which problems, benefits, and features to lead with."
+                  ? "Content angles were generated when you approved this profile."
                   : "Approve this profile to generate content angles."}
               </p>
             ) : (
