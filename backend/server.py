@@ -5594,9 +5594,16 @@ async def _studio_identity_references(
     row = None
     if asset_id:
         row = await _fetch_one(
-            "SELECT file_path FROM assets WHERE id = ? AND user_id = ?", (asset_id, user_id)
+            "SELECT * FROM assets WHERE id = ? AND user_id = ?", (asset_id, user_id)
         )
-    path = (row or {}).get("file_path") if isinstance(row, dict) else anchor.get("file_path")
+    if isinstance(row, dict):
+        # Restored from R2 when this container never saw the upload: refusing
+        # to spend a generation over a file the cloud can produce would be
+        # wrong, and the identity pass is the last moment to notice.
+        restored = await _ensure_asset_file(row)
+        path = str(restored) if restored else None
+    else:
+        path = anchor.get("file_path")
     if not path or not Path(path).is_file():
         logger.warning(f"Character reference {asset_id or '(unresolved)'} has no file on disk; refusing generation")
         raise HTTPException(
@@ -7794,6 +7801,46 @@ def _asset_dir(profile_id: str) -> Path:
     return target
 
 
+async def _ensure_asset_file(row: dict) -> Path | None:
+    """
+    The asset's bytes on this disk, restored from R2 when they are gone.
+
+    A Cloud Run container gets a fresh disk on every deploy, so a photograph
+    that uploaded fine yesterday can be missing today even though R2 still
+    holds it. Everything that needs the file — the preview route, attaching,
+    and generation's identity pass — comes through here, so one restore
+    covers all three instead of each refusing on a file the cloud can
+    produce. Returns None when there is genuinely nothing to serve.
+    """
+    stored = row.get("file_path") or ""
+    if not stored:
+        return None
+    file_path = Path(stored)
+    if file_path.is_file():
+        return file_path
+    if not storage_service.is_configured():
+        return None
+    profile_id = str(row.get("brand_profile_id") or "")
+    if not GENERATED_ID_RE.match(profile_id):
+        return None
+    target = _asset_dir(profile_id) / f"{row['id']}{file_path.suffix}"
+    try:
+        restored = await asyncio.to_thread(
+            storage_service.download_asset, row.get("user_id") or "", row["id"], target
+        )
+    except Exception as error:
+        logger.warning("Cloud asset restore failed for %s (%s)", row["id"], type(error).__name__)
+        return None
+    if not restored or not target.is_file():
+        return None
+    # Keep the row in step with where the file actually is: attach and
+    # generation read `file_path` directly, so a restored copy at a
+    # different path would still look missing to them.
+    if str(target) != stored:
+        await _execute("UPDATE assets SET file_path = ? WHERE id = ?", (str(target), row["id"]))
+    return target
+
+
 @api_router.get("/app-profiles/{profile_id}/assets")
 async def list_assets(
     profile_id: str,
@@ -7983,6 +8030,14 @@ async def upload_asset(
          duration_seconds, face_count, 1 if rights_confirmed else 0, now, now, user_id),
     )
     logger.info(f"Uploaded {asset_kind} asset {asset_id} for profile {profile_id}")
+    # Durable copy, best effort: the local file serves this instance, but a
+    # Cloud Run deploy throws the disk away, and without this the photograph
+    # would be gone from the library — and unusable by attach and generation —
+    # the next morning. Failure only logs: the upload itself already succeeded.
+    try:
+        await asyncio.to_thread(storage_service.upload_asset, user_id, asset_id, target)
+    except Exception as exc:
+        logger.warning("Asset R2 upload failed for %s (%s)", asset_id, type(exc).__name__)
     created = _public_asset(await _fetch_one("SELECT * FROM assets WHERE id = ?", (asset_id,)))
     if face_count is not None and face_count != 1:
         created["face_warning"] = (
@@ -8061,6 +8116,12 @@ async def delete_asset(asset_id: str, user_id: str = Depends(get_current_user_id
             path.unlink()
     except OSError as e:
         logger.warning(f"Could not remove asset file {path}: {e}")
+    # The durable copy too, or a deleted photograph would outlive its row in
+    # R2 with nothing left to delete it.
+    try:
+        await asyncio.to_thread(storage_service.delete_asset, user_id, asset_id)
+    except Exception as e:
+        logger.warning(f"Could not remove asset object from R2 for {asset_id}: {e}")
     return {
         "deleted": asset_id,
         "usage_count": len(still_used),
@@ -8099,7 +8160,10 @@ async def attach_asset_to_project(
             detail="That asset belongs to a different app. Assets can only be used in "
                    "their own App Profile's projects.",
         )
-    if not asset.get("file_path") or not Path(asset["file_path"]).is_file():
+    # The disk this container booted with may be younger than the upload, so
+    # restore from R2 before refusing — a photo the cloud still holds is not
+    # missing, and telling the founder to re-upload it would be wrong.
+    if await _ensure_asset_file(asset) is None:
         await _record_asset_event(
             "file_missing", "The asset file is missing on disk.", user_id,
             brand_profile_id=project.get("brand_profile_id"),
@@ -9302,39 +9366,14 @@ async def serve_asset(asset_id: str, request: Request, sig: str = "", exp: str =
     # own that profile. Since the URL is signed, the signature itself is
     # the authorization — the signer must have known the asset id.
     # But we also verify the row exists and the file is present.
-
-    # First try local file
-    file_path = Path(row.get("file_path") or "")
-    if file_path.is_file():
-        return FileResponse(
-            str(file_path),
-            media_type=row.get("content_type") or "image/jpeg",
-            headers={"Cache-Control": "private, max-age=31536000, immutable"},
-        )
-
-    # If not local but R2 is configured, try restoring from cloud
-    if storage_service.is_configured():
-        try:
-            # Need to find the profile_id for storage path
-            profile = await _fetch_one(
-                "SELECT id FROM brand_profiles WHERE id = ?", (row["brand_profile_id"],)
-            )
-            if profile:
-                target_dir = _asset_dir(profile["id"])
-                target_dir.mkdir(parents=True, exist_ok=True)
-                local_path = target_dir / f"{asset_id}{Path(row.get('file_path') or '').suffix}"
-                await asyncio.to_thread(
-                    storage_service.download_asset, row["user_id"], asset_id, local_path)
-                if local_path.is_file():
-                    return FileResponse(
-                        str(local_path),
-                        media_type=row.get("content_type") or "image/jpeg",
-                        headers={"Cache-Control": "private, max-age=31536000, immutable"},
-                    )
-        except Exception as error:
-            logger.warning("Cloud asset restore failed for %s (%s)", asset_id, type(error).__name__)
-
-    raise HTTPException(status_code=404, detail="Asset not found")
+    path = await _ensure_asset_file(row)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    return FileResponse(
+        str(path),
+        media_type=row.get("content_type") or "image/jpeg",
+        headers={"Cache-Control": "private, max-age=31536000, immutable"},
+    )
 
 
 app.mount("/api/media", StaticFiles(directory=str(pipeline.STORAGE_DIR)), name="media")

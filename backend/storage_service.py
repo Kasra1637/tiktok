@@ -224,6 +224,129 @@ def delete_poster(user_id: str, job_id: str) -> bool:
         return False
 
 
+def _asset_key(user_id: str, asset_id: str) -> str:
+    """Build the R2 object key for a library asset: {user_id}/assets/{asset_id}"""
+    return f"{user_id}/assets/{asset_id}"
+
+
+_ASSET_CONTENT_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+}
+
+
+def _looks_like_image(head: bytes) -> bool:
+    """PNG / JPEG / WEBP / GIF magic bytes — the formats the library accepts."""
+    if head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return True
+    if head.startswith(b"\xff\xd8\xff"):
+        return True
+    if head.startswith(b"GIF87a") or head.startswith(b"GIF89a"):
+        return True
+    return head.startswith(b"RIFF") and head[8:12] == b"WEBP"
+
+
+def upload_asset(user_id: str, asset_id: str, source_path: Path) -> bool:
+    """
+    Upload a library asset to R2 so it survives deploys.
+
+    A Cloud Run container gets a fresh disk on every deploy, so a photograph
+    kept only locally is gone the next morning — and the library, the attach
+    step, and generation all read that file. Returns True on success, False
+    otherwise, never raising: the local copy still serves this instance.
+    """
+    if not is_configured():
+        return False
+    try:
+        if not source_path or not Path(source_path).is_file():
+            return False
+    except OSError:
+        return False
+    client = _get_client()
+    if not client:
+        return False
+    key = _asset_key(user_id, asset_id)
+    suffix = Path(source_path).suffix.lower()
+    try:
+        client.upload_file(
+            str(source_path),
+            R2_BUCKET_NAME,
+            key,
+            ExtraArgs={
+                "ContentType": _ASSET_CONTENT_TYPES.get(suffix, "application/octet-stream"),
+                "CacheControl": "private, max-age=31536000, immutable",
+            },
+        )
+        logger.info(f"Uploaded asset to R2: {key}")
+        return True
+    except ClientError as e:
+        logger.error(f"R2 asset upload failed for {key}: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error uploading asset to R2 {key}: {e}")
+        return False
+
+
+def download_asset(user_id: str, asset_id: str, target: Path) -> bool:
+    """
+    Download a library asset from R2 to `target`.
+
+    The object is validated as one of the image formats the library accepts
+    before it is installed, so a truncated or wrong object can never take the
+    place of a photograph.
+    """
+    client = _get_client()
+    if client is None:
+        return False
+    target = Path(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp = target.with_name(f".{target.name}.{uuid.uuid4().hex}.asset")
+    try:
+        client.download_file(R2_BUCKET_NAME, _asset_key(user_id, asset_id), str(temp))
+        try:
+            if not temp.is_file() or temp.stat().st_size < 64:
+                return False
+            with temp.open("rb") as fh:
+                head = fh.read(12)
+            if not _looks_like_image(head):
+                return False
+        except OSError:
+            return False
+        temp.replace(target)
+        return True
+    except ClientError as error:
+        if _missing_object(error):
+            return False
+        raise
+    finally:
+        try:
+            temp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def delete_asset(user_id: str, asset_id: str) -> bool:
+    """Delete a library asset from R2. True if deleted or absent, False on error."""
+    if not is_configured():
+        return False
+    client = _get_client()
+    if not client:
+        return False
+    key = _asset_key(user_id, asset_id)
+    try:
+        client.delete_object(Bucket=R2_BUCKET_NAME, Key=key)
+        return True
+    except ClientError as e:
+        logger.error(f"R2 asset delete failed for {key}: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error deleting asset from R2 {key}: {e}")
+        return False
+
+
 def is_managed_url(value: str) -> bool:
     """Recognize our stable cloud locators, including the private S3 endpoint."""
     try:
