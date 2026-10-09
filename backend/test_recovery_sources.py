@@ -218,6 +218,94 @@ class TestTheWalkFallsThrough:
         assert "cannot be recovered" in error
 
 
+class TestCameraCutRunsInFinalize:
+    """
+    The hook-to-middle cut is baked into the canonical file during finalize,
+    so the preview and the download carry it — not just captioned composites,
+    the only place it used to run (which is why changing its magnitude never
+    showed on a raw clip). Fresh downloads only: re-running it on an
+    already-cut canonical file would punch twice.
+    """
+
+    def _persist_with_stubs(self, api, monkeypatch, tmp_path, row, project_id="proj-cut", project_hook=3):
+        from pathlib import Path as _Path
+
+        downloaded = tmp_path / "dl.mp4"
+
+        async def fake_download(url, generation_id):
+            downloaded.write_bytes(b"x")
+            return str(downloaded), None
+
+        async def fake_rescale(path):
+            return _Path(path), []
+
+        calls = []
+
+        async def fake_cut(path, at):
+            calls.append((_Path(path).name, at))
+            return _Path(path), []
+
+        monkeypatch.setattr(api, "_download_generation_video", fake_download)
+        monkeypatch.setattr(api.overlays, "rescale_to_canvas", fake_rescale)
+        monkeypatch.setattr(api.overlays, "apply_camera_cut", fake_cut)
+        monkeypatch.setattr(api.storage_service, "is_configured", lambda: False)
+        monkeypatch.setattr(api.storage_service, "is_usable_video", lambda path: False)
+        monkeypatch.setattr(
+            api.storage_service, "upload_video",
+            lambda *args, **kwargs: "https://cdn.example/saved.mp4",
+        )
+        if project_hook is not None:
+            asyncio.run(api._execute(
+                "INSERT INTO studio_projects (id, hook_seconds) VALUES (?, ?)",
+                (project_id, project_hook),
+            ))
+        stored, error, _ = asyncio.run(api._persist_generation_clip(row, "anonymous"))
+        return stored, error, calls
+
+    def test_cut_runs_once_with_the_project_boundary(self, api, monkeypatch, tmp_path):
+        row = provider_row(studio_project_id="proj-cut-1")
+        stored, error, calls = self._persist_with_stubs(
+            api, monkeypatch, tmp_path, row, project_id="proj-cut-1")
+        assert not error
+        assert stored == "https://cdn.example/saved.mp4"
+        assert calls == [("dl.mp4", 3.0)]
+
+    def test_no_cut_without_a_known_boundary(self, api, monkeypatch, tmp_path):
+        row = provider_row(studio_project_id="proj-cut-missing")
+        stored, error, calls = self._persist_with_stubs(
+            api, monkeypatch, tmp_path, row, project_id="proj-cut-missing", project_hook=None)
+        assert not error
+        assert stored == "https://cdn.example/saved.mp4"
+        assert calls == []
+
+    def test_cut_is_not_rerun_on_an_already_saved_clip(self, api, monkeypatch, tmp_path):
+        from pathlib import Path as _Path
+
+        row = provider_row(studio_project_id="proj-cut-2")
+        local = api.pipeline.VIDEOS_DIR / "gen-1.mp4"
+        local.write_bytes(b"already canonical")
+        monkeypatch.setattr(api.storage_service, "is_usable_video", lambda path: True)
+        monkeypatch.setattr(api.storage_service, "is_configured", lambda: False)
+        monkeypatch.setattr(
+            api.storage_service, "upload_video",
+            lambda *args, **kwargs: "https://cdn.example/saved.mp4",
+        )
+        calls = []
+
+        async def fake_cut(path, at):
+            calls.append(at)
+            return _Path(path), []
+
+        monkeypatch.setattr(api.overlays, "apply_camera_cut", fake_cut)
+        asyncio.run(api._execute(
+            "INSERT INTO studio_projects (id, hook_seconds) VALUES (?, ?)", ("proj-cut-2", 3),
+        ))
+        stored, error, _ = asyncio.run(api._persist_generation_clip(row, "anonymous"))
+        assert not error
+        assert stored == "https://cdn.example/saved.mp4"
+        assert calls == []
+
+
 class TestDryRunVerdict:
     """
     The report used to decide "would repair" from whether a URL string was
@@ -355,6 +443,10 @@ class TestProbeIsBoundedAndHonest:
                 return FakeStream(200)
 
         monkeypatch.setattr(api.httpx, "AsyncClient", FakeClient)
+        # Hermetic against worker history: ai_service captures OPENROUTER_API_KEY
+        # at import time, so a worker that first imported it via a module that
+        # sets no env would otherwise run this auth assertion with an empty key.
+        monkeypatch.setattr(api.ai_service, "OPENROUTER_API_KEY", "test-key-not-real")
         url = f"{api.ai_service.OPENROUTER_BASE}/videos/job-1/content?index=0"
         asyncio.run(api._probe_media_source(url))
         assert seen["headers"].get("Authorization"), "no bearer token on a provider probe"

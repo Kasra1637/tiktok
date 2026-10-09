@@ -12,8 +12,7 @@ network or a model:
 The prompt contract matters for the product rule that the model renders
 everything it shows: the environment, setting, lighting and props are
 invented from the verified app facts in the prompt, because nothing is
-composited over the footage except deterministic captions and the end
-card. The one thing the model must never invent is the person — they come
+composited over the footage at all and no text appears on screen. The one thing the model must never invent is the person — they come
 from the founder's character reference photograph, which rides along as a
 model input. Anything the viewer could read as a factual claim about the
 app (prices, ratings, interface text) must come from verified facts or
@@ -126,9 +125,12 @@ CONDENSE_BELOW = 4500
 # video's own story (its full and condensed forms are the fixed text measured
 # here). That is the trade this change makes on purpose: an interrupting
 # opening is the product, and it is bought out of descriptive room on the
-# providers with the tightest ceilings.
-FULL_PROMPT_FLOOR = 3052
-CONDENSED_PROMPT_FLOOR = 1800
+# providers with the tightest ceilings. The full floor fell by 5 when the
+# on-screen-text section became a no-text rule (burned-in captions removed);
+# the condensed floor rose by 23 for the same rewrite, which states the rule
+# in full rather than pointing at a captions step that no longer exists.
+FULL_PROMPT_FLOOR = 3047
+CONDENSED_PROMPT_FLOOR = 1823
 
 # What the variables are given at the default ceiling, derived rather than
 # measured: the default ceiling is a TOTAL, and the floor is part of it.
@@ -231,16 +233,16 @@ def _clip(text, limit: int, protect: bool = False) -> str:
 # explicit rather than relying on the model inferring "don't fake the facts".
 # Note what is NOT here: the environment, setting, lighting and props ARE
 # invented by the model from the verified app facts — nothing is composited
-# over the footage except captions now, so the scene has to be rendered, not
-# reserved.
+# over the footage and no text appears on screen, so the scene has to be
+# rendered, not reserved.
 _UI_RENDERING_WARNING = (
     "Do NOT draw or render: app interface elements, app screenshots, button "
     "labels, prices, ratings, review counts, download counts, logos, or any "
-    "small on-screen text. Nothing is composited over this footage except "
-    "captions, so invent the environment, setting, lighting "
+    "small on-screen text. Nothing is composited over this footage and no text "
+    "appears on screen at all, so invent the environment, setting, lighting "
     "and props concretely from the verified app facts — but anything the "
     "viewer could read as a factual claim about the app must come from those "
-    "facts, never from invention. Leave clean, uncluttered space for the captions."
+    "facts, never from invention."
 )
 
 # Condensed forms of the fixed instructions, for providers whose prompt ceiling
@@ -377,25 +379,6 @@ def _format_beats(beats, duration: int, hook_seconds: int = 3) -> str:
     return "\n".join(lines) or f"- 0-{duration}s: one continuous take"
 
 
-def _format_overlays(overlays) -> str:
-    if not overlays:
-        return "- (no on-screen text planned)"
-    lines = []
-    for item in overlays[:8]:
-        if isinstance(item, dict):
-            text = _clip(item.get("text"), 60)
-            if not text:
-                continue
-            try:
-                span = f"{float(item.get('start', 0)):g}-{float(item.get('end', 0)):g}s"
-            except (TypeError, ValueError):
-                span = "timed"
-            lines.append(f"- {span}: {text}")
-        elif isinstance(item, str) and item.strip():
-            lines.append(f"- {item.strip()}")
-    return "\n".join(lines) or "- (no on-screen text planned)"
-
-
 def build_single_pass_prompt(
     plan: dict,
     profile: dict,
@@ -408,7 +391,7 @@ def build_single_pass_prompt(
     Build the prompt for ONE coherent generation covering the whole video.
 
     Args:
-        plan: the reviewed studio plan (hook_line, script, beats, overlays...).
+        plan: the reviewed studio plan (hook_line, script, beats...).
         profile: the approved App Profile, used only to keep the product name
             and category accurate in any spoken or depicted context.
         template: the hook template, for visual style and pacing direction.
@@ -480,8 +463,8 @@ def build_single_pass_prompt(
     )
 
     sections.append(
-        "On-screen text will be added afterwards. Plan clean space for these, and do not "
-        "render the text yourself:\n" + _format_overlays(plan.get("overlays"))
+        "No text appears on screen at all — no captions, no titles, no labels. "
+        "Render a clean frame and do not draw any text yourself."
     )
 
     if visual:
@@ -1112,8 +1095,8 @@ def _assemble_prompt(
         sections.append(f"Camera and pacing: {_clip(tpl['camera_pacing'], 80)}")
 
     sections.append(
-        "On-screen text will be added afterwards. Plan clean space for it, and do not "
-        "render any text yourself."
+        "No text appears on screen at all — no captions, no titles, no labels. "
+        "Render a clean frame and do not draw any text yourself."
     )
     # The condensed handoff block above already carries this prohibition, merged
     # so the same rule is not stated twice on a budget that cannot afford it.

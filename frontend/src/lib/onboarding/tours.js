@@ -77,7 +77,7 @@ export const TOURS = {
         target: '[data-testid="step-pill-hook"]',
         title: "The one render step",
         body:
-          "Build the app-specific strategy first \u2014 free, and it is what makes the render about your app rather than a generic take. Then one render of the hook and the middle, with captions from the on-screen text you wrote on Review.",
+          "Build the app-specific strategy first \u2014 free, and it is what makes the render about your app rather than a generic take. Then one render of the hook and the middle, delivered with a hook-to-middle camera cut and no on-screen text.",
       },
       {
         target: '[data-testid="create-no-autopost-note"]',
@@ -242,7 +242,7 @@ export const TOURS = {
         title: "Open the receipts",
         optional: true,
         body:
-          "Details shows the exact prompt sent to the model, the claim check as it stood at render time, and the captions composited afterwards \u2014 the audit trail for any claim in a video you post.",
+          "Details shows the exact prompt sent to the model and the claim check as it stood at render time \u2014 the audit trail for any claim in a video you post.",
       },
       {
         target: '[data-testid="record-results-button"]',

@@ -22,11 +22,9 @@ schedules, engages, or holds platform credentials.
 |---|---|---|
 | Python 3.12 | Backend | `pip install -r requirements.txt` |
 | Node 20+ | Frontend | Uses `yarn` 1.22 |
-| **ffmpeg** | Frame extraction **and overlay compositing** | Must be on `PATH` |
-| A font file | Caption/end-card text | Auto-detected; override with `OVERLAY_FONT` |
+| **ffmpeg** | Frame extraction **and the finalize pass** (canvas fit, camera cut) | Must be on `PATH` |
 
-Without ffmpeg, overlays are skipped and the un-composited video is kept.
-Without a font, text layers are skipped rather than rendered wrong.
+Without ffmpeg, the finalize steps are skipped and the raw render is kept.
 
 ### Backend
 
@@ -75,7 +73,6 @@ All optional except `OPENROUTER_API_KEY` if you want AI features. Copy
 | `CORS_ORIGINS` | Allowed browser origins, comma-separated. Defaults to `*` |
 | `VIDEO_MODEL_DEFAULT` | Swap video provider without a code change |
 | `VIDEO_MODEL_ALLOWLIST` | Restrict which providers may be used at all |
-| `OVERLAY_FONT` | Font file for captions |
 
 ---
 

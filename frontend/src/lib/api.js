@@ -284,12 +284,6 @@ export const api = {
   detachAsset: (projectId, assetId) =>
     client.delete(`/studio/projects/${projectId}/assets/${assetId}`).then((r) => r.data),
 
-  // Deterministic overlay composition
-  composeOverlays: (generationId, payload = {}) =>
-    client.post(`/generations/${generationId}/overlay`, payload).then((r) => r.data),
-  getOverlayComposition: (generationId) =>
-    client.get(`/generations/${generationId}/overlay`).then((r) => r.data),
-
   // Variations
   getVariationKinds: () => client.get("/studio/variations").then((r) => r.data),
   createVariation: (generationId, payload) =>

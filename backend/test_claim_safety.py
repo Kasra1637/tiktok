@@ -67,12 +67,13 @@ class TestBannedClaims:
         assert report["passed"] is False
         assert len(report["blocking"]) == 2
 
-    def test_banned_claim_in_overlay_blocks(self):
-        """Overlays are on screen, so a banned claim there is equally a failure."""
+    def test_banned_claim_in_legacy_overlays_is_ignored(self):
+        """Overlays are no longer planned or rendered, so legacy overlay text
+        on an old row is not checked — and must not fail the report."""
         report = cs.build_safety_report(
             plan(script="A journaling app.", overlays=[{"text": "cures anxiety"}]), PROFILE
         )
-        assert report["passed"] is False
+        assert report["passed"] is True
 
     def test_clean_plan_passes(self):
         report = cs.build_safety_report(plan(), PROFILE)
@@ -186,14 +187,14 @@ class TestFeatureFraming:
         )
         assert report["passed"] is False
 
-    def test_caption_inventory_blocks(self):
+    def test_caption_inventory_in_legacy_overlays_is_ignored(self):
         report = cs.build_safety_report(
             plan(script="A finish you can feel.", overlays=[
                 {"start": 0, "end": 2, "text": "Mood tracking and reminders"},
             ]),
             PROFILE,
         )
-        assert report["passed"] is False
+        assert report["passed"] is True
 
     def test_outcome_framing_is_clean(self):
         report = cs.build_safety_report(
@@ -351,9 +352,9 @@ class TestScriptTextCoverage:
             b["claim"] == "cures anxiety" for b in report["blocking"]
         ), report["blocking"]
 
-    def test_a_banned_claim_is_still_caught_in_what_is_shown(self):
+    def test_a_banned_claim_is_still_caught_in_beat_text(self):
         report = cs.build_safety_report(
-            plan(overlays=[{"start": 0, "end": 3, "text": "clinically proven"}]), PROFILE)
+            plan(beat_timeline=[{"start": 0, "end": 3, "label": "hook", "text": "clinically proven"}]), PROFILE)
         assert report["passed"] is False
         assert any(
             b["claim"] == "clinically proven" for b in report["blocking"]

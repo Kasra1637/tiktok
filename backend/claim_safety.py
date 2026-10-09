@@ -164,10 +164,12 @@ def _plan_fields(plan: dict):
     """Yield every human-readable leaf value of a creative plan.
 
     Claim checking must cover what is actually SAID and SHOWN, so this
-    includes overlays and both beats — not just the spoken script body. `cta`
-    and `feature_emphasis` are gone: there is no call to action in a generated
+    includes both beats — not just the spoken script body. `cta` and
+    `feature_emphasis` are gone: there is no call to action in a generated
     piece, and `demo_brief` is a note to the founder that never reaches a
-    render, so neither is text a viewer could read.
+    render, so neither is text a viewer could read. `overlays` is gone too:
+    burned-in captions were removed, so no on-screen text is planned or
+    rendered anymore (the column keeps legacy rows; nothing new is written).
 
     `strategy` is included because the spoken words live there: the hook line,
     the two section scripts and the outcome promise are generated into the
@@ -188,7 +190,7 @@ def _plan_fields(plan: dict):
     for key in (
         "hook_line", "script", "visual_direction",
         "voice_direction", "sound_direction",
-        "beat_timeline", "overlays", "strategy",
+        "beat_timeline", "strategy",
     ):
         yield from walk(plan.get(key))
 
@@ -208,8 +210,8 @@ def spoken_text(plan: dict) -> str:
     scene lock is *made of* comma lists ("camera angle, lighting and wardrobe").
     A framing rule applied to that would refuse nearly every render for
     describing a room, so the blocking tier needs the narrower surface: the hook
-    line, the script, both beat texts, the strategy's spoken hook line and its
-    two section scripts, and the burned-in overlay text.
+    line, the script, both beat texts, and the strategy's spoken hook line and
+    its two section scripts.
 
     Everything else is production direction. A warning on it is informative; a
     block is wrong, because no viewer ever hears "tilt slightly left".
@@ -233,10 +235,6 @@ def spoken_text(plan: dict) -> str:
         for section in strategy.get("segments") or []:
             if isinstance(section, dict):
                 add(section.get("script"))
-
-    for overlay in plan.get("overlays") or []:
-        if isinstance(overlay, dict):
-            add(overlay.get("text"))
 
     return normalize(" \n ".join(parts))
 

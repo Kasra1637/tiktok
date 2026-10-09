@@ -432,9 +432,11 @@ class TestPlanGating:
         # deliberately, never passed to a render.
         assert result["demo_brief"] == FAKE_PLAN["demo_brief"]
         assert result["cta"] is None
-        # Two sections, exactly: the hook and the middle.
+        # Two sections, exactly: the hook and the middle. No overlays: a fresh
+        # plan always clears the column, because burned-in captions are gone
+        # and nothing renders them anymore.
         assert [b["label"] for b in result["beat_timeline"]] == ["hook", "middle"]
-        assert result["overlays"]
+        assert result["overlays"] == []
         assert result["script_version"] == 1
 
     def test_duration_cannot_be_changed_once_a_plan_exists(self, api, monkeypatch):
@@ -681,25 +683,25 @@ class TestClaimSafetyOnEdit:
         assert edited["tone"] == "playful"
         assert edited["audience"] == "Busy parents"
 
-        # And the retired pair is not an editable field any more, so a client
+        # And the retired trio is not an editable field any more, so a client
         # still sending one gets a 200 that changed nothing — which is exactly
         # why it was removed from the model rather than left to be filtered.
         assert "cta" not in STUDIO_EDITABLE_FIELDS
         assert "feature_emphasis" not in STUDIO_EDITABLE_FIELDS
+        assert "overlays" not in STUDIO_EDITABLE_FIELDS
         assert "cta" not in UpdateStudioProjectRequest.model_fields
         assert "feature_emphasis" not in UpdateStudioProjectRequest.model_fields
+        assert "overlays" not in UpdateStudioProjectRequest.model_fields
 
         # The JSON and template fields take their own normalization.
         edited = _run(api.update_studio_project(
             project_id=project["id"],
             payload=UpdateStudioProjectRequest(
                 beat_timeline=[{"start": 0, "end": 3, "label": "hook", "text": "Hi"}],
-                overlays=[{"start": 0, "end": 2, "text": "Hi"}],
             ),
             user_id=ANON,
         ))
         assert edited["beat_timeline"][0]["text"] == "Hi"
-        assert edited["overlays"][0]["text"] == "Hi"
 
     def test_switching_template_repins_version(self, api):
         from models import UpdateStudioProjectRequest
@@ -729,97 +731,46 @@ class TestClaimSafetyOnEdit:
         assert result["status"] == "draft"
 
 
-class TestOverlayNormalization:
+class TestOverlaysAreRetired:
     """
-    On-screen text is hand-editable in the review step, so it arrives with the
-    mistakes a text box invites. Storing them unfiltered would make a saved
-    plan list text the video never shows.
+    Burned-in captions are gone: the model is never asked for on-screen text,
+    the column is cleared on every fresh plan, and the edit endpoint no longer
+    accepts the field. An old client still sending it gets a 200 that changed
+    nothing — and, crucially, no phantom version, since presence alone never
+    bumps (see the no-phantom-version tests).
     """
 
-    def test_blank_overlays_are_dropped(self, api):
+    def test_sending_overlays_changes_nothing_and_bumps_nothing(self, api):
         from models import UpdateStudioProjectRequest
-        profile = _approved_profile(api, "Overlay Blank")
+        profile = _approved_profile(api, "Overlay Retired")
         template = _a_template(api)
         project = _a_project(api, profile, template)
+        assert project["script_version"] == 0
         edited = _run(api.update_studio_project(
             project_id=project["id"],
-            payload=UpdateStudioProjectRequest(overlays=[
-                {"start": 0, "end": 2, "text": "Real text"},
-                {"start": 2, "end": 4, "text": "   "},
-                {"start": 4, "end": 6},
-            ]),
-            user_id=ANON,
-        ))
-        assert [o["text"] for o in edited["overlays"]] == ["Real text"]
-
-    def test_an_inverted_window_is_given_a_minimum_length(self, api):
-        """
-        end <= start means the caption's enable window is never true, so it
-        would be stored but never rendered.
-        """
-        from models import UpdateStudioProjectRequest
-        profile = _approved_profile(api, "Overlay Inverted")
-        template = _a_template(api)
-        project = _a_project(api, profile, template)
-        edited = _run(api.update_studio_project(
-            project_id=project["id"],
-            payload=UpdateStudioProjectRequest(overlays=[
-                {"start": 5, "end": 5, "text": "Backwards"},
-                {"start": 6, "end": 2, "text": "Also backwards"},
-            ]),
-            user_id=ANON,
-        ))
-        for overlay in edited["overlays"]:
-            assert overlay["end"] > overlay["start"], overlay
-
-    def test_a_negative_start_is_clamped(self, api):
-        from models import UpdateStudioProjectRequest
-        profile = _approved_profile(api, "Overlay Negative")
-        template = _a_template(api)
-        project = _a_project(api, profile, template)
-        edited = _run(api.update_studio_project(
-            project_id=project["id"],
-            payload=UpdateStudioProjectRequest(overlays=[
-                {"start": -3, "end": 2, "text": "Hi"},
-            ]),
-            user_id=ANON,
-        ))
-        assert edited["overlays"][0]["start"] == 0
-
-    def test_clearing_every_overlay_is_allowed(self, api):
-        """
-        A founder may decide a video needs no on-screen text, so an empty list
-        is a real edit rather than something to reject.
-        """
-        from models import UpdateStudioProjectRequest
-        profile = _approved_profile(api, "Overlay Cleared")
-        template = _a_template(api)
-        project = _a_project(api, profile, template)
-        edited = _run(api.update_studio_project(
-            project_id=project["id"],
-            payload=UpdateStudioProjectRequest(overlays=[]),
+            payload=UpdateStudioProjectRequest.model_construct(
+                _fields_set={"overlays"},
+                overlays=[{"start": 0, "end": 2, "text": "Hi"}],
+            ),
             user_id=ANON,
         ))
         assert edited["overlays"] == []
+        assert edited["script_version"] == 0
 
-    def test_normalize_matches_the_renderers_cap(self, api):
-        """
-        What is stored is what gets sent to the model and to ffmpeg, so the
-        12-item cap has to agree across all three.
-        """
-        from models import UpdateStudioProjectRequest
-        profile = _approved_profile(api, "Overlay Cap")
+    def test_a_fresh_plan_clears_legacy_overlay_text(self, api, monkeypatch):
+        from models import GeneratePlanRequest
+        profile = _approved_profile(api, "Overlay Cleared")
         template = _a_template(api)
         project = _a_project(api, profile, template)
-        edited = _run(api.update_studio_project(
-            project_id=project["id"],
-            payload=UpdateStudioProjectRequest(overlays=[
-                {"start": i, "end": i + 1, "text": f"Line {i}"} for i in range(20)
-            ]),
-            user_id=ANON,
+        _run(api._execute(
+            "UPDATE studio_projects SET overlays = ? WHERE id = ?",
+            ('[{"start": 0, "end": 2, "text": "legacy line"}]', project["id"]),
         ))
-        assert len(edited["overlays"]) == 12
-        assert edited["overlays"][-1]["text"] == "Line 11"
+        _patch_plan(monkeypatch, api, FAKE_PLAN)
+        result = _run(api.generate_plan(project_id=project["id"],
+                                        payload=GeneratePlanRequest(), user_id=ANON))
+        assert result["overlays"] == []
+
 
     def test_tone_and_duration_are_editable(self, api):
         """

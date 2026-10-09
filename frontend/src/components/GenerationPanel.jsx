@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
-import { api, getErrorMessage, mediaUrl } from "../lib/api";
+import { api, getErrorMessage, mediaUrl, downloadMediaUrl } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
 import { RecordResultsNudge } from "./RecordResultsNudge";
 import {
@@ -11,7 +11,7 @@ import {
 } from "../lib/videoLength";
 import {
   Loader2, Clapperboard, AlertTriangle, Download, RotateCcw,
-  Play, Info, Clock, Layers, Smartphone,
+  Play, Info, Clock, Smartphone,
 } from "lucide-react";
 
 /**
@@ -64,9 +64,7 @@ function modelStorageKey(projectId) {
 export function GenerationPanel({ project, onGenerationChange, onProjectChange }) {
   const [models, setModels] = useState(null);
   const [selectedModel, setSelectedModel] = useState("");  const [generation, setGeneration] = useState(null);
-  const [composition, setComposition] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [composing, setComposing] = useState(false);
   // Set when the finished clip cannot be played inline, so the panel replaces a
   // dead-looking player with the truth instead of leaving a dead control.
   const [previewBroken, setPreviewBroken] = useState(false);
@@ -324,37 +322,19 @@ const handleGenerate = async () => {
     }
   };
 
-  const handleCompose = async () => {
-    setComposing(true);
-    setError(null);
-    try {
-      const result = await api.composeOverlays(generation.id);
-      setComposition(result);
-      if (result.status === "completed") {
-        // No end card. The server stopped building one: a card closing this
-        // file would overwrite the end frame the middle is built to end on,
-        // and the close belongs to the founder after their own demo.
-        setNotice(
-          `Composed ${result.applied?.captions || 0} caption(s), ` +
-          `${result.applied?.images || 0} image(s), ${result.applied?.videos || 0} video layer(s), ` +
-          `${result.applied?.audios || 0} audio track(s).`
-        );
-      } else {
-        setError(
-          result.error ||
-          "The composite could not be rendered. The original video is unaffected."
-        );
-      }
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setComposing(false);
-    }
-  };
-
   const capability = models?.models?.find((m) => m.key === selectedModel);
   const inFlight = generation && (generation.status === "submitted" || generation.status === "generating");
   const downloadUrl = generation ? mediaUrl(generation.r2_url || generation.video_url) : null;
+  // The save must originate same-origin: the playback href above is a raw
+  // cross-origin R2 locator whenever the durable copy sits in R2, and browsers
+  // ignore `download` there — the button opened an R2 error page instead of
+  // saving. downloadMediaUrl splices the signed same-origin /download route,
+  // whose signature is minted fresh by the server on every read. Falls back
+  // to the playback href only when no same-origin source exists at all.
+  const saveUrl = generation ? downloadMediaUrl(generation) || downloadUrl : null;
+  // Preview through the fresh signed same-origin route for the same reason:
+  // a raw R2 href fails on play (masked until then by preload="none").
+  const previewUrl = generation?.playback_url ? mediaUrl(generation.playback_url) : downloadUrl;
   const posterUrl = generation?.poster_url ? mediaUrl(generation.poster_url) : null;
   // The length this project will render at, and whether the selected model can
   // do it in one pass. Shown before the click because the endpoint refuses
@@ -542,7 +522,7 @@ const handleGenerate = async () => {
                 </p>
               ) : (
                 <video
-                  src={downloadUrl}
+                  src={previewUrl}
                   controls
                   playsInline
                   preload="none"
@@ -554,7 +534,7 @@ const handleGenerate = async () => {
               <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" size="sm" asChild>
                   <a
-                    href={downloadUrl}
+                    href={saveUrl}
                     download
                     onClick={() => recordSignal("video_downloaded", "downloaded", {
                       brand_profile_id: generation?.brand_profile_id || "",
@@ -566,40 +546,7 @@ const handleGenerate = async () => {
                     <Download className="h-3.5 w-3.5" /> Download MP4
                   </a>
                 </Button>
-                <Button variant="brand" size="sm" onClick={handleCompose} disabled={composing}>
-                  {composing ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Layers className="h-3.5 w-3.5" />
-                  )}
-                  {composition?.status === "completed" ? "Re-compose" : "Add captions"}
-                </Button>
               </div>
-              {composition?.status === "completed" && composition.output_url && (
-                <div className="space-y-1.5 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-3">
-                  <span className="eyebrow block">With captions</span>
-                  <video
-                    src={mediaUrl(composition.r2_url || composition.output_url)}
-                    controls
-                    playsInline
-                    className="w-full max-w-[280px] rounded-lg"
-                  />
-                  <Button variant="secondary" size="sm" asChild>
-                    <a
-                      href={mediaUrl(composition.r2_url || composition.output_url)}
-                      download
-                      onClick={() => recordSignal("video_downloaded", "downloaded", {
-                        brand_profile_id: generation?.brand_profile_id || "",
-                        studio_project_id: generation?.studio_project_id || "",
-                        generation_id: generation?.id || "",
-                        template_id: generation?.template_id || "",
-                      })}
-                    >
-                      <Download className="h-3.5 w-3.5" /> Download captioned MP4
-                    </a>
-                  </Button>
-                </div>
-              )}
               {/* What they got, and what is still theirs to do. The old copy here
                   promised a call to action on an end card, which made this file
                   look finished. It is not: the middle deliberately ends where
@@ -609,8 +556,8 @@ const handleGenerate = async () => {
                 <span className="eyebrow block">What you have, and what is left</span>
                 <p className="text-xs text-muted-foreground">
                   This file is the hook and the middle, ending where viewers reach for their
-                  phones. Attach your own demo next, then add your own call to action. Captions
-                  come from the on-screen text you wrote on Review, nothing is published for you.
+                  phones. Attach your own demo next, then add your own call to action. No text
+                  appears on screen — nothing is published for you.
                 </p>
               </div>
 

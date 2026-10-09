@@ -253,7 +253,7 @@ const SEGMENT = {
 //
 // No start/end, no audio_role, no audio_gain. Those fields are still accepted
 // on the wire for legacy rows, but the studio no longer renders a control for
-// any of them: the video is one render with captions composited over it, so an
+// any of them: the video is one render with no compositing at all, so an
 // asset has no on-screen window and nothing to mix. A fixture carrying them
 // would keep rendering as though the controls still existed.
 const ASSETS = [
@@ -395,7 +395,6 @@ const apiStub = {
   generateStrategy: async () => PROJECT_WITH_STRATEGY,
   generateVideo: async () => SEGMENT,
   retryGeneration: async () => SEGMENT,
-  composeOverlays: async () => ({ composition: null }),
   markProjectReady: async () => PROJECT_WITH_STRATEGY,
   recordSignal: () => {},
 };
@@ -405,7 +404,7 @@ const apiStub = {
  *
  * Two separate lists because they defend different things. `apiCalls` is a
  * record: it lets a check assert that a branch fired the request it was supposed
- * to. `retiredCalls` is a trap: the five methods the server deleted are not on
+ * to. `retiredCalls` is a trap: the methods the server deleted are not on
  * the stub at all, so a component that still called one would throw a
  * TypeError â€” and a TypeError inside a `try` with a `catch` that renders
  * `getErrorMessage` would be swallowed and shown as an ordinary failure message.
@@ -421,6 +420,8 @@ const RETIRED_API_METHODS = [
   "getGenerationContinuity",
   "setProjectExtendIntent",
   "setProjectHookLength",
+  "composeOverlays",
+  "getOverlayComposition",
 ];
 for (const [name, impl] of Object.entries(apiStub)) {
   apiStub[name] = (...args) => {
@@ -832,10 +833,10 @@ async function main() {
   });
 
   await check("no step offers time-range or audio controls for an asset", async (ctx) => {
-    // The video is one render with captions composited over it, so an asset has
+    // The video is one render with no compositing, so an asset has
     // no on-screen window and there is nothing to mix. The row used to carry
     // Start, End, Use as and Gain, and "Save timing" wrote them back - controls
-    // that implied a placement the composition cannot honour.
+    // that implied a placement nothing can honour.
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await mount(CreateVideo, {})(ctx);
@@ -1379,7 +1380,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
   await check("GenerationPanel offers no second render, approval or join", async (ctx) => {
     await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
     // The Extend button went with the endpoint. The remaining controls are the
-    // one generate, the download, the caption compose, the retry, a re-render
+    // one generate, the download, the retry, a re-render
     // of the SAME single job — and the native Demo + CTA entry, which is a link
     // into this app's own editor, not a second render and not an approval.
     for (const phrase of ["Extend", "Approve", "Join", "end card", "in two passes", "second pass"]) {
@@ -1428,15 +1429,15 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     expectText(ctx, "add your own call to action", "the founder's own close is not described");
   });
 
-  // The old copy claimed captions came from the approved script. They did not
-  // and do not: they are the plan's own on-screen text, edited on Review. The
-  // lie mattered because on a silent render the captions are the only words
-  // the viewer gets, and a founder who believed they echoed the script had no
-  // reason to check them.
-  await check("GenerationPanel credits the founder's captions, not the script", async (ctx) => {
+  // Burned-in captions are gone: no text appears on the finished video, so
+  // the panel must not promise on-screen text from Review anymore.
+  await check("GenerationPanel promises no on-screen text", async (ctx) => {
     await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
     expectAbsent(ctx, "Captions use your approved script", "the caption source is still misattributed");
-    expectText(ctx, "the on-screen text you wrote on Review", "the caption source is not stated");
+    expectAbsent(ctx, "the on-screen text you wrote on Review", "the caption source is still stated");
+    expectAbsent(ctx, "Add captions", "the compose control is still offered");
+    expectAbsent(ctx, "Download captioned", "the captioned download is still offered");
+    expectText(ctx, "add your own call to action", "the founder's own close is not described");
   });
 
   // Words that do not fit are not spoken, and the gate refuses the render — so
@@ -1476,6 +1477,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     // /app-profiles/{id}/approve is not caught by the word "approve".
     const retiredRoutes = [
       { re: /\/generations\/\$\{[^}]*\}\/(extend|approve|assemble|continuity)\b/, what: "a retired /generations/{id} route" },
+      { re: /\/generations\/\$\{[^}]*\}\/overlay\b/, what: "the retired /generations/{id}/overlay route" },
       { re: /\/studio\/projects\/\$\{[^}]*\}\/hook\b/, what: "the retired /studio/projects/{id}/hook route" },
     ];
     const retiredFields = [
@@ -2133,49 +2135,34 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     }
   });
 
-  // The burned-in captions are the only text a silent render ever shows, and
-  // the Review step had no editor for them: the text was AI-written, unseen
-  // and uneditable. Editing one must reach the project through the same save
-  // as every other review field, and the server normalizes it from there.
-  await check("Review edits captions and saves them with the plan", async (ctx) => {
-    const updates = [];
+  // Burned-in captions are gone, so Review offers no on-screen-text control:
+  // a legacy overlays array on an old row renders nothing and saves nothing.
+  // The caption editor went with burned-in captions: Review offers no
+  // on-screen-text control, and a legacy overlays array on an old row renders
+  // nothing and saves nothing.
+  await check("Review offers no caption editor", async (ctx) => {
     await withApi(
       {
         getStudioProject: async () => ({
           ...PROJECT_WITH_STRATEGY,
           overlays: [{ start: 0, end: 2, text: "one list" }],
         }),
-        updateStudioProject: async (id, payload) => {
-          updates.push(payload);
-          return PROJECT_WITH_STRATEGY;
-        },
       },
       async () => {
         global.__SMOKE_PARAMS = "?project=p1";
         try {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Review");
-          const input = ctx.container.querySelector('[data-testid="caption-text-0"]');
-          if (!input || input.value !== "one list") {
-            throw new Error("Review does not show the saved caption text for editing");
-          }
-          await typeInto(ctx, input, "one finished list", "cannot edit the caption text");
-          const save = [...ctx.container.querySelectorAll("button")]
-            .find((b) => (b.textContent || "").trim() === "Save edits");
-          if (!save) throw new Error("Review offers no save for the caption edit");
-          await act(async () => {
-            save.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-          });
           await act(async () => {});
+          await act(async () => {});
+          if (ctx.container.querySelector('[data-testid="caption-editor"]')) {
+            throw new Error("Review still offers the caption editor");
+          }
         } finally {
           global.__SMOKE_PARAMS = "";
         }
       }
     );
-    const sent = updates.map((p) => p.overlays).find((o) => o !== undefined);
-    if (!sent || sent[0]?.text !== "one finished list") {
-      throw new Error("the caption edit was not saved to the project");
-    }
   });
 
   // The partition the render actually speaks: what fits, and what is dropped.
@@ -3879,16 +3866,19 @@ async function runDemoCtaChecks() {
     status: "completed",
     video_url: "/api/media/videos/gen-1.mp4",
     r2_url: null,
+    // The server mints this fresh on every read, so the panel can always
+    // splice the same-origin /download route off it.
+    playback_url: "/api/media/videos/gen-1.mp4?exp=1&sig=abc",
   };
 
-  async function mountStudio(ctx) {
+  async function mountStudio(ctx, generations) {
     // Mounted directly rather than through the wizard, like the other
     // GenerationPanel checks: the block under test only renders for a finished
     // render, and reaching that through the wizard would be testing navigation
     // instead of this.
     await withApi(
       {
-        getGenerations: async () => ({ generations: [COMPLETED] }),
+        getGenerations: async () => ({ generations: generations || [COMPLETED] }),
       },
       async () => {
         await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
@@ -3932,8 +3922,43 @@ async function runDemoCtaChecks() {
         (a.textContent || "").includes("Download MP4")
       );
       if (!download) throw new Error("the studio's own download is gone");
-      if (!download.getAttribute("href")?.includes("/api/media/videos/")) {
-        throw new Error(`the download points somewhere else: ${download.getAttribute("href")}`);
+      const href = download.getAttribute("href") || "";
+      if (!href.includes("/api/media/videos/")) {
+        throw new Error(`the download points somewhere else: ${href}`);
+      }
+      // Same-origin is not enough: only the /download route forces a save.
+      // A same-origin playback href still opens in a tab.
+      if (!href.includes("/download")) {
+        throw new Error(`the download does not force a save: ${href}`);
+      }
+    }
+  );
+
+  await check(
+    "the studio download never points at raw cloud storage",
+    async (ctx) => {
+      // The reported bug: r2_url is a cross-origin private-bucket locator, so
+      // handing it to the anchor opened an R2 error page instead of saving.
+      // The preview has the same latent flaw, masked by preload="none".
+      const hostile = {
+        ...COMPLETED,
+        r2_url: "https://bucket.r2.dev/owner/gen-1.mp4",
+        playback_url: "/api/media/videos/gen-1.mp4?exp=1&sig=abc",
+      };
+      await mountStudio(ctx, [hostile]);
+      const download = [...ctx.container.querySelectorAll("a")].find((a) =>
+        (a.textContent || "").includes("Download MP4")
+      );
+      if (!download) throw new Error("the studio's own download is gone");
+      const href = download.getAttribute("href") || "";
+      if (!href.includes("/download") || href.includes("r2.dev")) {
+        throw new Error(`the download still points at raw storage: ${href}`);
+      }
+      const video = ctx.container.querySelector("video");
+      if (!video) throw new Error("the preview is gone");
+      const src = video.getAttribute("src") || "";
+      if (!src.includes("/api/media/videos/") || src.includes("r2.dev")) {
+        throw new Error(`the preview still points at raw storage: ${src}`);
       }
     }
   );
@@ -4897,6 +4922,9 @@ await check(
                 id: "gen-provider-only",
                 video_url: "https://openrouter.invalid/temporary.mp4",
                 r2_url: null,
+                // No fetchable copy at all: the server mints no playback URL
+                // without saved bytes, so the row must carry none either.
+                playback_url: null,
               },
             ],
           }),
@@ -4960,7 +4988,7 @@ await check(
   await check("History surfaces recovery failure instead of claiming success", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi({
-      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "lost", video_url: null, r2_url: null }] }),
+      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "lost", video_url: null, r2_url: null, playback_url: null }] }),
       getAppProfiles: async () => ({ profiles: [] }),
       getVariationKinds: async () => ({ variations: [] }),
       retryGenerationStorage: async () => { throw new Error("No remaining cloud or local copy. Re-upload your export."); },

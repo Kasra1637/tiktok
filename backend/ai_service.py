@@ -1947,7 +1947,7 @@ async def generate_brand_templates(
 # this workflow does not do.
 REQUIRED_PLAN_KEYS = {
     "hook_line", "script", "beat_timeline", "visual_direction",
-    "demo_brief", "overlays", "voice_direction", "sound_direction",
+    "demo_brief", "voice_direction", "sound_direction",
 }
 
 # The two sections a plan's beat timeline is made of. Enforced, not suggested:
@@ -1980,8 +1980,8 @@ async def generate_creative_plan(
 
     The prompt directs the model to render the full scene itself — environment,
     setting, props and on-screen context invented concretely from the verified
-    facts — because nothing is composited over the footage except captions. On-
-    screen text stays out of the model's hands (captions are added afterwards),
+    facts — because nothing is composited over the footage and no text appears
+    on screen at all. On-screen text stays out of the model's hands entirely,
     and anything the viewer could read as a factual claim about the app must
     come from verified facts or stay out of frame.
 
@@ -2096,7 +2096,6 @@ async def generate_creative_plan(
         '  "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "what happens and what is said"}, {"start": 3, "end": 10, "label": "middle", "text": "what happens and what is said"}],\n'
         '  "visual_direction": "what the camera shows across both sections, as one paragraph",\n'
         '  "demo_brief": "ONE sentence telling the FOUNDER what to record for their own demo. This never reaches the generated video.",\n'
-        '  "overlays": [{"start": 0, "end": 3, "text": "on-screen text, max 6 words"}],\n'
         '  "voice_direction": "delivery direction for the voiceover or on-camera talent",\n'
         '  "sound_direction": "sound and music direction, rights-safe (no named commercial tracks)",\n'
         '  "claims_used": ["exact strings from claims.approved that appear in the script"]\n'
@@ -2140,10 +2139,11 @@ async def generate_creative_plan(
         "an instruction to the founder about what to record themselves. Keep it to one "
         "sentence, and never write it as dialogue or as something the presenter says.\n"
         "- Fill every content_slot in the template with a concrete value for THIS app.\n"
-        "- CRITICAL: nothing is composited over the footage except "
-        "captions. Describe the full scene — environment, setting, props and any on-screen "
-        "context — concretely from the verified facts above, and keep overlay text to "
-        "short phrases. Never invent interface text, button labels, prices, ratings, "
+        "- CRITICAL: nothing is composited over the footage and no text appears "
+        "on screen at all — no captions, no titles, no labels. Describe the full scene — "
+        "environment, setting, props and any on-screen "
+        "context — concretely from the verified facts above, and leave clean, "
+        "uncluttered space in frame. Never invent interface text, button labels, prices, ratings, "
         "logos, testimonials, or anything the viewer could read as a factual claim "
         "about the app. The generated scene is illustrative: the script must never claim "
         "it shows real app footage or a screen recording.\n"
@@ -2203,7 +2203,10 @@ async def generate_creative_plan(
     # workflow generates, and the founder's demo starts after it.
     if result["beat_timeline"]:
         result["beat_timeline"][-1]["end"] = duration_seconds
-    result["overlays"] = _normalize_overlays(result.get("overlays"), duration_seconds)
+    # No overlays: burned-in captions are gone, so the model is never asked
+    # for on-screen text and anything it volunteers is dropped here rather
+    # than stored. The column keeps its old rows; nothing new is written.
+    result.pop("overlays", None)
     result["claims_used"] = [str(c).strip() for c in (result.get("claims_used") or []) if str(c).strip()][:8]
     result["duration_seconds"] = duration_seconds
     return result
@@ -3118,9 +3121,9 @@ async def generate_video_strategy(
         "- Invent the environment, setting, props and on-screen context concretely from the "
         "verified facts (features, use cases, problems, audience, platforms) — a kitchen "
         "counter at 7am for an evening-reflection app, not \"a nice room\". Nothing is "
-        "composited over the footage except captions, so what the camera "
+        "composited over the footage and no text appears on screen, so what the camera "
         "must show has to be written here, in scene, segments and hook_action.\n"
-        "- The generated scene is illustrative, never documentary: the script and captions "
+        "- The generated scene is illustrative, never documentary: the script "
         "must never claim it shows real app footage or a screen recording. Anything the "
         "viewer could read as a factual claim about the app — interface text, button labels, "
         "prices, ratings, logos — must come from the verified facts or stay out of frame.\n"
@@ -3304,36 +3307,6 @@ def _normalize_beats(beats, duration: int) -> list:
         out.append({"start": start, "end": end, "label": label, "text": text})
     out.sort(key=lambda b: b["start"])
     return out
-
-
-def _normalize_overlays(overlays, duration: int) -> list:
-    """Coerce overlays into {start, end, text} dicts bounded by the duration."""
-    if not isinstance(overlays, list):
-        return []
-    out = []
-    for item in overlays[:12]:
-        if isinstance(item, str):
-            text = item.strip()[:60]
-            out.append({"start": 0, "end": duration, "text": text} if text else None)
-            continue
-        if not isinstance(item, dict):
-            continue
-        text = str(item.get("text") or "").strip()[:60]
-        if not text:
-            continue
-        try:
-            start = max(0.0, float(item.get("start", 0)))
-            end = float(item.get("end", duration))
-        except (TypeError, ValueError):
-            start, end = 0.0, float(duration)
-        if end <= start:
-            end = start + 1
-        out.append({
-            "start": min(start, duration),
-            "end": min(end, duration),
-            "text": text,
-        })
-    return [o for o in out if o]
 
 
 async def generate_remix_script(analysis: dict, brand_profile: dict, target_duration: int, session_id: str, music_context: dict = None, transcript_text: str = "", hashtags: list = None, use_original_sound: bool = False) -> dict:

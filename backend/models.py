@@ -286,9 +286,12 @@ STUDIO_TEXT_FIELDS = (
 # column across every deployment, and leaving two unused TEXT columns costs
 # nothing next to rewriting existing rows to match a shape they were never in.
 
+# `overlays` was here too, while burned-in captions were composited onto Hook
+# + Story clips. The column stays (see above); the field is no longer writable
+# because there is no renderer left to read it.
 STUDIO_EDITABLE_FIELDS = STUDIO_TEXT_FIELDS + (
     "content_angle_id", "template_id", "objective", "duration_seconds",
-    "beat_timeline", "overlays", "assets", "strategy", "hook_seconds",
+    "beat_timeline", "assets", "strategy", "hook_seconds",
 )
 
 
@@ -334,7 +337,6 @@ class UpdateStudioProjectRequest(BaseModel):
     # editing the review step could not have corrected the one field that tells
     # them what to record for their own demo.
     demo_brief: Optional[str] = None
-    overlays: Optional[List[dict]] = None
     voice_direction: Optional[str] = None
     sound_direction: Optional[str] = None
     assets: Optional[List[dict]] = None
@@ -433,20 +435,6 @@ class AttachAssetRequest(BaseModel):
     scale: Optional[float] = None
     audio_role: Optional[str] = None
     audio_gain: Optional[float] = None
-
-
-class OverlayCompositionRequest(BaseModel):
-    """
-    Build a deterministic overlay composition for a completed generation.
-
-    asset_ids are resolved and checked against the generation's App Profile,
-    so an asset from another app can never be composited into this video.
-    """
-    asset_ids: Optional[List[str]] = None
-    include_captions: Optional[bool] = True
-    include_end_card: Optional[bool] = True
-    captions: Optional[List[dict]] = None
-    end_card_text: Optional[str] = None
 
 
 class CreateVariationRequest(BaseModel):

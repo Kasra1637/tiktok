@@ -479,13 +479,11 @@ class TestHistory:
         row = _run(api.generation_history(user_id=ANON))["generations"][0]
         assert "prompt_used" not in row
 
-    def test_history_includes_composition_when_present(self, api):
-        from models import OverlayCompositionRequest
+    def test_history_reports_no_composition(self, api):
         profile = _profile(api, "Hist Comp")
-        gen, _, _ = _generation(api, profile, "Hist Comp")
-        _run(api.create_overlay_composition(gen["id"], OverlayCompositionRequest(), ANON))
+        _generation(api, profile, "Hist Comp")
         row = _run(api.generation_history(user_id=ANON))["generations"][0]
-        assert row["composition"] is not None
+        assert row["composition"] is None
 
     def test_delete_removes_generation_and_dependents(self, api):
         from models import PerformanceEntryRequest

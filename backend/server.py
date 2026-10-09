@@ -53,7 +53,7 @@ from models import (
     CreateStudioProjectRequest, UpdateStudioProjectRequest, GeneratePlanRequest,
     ObjectiveTemplatesRequest,
     StudioGenerationRequest,     UpdateAssetRequest, AttachAssetRequest,
-    OverlayCompositionRequest, CreateVariationRequest, PerformanceEntryRequest,
+    CreateVariationRequest, PerformanceEntryRequest,
     FeedbackRequest,
     GenerateStrategyRequest,
     APP_PROFILE_LIST_FIELDS,
@@ -109,11 +109,11 @@ _ytdlp_semaphore = asyncio.Semaphore(1)
 # One local ffmpeg encode at a time, box-wide.
 #
 # Every ffmpeg argv in this repo is capped at -threads 1, and that bounds each
-# spike — but it does not bound overlap: a poll-save trim/rescale, an overlay
-# compose, and a poster encode can still run concurrently across requests,
-# and stacked encodes are what OOM-killed the container. This gate serializes
-# entry to all of them (trim + rescale in _persist_generation_clip, compose in
-# _render_overlay_composition, poster generation eager and lazy). Network work
+# spike — but it does not bound overlap: a poll-save trim/rescale/cut and a
+# poster encode can still run concurrently across requests, and stacked
+# encodes are what OOM-killed the container. This gate serializes
+# entry to all of them (trim + rescale + camera cut in _persist_generation_clip,
+# poster generation eager and lazy). Network work
 # (downloads, R2 uploads) stays outside it — only the encode holds the slot.
 # Same single-process assumption as _storage_repairs_in_flight above.
 _FFMPEG_SLOT = asyncio.Semaphore(1)
@@ -834,29 +834,10 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_assets_profile
                 ON assets (brand_profile_id, status);
 
-            -- A deterministic overlay composition applied to a generated clip.
-            -- Kept separate from the generation so the exact composite can be
-            -- re-run or audited without re-generating the footage.
-            CREATE TABLE IF NOT EXISTS overlay_compositions (
-                id TEXT PRIMARY KEY,
-                generation_id TEXT,
-                studio_project_id TEXT,
-                brand_profile_id TEXT,
-                spec TEXT,
-                status TEXT DEFAULT 'pending',
-                error TEXT,
-                source_path TEXT,
-                output_path TEXT,
-                output_url TEXT,
-                r2_url TEXT,
-                applied TEXT,
-                created_at TEXT,
-                updated_at TEXT,
-                user_id TEXT DEFAULT 'anonymous'
-            );
-            CREATE INDEX IF NOT EXISTS idx_overlay_generation
-                ON overlay_compositions (generation_id);
-
+            -- (Retired: overlay_compositions lived here while burned-in
+            -- captions were composited onto Hook + Story clips. The table is
+            -- intentionally NOT created for fresh databases; rows left behind
+            -- on older ones are inert and read by nothing.)
             -- Manually entered performance for a downloaded video.
             -- Named 'performance' to make the provenance obvious: these are
             -- operator-supplied numbers, never verified against TikTok. The
@@ -1147,7 +1128,7 @@ async def init_db():
             "videos", "analyses", "customizations", "video_jobs",
             "brand_profiles", "hook_templates",
             "studio_projects", "content_angles", "generations",
-            "assets", "overlay_compositions", "performance_entries",
+            "assets", "performance_entries",
             "feedback_events",
         ]
         for table in user_id_tables:
@@ -3856,7 +3837,7 @@ async def delete_app_profile(profile_id: str, user_id: str = Depends(get_current
     Delete an App Profile and everything scoped to it.
 
     Cascades to the profile's content angles, studio projects, generations,
-    assets, overlay compositions, performance entries, feedback events, and
+    assets, performance entries, feedback events, and
     asset event logs. The model_requests ledger is deliberately kept: it is
     the audit trail of which provider calls ran, and its orphaned rows are
     harmless.
@@ -3900,7 +3881,6 @@ async def delete_app_profile(profile_id: str, user_id: str = Depends(get_current
         "studio_projects",
         "generations",
         "assets",
-        "overlay_compositions",
         "performance_entries",
         "feedback_events",
         "asset_events",
@@ -4911,45 +4891,6 @@ async def get_studio_project(project_id: str, user_id: str = Depends(get_current
     return _public_project(row)
 
 
-def _normalize_overlays(overlays) -> list:
-    """
-    Clean founder-edited on-screen text before storing it.
-
-    Overlays are hand-editable in the review step, so they arrive with the
-    mistakes a text box invites: a blank line left behind after clearing a
-    field, or an end time dragged before its start. The renderer already skips
-    both silently, which is fine at render time but wrong for storage — a
-    saved plan that lists text the video will never show is a plan the founder
-    cannot trust.
-
-    So blank entries are dropped and inverted windows are given a minimum
-    length here, where the founder can see the result. The 12-item cap matches
-    the renderer and the prompt builder, so what is stored is what will be
-    sent to the model.
-    """
-    cleaned = []
-    for item in (overlays or [])[:12]:
-        if not isinstance(item, dict):
-            continue
-        text = str(item.get("text") or "").strip()[:60]
-        if not text:
-            continue
-        try:
-            start = max(0.0, float(item.get("start", 0) or 0))
-            end = float(item.get("end", 0) or 0)
-        except (TypeError, ValueError):
-            start, end = 0.0, 0.0
-        # An empty or inverted window would enable never, so the text would be
-        # stored but never shown. One second is the shortest readable caption.
-        if end <= start:
-            end = start + 1.0
-        entry = {"start": start, "end": end, "text": text}
-        if item.get("position"):
-            entry["position"] = str(item["position"])
-        cleaned.append(entry)
-    return cleaned
-
-
 @api_router.patch("/studio/projects/{project_id}")
 async def update_studio_project(
     project_id: str, payload: UpdateStudioProjectRequest, user_id: str = Depends(get_current_user_id)
@@ -4985,12 +4926,10 @@ async def update_studio_project(
     # regenerate could recover. Presence is not a change; compare the
     # normalized value about to be stored against the stored row.
     content_changed = False
-    _CONTENT_KEYS = set(STUDIO_TEXT_FIELDS) | {"beat_timeline", "overlays", "assets", "strategy"}
+    _CONTENT_KEYS = set(STUDIO_TEXT_FIELDS) | {"beat_timeline", "assets", "strategy"}
     for key, value in updates.items():
         if key in ("beat_timeline", "assets"):
             value = json.dumps(value if isinstance(value, list) else [])
-        elif key == "overlays":
-            value = json.dumps(_normalize_overlays(value))
         elif key == "strategy":
             # A hand-edited strategy is re-validated and version-bumped, the
             # same as a generated one. Bumping the version is what stops a
@@ -5090,7 +5029,7 @@ async def update_studio_project(
     if profile:
         merged = dict(row)
         for key, value in updates.items():
-            if key in ("beat_timeline", "overlays", "assets"):
+            if key in ("beat_timeline", "assets"):
                 merged[key] = value if isinstance(value, list) else []
             elif key == "strategy":
                 # Already serialized above; claim checking walks the structure,
@@ -5282,6 +5221,9 @@ async def generate_plan(
     # `demo_brief` — the founder still needs to know what to record for their own
     # demo, so the plan works it out, but it is deliberately never passed to a
     # render. Both old columns stay in the schema; nothing reads them.
+    # `overlays` joins them: burned-in captions are gone, so a fresh plan
+    # always clears the column (legacy rows may still carry text, which nothing
+    # renders anymore).
     await _execute(
         """UPDATE studio_projects SET
              hook_line = ?, script = ?, beat_timeline = ?, visual_direction = ?,
@@ -5292,7 +5234,7 @@ async def generate_plan(
              status = 'draft', updated_at = ?
            WHERE id = ? AND user_id = ?""",
         (plan["hook_line"], plan["script"], json.dumps(plan["beat_timeline"]),
-         plan["visual_direction"], plan["demo_brief"], json.dumps(plan["overlays"]),
+         plan["visual_direction"], plan["demo_brief"], json.dumps([]),
          plan["voice_direction"], plan["sound_direction"],
          json.dumps(report), summary, objective, duration, tone or None,
          trimmed_chars, now, project_id, user_id),
@@ -5445,7 +5387,7 @@ async def _eager_poster(generation_id: str, user_id: str) -> None:
     """
     try:
         # Shares the box-wide encode gate: a poster encode must never overlap
-        # a save trim/rescale or a compose, even though it runs after the
+        # a save trim/rescale/cut, even though it runs after the
         # response and off the event loop.
         async with _FFMPEG_SLOT:
             poster = await asyncio.to_thread(posters.ensure_poster, generation_id)
@@ -6045,7 +5987,7 @@ async def list_generations(
     limit: int = 50,
     user_id: str = Depends(get_current_user_id),
 ):
-    """Generation history, newest first. Filters compose."""
+    """Generation history, newest first."""
     clauses = ["user_id = ?"]
     params: list = [user_id]
     if studio_project_id.strip():
@@ -7053,8 +6995,8 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
                     + "; ".join(attempts) + ")."
                 ), 0
 
-    # One encode at a time box-wide (see _FFMPEG_SLOT): trim and rescale are
-    # sequential here, but a concurrent compose or poster encode from another
+    # One encode at a time box-wide (see _FFMPEG_SLOT): trim, rescale and the
+    # camera cut are sequential here, but a concurrent poster encode from another
     # request would stack on top of them. R2 upload below stays outside the
     # gate — network, not encode.
     if fresh and not restored:
@@ -7089,8 +7031,8 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
             # below it -- Grok Imagine Video at 720p -- and a founder posting to
             # TikTok wants 1080x1920 rather than whatever the model emitted.
             # Applied after the trim so the scaled clip is the canonical file:
-            # it is what an extension would bridge from, and what both the
-            # captioned and the plain download then serve.
+            # it is what an extension would bridge from, and what the preview
+            # and the plain download then serve.
             #
             # Soft by design. A plain bilinear scale adds no detail, so failing
             # here costs resolution and nothing else, and the un-rescaled clip
@@ -7104,6 +7046,33 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
                     f"({rescale_warnings[0]}); the clip is delivered at its "
                     f"rendered size."
                 )
+
+            # Bake the hook-to-middle camera cut into the canonical file, right
+            # here after the canvas resize and before the R2 upload, so the
+            # preview and the download carry it — not just captioned
+            # composites, the only place it used to run (which is why changing
+            # its magnitude never showed on a raw clip). Fresh downloads only,
+            # like trim and rescale above: re-running it on an already-cut
+            # canonical file would punch twice. Soft by design: an uncut clip
+            # is still a watchable video.
+            hook_at = 0.0
+            try:
+                project_row = await _fetch_one(
+                    "SELECT hook_seconds FROM studio_projects WHERE id = ?",
+                    (row.get("studio_project_id") or "",),
+                )
+                hook_at = float((project_row or {}).get("hook_seconds") or 0)
+            except (TypeError, ValueError):
+                hook_at = 0.0
+            if hook_at > 0:
+                cut, cut_warnings = await overlays.apply_camera_cut(local_path, hook_at)
+                if cut:
+                    local_path = cut
+                elif cut_warnings:
+                    logger.warning(
+                        f"Generation {generation_id}: camera cut skipped "
+                        f"({cut_warnings[0]}); delivering without it."
+                    )
 
     stored_url = await asyncio.to_thread(
         storage_service.upload_video, user_id, generation_id, Path(local_path))
@@ -8219,254 +8188,12 @@ async def detach_asset_from_project(
 
 
 # ---------------------------------------------------------------------------
-# Deterministic overlay composition
+# Deterministic overlay composition (retired)
 # ---------------------------------------------------------------------------
-async def _resolve_composition_assets(
-    asset_ids: list, brand_profile_id: str, user_id: str
-) -> tuple:
-    """
-    Resolve asset ids for a composition, refusing any from another app.
-
-    Returns (assets, rejected). Rejections are reported rather than silently
-    dropped, so a founder who attached the wrong asset finds out.
-    """
-    resolved, rejected = [], []
-    for asset_id in asset_ids or []:
-        asset = await _fetch_one(
-            "SELECT * FROM assets WHERE id = ? AND user_id = ?", (asset_id, user_id)
-        )
-        if not asset:
-            rejected.append({"asset_id": asset_id, "reason": "not found"})
-            continue
-        if asset["brand_profile_id"] != brand_profile_id:
-            rejected.append({"asset_id": asset_id, "reason": "belongs to a different App Profile"})
-            continue
-        if asset.get("status") != "active":
-            rejected.append({"asset_id": asset_id, "reason": "archived"})
-            continue
-        # Storage is not permission: an unconfirmed file can be kept for review,
-        # but it must never reach a production composite.
-        if not asset.get("rights_confirmed"):
-            rejected.append({"asset_id": asset_id, "reason": "rights unconfirmed"})
-            continue
-        if not asset.get("file_path") or not Path(asset["file_path"]).is_file():
-            rejected.append({"asset_id": asset_id, "reason": "file missing on disk"})
-            continue
-        resolved.append(asset)
-    return resolved, rejected
-
-
-@api_router.post("/generations/{generation_id}/overlay", status_code=201)
-async def create_overlay_composition(
-    generation_id: str,
-    payload: OverlayCompositionRequest,
-    user_id: str = Depends(get_current_user_id),
-):
-    """
-    Compose verified text onto a generated clip.
-
-    This is the step that keeps on-screen text honest: the model supplies a
-    person and a scene, and the captions — from the claim-checked plan — are
-    composited deterministically here. Nothing else is composited: no end card
-    (the call to action is the founder's own, added in their editor), the
-    character reference rides to the video model as an input reference, and
-    retired uploads are refused before composition.
-
-    The composition is recorded separately from the generation so the exact
-    composite can be re-rendered or audited without running another
-    generation.
-    """
-    generation = await _fetch_one(
-        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
-    )
-    if not generation:
-        raise HTTPException(status_code=404, detail="Generation not found")
-    if generation.get("status") != "completed":
-        raise HTTPException(
-            status_code=409,
-            detail="Compose overlays only after the video has finished generating.",
-        )
-
-    project = await _fetch_one(
-        "SELECT * FROM studio_projects WHERE id = ?", (generation.get("studio_project_id"),)
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="The studio project for this generation is gone")
-
-    # Face-only product: retired uploads attached before the rule must be
-    # detached before composing, same as every other pipeline stage.
-    _refuse_retired_project_assets(project.get("assets"))
-
-    report = project.get("safety_report") or {}
-    if isinstance(report, str):
-        try:
-            report = json.loads(report)
-        except (json.JSONDecodeError, TypeError):
-            report = {}
-    if report and not report.get("passed", True):
-        blocking = [b.get("claim") for b in report.get("blocking", []) if b.get("claim")]
-        raise HTTPException(
-            status_code=409,
-            detail="Fix prohibited claims before generating: " + ", ".join(blocking[:3]),
-        )
-
-    wanted = list(payload.asset_ids or [])
-    attached = project.get("assets") or []
-    for entry in attached if isinstance(attached, list) else []:
-        if isinstance(entry, dict) and entry.get("asset_id") and entry["asset_id"] not in wanted:
-            wanted.append(entry["asset_id"])
-
-    assets, rejected = await _resolve_composition_assets(
-        wanted, generation.get("brand_profile_id"), user_id
-    )
-
-    # Face-only product: resolved attachments never enter the spec — the
-    # character reference rides to the video model as an input reference and
-    # retired uploads are refused before composition. Resolution still runs
-    # so granular rejections (wrong profile, missing file, unconfirmed
-    # rights) are reported rather than silently dropped.
-    # Captions only. There is no end card: a call to action is added by the
-    # founder in their own editor, after the demo they record, and a card
-    # closing this file would overwrite the handoff frame the generated middle
-    # is built to end on. A caller passing end_card_text or include_end_card
-    # still gets them accepted by the schema for compatibility, but they can no
-    # longer put a close on the video.
-    spec = overlays.build_spec_from_plan(plan=project)
-    if payload.captions:
-        spec["captions"] = payload.captions[:12]
-    if payload.include_captions is False:
-        spec["captions"] = []
-    if payload.include_end_card is False:
-        spec["end_card"] = None
-
-    composition_id = str(uuid.uuid4())
-    now = now_iso()
-    await _execute(
-        """INSERT INTO overlay_compositions
-           (id, generation_id, studio_project_id, brand_profile_id, spec, status,
-            source_path, created_at, updated_at, user_id)
-           VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)""",
-        (composition_id, generation_id, project["id"], project.get("brand_profile_id"),
-         json.dumps(spec), generation.get("video_url") or "", now, now, user_id),
-    )
-
-    result = await _render_overlay_composition(composition_id, user_id)
-    for item in rejected:
-        await _record_asset_event(
-            "composition_rejected", item.get("reason") or "rejected", user_id,
-            brand_profile_id=generation.get("brand_profile_id"),
-            studio_project_id=project["id"], generation_id=generation_id,
-            asset_id=item.get("asset_id") or "",
-        )
-    result["rejected_assets"] = rejected
-    return result
-
-
-async def _render_overlay_composition(composition_id: str, user_id: str) -> dict:
-    """
-    Render a composition record to a finished MP4.
-
-    A failure here is SOFT: the un-composited clip is still a valid video, so
-    the generation is left intact and the composition is marked failed with a
-    reason. Losing an overlay must never lose the video itself.
-    """
-    row = await _fetch_one(
-        "SELECT * FROM generations g JOIN overlay_compositions o "
-        "ON o.generation_id = g.id WHERE o.id = ? AND o.user_id = ?",
-        (composition_id, user_id),
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Overlay composition not found")
-
-    spec = row.get("spec") or {}
-    if isinstance(spec, str):
-        try:
-            spec = json.loads(spec)
-        except (json.JSONDecodeError, TypeError):
-            spec = {}
-
-    source = Path(row.get("source_path") or "")
-    if not source.is_file():
-        local = pipeline.VIDEOS_DIR / f"{row['generation_id']}.mp4"
-        source = local if local.is_file() else source
-    if not source.is_file():
-        await _execute(
-            "UPDATE overlay_compositions SET status = 'failed', error = ?, updated_at = ? WHERE id = ?",
-            ("The generated clip is no longer available on disk.", now_iso(), composition_id),
-        )
-        return {
-            "id": composition_id, "status": "failed",
-            "error": "The generated clip is no longer available on disk.",
-        }
-
-    output = pipeline.VIDEOS_DIR / f"{composition_id}.mp4"
-    # Gated like every other encode (see _FFMPEG_SLOT): this is a full
-    # re-encode sharing the box with saves and posters. The call itself stays
-    # synchronous, exactly as before — only entry is serialized.
-    async with _FFMPEG_SLOT:
-        result, warnings = overlays.compose(source, output, spec)
-
-    if not result:
-        message = "; ".join(warnings) or "Overlay render failed."
-        await _execute(
-            "UPDATE overlay_compositions SET status = 'failed', error = ?, updated_at = ? WHERE id = ?",
-            (message[:500], now_iso(), composition_id),
-        )
-        return {"id": composition_id, "status": "failed", "error": message[:500]}
-
-    r2_url = None
-    try:
-        r2_url = storage_service.upload_video(user_id, composition_id, Path(result))
-    except Exception as e:
-        logger.warning(f"Overlay R2 upload failed for {composition_id}: {e}")
-
-    applied_summary = {
-        "captions": len(spec.get("captions") or []),
-        "images": len(spec.get("images") or []),
-        "videos": len(spec.get("videos") or []),
-        "audios": len(spec.get("audios") or []),
-        "end_card": bool(spec.get("end_card")),
-    }
-    # Stored unsigned. This row outlives any one signature, so a signed URL
-    # written here would expire and the composition would be a dead link
-    # forever. Signed on the way out instead — see media_signing.sign_stored_path.
-    await _execute(
-        "UPDATE overlay_compositions SET status = 'completed', output_path = ?, "
-        "output_url = ?, r2_url = ?, applied = ?, error = NULL, updated_at = ? WHERE id = ?",
-        (str(result), f"/api/media/videos/{composition_id}.mp4", r2_url or "",
-         json.dumps(applied_summary), now_iso(), composition_id),
-    )
-    logger.info(f"Overlay composition {composition_id} completed (r2={'yes' if r2_url else 'no'})")
-    return {
-        "id": composition_id,
-        "status": "completed",
-        "output_url": media_signing.build_signed_path(f"{composition_id}.mp4"),
-        "r2_url": r2_url or "",
-        "applied": applied_summary,
-        "warnings": warnings,
-    }
-
-
-@api_router.get("/generations/{generation_id}/overlay")
-async def get_overlay_composition(generation_id: str, user_id: str = Depends(get_current_user_id)):
-    """Latest composition for a generation, if any."""
-    row = await _fetch_one(
-        "SELECT * FROM overlay_compositions WHERE generation_id = ? AND user_id = ? "
-        "ORDER BY created_at DESC LIMIT 1",
-        (generation_id, user_id),
-    )
-    if not row:
-        return {"composition": None}
-    out = dict(row)
-    # Stored unsigned, so it gets a fresh signature on the way out. Without
-    # this the row's own URL would be rejected by the now-signed media route.
-    out["output_url"] = media_signing.sign_stored_path(out.get("output_url"))
-    if isinstance(out.get("spec"), str):
-        try:
-            out["spec"] = json.loads(out["spec"])
-        except (json.JSONDecodeError, TypeError):
-            out["spec"] = {}
-    return {"composition": out}
+# Burned-in captions were removed from the Hook + Story path: the compose
+# endpoint, its renderer, the composition fetcher and the asset resolver
+# lived here. Every finished render now carries the hook-to-middle camera
+# cut from the finalize pass instead, so no second render exists to dress.
 
 
 @api_router.get("/studio/variations")
@@ -8572,7 +8299,9 @@ async def create_variation(
     # near-identical video rather than writing one from scratch. `cta` is not
     # copied — there is no call to action in a generated piece — and
     # `feature_emphasis` is not copied either; `demo_brief` is what the founder
-    # needs when they record their own demo, so that carries over.
+    # needs when they record their own demo, so that carries over. `overlays`
+    # is cleared, not copied: burned-in captions are gone and nothing renders
+    # them anymore.
     await _execute(
         """INSERT INTO studio_projects
            (id, brand_profile_id, content_angle_id, template_id, template_version,
@@ -8584,7 +8313,7 @@ async def create_variation(
                   objective, ?, ?, ?,
                   COALESCE(?, hook_line), COALESCE(?, script),
                   beat_timeline, COALESCE(?, visual_direction),
-                  COALESCE(?, demo_brief), overlays,
+                  COALESCE(?, demo_brief), '[]',
                   voice_direction, sound_direction, assets, hook_seconds,
                   0, 'draft', ?, ?, ?
            FROM studio_projects WHERE id = ?""",
@@ -8678,7 +8407,9 @@ async def duplicate_generation(
     now = now_iso()
     # Copies the approved plan verbatim so the founder can re-render the same
     # setup unchanged. `cta` is dropped (a generated piece has no call to action)
-    # and `feature_emphasis` is replaced by `demo_brief`. The duration is
+    # and `feature_emphasis` is replaced by `demo_brief`. `overlays` is cleared
+    # rather than copied: burned-in captions are gone and nothing renders them
+    # anymore. The duration is
     # re-clamped, because a project saved before this change may carry a 20s or
     # 30s target that no single pass can produce.
     await _execute(
@@ -8690,7 +8421,7 @@ async def duplicate_generation(
              safety_summary, script_version, status, created_at, updated_at, user_id)
            SELECT ?, brand_profile_id, content_angle_id, template_id, template_version,
                   objective, ?, ?, tone, hook_line, script,
-                  beat_timeline, visual_direction, demo_brief, overlays,
+                  beat_timeline, visual_direction, demo_brief, '[]',
                   voice_direction, sound_direction, assets, ?, safety_report,
                   safety_summary, script_version, 'draft', ?, ?, ?
            FROM studio_projects WHERE id = ?""",
@@ -8776,19 +8507,7 @@ async def generation_history(
         entry["r2_url"] = media_signing.sign_stored_path(entry.get("r2_url"))
         entry["playback_url"] = _playback_url(row)
         entry["poster_url"] = _poster_url(row)
-        composition = await _fetch_one(
-            "SELECT id, status, output_url, r2_url FROM overlay_compositions "
-            "WHERE generation_id = ? ORDER BY created_at DESC LIMIT 1",
-            (entry["id"],),
-        )
-        if composition:
-            # Signed on read, for the same reason as the single-composition
-            # route: the stored path is unsigned so it never expires in the row.
-            composition = dict(composition)
-            composition["output_url"] = media_signing.sign_stored_path(
-                composition.get("output_url")
-            )
-        entry["composition"] = composition
+        entry["composition"] = None
         performance = await _fetch_all(
             "SELECT views, likes, comments, shares, saves, outcome, notes, created_at "
             "FROM performance_entries WHERE generation_id = ? ORDER BY created_at DESC LIMIT 1",
@@ -8802,7 +8521,7 @@ async def generation_history(
 @api_router.delete("/generations/{generation_id}")
 async def delete_generation(generation_id: str, user_id: str = Depends(get_current_user_id)):
     """
-    Delete a generation and its derived overlays.
+    Delete a generation and its derived records.
 
     Archiving is usually the better choice: the row keeps the render, its
     prompt, and its verdict while dropping it from the working list. Delete is
@@ -8814,9 +8533,6 @@ async def delete_generation(generation_id: str, user_id: str = Depends(get_curre
     if not row:
         raise HTTPException(status_code=404, detail="Generation not found")
 
-    await _execute(
-        "DELETE FROM overlay_compositions WHERE generation_id = ?", (generation_id,)
-    )
     await _execute(
         "DELETE FROM performance_entries WHERE generation_id = ?", (generation_id,)
     )
@@ -9332,11 +9048,6 @@ async def serve_video(filename: str, request: Request, sig: str = "", exp: str =
             "SELECT id, user_id, r2_url FROM generations WHERE id = ?",
             (filename[:-4],),
         )
-        if not row:
-            row = await _fetch_one(
-                "SELECT id, user_id, r2_url FROM overlay_compositions WHERE id = ?",
-                (filename[:-4],),
-            )
         if row and storage_service.is_configured():
             try:
                 cloud_url = await asyncio.to_thread(
@@ -9523,9 +9234,6 @@ async def serve_poster(filename: str, sig: str = "", exp: str = ""):
     # Owner comes from our rows, never from the URL, like the video route.
     row = await _fetch_one(
         "SELECT id, user_id FROM generations WHERE id = ?", (job_id,))
-    if not row:
-        row = await _fetch_one(
-            "SELECT id, user_id FROM overlay_compositions WHERE id = ?", (job_id,))
     if row and storage_service.is_configured():
         try:
             restored_poster = await asyncio.to_thread(

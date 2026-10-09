@@ -174,14 +174,13 @@ class TestFfmpegIsBounded:
         assert argv[argv.index("-crf") + 1] == "20"
         assert "+faststart" in " ".join(argv)
 
-    def test_the_compose_asks_for_one_thread(self, tmp_path):
+    def test_the_camera_cut_asks_for_one_thread(self, tmp_path):
         """
-        The overlay compose was the one uncapped call site: a full re-encode
-        at preset medium with default threads, overlapping a save, is what
-        OOM-killed the container.
+        The finalize camera cut is a full re-encode at preset medium; uncapped
+        threads overlapping a save is what OOM-killed the container.
         """
-        argv, _ = overlays.build_ffmpeg_command(
-            tmp_path / "b.mp4", tmp_path / "o.mp4", {}, 10, None)
+        argv = overlays.build_camera_cut_command(
+            tmp_path / "b.mp4", tmp_path / "o.mp4", 3.0, 10.0)
         assert argv[argv.index("-threads") + 1] == "1"
 
     def test_the_concat_asks_for_one_thread(self, tmp_path):
@@ -211,7 +210,7 @@ class TestEncodeGate:
     One local ffmpeg encode at a time, box-wide.
 
     Capping threads bounds each spike; it does not bound overlap. A poll-save
-    trim/rescale, an overlay compose and a poster encode could still run
+    trim/rescale/cut and a poster encode could still run
     concurrently across requests, and stacked encodes OOM-killed the 512MB
     container. _FFMPEG_SLOT serializes entry to all of them.
     """
@@ -237,13 +236,12 @@ class TestEncodeGate:
     def test_every_encode_site_holds_the_gate(self, api):
         """
         A new encode path that bypasses the gate reintroduces the overlap by
-        accident. Pin all four call sites the way the smoke suite pins its
+        accident. Pin all three call sites the way the smoke suite pins its
         markers: by name, in source.
         """
         import inspect
 
         assert "_FFMPEG_SLOT" in inspect.getsource(api._persist_generation_clip)
-        assert "_FFMPEG_SLOT" in inspect.getsource(api._render_overlay_composition)
         assert "_FFMPEG_SLOT" in inspect.getsource(api._eager_poster)
         assert "_FFMPEG_SLOT" in inspect.getsource(api.serve_poster)
 

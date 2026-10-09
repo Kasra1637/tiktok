@@ -12,7 +12,7 @@ import { FactChip, FactList } from "../components/FactChip";
 import { recordSignal, recordReason } from "../lib/feedback";
 import {
   History as HistoryIcon, Loader2, AlertTriangle, Download, Trash2,
-  RotateCcw, GitBranch, RefreshCw, ChevronRight, Film, Star, TrendingUp,
+  RotateCcw, GitBranch, RefreshCw, ChevronRight, Film, TrendingUp,
   Check, ThumbsDown, Info, Copy, X, Smartphone,
 } from "lucide-react";
 
@@ -164,10 +164,9 @@ function DetailRow({ label, children }) {
  * Everything about one render that the history row deliberately leaves out.
  *
  * The list stays light on purpose, but "why does this video look like this"
- * is answerable only from the prompt, the script it was built from, and the
- * overlays that were composited afterwards. Those three together are the
- * audit trail for a claim in a published video, so they belong one click away
- * rather than only in the database.
+ * is answerable only from the prompt and the script it was built from.
+ * Those two together are the audit trail for a claim in a published video,
+ * so they belong one click away rather than only in the database.
  */
 function GenerationDetails({ generationId, onClose }) {
   const [detail, setDetail] = useState(null);
@@ -180,8 +179,6 @@ function GenerationDetails({ generationId, onClose }) {
       .catch((err) => { if (!cancelled) setError(getErrorMessage(err)); });
     return () => { cancelled = true; };
   }, [generationId]);
-
-  const overlays = detail?.overlays || detail?.composition?.applied || [];
 
   return (
     <div
@@ -244,19 +241,6 @@ function GenerationDetails({ generationId, onClose }) {
                 <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg bg-secondary/40 p-3 text-xs">
                   {detail.prompt_used}
                 </pre>
-              </div>
-            )}
-
-            {Array.isArray(overlays) && overlays.length > 0 && (
-              <div className="space-y-1.5">
-                <span className="eyebrow block">On-screen text composited</span>
-                <ul className="space-y-1 text-sm">
-                  {overlays.map((o, i) => (
-                    <li key={i} className="text-muted-foreground">
-                      {o.start ?? 0}&ndash;{o.end ?? 0}s: {o.text || o.label || JSON.stringify(o)}
-                    </li>
-                  ))}
-                </ul>
               </div>
             )}
 
@@ -334,7 +318,6 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
   // generation in flight) simply omits the attribute and the <video> behaves
   // as before — a 404 poster must never break playback.
   const posterUrl = row.poster_url ? mediaUrl(row.poster_url) : null;
-  const composedUrl = row.composition?.r2_url || row.composition?.output_url;
   const hasClip = row.status === "completed" && Boolean(downloadUrl);
   // A finished render with no fetchable copy still gets the rail: the row has
   // to say the copy is missing and offer the repair, which is the only way a
@@ -619,17 +602,6 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
                 <Trash2 className="h-3.5 w-3.5" /> Delete
               </Button>
             </div>
-            {composedUrl && (
-              <Button variant="secondary" size="sm" className="w-full" asChild>
-                <a
-                  href={mediaUrl(composedUrl)}
-                  download
-                  onClick={() => recordSignal("video_downloaded", "downloaded", signalRefs)}
-                >
-                  <Star className="h-3.5 w-3.5" /> With real visuals
-                </a>
-              </Button>
-            )}
             {stuckGenerating && (
               <Button
                 variant="secondary"

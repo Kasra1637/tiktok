@@ -596,10 +596,10 @@ class TestSinglePassPrompt:
         assert "0-3s" in prompt
         assert "3-20s" in prompt
 
-    def test_overlay_text_is_handed_over_not_drawn(self):
+    def test_no_text_appears_on_screen(self):
         prompt = gp.build_single_pass_prompt(PLAN, PROFILE, TEMPLATE, 20)
-        assert "one prompt" in prompt
-        assert "added afterwards" in prompt
+        assert "No text appears on screen at all" in prompt
+        assert "added afterwards" not in prompt
 
     def test_uses_the_real_app_name(self):
         prompt = gp.build_single_pass_prompt(PLAN, PROFILE, TEMPLATE, 20)
@@ -625,7 +625,7 @@ class TestSinglePassPrompt:
     def test_no_composited_assets_section(self):
         # Face-only product: the photograph is covered by the person anchor
         # and nothing else can be attached, so the prompt no longer lists
-        # real assets to composite — only the captions carve-out remains.
+        # real assets to composite — and no on-screen text is planned at all.
         prompt = gp.build_single_pass_prompt(PLAN, PROFILE, TEMPLATE, 20)
         assert "Real app assets" not in prompt
 
@@ -837,9 +837,9 @@ class TestRenderPromptLengthCap:
 
     def test_single_pass_prompt_stays_within_the_provider_limit(self):
         """
-        The no-strategy fallback reads founder-written fields (script, beats,
-        overlays) that are equally unbounded, so it gets the same guarantee:
-        a 12-beat, 10-overlay plan at 6,000 chars a field still assembles
+        The no-strategy fallback reads founder-written fields (script, beats)
+        that are equally unbounded, so it gets the same guarantee:
+        a 12-beat plan at 6,000 chars a field still assembles
         under the ceiling (measured 6,077).
         """
         big = self.BIG
@@ -852,7 +852,6 @@ class TestRenderPromptLengthCap:
                     {"start": i, "end": i + 1, "label": "b", "text": big}
                     for i in range(12)
                 ],
-                "overlays": [{"text": big}] * 10,
                 "assets": self._verbose_assets(),
             },
             profile=self._verbose_profile(),
