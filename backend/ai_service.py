@@ -2118,14 +2118,18 @@ async def generate_creative_plan(
         # rest over the middle). A script past it is not shortened gracefully at
         # render time: the render gate refuses and sends the founder back to
         # trim by hand, and the trimmed-away text is usually the payoff
-        # sentence. Sizing the request is the fix at its cause.
+        # sentence. Sizing the request is the fix at its cause — and the
+        # request must aim CLOSE TO the budget, not well under it: a script far
+        # under budget leaves dead air the video has to stretch across the full
+        # duration, which reads as slow delivery.
         f"- SPOKEN BUDGET: the hook line is spoken over the first {hook_seconds}s and the rest of "
         f"the script over the {middle_seconds}s middle. At natural spoken pace that is at most "
         f"{hook_budget} characters for the hook line and {middle_budget} characters for the rest of "
-        "the script, counted after the hook line is removed. Treat these as hard ceilings, not "
-        "targets: write tight enough to land under them with room to spare, and put the "
-        "payoff sentence INSIDE the middle budget, not after it. Anything past either ceiling "
-        "is not spoken in the video and the render is refused until it is cut.\n"
+        "the script, counted after the hook line is removed. These ceilings are still enforced: "
+        "anything past either ceiling is not spoken in the video and the render is refused "
+        "until it is cut. Aim to land CLOSE TO each ceiling, not well under it — use the full "
+        "middle budget and end on the payoff sentence as the last thing said inside it. A script "
+        "far under the budget leaves dead air the video has to stretch across the full duration.\n"
         "- NEVER write a product demonstration into either beat. Do not film the app in use, "
         "do not show a screen, and do not narrate what the app does while something unrelated "
         "happens on camera. Showing the working product is the founder's recording, attached "
@@ -2800,6 +2804,14 @@ async def generate_video_strategy(
     _remaining = max(0, int(total_duration or 0) - int(hook_seconds or 0))
     plan_seconds = _remaining or int(hook_seconds or 4)
 
+    # The section scripts are sized to their seconds at the same natural pace
+    # the plan prompt and the render gate use. Stated here so the strategy's own
+    # words fill the piece when there is no approved plan to bind to; when
+    # there is one, bind_spoken_words rewrites the sections from it and the
+    # same ceilings still apply.
+    _strategy_hook_budget = spoken_budget(hook_seconds)
+    _strategy_middle_budget = spoken_budget(plan_seconds)
+
     facts = {
         "app_name": profile.get("brand_name") or "(unnamed app)",
         "category": profile.get("app_category") or profile.get("niche") or "(unstated)",
@@ -3043,6 +3055,13 @@ async def generate_video_strategy(
         + "- There are exactly TWO sections and they are the whole video. Segment 0 is the hook. "
         f"Segment 1 is the middle and runs {plan_seconds} seconds to the end. Never return a third "
         "section.\n"
+        + f"- SPOKEN BUDGET: the hook section speaks for {hook_seconds}s and the middle for "
+        f"{plan_seconds}s — at most {_strategy_hook_budget} characters of hook dialogue and "
+        f"{_strategy_middle_budget} characters of middle script. These ceilings are still enforced "
+        "downstream: anything past them is cut and the render is refused until it fits. Aim to "
+        "land CLOSE TO each ceiling, not well under it — use the full middle budget and end on "
+        "the payoff beat as the last thing said inside it. A script far under the budget leaves "
+        "dead air the video has to stretch across the full duration.\n"
         "- The middle develops the hook — the situation, the pain, the reaction, the action, the "
         "transition — and its job is to end at the moment the viewer would reach for the app. It "
         "does NOT satisfy them, and it does not continue past that point.\n"

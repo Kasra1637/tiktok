@@ -1601,6 +1601,11 @@ class TestSpokenBudgetReachesThePlanPrompt:
         assert "140 characters for the rest of the script" in prompt
         assert "first 3s" in prompt
         assert "60 characters for the hook line" in prompt
+        # Fill-target, not under-fill: the model must use the budget, or the
+        # video stretches a short script across the full duration (slow delivery).
+        assert "CLOSE TO each ceiling" in prompt
+        assert "room to spare" not in prompt
+        assert "render is refused" in prompt
 
     def test_the_budget_tracks_the_template_declared_hook(self, monkeypatch):
         """A 3s hook on a 15s piece squeezes the middle to 12s / 240 chars at the current pace."""
@@ -1617,6 +1622,22 @@ class TestSpokenBudgetReachesThePlanPrompt:
         # And the two ceilings must never collide: the hook budget is on the
         # hook line, the middle budget on the remainder after it.
         assert "60 characters for the hook line" in prompt
+        assert "CLOSE TO each ceiling" in prompt
+        assert "payoff sentence as the last thing said inside it" in prompt
+
+    def test_the_strategy_prompt_carries_the_same_spoken_budget(self, monkeypatch):
+        """The strategy prompt sizes its section scripts to the same ceilings.
+
+        _StrategyCapture runs hook_seconds=5, total_duration=20, so the middle
+        is 15s: 100 chars of hook dialogue and 300 of middle script at the
+        20 chars/sec pace. Same fill-target wording as the plan prompt.
+        """
+        prompt = _StrategyCapture(monkeypatch).run()
+        assert "SPOKEN BUDGET" in prompt
+        assert "100 characters of hook dialogue" in prompt
+        assert "300 characters of middle script" in prompt
+        assert "CLOSE TO each ceiling" in prompt
+        assert "room to spare" not in prompt
 
 
 class TestTrendEvidenceReachesTheStrategy:

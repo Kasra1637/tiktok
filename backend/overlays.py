@@ -46,7 +46,7 @@ CANVAS_HEIGHT = 1920
 # model cannot be trusted with frame-exact timing, and a prompt asking for "a
 # cut at 3 seconds" drifts. ffmpeg lands it on the frame.
 TRANSITION_RAMP_SECONDS = 0.25
-TRANSITION_ZOOM = 0.12
+TRANSITION_ZOOM = 0.17
 TRANSITION_SHIFT = 0.35
 # A boundary needs room on both sides for the ramp. Closer to either end than
 # this, the move would start before the first frame or finish past the last

@@ -513,6 +513,14 @@ class TestHookMiddleCut:
         graph, _, _ = overlays.build_filter_graph({"transition": {"at": 3.0}}, 12, None)
         assert ":eval=frame" in graph
 
+    def test_punch_in_magnitude_is_seventeen_percent(self):
+        """The hook-to-middle zoom-punch magnitude. Pinned so a retune is a
+        conscious change, not a drift: the graph must carry the same factor as
+        overlays.TRANSITION_ZOOM."""
+        assert overlays.TRANSITION_ZOOM == 0.17
+        graph, _, _ = overlays.build_filter_graph({"transition": {"at": 3.0}}, 12, None)
+        assert f"1+{overlays.TRANSITION_ZOOM}*" in graph
+
     def test_cut_feeds_the_layers_downstream(self):
         """The cut reframes the footage, not the captions: layers drawn after
         it stay put while the camera appears to move."""
