@@ -1742,6 +1742,78 @@ class TestPlanArrivalClamp:
         # And nothing is reported as un-spoken on a freshly generated plan.
         assert result["spoken_overflow"] == {}
 
+    def test_the_hook_line_is_stored_once_not_repeated_in_the_script(self, api, monkeypatch):
+        """The hook line lives in its own column, so the script must not open
+        with a second copy of it.
+
+        The model is asked for the whole piece because it is writing the whole
+        piece, and the hook line is written once. Review shows the two fields
+        side by side, so a stored copy made the founder read the same sentence
+        twice and left them unable to tell what the middle would actually say.
+        """
+        _patch_plan(monkeypatch, api, {
+            **FAKE_PLAN,
+            "hook_line": "Stop writing empty pages",
+            "script": "Stop writing empty pages. Taskly gives you one short prompt.",
+        })
+        from models import GeneratePlanRequest
+        profile = _approved_profile(api, "Clamp Once")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        result = _run(api.generate_plan(project_id=project["id"],
+                                        payload=GeneratePlanRequest(), user_id=ANON))
+        assert result["hook_line"] == "Stop writing empty pages"
+        assert "empty pages" not in result["script"]
+        assert result["script"] == "Taskly gives you one short prompt."
+
+    def test_a_paraphrased_hook_is_also_stored_once(self, api, monkeypatch):
+        """The same rule when the model introduces the hook before saying it."""
+        _patch_plan(monkeypatch, api, {
+            **FAKE_PLAN,
+            "hook_line": "Stop writing empty pages",
+            "script": "So, stop writing empty pages. Taskly gives you one prompt.",
+        })
+        from models import GeneratePlanRequest
+        profile = _approved_profile(api, "Clamp Paraphrase")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        result = _run(api.generate_plan(project_id=project["id"],
+                                        payload=GeneratePlanRequest(), user_id=ANON))
+        assert result["script"] == "Taskly gives you one prompt."
+
+    def test_the_hook_is_still_spoken_once_after_being_deduplicated(self, api, monkeypatch):
+        """Deduplication must not cost the video its opening line.
+
+        The hook moves from the head of the script to its own column, and
+        bind_spoken_words is what puts it back into the rendered strategy. If
+        that binding stopped reading hook_line, the video would open on the
+        middle instead.
+        """
+        import ai_service
+        _patch_plan(monkeypatch, api, {
+            **FAKE_PLAN,
+            "hook_line": "Stop writing empty pages",
+            "script": "Stop writing empty pages. Taskly gives you one short prompt.",
+        })
+        from models import GeneratePlanRequest
+        profile = _approved_profile(api, "Clamp Spoken")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        result = _run(api.generate_plan(project_id=project["id"],
+                                        payload=GeneratePlanRequest(), user_id=ANON))
+        strategy = {"segments": [
+            {"role": "hook", "script": "model hook draft"},
+            {"role": "middle", "script": "model middle draft"},
+        ]}
+        bound, _ = ai_service.bind_spoken_words(
+            strategy,
+            {"hook_line": result["hook_line"], "script": result["script"]},
+            result["hook_seconds"] or 3,
+            result["duration_seconds"] or 0,
+        )
+        assert bound["segments"][0]["script"] == "Stop writing empty pages"
+        assert bound["segments"][1]["script"] == "Taskly gives you one short prompt."
+
     def test_a_fitting_plan_records_no_trim(self, api, monkeypatch):
         _patch_plan(monkeypatch, api, FAKE_PLAN)
         from models import GeneratePlanRequest

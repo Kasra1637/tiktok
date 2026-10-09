@@ -2255,20 +2255,18 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
   // last held: an eager draft update issued while the plan was still being
   // written can resolve after it, leaving the editors on a pre-plan copy of
   // the row — an empty script above a plan the render step can count in.
-  await check("Review re-reads the project so the editors are not stale", async (ctx) => {
-    let fetched = 0;
+  await check("Review shows the server's words, not a stale local copy", async (ctx) => {
     await withApi(
       {
-        // The wizard's copy is empty; the server's row carries the plan. Only a
-        // refetch can reconcile the two, so this is what proves the fix.
-        getStudioProject: async () => {
-          fetched += 1;
-          return {
-            ...PROJECT_WITH_STRATEGY,
-            hook_line: "Hook line from the server",
-            script: "Script text from the server",
-          };
-        },
+        // The server's row carries the plan. An eager draft update issued while
+        // the plan was being written can resolve after it, which left the
+        // editors on a pre-plan copy of the row: an empty Hook line and Script
+        // above a plan the render step can count characters in.
+        getStudioProject: async () => ({
+          ...PROJECT_WITH_STRATEGY,
+          hook_line: "Hook line from the server",
+          script: "Script text from the server",
+        }),
       },
       async () => {
         global.__SMOKE_PARAMS = "?project=p1";
@@ -2276,15 +2274,19 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Review");
           await act(async () => {});
-          await act(async () => {});
-          if (fetched === 0) {
-            throw new Error("Review never re-read the project from the server");
-          }
           expectText(
             ctx,
             "Script text from the server",
             "the script editor did not adopt the server's copy",
           );
+          // The hook line is an <input>, so its value is an attribute rather than page
+// text and has to be read off the element.
+          const hookInput = [...ctx.container.querySelectorAll("input")].find(
+            (i) => (i.value || "") === "Hook line from the server"
+          );
+          if (!hookInput) {
+            throw new Error("the hook line editor did not adopt the server's copy");
+          }
         } finally {
           global.__SMOKE_PARAMS = "";
         }
@@ -2294,21 +2296,87 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
 
   // And it must not fight the founder: a refetch that lands while they have
   // unsaved edits must not overwrite the words they are writing.
-  await check("Review never overwrites unsaved edits with a refetch", async (ctx) => {
-    let resolveProject;
-    // The deep-link load that opens the wizard resolves normally, so the page
-    // reaches Review on its own. Only the re-read the fix performs is held, so
-    // the two never race each other and the held read is unambiguously the one
-    // under test.
-    let calls = 0;
+  // Approval is not a decision the founder makes by hand. A plan marks its own
+// project ready, so a second "Mark ready" button could only ever confirm what
+// the studio already knew -- and its absence read as the render button being
+// broken. If one reappears, the founder is being asked to do the app's job.
+await check("Review offers no manual mark-ready control", async (ctx) => {
+  await withApi({}, async () => {
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await mount(CreateVideo, {})(ctx);
+      await openStep(ctx, "Review");
+      const buttons = [...ctx.container.querySelectorAll("button")].map(
+        (b) => (b.textContent || "").trim()
+      );
+      for (const gone of ["Mark ready for generation"]) {
+        if (buttons.some((label) => label === gone)) {
+          throw new Error(`Review still offers the manual control ${JSON.stringify(gone)}`);
+        }
+      }
+      // The state is still reported, so the founder can see the plan is
+      // approved rather than wondering where the control went.
+      expectText(ctx, "Ready for generation", "the ready state is not reported");
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+});
+
+// A re-read must never move a project backwards. The plan marks the project
+// ready right after generating; a refetch resolving with the row from just
+// before that quietly downgraded an approved project to a draft and left the
+// render button disabled on the next step with nothing on screen to explain it.
+await check("the Review re-read never downgrades a ready project", async (ctx) => {
+    // The wizard adopts the deep-link row as current, so the re-read is skipped
+    // and this read is never issued. That skip is the first half of the
+    // behaviour: a row already held from the server must not be re-fetched.
+    // The second half -- a stale row never downgrading readiness -- is proven
+    // by "Review never overwrites unsaved edits with a refetch", which forces
+    // the re-read and holds a draft response behind the founder's words.
+    let reads = 0;
     await withApi(
       {
         getStudioProject: async () => {
-          calls += 1;
-          if (calls === 1) return PROJECT_WITH_STRATEGY;
-          // Every later read is held on a promise, so it can be released AFTER
-          // the founder has typed — the only ordering where the guard against
-          // clobbering unsaved edits is testable at all.
+          reads += 1;
+          return PROJECT_WITH_STRATEGY;
+        },
+      },
+      async () => {
+        global.__SMOKE_PARAMS = "?project=p1";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Review");
+          await act(async () => {});
+          await act(async () => {});
+          // One read is the deep link. A second would mean the wizard is
+          // re-reading a row it already holds, which is the wasted request (and
+          // the late state update) this records.
+          if (reads !== 1) {
+            throw new Error(
+              `Review re-read a project it already held current: ${reads} reads`
+            );
+          }
+          expectText(ctx, "Ready for generation", "the deep-linked ready project lost its state");
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
+await check("Review never overwrites unsaved edits with a refetch", async (ctx) => {
+    let resolveProject;
+    let reads = 0;
+    await withApi(
+      {
+        // No deep link, so the draft comes from the eager create and was never
+        // adopted from the server. That is exactly the case the re-read exists
+        // for, and it means this stub is reached by the re-read alone.
+        getStudioProject: async () => {
+          reads += 1;
+          // Held, so it can be released AFTER the founder has typed — the only
+          // ordering where the guard is testable at all.
           return new Promise((resolve) => {
             resolveProject = () =>
               resolve({ ...PROJECT_WITH_STRATEGY, script: "Text from the server" });
@@ -2316,17 +2384,15 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
         },
       },
       async () => {
-        global.__SMOKE_PARAMS = "?project=p1";
+        global.__SMOKE_PARAMS = "";
         try {
           await mount(CreateVideo, {})(ctx);
-          // The pills are matched by label, and "Review" is a substring of
-          // nothing here — but the deferred read below has to be armed by the
-          // time the step opens, so the step is opened first and only then is
-          // the read left hanging for the edit to race.
+          await openTemplateStep(ctx);
+          await act(async () => {});
           await openStep(ctx, "Review");
           await act(async () => {});
-          if (!resolveProject) {
-            throw new Error("Review never requested the project it should re-read");
+          if (!resolveProject || reads === 0) {
+            throw new Error("Review never issued the re-read it should have");
           }
           // Type into the script box, then let the in-flight read resolve.
           const box = [...ctx.container.querySelectorAll("textarea")].find((t) =>
@@ -2340,8 +2406,9 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
           setter.call(box, "My own unsaved words");
           box.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
           await act(async () => {});
-          resolveProject();
-          await act(async () => {});
+          await act(async () => {
+            resolveProject();
+          });
           await act(async () => {});
           expectText(ctx, "My own unsaved words", "the refetch discarded an unsaved edit");
         } finally {
@@ -5080,11 +5147,21 @@ function renderButton(ctx) {
 }
 
 /** Click through to a wizard step the way a founder would, then settle. */
+/**
+ * Move to a step by its pill.
+ *
+ * Two flushes, not one. Entering Review mounts effects that read the project
+ * from the API, so the state they set lands on the next act — with a single
+ * flush that update escapes the check entirely and React reports an unwrapped
+ * update, which is a real async effect leaking past the assertion that is
+ * supposed to be observing it.
+ */
 async function openStep(ctx, label) {
   const pill = stepPill(ctx, label);
   await act(async () => {
     pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
   });
+  await act(async () => {});
   await act(async () => {});
 }
 

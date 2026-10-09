@@ -5235,17 +5235,21 @@ async def generate_plan(
         plan, int(row.get("hook_seconds") or 3), duration
     )
     trimmed_chars = int(clamp["dropped_chars"] or 0)
-    if trimmed_chars:
-        # The stored script keeps both sections, because that is what the field
-        # has always meant and what the founder reads it as: the hook line, then
-        # the part of the middle that fits. Re-storing it this way means the
-        # gate's own partition finds the same boundary and finds nothing left
-        # over.
+    if trimmed_chars or clamp["middle_text"] != (plan.get("script") or "").strip():
+        # `script` is stored as the MIDDLE only. The prompt asks the model for
+        # the whole piece, which is right for the words and wrong for the
+        # field: the hook line is already its own column, so keeping a copy at
+        # the head of the script showed the founder the same sentence twice on
+        # Review and left them unable to tell what the middle would actually
+        # say. Stored this way, the two boxes hold one sentence between them and
+        # the renderer reads the middle as-is.
+        #
+        # The hook survives in hook_line, and bind_spoken_words still binds it
+        # into the strategy's opening section, so nothing is dropped from the
+        # video -- it is simply written once.
         fitted = dict(plan)
         fitted["hook_line"] = clamp["hook_line"]
-        fitted["script"] = (
-            f"{clamp['hook_line']} {clamp['kept']}".strip() if clamp["hook_line"] else clamp["kept"]
-        )
+        fitted["script"] = clamp["kept"]
         plan = fitted
         logger.info(
             f"Plan for project {project_id} was {trimmed_chars} characters over the "

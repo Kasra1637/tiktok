@@ -419,6 +419,13 @@ export default function CreateVideo() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
 
+  // The server's updated_at for each project this wizard has adopted from a
+  // server response, so a row that is already current is never re-read or
+  // re-adopted. Declared here, above every effect that reads or writes it: a
+  // dep array is evaluated during render, and the deep-link load below uses it
+  // long before the Review step that first needed it was in view.
+  const syncedProjectsRef = useRef({});
+
   const [step, setStep] = useState(0);
   const [profiles, setProfiles] = useState([]);
   const [angles, setAngles] = useState([]);
@@ -484,6 +491,12 @@ export default function CreateVideo() {
               .catch(() => ({ angles: [] }));
             if (cancelled) return;
             setProject(draft);
+            // This row came from the server, so it is already current: recording
+            // it means the Review re-read has nothing to reconcile and does not
+            // fire. Without that, every deep link issued a second identical
+            // request whose late resolution updated state after the check (or
+            // the founder) had moved on.
+            syncedProjectsRef.current[draft.id] = draft.updated_at || "";
             setAngles(angleData.angles || []);
             setAngleId(draft.content_angle_id || "");
             setTemplateId(draft.template_id || "");
@@ -877,22 +890,40 @@ export default function CreateVideo() {
         tone,
       });
       // A freshly generated plan is exactly the text the founder is about to
-      // read on Review, and "Mark ready" was a separate click they could (and
-      // did) skip by jumping straight to the render step via the pills -- which
-      // left the Generate button disabled with no obvious reason. Mark-ready
-      // now happens as part of generating, so the button is clickable the
-      // moment the plan lands. The server still recomputes claim-safety here
-      // and refuses if a prohibited claim is present, so the safety gate is
-      // unchanged; this only removes the redundant "yes I saw it" click.
+      // read on Review, so the project is marked ready as part of generating
+      // it. There is no manual mark-ready control anywhere: a click that could
+      // only confirm what the studio already knew was a button with no meaning,
+      // and its absence was read as the render button being broken. The server
+      // recomputes claim safety on this call and refuses when a prohibited
+      // claim is present, so the gate is unchanged -- it just happens without
+      // the founder having to say "I saw it".
+      //
+      // A refusal is kept as the plan's own state rather than surfaced as a
+      // thrown error, because the plan landed and is readable; the render
+      // button then states the real reason (a prohibited claim, a missing
+      // photograph) instead of the screen looking broken.
       let settled = updated;
+      let readyError = null;
       try {
         settled = await api.markProjectReady(updated.id);
-      } catch {
-        // Safety or validation refused the ready transition: keep the plan
-        // result so the founder can fix the claim on Review and mark ready
-        // from there. The render button stays disabled for the real reason.
+      } catch (err) {
+        // The plan landed and is readable, so this is not a failure of the step.
+        // The render button below names the real reason (a prohibited claim, or
+        // a photograph still owed); swallowing this without comment is what made
+        // a refused project look broken rather than gated.
         settled = updated;
+        readyError = err;
       }
+      // Record what the server now holds, so the Review re-read knows this state is
+      // already current and cannot resolve an older row over it. Taken from
+      // `settled`, not `updated`: marking ready is itself a write, so its row is
+      // the fresher of the two.
+      if (settled?.id) {
+        syncedProjectsRef.current[settled.id] = settled.updated_at || "";
+      }
+      // A refusal is stated rather than swallowed, so a founder who lands on a
+      // disabled render button can read why instead of assuming the app broke.
+      setError(readyError ? getErrorMessage(readyError) : null);
       setProject(settled);
       setEdits({});
       // Straight to the top of Review, which is this step now: the plan is the
@@ -941,19 +972,29 @@ export default function CreateVideo() {
         });
       }
       // A content save un-readies the project server-side (ready_for_generation
-      // -> draft), which used to leave the Generate button below silently
-      // disabled behind a "mark ready" note the founder had already dismissed
-      // once. Re-mark here for the same reason plan generation does: the
-      // founder just reviewed the exact text they saved, so the approval still
-      // describes what was read. A safety refusal is swallowed the same way --
-      // the render button stays disabled for the real reason, and Review's
-      // Mark-ready button remains the explicit recovery path.
+      // -> draft), because the strategy and the approval both describe the text
+      // as it was before this edit. Re-marked here for the same reason plan
+      // generation marks it: the founder just reviewed the exact words they
+      // saved, so the approval still describes what they read, and there is no
+      // manual mark-ready control for them to reach for instead.
+      //
+      // The readiness rule this encodes: an edit the founder saved after reading
+      // it keeps the project approved, and a server refusal (a claim that is now
+      // prohibited, a photograph detached) is reported rather than hidden -- so
+      // the render button is disabled with a stated reason instead of the screen
+      // looking broken.
       let settled = updated;
+      let readyError = null;
       try {
         settled = await api.markProjectReady(updated.id);
-      } catch {
+      } catch (err) {
         settled = updated;
+        readyError = err;
       }
+      if (settled?.id) {
+        syncedProjectsRef.current[settled.id] = settled.updated_at || "";
+      }
+      setError(readyError ? getErrorMessage(readyError) : null);
       setProject(settled);
       setEdits({});
     } catch (err) {
@@ -963,19 +1004,7 @@ export default function CreateVideo() {
     }
   };
 
-  const handleMarkReady = async () => {
-    if (!project) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const updated = await api.markProjectReady(project.id);
-      setProject(updated);
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  };
+  
 
   // A template can be selected either via URL param (templateId) or stored
   // on the project (project.template_id). The URL param wins when present
@@ -1065,9 +1094,17 @@ export default function CreateVideo() {
   // an empty Hook line and Script above a plan that the render step can count
   // characters in. Re-fetching on entry makes this step authoritative.
   //
-  // Keyed on the row's own version stamps, so a later write re-syncs, and
-  // guarded by a ref so a refetch cannot loop against its own result. Unsaved
-  // edits always win: the founder's words are never overwritten by a read.
+  // Guarded three ways, because a read that fights a write is worse than no
+  // read at all:
+  //   - Keyed on the row's own version stamps, so it re-syncs only when the
+  //     server has something new, and a refetch cannot loop against itself.
+  //   - Unsaved edits always win; the founder's words are never overwritten.
+  //   - Readiness is one-way. The plan handler marks the project ready right
+  //     after generating, and this read was able to resolve with the row from
+  //     just before that and quietly downgrade an approved project to a draft
+  //     -- which left the render button disabled on the next step with nothing
+  //     on screen to explain it. A read may move a project forward; it may
+  //     never move one back.
   const reviewSynced = useRef("");
   const editsRef = useRef(edits);
   useEffect(() => {
@@ -1075,6 +1112,19 @@ export default function CreateVideo() {
   }, [edits]);
   useEffect(() => {
     if (step !== 3 || !project?.id || busy) return;
+    // A row the wizard already adopted from a server response needs no read,
+    // and cannot be improved on by another one. That covers the deep-link load
+    // and the plan handler's own settled row.
+    //
+    // The second case is not just a wasted request. Marking ready is itself a
+    // write, and a read issued around it could resolve with the row from before
+    // it -- quietly downgrading an approved project to a draft and leaving the
+    // render button disabled on the next step with nothing on screen to explain
+    // it. Skipping the read is the fix; a one-way adoption below is the backstop
+    // for any read that still happens.
+    if (syncedProjectsRef.current[project.id] !== undefined) {
+      return;
+    }
     const key = `${project.id}:${project.updated_at || ""}:${project.script_version || 0}`;
     if (reviewSynced.current === key) return;
     reviewSynced.current = key;
@@ -1084,13 +1134,17 @@ export default function CreateVideo() {
       .then((fresh) => {
         if (cancelled || !fresh) return;
         if (Object.keys(editsRef.current).length > 0) return;
+        if (project.status === "ready_for_generation" && fresh.status !== "ready_for_generation") {
+          return;
+        }
+        syncedProjectsRef.current[project.id] = fresh.updated_at || "";
         setProject(fresh);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [step, project?.id, project?.updated_at, project?.script_version, busy]);
+  }, [step, project?.id, project?.updated_at, project?.script_version, project?.status, busy]);
 
   /* Progress state, derived rather than tracked. A founder can reach any step
      from any other, so nothing here can be a counter that advances — the pills
@@ -1941,16 +1995,24 @@ if (step === 3) {
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 Save edits
               </Button>
-              <Button
-                variant="secondary"
-                onClick={handleMarkReady}
-                disabled={busy || hasEdits || project?.status === "ready_for_generation"}
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                {project?.status === "ready_for_generation"
-                  ? "Ready for generation"
-                  : "Mark ready for generation"}
-              </Button>
+              {/* No "Mark ready" button. Approval is not a decision the founder
+                  makes by hand here: the plan handler marks the project ready
+                  as part of generating, because it has just written the words
+                  the founder is about to read. A second button said the same
+                  thing twice, and a click that could only ever confirm what the
+                  studio already knew was a control with no meaning.
+
+                  Saving an edit re-marks, for the same reason: the founder
+                  reviewed the exact text they saved, so the approval still
+                  describes it. If the server refuses (a prohibited claim, a
+                  missing photograph), the render button below states that real
+                  reason instead of sitting disabled behind this control. */}
+              {project?.status === "ready_for_generation" && (
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Ready for generation.
+                </p>
+              )}
             </div>
             {hasEdits && (
               <p className="text-xs text-muted-foreground">Save your edits before marking ready.</p>
