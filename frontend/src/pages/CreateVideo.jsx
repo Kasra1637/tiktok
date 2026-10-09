@@ -1747,8 +1747,10 @@ if (step === 3) {
           <div className="space-y-4">
             {/* Regenerating replaces a plan that may have been edited and
                 approved, so it asks first — the same rule as the strategy
-                rebuild, and for the same reason. No version helper beside it:
-                the button's own confirm states what is discarded. */}
+                rebuild, and for the same reason. The status beside it names
+                the current version and whether it holds words: a version with
+                nothing written is a blank row, never a plan, and says so
+                rather than wearing a check it did not earn. */}
             {project?.script_version > 0 && (
               <div className="flex flex-wrap items-center gap-2">
                 <Button
@@ -1781,6 +1783,12 @@ if (step === 3) {
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                   Regenerate plan
                 </Button>
+                <p className="text-xs text-muted-foreground" data-testid="plan-version-status">
+                  Plan v{project.script_version}
+                  {(project.hook_line || project.script)
+                    ? " · generated ✓"
+                    : " · empty — regenerate to write it"}
+                </p>
               </div>
             )}
             <span className="eyebrow block">Script</span>

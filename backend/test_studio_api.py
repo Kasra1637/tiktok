@@ -587,6 +587,54 @@ class TestClaimSafetyOnEdit:
         ))
         assert edited["script_version"] == 1
 
+    def test_unchanged_resend_does_not_bump_script_version(self, api):
+        """The wizard's background draft sync resends tone/objective/template
+        on every selection change. Bumping on key presence alone minted phantom
+        "Plan v1" versions with blank fields: Review then saw script_version >
+        0, concluded a plan existed, and never auto-generated — a blank form
+        only a manual regenerate could recover.
+        """
+        from models import UpdateStudioProjectRequest
+        profile = _approved_profile(api, "No Phantom Version")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        assert project["script_version"] == 0
+        for _ in range(3):
+            edited = _run(api.update_studio_project(
+                project_id=project["id"],
+                payload=UpdateStudioProjectRequest(
+                    content_angle_id="", template_id=template["id"],
+                    objective="demonstrate_feature", tone="",
+                ),
+                user_id=ANON,
+            ))
+            assert edited["script_version"] == 0
+            assert edited["hook_line"] in (None, "")
+            assert edited["script"] in (None, "")
+
+    def test_changed_tone_still_bumps_script_version(self, api):
+        """Value semantics, not presence: the same key that is ignored
+        unchanged must still bump when its value actually changes.
+        """
+        from models import UpdateStudioProjectRequest
+        profile = _approved_profile(api, "Tone Change")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        edited = _run(api.update_studio_project(
+            project_id=project["id"],
+            payload=UpdateStudioProjectRequest(tone="calm"),
+            user_id=ANON,
+        ))
+        assert edited["tone"] == "calm"
+        assert edited["script_version"] == 1
+        # And resending that same value is a no-op again.
+        again = _run(api.update_studio_project(
+            project_id=project["id"],
+            payload=UpdateStudioProjectRequest(tone="calm"),
+            user_id=ANON,
+        ))
+        assert again["script_version"] == 1
+
     def test_every_editable_field_is_writable(self, api):
         """
         The review step promises that every generated field is editable, so the

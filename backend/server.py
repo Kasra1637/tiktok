@@ -4977,6 +4977,15 @@ async def update_studio_project(
 
     set_clauses, values = [], []
     strategy_edited = False
+    # Whether a content field's WRITTEN value actually changed. The background
+    # draft sync resends tone/objective/template on every selection change, so
+    # bumping on key presence alone minted phantom "Plan v1/v2..." versions
+    # with blank fields: Review then saw script_version > 0, concluded a plan
+    # existed, and never auto-generated — a blank form only a manual
+    # regenerate could recover. Presence is not a change; compare the
+    # normalized value about to be stored against the stored row.
+    content_changed = False
+    _CONTENT_KEYS = set(STUDIO_TEXT_FIELDS) | {"beat_timeline", "overlays", "assets", "strategy"}
     for key, value in updates.items():
         if key in ("beat_timeline", "assets"):
             value = json.dumps(value if isinstance(value, list) else [])
@@ -5051,6 +5060,18 @@ async def update_studio_project(
             value = str(value).strip()
         set_clauses.append(f"{key} = ?")
         values.append(value)
+        if key in _CONTENT_KEYS:
+            new_norm = (
+                "" if value is None
+                else (value if isinstance(value, str) else json.dumps(value, sort_keys=True))
+            )
+            old_raw = row.get(key)
+            old_norm = (
+                "" if old_raw is None
+                else (old_raw if isinstance(old_raw, str) else json.dumps(old_raw, sort_keys=True))
+            )
+            if new_norm != old_norm:
+                content_changed = True
 
     if "template_id" in updates and updates["template_id"]:
         tpl = await _fetch_one(
@@ -5086,17 +5107,13 @@ async def update_studio_project(
         set_clauses.append("safety_summary = ?")
         values.append(claim_safety.summarize(report))
 
-    # script_version tracks the WRITTEN content, so only a content edit bumps
-    # it. It previously bumped on every edit at all, which meant a preference
-    # change such as the extend-intent toggle or the hook length looked like a
-    # rewrite — and that in turn made the "heavy script edit" signal fire for
-    # edits that touched no script.
-    content_edited = any(
-        key in STUDIO_TEXT_FIELDS
-        or key in ("beat_timeline", "overlays", "assets", "strategy")
-        for key in updates
-    )
-    if content_edited:
+    # script_version tracks the WRITTEN content, so only a content edit that
+    # actually changes a value bumps it. It previously bumped on key presence
+    # alone — resending an unchanged tone minted phantom versions with blank
+    # fields (see content_changed above) — and before that on every edit at
+    # all, which meant a preference change such as the extend-intent toggle or
+    # the hook length looked like a rewrite.
+    if content_changed:
         set_clauses.append("script_version = ?")
         values.append(int(row.get("script_version") or 0) + 1)
         # A content edit un-readies the project.
