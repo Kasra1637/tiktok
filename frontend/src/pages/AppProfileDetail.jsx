@@ -17,7 +17,7 @@ import PageHeader from "../components/PageHeader";
 import { api, getErrorMessage } from "../lib/api";
 import {
   Briefcase, Loader2, AlertTriangle, ArrowLeft, Sparkles, Target,
-  ShieldAlert, Lightbulb, ChevronRight, Video, Trash2, RefreshCw,
+  ShieldAlert, Lightbulb, Trash2, RefreshCw,
 } from "lucide-react";
 
 /** Read an array-or-empty field into a clean list. */
@@ -83,74 +83,6 @@ function ClaimPanel({ profile }) {
   );
 }
 
-function AngleCard({ angle, onDelete, busy }) {
-  return (
-    <div className="surface rounded-2xl">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h4 className="font-display text-sm font-semibold">{angle.label || angle.kind}</h4>
-          <Badge variant="secondary" className="mt-1 text-[11px]">
-            {String(angle.kind || "").replace(/_/g, " ")}
-          </Badge>
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onDelete(angle.id)}
-          disabled={busy}
-          aria-label={`Delete ${angle.label || "angle"}`}
-        >
-          Delete
-        </Button>
-      </div>
-
-      <dl className="mt-3 space-y-2 text-sm">
-        {angle.target_audience && (
-          <div>
-            <dt className="eyebrow">Audience</dt>
-            <dd className="text-foreground/90">{angle.target_audience}</dd>
-          </div>
-        )}
-        {angle.user_problem && (
-          <div>
-            <dt className="eyebrow">Problem</dt>
-            <dd className="text-foreground/90">{angle.user_problem}</dd>
-          </div>
-        )}
-        {angle.hook_promise && (
-          <div>
-            <dt className="eyebrow">Hook promise</dt>
-            <dd className="text-foreground/90">{angle.hook_promise}</dd>
-          </div>
-        )}
-        {angle.app_feature && (
-          <div>
-            <dt className="eyebrow">Feature shown</dt>
-            <dd className="text-foreground/90">{angle.app_feature}</dd>
-          </div>
-        )}
-        {angle.desired_emotion && (
-          <div>
-            <dt className="eyebrow">Desired emotion</dt>
-            <dd className="text-foreground/90">{angle.desired_emotion}</dd>
-          </div>
-        )}
-      </dl>
-
-      {list(angle.claims_to_respect).length > 0 && (
-        <div className="mt-3 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-3">
-          <span className="eyebrow block">Respect these claims</span>
-          <ul className="mt-1.5 space-y-1 text-sm text-foreground/90">
-            {list(angle.claims_to_respect).map((c, i) => (
-              <li key={i}>{c}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /**
  * Join a list the way a sentence does: "a", "a and b", "a, b and c".
  *
@@ -200,10 +132,6 @@ export default function AppProfileDetail() {
   const [angles, setAngles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [regeneratingEverything, setRegeneratingEverything] = useState(false);
-  // Angles only, no re-research: offered while there are none, where the
-  // heavier "Refresh research & angles" would be the only route otherwise.
-  const [generatingAngles, setGeneratingAngles] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [drafts, setDrafts] = useState([]);
@@ -253,41 +181,17 @@ export default function AppProfileDetail() {
       setAngles(a.angles || []);
       const src = Array.isArray(updated?.research_sources) ? updated.research_sources : [];
       const readSrc = src.filter((s) => s && s.ok).length;
+      // Angles are regenerated too but managed in Create Video now, so the
+      // notice names where they went rather than a section that is gone.
       setNotice(
         src.length > 0
-          ? `Refreshed research (${readSrc} of ${src.length} sources read), approval, and audience angles.`
-          : "Refreshed research, approval, and audience angles."
+          ? `Refreshed research (${readSrc} of ${src.length} sources read) and approval. Audience angles were regenerated for use in Create Video.`
+          : "Refreshed research and approval. Audience angles were regenerated for use in Create Video."
       );
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
       setRegeneratingEverything(false);
-    }
-  };
-
-  const handleGenerateAngles = async () => {
-    setGeneratingAngles(true);
-    setError(null);
-    try {
-      const data = await api.generateContentAngles(profileId);
-      setAngles(data.angles || []);
-      setNotice(`Generated ${data.angles?.length || 0} audience angles.`);
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setGeneratingAngles(false);
-    }
-  };
-
-  const handleDeleteAngle = async (angleId) => {
-    setDeleting(true);
-    try {
-      await api.deleteContentAngle(profileId, angleId);
-      setAngles((prev) => prev.filter((a) => a.id !== angleId));
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setDeleting(false);
     }
   };
 
@@ -454,8 +358,10 @@ export default function AppProfileDetail() {
         </Alert>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-2">
+      {/* Single column: drafts and angle management live in Create Video and
+          History now. This page is the profile itself: facts, results,
+          audiences, and claim guardrails. */}
+      <div className="space-y-4">
           <div className="surface space-y-4 rounded-2xl" data-testid="profile-facts">
             <span className="eyebrow block">Product facts</span>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -575,100 +481,6 @@ export default function AppProfileDetail() {
           </div>
 
           <ClaimPanel profile={profile || {}} />
-        </div>
-
-        <div className="space-y-4">
-          <div className="surface space-y-3 rounded-2xl" data-testid="app-profile-videos">
-            <div className="flex items-center justify-between gap-2">
-              <span className="eyebrow flex items-center gap-1.5">
-                <Video className="h-3 w-3" />
-                Videos from this app
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {drafts.length ? `${drafts.length} draft${drafts.length === 1 ? "" : "s"}` : ""}
-              </span>
-            </div>
-
-            {drafts.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {approved
-                  ? "No video drafts yet. Start a new video with this profile, or use it again for another video whenever you like."
-                  : "Review and approve this profile before starting a video. You can reuse it for as many videos as you need."}
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {drafts.map((d) => (
-                  <Link
-                    key={d.id}
-                    to={`/create?profile=${encodeURIComponent(profileId)}&project=${encodeURIComponent(d.id)}`}
-                    className="block rounded-xl border border-[color:var(--hairline)] p-3 transition-colors hover:border-[color:var(--indigo-35)]"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-medium">
-                        {d.hook_line || d.objective || "Untitled draft"}
-                      </span>
-                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {d.script_version > 0
-                        ? "Script plan ready — resume in Create Video"
-                        : "Setup started — choose a goal, template, and presenter photo"}
-                    </p>
-                  </Link>
-                ))}
-                <p className="pt-1 text-xs text-muted-foreground">
-                  Each draft is separate. Start another video without changing this profile or its other drafts.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="surface space-y-3 rounded-2xl" data-testid="app-profile-angles">
-            <span className="eyebrow flex items-center gap-1.5">
-              <Target className="h-3 w-3" />
-              Audience angles
-            </span>
-            <p className="text-xs text-muted-foreground">Optional audience-and-problem starting points. Choose one in Create Video to focus template suggestions, or skip it for a broader match.</p>
-
-            {angles.length === 0 ? (
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  {approved
-                    ? "No audience angles yet. Generate them from this approved profile, or use Refresh research & angles above for a full re-research."
-                    : "Approve this profile to create suggested audience angles for the video workflow."}
-                </p>
-                {approved && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="gap-1.5"
-                    onClick={handleGenerateAngles}
-                    disabled={generatingAngles}
-                    data-testid="generate-angles-button"
-                  >
-                    {generatingAngles ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-3.5 w-3.5" />
-                    )}
-                    {generatingAngles ? "Generating…" : "Generate audience angles"}
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {angles.map((a) => (
-                  <AngleCard
-                    key={a.id}
-                    angle={a}
-                    onDelete={handleDeleteAngle}
-                    busy={deleting}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
       </div>
 
       <Dialog

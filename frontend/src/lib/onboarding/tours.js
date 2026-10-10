@@ -198,18 +198,9 @@ export const TOURS = {
         body:
           "After posting, enter a video's results in History. Recorded view counts appear here by template and can inform future strategies; they are manual inputs, not independently verified performance data.",
       },
-      {
-        target: '[data-testid="app-profile-angles"]',
-        title: "Focus on an audience angle",
-        body:
-          "Approval creates suggested angles based on audience problems and product details. Choose an angle in Create Video if you want narrower template suggestions; skip it to keep the audience broad.",
-      },
-      {
-        target: '[data-testid="app-profile-videos"]',
-        title: "Resume or start a video",
-        body:
-          "Open a draft to continue its Create Video steps. Start a new video whenever you like; each draft is separate, and this approved profile remains available to reuse.",
-      },
+      // Angles and drafts used to live on this page; both moved to Create
+      // Video (angles) and History (drafts), so there is nothing to point at
+      // here any more. The wizard's own tour covers the angle picker.
     ],
   },
 

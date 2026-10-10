@@ -358,15 +358,15 @@ const ANGLE_GOALS = {
   feature_demonstration: ["demonstrate_feature", "explain_app", "achieve_desired_outcome", "educate_viewers", "create_curiosity", "ease_daily_moment"],
 };
 const OBJECTIVE_OUTCOMES = {
-  address_user_problem: "gets them naming the problem out loud",
-  feel_seen_and_understood: "makes them feel described, not sold to",
-  avoid_common_mistake: "catches them before the mistake",
-  create_curiosity: "leaves them wanting the answer",
-  ease_daily_moment: "makes the daily moment feel lighter",
-  demonstrate_feature: "keeps them watching long enough to see it work",
-  explain_app: "walks them into what the app is without a feature list",
-  achieve_desired_outcome: "shows the outcome as reachable",
-  educate_viewers: "leaves them with one thing they got wrong",
+  address_user_problem: "Gets them naming the problem out loud",
+  feel_seen_and_understood: "Makes them feel described, not sold to",
+  avoid_common_mistake: "Catches them before the mistake",
+  create_curiosity: "Leaves them wanting the answer",
+  ease_daily_moment: "Makes the daily moment feel lighter",
+  demonstrate_feature: "Keeps them watching long enough to see it work",
+  explain_app: "Walks them into what the app is without a feature list",
+  achieve_desired_outcome: "Shows the outcome as reachable",
+  educate_viewers: "Leaves them with one thing they got wrong",
 };
 
 // template_library.SUPPORTED_DURATIONS. Every one of them is a single render on
@@ -2953,7 +2953,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     // because opening it only revealed plain text.
     global.__SMOKE_PARAMS = "";
     const FOUR_REASONS = [
-      "Built for 'create curiosity' — leaves them wanting the answer.",
+      "Built for 'create curiosity'. Leaves them wanting the answer.",
       "Lands with Health & Fitness viewers before the app is even named — framed for how they talk about the problem.",
       "Tailored for Vocolens - generated from this app's approved profile.",
       "Aimed at anxious, night-owls — they're already in the situation this opens on.",
@@ -3108,7 +3108,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
             {
               template: ORDERED_TEMPLATES[0],
               score: 9,
-              why_it_fits: ["Built for 'create curiosity' — leaves them wanting the answer."],
+              why_it_fits: ["Built for 'create curiosity'. Leaves them wanting the answer."],
               limitations: [],
               suggested_duration: TEMPLATE.default_duration,
             },
@@ -4328,30 +4328,26 @@ async function runDeleteDialogChecks() {
     );
   }
 
-  // The angle gap on the profile page used to have one route out: "Refresh
-  // research & angles", which re-scrapes every URL and re-runs profile research
-  // just to produce angles. The empty state now offers angles alone.
-  await check("the profile page offers to generate missing angles", async (ctx) => {
+  // Angles moved out of the profile page into the Create Video wizard: the
+  // profile is facts, results, audiences and guardrails, and the Audience &
+  // goal step already offers to generate missing angles (pinned above). The
+  // profile must therefore carry no angles or drafts section at all.
+  await check("the profile page carries no angles or drafts section", async (ctx) => {
     await withApi(
       stubProfileApi({
         getContentAngles: async () => ({ angles: [] }),
-        generateContentAngles: async () => ({ angles: [{ id: "a1", label: "Confession" }] }),
       }),
       async () => {
         await mountProfileDetail()(ctx);
         await act(async () => {});
-        const button = ctx.container.querySelector('[data-testid="generate-angles-button"]');
-        if (!button) throw new Error("the empty angles section offers no generate button");
-        apiCalls.length = 0;
-        await act(async () => {
-          button.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-        });
-        await act(async () => {});
-        if (!apiCalls.includes("generateContentAngles")) {
-          throw new Error("clicking generate angles never called the endpoint");
+        if (ctx.container.querySelector('[data-testid="app-profile-angles"]')) {
+          throw new Error("the angles section is still on the profile page");
         }
-        if (!ctx.text().includes("Confession")) {
-          throw new Error("the generated angles were not listed");
+        if (ctx.container.querySelector('[data-testid="app-profile-videos"]')) {
+          throw new Error("the drafts section is still on the profile page");
+        }
+        if (ctx.container.querySelector('[data-testid="generate-angles-button"]')) {
+          throw new Error("angle generation is still offered on the profile page");
         }
       }
     );
