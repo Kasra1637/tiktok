@@ -48,7 +48,14 @@ dump.rdb
 
 # Python
 __pycache__/
-*pyc*
+# Bytecode suffixes only. This was "*pyc*", which is a substring match and
+# silently ignored any path containing the letters p-y-c -- frontend/src/lib/
+# copyCase.js was ignored by it, because "copyCase" contains "pyc" under git's
+# case-insensitive matching on Windows. A source file vanishing from `git add`
+# without a warning is the failure mode, so the pattern is anchored to the
+# extension it was meant to describe.
+*.pyc
+*.pyd
 venv/
 .venv/
 
