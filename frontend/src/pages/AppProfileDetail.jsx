@@ -15,7 +15,6 @@ import {
 import { Input } from "../components/ui/input";
 import PageHeader from "../components/PageHeader";
 import { sentenceCase } from "../lib/copyCase";
-import { angleSubtitle } from "../lib/angleSubtitle";
 import { ProfileCard, ProfileField, InfoChipList, InfoListBlock, CardGrid, StatementCard, SectionGroup } from "../components/profileUi";
 import { api, getErrorMessage } from "../lib/api";
 import {
@@ -550,28 +549,9 @@ export default function AppProfileDetail() {
             the main column's bottom. Rows render fully — no truncation, no
             clipping — with identical row heights. */}
         <div className="min-w-0 space-y-4 xl:col-span-4">
-          <ProfileCard testid="content-angles" eyebrow="Content angles">
-            {angles.length === 0 ? (
-              <p className="text-sm leading-[22px] text-muted-foreground">
-                No audience angles yet. Generate them in Create Video or refresh this profile&apos;s research.
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 items-stretch gap-4">
-                {angles.map((a) => (
-                  <div key={a.id} className="h-full rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-medium leading-[22px]">{sentenceCase(a.label)}</div>
-                      <Badge variant="secondary" className="shrink-0 text-[11px]">
-                        {a.kind ? a.kind.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Angle"}
-                      </Badge>
-                    </div>
-                    <p className="mt-3 text-xs leading-[18px] text-muted-foreground">{angleSubtitle(a)}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </ProfileCard>
-
+          {/* Angles live in Create Video, where they are generated, selected
+              and built on — the profile keeps facts, results, audiences and
+              guardrails, so this rail carries no angles section. */}
           {/* The only part of the profile that improves with use. Everything
               above was scraped once from the URL; this is the founder's own
               numbers on their own videos, and the next strategy prompt reads
