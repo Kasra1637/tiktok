@@ -11,6 +11,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -38,8 +39,17 @@ OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 logger = logging.getLogger(__name__)
 
 # Models
-VISION_MODEL = "openai/gpt-4o-mini"
-TEXT_MODEL = "openai/gpt-4o-mini"
+VISION_MODEL = "openai/gpt-5-mini"
+TEXT_MODEL = "openai/gpt-5-mini"
+# Both chat models are GPT-5 Mini: the successor to gpt-4o-mini/o4-mini,
+# multimodal (text+image in) with structured-output support. Two consequences
+# of the family travel with it everywhere below:
+# - temperature other than the default 1 is a 400 ("Only the default (1)
+#   value is supported"), so _temperature_param omits the field for it;
+# - max_tokens is accepted via OpenRouter (it maps to the provider field),
+#   and reasoning tokens come out of the same budget, so small budgets can
+#   return empty content with finish_reason=length — which _chat_json already
+#   treats as truncation and retries with a doubled budget.
 # Image generation model for opening scene stills. Uses a dedicated image model
 # rather than a video model, since the opening frame is a single still image.
 
@@ -215,6 +225,250 @@ def _headers():
         "HTTP-Referer": "https://hookforge.app",
         "X-Title": "HookForge",
     }
+
+
+# GPT-5 and the o-series only accept temperature=1: any other value is a 400
+# ("Unsupported value: 'temperature' ... Only the default (1) value is
+# supported"). The studio therefore sends the field only to models that take
+# it, so a model switch cannot silently turn every call into a refusal.
+_NO_TEMPERATURE_MODEL_PREFIXES = ("gpt-5", "o1", "o3", "o4")
+
+
+def _temperature_param(model: str, temperature: float) -> dict:
+    """{"temperature": t} for models that accept it, else {} (never raises)."""
+    name = (model or "").strip().lower().split("/")[-1]
+    if name.startswith(_NO_TEMPERATURE_MODEL_PREFIXES):
+        return {}
+    return {"temperature": temperature}
+
+
+def _response_format(name: str, schema: dict, strict: bool = True) -> dict:
+    """
+    OpenRouter structured-outputs envelope for one JSON Schema.
+
+    Strict mode makes the provider conform to the schema instead of the model
+    improvising shape; the local parse-and-retry stays because providers can
+    still error, refuse, or truncate. Non-strict is the fallback for shapes
+    strict mode cannot express (free-form maps like content_slots).
+    """
+    slug = "".join(
+        c.lower() if c.isalnum() else "_" for c in str(name or "response")
+    ).strip("_") or "response"
+    while "__" in slug:
+        slug = slug.replace("__", "_")
+    return {
+        "type": "json_schema",
+        "json_schema": {"name": slug[:64], "strict": strict, "schema": schema},
+    }
+
+
+# ---------------------------------------------------------------------------
+# Structured-output schemas (OpenRouter response_format, strict JSON Schema).
+#
+# These mirror the prompt-embedded schemas and the REQUIRED_* key sets field
+# for field: the provider enforces the shape, while the prompts keep asking
+# for it in words (cheap, and the only thing working when a provider ignores
+# response_format) and the normalizers keep coercing whatever arrives.
+# Descriptions are omitted on purpose — every word here is billed as input
+# tokens on every call, and the prompts already carry the guidance.
+# ---------------------------------------------------------------------------
+
+def _str_prop() -> dict:
+    return {"type": "string"}
+
+
+def _str_array_prop() -> dict:
+    return {"type": "array", "items": {"type": "string"}}
+
+
+def _strict_object(properties: dict) -> dict:
+    """One strict object: every property required, nothing else admitted."""
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": sorted(properties),
+        "additionalProperties": False,
+    }
+
+
+BRAND_ANALYSIS_JSON_SCHEMA = _strict_object({
+    "brand_name": _str_prop(),
+    "brand_description": _str_prop(),
+    "niche": _str_prop(),
+    "target_audience": _str_prop(),
+    "ideal_customer_profile": _str_prop(),
+    "differentiation": _str_prop(),
+    "tone_voice": _str_prop(),
+})
+# Mirrors REQUIRED_BRAND_ANALYSIS_KEYS above.
+
+
+APP_PROFILE_JSON_SCHEMA = _strict_object({
+    "brand_name": _str_prop(),
+    "brand_description": _str_prop(),
+    "app_category": _str_prop(),
+    "niche": _str_prop(),
+    "platforms": _str_array_prop(),
+    "core_features": _str_array_prop(),
+    "primary_use_cases": _str_array_prop(),
+    "problems_solved": _str_array_prop(),
+    "target_audience": _str_prop(),
+    "ideal_customer_profile": _str_prop(),
+    "icp_segments": _str_array_prop(),
+    "desired_outcomes": _str_array_prop(),
+    "outcome_statements": {
+        "type": "array",
+        "items": _strict_object({
+            "outcome": _str_prop(),
+            "who_feels_it": _str_prop(),
+            "from_feature": _str_prop(),
+            "how_it_helps": _str_prop(),
+        }),
+    },
+    "differentiation": _str_prop(),
+    "competitors": _str_array_prop(),
+    "known_limitations": _str_prop(),
+    "must_not_show": _str_array_prop(),
+    "usage_moments": _str_array_prop(),
+    "proof_moment": _str_prop(),
+    "viewer_objections": {
+        "type": "array",
+        "items": _strict_object({
+            "objection": _str_prop(),
+            "what_they_do_now": _str_prop(),
+            "honest_answer": _str_prop(),
+        }),
+    },
+    "tone_voice": _str_prop(),
+    "claims_approved": _str_array_prop(),
+    "claims_review": _str_array_prop(),
+    "claims_banned": _str_array_prop(),
+})
+# Mirrors REQUIRED_APP_PROFILE_KEYS above. Deliberately no overlays/cta keys:
+# anything the normalizers drop, the schema must not invite.
+
+
+ANGLE_JSON_SCHEMA = _strict_object({
+    "kind": _str_prop(),
+    "label": _str_prop(),
+    "target_audience": _str_prop(),
+    "user_problem": _str_prop(),
+    "hook_promise": _str_prop(),
+    "app_feature": _str_prop(),
+    "desired_emotion": _str_prop(),
+    "claims_to_respect": _str_array_prop(),
+})
+
+ANGLES_JSON_SCHEMA = _strict_object({"angles": {"type": "array", "items": ANGLE_JSON_SCHEMA}})
+# Object wrapper, not a bare array: strict mode requires an object at the
+# root. The list-or-dict parse below stays — a provider that ignores
+# response_format can still answer either way.
+
+
+PLAN_BEAT_JSON_SCHEMA = _strict_object({
+    "start": {"type": "number"},
+    "end": {"type": "number"},
+    "label": _str_prop(),
+    "text": _str_prop(),
+})
+
+PLAN_JSON_SCHEMA = _strict_object({
+    "hook_line": _str_prop(),
+    "script": _str_prop(),
+    "beat_timeline": {"type": "array", "items": PLAN_BEAT_JSON_SCHEMA},
+    "visual_direction": _str_prop(),
+    "demo_brief": _str_prop(),
+    "voice_direction": _str_prop(),
+    "sound_direction": _str_prop(),
+    "claims_used": _str_array_prop(),
+})
+# Mirrors REQUIRED_PLAN_KEYS. No overlays key: the normalizer pops anything
+# volunteered, so the schema must not ask for it.
+
+
+STRATEGY_SEGMENT_JSON_SCHEMA = _strict_object({
+    "index": {"type": "integer"},
+    "role": _str_prop(),
+    "seconds": {"type": "integer"},
+    "goal": _str_prop(),
+    "script": _str_prop(),
+    "action": _str_prop(),
+})
+
+STRATEGY_JSON_SCHEMA = _strict_object({
+    "strategy_summary": _str_prop(),
+    "audience_problem": _str_prop(),
+    "hook_concept": _str_prop(),
+    "hook_line": _str_prop(),
+    "hook_promise": _str_prop(),
+    "hook_action": _str_prop(),
+    "hook_dialogue": _str_prop(),
+    "primary_feature": _str_prop(),
+    "desired_outcome": _str_prop(),
+    "mechanism_beat": _str_prop(),
+    "payoff_beat": _str_prop(),
+    "differentiation_beat": _str_prop(),
+    "emotional_triggers": _str_array_prop(),
+    "messaging_pillars": _str_array_prop(),
+    "scene": _strict_object({
+        "camera_angle": _str_prop(),
+        "framing": _str_prop(),
+        "lighting": _str_prop(),
+        "environment": _str_prop(),
+        "background": _str_prop(),
+        "setting": _str_prop(),
+        "visual_style": _str_prop(),
+        "character_positioning": _str_prop(),
+        "wardrobe": _str_prop(),
+        "props": _str_prop(),
+        "color_palette": _str_prop(),
+    }),
+    "performance": _strict_object({
+        "movement": _str_prop(),
+        "voice_delivery": _str_prop(),
+    }),
+    "segments": {"type": "array", "items": STRATEGY_SEGMENT_JSON_SCHEMA},
+})
+# Mirrors normalize_strategy: every key it keeps is listed, retired keys
+# (character, cta_strategy) are absent so the model cannot emit them.
+
+
+TEMPLATE_JSON_SCHEMA = {
+    # NOT strict: content_slots is a free-form string map, which strict mode
+    # cannot express (arbitrary keys). Best-effort shape guidance instead;
+    # normalize_brand_template still drops anything unusable.
+    "type": "object",
+    "properties": {
+        "name": _str_prop(),
+        "category": _str_prop(),
+        "objective": _str_prop(),
+        "opening_structure": _str_prop(),
+        "hook_seconds": {"type": "integer"},
+        "middle_structure": _str_prop(),
+        "visual_style": _str_prop(),
+        "camera_pacing": _str_prop(),
+        "content_slots": {"type": "object"},
+        "default_duration": {"type": "integer"},
+        "outcome": _str_prop(),
+    },
+    "required": [
+        "name", "category", "objective", "opening_structure", "hook_seconds",
+        "middle_structure", "visual_style", "camera_pacing", "content_slots",
+        "default_duration", "outcome",
+    ],
+    "additionalProperties": False,
+}
+
+TEMPLATES_JSON_SCHEMA = {
+    # Same non-strict wrapper for the same reason; the list-or-dict parse
+    # below stays for providers that ignore response_format.
+    "type": "object",
+    "properties": {
+        "templates": {"type": "array", "items": TEMPLATE_JSON_SCHEMA},
+    },
+    "required": ["templates"],
+    "additionalProperties": False,
+}
 
 
 def video_content_url(job_id: str) -> str:
@@ -421,6 +675,8 @@ async def _chat_json(
     max_tokens: int = 3000,
     attempts: int = 2,
     timeout: int = 120,
+    json_schema: Optional[dict] = None,
+    strict: bool = True,
 ) -> dict:
     """
     One chat completion that must come back as a JSON object.
@@ -436,6 +692,11 @@ async def _chat_json(
       more often than it recurs.
 
     Only after the retries are exhausted does it raise.
+
+    `temperature` is accepted but only sent to models that take it (GPT-5
+    Mini does not); `json_schema`, when given, is sent as OpenRouter
+    structured output (strict JSON Schema) while the parse-and-retry below
+    stays as defense-in-depth for provider errors, refusals and truncation.
     """
     last_error = None
 
@@ -458,9 +719,11 @@ async def _chat_json(
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": attempt_prompt},
             ],
-            "temperature": temperature,
+            **_temperature_param(TEXT_MODEL, temperature),
             "max_tokens": budget,
         }
+        if json_schema is not None:
+            payload["response_format"] = _response_format(context, json_schema, strict)
 
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(
@@ -1326,9 +1589,10 @@ async def analyze_brand_from_text(url: str, page_text: str) -> dict:
             {"role": "system", "content": system_message},
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0.3,
-        "max_tokens": 1500,
-    }
+            **_temperature_param(TEXT_MODEL, 0.3),
+            "max_tokens": 1500,
+            "response_format": _response_format("brand analysis", BRAND_ANALYSIS_JSON_SCHEMA),
+        }
 
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
@@ -1458,11 +1722,12 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
             {"role": "system", "content": system_message},
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0.3,
-        # 4000 rather than 3000: outcome_statements adds up to six objects to
-        # the schema, and a reply cut off mid-object fails the whole research.
-        "max_tokens": 4000,
-    }
+            **_temperature_param(TEXT_MODEL, 0.3),
+            # 4000 rather than 3000: outcome_statements adds up to six objects to
+            # the schema, and a reply cut off mid-object fails the whole research.
+            "max_tokens": 4000,
+            "response_format": _response_format("app profile", APP_PROFILE_JSON_SCHEMA),
+        }
 
     async with httpx.AsyncClient(timeout=90) as client:
         resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
@@ -1669,9 +1934,10 @@ async def generate_content_angles(profile: dict, max_angles: int = 8) -> list:
             {"role": "system", "content": system_message},
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0.4,
-        "max_tokens": 3000,
-    }
+            **_temperature_param(TEXT_MODEL, 0.4),
+            "max_tokens": 3000,
+            "response_format": _response_format("content angles", ANGLES_JSON_SCHEMA),
+        }
 
     async with httpx.AsyncClient(timeout=90) as client:
         resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
@@ -1919,6 +2185,8 @@ async def generate_brand_templates(
         temperature=0.5,
         max_tokens=16384,
         attempts=2,
+        json_schema=TEMPLATES_JSON_SCHEMA,
+        strict=False,
     )
     if isinstance(raw, dict):
         raw = raw.get("templates") or []
@@ -2173,9 +2441,10 @@ async def generate_creative_plan(
             {"role": "system", "content": system_message},
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0.5,
-        "max_tokens": 3500,
-    }
+            **_temperature_param(TEXT_MODEL, 0.5),
+            "max_tokens": 3500,
+            "response_format": _response_format("creative plan", PLAN_JSON_SCHEMA),
+        }
 
     async with httpx.AsyncClient(timeout=120) as client:
         resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
@@ -3236,7 +3505,7 @@ async def generate_video_strategy(
     # on paper can be exhausted before the closing brace is written. 8192
     # stays the floor: it fits this schema and sits inside the provider
     # output ceiling of the models this service can be pointed at
-    # (openai/gpt-4o-mini caps output at 16384).
+    # (openai/gpt-5-mini allows 128,000 output tokens).
     raw = await _chat_json(
         system_message=system_message,
         prompt=prompt,
@@ -3244,6 +3513,7 @@ async def generate_video_strategy(
         temperature=0.5,
         max_tokens=8192,
         attempts=2,
+        json_schema=STRATEGY_JSON_SCHEMA,
     )
     if isinstance(raw.get("strategy"), dict):
         raw = raw["strategy"]
@@ -3498,3 +3768,97 @@ def strip_html_to_text(html: str) -> str:
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n\s*\n+", "\n", text)
     return text.strip()
+
+
+def _html_meta_descriptions(html: str) -> list:
+    """
+    content= of description/og:description/twitter:description meta tags.
+
+    Parsed per-tag so attribute order does not matter (content-first tags
+    are common on store listings). Returns [] on any markup surprise rather
+    than half a tag.
+    """
+    found = []
+    for tag in re.findall(r"(?is)<meta\b[^>]*>", html or ""):
+        attrs = dict(
+            (k.lower(), v)
+            for k, v in re.findall(r"""(\w+)\s*=\s*["'](.*?)["']""", tag)
+        )
+        name = (attrs.get("name") or attrs.get("property") or "").strip().lower()
+        if name in ("description", "og:description", "twitter:description"):
+            content = (attrs.get("content") or "").strip()
+            if content:
+                found.append(content)
+    return found
+
+
+def _html_json_ld_strings(html: str, limit: int = 20) -> list:
+    """
+    Every string value inside JSON-LD blocks, in document order.
+
+    Store listings and business sites carry their real description here even
+    when the visible body is a client-rendered shell. Malformed blocks are
+    skipped: one bad script tag must not poison the rest.
+    """
+    found = []
+    for block in re.findall(
+        r'''(?is)<script\b[^>]*type\s*=\s*["']application/ld\+json["'][^>]*>(.*?)</script>''',
+        html or "",
+    ):
+        try:
+            data = json.loads(block)
+        except (ValueError, TypeError):
+            continue
+        stack = [data]
+        while stack and len(found) < limit:
+            node = stack.pop()
+            if isinstance(node, dict):
+                stack.extend(node.values())
+            elif isinstance(node, list):
+                stack.extend(node)
+            elif isinstance(node, str) and node.strip():
+                found.append(node.strip())
+    return found[:limit]
+
+
+def _html_title(html: str) -> str:
+    """The page <title>: stripped with <head> today, yet often the only words
+    a script-rendered page serves to a plain fetch."""
+    match = re.search(r"(?is)<title[^>]*>(.*?)</title>", html or "")
+    if not match:
+        return ""
+    return re.sub(r"\s+", " ", re.sub(r"(?s)<[^>]+>", " ", match.group(1))).strip()
+
+
+def page_text_with_metadata(html: str) -> str:
+    """
+    Body text plus high-signal head metadata, highest-signal first.
+
+    The plain stripper drops <head> entirely, so a store listing whose body
+    is a client-rendered shell used to research as one heading plus nav —
+    while its title, meta description and JSON-LD carried the actual product
+    facts. This keeps the body primary (it stays the bulk) and prepends only
+    what the body lacks: title, meta descriptions, JSON-LD strings, each
+    once. A pure JS shell still yields almost nothing — honestly thin, and
+    reported as such by the caller — rather than invented text.
+    """
+    import re
+
+    body = strip_html_to_text(html)
+    blocks = []
+    title = _html_title(html)
+    if title:
+        blocks.append(title)
+    blocks.extend(_html_meta_descriptions(html))
+    blocks.extend(_html_json_ld_strings(html))
+    if body.strip():
+        blocks.append(body.strip())
+    # Meta and JSON-LD routinely repeat the body's first paragraph; exact
+    # duplicates would burn prompt budget twice for the same words.
+    seen = set()
+    unique = []
+    for block in blocks:
+        if block not in seen:
+            seen.add(block)
+            unique.append(block)
+    return "\n\n".join(unique).strip()

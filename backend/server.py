@@ -41,7 +41,7 @@ from ai_service import (
     generate_video,
     poll_video_job, analyze_brand_from_text, analyze_app_profile,
     generate_content_angles, generate_creative_plan,
-    strip_html_to_text,
+    page_text_with_metadata,
     TEXT_MODEL,
     generate_video_strategy, normalize_strategy, generate_brand_templates,
     bind_spoken_words, spoken_budget,
@@ -2263,7 +2263,7 @@ async def _fetch_url_text(url: str, max_chars: int) -> str:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers=headers) as client:
             resp = await client.get(url)
             resp.raise_for_status()
-            return strip_html_to_text(resp.text)[:max_chars]
+            return page_text_with_metadata(resp.text)[:max_chars]
     except Exception as e:
         logger.warning(f"App research: could not fetch {url}: {e}")
         return ""
@@ -3031,7 +3031,7 @@ async def analyze_brand_url(payload: AnalyzeBrandUrlRequest, user_id: str = Depe
             detail=f"Could not fetch this URL. Please check it and try again. ({str(e)[:150]})",
         )
 
-    page_text = strip_html_to_text(html)[:BRAND_URL_TEXT_MAX_CHARS]
+    page_text = page_text_with_metadata(html)[:BRAND_URL_TEXT_MAX_CHARS]
     if not page_text.strip():
         raise HTTPException(
             status_code=400,
@@ -3786,7 +3786,7 @@ async def regenerate_everything(profile_id: str, user_id: str = Depends(get_curr
         raise HTTPException(status_code=404, detail="App Profile not found")
 
     # Step 1: Re-research from the same sources a refresh would read.
-    sources = await _research_profile_sources(existing)
+    sources, report = await _research_profile_sources(existing)
 
     try:
         proposal = await _log_model_call(
@@ -3833,12 +3833,27 @@ async def regenerate_everything(profile_id: str, user_id: str = Depends(get_curr
     await _auto_generate_content_angles(updated_profile, user_id)
 
     logger.info(f"Regenerated everything for App Profile {profile_id}")
+    updated_profile["research_sources"] = report
     return updated_profile
 
 
-async def _research_profile_sources(existing: dict) -> dict:
+async def _fetch_one_source(label: str, url: str, cap: int) -> tuple[str, str]:
+    """One labeled fetch that never raises: _fetch_url_text already swallows
+    fetch failures into "", and this guards the gather itself."""
+    try:
+        return label, await _fetch_url_text(url, cap)
+    except Exception as e:
+        logger.warning(f"App research: source {label} ({url}) failed outside the fetcher: {e}")
+        return label, ""
+
+
+async def _research_profile_sources(existing: dict) -> tuple[dict, list]:
     """
-    Fetch readable text for an App Profile's stored URLs, keyed for research.
+    Fetch readable text for an App Profile's stored URLs, concurrently.
+
+    Returns (sources, report): sources maps label -> text for research;
+    report lists {label, url, chars, ok} per source so the founder can see
+    what was actually read and what failed, instead of a silent partial run.
 
     Shared by refresh (which stages the result as pending_research) and
     regenerate (which applies it directly): the two must read the same
@@ -3863,17 +3878,29 @@ async def _research_profile_sources(existing: dict) -> dict:
     if not urls:
         raise HTTPException(
             status_code=400,
-            detail="This profile has no source URLs to refresh from. Add a website, App Store, "
+            detail="This profile has no source URLs to research from. Add a website, App Store, "
                    "or Google Play URL first.",
         )
 
-    sources = {label: await _fetch_url_text(url, cap) for label, (url, cap) in urls.items()}
+    results = await asyncio.gather(
+        *(_fetch_one_source(label, url, cap) for label, (url, cap) in urls.items())
+    )
+    sources = dict(results)
+    report = [
+        {"label": label, "url": url, "chars": len(sources.get(label) or ""),
+         "ok": bool((sources.get(label) or "").strip())}
+        for label, (url, cap) in urls.items()
+    ]
+    read = sum(1 for r in report if r["ok"])
+    logger.info(
+        f"App research: read {read}/{len(report)} sources "
+        f"({sum(r['chars'] for r in report)} chars)")
     if not any((v or "").strip() for v in sources.values()):
         raise HTTPException(
             status_code=400,
-            detail="Could not extract readable text from any stored URL. The live profile is unchanged.",
+            detail="Could not extract readable text from any stored URL. The profile is unchanged.",
         )
-    return sources
+    return sources, report
 
 
 @api_router.post("/app-profiles/{profile_id}/refresh")
@@ -3890,7 +3917,7 @@ async def refresh_app_profile(profile_id: str, user_id: str = Depends(get_curren
     if not existing:
         raise HTTPException(status_code=404, detail="App Profile not found")
 
-    sources = await _research_profile_sources(existing)
+    sources, report = await _research_profile_sources(existing)
 
     try:
         proposal = await _log_model_call(
@@ -3910,9 +3937,11 @@ async def refresh_app_profile(profile_id: str, user_id: str = Depends(get_curren
         (json.dumps(proposal), now, now, profile_id, user_id),
     )
     logger.info(f"Refreshed app profile {profile_id} into pending review")
-    return await _fetch_one(
+    refreshed = await _fetch_one(
         "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
     )
+    refreshed["research_sources"] = report
+    return refreshed
 
 
 # ---------------------------------------------------------------------------

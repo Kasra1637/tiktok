@@ -374,6 +374,17 @@ export default function BrandSetup() {
 
   const status = brand?.status || "draft";
   const pendingProposal = brand?.pending_research;
+  // What the last research run actually read. Rides on the refresh response
+  // (and vanishes on the next load/save, which is correct — it describes
+  // that run, not the profile). Shown in the pending alert so a partial run
+  // is visible instead of silently thin.
+  const researchSources = Array.isArray(brand?.research_sources)
+    ? brand.research_sources
+    : [];
+  const sourcesRead = researchSources.filter((s) => s && s.ok).length;
+  const sourcesFailed = researchSources
+    .filter((s) => s && !s.ok && s.label)
+    .map((s) => s.label);
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">
@@ -539,6 +550,13 @@ export default function BrandSetup() {
           <AlertDescription className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
             <span className="text-muted-foreground">
               Re-research found updates. Your approved profile is unchanged — approving applies the proposal.
+              {researchSources.length > 0 && (
+                <>
+                  {" "}Read {sourcesRead} of {researchSources.length} source
+                  {researchSources.length === 1 ? "" : "s"}
+                  {sourcesFailed.length > 0 && ` · failed: ${sourcesFailed.join(", ")}`}.
+                </>
+              )}
             </span>
             <Button
               variant="secondary"

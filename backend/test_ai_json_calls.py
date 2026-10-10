@@ -209,6 +209,127 @@ class TestChatJson:
         assert "content_filter" in str(err.value)
 
 
+class TestGpt5MiniRequestShape:
+    """
+    GPT-5 Mini replaces GPT-4o Mini on every chat flow. Two consequences
+    travel with the family and are pinned here rather than re-discovered
+    as production 400s:
+
+    - temperature other than the default 1 is rejected, so it must never
+      be sent (the determinism it bought on 4o-mini is gone with it);
+    - max_tokens stays (OpenRouter maps it), and reasoning tokens come out
+      of the same budget, which the truncation retry already covers.
+    """
+
+    def test_chat_models_point_at_gpt5_mini(self):
+        import ai_service
+        assert ai_service.TEXT_MODEL == "openai/gpt-5-mini"
+        assert ai_service.VISION_MODEL == "openai/gpt-5-mini"
+
+    def test_temperature_is_never_sent(self, monkeypatch):
+        import ai_service
+        rec = _patch_client(monkeypatch, [_completion('{"a": 1}')])
+        assert _run(ai_service._chat_json("sys", "prompt", "Ctx", temperature=0.4)) == {"a": 1}
+        assert rec.payloads[0]["model"] == "openai/gpt-5-mini"
+        assert "temperature" not in rec.payloads[0]
+
+    def test_no_response_format_without_a_schema(self, monkeypatch):
+        import ai_service
+        rec = _patch_client(monkeypatch, [_completion('{"a": 1}')])
+        _run(ai_service._chat_json("sys", "prompt", "Ctx"))
+        assert "response_format" not in rec.payloads[0]
+
+    def test_response_format_carries_a_strict_schema(self, monkeypatch):
+        import ai_service
+        schema = {
+            "type": "object",
+            "properties": {"a": {"type": "string"}},
+            "required": ["a"],
+            "additionalProperties": False,
+        }
+        rec = _patch_client(monkeypatch, [_completion('{"a": "1"}')])
+        _run(ai_service._chat_json("sys", "prompt", "Ctx", json_schema=schema))
+        rf = rec.payloads[0]["response_format"]
+        assert rf["type"] == "json_schema"
+        assert rf["json_schema"]["strict"] is True
+        assert rf["json_schema"]["schema"] == schema
+        assert rf["json_schema"]["name"] == "ctx"
+
+    def test_every_shipped_schema_is_strict(self):
+        """
+        Strict mode rejects any object whose properties are not all required
+        with nothing else admitted. A helper walks every shipped schema the
+        way the provider validates it, so a loose object cannot slip in with
+        a new field and fail every call at request time.
+        """
+        import ai_service
+
+        def check(node, path):
+            if isinstance(node, dict) and node.get("type") == "object":
+                props = node.get("properties", {})
+                assert sorted(node.get("required", [])) == sorted(props), (
+                    f"{path}: required must list every property"
+                )
+                assert node.get("additionalProperties") is False, (
+                    f"{path}: additionalProperties must be false"
+                )
+                for key, sub in props.items():
+                    check(sub, f"{path}.{key}")
+            elif isinstance(node, dict) and node.get("type") == "array":
+                check(node.get("items", {}), f"{path}[]")
+
+        for name in (
+            "BRAND_ANALYSIS_JSON_SCHEMA", "APP_PROFILE_JSON_SCHEMA",
+            "ANGLES_JSON_SCHEMA", "PLAN_JSON_SCHEMA", "STRATEGY_JSON_SCHEMA",
+        ):
+            check(getattr(ai_service, name), name)
+
+    def test_direct_flows_send_response_format(self, monkeypatch):
+        """
+        The flows that post httpx directly (not through _chat_json) must
+        still carry the envelope: brand research, app research, angles, plan.
+        """
+        import ai_service
+
+        profile_keys = ai_service.REQUIRED_APP_PROFILE_KEYS
+        list_keys = set(ai_service.APP_PROFILE_LIST_KEYS) | {
+            "outcome_statements", "viewer_objections"}
+        profile = {
+            k: ([] if k in list_keys else "") for k in profile_keys}
+        angle = {
+            "kind": "problem_solution", "label": "L",
+            "target_audience": "a", "user_problem": "p",
+            "hook_promise": "h", "app_feature": "f",
+            "desired_emotion": "e", "claims_to_respect": [],
+        }
+        plan = {
+            "hook_line": "h", "script": "s",
+            "beat_timeline": [
+                {"start": 0, "end": 3, "label": "hook", "text": "t"},
+                {"start": 3, "end": 20, "label": "middle", "text": "t"},
+            ],
+            "visual_direction": "v", "demo_brief": "d",
+            "voice_direction": "vd", "sound_direction": "sd",
+            "claims_used": [],
+        }
+        rec = _patch_client(monkeypatch, [
+            _completion(json.dumps(
+                {k: "" for k in ai_service.REQUIRED_BRAND_ANALYSIS_KEYS})),
+            _completion(json.dumps(profile)),
+            _completion(json.dumps({"angles": [angle]})),
+            _completion(json.dumps(plan)),
+        ])
+        _run(ai_service.analyze_brand_from_text("https://x.example", "text"))
+        _run(ai_service.analyze_app_profile({"website": "text"}))
+        _run(ai_service.generate_content_angles({"brand_name": "B"}))
+        _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "B"}, template={"name": "T"}))
+        assert len(rec.payloads) == 4
+        for payload in rec.payloads:
+            assert payload["response_format"]["type"] == "json_schema"
+            assert "temperature" not in payload
+
+
 class TestStrategyBudget:
     def test_strategy_uses_a_budget_that_fits_its_schema(self):
         """

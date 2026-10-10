@@ -281,7 +281,13 @@ export default function AppProfileDetail() {
       // Reload angles after regeneration
       const a = await api.getContentAngles(profileId).catch(() => ({ angles: [] }));
       setAngles(a.angles || []);
-      setNotice("Refreshed research, approval, and audience angles.");
+      const src = Array.isArray(updated?.research_sources) ? updated.research_sources : [];
+      const readSrc = src.filter((s) => s && s.ok).length;
+      setNotice(
+        src.length > 0
+          ? `Refreshed research (${readSrc} of ${src.length} sources read), approval, and audience angles.`
+          : "Refreshed research, approval, and audience angles."
+      );
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {

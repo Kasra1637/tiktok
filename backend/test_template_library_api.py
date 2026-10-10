@@ -668,6 +668,10 @@ class TestRegenerateEverything:
         assert out["version"] == (profile.get("version") or 1) + 1
         assert out["brand_description"] == "Freshly researched desc"
         assert calls == ["app_profile_refresh", "content_angles"]
+        assert out["research_sources"] == [
+            {"label": "website", "url": "https://example.com",
+             "chars": len("research text about the app"), "ok": True},
+        ]
         listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
         assert [a["label"] for a in listed["angles"]] == ["Stop stalling on starts"]
 
@@ -705,6 +709,10 @@ class TestRegenerateEverything:
         if isinstance(pending, str):
             pending = json.loads(pending)
         assert pending.get("brand_description") == "Pending desc"
+        assert out["research_sources"] == [
+            {"label": "website", "url": "https://example.com",
+             "chars": len("research text about the app"), "ok": True},
+        ]
         assert calls == ["app_profile_refresh"]
 
 
