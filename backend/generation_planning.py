@@ -516,6 +516,13 @@ def build_single_pass_prompt(
     person_anchor = person_anchor_notes(plan.get("assets") or [])
     if person_anchor:
         sections.append(person_anchor)
+        # Same first-frame release as the main path, worded for a prompt with
+        # no scene lock: this fallback renders from the plan alone, so the
+        # place comes from the described scene rather than a locked one.
+        sections.append(
+            "Open in the scene described above, never the photo's room: the "
+            "photo supplies only the person."
+        )
 
     sections.append(
         "Keep one consistent person, hand, or subject for the entire clip. Vertical framing "
@@ -602,6 +609,11 @@ def person_anchor_notes(assets: list) -> str:
       invites the model's most confident hair behaviour. Nothing in the prompt
       forbade adding hair — only matching it — which left the addition
       unspecified and therefore free. Hence the explicit no-additions clause.
+    - It used to let the image speak for the place as well as the person.
+      First-frame models open ON the attached photo, so the opening was the
+      uploaded room and the prompted scene only arrived mid-clip. The image
+      is now authority on the person only; the opening-scene section in the
+      assemblers commands the locked scene from frame one.
     """
     if not assets:
         return ""
@@ -618,11 +630,12 @@ def person_anchor_notes(assets: list) -> str:
             "Their appearance is fixed by that photograph: do not add, lengthen, restyle "
             "or recolour their hair, and do not add or remove anything absent from the "
             "image (hats, glasses, jewellery, makeup). Move and speak naturally, but do "
-            "not change who they are. The image is the only authority on who they are — "
-            "where this prompt or any written description states otherwise, ignore the "
-            "text and follow the image. Do not invent a different person and do not blend "
-            "them with anyone else. Their clothing is the one exception: the scene above "
-            "sets it, and it need not match the photograph."
+        "not change who they are. The image is the only authority on the person — "
+        "face, hair and build, not the place. Where this prompt states otherwise "
+        "about who they are, ignore the text and follow the image. Do not invent "
+        "a different person and do not blend "
+        "them with anyone else. Their clothing is the one exception: the scene above "
+        "sets it, and it need not match the photograph."
         )
     return ""
 
@@ -1132,6 +1145,14 @@ def _assemble_prompt(
     person_anchor = person_anchor_notes(assets or [])
     if person_anchor:
         sections.append(person_anchor)
+        # First-frame models open ON the attached photo: without this the
+        # opening is the uploaded room and the prompted scene only arrives
+        # mid-clip. One tight sentence — heygen's 4096 ceiling leaves no room
+        # for more, and the anchor above already carries the rationale.
+        sections.append(
+            "Open in the locked scene, never the photo's room: the photo "
+            "supplies only the person."
+        )
 
     if condensed:
         # The seconds are already stated in the opening sentence and in both

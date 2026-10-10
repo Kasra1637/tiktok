@@ -5850,6 +5850,7 @@ async def _submit_generation(
     variation_kind: str = "",
     variation_params: Optional[dict] = None,
     generate_audio: Optional[bool] = None,
+    resolution: Optional[str] = None,
     strategy: Optional[dict] = None,
     continuity: Optional[dict] = None,
     continuity_frame: Optional[Path] = None,
@@ -6093,6 +6094,10 @@ async def _submit_generation(
                     if generate_audio is None
                     else bool(generate_audio)
                 ),
+                # A per-render resolution override, already validated against
+                # the model's supported_resolutions by the caller. None means
+                # the catalog default.
+                resolution=resolution,
             ),
             user_id,
             brand_profile_id=project.get("brand_profile_id"),
@@ -6574,6 +6579,32 @@ def _assert_model_usable(model_key: str) -> str:
     return model_key
 
 
+def _assert_resolution_offered(model_key: str, resolution: str | None) -> str | None:
+    """
+    Refuse a render resolution the model does not offer, naming what it does.
+
+    Only models that list supported_resolutions take the field at all: an
+    unlisted value would either 400 at the provider after billing the attempt
+    or, worse, silently render at the default while the founder believes they
+    are testing another resolution. Omitted stays omitted — the catalog
+    default applies.
+    """
+    if not resolution:
+        return None
+    cap = video_providers.capability(model_key)
+    offered = cap.get("supported_resolutions") or []
+    if resolution not in offered:
+        allowed = ", ".join(offered) if offered else "none — this model renders at its default"
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{cap['name']} does not offer {resolution}. "
+                f"Choose one of: {allowed}. Omit it to use the default."
+            ),
+        )
+    return resolution
+
+
 def _assert_within_single_pass_cap(model_key: str, wanted: int) -> None:
     """
     Refuse a one-pass request the model cannot fill rather than shortening it.
@@ -6617,6 +6648,11 @@ async def submit_project_generation(
     # not enough on its own.
     _assert_model_usable(payload.model or "")
 
+    # A resolution the model does not offer is refused with the allowed
+    # values, for the same reason as an unknown model key: silently rendering
+    # at the default would bill a test the founder thought was at 480p.
+    _assert_resolution_offered(payload.model or "", payload.resolution)
+
     # _require_renderable_project already proved a current strategy exists, so
     # this can only fail if the row changed underneath us. Resolving it through
     # the same helper keeps the prompt and the gate reading the same object.
@@ -6637,6 +6673,7 @@ async def submit_project_generation(
         model=payload.model or "",
         duration=int(wanted or 0) or None,
         generate_audio=payload.generate_audio,
+        resolution=payload.resolution,
         strategy=strategy or None,
         idempotency_key=payload.idempotency_key or "",
     )

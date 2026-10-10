@@ -156,6 +156,10 @@ VIDEO_MODELS = {
         "supports_native_audio": True,  # listed as accepted; studio requests it by default
         "supports_v2v_motion": False,
         "resolution": "768p",
+        # 480p is offered as an explicit test choice (kept out of the default:
+        # below TikTok's 720x1280 floor, so the finalize upscale carries it and
+        # the picture is softer). 2K stays unlisted: ~3x the 768p price.
+        "supported_resolutions": ["480p", "768p"],
         "supports_combined_refs": False,
     },
 }
@@ -1252,6 +1256,7 @@ async def generate_video(
     prefer_v2v_motion: bool = False,
     continuity_frame_path: Path = None,
     continuity_video_url: str = None,
+    resolution: str = None,
 ) -> dict:
     """Submit a video generation job to OpenRouter using MiniMax H3.
 
@@ -1310,7 +1315,16 @@ async def generate_video(
         "model": model_id,
         "prompt": prompt,
         "duration": max(min_dur, min(duration, max_dur)),
-        "resolution": model_config.get("resolution", "1080p"),
+        # A per-render override is only honored when the model offers it: an
+        # unlisted value falls back to the catalog default rather than reaching
+        # the provider, where it is a 400 after billing the attempt. The studio
+        # endpoint refuses unknown values first with the allowed list, so this
+        # fallback only fires for direct callers.
+        "resolution": (
+            resolution
+            if resolution in (model_config.get("supported_resolutions") or [])
+            else model_config.get("resolution", "1080p")
+        ),
         "aspect_ratio": "9:16",
     }
 

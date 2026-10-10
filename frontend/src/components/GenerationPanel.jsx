@@ -61,9 +61,17 @@ function modelStorageKey(projectId) {
   return `studio-video-model:${projectId}`;
 }
 
+function resolutionStorageKey(projectId) {
+  return `studio-video-resolution:${projectId}`;
+}
+
 export function GenerationPanel({ project, onGenerationChange, onProjectChange }) {
   const [models, setModels] = useState(null);
   const [selectedModel, setSelectedModel] = useState("");  const [generation, setGeneration] = useState(null);
+  // A per-render resolution override, only for models that offer a choice.
+  // "" means the catalog default; anything else must be one of the model's
+  // supported_resolutions or the server refuses the render.
+  const [selectedResolution, setSelectedResolution] = useState("");
   const [busy, setBusy] = useState(false);
   // Set when the finished clip cannot be played inline, so the panel replaces a
   // dead-looking player with the truth instead of leaving a dead control.
@@ -141,7 +149,22 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
           saved = "";
         }
         const offered = (data.models || []).some((m) => m.key === saved);
-        setSelectedModel(offered ? saved : data.default || "");
+        const nextModel = offered ? saved : data.default || "";
+        setSelectedModel(nextModel);
+        // Same rule for the resolution choice, validated against the model
+        // actually selected: a saved value from another model (or a retired
+        // option) falls back to that model's default rather than sticking.
+        try {
+          if (projectId) {
+            const resSaved = window.localStorage.getItem(resolutionStorageKey(projectId)) || "";
+            const caps = (data.models || []).find((m) => m.key === nextModel);
+            if ((caps?.supported_resolutions || []).includes(resSaved)) {
+              setSelectedResolution(resSaved);
+            }
+          }
+        } catch {
+          /* a choice that does not persist is still a choice for this render */
+        }
       })
       .catch(() => {
         if (!cancelled) setModels(null);
@@ -263,8 +286,13 @@ const handleGenerate = async () => {
       // project carries it, and the response has no plan to return because
       // there is no second pass to arrange - so there is nothing here to
       // reconcile afterwards and nothing to warn about.
+      //
+      // Resolution IS sent, but only an explicit pick: omitted means the
+      // model's catalog default, so a default change server-side never needs
+      // a client change to follow it.
       const created = await api.generateVideo(projectId, {
         model: selectedModel || undefined,
+        resolution: selectedResolution || undefined,
         idempotency_key: intentKey.current,
       });
       // The intent is spent. A later deliberate re-roll mints its own key, so
@@ -424,8 +452,15 @@ const handleGenerate = async () => {
             onChange={(e) => {
               const next = e.target.value;
               setSelectedModel(next);
+              // A resolution picked for another model must not ride along: the
+              // server refuses values the new model does not offer, so the
+              // select falls back to that model's default.
+              setSelectedResolution("");
               try {
-                if (projectId) window.localStorage.setItem(modelStorageKey(projectId), next);
+                if (projectId) {
+                  window.localStorage.setItem(modelStorageKey(projectId), next);
+                  window.localStorage.removeItem(resolutionStorageKey(projectId));
+                }
               } catch {
                 /* a choice that does not persist is still a choice for this render */
               }
@@ -439,6 +474,36 @@ const handleGenerate = async () => {
               </option>
             ))}
           </select>
+          {(capability?.supported_resolutions || []).length > 0 && (
+            <div className="space-y-1.5 pt-1">
+              <label htmlFor="gen-resolution" className="text-sm font-medium">Resolution</label>
+              <select
+                id="gen-resolution"
+                value={selectedResolution}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setSelectedResolution(next);
+                  try {
+                    if (projectId) {
+                      if (next) window.localStorage.setItem(resolutionStorageKey(projectId), next);
+                      else window.localStorage.removeItem(resolutionStorageKey(projectId));
+                    }
+                  } catch {
+                    /* a choice that does not persist is still a choice for this render */
+                  }
+                }}
+                disabled={inFlight}
+                className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
+              >
+                <option value="">{capability?.resolution || ""} (default)</option>
+                {(capability.supported_resolutions || [])
+                  .filter((r) => r !== capability?.resolution)
+                  .map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+              </select>
+            </div>
+          )}
         </div>
       )}
 

@@ -241,6 +241,47 @@ class TestSinglePassGeneration:
         assert result["openrouter_job_id"]
 
 
+class TestResolutionOverride:
+    """
+    heygen-video-1 offers 480p beside its 768p default so renders can be
+    compared cheaply. The request carries the choice end to end; anything
+    unlisted is refused before anything is billed.
+    """
+
+    def test_unlisted_resolution_is_refused_with_the_allowed_values(self, api, monkeypatch):
+        _mock_submit(api, monkeypatch)
+        from models import StudioGenerationRequest
+        project, _, _ = _ready_project(api, "Resolution Refused")
+        with pytest.raises(HTTPException) as err:
+            _run(api.submit_project_generation(
+                project_id=project["id"],
+                payload=StudioGenerationRequest(model="heygen-video-1", resolution="2K"),
+                user_id=ANON))
+        assert err.value.status_code == 400
+        assert "480p" in str(err.value.detail)
+        assert "768p" in str(err.value.detail)
+
+    def test_listed_resolution_reaches_the_provider_call(self, api, monkeypatch):
+        calls = _mock_submit(api, monkeypatch)
+        from models import StudioGenerationRequest
+        project, _, _ = _ready_project(api, "Resolution Override")
+        _run(api.submit_project_generation(
+            project_id=project["id"],
+            payload=StudioGenerationRequest(model="heygen-video-1", resolution="480p"),
+            user_id=ANON))
+        assert calls[0]["resolution"] == "480p"
+
+    def test_omitted_resolution_stays_omitted(self, api, monkeypatch):
+        calls = _mock_submit(api, monkeypatch)
+        from models import StudioGenerationRequest
+        project, _, _ = _ready_project(api, "Resolution Default")
+        _run(api.submit_project_generation(
+            project_id=project["id"],
+            payload=StudioGenerationRequest(model="heygen-video-1"),
+            user_id=ANON))
+        assert calls[0]["resolution"] is None
+
+
 class TestIdempotency:
     """
     One click, one render.
@@ -987,7 +1028,7 @@ class TestStudioIdentityReference:
         assert "The person on camera is the person in the attached character reference" in (
             calls[0]["prompt"]
         )
-        assert "The image is the only authority on who they are" in calls[0]["prompt"]
+        assert "The image is the only authority on the person" in calls[0]["prompt"]
         # ...and no invented description of them rides along with it.
         for invented in ("round face", "teal scrubs", "low bun"):
             assert invented not in calls[0]["prompt"], f"prompt invents an appearance: {invented}"

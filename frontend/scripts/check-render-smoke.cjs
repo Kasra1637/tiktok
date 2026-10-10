@@ -232,6 +232,7 @@ const STRATEGY = {
     { index: 1, role: "middle", seconds: 7, goal: "develop it, stop at the reach", script: "You have too many lists.", action: "count on fingers" },
   ],
   objective: "address_user_problem",
+  content_angle_id: "a1",
 };
 
 const SEGMENT = {
@@ -1132,6 +1133,119 @@ async function main() {
     if (!generate.disabled) {
       throw new Error("Generate stays enabled on a strategy built for another angle");
     }
+  });
+
+  // -------------------------------------------------------------------------
+  // Per-render resolution choice (heygen-video-1 offers 480p beside 768p).
+  //
+  // The toggle is data-driven off capability.supported_resolutions: models
+  // without the list never show it, and the default is always the catalog
+  // value. An explicit pick rides the generate payload; omitted stays
+  // omitted so a server-side default change needs no client change.
+  // -------------------------------------------------------------------------
+  const HEYGEN_CAPABILITY = {
+    key: "heygen-video-1",
+    name: "HeyGen Video",
+    max_duration: 15,
+    min_duration: 5,
+    resolution: "768p",
+    supported_resolutions: ["480p", "768p"],
+    aspect_ratio: "9:16",
+    supports_references: false,
+    supports_native_audio: true,
+    supports_last_frame: false,
+  };
+
+  await check("the resolution toggle appears only for models that offer a choice", async (ctx) => {
+    dom.window.localStorage.removeItem("studio-video-model:p1");
+    dom.window.localStorage.removeItem("studio-video-resolution:p1");
+    await withApi({
+      getGenerations: async () => ({ generations: [] }),
+      getStudioVideoModels: async () => ({ default: "heygen-video-1", models: [HEYGEN_CAPABILITY] }),
+    }, () => mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY } })(ctx));
+    const res = ctx.container.querySelector("#gen-resolution");
+    if (!res) throw new Error("no resolution toggle for a model that offers 480p and 768p");
+    if (res.value !== "") {
+      throw new Error(`the toggle does not default to 768p (value ${JSON.stringify(res.value)})`);
+    }
+    const options = [...res.querySelectorAll("option")].map((o) => o.value);
+    if (!options.includes("480p")) {
+      throw new Error(`480p is not offered: ${JSON.stringify(options)}`);
+    }
+  });
+
+  await check("no resolution toggle renders for a model with no choice", async (ctx) => {
+    // Minimax H3 renders at its catalog resolution with no per-render option.
+    dom.window.localStorage.removeItem("studio-video-model:p1");
+    dom.window.localStorage.removeItem("studio-video-resolution:p1");
+    await withApi({
+      getGenerations: async () => ({ generations: [] }),
+    }, () => mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY } })(ctx));
+    if (ctx.container.querySelector("#gen-resolution")) {
+      throw new Error("a resolution toggle renders for minimax-h3, which offers no choice");
+    }
+  });
+
+  await check("the chosen resolution reaches the render request", async (ctx) => {
+    dom.window.localStorage.removeItem("studio-video-model:p1");
+    dom.window.localStorage.removeItem("studio-video-resolution:p1");
+    let sent = null;
+    await withApi({
+      getGenerations: async () => ({ generations: [] }),
+      getStudioVideoModels: async () => ({ default: "heygen-video-1", models: [HEYGEN_CAPABILITY] }),
+      generateVideo: async (projectId, payload) => {
+        sent = payload;
+        return { ...SEGMENT, status: "submitted" };
+      },
+    }, async () => {
+      await mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY } })(ctx);
+      const res = ctx.container.querySelector("#gen-resolution");
+      if (!res) throw new Error("no resolution toggle to choose from");
+      await selectOption(ctx, res, "480p");
+      const btn = renderButton(ctx);
+      if (btn.disabled) throw new Error("Generate is not live on a ready heygen project");
+      await act(async () => {
+        btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      });
+      await act(async () => {});
+      await act(async () => {});
+      if (!sent) throw new Error("Generate never called the endpoint");
+      if (sent.resolution !== "480p") {
+        throw new Error(`render request carried resolution ${JSON.stringify(sent.resolution)}, expected "480p"`);
+      }
+    });
+  });
+
+  await check("switching models resets the resolution choice", async (ctx) => {
+    dom.window.localStorage.removeItem("studio-video-model:p1");
+    dom.window.localStorage.removeItem("studio-video-resolution:p1");
+    await withApi({
+      getGenerations: async () => ({ generations: [] }),
+      getStudioVideoModels: async () => ({
+        default: "heygen-video-1",
+        models: [HEYGEN_CAPABILITY, { ...CAPABILITY, key: "minimax-h3" }],
+      }),
+    }, async () => {
+      await mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY } })(ctx);
+      const res = ctx.container.querySelector("#gen-resolution");
+      if (!res) throw new Error("no resolution toggle to choose from");
+      await selectOption(ctx, res, "480p");
+      if (res.value !== "480p") throw new Error("the 480p pick did not stick");
+      const model = ctx.container.querySelector("#gen-model");
+      if (!model) throw new Error("no model picker to switch with");
+      // A 480p pick for heygen must not ride along onto minimax-h3: the server
+      // refuses values the new model does not offer.
+      await selectOption(ctx, model, "minimax-h3");
+      if (ctx.container.querySelector("#gen-resolution")) {
+        throw new Error("the resolution toggle survives a switch to a model with no choice");
+      }
+      await selectOption(ctx, model, "heygen-video-1");
+      const resAgain = ctx.container.querySelector("#gen-resolution");
+      if (!resAgain) throw new Error("the toggle did not return with heygen");
+      if (resAgain.value !== "") {
+        throw new Error(`switching back kept the stale 480p pick: ${JSON.stringify(resAgain.value)}`);
+      }
+    });
   });
 
   await check("GenerationPanel explains an un-ready project that already rendered", async (ctx) => {

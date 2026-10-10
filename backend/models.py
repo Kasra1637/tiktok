@@ -409,11 +409,16 @@ class StudioGenerationRequest(BaseModel):
         a double-tap or a network retry cannot run it twice while a deliberate
         re-roll still can. Omitted by any other caller, which is the same
         one-key-one-render behaviour as before.
+    resolution: optional render resolution. Only models that list
+        supported_resolutions accept one (heygen-video-1: 480p for testing,
+        768p default); anything else is refused with a 400 naming the
+        allowed values. Omitted means the model's catalog default.
     """
     model: Optional[str] = None
     duration_seconds: Optional[int] = None
     generate_audio: Optional[bool] = None
     idempotency_key: Optional[str] = None
+    resolution: Optional[str] = None
 
 
 class UpdateAssetRequest(BaseModel):

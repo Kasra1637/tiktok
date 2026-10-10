@@ -141,18 +141,41 @@ class TestCapabilities:
         """
         assert vp.capability("heygen-video-1")["supports_native_audio"] is True
 
-    def test_heygen_video_integrates_identity_into_a_generated_first_frame(self):
+    def test_heygen_lists_its_offered_resolutions(self):
         """
-        HeyGen no longer receives the raw uploaded photo as first_frame.
-        Identity is still accepted, but submission integrates it into a
-        strategy-derived opening scene so the provider starts in the generated
-        environment rather than the uploaded background.
+        The studio toggle is data-driven: only models listing
+        supported_resolutions offer a choice, and the default stays 768p.
+        """
+        cap = vp.capability("heygen-video-1")
+        assert cap["supported_resolutions"] == ["480p", "768p"]
+        assert cap["resolution"] == "768p"
+        assert vp.capability("minimax-h3")["supported_resolutions"] == []
+        assert vp.capability("minimax-h3-max")["supported_resolutions"] == []
+
+    def test_first_frame_models_are_told_to_open_in_the_prompted_scene(self):
+        """
+        First-frame models open ON the attached photo, so without an explicit
+        instruction the opening is the uploaded room and the prompted scene
+        only arrives mid-clip. The photo supplies the person; the place comes
+        from text — asserted on the anchor and on both prompt paths.
         """
         cap = vp.capability("heygen-video-1")
         assert cap["supports_first_frame"] is True
         assert cap["supports_last_frame"] is False
         assert cap["max_reference_images"] == 0
         assert vp.accepts_identity_reference("heygen-video-1") is True
+        assets = [{"kind": "character_reference", "label": "Founder face"}]
+        anchor = gp.person_anchor_notes(assets)
+        assert "only authority on the person" in anchor
+        assert "not the place" in anchor
+        segment = gp.build_segment_prompt(
+            strategy={}, profile={}, template={}, duration=12,
+            assets=assets, plan={"hook_seconds": 3},
+        )
+        assert "never the photo's room" in segment
+        fallback = gp.build_single_pass_prompt(
+            dict(PLAN, assets=assets), PROFILE, TEMPLATE, 20)
+        assert "never the photo's room" in fallback
 
     def test_an_removed_provider_falls_back_to_the_default(self):
         """
@@ -409,6 +432,43 @@ class TestHailuo3MaxPayload:
         assert seen[0]["model"] == "heygen/heygen-video-1"
         assert seen[0]["resolution"] == "768p"
         assert seen[0]["generate_audio"] is True
+
+    def test_heygen_resolution_override_reaches_the_payload(self, monkeypatch):
+        """
+        480p is offered as an explicit test choice: a requested override must
+        reach the payload verbatim rather than being overwritten by the default.
+        """
+        import asyncio
+
+        import ai_service
+
+        seen = self._capture(monkeypatch)
+        asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
+                                             duration=10, model="heygen-video-1",
+                                             resolution="480p"))
+        assert seen[0]["model"] == "heygen/heygen-video-1"
+        assert seen[0]["resolution"] == "480p"
+
+    def test_unlisted_resolution_falls_back_to_the_catalog_default(self, monkeypatch):
+        """
+        The payload layer is the last-resort guard: an unlisted value never
+        reaches the provider, where it is a 400 after billing the attempt.
+        (The studio endpoint refuses it first with the allowed list.)
+        """
+        import asyncio
+
+        import ai_service
+
+        seen = self._capture(monkeypatch)
+        asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
+                                             duration=10, model="heygen-video-1",
+                                             resolution="2K"))
+        assert seen[0]["resolution"] == "768p"
+        seen = self._capture(monkeypatch)
+        asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
+                                             duration=10, model="minimax-h3",
+                                             resolution="480p"))
+        assert seen[0]["resolution"] == "2K"
 
     def test_face_rides_as_first_frame_not_references(self, monkeypatch, tmp_path):
         """
@@ -715,7 +775,7 @@ class TestAppearanceIsLockedAndClothingIsNot:
     def test_the_anchor_still_names_the_photograph_as_the_only_authority(self):
         anchor = gp.person_anchor_notes(self.ANCHOR)
         assert "the person in the attached character reference" in anchor
-        assert "The image is the only authority on who they are" in anchor
+        assert "The image is the only authority on the person" in anchor
 
     def test_a_scene_may_choose_the_wardrobe_and_it_is_locked(self):
         """

@@ -239,6 +239,9 @@ def capability(key: Optional[str] = None) -> dict:
         "min_duration": base.get("min_duration", 1),
         "max_duration": base.get("max_duration", 30),
         "resolution": base.get("resolution", "1080p"),
+        # The resolutions a founder may pick per render. Absent means the
+        # model offers no choice and the catalog default always applies.
+        "supported_resolutions": base.get("supported_resolutions", []),
         "supports_references": base.get("supports_references", False),
         "supports_native_audio": base.get("supports_native_audio", False),
         "supports_v2v_motion": base.get("supports_v2v_motion", False),
