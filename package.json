@@ -1,0 +1,10 @@
+{
+  "name": "hookforge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HookForge workspace root. Dependency installation lives in the frontend (yarn) and backend (pip) subdirectories; this file exists so a root-level package install does not fail.",
+  "scripts": {
+    "build": "cd frontend && yarn install && yarn build",
+    "test": "cd backend && python -m pytest -q"
+  }
+}
