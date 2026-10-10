@@ -119,9 +119,9 @@ export default function AppProfileDetail() {
   const [deleteError, setDeleteError] = useState(null);
   const [deletingProfile, setDeletingProfile] = useState(false);
   // Collapsible groups (per group, never per card, so row heights stay
-  // equal): everything starts collapsed and the founder opens whatever they
-  // want. Persisted per profile so a reading position survives reloads.
-  const [groups, setGroups] = useState({ essentials: false, problems: false, messaging: false, context: false });
+  // equal): Essentials open by default, others collapsed. Persisted per
+  // profile so a reading position survives reloads.
+  const [groups, setGroups] = useState({ essentials: true, problems: false, messaging: false, context: false });
   useEffect(() => {
     try {
       const raw = localStorage.getItem(`profile-groups:${profileId}`);
@@ -294,7 +294,7 @@ export default function AppProfileDetail() {
     objectionCount > 0 && `${objectionCount} objection${objectionCount === 1 ? "" : "s"}`,
   ]);
 
-  return (
+return (
     <div className="space-y-6">
       <Button variant="ghost" size="sm" asChild className="-ml-2">
         {/* Was "All profiles" -> /app-profiles. There is no list page any
@@ -363,7 +363,7 @@ export default function AppProfileDetail() {
                 title="Re-research this app, apply the refreshed profile, and regenerate its audience angles"
               >
                 {regeneratingEverything ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                Refresh research &amp; angles
+                Refresh research & angles
               </Button>
             )}
           </div>
@@ -400,18 +400,153 @@ export default function AppProfileDetail() {
         </Alert>
       )}
 
-      {/* Rail cards first in one equal-height row: results, audiences and
-          guardrails. The collapsed research groups stack full width below.
-          One card language throughout — 16px gaps, stretch rows with h-full
-          cards, top-aligned content, no truncation. */}
-      <div className="min-w-0 space-y-4">
-        <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-3">
-          {/* The only part of the profile that improves with use. Everything
-              below was scraped once from the URL; this is the founder's own
-              numbers on their own videos, and the next strategy prompt reads
-              it. Aggregate per template, so it is evidence of what carried
-              views rather than a ranking of hooks. */}
-          <ProfileCard testid="what-works" eyebrow="What has worked here">
+      {/* Section groups: Essentials, Problems & Outcomes, Messaging, Context & Objections.
+          Directly under header, no gap above. Essentials open by default, rest collapsed.
+          Per-group toggling with persisted state; no bulk expand/collapse. */}
+      <div className="min-w-0 space-y-3">
+        {hasEssentials && (
+        <SectionGroup id="essentials" label="Essentials" summary={essentialsSummary} open={groups.essentials} onToggle={toggleGroup}>
+        {basics.some(Boolean) ? (
+          <ProfileCard testid="profile-facts" eyebrow="Product facts">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_1fr_2fr]">
+              <ProfileField label="Category" value={basics[0]} />
+              <ProfileField label="Platforms" value={basics[1]} />
+              <ProfileField label="Tone / voice" value={basics[2]} />
+            </div>
+          </ProfileCard>
+        ) : null}
+        {coreFeatures.length > 0 || useCases.length > 0 ? (
+          <CardGrid className="md:grid-cols-2">
+            {coreFeatures.length > 0 ? (
+              <ProfileCard eyebrow="Core features">
+                <InfoChipList label="Core features" items={coreFeatures} />
+              </ProfileCard>
+            ) : null}
+            {useCases.length > 0 ? (
+              <ProfileCard eyebrow="Primary use cases">
+                <InfoChipList label="Primary use cases" items={useCases} />
+              </ProfileCard>
+            ) : null}
+          </CardGrid>
+        ) : null}
+        {/* Labelled as enforced because it is: this list is attached to
+            every video prompt, so it is an instruction to the model rather
+            than context it may use or ignore. The wording matters — the old
+            label promised the same enforcement over a field that had none. */}
+        {mustNotShow.length > 0 ? (
+          <ProfileCard eyebrow="Never show in the video (enforced)" tone="enforced">
+            <InfoChipList
+              label="Never show in the video (enforced)"
+              items={mustNotShow}
+              tone="enforced"
+            />
+          </ProfileCard>
+        ) : null}
+        </SectionGroup>
+        )}
+        {hasProblems && (
+        <SectionGroup id="problems" label="Problems & outcomes" summary={problemsSummary} open={groups.problems} onToggle={toggleGroup}>
+          <CardGrid className="md:grid-cols-2">
+            {problems.length > 0 ? (
+              <ProfileCard eyebrow="Problems solved">
+                <InfoChipList label="Problems solved" items={problems} />
+              </ProfileCard>
+            ) : null}
+            {outcomes.length > 0 ? (
+              <ProfileCard eyebrow="Desired outcomes">
+                <InfoChipList label="Desired outcomes" items={outcomes} />
+              </ProfileCard>
+            ) : null}
+          </CardGrid>
+        </SectionGroup>
+        )}
+        {hasMessaging && (
+        <SectionGroup id="messaging" label="Messaging" summary={messagingSummary} open={groups.messaging} onToggle={toggleGroup}>
+        {profile?.differentiation || profile?.known_limitations || profile?.proof_moment ? (
+          <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
+            {profile?.differentiation ? (
+              <div className="h-full md:row-span-2">
+                <ProfileCard eyebrow="Differentiators">
+                  <ProfileField label="Differentiators" value={profile.differentiation} />
+                </ProfileCard>
+              </div>
+            ) : null}
+            {profile?.known_limitations || profile?.proof_moment ? (
+              <div className="flex h-full min-w-0 flex-col gap-4">
+                {profile?.known_limitations ? (
+                  <ProfileCard eyebrow="Known limitations">
+                    <ProfileField label="Known limitations" value={profile.known_limitations} />
+                  </ProfileCard>
+                ) : null}
+                {profile?.proof_moment ? (
+                  <ProfileCard eyebrow="The proof moment">
+                    <ProfileField label="The proof moment" value={profile.proof_moment} />
+                  </ProfileCard>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+          {Array.isArray(profile?.outcome_statements) && profile.outcome_statements.length > 0 && (
+            <ProfileCard eyebrow="Feature-to-outcome statements">
+              <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
+              {profile.outcome_statements.map((s, i) => (
+                <StatementCard
+                  key={`${s.outcome}-${i}`}
+                  title={s.outcome}
+                  spanFull={profile.outcome_statements.length % 2 === 1 && i === profile.outcome_statements.length - 1}
+                  rows={[
+                    s.who_feels_it && `Who feels it: ${s.who_feels_it}`,
+                    s.from_feature && `From: ${s.from_feature}`,
+                    s.how_it_helps && `How it helps: ${s.how_it_helps}`,
+                  ]}
+                />
+              ))}
+              </div>
+            </ProfileCard>
+          )}
+        </SectionGroup>
+        )}
+        {hasContext && (
+        <SectionGroup id="context" label="Context & objections" summary={contextSummary} open={groups.context} onToggle={toggleGroup}>
+        {usageMoments.length > 0 ? (
+          <ProfileCard eyebrow="When the app is reached for">
+            <InfoChipList label="When the app is reached for" items={usageMoments} />
+          </ProfileCard>
+        ) : null}
+        {competitors.length > 0 ? (
+          <ProfileCard eyebrow="Competitor apps">
+            <InfoChipList label="Competitor apps" items={competitors} />
+          </ProfileCard>
+        ) : null}
+          {Array.isArray(profile?.viewer_objections) && profile.viewer_objections.length > 0 && (
+            <ProfileCard eyebrow="Why they would not download">
+              <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
+              {profile.viewer_objections.map((o, i) => (
+                <StatementCard
+                  key={`${o.objection}-${i}`}
+                  title={o.objection}
+                  spanFull={profile.viewer_objections.length % 2 === 1 && i === profile.viewer_objections.length - 1}
+                  rows={[
+                    o.what_they_do_now && `Does now: ${o.what_they_do_now}`,
+                    o.honest_answer && `Answer: ${o.honest_answer}`,
+                  ]}
+                />
+              ))}
+              </div>
+            </ProfileCard>
+          )}
+        </SectionGroup>
+        )}
+      </div>
+
+      {/* Supporting content: What Has Worked Here, Audiences, Claim Guardrails.
+          3-column row at >=1280px (xl), stacking to 1 column below that.
+          What Has Worked Here shrinks to fit content rather than stretching. */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        {/* What Has Worked Here — slim banner, fits content height */}
+        <div className="xl:col-span-1">
+          <ProfileCard testid="what-works" eyebrow="What has worked here" className="h-auto">
             {!whatWorks || !whatWorks.has_signal ? (
               <p className="text-sm leading-[22px] text-muted-foreground">
                 Nothing recorded yet. Add view numbers to a finished video and the next strategy
@@ -436,151 +571,17 @@ export default function AppProfileDetail() {
               </>
             )}
           </ProfileCard>
-
-          <ProfileCard eyebrow="Audiences">
-            <ProfileField label="Primary audience" value={profile?.target_audience} />
-            <ProfileField label="Ideal customer" value={profile?.ideal_customer_profile} />
-            <InfoListBlock label="Segments" items={list(profile?.icp_segments)} />
-          </ProfileCard>
-
-          <ClaimPanel profile={profile || {}} />
         </div>
-        <div className="min-w-0 space-y-4">
-          {hasEssentials && (
-          <SectionGroup id="essentials" label="Essentials" summary={essentialsSummary} open={groups.essentials} onToggle={toggleGroup}>
-          {basics.some(Boolean) ? (
-            <ProfileCard testid="profile-facts" eyebrow="Product facts">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_1fr_2fr]">
-                <ProfileField label="Category" value={basics[0]} />
-                <ProfileField label="Platforms" value={basics[1]} />
-                <ProfileField label="Tone / voice" value={basics[2]} />
-              </div>
-            </ProfileCard>
-          ) : null}
-          {coreFeatures.length > 0 || useCases.length > 0 ? (
-            <CardGrid className="md:grid-cols-2">
-              {coreFeatures.length > 0 ? (
-                <ProfileCard eyebrow="Core features">
-                  <InfoChipList label="Core features" items={coreFeatures} />
-                </ProfileCard>
-              ) : null}
-              {useCases.length > 0 ? (
-                <ProfileCard eyebrow="Primary use cases">
-                  <InfoChipList label="Primary use cases" items={useCases} />
-                </ProfileCard>
-              ) : null}
-            </CardGrid>
-          ) : null}
-          {/* Labelled as enforced because it is: this list is attached to
-              every video prompt, so it is an instruction to the model rather
-              than context it may use or ignore. The wording matters — the old
-              label promised the same enforcement over a field that had none. */}
-          {mustNotShow.length > 0 ? (
-            <ProfileCard eyebrow="Never show in the video (enforced)" tone="enforced">
-              <InfoChipList
-                label="Never show in the video (enforced)"
-                items={mustNotShow}
-                tone="enforced"
-              />
-            </ProfileCard>
-          ) : null}
-          </SectionGroup>
-          )}
-          {hasProblems && (
-          <SectionGroup id="problems" label="Problems & outcomes" summary={problemsSummary} open={groups.problems} onToggle={toggleGroup}>
-            <CardGrid className="md:grid-cols-2">
-              {problems.length > 0 ? (
-                <ProfileCard eyebrow="Problems solved">
-                  <InfoChipList label="Problems solved" items={problems} />
-                </ProfileCard>
-              ) : null}
-              {outcomes.length > 0 ? (
-                <ProfileCard eyebrow="Desired outcomes">
-                  <InfoChipList label="Desired outcomes" items={outcomes} />
-                </ProfileCard>
-              ) : null}
-            </CardGrid>
-          </SectionGroup>
-          )}
-          {hasMessaging && (
-          <SectionGroup id="messaging" label="Messaging" summary={messagingSummary} open={groups.messaging} onToggle={toggleGroup}>
-          {profile?.differentiation || profile?.known_limitations || profile?.proof_moment ? (
-            <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
-              {profile?.differentiation ? (
-                <div className="h-full md:row-span-2">
-                  <ProfileCard eyebrow="Differentiators">
-                    <ProfileField label="Differentiators" value={profile.differentiation} />
-                  </ProfileCard>
-                </div>
-              ) : null}
-              {profile?.known_limitations || profile?.proof_moment ? (
-                <div className="flex h-full min-w-0 flex-col gap-4">
-                  {profile?.known_limitations ? (
-                    <ProfileCard eyebrow="Known limitations">
-                      <ProfileField label="Known limitations" value={profile.known_limitations} />
-                    </ProfileCard>
-                  ) : null}
-                  {profile?.proof_moment ? (
-                    <ProfileCard eyebrow="The proof moment">
-                      <ProfileField label="The proof moment" value={profile.proof_moment} />
-                    </ProfileCard>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-            {Array.isArray(profile?.outcome_statements) && profile.outcome_statements.length > 0 && (
-              <ProfileCard eyebrow="Feature-to-outcome statements">
-                <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
-                {profile.outcome_statements.map((s, i) => (
-                  <StatementCard
-                    key={`${s.outcome}-${i}`}
-                    title={s.outcome}
-                    spanFull={profile.outcome_statements.length % 2 === 1 && i === profile.outcome_statements.length - 1}
-                    rows={[
-                      s.who_feels_it && `Who feels it: ${s.who_feels_it}`,
-                      s.from_feature && `From: ${s.from_feature}`,
-                      s.how_it_helps && `How it helps: ${s.how_it_helps}`,
-                    ]}
-                  />
-                ))}
-                </div>
-              </ProfileCard>
-            )}
-          </SectionGroup>
-          )}
-          {hasContext && (
-          <SectionGroup id="context" label="Context & objections" summary={contextSummary} open={groups.context} onToggle={toggleGroup}>
-          {usageMoments.length > 0 ? (
-            <ProfileCard eyebrow="When the app is reached for">
-              <InfoChipList label="When the app is reached for" items={usageMoments} />
-            </ProfileCard>
-          ) : null}
-          {competitors.length > 0 ? (
-            <ProfileCard eyebrow="Competitor apps">
-              <InfoChipList label="Competitor apps" items={competitors} />
-            </ProfileCard>
-          ) : null}
-            {Array.isArray(profile?.viewer_objections) && profile.viewer_objections.length > 0 && (
-              <ProfileCard eyebrow="Why they would not download">
-                <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
-                {profile.viewer_objections.map((o, i) => (
-                  <StatementCard
-                    key={`${o.objection}-${i}`}
-                    title={o.objection}
-                    spanFull={profile.viewer_objections.length % 2 === 1 && i === profile.viewer_objections.length - 1}
-                    rows={[
-                      o.what_they_do_now && `Does now: ${o.what_they_do_now}`,
-                      o.honest_answer && `Answer: ${o.honest_answer}`,
-                    ]}
-                  />
-                ))}
-                </div>
-              </ProfileCard>
-            )}
-          </SectionGroup>
-          )}
-        </div>
+
+        {/* Audiences — keeps current internal structure */}
+        <ProfileCard eyebrow="Audiences">
+          <ProfileField label="Primary audience" value={profile?.target_audience} />
+          <ProfileField label="Ideal customer" value={profile?.ideal_customer_profile} />
+          <InfoListBlock label="Segments" items={list(profile?.icp_segments)} />
+        </ProfileCard>
+
+        {/* Claim Guardrails — keeps current internal structure */}
+        <ClaimPanel profile={profile || {}} />
       </div>
 
       <Dialog
