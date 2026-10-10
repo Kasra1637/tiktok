@@ -476,7 +476,6 @@ async def init_db():
                 problems_solved TEXT,
                 icp_segments TEXT,
                 desired_outcomes TEXT,
-                competitors TEXT,
                 known_limitations TEXT,
                 must_not_show TEXT,
                 usage_moments TEXT,

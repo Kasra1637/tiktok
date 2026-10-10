@@ -148,7 +148,11 @@ export function SectionGroup({ id, label, summary, open, onToggle, children }) {
         aria-expanded={open}
         aria-controls={contentId}
         onClick={() => onToggle(id, !open)}
-        className="group flex w-full min-w-0 items-center gap-3 rounded-[10px] px-1 py-1 text-left transition-colors hover:bg-secondary/30"
+        className={cn(
+          "group flex w-full min-w-0 items-center gap-3 rounded-[10px] px-1 py-1 text-left transition-colors hover:bg-secondary/30",
+          "sticky top-0 z-10 bg-background/80 backdrop-blur-sm",
+          open && "border-l-2 border-[color:var(--brand-indigo)] pl-2 -ml-1"
+        )}
       >
         <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground transition-colors group-hover:text-foreground">
           {label}

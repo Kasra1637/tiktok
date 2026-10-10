@@ -126,7 +126,7 @@ export default function AppProfileDetail() {
   // stay equal): at most one bar open, all collapsed by default. The open
   // bar's id (or null) persists per profile so a reading position survives
   // reloads. A legacy object-shaped value degrades to its first open bar.
-  const [openGroup, setOpenGroup] = useState(null);
+  const [openGroup, setOpenGroup] = useState("essentials");
   useEffect(() => {
     try {
       const raw = localStorage.getItem(`profile-groups:${profileId}`);
@@ -273,7 +273,6 @@ export default function AppProfileDetail() {
   const outcomes = list(profile?.desired_outcomes);
   const mustNotShow = list(profile?.must_not_show);
   const usageMoments = list(profile?.usage_moments);
-  const competitors = list(profile?.competitors);
   const outcomeCount = Array.isArray(profile?.outcome_statements) ? profile.outcome_statements.length : 0;
   const objectionCount = Array.isArray(profile?.viewer_objections) ? profile.viewer_objections.length : 0;
   const segments = list(profile?.icp_segments);
@@ -287,7 +286,7 @@ export default function AppProfileDetail() {
   const hasEssentials = basics.some(Boolean) || coreFeatures.length > 0 || useCases.length > 0 || mustNotShow.length > 0;
   const hasProblems = problems.length > 0 || outcomes.length > 0;
   const hasMessaging = Boolean(profile?.differentiation || profile?.known_limitations || profile?.proof_moment) || outcomeCount > 0;
-  const hasContext = usageMoments.length > 0 || competitors.length > 0 || objectionCount > 0;
+  const hasContext = usageMoments.length > 0 || objectionCount > 0;
   const joinSummary = (parts) => parts.filter(Boolean).join(" · ");
   const essentialsSummary = joinSummary([
     coreFeatures.length > 0 && `${coreFeatures.length} feature${coreFeatures.length === 1 ? "" : "s"}`,
@@ -304,7 +303,6 @@ export default function AppProfileDetail() {
   ]);
   const contextSummary = joinSummary([
     usageMoments.length > 0 && `${usageMoments.length} moment${usageMoments.length === 1 ? "" : "s"}`,
-    competitors.length > 0 && `${competitors.length} competitor${competitors.length === 1 ? "" : "s"}`,
     objectionCount > 0 && `${objectionCount} objection${objectionCount === 1 ? "" : "s"}`,
   ]);
   const audienceSummary = joinSummary([
@@ -334,9 +332,9 @@ return (
                 edits, destructive icon, then the single coral CTA last. Wraps
                 under the title on narrow screens instead of squeezing. */}
             {approved ? (
-              <Badge className="border-green-500/25 bg-green-500/10 px-3 py-1 font-medium text-green-300">Approved</Badge>
+              <Badge className="border-green-500/25 bg-green-500/10 px-3 py-1 font-medium text-green-300 transition-none">Approved</Badge>
             ) : (
-              <Badge variant="secondary" className="px-3 py-1">Draft — needs review</Badge>
+              <Badge variant="secondary" className="px-3 py-1 transition-none">Draft — needs review</Badge>
             )}
             <Button variant="secondary" size="sm" asChild>
               <Link to="/brand">Edit</Link>
@@ -535,11 +533,6 @@ return (
         {usageMoments.length > 0 ? (
           <ProfileCard eyebrow="When the app is reached for">
             <InfoChipList label="When the app is reached for" items={usageMoments} />
-          </ProfileCard>
-        ) : null}
-        {competitors.length > 0 ? (
-          <ProfileCard eyebrow="Competitor apps">
-            <InfoChipList label="Competitor apps" items={competitors} />
           </ProfileCard>
         ) : null}
           {Array.isArray(profile?.viewer_objections) && profile.viewer_objections.length > 0 && (
