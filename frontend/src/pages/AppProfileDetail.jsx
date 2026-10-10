@@ -103,19 +103,32 @@ function Field({ label, value }) {
   );
 }
 
+/**
+ * One bordered information card. Every info block on this page gets its own
+ * border and breathing room so the cards read as separate, organized units
+ * instead of one long undifferentiated column.
+ */
+function SectionCard({ testid, eyebrow, children }) {
+  return (
+    <div className="surface space-y-3 rounded-2xl" {...(testid ? { "data-testid": testid } : {})}>
+      {eyebrow && <span className="eyebrow block">{eyebrow}</span>}
+      {children}
+    </div>
+  );
+}
+
 function ClaimPanel({ profile }) {
   const approved = list(profile.claims_approved);
   const review = list(profile.claims_review);
   const banned = list(profile.claims_banned);
   if (!approved.length && !review.length && !banned.length) return null;
   return (
-    <div className="space-y-3" data-testid="claim-guardrails">
-      <span className="eyebrow block">Claim guardrails</span>
+    <SectionCard testid="claim-guardrails" eyebrow="Claim guardrails">
       <p className="text-xs text-muted-foreground">The plan checks these phrases before rendering. Review each claim for accuracy before publishing; an automated check is not a guarantee.</p>
       <ListBlock label="Approved — safe to use" items={approved} />
       <ListBlock label="Needs review — verify first" items={review} tone="review" />
       <ListBlock label="Never use" items={banned} tone="banned" />
-    </div>
+    </SectionCard>
   );
 }
 
@@ -288,6 +301,19 @@ export default function AppProfileDetail() {
 
   const approved = profile?.status === "approved";
 
+  // Section visibility is computed up front so an empty research field leaves
+  // no hollow bordered card behind: ChipList and Field render null when they
+  // have nothing to show, and a SectionCard around nothing would be a box
+  // with a title and no body.
+  const basics = [profile?.app_category || profile?.niche, list(profile?.platforms).join(", "), profile?.tone_voice];
+  const coreFeatures = list(profile?.core_features);
+  const useCases = list(profile?.primary_use_cases);
+  const problems = list(profile?.problems_solved);
+  const outcomes = list(profile?.desired_outcomes);
+  const mustNotShow = list(profile?.must_not_show);
+  const usageMoments = list(profile?.usage_moments);
+  const competitors = list(profile?.competitors);
+
   return (
     <div className="space-y-6">
       <Button variant="ghost" size="sm" asChild className="-ml-2">
@@ -400,27 +426,85 @@ export default function AppProfileDetail() {
           every card stretched past any text it held. */}
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
-          <div className="surface space-y-4 rounded-2xl" data-testid="profile-facts">
-            <span className="eyebrow block">Product facts</span>
+          {basics.some(Boolean) ? (
+            <SectionCard testid="profile-facts" eyebrow="Product facts">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <Field label="Category" value={basics[0]} />
+                <Field label="Platforms" value={basics[1]} />
+                <Field label="Tone / voice" value={basics[2]} />
+              </div>
+            </SectionCard>
+          ) : null}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {coreFeatures.length > 0 ? (
+              <SectionCard eyebrow="Core features">
+                <ChipList label="Core features" items={coreFeatures} />
+              </SectionCard>
+            ) : null}
+            {useCases.length > 0 ? (
+              <SectionCard eyebrow="Primary use cases">
+                <ChipList label="Primary use cases" items={useCases} />
+              </SectionCard>
+            ) : null}
+            {problems.length > 0 ? (
+              <SectionCard eyebrow="Problems solved">
+                <ChipList label="Problems solved" items={problems} />
+              </SectionCard>
+            ) : null}
+            {outcomes.length > 0 ? (
+              <SectionCard eyebrow="Desired outcomes">
+                <ChipList label="Desired outcomes" items={outcomes} />
+              </SectionCard>
+            ) : null}
+          </div>
+          {profile?.differentiation || profile?.known_limitations || profile?.proof_moment ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <Field label="Category" value={profile?.app_category || profile?.niche} />
-              <Field label="Platforms" value={list(profile?.platforms).join(", ")} />
-              <Field label="Tone / voice" value={profile?.tone_voice} />
+              {profile?.differentiation ? (
+                <SectionCard eyebrow="Differentiators">
+                  <Field label="Differentiators" value={profile.differentiation} />
+                </SectionCard>
+              ) : null}
+              {profile?.known_limitations ? (
+                <SectionCard eyebrow="Known limitations">
+                  <Field label="Known limitations" value={profile.known_limitations} />
+                </SectionCard>
+              ) : null}
+              {profile?.proof_moment ? (
+                <SectionCard eyebrow="The proof moment">
+                  <Field label="The proof moment" value={profile.proof_moment} />
+                </SectionCard>
+              ) : null}
             </div>
+          ) : null}
+          {mustNotShow.length > 0 || usageMoments.length > 0 || competitors.length > 0 ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <ChipList label="Core features" items={list(profile?.core_features)} />
-              <ChipList label="Primary use cases" items={list(profile?.primary_use_cases)} />
-              <ChipList label="Problems solved" items={list(profile?.problems_solved)} />
-              <ChipList label="Desired outcomes" items={list(profile?.desired_outcomes)} />
+              {/* Labelled as enforced because it is: this list is attached to
+                  every video prompt, so it is an instruction to the model rather
+                  than context it may use or ignore. The wording matters — the old
+                  label promised the same enforcement over a field that had none. */}
+              {mustNotShow.length > 0 ? (
+                <SectionCard eyebrow="Never show in the video (enforced)">
+                  <ChipList
+                    label="Never show in the video (enforced)"
+                    items={mustNotShow}
+                    tone="enforced"
+                  />
+                </SectionCard>
+              ) : null}
+              {usageMoments.length > 0 ? (
+                <SectionCard eyebrow="When the app is reached for">
+                  <ChipList label="When the app is reached for" items={usageMoments} />
+                </SectionCard>
+              ) : null}
+              {competitors.length > 0 ? (
+                <SectionCard eyebrow="Competitor apps">
+                  <ChipList label="Competitor apps" items={competitors} />
+                </SectionCard>
+              ) : null}
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <Field label="Differentiators" value={profile?.differentiation} />
-              <Field label="Known limitations" value={profile?.known_limitations} />
-              <Field label="The proof moment" value={profile?.proof_moment} />
-            </div>
+          ) : null}
             {Array.isArray(profile?.outcome_statements) && profile.outcome_statements.length > 0 && (
-              <div className="space-y-2">
-                <span className="eyebrow block">Feature-to-outcome statements</span>
+              <SectionCard eyebrow="Feature-to-outcome statements">
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 {profile.outcome_statements.map((s, i) => (
                   <div
@@ -446,11 +530,10 @@ export default function AppProfileDetail() {
                   </div>
                 ))}
                 </div>
-              </div>
+              </SectionCard>
             )}
             {Array.isArray(profile?.viewer_objections) && profile.viewer_objections.length > 0 && (
-              <div className="space-y-2">
-                <span className="eyebrow block">Why they would not download</span>
+              <SectionCard eyebrow="Why they would not download">
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 {profile.viewer_objections.map((o, i) => (
                   <div
@@ -471,22 +554,8 @@ export default function AppProfileDetail() {
                   </div>
                 ))}
                 </div>
-              </div>
+              </SectionCard>
             )}
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              {/* Labelled as enforced because it is: this list is attached to
-                  every video prompt, so it is an instruction to the model rather
-                  than context it may use or ignore. The wording matters — the old
-                  label promised the same enforcement over a field that had none. */}
-              <ChipList
-                label="Never show in the video (enforced)"
-                items={list(profile?.must_not_show)}
-                tone="enforced"
-              />
-              <ChipList label="When the app is reached for" items={list(profile?.usage_moments)} />
-              <ChipList label="Competitor apps" items={list(profile?.competitors)} />
-            </div>
-          </div>
         </div>
 
         {/* The rail: three lighter panels sharing one column. */}

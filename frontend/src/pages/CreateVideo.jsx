@@ -1630,8 +1630,10 @@ export default function CreateVideo() {
           <div className="space-y-4" data-testid="audience-goal-step">
             {/* The angle is required: the strategy and the render are built
                 around it, so a video without one is the generic framing this
-                step exists to prevent. */}
-            <div className="space-y-1.5">
+                step exists to prevent. Each block on this step is its own
+                bordered card so the picker, the goal list, and the tone field
+                read as separate organized units. */}
+            <div className="surface space-y-2 rounded-2xl">
               <label className="text-sm font-medium">
                 Audience angle{" "}
                 <span className="font-normal text-muted-foreground">(required)</span>
@@ -1708,7 +1710,7 @@ export default function CreateVideo() {
             </div>
 
             {/* The goal step is intentionally downstream of the angle. */}
-            <div className="space-y-1.5 rounded-xl border border-[color:var(--hairline)] p-4" data-testid="create-what-you-get">
+            <div className="surface space-y-1.5 rounded-2xl" data-testid="create-what-you-get">
               <span className="text-sm font-medium">What you get</span>
               <p className="text-sm">
                 One {pieceSeconds}s Hook + Story clip: a {pieceSplit.hookSeconds}s hook, then a {pieceSplit.middleSeconds}s story.
@@ -1723,17 +1725,19 @@ export default function CreateVideo() {
               </p>
             </div>
 
-            <AngleGoalPicker
-              angle={angle}
-              value={objective}
-              onPick={setObjective}
-              options={objectiveOptions}
-              recommendations={recommendedObjectives}
-              outcomes={objectiveOutcomes}
-              fitReasons={objectiveFitReasons}
-            />
+            <div className="surface rounded-2xl">
+              <AngleGoalPicker
+                angle={angle}
+                value={objective}
+                onPick={setObjective}
+                options={objectiveOptions}
+                recommendations={recommendedObjectives}
+                outcomes={objectiveOutcomes}
+                fitReasons={objectiveFitReasons}
+              />
+            </div>
 
-            <div className="space-y-1.5">
+            <div className="surface space-y-1.5 rounded-2xl">
               <label htmlFor="tone" className="text-sm font-medium">Tone (optional)</label>
               <Input
                 id="tone"
