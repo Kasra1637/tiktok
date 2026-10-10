@@ -972,7 +972,7 @@ async def init_db():
         for col in (
             "appstore_url", "play_url", "support_urls", "notes", "app_category",
             "platforms", "core_features", "primary_use_cases",
-            "problems_solved", "icp_segments", "desired_outcomes", "competitors",
+            "problems_solved", "icp_segments", "desired_outcomes",
             "known_limitations", "must_not_show", "usage_moments", "proof_moment",
             "viewer_objections", "outcome_statements", "claims_approved", "claims_review",
             "claims_banned", "ctas", "video_themes", "status",
@@ -3117,13 +3117,13 @@ async def create_brand(payload: BrandProfileCreateRequest, user_id: str = Depend
              raw_extracted_text, created_at, updated_at, user_id,
              appstore_url, play_url, support_urls, notes, app_category, platforms,
              core_features, primary_use_cases, problems_solved,
-             icp_segments, desired_outcomes, competitors, known_limitations,
+             icp_segments, desired_outcomes, known_limitations,
              must_not_show, usage_moments, proof_moment, viewer_objections,
              outcome_statements,
              claims_approved, claims_review, claims_banned,
              status, version)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (brand_id, website or None, name, payload.brand_description or "",
          payload.niche or "",
          payload.target_audience or "", payload.ideal_customer_profile or "",
@@ -3139,7 +3139,6 @@ async def create_brand(payload: BrandProfileCreateRequest, user_id: str = Depend
          json.dumps(_normalize_str_list(payload.problems_solved)),
          json.dumps(_normalize_str_list(payload.icp_segments)),
          json.dumps(_normalize_str_list(payload.desired_outcomes)),
-         json.dumps(_normalize_str_list(payload.competitors)),
          payload.known_limitations or "",
          json.dumps(_normalize_str_list(payload.must_not_show)),
          json.dumps(_normalize_str_list(payload.usage_moments)),
@@ -3342,13 +3341,13 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
              raw_extracted_text, created_at, updated_at, user_id,
              appstore_url, play_url, support_urls, notes, app_category, platforms,
              core_features, primary_use_cases, problems_solved,
-             icp_segments, desired_outcomes, competitors, known_limitations,
+             icp_segments, desired_outcomes, known_limitations,
              must_not_show, usage_moments, proof_moment, viewer_objections,
              outcome_statements,
              claims_approved, claims_review, claims_banned,
              status, version, last_research_at, research_sources)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (brand_id, website, profile.get("brand_name") or "Untitled app",
 
          profile.get("brand_description") or "", profile.get("niche") or "",
@@ -3364,7 +3363,6 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
          json.dumps(profile.get("problems_solved") or []),
          json.dumps(profile.get("icp_segments") or []),
          json.dumps(profile.get("desired_outcomes") or []),
-         json.dumps(profile.get("competitors") or []),
          profile.get("known_limitations") or "",
          json.dumps(profile.get("must_not_show") or []),
          json.dumps(profile.get("usage_moments") or []),
@@ -3570,8 +3568,8 @@ def _approval_gaps(profile: dict, pending: Optional[dict] = None) -> list:
     researched and is approvable while most of what a plan needs is absent.
 
     Only the fields a plan actually depends on are required. Not requiring
-    everything keeps a legitimate sparse profile -- an app with no stated
-    competitors, say -- approvable instead of forcing invented filler.
+    everything keeps a legitimate sparse profile -- an app with no proof
+    moment, say -- approvable instead of forcing invented filler.
     """
     merged = dict(profile or {})
     for key, value in (pending or {}).items():

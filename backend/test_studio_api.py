@@ -1451,14 +1451,8 @@ class TestOutcomeStatementsSurviveASave:
         assert profile["outcome_statements"][0]["from_feature"] == "Task timer"
 
 
-class TestPlanPromptSeesCompetitors:
-    """
-    The plan is the document the founder now reads and approves before spending.
-    It was also the only generation prompt that could not see what this app is
-    up against, so the differentiation beat it asked for rested on a comparison
-    the model could only guess at -- while the strategy prompt, downstream, had
-    the list all along.
-    """
+class TestPlanPromptSeedsVoiceDefault:
+    """The plan's voice_direction is what the founder reads, edits and trusts."""
 
     def _capture(self, monkeypatch):
         import ai_service
@@ -1499,39 +1493,6 @@ class TestPlanPromptSeesCompetitors:
 
         monkeypatch.setattr(ai_service.httpx, "AsyncClient", _AsyncClient)
         return captured
-
-    def test_competitors_reach_the_plan_prompt(self, monkeypatch):
-        import ai_service
-        captured = self._capture(monkeypatch)
-        asyncio.run(ai_service.generate_creative_plan(
-            profile={"brand_name": "ShiftLog", "competitors": ["Daylio", "How We Feel"]},
-            template={"name": "T"},
-            objective="address_user_problem",
-            duration_seconds=20,
-        ))
-        prompt = json.dumps(captured["messages"])
-        assert "Daylio" in prompt
-        assert "How We Feel" in prompt
-
-    def test_it_forbids_claims_about_a_competitor(self, monkeypatch):
-        """
-        The data without the rule is context the model may ignore, and a short
-        video that names a competitor is exactly where an invented fact about a
-        third party does real damage. Asserted on the built prompt, not the
-        source: the rule is assembled from adjacent string literals, so a grep
-        for the sentence finds nothing.
-        """
-        import ai_service
-        captured = self._capture(monkeypatch)
-        asyncio.run(ai_service.generate_creative_plan(
-            profile={"brand_name": "ShiftLog", "competitors": ["Daylio"]},
-            template={"name": "T"},
-            objective="address_user_problem",
-            duration_seconds=20,
-        ))
-        prompt = json.dumps(captured["messages"])
-        assert "state anything factual about a competitor" in prompt
-        assert "never put a competitor's name" in prompt
 
     def test_plan_prompt_seeds_energetic_voice_default(self, monkeypatch):
         """

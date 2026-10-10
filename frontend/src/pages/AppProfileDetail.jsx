@@ -316,7 +316,6 @@ export default function AppProfileDetail() {
   const outcomes = list(profile?.desired_outcomes);
   const mustNotShow = list(profile?.must_not_show);
   const usageMoments = list(profile?.usage_moments);
-  const competitors = list(profile?.competitors);
 
   return (
     <div className="space-y-6">
@@ -490,11 +489,6 @@ export default function AppProfileDetail() {
               usageMoments.length > 0 ? (
                 <SectionCard key="usage-moments">
                   <ChipList label="When the app is reached for" items={usageMoments} />
-                </SectionCard>
-              ) : null,
-              competitors.length > 0 ? (
-                <SectionCard key="competitors">
-                  <ChipList label="Competitor apps" items={competitors} />
                 </SectionCard>
               ) : null,
             ].filter(Boolean);

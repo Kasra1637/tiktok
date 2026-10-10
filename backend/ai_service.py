@@ -200,7 +200,7 @@ REQUIRED_APP_PROFILE_KEYS = {
     "core_features", "primary_use_cases", "problems_solved",
     "target_audience", "ideal_customer_profile",
     "icp_segments", "desired_outcomes", "outcome_statements",
-    "differentiation", "competitors",
+    "differentiation",
     "known_limitations", "must_not_show", "usage_moments", "proof_moment",
     "viewer_objections", "tone_voice", "claims_approved", "claims_review",
     "claims_banned",
@@ -214,7 +214,7 @@ REQUIRED_APP_PROFILE_KEYS = {
 # included. Each has its own normalizer, called after this loop.
 APP_PROFILE_LIST_KEYS = (
     "platforms", "core_features", "primary_use_cases", "problems_solved",
-    "icp_segments", "desired_outcomes", "competitors", "must_not_show",
+    "icp_segments", "desired_outcomes", "must_not_show",
     "usage_moments", "claims_approved",
     "claims_review", "claims_banned",
 )
@@ -330,7 +330,6 @@ APP_PROFILE_JSON_SCHEMA = _strict_object({
         }),
     },
     "differentiation": _str_prop(),
-    "competitors": _str_array_prop(),
     "known_limitations": _str_prop(),
     "must_not_show": _str_array_prop(),
     "usage_moments": _str_array_prop(),
@@ -1682,7 +1681,6 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         'starts itself so there is no reason to pick the phone back up -- never a spec, '
         'never a guarantee)"}],\n'
         '  "differentiation": "2-4 sentences on what sets this app apart",\n'
-        '  "competitors": ["named competitor apps if inferable, else empty"],\n'
         '  "known_limitations": "material limitations a promo must not contradict (platforms, feature gaps)",\n'
         '  "must_not_show": ["concrete things a promo must never show or imply, each a short '
         'phrase a camera could actually depict: a specific setting, a demographic stereotype, a '
@@ -1886,7 +1884,6 @@ async def generate_content_angles(profile: dict, max_angles: int = 8) -> list:
         # evidenced outcome pair instead of re-deriving it.
         "outcome_statements": profile.get("outcome_statements") or [],
         "differentiators": profile.get("differentiation") or "(unstated)",
-        "competitors": _list("competitors"),
         "limitations": profile.get("known_limitations") or "(none recorded)",
         "voice": profile.get("tone_voice") or "(unstated)",
         "approved_claims": _list("claims_approved"),
@@ -2092,7 +2089,6 @@ async def generate_brand_templates(
         "outcomes": _list("desired_outcomes"),
         "outcome_statements": profile.get("outcome_statements") or [],
         "differentiators": profile.get("differentiation") or "(unstated)",
-        "competitors": _list("competitors"),
         "voice": profile.get("tone_voice") or "(unstated)",
         "approved_claims": _list("claims_approved"),
         "banned_claims": _list("claims_banned"),
@@ -2278,12 +2274,6 @@ async def generate_creative_plan(
         # to something evidenced rather than floating as a generic benefit.
         "outcome_statements": profile.get("outcome_statements") or [],
         "differentiators": profile.get("differentiation") or "(unstated)",
-        # The plan prompt never saw the competitor list, while the strategy
-        # prompt did -- so the one document the founder now reads and approves
-        # before rendering was written by a model that could not see what this
-        # app is up against, and the differentiation beat it asked for rested on
-        # a comparison it could only guess at.
-        "competitors": _list("competitors"),
         "known_limitations": profile.get("known_limitations") or "(none recorded)",
     }
 
@@ -2427,15 +2417,6 @@ async def generate_creative_plan(
         "the situation. Never invent a feature, a rating, "
         "a review, a download count, or a user testimonial, and never state a price: no "
         "price is on record for this app, so a quote could not be checked.\n"
-        # The reason competitors is in this prompt at all. Without the rule the
-        # list is context the model may ignore, which is how it ended up in the
-        # strategy prompt and missing here.
-        "- If competitors are listed, the hook may open on the contrast between this app and "
-        "the one a viewer would otherwise reach for, naming the specific difference. Do not "
-        "state anything factual about a competitor: no features, prices, ratings or reviews "
-        "may be attributed to another product, and never put a competitor's name, logo or "
-        "interface on screen. Contrast this app's own verified facts against the viewer's "
-        "default assumption, not against a competitor's record.\n"
         "- Never use anything in claims.never_use. If a claims.needs_review item would help, "
         "leave it out rather than using it.\n"
         "- Never promise a guaranteed outcome and never describe the viewer as having a "
@@ -3100,7 +3081,6 @@ async def generate_video_strategy(
         # link instead of re-deriving it from two flat lists.
         "outcome_statements": profile.get("outcome_statements") or [],
         "differentiators": profile.get("differentiation") or "(unstated)",
-        "competitors": _list("competitors"),
         "limitations": profile.get("known_limitations") or "(none recorded)",
         # usage_moments exists because the schema asks for a scene and a hook
         # action, and without it the model invents a setting (a kitchen at 7am,

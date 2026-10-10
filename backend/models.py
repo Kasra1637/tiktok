@@ -17,7 +17,7 @@ def row_to_dict(row, columns: list) -> dict:
         "products_services", "messages", "brief", "hashtags", "sound_reference",
         # App Profile (brand_profiles) structured fields
         "support_urls", "platforms", "core_features", "primary_use_cases",
-        "problems_solved", "icp_segments", "desired_outcomes", "competitors",
+        "problems_solved", "icp_segments", "desired_outcomes",
         "must_not_show", "usage_moments", "viewer_objections",
         "outcome_statements",
         "claims_approved", "claims_review", "claims_banned",
@@ -95,7 +95,7 @@ class ApproveAppProfileRequest(BaseModel):
 # accepts either a list or a comma-separated string.
 APP_PROFILE_LIST_FIELDS = (
     "support_urls", "platforms", "core_features", "primary_use_cases",
-    "problems_solved", "icp_segments", "desired_outcomes", "competitors",
+    "problems_solved", "icp_segments", "desired_outcomes",
     "must_not_show", "usage_moments", "claims_approved",
     "claims_review", "claims_banned",
 )
@@ -173,7 +173,6 @@ class BrandProfileCreateRequest(BaseModel):
     problems_solved: Optional[List[str]] = None
     icp_segments: Optional[List[str]] = None
     desired_outcomes: Optional[List[str]] = None
-    competitors: Optional[List[str]] = None
     known_limitations: Optional[str] = ""
     # Enforced in the video prompt. known_limitations is advisory context for
     # the plan and strategy; this one is attached to the render that could
@@ -210,7 +209,6 @@ class BrandProfileUpdateRequest(BaseModel):
     problems_solved: Optional[List[str]] = None
     icp_segments: Optional[List[str]] = None
     desired_outcomes: Optional[List[str]] = None
-    competitors: Optional[List[str]] = None
     known_limitations: Optional[str] = None
     must_not_show: Optional[List[str]] = None
     usage_moments: Optional[List[str]] = None

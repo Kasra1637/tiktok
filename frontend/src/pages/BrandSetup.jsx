@@ -26,8 +26,7 @@ const EMPTY_FORM = {
   viewer_objections: "",
   desired_outcomes: "",
   outcome_statements: "",
-  competitors: "",
-  target_audience: "",
+  target_audience: "",,
   ideal_customer_profile: "",
   icp_segments: "",
   differentiation: "",
@@ -149,8 +148,7 @@ function profileToForm(data) {
     viewer_objections: objectionsToText(data.viewer_objections),
     desired_outcomes: productsToText(data.desired_outcomes),
     outcome_statements: outcomesToText(data.outcome_statements),
-    competitors: productsToText(data.competitors),
-    target_audience: data.target_audience || "",
+    target_audience: data.target_audience || "",,
     ideal_customer_profile: data.ideal_customer_profile || "",
     icp_segments: linesToText(data.icp_segments),
     differentiation: data.differentiation || "",
@@ -329,7 +327,6 @@ export default function BrandSetup() {
         viewer_objections: textToObjections(form.viewer_objections),
         desired_outcomes: textToProducts(form.desired_outcomes),
         outcome_statements: textToOutcomes(form.outcome_statements),
-        competitors: textToProducts(form.competitors),
         target_audience: form.target_audience,
         ideal_customer_profile: form.ideal_customer_profile,
         icp_segments: textToLines(form.icp_segments),
@@ -829,14 +826,6 @@ export default function BrandSetup() {
                       onChange={handleFieldChange("target_audience")}
                       placeholder="For example: Busy professionals 25-40"
                       data-testid="brand-audience-field"
-                    />
-                  </Field>
-                  <Field label="Competitor apps" hint="Comma-separated.">
-                    <Input
-                      value={form.competitors}
-                      onChange={handleFieldChange("competitors")}
-                      placeholder="For example: Day One, Journey"
-                      data-testid="app-competitors-field"
                     />
                   </Field>
                 </div>

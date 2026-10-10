@@ -289,9 +289,9 @@ class TestApprovalNeedsAProfileWorthApproving:
 
     def test_a_sparse_but_honest_profile_is_still_approvable(self, api):
         """
-        Not everything is required. An app with no stated competitors or no
-        proof moment is a real profile, and demanding filler for those would make
-        the gate something founders learn to bypass.
+        Not everything is required. An app with no proof moment is a real
+        profile, and demanding filler for those would make the gate something
+        founders learn to bypass.
         """
         from models import ApproveAppProfileRequest, BrandProfileCreateRequest
         profile = _run(api.create_brand(payload=BrandProfileCreateRequest(

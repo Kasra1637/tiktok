@@ -682,7 +682,6 @@ class TestStrategyBudget:
                     }
                     for i in range(6)
                 ],
-                "competitors": eight,
                 "known_limitations": "iOS and Android only; no offline mode yet.",
                 "must_not_show": eight,
                 "usage_moments": eight,
