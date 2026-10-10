@@ -106,25 +106,32 @@ ANGLE_GOAL_RECOMMENDATIONS = {
 # What each campaign objective leaves the viewer with, in the viewer's terms.
 #
 # This is what the recommender says when a template serves an objective: the
-# outcome, not the taxonomy. Each clause describes what the footage DOES —
+# outcome, not the taxonomy. Each sentence describes what the footage DOES —
 # where it leaves the person watching — never what it will earn. No reach,
 # no conversion, no performance claim of any kind, which is the same honesty
 # rule the evidence note follows. Keyed to VIDEO_OBJECTIVES above; the
-# scorer falls back to a neutral clause for anything outside the vocabulary.
+# scorer falls back to a neutral sentence for anything outside the vocabulary.
+#
+# These are capitalized because they are shown on their own line under the goal
+# name on the picker, where a lowercase opener reads as a typo. Anything that
+# SPLICES one of these into the middle of its own sentence must re-word around
+# the capital rather than paste it after an em dash — see _score_template_for_angle,
+# which reads "Built for 'x'. Leaves them wanting the answer." instead of
+# "... — leaves them wanting the answer."
 OBJECTIVE_OUTCOMES = {
-    "explain_app": "walks them into what the app is without a feature list",
-    "demonstrate_feature": "keeps them watching long enough to see it work",
-    "create_curiosity": "leaves them wanting the answer",
-    "address_user_problem": "gets them naming the problem out loud",
-    "compare_alternative": "puts the choice in front of them honestly",
-    "introduce_new_app": "gets them to recognise it and remember it",
-    "build_awareness": "puts the app in their head as familiar",
-    "educate_viewers": "leaves them with one thing they got wrong",
-    "achieve_desired_outcome": "shows the outcome as reachable",
-    "overcome_viewer_doubt": "takes the doubt seriously instead of dismissing it",
-    "ease_daily_moment": "makes the daily moment feel lighter",
-    "avoid_common_mistake": "catches them before the mistake",
-    "feel_seen_and_understood": "makes them feel described, not sold to",
+    "explain_app": "Walks them into what the app is without a feature list",
+    "demonstrate_feature": "Keeps them watching long enough to see it work",
+    "create_curiosity": "Leaves them wanting the answer",
+    "address_user_problem": "Gets them naming the problem out loud",
+    "compare_alternative": "Puts the choice in front of them honestly",
+    "introduce_new_app": "Gets them to recognise it and remember it",
+    "build_awareness": "Puts the app in their head as familiar",
+    "educate_viewers": "Leaves them with one thing they got wrong",
+    "achieve_desired_outcome": "Shows the outcome as reachable",
+    "overcome_viewer_doubt": "Takes the doubt seriously instead of dismissing it",
+    "ease_daily_moment": "Makes the daily moment feel lighter",
+    "avoid_common_mistake": "Catches them before the mistake",
+    "feel_seen_and_understood": "Makes them feel described, not sold to",
 }
 
 # Why each suggested goal fits the angle it was suggested for, in plain words.

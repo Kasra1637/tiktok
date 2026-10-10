@@ -221,6 +221,16 @@ class TestVocabularies:
     def test_twelve_content_angle_kinds(self):
         assert len(tl.CONTENT_ANGLE_KINDS) == 12
 
+    def test_every_objective_outcome_is_a_capitalized_sentence(self):
+        """
+        These are shown on their own line under the goal name on the picker,
+        where a lowercase opener reads as a typo rather than a clause. They
+        used to be lowercase clause fragments ("catches them before the
+        mistake") and the picker displayed them verbatim.
+        """
+        for objective, outcome in tl.OBJECTIVE_OUTCOMES.items():
+            assert outcome[:1].isupper(), f"{objective}: {outcome!r}"
+
     def test_unknown_values_fall_back(self):
         assert tl.normalize_category("not-a-real-category") == "other"
         assert tl.normalize_objective("not_a_real_objective") == ""
@@ -331,6 +341,36 @@ class TestRecommendationScorer:
         )
         assert result["score"] >= 7.0
         assert any("demonstrate feature" in r for r in result["reasons"])
+
+    def test_a_reason_never_splices_a_capitalized_outcome_after_a_dash(self):
+        """
+        The outcome sentences are capitalized for the picker, so the reason
+        cannot paste one mid-sentence after an em dash -- that rendered
+        "Built for 'create curiosity' — Leaves them wanting the answer." The
+        separator is a full stop, and this pins the joined shape so a future
+        edit back to the dash fails here rather than in the UI.
+        """
+        angle = {"kind": "feature_demonstration", "target_audience": "Busy professionals",
+                 "app_feature": "timer", "claims_to_respect": []}
+        result = _score_template_for_angle(
+            self._template(), self._profile(), angle, "demonstrate_feature"
+        )
+        built = next(r for r in result["reasons"] if r.startswith("Built for"))
+        assert built == (
+            "Built for 'demonstrate feature'. "
+            "Keeps them watching long enough to see it work."
+        )
+        assert " — K" not in built and "— L" not in built
+
+    def test_a_mismatched_objective_reason_joins_cleanly_too(self):
+        angle = {"kind": "feature_demonstration", "target_audience": "x",
+                 "app_feature": "timer", "claims_to_respect": []}
+        result = _score_template_for_angle(
+            self._template(), self._profile(), angle, "build_awareness"
+        )
+        made = next(r for r in result["reasons"] if r.startswith("Made for"))
+        assert made.endswith("Close to your 'build awareness' goal.")
+        assert " — P" not in made
 
     def test_objective_mismatch_scores_lower(self):
         angle = {"kind": "feature_demonstration", "target_audience": "x",

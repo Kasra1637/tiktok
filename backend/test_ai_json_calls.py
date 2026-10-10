@@ -755,21 +755,30 @@ class TestStrategyBudget:
 
         prompt = captured["prompt"]
         # Measured worst case, with every list at its cap, six viewer objections,
-        # six outcome statements and the anonymous trend aggregate: 20,675 chars.
-        # The ceiling sits just above at 21,500.
+        # six outcome statements and the anonymous trend aggregate: 21,614 chars.
+        # The ceiling sits just above at 22,500.
         #
-        # The number has moved three times now -- 13,692 before the objections,
+        # The number has moved four times now -- 13,692 before the objections,
         # 15,226 after, 20,675 after the outcome layer (linked statements in
         # every prompt plus the pitch rules that consume them) -- and it moved
         # *because* the fixture was corrected, not because the ceiling was
         # raised. Two earlier versions of this test used a round number picked
         # without measuring and let a real inflation through, so the figure
         # quoted in the failure message is the one to trust.
-        CEILING = 21_500
+        #
+        # Two things worth recording about the most recent move, because the one
+        # before it is the lesson. The 20,675 above had gone stale without anyone
+        # noticing: HEAD measured 21,440, which left 60 chars of headroom, so an
+        # unmeasured growth of 765 had already slipped past a quoted figure that
+        # no longer described reality. What moved it now is deliberate and
+        # measured -- 174 chars for the capitalization rule, which is the only
+        # thing standing between a lowercase opening sentence and the card it
+        # renders on. Measured first, raised second.
+        CEILING = 22_500
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling (measured "
-            f"worst case 20,675). Every field added here is a value the model must "
+            f"worst case 21,614). Every field added here is a value the model must "
             f"write back, and a truncated strategy is a 502 the founder cannot fix."
         )
 

@@ -4388,6 +4388,20 @@ async def template_facets(user_id: str = Depends(get_current_user_id)):
 # ---------------------------------------------------------------------------
 # Template recommendation
 # ---------------------------------------------------------------------------
+# Terminal punctuation for an objective outcome spliced into a reason.
+#
+# OBJECTIVE_OUTCOMES are complete sentences with no trailing period, because the
+# goal picker shows them as a standalone line where a trailing dot would be
+# noise. The scorer composes them INTO a sentence, so it has to close the one it
+# opens -- hence this. It is not a bare f"{outcome}." because an outcome ending
+# in "?" or "!" would then come out as "?." / "!.".
+def _outcome_as_sentence(outcome: str) -> str:
+    text = str(outcome or "").strip()
+    if not text:
+        return ""
+    return text if text[-1] in ".!?" else text + "."
+
+
 def _score_template_for_angle(
     template: dict,
     profile: dict,
@@ -4445,17 +4459,22 @@ def _score_template_for_angle(
         if tpl_objective == objective:
             score += 3.0
             # The objective name stays in the sentence: it is the goal the
-            # founder picked, and the clause after it is what the footage
-            # does about that goal. See OBJECTIVE_OUTCOMES.
-            add(3.0, f"Built for '{objective.replace('_', ' ')}' — "
-                     f"{template_library.OBJECTIVE_OUTCOMES.get(objective, 'serves the goal you picked')}.")
+            # founder picked, and what follows is what the footage does about
+            # that goal. See OBJECTIVE_OUTCOMES.
+            #
+            # A full stop, not an em dash, between the two: those outcomes are
+            # capitalized sentences in their own right (they are shown that way
+            # on the goal picker), so splicing one in after a dash produced
+            # "Built for 'create curiosity' — Leaves them wanting the answer."
+            add(3.0, f"Built for '{objective.replace('_', ' ')}'. "
+                     f"{_outcome_as_sentence(template_library.OBJECTIVE_OUTCOMES.get(objective)) or 'Serves the goal you picked.'}")
         else:
             score += 0.5
             add(
                 0.5,
-                f"Made for '{tpl_objective.replace('_', ' ')}' — "
-                f"{template_library.OBJECTIVE_OUTCOMES.get(tpl_objective, 'serves that goal')}; "
-                f"close to your '{objective.replace('_', ' ')}' goal.",
+                f"Made for '{tpl_objective.replace('_', ' ')}'. "
+                f"{_outcome_as_sentence(template_library.OBJECTIVE_OUTCOMES.get(tpl_objective)) or 'Serves that goal.'} "
+                f"Close to your '{objective.replace('_', ' ')}' goal.",
             )
 
     profile_category = (profile.get("app_category") or profile.get("niche") or "").strip()

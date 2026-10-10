@@ -1914,14 +1914,17 @@ async def generate_content_angles(profile: dict, max_angles: int = 8) -> list:
         "{\n"
         '  "kind": "one of the kinds listed above",\n'
         '  "label": "short 3-6 word title",\n'
-        '  "target_audience": "the audience segment, described functionally",\n'
-        '  "user_problem": "the concrete problem this angle speaks to",\n'
-        '  "hook_promise": "what the first 3 seconds promise",\n'
-        '  "app_feature": "the app feature this angle demonstrates",\n'
-        '  "desired_emotion": "the emotion the viewer should feel by the end",\n'
-        '  "claims_to_respect": ["claims or limitations that bound this angle"]\n'
+        '  "target_audience": "The audience segment, described functionally",\n'
+        '  "user_problem": "The concrete problem this angle speaks to",\n'
+        '  "hook_promise": "What the first 3 seconds promise",\n'
+        '  "app_feature": "The app feature this angle demonstrates",\n'
+        '  "desired_emotion": "The emotion the viewer should feel by the end",\n'
+        '  "claims_to_respect": ["Claims or limitations that bound this angle"]\n'
         "}\n"
-        "Rules: use ONLY facts present in the profile. If an angle would require a "
+        "Rules: use ONLY facts present in the profile. Every text field is a "
+        "sentence that starts with a capital letter -- write the examples above as "
+        "sentences, not as lowercase fragments, or the angle renders with a typo. "
+        "If an angle would require a "
         "claim from claims_needing_review, list that claim in claims_to_respect. Never "
         "promise guaranteed outcomes, invent testimonials or reviews, state any price or "
         "trial term, or imply a feature the profile does not list. Vary the "
@@ -2156,7 +2159,10 @@ async def generate_brand_templates(
         '  "default_duration": 15,\n'
         '  "outcome": "what the viewer ends up with from this structure, one sentence, viewer-facing (e.g. hears their own frustration said out loud) -- never the mechanic, never a guaranteed result",\n'
         "}\n"
-        "Rules: use ONLY facts present above. Never invent a feature, price, rating, "
+        "Rules: use ONLY facts present above. Every text field is a "
+        "sentence that starts with a capital letter -- write the examples above as "
+        "sentences, not as lowercase fragments, or the template renders with a typo. "
+        "Never invent a feature, price, rating, "
         "review, testimonial, or guaranteed outcome. Never use a banned claim. Vary "
         "the categories and objectives — not ten variations of one idea. "
         f"hook_seconds is {MIN_HOOK_SECONDS}-{MAX_HOOK_SECONDS}; default_duration is one of "
@@ -3311,6 +3317,9 @@ async def generate_video_strategy(
         + '\n  ]\n'
         "}\n"
         "Rules:\n"
+        + "- Every text field is a sentence that starts with a capital letter -- write "
+        "the examples above as sentences, not as lowercase fragments, or the strategy "
+        "renders with a typo.\n"
         + (
             "- An APPROVED CREATIVE PLAN is supplied above. The founder wrote it and reviewed it "
             "before this video cost anything, so it is the video: hook_line must be that hook line, "
