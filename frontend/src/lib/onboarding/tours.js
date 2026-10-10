@@ -210,12 +210,6 @@ export const TOURS = {
         body:
           "Open a draft to continue its Create Video steps. Start a new video whenever you like; each draft is separate, and this approved profile remains available to reuse.",
       },
-      {
-        target: '[data-testid="app-profile-templates"]',
-        title: "Start with a suggested format",
-        body:
-          "Choose a template here to open Create Video with it preselected, then set the video's goal to see goal-matched suggestions. The full list and fit reasons appear on Template & photo.",
-      },
     ],
   },
 

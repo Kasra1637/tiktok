@@ -198,8 +198,6 @@ export default function AppProfileDetail() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [angles, setAngles] = useState([]);
-  const [recommendations, setRecommendations] = useState([]);
-  const [recError, setRecError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [regeneratingEverything, setRegeneratingEverything] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -240,37 +238,6 @@ export default function AppProfileDetail() {
     setLoading(true);
     load();
   }, [load]);
-
-  const loadRecommendations = useCallback(
-    async (angleId) => {
-      // Drafts are not ranked at all now: the endpoint refuses them, and the
-      // page already says recommendations appear after approval. Requesting
-      // anyway would only produce a 409 that then has to be hidden again.
-      if (profile?.status !== "approved") {
-        setRecommendations([]);
-        return;
-      }
-      try {
-        const rec = await api.getTemplateRecommendations(profileId, {
-          angle_id: angleId || undefined,
-          limit: 6,
-        });
-        setRecommendations(rec.recommendations || []);
-        setRecError(null);
-      } catch (err) {
-        // Same rule as the wizard: an empty list must not absorb a failure.
-        // Drafts never reach this branch (they return above), so anything
-        // caught here is a real error worth naming.
-        setRecommendations([]);
-        setRecError(getErrorMessage(err));
-      }
-    },
-    [profileId, profile?.status]
-  );
-
-  useEffect(() => {
-    if (profile) loadRecommendations();
-  }, [profile, loadRecommendations]);
 
   const handleRegenerateEverything = async () => {
     setRegeneratingEverything(true);
@@ -662,55 +629,6 @@ export default function AppProfileDetail() {
                     busy={deleting}
                   />
                 ))}
-              </div>
-            )}
-          </div>
-
-          <div className="surface space-y-3 rounded-2xl" data-testid="app-profile-templates">
-            <span className="eyebrow block">Suggested templates</span>
-            <p className="text-xs text-muted-foreground">These are app-level suggestions. Create Video ranks templates again for your selected video goal.</p>
-            {recError && (
-              <p className="text-xs text-muted-foreground">
-                Could not load suggestions ({recError}).
-              </p>
-            )}
-            {recommendations.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {approved
-                  ? "No template suggestions are available yet. You can still choose a goal in Create Video and review any suggestions there."
-                  : "Template suggestions appear after you approve the profile."}
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {recommendations.map((r) => {
-                  // The outcome is the one-line pitch for this row; the top
-                  // reason is the fallback for rows that predate it.
-                  const line =
-                    (typeof r.template.outcome === "string" && r.template.outcome.trim()) ||
-                    r.why_it_fits?.[0] ||
-                    "";
-                  return (
-                    <Link
-                      key={r.template.id}
-                      to={`/create?profile=${profileId}&template=${r.template.id}`}
-                      className="block rounded-xl border border-[color:var(--hairline)] p-3 transition-colors hover:border-[color:var(--indigo-35)]"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium">{r.template.name}</span>
-                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-                      </div>
-                      {line && (
-                        <p className="mt-1 text-xs text-muted-foreground">{line}</p>
-                      )}
-                    </Link>
-                  );
-                })}
-                <Link
-                  to={`/create?profile=${profileId}`}
-                  className="block pt-1 text-center text-xs font-medium text-[color:var(--brand-indigo)] hover:underline"
-                >
-                  Choose a goal and compare suggestions in Create Video
-                </Link>
               </div>
             )}
           </div>
