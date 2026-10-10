@@ -68,6 +68,12 @@ steps:
   # be added here without passing all six.
   - id: deploy
     name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    # The slim image boots into bash, not gcloud: without this the args below
+    # run as `bash run deploy ...` and the step dies with `"run": executable
+    # file not found` after a successful build+push (exactly the d323079
+    # failure). The verify step above states `entrypoint: bash` for the same
+    # reason, in reverse.
+    entrypoint: gcloud
     args:
       - run
       - deploy
