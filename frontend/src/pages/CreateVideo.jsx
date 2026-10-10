@@ -1669,21 +1669,21 @@ export default function CreateVideo() {
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="grid grid-cols-1 items-stretch gap-4">
                   {angles.map((a) => (
                     <button
                       key={a.id}
                       type="button"
                       aria-pressed={angleId === a.id}
                       onClick={() => setAngleId(a.id)}
-                      className={`w-full rounded-xl border p-3 text-left transition-colors ${
+                      className={`h-full w-full rounded-2xl border bg-card/70 p-5 text-left transition-colors ${
                         angleId === a.id
                           ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
                           : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium">{sentenceCase(a.label)}</span>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm font-medium leading-[22px]">{sentenceCase(a.label)}</span>
                         <span className="flex items-center gap-1.5">
                           <Badge variant="secondary" className="text-[11px]">
                             {humanize(a.kind)}
@@ -1692,7 +1692,7 @@ export default function CreateVideo() {
                         </span>
                       </div>
                       {angleSubtitle(a) && (
-                        <p className="mt-1 text-xs text-muted-foreground">{angleSubtitle(a)}</p>
+                        <p className="mt-3 text-xs leading-[18px] text-muted-foreground">{angleSubtitle(a)}</p>
                       )}
                     </button>
                   ))}

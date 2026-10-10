@@ -11,7 +11,7 @@ export function PageHeader({ icon: Icon, eyebrow, title, description, actions, a
   return (
     <div
       className={`flex flex-col gap-4 ${
-        centered ? "items-center text-center" : "sm:flex-row sm:items-end sm:justify-between"
+        centered ? "items-center text-center" : "sm:flex-row sm:items-center sm:justify-between"
       }`}
     >
       <div className={`min-w-0 ${centered ? "flex flex-col items-center" : ""}`}>

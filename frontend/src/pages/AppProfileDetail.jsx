@@ -12,18 +12,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "../components/ui/dropdown-menu";
 import { Input } from "../components/ui/input";
 import PageHeader from "../components/PageHeader";
-import { api, getErrorMessage } from "../lib/api";
 import { sentenceCase } from "../lib/copyCase";
 import { angleSubtitle } from "../lib/angleSubtitle";
-import { Briefcase, Loader as Loader2, TriangleAlert as AlertTriangle, ArrowLeft, Sparkles, Target, ShieldAlert, Lightbulb, Trash as Trash2, RefreshCw, MoveHorizontal as MoreHorizontal, Pencil } from "lucide-react";
+import { ProfileCard, ProfileField, InfoChipList, InfoListBlock, CardGrid, StatementCard, SectionGroup } from "../components/profileUi";
+import { api, getErrorMessage } from "../lib/api";
+import {
+  Briefcase, Loader2, AlertTriangle, ArrowLeft, Sparkles,
+  ShieldAlert, Lightbulb, Trash2, RefreshCw,
+} from "lucide-react";
 
 /** Read an array-or-empty field into a clean list. */
 function list(value) {
@@ -39,88 +37,10 @@ function list(value) {
   return [];
 }
 
-function ListBlock({ label, items, tone = "default" }) {
-  if (!items.length) return null;
-  const toneClass =
-    tone === "banned"
-      ? "border-[color:var(--hairline-strong)] bg-secondary/30"
-      : tone === "review"
-        ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
-        : "border-[color:var(--hairline)] bg-secondary/20";
-  return (
-    <div className={`rounded-xl border p-4 ${toneClass}`}>
-      <span className="eyebrow block">{label}</span>
-      <ul className="mt-2 space-y-1.5 text-sm text-foreground/90">
-        {items.map((item, i) => (
-          <li key={i} className="flex gap-2">
-            <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-[color:var(--brand-indigo)]" />
-            <span>{sentenceCase(item)}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-/**
- * A list rendered as wrapping chips rather than one long column of bullets.
- *
- * The research fields this page shows are mostly short phrases, and a stacked
- * bullet list gave every one of them a full card width with the text hugging
- * the left edge — the page read as a tall strip of empty space. Chips let a
- * list use the horizontal room it is given: two or three phrases per row, the
- * card shrinking to fit its content instead of stretching to fill the grid.
- */
-function ChipList({ label, items, tone = "default" }) {
-  if (!items.length) return null;
-  const labelClass =
-    tone === "enforced"
-      ? "text-[color:var(--destructive,oklch(0.65_0.2_25))]"
-      : "text-foreground";
-  const chipClass =
-    tone === "enforced"
-      ? "border-red-500/30 bg-red-500/10 text-foreground/90"
-      : "border-[color:var(--hairline)] bg-secondary/40 text-foreground/90";
-  return (
-    <div>
-      <span className={`eyebrow block ${labelClass}`}>{label}</span>
-      <ul className="mt-2 flex flex-wrap gap-1.5">
-        {items.map((item, i) => (
-          <li
-            key={i}
-            className={`rounded-full border px-2.5 py-1 text-xs leading-5 ${chipClass}`}
-          >
-            {sentenceCase(item)}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function Field({ label, value }) {
-  if (!value) return null;
-  return (
-    <div>
-      <span className="eyebrow block">{label}</span>
-      <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">{sentenceCase(value)}</p>
-    </div>
-  );
-}
-
-/**
- * One bordered information card. Every info block on this page gets its own
- * border and breathing room so the cards read as separate, organized units
- * instead of one long undifferentiated column.
- */
-function SectionCard({ testid, eyebrow, children }) {
-  return (
-    <div className="surface flex flex-col space-y-3 rounded-2xl" {...(testid ? { "data-testid": testid } : {})}>
-      {eyebrow && <span className="eyebrow block">{eyebrow}</span>}
-      {children}
-    </div>
-  );
-}
+/* Shared card language (Step 1): one background, 1px hairline, radius 16,
+   padding 20, 16px card gaps, 12px item gaps. Research phrases render as
+   wrapping chips so lists use their horizontal room instead of stretching
+   one phrase per row down a tall strip of empty space. */
 
 function ClaimPanel({ profile }) {
   const approved = list(profile.claims_approved);
@@ -128,12 +48,17 @@ function ClaimPanel({ profile }) {
   const banned = list(profile.claims_banned);
   if (!approved.length && !review.length && !banned.length) return null;
   return (
-    <SectionCard testid="claim-guardrails" eyebrow="Claim guardrails">
-      <p className="text-xs text-muted-foreground">The plan checks these phrases before rendering. Review each claim for accuracy before publishing; an automated check is not a guarantee.</p>
-      <ListBlock label="Approved — safe to use" items={approved} />
-      <ListBlock label="Needs review — verify first" items={review} tone="review" />
-      <ListBlock label="Never use" items={banned} tone="banned" />
-    </SectionCard>
+    <ProfileCard testid="claim-guardrails" eyebrow="Claim guardrails">
+      <div>
+        <Badge className="border-amber-500/25 bg-amber-500/10 px-3 py-1 text-amber-300">
+          Needs review · {review.length}
+        </Badge>
+      </div>
+      <p className="text-xs leading-[18px] text-muted-foreground">The plan checks these phrases before rendering. Review each claim for accuracy before publishing; an automated check is not a guarantee.</p>
+      <InfoListBlock label="Approved — safe to use" items={approved} tone="approved" />
+      <InfoListBlock label="Needs review — verify first" items={review} tone="review" />
+      <InfoListBlock label="Never use" items={banned} tone="banned" />
+    </ProfileCard>
   );
 }
 
@@ -194,6 +119,38 @@ export default function AppProfileDetail() {
   const [typedName, setTypedName] = useState("");
   const [deleteError, setDeleteError] = useState(null);
   const [deletingProfile, setDeletingProfile] = useState(false);
+  // Collapsible groups (per group, never per card, so row heights stay
+  // equal): Essentials open, the rest collapsed. Persisted per profile so a
+  // founder's reading position survives reloads.
+  const [groups, setGroups] = useState({ essentials: true, problems: false, messaging: false, context: false });
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`profile-groups:${profileId}`);
+      if (raw) setGroups((s) => ({ ...s, ...JSON.parse(raw) }));
+    } catch {
+      // A stale or foreign value leaves the defaults in place.
+    }
+  }, [profileId]);
+  const toggleGroup = useCallback((id, open) => {
+    setGroups((s) => {
+      const next = { ...s, [id]: open };
+      try {
+        localStorage.setItem(`profile-groups:${profileId}`, JSON.stringify(next));
+      } catch {
+        // Private-mode writes fail silently; the toggle still works in memory.
+      }
+      return next;
+    });
+  }, [profileId]);
+  const setAllGroups = useCallback((open) => {
+    const next = { essentials: open, problems: open, messaging: open, context: open };
+    setGroups(next);
+    try {
+      localStorage.setItem(`profile-groups:${profileId}`, JSON.stringify(next));
+    } catch {
+      // See toggleGroup.
+    }
+  }, [profileId]);
 
   const load = useCallback(async () => {
     try {
@@ -307,9 +264,9 @@ export default function AppProfileDetail() {
   const approved = profile?.status === "approved";
 
   // Section visibility is computed up front so an empty research field leaves
-  // no hollow bordered card behind: ChipList and Field render null when they
-  // have nothing to show, and a SectionCard around nothing would be a box
-  // with a title and no body.
+  // no hollow bordered card behind: InfoChipList and ProfileField render null
+  // when they have nothing to show, and a ProfileCard around nothing would be
+  // a box with a title and no body.
   const basics = [profile?.app_category || profile?.niche, list(profile?.platforms).join(", "), profile?.tone_voice];
   const coreFeatures = list(profile?.core_features);
   const useCases = list(profile?.primary_use_cases);
@@ -317,6 +274,35 @@ export default function AppProfileDetail() {
   const outcomes = list(profile?.desired_outcomes);
   const mustNotShow = list(profile?.must_not_show);
   const usageMoments = list(profile?.usage_moments);
+  const competitors = list(profile?.competitors);
+  const outcomeCount = Array.isArray(profile?.outcome_statements) ? profile.outcome_statements.length : 0;
+  const objectionCount = Array.isArray(profile?.viewer_objections) ? profile.viewer_objections.length : 0;
+
+  // Group visibility mirrors the cards: an empty group leaves no header
+  // behind. Summaries are computed from the data, never hand-written.
+  const hasEssentials = basics.some(Boolean) || coreFeatures.length > 0 || useCases.length > 0 || mustNotShow.length > 0;
+  const hasProblems = problems.length > 0 || outcomes.length > 0;
+  const hasMessaging = Boolean(profile?.differentiation || profile?.known_limitations || profile?.proof_moment) || outcomeCount > 0;
+  const hasContext = usageMoments.length > 0 || competitors.length > 0 || objectionCount > 0;
+  const joinSummary = (parts) => parts.filter(Boolean).join(" · ");
+  const essentialsSummary = joinSummary([
+    coreFeatures.length > 0 && `${coreFeatures.length} feature${coreFeatures.length === 1 ? "" : "s"}`,
+    useCases.length > 0 && `${useCases.length} use case${useCases.length === 1 ? "" : "s"}`,
+    mustNotShow.length > 0 && `${mustNotShow.length} never-show`,
+  ]);
+  const problemsSummary = joinSummary([
+    problems.length > 0 && `${problems.length} problem${problems.length === 1 ? "" : "s"}`,
+    outcomes.length > 0 && `${outcomes.length} outcome${outcomes.length === 1 ? "" : "s"}`,
+  ]);
+  const messagingSummary = joinSummary([
+    profile?.differentiation && "differentiators",
+    outcomeCount > 0 && `${outcomeCount} statement${outcomeCount === 1 ? "" : "s"}`,
+  ]);
+  const contextSummary = joinSummary([
+    usageMoments.length > 0 && `${usageMoments.length} moment${usageMoments.length === 1 ? "" : "s"}`,
+    competitors.length > 0 && `${competitors.length} competitor${competitors.length === 1 ? "" : "s"}`,
+    objectionCount > 0 && `${objectionCount} objection${objectionCount === 1 ? "" : "s"}`,
+  ]);
 
   return (
     <div className="space-y-6">
@@ -337,10 +323,33 @@ export default function AppProfileDetail() {
         actions={
           <div className="flex items-center gap-2">
             {approved ? (
-              <Badge variant="indigo" className="px-3 py-1">Approved</Badge>
+              <Badge className="border-green-500/25 bg-green-500/10 px-3 py-1 text-green-300">Approved</Badge>
             ) : (
               <Badge variant="secondary" className="px-3 py-1">Draft — needs review</Badge>
             )}
+            <Button variant="secondary" size="sm" asChild>
+              <Link to="/brand">Edit</Link>
+            </Button>
+            {/* Deletes the profile and everything scoped to it: content angles,
+                studio projects, generations, assets and their recorded
+                results. The endpoint and the api client both already existed
+                and nothing called them; this is the control that reaches them.
+                Type-to-confirm rather than window.confirm because the blast
+                radius is every finished video, not one regenerable row. */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={openConfirm}
+              aria-label="Delete app profile"
+              title="Delete this app profile and everything built on it"
+              data-testid="delete-profile-button"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+            {/* An App Profile is not consumed by making a video: the same
+                approved profile backs every video, and the studio reuses its
+                angles, assets and templates. This is the way back in, on the
+                page where someone is looking at the app itself. */}
             <Button variant="brand" size="sm" asChild>
               <Link
                 to={`/create?profile=${encodeURIComponent(profileId)}`}
@@ -355,37 +364,18 @@ export default function AppProfileDetail() {
                 Create Video
               </Link>
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" aria-label="More actions">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem asChild>
-                  <Link to="/brand" className="flex items-center gap-2">
-                    <Pencil className="h-3.5 w-3.5" /> Edit profile
-                  </Link>
-                </DropdownMenuItem>
-                {approved && (
-                  <DropdownMenuItem
-                    onClick={handleRegenerateEverything}
-                    disabled={regeneratingEverything}
-                    className="flex items-center gap-2"
-                  >
-                    {regeneratingEverything ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                    Refresh research &amp; angles
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem
-                  onClick={openConfirm}
-                  className="flex items-center gap-2 text-destructive focus:text-destructive"
-                  data-testid="delete-profile-button"
-                >
-                  <Trash2 className="h-3.5 w-3.5" /> Delete profile
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {approved && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleRegenerateEverything}
+                disabled={regeneratingEverything}
+                title="Re-research this app, apply the refreshed profile, and regenerate its audience angles"
+              >
+                {regeneratingEverything ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                Refresh research &amp; angles
+              </Button>
+            )}
           </div>
         }
       />
@@ -420,200 +410,209 @@ export default function AppProfileDetail() {
         </Alert>
       )}
 
-      {/* Two columns on desktop: the research facts span the wide column and
-          the lighter panels (results, audiences, guardrails) take the rail.
-          One full-width column was the whole defect this page shipped with —
-          every card stretched past any text it held. */}
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-2">
+      {/* Main column + sidebar rail: one card language, 16px gaps, stretch
+          rows with h-full cards, top-aligned content. Below xl (1280) the
+          rail drops under the main column. One full-width column was the
+          whole defect this page shipped with — every card stretched past any
+          text it held. */}
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
+        <div className="min-w-0 xl:col-span-8">
+          {(hasEssentials || hasProblems || hasMessaging || hasContext) && (
+            <div className="mb-4 flex items-center justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setAllGroups(true)}>
+                Expand all
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setAllGroups(false)}>
+                Collapse all
+              </Button>
+            </div>
+          )}
+          <div className="min-w-0 space-y-4">
+          {hasEssentials && (
+          <SectionGroup id="essentials" label="Essentials" summary={essentialsSummary} open={groups.essentials} onToggle={toggleGroup}>
           {basics.some(Boolean) ? (
-            <SectionCard testid="profile-facts" eyebrow="Product facts">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <Field label="Category" value={basics[0]} />
-                <Field label="Platforms" value={basics[1]} />
-                <Field label="Tone / voice" value={basics[2]} />
+            <ProfileCard testid="profile-facts" eyebrow="Product facts">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_1fr_2fr]">
+                <ProfileField label="Category" value={basics[0]} />
+                <ProfileField label="Platforms" value={basics[1]} />
+                <ProfileField label="Tone / voice" value={basics[2]} />
               </div>
-            </SectionCard>
+            </ProfileCard>
           ) : null}
-          <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
-            {coreFeatures.length > 0 ? (
-              <SectionCard>
-                <ChipList label="Core features" items={coreFeatures} />
-              </SectionCard>
-            ) : null}
-            {useCases.length > 0 ? (
-              <SectionCard>
-                <ChipList label="Primary use cases" items={useCases} />
-              </SectionCard>
-            ) : null}
-            {problems.length > 0 ? (
-              <SectionCard>
-                <ChipList label="Problems solved" items={problems} />
-              </SectionCard>
-            ) : null}
-            {outcomes.length > 0 ? (
-              <SectionCard>
-                <ChipList label="Desired outcomes" items={outcomes} />
-              </SectionCard>
-            ) : null}
-          </div>
+          {coreFeatures.length > 0 || useCases.length > 0 ? (
+            <CardGrid className="md:grid-cols-2">
+              {coreFeatures.length > 0 ? (
+                <ProfileCard eyebrow="Core features">
+                  <InfoChipList label="Core features" items={coreFeatures} />
+                </ProfileCard>
+              ) : null}
+              {useCases.length > 0 ? (
+                <ProfileCard eyebrow="Primary use cases">
+                  <InfoChipList label="Primary use cases" items={useCases} />
+                </ProfileCard>
+              ) : null}
+            </CardGrid>
+          ) : null}
+          {/* Labelled as enforced because it is: this list is attached to
+              every video prompt, so it is an instruction to the model rather
+              than context it may use or ignore. The wording matters — the old
+              label promised the same enforcement over a field that had none. */}
+          {mustNotShow.length > 0 ? (
+            <ProfileCard eyebrow="Never show in the video (enforced)" tone="enforced">
+              <InfoChipList
+                label="Never show in the video (enforced)"
+                items={mustNotShow}
+                tone="enforced"
+              />
+            </ProfileCard>
+          ) : null}
+          </SectionGroup>
+          )}
+          {hasProblems && (
+          <SectionGroup id="problems" label="Problems & outcomes" summary={problemsSummary} open={groups.problems} onToggle={toggleGroup}>
+            <CardGrid className="md:grid-cols-2">
+              {problems.length > 0 ? (
+                <ProfileCard eyebrow="Problems solved">
+                  <InfoChipList label="Problems solved" items={problems} />
+                </ProfileCard>
+              ) : null}
+              {outcomes.length > 0 ? (
+                <ProfileCard eyebrow="Desired outcomes">
+                  <InfoChipList label="Desired outcomes" items={outcomes} />
+                </ProfileCard>
+              ) : null}
+            </CardGrid>
+          </SectionGroup>
+          )}
+          {hasMessaging && (
+          <SectionGroup id="messaging" label="Messaging" summary={messagingSummary} open={groups.messaging} onToggle={toggleGroup}>
           {profile?.differentiation || profile?.known_limitations || profile?.proof_moment ? (
-            <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
               {profile?.differentiation ? (
-                <SectionCard>
-                  <Field label="Differentiators" value={profile.differentiation} />
-                </SectionCard>
+                <div className="h-full md:row-span-2">
+                  <ProfileCard eyebrow="Differentiators">
+                    <ProfileField label="Differentiators" value={profile.differentiation} />
+                  </ProfileCard>
+                </div>
               ) : null}
-              {profile?.known_limitations ? (
-                <SectionCard>
-                  <Field label="Known limitations" value={profile.known_limitations} />
-                </SectionCard>
-              ) : null}
-              {profile?.proof_moment ? (
-                <SectionCard>
-                  <Field label="The proof moment" value={profile.proof_moment} />
-                </SectionCard>
+              {profile?.known_limitations || profile?.proof_moment ? (
+                <div className="flex h-full min-w-0 flex-col gap-4">
+                  {profile?.known_limitations ? (
+                    <ProfileCard eyebrow="Known limitations">
+                      <ProfileField label="Known limitations" value={profile.known_limitations} />
+                    </ProfileCard>
+                  ) : null}
+                  {profile?.proof_moment ? (
+                    <ProfileCard eyebrow="The proof moment">
+                      <ProfileField label="The proof moment" value={profile.proof_moment} />
+                    </ProfileCard>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           ) : null}
-          {(() => {
-            const directionCards = [
-              mustNotShow.length > 0 ? (
-                <SectionCard key="must-not-show">
-                  <ChipList
-                    label="Never show in the video (enforced)"
-                    items={mustNotShow}
-                    tone="enforced"
-                  />
-                </SectionCard>
-              ) : null,
-              usageMoments.length > 0 ? (
-                <SectionCard key="usage-moments">
-                  <ChipList label="When the app is reached for" items={usageMoments} />
-                </SectionCard>
-              ) : null,
-            ].filter(Boolean);
-            if (!directionCards.length) return null;
-            return (
-              <div className={`grid items-stretch gap-4 ${
-                directionCards.length === 1
-                  ? "grid-cols-1"
-                  : directionCards.length === 3
-                    ? "grid-cols-1 md:grid-cols-3"
-                    : "grid-cols-1 md:grid-cols-2"
-              }`}>
-                {directionCards}
-              </div>
-            );
-          })()}
             {Array.isArray(profile?.outcome_statements) && profile.outcome_statements.length > 0 && (
-              <SectionCard eyebrow="Feature-to-outcome statements">
-                <div className="grid grid-cols-1 items-stretch gap-3 md:grid-cols-2">
+              <ProfileCard eyebrow="Feature-to-outcome statements">
+                <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
                 {profile.outcome_statements.map((s, i) => (
-                  <div
+                  <StatementCard
                     key={`${s.outcome}-${i}`}
-                    className="rounded-xl border border-[color:var(--hairline)] p-3 text-sm"
-                  >
-                    <p className="font-medium">{sentenceCase(s.outcome)}</p>
-                    {s.who_feels_it && (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Who feels it: {sentenceCase(s.who_feels_it)}
-                      </p>
-                    )}
-                    {s.from_feature && (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        From: {sentenceCase(s.from_feature)}
-                      </p>
-                    )}
-                    {s.how_it_helps && (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        How it helps: {sentenceCase(s.how_it_helps)}
-                      </p>
-                    )}
-                  </div>
+                    title={s.outcome}
+                    spanFull={profile.outcome_statements.length % 2 === 1 && i === profile.outcome_statements.length - 1}
+                    rows={[
+                      s.who_feels_it && `Who feels it: ${s.who_feels_it}`,
+                      s.from_feature && `From: ${s.from_feature}`,
+                      s.how_it_helps && `How it helps: ${s.how_it_helps}`,
+                    ]}
+                  />
                 ))}
                 </div>
-              </SectionCard>
+              </ProfileCard>
             )}
+          </SectionGroup>
+          )}
+          {hasContext && (
+          <SectionGroup id="context" label="Context & objections" summary={contextSummary} open={groups.context} onToggle={toggleGroup}>
+          {usageMoments.length > 0 ? (
+            <ProfileCard eyebrow="When the app is reached for">
+              <InfoChipList label="When the app is reached for" items={usageMoments} />
+            </ProfileCard>
+          ) : null}
+          {competitors.length > 0 ? (
+            <ProfileCard eyebrow="Competitor apps">
+              <InfoChipList label="Competitor apps" items={competitors} />
+            </ProfileCard>
+          ) : null}
             {Array.isArray(profile?.viewer_objections) && profile.viewer_objections.length > 0 && (
-              <SectionCard eyebrow="Why they would not download">
-                <div className="grid grid-cols-1 items-stretch gap-3 md:grid-cols-2">
+              <ProfileCard eyebrow="Why they would not download">
+                <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
                 {profile.viewer_objections.map((o, i) => (
-                  <div
+                  <StatementCard
                     key={`${o.objection}-${i}`}
-                    className="rounded-xl border border-[color:var(--hairline)] p-3 text-sm"
-                  >
-                    <p className="font-medium">{sentenceCase(o.objection)}</p>
-                    {o.what_they_do_now && (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Does now: {sentenceCase(o.what_they_do_now)}
-                      </p>
-                    )}
-                    {o.honest_answer && (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Answer: {sentenceCase(o.honest_answer)}
-                      </p>
-                    )}
-                  </div>
+                    title={o.objection}
+                    spanFull={profile.viewer_objections.length % 2 === 1 && i === profile.viewer_objections.length - 1}
+                    rows={[
+                      o.what_they_do_now && `Does now: ${o.what_they_do_now}`,
+                      o.honest_answer && `Answer: ${o.honest_answer}`,
+                    ]}
+                  />
                 ))}
                 </div>
-              </SectionCard>
+              </ProfileCard>
             )}
+          </SectionGroup>
+          )}
+          </div>
         </div>
 
-        {/* The rail: lighter panels sharing one column. */}
-        <div className="space-y-4">
-
-          <SectionCard testid="content-angles">
-            <span className="eyebrow flex items-center gap-1.5">
-              <Target className="h-3 w-3" /> Content angles
-            </span>
+        {/* The rail: same card tokens, one column, never stretched to match
+            the main column's bottom. Rows render fully — no truncation, no
+            clipping — with identical row heights. */}
+        <div className="min-w-0 space-y-4 xl:col-span-4">
+          <ProfileCard testid="content-angles" eyebrow="Content angles">
             {angles.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No audience angles yet. Generate them in Create Video or refresh this profile's research.
+              <p className="text-sm leading-[22px] text-muted-foreground">
+                No audience angles yet. Generate them in Create Video or refresh this profile&apos;s research.
               </p>
             ) : (
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 items-stretch gap-4">
                 {angles.map((a) => (
-                  <div key={a.id} className="rounded-lg border border-[color:var(--hairline)] p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-medium">{sentenceCase(a.label)}</div>
-                      <Badge variant="secondary" className="text-[11px]">
+                  <div key={a.id} className="h-full rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-medium leading-[22px]">{sentenceCase(a.label)}</div>
+                      <Badge variant="secondary" className="shrink-0 text-[11px]">
                         {a.kind ? a.kind.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Angle"}
                       </Badge>
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground">{angleSubtitle(a)}</p>
+                    <p className="mt-3 text-xs leading-[18px] text-muted-foreground">{angleSubtitle(a)}</p>
                   </div>
                 ))}
               </div>
             )}
-          </SectionCard>
+          </ProfileCard>
 
           {/* The only part of the profile that improves with use. Everything
               above was scraped once from the URL; this is the founder's own
               numbers on their own videos, and the next strategy prompt reads
               it. Aggregate per template, so it is evidence of what carried
               views rather than a ranking of hooks. */}
-          <div className="surface space-y-3 rounded-2xl" data-testid="what-works">
-            <span className="eyebrow flex items-center gap-1.5">
-              <Target className="h-3 w-3" /> What has worked here
-            </span>
+          <ProfileCard testid="what-works" eyebrow="What has worked here">
             {!whatWorks || !whatWorks.has_signal ? (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm leading-[22px] text-muted-foreground">
                 Nothing recorded yet. Add view numbers to a finished video and the next strategy
                 will know which of this app&apos;s openings actually carried them.
               </p>
             ) : (
               <>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs leading-[18px] text-muted-foreground">
                   Across {whatWorks.videos} recorded videos. View counts are only directional —
                   they do not prove that one template is better.
                 </p>
-                <dl className="space-y-1.5 text-sm">
+                <dl className="space-y-3 text-sm leading-[22px]">
                   {(whatWorks.top || []).map((row) => (
-                    <div key={row.template_id} className="flex items-baseline justify-between gap-3">
-                      <dt className="min-w-0 truncate">{row.template_id}</dt>
-                      <dd className="shrink-0 text-muted-foreground">
+                    <div key={row.template_id} className="flex min-h-8 items-center justify-between gap-3">
+                      <dt className="min-w-0 break-words">{row.template_id}</dt>
+                      <dd className="shrink-0 text-xs leading-[18px] text-muted-foreground">
                         {row.views.toLocaleString()} views · save rate {Math.round(row.save_rate * 100)}%
                       </dd>
                     </div>
@@ -621,14 +620,13 @@ export default function AppProfileDetail() {
                 </dl>
               </>
             )}
-          </div>
+          </ProfileCard>
 
-          <div className="surface space-y-4 rounded-2xl">
-            <span className="eyebrow block">Audiences</span>
-            <Field label="Primary audience" value={profile?.target_audience} />
-            <Field label="Ideal customer" value={profile?.ideal_customer_profile} />
-            <ListBlock label="Segments" items={list(profile?.icp_segments)} />
-          </div>
+          <ProfileCard eyebrow="Audiences">
+            <ProfileField label="Primary audience" value={profile?.target_audience} />
+            <ProfileField label="Ideal customer" value={profile?.ideal_customer_profile} />
+            <InfoListBlock label="Segments" items={list(profile?.icp_segments)} />
+          </ProfileCard>
 
           <ClaimPanel profile={profile || {}} />
         </div>
