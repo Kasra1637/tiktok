@@ -281,7 +281,7 @@ export default function AppProfileDetail() {
       // Reload angles after regeneration
       const a = await api.getContentAngles(profileId).catch(() => ({ angles: [] }));
       setAngles(a.angles || []);
-      setNotice("Regenerated everything: research, approval, and content angles.");
+      setNotice("Refreshed research, approval, and audience angles.");
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -643,7 +643,7 @@ export default function AppProfileDetail() {
             {angles.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 {approved
-                  ? "No audience angles are available yet. Re-research and approve an updated profile to refresh them. You can still choose a video goal without an angle."
+                  ? "No audience angles yet — use Refresh research & angles above to research this profile and generate them. You can still choose a video goal without an angle."
                   : "Approve this profile to create suggested audience angles for the video workflow."}
               </p>
             ) : (

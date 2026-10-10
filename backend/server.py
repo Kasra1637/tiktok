@@ -3642,9 +3642,9 @@ async def _auto_generate_content_angles(profile: dict, user_id: str) -> None:
     """
     Best-effort content angle generation after a profile is approved.
 
-    Runs in the background; failures are logged but don't block the approval
-    response. Angles are derived data — if generation fails the founder can
-    still use the profile and regenerate later.
+    Awaited inline by the caller, but failures never block the response:
+    angles are derived data — if generation fails the founder can still use
+    the profile and regenerate later (or the next listing backfills them).
     """
     try:
         angles = await _log_model_call(
@@ -3655,6 +3655,12 @@ async def _auto_generate_content_angles(profile: dict, user_id: str) -> None:
         )
     except Exception as e:
         logger.warning(f"Auto content angle generation failed for profile {profile.get('id')}: {e}")
+        return
+
+    if not angles:
+        # An empty model reply must not silently wipe the section: without
+        # this the listing shows nothing and nobody is told why.
+        logger.warning(f"Auto content angle generation returned no angles for profile {profile.get('id')}")
         return
 
     await _execute("DELETE FROM content_angles WHERE brand_profile_id = ?", (profile.get("id"),))
@@ -3779,25 +3785,24 @@ async def regenerate_everything(profile_id: str, user_id: str = Depends(get_curr
     if not existing:
         raise HTTPException(status_code=404, detail="App Profile not found")
 
-    # Step 1: Re-research from URLs
-    urls: dict = {}
-    if existing.get("website_url"):
-        urls["website"] = (existing["website_url"], APP_RESEARCH_CAPS["website"])
-    if existing.get("appstore_url"):
-        urls["app_store"] = (existing["appstore_url"], APP_RESEARCH_CAPS["app_store"])
-    if existing.get("play_url"):
-        urls["google_play"] = (existing["play_url"], APP_RESEARCH_CAPS["google_play"])
-    stored_support = existing.get("support_urls") or []
-    for u in stored_support:
-        if isinstance(u, str) and u.strip():
-            urls.setdefault("support", []).append((u.strip(), APP_RESEARCH_CAPS["support"]))
+    # Step 1: Re-research from the same sources a refresh would read.
+    sources = await _research_profile_sources(existing)
 
-    research = await analyze_brand_from_sources(urls, existing.get("brand_name") or "")
-    if not research or not isinstance(research, dict):
+    try:
+        proposal = await _log_model_call(
+            "app_profile_refresh", "text", TEXT_MODEL,
+            lambda: analyze_app_profile(sources, existing.get("notes") or ""),
+            user_id,
+            brand_profile_id=profile_id,
+        )
+    except Exception as e:
+        logger.error(f"App regenerate failed for {profile_id}: {e}")
+        raise HTTPException(status_code=502, detail=f"AI app research failed. Please try again. ({str(e)[:150]})")
+    if not proposal or not isinstance(proposal, dict):
         raise HTTPException(status_code=502, detail="Research returned no usable data.")
 
-    # Step 2: Apply the research (like approve with apply_pending)
-    apply = {k: v for k, v in research.items() if k in APP_PROFILE_EDITABLE_FIELDS and v not in (None, "", [])}
+    # Step 2: Apply the research the way approve applies a pending proposal.
+    apply = {k: v for k, v in proposal.items() if k in APP_PROFILE_EDITABLE_FIELDS and v not in (None, "", [])}
     now = now_iso()
     if apply:
         set_clauses, values = _brand_update_parts(apply)
@@ -3831,20 +3836,15 @@ async def regenerate_everything(profile_id: str, user_id: str = Depends(get_curr
     return updated_profile
 
 
-@api_router.post("/app-profiles/{profile_id}/refresh")
-async def refresh_app_profile(profile_id: str, user_id: str = Depends(get_current_user_id)):
-    """Re-research an App Profile from its stored URLs without touching live fields.
-
-    The fresh analysis is stored as pending_research for founder review — the
-    approved profile stays exactly as it was until approve applies it.
+async def _research_profile_sources(existing: dict) -> dict:
     """
-    require_ai_configured()
-    existing = await _fetch_one(
-        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
-    )
-    if not existing:
-        raise HTTPException(status_code=404, detail="App Profile not found")
+    Fetch readable text for an App Profile's stored URLs, keyed for research.
 
+    Shared by refresh (which stages the result as pending_research) and
+    regenerate (which applies it directly): the two must read the same
+    sources, or "regenerate everything" would rebuild the profile from
+    different evidence than a refresh proposes.
+    """
     urls: dict = {}
     if existing.get("website_url"):
         urls["website"] = (existing["website_url"], APP_RESEARCH_CAPS["website"])
@@ -3873,6 +3873,24 @@ async def refresh_app_profile(profile_id: str, user_id: str = Depends(get_curren
             status_code=400,
             detail="Could not extract readable text from any stored URL. The live profile is unchanged.",
         )
+    return sources
+
+
+@api_router.post("/app-profiles/{profile_id}/refresh")
+async def refresh_app_profile(profile_id: str, user_id: str = Depends(get_current_user_id)):
+    """Re-research an App Profile from its stored URLs without touching live fields.
+
+    The fresh analysis is stored as pending_research for founder review — the
+    approved profile stays exactly as it was until approve applies it.
+    """
+    require_ai_configured()
+    existing = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="App Profile not found")
+
+    sources = await _research_profile_sources(existing)
 
     try:
         proposal = await _log_model_call(
@@ -3931,7 +3949,7 @@ def _serialize_angle_row(row: dict) -> dict:
 @api_router.get("/app-profiles/{profile_id}/content-angles")
 async def list_content_angles(profile_id: str, user_id: str = Depends(get_current_user_id)):
     profile = await _fetch_one(
-        "SELECT id FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+        "SELECT id, status FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
     )
     if not profile:
         raise HTTPException(status_code=404, detail="App Profile not found")
@@ -3940,6 +3958,22 @@ async def list_content_angles(profile_id: str, user_id: str = Depends(get_curren
         "ORDER BY rank ASC, created_at ASC",
         (profile_id, user_id),
     )
+    if not rows and profile.get("status") == "approved" and os.environ.get("OPENROUTER_API_KEY"):
+        # Self-heal profiles approved before auto-generation existed — and
+        # recover from a generation that returned nothing. The next view
+        # fills the section instead of leaving it blank forever. Profiles
+        # with hand-written angles (count > 0) and drafts never reach here.
+        await _auto_generate_content_angles(
+            await _fetch_one(
+                "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+            ),
+            user_id,
+        )
+        rows = await _fetch_all(
+            "SELECT * FROM content_angles WHERE brand_profile_id = ? AND user_id = ? "
+            "ORDER BY rank ASC, created_at ASC",
+            (profile_id, user_id),
+        )
     return {"angles": [_serialize_angle_row(r) for r in rows]}
 
 

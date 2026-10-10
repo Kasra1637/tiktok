@@ -528,6 +528,186 @@ class TestContentAngles:
         assert gate in ("passed", 502)
 
 
+CANNED_ANGLES = [
+    {
+        "kind": "problem_solution",
+        "label": "Stop stalling on starts",
+        "target_audience": "People who stall on starting",
+        "user_problem": "Cannot start without setup friction",
+        "hook_promise": "Start in one tap",
+        "app_feature": "Task timer",
+        "desired_emotion": "relief",
+        "claims_to_respect": [],
+    },
+]
+
+
+def _failing_log(api, monkeypatch, calls=None):
+    """A model layer that always fails, recording which operation asked."""
+    async def fake_log(operation, modality, model, call, user_id, **refs):
+        if calls is not None:
+            calls.append(operation)
+        raise RuntimeError("no model in this test")
+    monkeypatch.setattr(api, "_log_model_call", fake_log)
+
+
+def _canned_log(api, monkeypatch, angles, calls=None):
+    """A model layer that answers content-angle generation with canned rows."""
+    async def fake_log(operation, modality, model, call, user_id, **refs):
+        if calls is not None:
+            calls.append(operation)
+        if operation == "content_angles":
+            return [dict(a) for a in angles]
+        raise AssertionError(f"unexpected model call: {operation}")
+    monkeypatch.setattr(api, "_log_model_call", fake_log)
+
+
+def _approve_empty(api, profile_id, user_id=ANON):
+    """Approve a draft while the model layer fails: approved, zero angles."""
+    from models import ApproveAppProfileRequest
+    return _run(api.approve_app_profile(
+        profile_id=profile_id, payload=ApproveAppProfileRequest(), user_id=user_id))
+
+
+class TestApprovalAutoGeneratesAngles:
+    def test_approving_fills_angles_with_no_extra_click(self, api, monkeypatch):
+        """
+        The regression: approval silently left the section blank because
+        generation only ran behind a separate Generate button. Profiles
+        approved after this change carry angles straight away.
+        """
+        profile = _make_profile(api, ANON, name="Auto Angles")
+        _canned_log(api, monkeypatch, CANNED_ANGLES)
+        _run(api.approve_app_profile(
+            profile_id=profile["id"], payload={}, user_id=ANON))
+        listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
+        assert [a["label"] for a in listed["angles"]] == ["Stop stalling on starts"]
+
+
+class TestAngleBackfillOnListing:
+    """
+    Profiles approved before auto-generation existed have zero angles and no
+    trigger left to create them. The listing backfills exactly that case —
+    approved and empty — so the next page view fills the section instead of
+    leaving it blank forever.
+    """
+
+    def test_listing_backfills_once_then_stops(self, api, monkeypatch):
+        profile = _make_profile(api, ANON, name="Backfill Me")
+        _failing_log(api, monkeypatch)
+        _approve_empty(api, profile["id"])
+        calls = []
+        _canned_log(api, monkeypatch, CANNED_ANGLES, calls)
+        first = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
+        assert [a["label"] for a in first["angles"]] == ["Stop stalling on starts"]
+        second = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
+        assert [a["label"] for a in second["angles"]] == ["Stop stalling on starts"]
+        assert calls == ["content_angles"]
+
+    def test_listing_never_generates_for_drafts(self, api, monkeypatch):
+        profile = _make_profile(api, ANON, name="Draft Angles")
+
+        async def boom(operation, modality, model, call, user_id, **refs):
+            raise AssertionError("must not generate for drafts")
+
+        monkeypatch.setattr(api, "_log_model_call", boom)
+        listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
+        assert listed["angles"] == []
+
+    def test_listing_leaves_hand_written_angles_alone(self, api, monkeypatch):
+        from models import CreateContentAngleRequest
+        profile = _make_profile(api, ANON, name="Hand Written")
+        _failing_log(api, monkeypatch)
+        _approve_empty(api, profile["id"])
+        _run(api.create_manual_content_angle(
+            profile_id=profile["id"],
+            payload=CreateContentAngleRequest(
+                label="Mine", target_audience="a", user_problem="p"),
+            user_id=ANON,
+        ))
+
+        async def boom(operation, modality, model, call, user_id, **refs):
+            raise AssertionError("must not overwrite manual angles")
+
+        monkeypatch.setattr(api, "_log_model_call", boom)
+        listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
+        assert [a["label"] for a in listed["angles"]] == ["Mine"]
+
+
+def _fake_research(api, monkeypatch, proposal, angles, calls):
+    async def fake_fetch(url, cap):
+        return "research text about the app"
+
+    async def fake_log(operation, modality, model, call, user_id, **refs):
+        calls.append(operation)
+        if operation == "app_profile_refresh":
+            return dict(proposal)
+        if operation == "content_angles":
+            return [dict(a) for a in angles]
+        raise AssertionError(f"unexpected model call: {operation}")
+
+    monkeypatch.setattr(api, "_fetch_url_text", fake_fetch)
+    monkeypatch.setattr(api, "_log_model_call", fake_log)
+
+
+def _give_website(api, profile_id, url="https://example.com"):
+    _run(api._execute(
+        "UPDATE brand_profiles SET website_url = ? WHERE id = ?", (url, profile_id)))
+
+
+class TestRegenerateEverything:
+    def test_regenerate_researches_applies_and_regenerates_angles(self, api, monkeypatch):
+        profile = _make_profile(api, ANON, name="Regen All")
+        _give_website(api, profile["id"])
+        calls = []
+        _fake_research(api, monkeypatch,
+                       {"brand_description": "Freshly researched desc"},
+                       CANNED_ANGLES, calls)
+        out = _run(api.regenerate_everything(profile_id=profile["id"], user_id=ANON))
+        assert out["status"] == "approved"
+        assert out["version"] == (profile.get("version") or 1) + 1
+        assert out["brand_description"] == "Freshly researched desc"
+        assert calls == ["app_profile_refresh", "content_angles"]
+        listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
+        assert [a["label"] for a in listed["angles"]] == ["Stop stalling on starts"]
+
+    def test_regenerate_404s_for_unknown_profiles(self, api):
+        with pytest.raises(HTTPException) as err:
+            _run(api.regenerate_everything(profile_id=str(uuid.uuid4()), user_id=ANON))
+        assert err.value.status_code == 404
+
+    def test_regenerate_400s_without_source_urls(self, api, monkeypatch):
+        profile = _make_profile(api, ANON, name="No Sources")
+        calls = []
+        _fake_research(api, monkeypatch, {"brand_description": "x"}, CANNED_ANGLES, calls)
+        with pytest.raises(HTTPException) as err:
+            _run(api.regenerate_everything(profile_id=profile["id"], user_id=ANON))
+        assert err.value.status_code == 400
+        assert calls == []
+
+    def test_refresh_still_stages_pending_without_touching_live_fields(self, api, monkeypatch):
+        """
+        The research extraction must not change refresh: the proposal is
+        staged for review and the live profile stays exactly as it was.
+        """
+        import json
+        profile = _make_profile(api, ANON, name="Refresh Intact")
+        before = _run(api.get_app_profile(profile["id"], ANON))
+        _give_website(api, profile["id"])
+        calls = []
+        _fake_research(api, monkeypatch,
+                       {"brand_description": "Pending desc"},
+                       CANNED_ANGLES, calls)
+        out = _run(api.refresh_app_profile(profile_id=profile["id"], user_id=ANON))
+        assert out["status"] == "draft"
+        assert out["brand_description"] == before["brand_description"]
+        pending = out.get("pending_research") or {}
+        if isinstance(pending, str):
+            pending = json.loads(pending)
+        assert pending.get("brand_description") == "Pending desc"
+        assert calls == ["app_profile_refresh"]
+
+
 class TestRecommendations:
     def test_recommendations_returned_for_profile(self, api):
         profile = _approve_profile(api, name="Reco App")
