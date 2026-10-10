@@ -148,9 +148,9 @@ export function SectionGroup({ id, label, summary, open, onToggle, children }) {
         aria-expanded={open}
         aria-controls={contentId}
         onClick={() => onToggle(id, !open)}
-        className="flex w-full min-w-0 items-center gap-3 rounded-[10px] px-1 py-1 text-left transition-colors hover:bg-secondary/30"
+        className="group flex w-full min-w-0 items-center gap-3 rounded-[10px] px-1 py-1 text-left transition-colors hover:bg-secondary/30"
       >
-        <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+        <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground transition-colors group-hover:text-foreground">
           {label}
         </span>
         {summary ? (
@@ -162,8 +162,8 @@ export function SectionGroup({ id, label, summary, open, onToggle, children }) {
         )}
         <ChevronDown
           className={cn(
-            "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
-            open && "rotate-180"
+            "h-4 w-4 shrink-0 text-muted-foreground transition-all duration-200 group-hover:text-foreground",
+            open && "rotate-180 text-[color:var(--brand-indigo)]"
           )}
         />
       </button>

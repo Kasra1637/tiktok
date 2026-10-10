@@ -400,14 +400,52 @@ export default function AppProfileDetail() {
         </Alert>
       )}
 
-      {/* Main column + sidebar rail: one card language, 16px gaps, stretch
-          rows with h-full cards, top-aligned content. Below xl (1280) the
-          rail drops under the main column. One full-width column was the
-          whole defect this page shipped with — every card stretched past any
-          text it held. */}
-      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
-        <div className="min-w-0 xl:col-span-8">
-          <div className="min-w-0 space-y-4">
+      {/* Rail cards first in one equal-height row: results, audiences and
+          guardrails. The collapsed research groups stack full width below.
+          One card language throughout — 16px gaps, stretch rows with h-full
+          cards, top-aligned content, no truncation. */}
+      <div className="min-w-0 space-y-4">
+        <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-3">
+          {/* The only part of the profile that improves with use. Everything
+              below was scraped once from the URL; this is the founder's own
+              numbers on their own videos, and the next strategy prompt reads
+              it. Aggregate per template, so it is evidence of what carried
+              views rather than a ranking of hooks. */}
+          <ProfileCard testid="what-works" eyebrow="What has worked here">
+            {!whatWorks || !whatWorks.has_signal ? (
+              <p className="text-sm leading-[22px] text-muted-foreground">
+                Nothing recorded yet. Add view numbers to a finished video and the next strategy
+                will know which of this app&apos;s openings actually carried them.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs leading-[18px] text-muted-foreground">
+                  Across {whatWorks.videos} recorded videos. View counts are only directional —
+                  they do not prove that one template is better.
+                </p>
+                <dl className="space-y-3 text-sm leading-[22px]">
+                  {(whatWorks.top || []).map((row) => (
+                    <div key={row.template_id} className="flex min-h-8 items-center justify-between gap-3">
+                      <dt className="min-w-0 break-words">{row.template_id}</dt>
+                      <dd className="shrink-0 text-xs leading-[18px] text-muted-foreground">
+                        {row.views.toLocaleString()} views · save rate {Math.round(row.save_rate * 100)}%
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </>
+            )}
+          </ProfileCard>
+
+          <ProfileCard eyebrow="Audiences">
+            <ProfileField label="Primary audience" value={profile?.target_audience} />
+            <ProfileField label="Ideal customer" value={profile?.ideal_customer_profile} />
+            <InfoListBlock label="Segments" items={list(profile?.icp_segments)} />
+          </ProfileCard>
+
+          <ClaimPanel profile={profile || {}} />
+        </div>
+        <div className="min-w-0 space-y-4">
           {hasEssentials && (
           <SectionGroup id="essentials" label="Essentials" summary={essentialsSummary} open={groups.essentials} onToggle={toggleGroup}>
           {basics.some(Boolean) ? (
@@ -542,54 +580,6 @@ export default function AppProfileDetail() {
             )}
           </SectionGroup>
           )}
-          </div>
-        </div>
-
-        {/* The rail: same card tokens, one column, never stretched to match
-            the main column's bottom. Rows render fully — no truncation, no
-            clipping — with identical row heights. */}
-        <div className="min-w-0 space-y-4 xl:col-span-4">
-          {/* Angles live in Create Video, where they are generated, selected
-              and built on — the profile keeps facts, results, audiences and
-              guardrails, so this rail carries no angles section. */}
-          {/* The only part of the profile that improves with use. Everything
-              above was scraped once from the URL; this is the founder's own
-              numbers on their own videos, and the next strategy prompt reads
-              it. Aggregate per template, so it is evidence of what carried
-              views rather than a ranking of hooks. */}
-          <ProfileCard testid="what-works" eyebrow="What has worked here">
-            {!whatWorks || !whatWorks.has_signal ? (
-              <p className="text-sm leading-[22px] text-muted-foreground">
-                Nothing recorded yet. Add view numbers to a finished video and the next strategy
-                will know which of this app&apos;s openings actually carried them.
-              </p>
-            ) : (
-              <>
-                <p className="text-xs leading-[18px] text-muted-foreground">
-                  Across {whatWorks.videos} recorded videos. View counts are only directional —
-                  they do not prove that one template is better.
-                </p>
-                <dl className="space-y-3 text-sm leading-[22px]">
-                  {(whatWorks.top || []).map((row) => (
-                    <div key={row.template_id} className="flex min-h-8 items-center justify-between gap-3">
-                      <dt className="min-w-0 break-words">{row.template_id}</dt>
-                      <dd className="shrink-0 text-xs leading-[18px] text-muted-foreground">
-                        {row.views.toLocaleString()} views · save rate {Math.round(row.save_rate * 100)}%
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </>
-            )}
-          </ProfileCard>
-
-          <ProfileCard eyebrow="Audiences">
-            <ProfileField label="Primary audience" value={profile?.target_audience} />
-            <ProfileField label="Ideal customer" value={profile?.ideal_customer_profile} />
-            <InfoListBlock label="Segments" items={list(profile?.icp_segments)} />
-          </ProfileCard>
-
-          <ClaimPanel profile={profile || {}} />
         </div>
       </div>
 
