@@ -458,6 +458,11 @@ export default function CreateVideo() {
   const [step, setStep] = useState(0);
   const [profiles, setProfiles] = useState([]);
   const [angles, setAngles] = useState([]);
+  // Angles can be generated from in here, not just on the profile page:
+  // sending the founder out of the wizard to make an optional angle usable
+  // was a round trip the flow never offered a way back from.
+  const [generatingAngles, setGeneratingAngles] = useState(false);
+  const [angleError, setAngleError] = useState(null);
   const [facets, setFacets] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
   const [recError, setRecError] = useState(null);
@@ -675,6 +680,28 @@ export default function CreateVideo() {
       if (tailorKeyRef.current === key) setTailoring(false);
     }
   }, [profileId, objective, angleId, loadRecommendations]);
+
+  // Generating this profile's audience angles without leaving the wizard.
+  //
+  // Offered only when there are none, because the endpoint replaces the whole
+  // set: a button on a populated list could silently discard angles the
+  // founder wrote by hand on the profile page.
+  const handleGenerateAngles = useCallback(async () => {
+    if (!profileId) return;
+    setGeneratingAngles(true);
+    setAngleError(null);
+    try {
+      const data = await api.generateContentAngles(profileId);
+      setAngles(data.angles || []);
+      if (!data.angles?.length) {
+        setAngleError("The model returned no usable angles. Try again.");
+      }
+    } catch (err) {
+      setAngleError(getErrorMessage(err));
+    } finally {
+      setGeneratingAngles(false);
+    }
+  }, [profileId]);
 
   useEffect(() => {
     if (step !== 2 || !profileId || !objective) return;
@@ -1313,12 +1340,36 @@ export default function CreateVideo() {
                 Choose a saved angle to focus on one audience problem. Skip it for broader template suggestions.
               </p>
               {angles.length === 0 ? (
-                <Alert>
-                  <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-                  <AlertDescription>
-                    This profile has no saved audience angles yet. You can skip this and choose a video goal below, or add angles from the App Profile later.
-                  </AlertDescription>
-                </Alert>
+                <div className="space-y-2">
+                  <Alert>
+                    <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
+                    <AlertDescription>
+                      This profile has no audience angles yet. Generate them here to focus
+                      this video on one audience problem — or skip it and choose a goal
+                      below for broader suggestions.
+                    </AlertDescription>
+                  </Alert>
+                  {angleError && (
+                    <Alert variant="destructive">
+                      <AlertDescription>{angleError}</AlertDescription>
+                    </Alert>
+                  )}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={handleGenerateAngles}
+                    disabled={generatingAngles}
+                    data-testid="generate-angles-button"
+                  >
+                    {generatingAngles ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-3.5 w-3.5" />
+                    )}
+                    {generatingAngles ? "Generating…" : "Generate audience angles"}
+                  </Button>
+                </div>
               ) : (
                 <div className="space-y-2">
                   {angles.map((a) => (

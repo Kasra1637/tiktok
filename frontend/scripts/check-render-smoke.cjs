@@ -363,6 +363,9 @@ const apiStub = {
   }),
   getAppProfiles: async () => ({ profiles: [PROFILE] }),
   getContentAngles: async () => ({ angles: [ANGLE] }),
+  // Empty by default: the base stub has angles, so this only answers checks
+  // that override the read to empty and then exercise the generate button.
+  generateContentAngles: async () => ({ angles: [] }),
   getTemplateRecommendations: async () => ({
     recommendations: [{
       template: { ...TEMPLATE, brand_profile_id: "b1" },
@@ -2497,6 +2500,85 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
+  // -------------------------------------------------------------------------
+  // The optional angle is usable from in here.
+  //
+  // The angle used to be a dead end in the wizard: a founder with no angles was
+  // told to add them on the App Profile page, which meant leaving the flow,
+  // generating, and coming back. The empty state now offers the generation
+  // itself — and it must stay honest about failure, or a silent zero reads as
+  // "this app has no angles" rather than "the call failed".
+  // -------------------------------------------------------------------------
+  await check("the Audience step offers to generate missing angles", async (ctx) => {
+    await withApi({
+      getContentAngles: async () => ({ angles: [] }),
+      generateContentAngles: async () => ({ angles: [ANGLE] }),
+    }, async () => {
+      global.__SMOKE_PARAMS = "";
+      await mount(CreateVideo, {})(ctx);
+      const pill = stepPill(ctx, "Audience & goal");
+      await act(async () => {
+        pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      });
+      await act(async () => {});
+      const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
+      if (!step?.textContent.includes("no audience angles yet")) {
+        throw new Error("the empty angle state does not say the angles are missing");
+      }
+      const button = step.querySelector('[data-testid="generate-angles-button"]');
+      if (!button) throw new Error("the empty angle state offers no generate button");
+
+      apiCalls.length = 0;
+      await act(async () => {
+        button.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      });
+      await act(async () => {});
+      if (!apiCalls.includes("generateContentAngles")) {
+        throw new Error("clicking generate angles never called the endpoint");
+      }
+      // The generated angles render, and one can be picked — the whole point of
+      // generating them in the wizard.
+      const cards = Array.from(step.querySelectorAll("button")).filter((b) =>
+        b.textContent.includes(ANGLE.label));
+      if (!cards.length) {
+        throw new Error("generated angles were not offered in the list");
+      }
+      await act(async () => {
+        cards[0].dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      });
+      await act(async () => {});
+    });
+  });
+
+  await check("a failed angle generation is named and stays retryable", async (ctx) => {
+    await withApi({
+      getContentAngles: async () => ({ angles: [] }),
+      generateContentAngles: async () => {
+        throw new Error("AI content angle generation failed. Please try again.");
+      },
+    }, async () => {
+      global.__SMOKE_PARAMS = "";
+      await mount(CreateVideo, {})(ctx);
+      const pill = stepPill(ctx, "Audience & goal");
+      await act(async () => {
+        pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      });
+      await act(async () => {});
+      const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
+      const button = step.querySelector('[data-testid="generate-angles-button"]');
+      await act(async () => {
+        button.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      });
+      await act(async () => {});
+      if (!ctx.text().includes("AI content angle generation failed")) {
+        throw new Error("the failure is not surfaced where the button was");
+      }
+      if (button.disabled) {
+        throw new Error("the button stays disabled after a failure, so there is no retry");
+      }
+    });
+  });
+
   // Every offered length is one render, and the UI never implies otherwise.
   // The backend refuses a longer request with a 400 rather than splitting it, so
   // a length that needed two passes would be a length the product cannot make.
@@ -3660,6 +3742,7 @@ async function runDeleteDialogChecks() {
   const stubProfileApi = (extra = {}) => ({
     getAppProfile: async () => PROFILE,
     getContentAngles: async () => ({ angles: [{ id: "a1", label: "Confession" }] }),
+    generateContentAngles: async () => ({ angles: [{ id: "a1", label: "Confession" }] }),
     getStudioProjects: async () => ({ projects: [{ id: "s1", name: "Draft one" }] }),
     getProfileWhatWorks: async () => ({ videos: 3, top: [] }),
     getTemplateRecommendations: async () => ({ recommendations: [] }),
@@ -3842,11 +3925,40 @@ async function runDeleteDialogChecks() {
             if (!text.includes(c.want)) {
               throw new Error(`expected ${JSON.stringify(c.want)} in: ${text.slice(0, 240)}`);
             }
-          }
+           }
         );
       }
     );
   }
+
+  // The angle gap on the profile page used to have one route out: "Refresh
+  // research & angles", which re-scrapes every URL and re-runs profile research
+  // just to produce angles. The empty state now offers angles alone.
+  await check("the profile page offers to generate missing angles", async (ctx) => {
+    await withApi(
+      stubProfileApi({
+        getContentAngles: async () => ({ angles: [] }),
+        generateContentAngles: async () => ({ angles: [{ id: "a1", label: "Confession" }] }),
+      }),
+      async () => {
+        await mountProfileDetail()(ctx);
+        await act(async () => {});
+        const button = ctx.container.querySelector('[data-testid="generate-angles-button"]');
+        if (!button) throw new Error("the empty angles section offers no generate button");
+        apiCalls.length = 0;
+        await act(async () => {
+          button.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+        if (!apiCalls.includes("generateContentAngles")) {
+          throw new Error("clicking generate angles never called the endpoint");
+        }
+        if (!ctx.text().includes("Confession")) {
+          throw new Error("the generated angles were not listed");
+        }
+      }
+    );
+  });
 }
 
 /**

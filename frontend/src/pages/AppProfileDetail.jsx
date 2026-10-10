@@ -200,6 +200,9 @@ export default function AppProfileDetail() {
   const [angles, setAngles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [regeneratingEverything, setRegeneratingEverything] = useState(false);
+  // Angles only, no re-research: offered while there are none, where the
+  // heavier "Refresh research & angles" would be the only route otherwise.
+  const [generatingAngles, setGeneratingAngles] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -259,6 +262,20 @@ export default function AppProfileDetail() {
       setError(getErrorMessage(err));
     } finally {
       setRegeneratingEverything(false);
+    }
+  };
+
+  const handleGenerateAngles = async () => {
+    setGeneratingAngles(true);
+    setError(null);
+    try {
+      const data = await api.generateContentAngles(profileId);
+      setAngles(data.angles || []);
+      setNotice(`Generated ${data.angles?.length || 0} audience angles.`);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setGeneratingAngles(false);
     }
   };
 
@@ -614,11 +631,30 @@ export default function AppProfileDetail() {
             <p className="text-xs text-muted-foreground">Optional audience-and-problem starting points. Choose one in Create Video to focus template suggestions, or skip it for a broader match.</p>
 
             {angles.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {approved
-                  ? "No audience angles yet — use Refresh research & angles above to research this profile and generate them. You can still choose a video goal without an angle."
-                  : "Approve this profile to create suggested audience angles for the video workflow."}
-              </p>
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  {approved
+                    ? "No audience angles yet. Generate them from this approved profile, or use Refresh research & angles above for a full re-research."
+                    : "Approve this profile to create suggested audience angles for the video workflow."}
+                </p>
+                {approved && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={handleGenerateAngles}
+                    disabled={generatingAngles}
+                    data-testid="generate-angles-button"
+                  >
+                    {generatingAngles ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-3.5 w-3.5" />
+                    )}
+                    {generatingAngles ? "Generating…" : "Generate audience angles"}
+                  </Button>
+                )}
+              </div>
             ) : (
               <div className="space-y-3">
                 {angles.map((a) => (
