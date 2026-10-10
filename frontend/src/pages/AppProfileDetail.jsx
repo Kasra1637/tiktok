@@ -559,14 +559,64 @@ return (
             whatWorks fetch stays: the delete dialog counts recorded videos. */}
         {hasAudience && (
         <SectionGroup id="audience" label="Audience & guardrails" summary={audienceSummary} open={openGroup === "audience"} onToggle={toggleGroup}>
-          <ProfileCard eyebrow="Audiences">
-            <ProfileField label="Primary audience" value={profile?.target_audience} />
-            <ProfileField label="Ideal customer" value={profile?.ideal_customer_profile} />
-            <InfoListBlock label="Segments" items={segments} />
-          </ProfileCard>
-          <ClaimPanel profile={profile || {}} />
+          <CardGrid className="md:grid-cols-2">
+            <ProfileCard eyebrow="Audiences">
+              <ProfileField label="Primary audience" value={profile?.target_audience} />
+              <ProfileField label="Ideal customer" value={profile?.ideal_customer_profile} />
+              <InfoListBlock label="Segments" items={segments} />
+            </ProfileCard>
+            <ClaimPanel profile={profile || {}} />
+          </CardGrid>
         </SectionGroup>
         )}
+      </div>
+
+      {/* Supporting content: What Has Worked Here (slim banner, auto-width),
+          Audiences, Claim Guardrails — 2 cards + 1 banner at >=1280px. */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1fr_auto]">
+        {/* What Has Worked Here — slim banner, auto width */}
+        <div className="xl:col-span-1">
+          <div className="border-b border-[color:var(--hairline)] bg-card/30 px-4 py-3">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                What has worked here
+              </span>
+            </div>
+            {!whatWorks || !whatWorks.has_signal ? (
+              <p className="text-sm leading-[22px] text-muted-foreground">
+                Nothing recorded yet. Add view numbers to a finished video and the next strategy
+                will know which of this app&apos;s openings actually carried them.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs leading-[18px] text-muted-foreground">
+                  Across {whatWorks.videos} recorded videos. View counts are only directional —
+                  they do not prove that one template is better.
+                </p>
+                <dl className="space-y-2 text-sm leading-[22px] mt-2">
+                  {(whatWorks.top || []).map((row) => (
+                    <div key={row.template_id} className="flex min-h-8 items-center justify-between gap-3">
+                      <dt className="min-w-0 break-words">{row.template_id}</dt>
+                      <dd className="shrink-0 text-xs leading-[18px] text-muted-foreground">
+                        {row.views.toLocaleString()} views · save rate {Math.round(row.save_rate * 100)}%
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Audiences — keeps current internal structure */}
+        <ProfileCard eyebrow="Audiences">
+          <ProfileField label="Primary audience" value={profile?.target_audience} />
+          <ProfileField label="Ideal customer" value={profile?.ideal_customer_profile} />
+          <InfoListBlock label="Segments" items={segments} />
+        </ProfileCard>
+
+        {/* Claim Guardrails — keeps current internal structure */}
+        <ClaimPanel profile={profile || {}} />
       </div>
 
       <Dialog
