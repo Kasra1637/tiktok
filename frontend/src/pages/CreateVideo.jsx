@@ -387,35 +387,6 @@ function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
     (key) => REVIEW_EDIT_LABELS[key] || humanize(key)
   );
 
-  let clipLine;
-  if (!clipLoaded) {
-    clipLine = "Checking for rendered clips…";
-  } else if (!clip) {
-    clipLine = "No rendered clip yet — nothing to compare.";
-  } else if (clip.status !== "completed") {
-    clipLine =
-      `Latest render is ${clip.status || "not finished"} — no finished clip to compare. ` +
-      "Finish or retry it on Hook + Story first.";
-  } else if (
-    typeof clip.script_version !== "number" ||
-    typeof clip.strategy_version !== "number"
-  ) {
-    clipLine =
-      "Rendered clip found, but its plan version was not recorded — " +
-      "treat it as older if you edited or rebuilt since rendering.";
-  } else if (
-    clip.script_version !== scriptVersion ||
-    clip.strategy_version !== strategyVersion
-  ) {
-    clipLine =
-      `Rendered clip reflects plan v${clip.script_version} and strategy v${clip.strategy_version}; ` +
-      `current is plan v${scriptVersion} and strategy v${strategyVersion}. ` +
-      "Re-render on Hook + Story after saving and rebuilding.";
-  } else {
-    clipLine =
-      `Rendered clip reflects current plan v${scriptVersion} and strategy v${strategyVersion}.`;
-  }
-
   // A strategy row without a recorded version is missing history, not proof
   // of a match: the server numbers every build, so v0 means the record
   // predates the versioning rather than that it matches the current plan.
@@ -460,6 +431,29 @@ function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
     clip &&
     clip.status === "completed" &&
     (typeof clip.script_version !== "number" || typeof clip.strategy_version !== "number");
+
+  let clipLine;
+  if (!clipLoaded) {
+    clipLine = "Checking for rendered clips…";
+  } else if (!clip) {
+    clipLine = "No rendered clip yet — nothing to compare.";
+  } else if (clip.status !== "completed") {
+    clipLine =
+      `Latest render is ${clip.status || "not finished"} — no finished clip to compare. ` +
+      "Finish or retry it on Hook + Story first.";
+  } else if (clipUnversioned) {
+    clipLine =
+      "Rendered clip found, but its plan version was not recorded — " +
+      "treat it as older if you edited or rebuilt since rendering.";
+  } else if (clipIsStale) {
+    clipLine =
+      `Rendered clip reflects plan v${clip.script_version} and strategy v${clip.strategy_version}; ` +
+      `current is plan v${scriptVersion} and strategy v${strategyVersion}. ` +
+      "Re-render on Hook + Story after saving and rebuilding.";
+  } else {
+    clipLine =
+      `Rendered clip reflects current plan v${scriptVersion} and strategy v${strategyVersion}.`;
+  }
 
   const nextActions = [];
   if (hasEdits) {
