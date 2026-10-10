@@ -76,6 +76,10 @@ function formatList(items) {
   return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
+/* Every collapsible bar on this page. The accordion keeps at most one of
+   these open; persisted state stores the open id (or null). */
+const GROUP_IDS = ["essentials", "problems", "messaging", "context", "audience"];
+
 /**
  * Everything a delete of this profile takes with it, named from the data the
  * page has already loaded rather than described in the abstract.
@@ -118,28 +122,33 @@ export default function AppProfileDetail() {
   const [typedName, setTypedName] = useState("");
   const [deleteError, setDeleteError] = useState(null);
   const [deletingProfile, setDeletingProfile] = useState(false);
-  // Collapsible groups (per group, never per card, so row heights stay
-  // equal): Essentials open by default, others collapsed. Persisted per
-  // profile so a reading position survives reloads.
-  const [groups, setGroups] = useState({ essentials: true, problems: false, messaging: false, context: false });
+  // Accordion-exclusive groups (per group, never per card, so row heights
+  // stay equal): at most one bar open, all collapsed by default. The open
+  // bar's id (or null) persists per profile so a reading position survives
+  // reloads. A legacy object-shaped value degrades to its first open bar.
+  const [openGroup, setOpenGroup] = useState(null);
   useEffect(() => {
     try {
       const raw = localStorage.getItem(`profile-groups:${profileId}`);
-      if (raw) setGroups((s) => ({ ...s, ...JSON.parse(raw) }));
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (typeof parsed === "string") {
+        if (GROUP_IDS.includes(parsed)) setOpenGroup(parsed);
+      } else if (parsed && typeof parsed === "object") {
+        setOpenGroup(GROUP_IDS.find((id) => parsed[id]) || null);
+      }
     } catch {
-      // A stale or foreign value leaves the defaults in place.
+      // A stale or foreign value leaves everything collapsed.
     }
   }, [profileId]);
   const toggleGroup = useCallback((id, open) => {
-    setGroups((s) => {
-      const next = { ...s, [id]: open };
-      try {
-        localStorage.setItem(`profile-groups:${profileId}`, JSON.stringify(next));
-      } catch {
-        // Private-mode writes fail silently; the toggle still works in memory.
-      }
-      return next;
-    });
+    const next = open ? id : null;
+    setOpenGroup(next);
+    try {
+      localStorage.setItem(`profile-groups:${profileId}`, JSON.stringify(next));
+    } catch {
+      // Private-mode writes fail silently; the toggle still works in memory.
+    }
   }, [profileId]);
 
   const load = useCallback(async () => {
@@ -267,6 +276,11 @@ export default function AppProfileDetail() {
   const competitors = list(profile?.competitors);
   const outcomeCount = Array.isArray(profile?.outcome_statements) ? profile.outcome_statements.length : 0;
   const objectionCount = Array.isArray(profile?.viewer_objections) ? profile.viewer_objections.length : 0;
+  const segments = list(profile?.icp_segments);
+  const claimReview = list(profile?.claims_review);
+  const hasAudience = Boolean(profile?.target_audience || profile?.ideal_customer_profile) ||
+    segments.length > 0 ||
+    list(profile?.claims_approved).length + claimReview.length + list(profile?.claims_banned).length > 0;
 
   // Group visibility mirrors the cards: an empty group leaves no header
   // behind. Summaries are computed from the data, never hand-written.
@@ -292,6 +306,10 @@ export default function AppProfileDetail() {
     usageMoments.length > 0 && `${usageMoments.length} moment${usageMoments.length === 1 ? "" : "s"}`,
     competitors.length > 0 && `${competitors.length} competitor${competitors.length === 1 ? "" : "s"}`,
     objectionCount > 0 && `${objectionCount} objection${objectionCount === 1 ? "" : "s"}`,
+  ]);
+  const audienceSummary = joinSummary([
+    segments.length > 0 && `${segments.length} segment${segments.length === 1 ? "" : "s"}`,
+    claimReview.length > 0 && `${claimReview.length} to review`,
   ]);
 
 return (
@@ -404,12 +422,13 @@ return (
         </Alert>
       )}
 
-      {/* Section groups: Essentials, Problems & Outcomes, Messaging, Context & Objections.
-          Directly under header, no gap above. Essentials open by default, rest collapsed.
-          Per-group toggling with persisted state; no bulk expand/collapse. */}
+      {/* Section groups: Essentials, Problems & Outcomes, Messaging,
+          Context & Objections, Audience & guardrails. Directly under header,
+          no gap above. Accordion-exclusive with persisted single-open state;
+          all collapsed by default; no bulk expand/collapse. */}
       <div className="min-w-0 space-y-3">
         {hasEssentials && (
-        <SectionGroup id="essentials" label="Essentials" summary={essentialsSummary} open={groups.essentials} onToggle={toggleGroup}>
+        <SectionGroup id="essentials" label="Essentials" summary={essentialsSummary} open={openGroup === "essentials"} onToggle={toggleGroup}>
         {basics.some(Boolean) ? (
           <ProfileCard testid="profile-facts" eyebrow="Product facts">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_1fr_2fr]">
@@ -449,7 +468,7 @@ return (
         </SectionGroup>
         )}
         {hasProblems && (
-        <SectionGroup id="problems" label="Problems & outcomes" summary={problemsSummary} open={groups.problems} onToggle={toggleGroup}>
+        <SectionGroup id="problems" label="Problems & outcomes" summary={problemsSummary} open={openGroup === "problems"} onToggle={toggleGroup}>
           <CardGrid className="md:grid-cols-2">
             {problems.length > 0 ? (
               <ProfileCard eyebrow="Problems solved">
@@ -465,7 +484,7 @@ return (
         </SectionGroup>
         )}
         {hasMessaging && (
-        <SectionGroup id="messaging" label="Messaging" summary={messagingSummary} open={groups.messaging} onToggle={toggleGroup}>
+        <SectionGroup id="messaging" label="Messaging" summary={messagingSummary} open={openGroup === "messaging"} onToggle={toggleGroup}>
         {profile?.differentiation || profile?.known_limitations || profile?.proof_moment ? (
           <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
             {profile?.differentiation ? (
@@ -512,7 +531,7 @@ return (
         </SectionGroup>
         )}
         {hasContext && (
-        <SectionGroup id="context" label="Context & objections" summary={contextSummary} open={groups.context} onToggle={toggleGroup}>
+        <SectionGroup id="context" label="Context & objections" summary={contextSummary} open={openGroup === "context"} onToggle={toggleGroup}>
         {usageMoments.length > 0 ? (
           <ProfileCard eyebrow="When the app is reached for">
             <InfoChipList label="When the app is reached for" items={usageMoments} />
@@ -542,50 +561,19 @@ return (
           )}
         </SectionGroup>
         )}
-      </div>
-
-      {/* Supporting content: What Has Worked Here, Audiences, Claim Guardrails.
-          3-column row at >=1280px (xl), stacking to 1 column below that.
-          What Has Worked Here shrinks to fit content rather than stretching. */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        {/* What Has Worked Here — slim banner, fits content height */}
-        <div className="xl:col-span-1">
-          <ProfileCard testid="what-works" eyebrow="What has worked here" className="h-auto">
-            {!whatWorks || !whatWorks.has_signal ? (
-              <p className="text-sm leading-[22px] text-muted-foreground">
-                Nothing recorded yet. Add view numbers to a finished video and the next strategy
-                will know which of this app&apos;s openings actually carried them.
-              </p>
-            ) : (
-              <>
-                <p className="text-xs leading-[18px] text-muted-foreground">
-                  Across {whatWorks.videos} recorded videos. View counts are only directional —
-                  they do not prove that one template is better.
-                </p>
-                <dl className="space-y-3 text-sm leading-[22px]">
-                  {(whatWorks.top || []).map((row) => (
-                    <div key={row.template_id} className="flex min-h-8 items-center justify-between gap-3">
-                      <dt className="min-w-0 break-words">{row.template_id}</dt>
-                      <dd className="shrink-0 text-xs leading-[18px] text-muted-foreground">
-                        {row.views.toLocaleString()} views · save rate {Math.round(row.save_rate * 100)}%
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </>
-            )}
+        {/* What Has Worked Here lived here; it belongs on Analytics with the
+            other recorded results, so this page keeps only groups. The
+            whatWorks fetch stays: the delete dialog counts recorded videos. */}
+        {hasAudience && (
+        <SectionGroup id="audience" label="Audience & guardrails" summary={audienceSummary} open={openGroup === "audience"} onToggle={toggleGroup}>
+          <ProfileCard eyebrow="Audiences">
+            <ProfileField label="Primary audience" value={profile?.target_audience} />
+            <ProfileField label="Ideal customer" value={profile?.ideal_customer_profile} />
+            <InfoListBlock label="Segments" items={segments} />
           </ProfileCard>
-        </div>
-
-        {/* Audiences — keeps current internal structure */}
-        <ProfileCard eyebrow="Audiences">
-          <ProfileField label="Primary audience" value={profile?.target_audience} />
-          <ProfileField label="Ideal customer" value={profile?.ideal_customer_profile} />
-          <InfoListBlock label="Segments" items={list(profile?.icp_segments)} />
-        </ProfileCard>
-
-        {/* Claim Guardrails — keeps current internal structure */}
-        <ClaimPanel profile={profile || {}} />
+          <ClaimPanel profile={profile || {}} />
+        </SectionGroup>
+        )}
       </div>
 
       <Dialog

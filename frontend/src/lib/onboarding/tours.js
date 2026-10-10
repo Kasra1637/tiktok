@@ -192,13 +192,9 @@ export const TOURS = {
         body:
           "Check approved, needs-review, and banned claims here. The script plan runs a claim check; a prohibited claim blocks rendering until you edit the plan and the check passes. Verify claims yourself before publishing.",
       },
-      {
-        target: '[data-testid="what-works"]',
-        title: "Use your results as feedback",
-        body:
-          "After posting, enter a video's results in History. Recorded view counts appear here by template and can inform future strategies; they are manual inputs, not independently verified performance data.",
-      },
-      // Angles and drafts used to live on this page; both moved to Create
+      // The results card moved off this page (bound for Analytics); the step
+      // goes with it rather than pointing at nothing. Angles and drafts used
+      // to live on this page; both moved to Create
       // Video (angles) and History (drafts), so there is nothing to point at
       // here any more. The wizard's own tour covers the angle picker.
     ],
