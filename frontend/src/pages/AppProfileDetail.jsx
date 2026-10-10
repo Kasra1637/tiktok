@@ -18,7 +18,7 @@ import { sentenceCase } from "../lib/copyCase";
 import { ProfileCard, ProfileField, InfoChipList, InfoListBlock, CardGrid, StatementCard, SectionGroup } from "../components/profileUi";
 import { api, getErrorMessage } from "../lib/api";
 import {
-  Briefcase, Loader2, AlertTriangle, ArrowLeft, Sparkles,
+  Briefcase, Loader2, AlertTriangle, ArrowLeft,
   ShieldAlert, Lightbulb, Trash2, RefreshCw,
 } from "lucide-react";
 
@@ -123,7 +123,7 @@ export default function AppProfileDetail() {
   const [deleteError, setDeleteError] = useState(null);
   const [deletingProfile, setDeletingProfile] = useState(false);
   // Accordion-exclusive groups (per group, never per card, so row heights
-  // stay equal): at most one bar open, all collapsed by default. The open
+  // stay equal): at most one bar open, Essentials open by default. The open
   // bar's id (or null) persists per profile so a reading position survives
   // reloads. A legacy object-shaped value degrades to its first open bar.
   const [openGroup, setOpenGroup] = useState("essentials");
@@ -329,8 +329,9 @@ return (
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
             {/* Brand hierarchy, left to right: semantic status badge, secondary
-                edits, destructive icon, then the single coral CTA last. Wraps
-                under the title on narrow screens instead of squeezing. */}
+                edits, destructive icon. Wraps under the title on narrow screens
+                instead of squeezing. Create Video starts from the sidebar —
+                this header only manages the profile. */}
             {approved ? (
               <Badge className="border-green-500/25 bg-green-500/10 px-3 py-1 font-medium text-green-300 transition-none">Approved</Badge>
             ) : (
@@ -367,24 +368,6 @@ return (
               className="h-8 w-8 text-muted-foreground hover:text-destructive"
             >
               <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-            {/* An App Profile is not consumed by making a video: the same
-                approved profile backs every video, and the studio reuses its
-                angles, assets and templates. This is the way back in, on the
-                page where someone is looking at the app itself. */}
-            <Button variant="brand" size="sm" asChild>
-              <Link
-                to={`/create?profile=${encodeURIComponent(profileId)}`}
-                onClick={(e) => {
-                  if (!approved) {
-                    e.preventDefault();
-                    setNotice("Approve this profile first — the studio only accepts approved apps.");
-                  }
-                }}
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                Create Video
-              </Link>
             </Button>
           </div>
         }
@@ -423,7 +406,8 @@ return (
       {/* Section groups: Essentials, Problems & Outcomes, Messaging,
           Context & Objections, Audience & guardrails. Directly under header,
           no gap above. Accordion-exclusive with persisted single-open state;
-          all collapsed by default; no bulk expand/collapse. */}
+          Essentials open by default, the rest collapsed; no bulk
+          expand/collapse. */}
       <div className="min-w-0 space-y-3">
         {hasEssentials && (
         <SectionGroup id="essentials" label="Essentials" summary={essentialsSummary} open={openGroup === "essentials"} onToggle={toggleGroup}>

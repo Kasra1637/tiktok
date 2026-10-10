@@ -177,7 +177,7 @@ export const TOURS = {
         target: '[data-testid="app-profile-header"]',
         title: "Manage this app profile",
         body:
-          "Check whether the profile is a draft or approved. Edit opens its details; New video opens Create Video with this app selected. Reuse it for every video about this app.",
+          "Check whether the profile is a draft or approved. Edit opens its details. Reuse it for every video about this app.",
       },
       {
         target: '[data-testid="profile-facts"]',
