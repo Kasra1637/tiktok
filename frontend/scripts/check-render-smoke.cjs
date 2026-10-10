@@ -861,7 +861,7 @@ async function main() {
     const remove = [...ctx.container.querySelectorAll("button")]
       .find((b) => (b.textContent || "").trim() === "Remove");
     if (!remove) throw new Error("the attached photograph cannot be removed");
-    if (!text.includes("used for the whole video")) {
+    if (!text.includes("Used for the whole video")) {
       throw new Error("the photograph does not say how it is used");
     }
   });

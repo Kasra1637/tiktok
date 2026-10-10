@@ -550,15 +550,15 @@ export default function AppProfileDetail() {
             ) : (
               <>
                 <p className="text-xs text-muted-foreground">
-                  Across {whatWorks.videos} recorded video(s). View counts only — not proof that one
-                  template is better.
+                  Across {whatWorks.videos} recorded videos. View counts are only directional —
+                  they do not prove that one template is better.
                 </p>
                 <dl className="space-y-1.5 text-sm">
                   {(whatWorks.top || []).map((row) => (
                     <div key={row.template_id} className="flex items-baseline justify-between gap-3">
                       <dt className="min-w-0 truncate">{row.template_id}</dt>
                       <dd className="shrink-0 text-muted-foreground">
-                        {row.views.toLocaleString()} views · save {Math.round(row.save_rate * 100)}%
+                        {row.views.toLocaleString()} views · save rate {Math.round(row.save_rate * 100)}%
                       </dd>
                     </div>
                   ))}

@@ -1482,7 +1482,7 @@ export default function CreateVideo() {
                 id="tone"
                 value={tone}
                 onChange={(e) => setTone(e.target.value)}
-                placeholder="e.g. calm and direct"
+                placeholder="For example: calm and direct"
               />
               <p className="text-xs text-muted-foreground">
                 Optional. Guides the script&apos;s voice, not the facts about your app.
@@ -1989,7 +1989,7 @@ if (step === 3) {
                 value={editValue("demo_brief", "")}
                 onChange={(e) => setEdits({ ...edits, demo_brief: e.target.value })}
                 className="min-h-[70px]"
-                placeholder="e.g. Record yourself tapping the timer once, hands only"
+                placeholder="For example: Record yourself tapping the timer once, hands only"
               />
               <p className="text-xs text-muted-foreground">
                 A note to you, not the model — never reaches the render.
@@ -2063,7 +2063,7 @@ if (step === 3) {
                   id="review-tone"
                   value={editValue("tone", "")}
                   onChange={(e) => editTone(e.target.value)}
-                  placeholder="e.g. calm and direct"
+                  placeholder="For example: calm and direct"
                 />
               </div>
             </div>
