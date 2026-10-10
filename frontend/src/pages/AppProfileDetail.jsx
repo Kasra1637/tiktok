@@ -120,9 +120,9 @@ export default function AppProfileDetail() {
   const [deleteError, setDeleteError] = useState(null);
   const [deletingProfile, setDeletingProfile] = useState(false);
   // Collapsible groups (per group, never per card, so row heights stay
-  // equal): Essentials open, the rest collapsed. Persisted per profile so a
-  // founder's reading position survives reloads.
-  const [groups, setGroups] = useState({ essentials: true, problems: false, messaging: false, context: false });
+  // equal): everything starts collapsed and the founder opens whatever they
+  // want. Persisted per profile so a reading position survives reloads.
+  const [groups, setGroups] = useState({ essentials: false, problems: false, messaging: false, context: false });
   useEffect(() => {
     try {
       const raw = localStorage.getItem(`profile-groups:${profileId}`);
@@ -141,15 +141,6 @@ export default function AppProfileDetail() {
       }
       return next;
     });
-  }, [profileId]);
-  const setAllGroups = useCallback((open) => {
-    const next = { essentials: open, problems: open, messaging: open, context: open };
-    setGroups(next);
-    try {
-      localStorage.setItem(`profile-groups:${profileId}`, JSON.stringify(next));
-    } catch {
-      // See toggleGroup.
-    }
   }, [profileId]);
 
   const load = useCallback(async () => {
@@ -417,16 +408,6 @@ export default function AppProfileDetail() {
           text it held. */}
       <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
         <div className="min-w-0 xl:col-span-8">
-          {(hasEssentials || hasProblems || hasMessaging || hasContext) && (
-            <div className="mb-4 flex items-center justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setAllGroups(true)}>
-                Expand all
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setAllGroups(false)}>
-                Collapse all
-              </Button>
-            </div>
-          )}
           <div className="min-w-0 space-y-4">
           {hasEssentials && (
           <SectionGroup id="essentials" label="Essentials" summary={essentialsSummary} open={groups.essentials} onToggle={toggleGroup}>
