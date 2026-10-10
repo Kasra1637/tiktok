@@ -922,7 +922,7 @@ export default function GenerationHistory() {
       <PageHeader
         icon={HistoryIcon}
         title="Generation History"
-        description="Every video produced, with the exact template, script version and model behind it. Publishing stays manual."
+        description="Find renders and exports, check status, download clips, and manually log post results. Publishing is always manual."
       />
 
       {error && (
@@ -933,7 +933,9 @@ export default function GenerationHistory() {
       )}
 
       <div className="surface flex flex-wrap items-center gap-2 rounded-2xl" data-testid="history-filters">
+        <label className="sr-only" htmlFor="history-app-filter">Filter History by app</label>
         <select
+          id="history-app-filter"
           value={profileFilter}
           onChange={(e) => setProfileFilter(e.target.value)}
           aria-label="Filter by app"
@@ -944,7 +946,9 @@ export default function GenerationHistory() {
             <option key={p.id} value={p.id}>{p.brand_name}</option>
           ))}
         </select>
+        <label className="sr-only" htmlFor="history-status-filter">Filter History by status</label>
         <select
+          id="history-status-filter"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
           aria-label="Filter by status"
@@ -984,7 +988,7 @@ export default function GenerationHistory() {
         <EmptyState
           icon={Film}
           title="Nothing generated yet"
-          description="Create a video from an approved App Profile and a hook template, and it will appear here."
+          description="Create Video saves generated Hook + Story clips here. Exports from Demo + CTA and manually recorded performance results appear alongside them."
           action={
             <Button variant="brand" asChild>
               <Link to="/create">

@@ -380,7 +380,7 @@ export default function BrandSetup() {
       <PageHeader
         icon={Briefcase}
         title="App Profile"
-        description="Research a mobile app, review the draft profile, then approve it — approved profiles power video scripts."
+        description="Create a profile from app sources or enter details yourself. Review the product facts and claims, save your changes, then approve the profile to use it in Create Video."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {profiles.length > 1 && (
@@ -439,8 +439,7 @@ export default function BrandSetup() {
               <div className="min-w-0">
                 <h2 className="font-display text-base font-semibold">Autofill from your website</h2>
                 <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">
-                  AI reads your site and extracts your name, niche, audience, and tone &mdash; so you
-                  don&apos;t fill out the form below from scratch.
+                  Enter your app website and choose Analyze to prefill basic details below. It is an optional shortcut; you can also research store listings or fill in the profile yourself.
                 </p>
               </div>
             </div>
@@ -488,8 +487,7 @@ export default function BrandSetup() {
               <div className="min-w-0">
                 <h2 className="font-display text-base font-semibold">Research a mobile app</h2>
                 <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">
-                  AI reads the website plus the App Store and Google Play listings and drafts a full
-                  App Profile — features, audiences, claims, and video themes. Review it below, then approve.
+                  Enter at least one source URL—your website, App Store, Google Play, or a support page. Add optional notes, then choose Research app. Review the draft for accuracy before saving and approving it.
                 </p>
               </div>
             </div>
@@ -911,9 +909,11 @@ export default function BrandSetup() {
                 <CheckCircle2 className="h-4 w-4 text-[color:var(--brand-indigo)]" />
                 <AlertTitle>Ready for the template studio</AlertTitle>
                 <AlertDescription className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                  <span className="text-muted-foreground">
-                    This profile can inform App Profiles and template-based scripts anywhere you generate a video.
-                  </span>
+          <span className="text-muted-foreground">
+            {status === "approved"
+              ? "This approved profile is ready to select in Create Video."
+              : "Save and approve this profile before using it in Create Video."}
+          </span>
                   <Button
                     variant="secondary"
                     size="sm"

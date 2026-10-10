@@ -350,7 +350,7 @@ const handleGenerate = async () => {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="flex items-center gap-2 font-display text-sm font-semibold">
           <Clapperboard className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-          Render the hook and the middle
+          Render your Hook + Story
         </span>
         {generation && <StatusBadge status={generation.status} />}
       </div>
@@ -375,16 +375,13 @@ const handleGenerate = async () => {
         <Alert variant="destructive">
           <AlertTitle>No photo attached</AlertTitle>
           <AlertDescription>
-            This template puts a person on camera, so it needs a character reference — the
-            video is generated from your photograph, and without one the model would invent
-            somebody who looks nothing like you. Attach one on the Template &amp; photo step,
-            then mark the project ready again.
+            Add a clear photo of the person you want on camera on the Template &amp; photo step. The video model uses it as a presenter reference; without it, the presenter may be invented.
           </AlertDescription>
         </Alert>
       )}
       {!ready && !noPhoto && (
         <p className="text-sm text-muted-foreground">
-          Mark the project ready for generation to enable production.
+          Review and save your script plan first. A saved plan is checked before rendering.
         </p>
       )}
       {claimBlocked && (
@@ -454,8 +451,8 @@ const handleGenerate = async () => {
       {!strategyReady && (
         <p className="text-sm text-muted-foreground">
           {staleStrategy
-            ? "Rebuild the strategy above so it matches the plan you edited, then generate."
-            : "Build the strategy above, read it, then generate. It is what makes the render about this app."}
+            ? "The plan changed after this strategy was built. Rebuild it so it matches your saved plan, then render."
+            : "Read the app-specific strategy above, then generate. It guides the Hook + Story clip and is separate from your filmed product demo."}
         </p>
       )}
 

@@ -805,8 +805,8 @@ async function main() {
     await mount(CreateVideo, {})(ctx);
     await openTemplateStep(ctx);
     const text = ctx.text();
-    if (!text.includes("Your photo")) {
-      throw new Error("the template step does not offer the photograph upload");
+    if (!text.includes("Presenter photo")) {
+      throw new Error("the template step does not offer the presenter photo upload");
     }
     // The draft is created eagerly now (ensureProject fires on profile +
     // template), so the photo attaches to a project without the founder
@@ -814,7 +814,7 @@ async function main() {
     // the proof that this step owns the photo -- a missing project would show
     // neither.
     const ownsPhoto =
-      /Create the draft/.test(text) || /attach/i.test(text) || !!ctx.container.querySelector("input[type=file]");
+      /prepar(?:e|ing).*draft/i.test(text) || /attach/i.test(text) || !!ctx.container.querySelector("input[type=file]");
     if (!ownsPhoto) {
       throw new Error("the template step cannot create the draft the photo attaches to");
     }
@@ -1053,7 +1053,7 @@ async function main() {
     await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
       mount(GenerationPanel, { project: { ...BASE_PROJECT } })(ctx)
     );
-expectText(ctx, "Mark the project ready for generation", "the ready gate did not render");
+    expectText(ctx, "Review and save your script plan first", "the plan-review gate did not render");
   });
 
   await check("GenerationPanel refuses a ready project with no photograph", async (ctx) => {
@@ -1067,7 +1067,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
       })(ctx)
     );
     expectText(ctx, "No photo attached", "the missing-photograph gate did not render");
-    expectText(ctx, "invent somebody who looks nothing like you", "the gate did not say why it matters");
+    expectText(ctx, "presenter reference", "the gate did not explain why the photo matters");
     expectText(ctx, "Template & photo", "the gate did not name the step that fixes it");
     // The old ready hint and the new one must not both be talking at once.
     expectAbsent(ctx, "Mark the project ready for generation", "the ready hint competes with the real blocker");
@@ -1101,7 +1101,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     await mount(GenerationPanel, { project: { ...BASE_PROJECT } })(ctx);
     expectText(
       ctx,
-      "Mark the project ready for generation",
+      "Review and save your script plan first",
       "the ready gate was hidden behind an existing generation"
     );
   });
@@ -1333,7 +1333,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
       "Segments planned",
       "One continuous video",
       "end card",
-      "CTA",
+      "Show closing call-to-action card",
     ]) {
       expectAbsent(ctx, phrase, "the review surface still describes a chain");
     }
@@ -1550,7 +1550,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
       mount(CreateVideo, {})(ctx)
     );
-    expectText(ctx, "Which app are you promoting?", "step 0 did not render its heading");
+    expectText(ctx, "Choose an approved app", "step 0 did not render its heading");
     expectText(ctx, "No approved App Profile", "step 0 did not render its empty state");
   });
 
@@ -1693,7 +1693,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     }
     // A dead button with no explanation strands the founder, so the panel has to
     // say what to do next.
-    if (!ctx.text().includes("Build the strategy above")) {
+    if (!ctx.text().includes("Read the app-specific strategy above")) {
       throw new Error("the blocked generate button does not explain the next step");
     }
   });
@@ -1883,7 +1883,7 @@ expectText(ctx, "Mark the project ready for generation", "the ready gate did not
     if (!btn.disabled) {
       throw new Error("the generate button is live against a stale strategy");
     }
-    if (!text.includes("Rebuild the strategy above")) {
+    if (!text.includes("Rebuild it so it matches your saved plan")) {
       throw new Error("the drift warning does not say what to do about it");
     }
   });
@@ -2460,7 +2460,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
     await act(async () => {});
     const text = ctx.text();
-    if (!text.includes(`One render of ${PIECE_SECONDS}s`)) {
+    if (!text.includes(`One ${PIECE_SECONDS}s Hook + Story clip`)) {
       throw new Error(
         `the Audience step does not state the piece length; it rendered: ${JSON.stringify(
           text.slice(0, 400)
@@ -2469,12 +2469,14 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
     // The two sections, with the remainder spelled out. A hook boundary that did
     // not add up to the piece would be a plan that does not add up either.
-    if (!new RegExp(`a 3s hook,\\s*then a 12s middle`).test(text)) {
+    if (!new RegExp(`a 3s hook,\\s*then a 12s story`).test(text)) {
       throw new Error("the Audience step does not split the piece into its two sections");
     }
-    // Why there is nothing to choose.
-    if (!text.includes("not a choice")) {
-      throw new Error("the Audience step does not say the length is not the founder's to pick");
+    // The empty state has no selected template, so its copy explains how the
+    // user will learn the length rather than naming a particular template.
+    const audience = ctx.container.querySelector('[data-testid="audience-goal-step"]');
+    if (!audience?.textContent.includes("Choose a template to see the clip length")) {
+      throw new Error("the Audience step does not explain that template choice sets the clip length");
     }
   });
 
@@ -2487,10 +2489,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
     await act(async () => {});
     const text = ctx.text();
-    if (!text.includes("you record the demo yourself")) {
+    if (!text.includes("record the demo yourself")) {
       throw new Error("the Audience step does not tell the founder the demo is theirs to record");
     }
-    if (!text.includes("add your own call to action")) {
+    if (!text.includes("your own call to action")) {
       throw new Error("the Audience step does not tell the founder the close is theirs to add");
     }
   });
@@ -2541,21 +2543,19 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
         });
         await act(async () => {});
-        const text = ctx.text();
-        // The acronym is the affordance: a field labelled "CTA", a "CTA pattern"
-        // row, a "CTA end card" badge. Prose that spells the phrase out to say
-        // the close is the founder's own is honest and is allowed to stay. So is
-        // the native editor entry: "Demo + CTA" names this app's own editor, not
-        // a promise the render keeps, so it is lifted out before the test.
-        const withoutEntry = text.replace(/demo \+ cta/gi, "");
-        if (/\bCTA\b/.test(withoutEntry)) {
+        const stepContent = ctx.container.querySelector(".surface.rounded-2xl");
+        const stepText = stepContent?.textContent || "";
+        // Only test text inside the active step. Shared page guidance outside the
+        // step truthfully names the separate editor without offering a control.
+        const withoutEntry = stepText.replace(/demo \+ cta/gi, "");
+        if (/CTA/.test(withoutEntry)) {
           throw new Error(`step ${JSON.stringify(label)} offers a CTA affordance`);
         }
-        if (text.includes("end card")) {
+        if (stepText.includes("CTA card")) {
           throw new Error(`step ${JSON.stringify(label)} promises an end card`);
         }
         // The retired field labels, in case one is ever restored as a heading.
-        if (text.includes("Feature emphasis")) {
+        if (stepText.includes("Feature emphasis")) {
           throw new Error(`step ${JSON.stringify(label)} offers a feature instruction to render`);
         }
       }
@@ -3303,7 +3303,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const steps = [...ctx.container.querySelectorAll('[data-testid="landing-how-it-works"] h3')];
     if (steps.length !== 5) throw new Error("expected five workflow steps");
     const workflow = ctx.container.querySelector('[data-testid="landing-how-it-works"]').textContent;
-    for (const phrase of ["approve the facts", "Set a goal", "presenter photo", "mark the project ready", "publish them yourself"]) {
+    for (const phrase of ["approve the facts", "Set a goal", "presenter photo", "save it", "publish them yourself"]) {
       if (!workflow.includes(phrase)) throw new Error(`missing workflow action: ${phrase}`);
     }
     for (const link of ctx.container.querySelectorAll('a[href^="#"]')) {
@@ -3327,23 +3327,25 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       modules.forEach((p) => cache.delete(resolveFile(path.join(SRC, p))));
       try {
         await mount(load("pages/Landing.jsx").default)(ctx);
-        const headerAction = ctx.container.querySelectorAll('[data-testid="landing-enter-app-button"]');
-        if (headerAction.length !== 1) throw new Error("expected exactly one header action");
+        const header = ctx.container.querySelector("header");
+        if (!header) throw new Error("landing header did not render");
+        if (header.querySelector('[data-testid="landing-enter-app-button"]')) {
+          throw new Error("landing header should not contain a Create Video/Get Started CTA");
+        }
         if (authState === "signed-out") {
-          for (const section of ["header", '[data-testid="landing-hero"]', '[data-testid="landing-final-cta"]']) {
-            const button = ctx.container.querySelector(`${section} button` + (section === "header" ? '[data-testid="landing-enter-app-button"]' : ""));
+          for (const section of ['[data-testid="landing-hero"]', '[data-testid="landing-final-cta"]']) {
+            const button = ctx.container.querySelector(`${section} button`);
             if (!button) throw new Error(`missing sign-up action: ${section}`);
             await act(async () => button.click());
           }
-          const signIn = [...ctx.container.querySelectorAll("header button")].find((b) => b.textContent.trim() === "Sign In");
+          const signIn = [...header.querySelectorAll("button")].find((b) => b.textContent.trim() === "Sign In");
           if (!signIn) throw new Error("missing sign-in action");
           await act(async () => signIn.click());
           const heroSignIn = [...ctx.container.querySelectorAll('[data-testid="landing-hero"] button')].find((b) => b.textContent.trim() === "Sign in");
           if (!heroSignIn) throw new Error("missing mobile-friendly sign-in action");
           await act(async () => heroSignIn.click());
-          if (global.__SMOKE_AUTH_ACTIONS.join(",") !== "sign-up,sign-up,sign-up,sign-in,sign-in") throw new Error("auth actions did not reach the correct triggers");
+          if (global.__SMOKE_AUTH_ACTIONS.join(",") !== "sign-up,sign-up,sign-in,sign-in") throw new Error("auth actions did not reach the correct triggers");
         } else {
-          if (headerAction[0].closest("a")?.getAttribute("href") !== "/create") throw new Error("header action loops to landing");
           for (const section of ["landing-hero", "landing-final-cta"]) {
             const link = ctx.container.querySelector(`[data-testid="${section}"] a[href="/create"]`);
             if (!link || !link.textContent.includes("Create Video")) throw new Error(`missing creation action: ${section}`);
@@ -4031,7 +4033,7 @@ async function runDemoCtaChecks() {
       // the budget: anything longer pushes the editor down on the small screens
       // this route is most useful on.
       const STANDALONE_COPY =
-        "Wrap your own clip—or a finished render—in a phone mockup. Exports save to History.";
+        "Style a clip in a phone mockup; combine clips separately. Export to History.";
       if (STANDALONE_COPY.length > 85) {
         throw new Error(
           `the standalone copy is ${STANDALONE_COPY.length} chars, over the 85 budget`
@@ -4376,11 +4378,11 @@ async function runDemoCtaChecks() {
           // Anchored on the JSX element, not the bare word: the comment above the
           // button explains where the copy used to live, and matching that would
           // read as "still above the button".
-          const liveIdx = src.indexOf('>Live preview</p>');
+          const liveIdx = src.indexOf('>Upload one clip to preview and style it.</p>');
           const uploadIdx = src.indexOf('data-testid="demo-cta-frame-upload"');
           if (liveIdx === -1 || uploadIdx === -1 || liveIdx < uploadIdx) {
             throw new Error(
-              '"Live preview" must be below the upload button, inside the frame.'
+              'The upload guidance must be below the upload button, inside the frame.'
             );
           }
           // The label was removed from the caption row. The literal string still exists

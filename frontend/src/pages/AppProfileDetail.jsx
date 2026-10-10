@@ -75,6 +75,7 @@ function ClaimPanel({ profile }) {
   return (
     <div className="space-y-3" data-testid="claim-guardrails">
       <span className="eyebrow block">Claim guardrails</span>
+      <p className="text-xs text-muted-foreground">The plan checks these phrases before rendering. Review each claim for accuracy before publishing; an automated check is not a guarantee.</p>
       <ListBlock label="Approved — safe to use" items={approved} />
       <ListBlock label="Needs review — verify first" items={review} tone="review" />
       <ListBlock label="Never use" items={banned} tone="banned" />
@@ -414,7 +415,7 @@ export default function AppProfileDetail() {
                 }}
               >
                 <Sparkles className="h-3.5 w-3.5" />
-                New video
+                Create Video
               </Link>
             </Button>
             {approved && (
@@ -423,10 +424,10 @@ export default function AppProfileDetail() {
                 size="sm"
                 onClick={handleRegenerateEverything}
                 disabled={regeneratingEverything}
-                title="Re-research, re-approve, and regenerate content angles"
+                title="Re-research this app, apply the refreshed profile, and regenerate its audience angles"
               >
                 {regeneratingEverything ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                Regenerate everything
+                Refresh research &amp; angles
               </Button>
             )}
           </div>
@@ -601,8 +602,8 @@ export default function AppProfileDetail() {
             {drafts.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 {approved
-                  ? "Nothing built on this app yet. The profile, its angles and its templates stay here and can be reused for every video you make."
-                  : "Approve this profile to start building videos on it. It can be reused as often as you like."}
+                  ? "No video drafts yet. Start a new video with this profile, or use it again for another video whenever you like."
+                  : "Review and approve this profile before starting a video. You can reuse it for as many videos as you need."}
               </p>
             ) : (
               <div className="space-y-2">
@@ -620,13 +621,13 @@ export default function AppProfileDetail() {
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {d.script_version > 0
-                        ? "Plan ready — resume in the studio"
-                        : "Setup started — still needs a hook and assets"}
+                        ? "Script plan ready — resume in Create Video"
+                        : "Setup started — choose a goal, template, and presenter photo"}
                     </p>
                   </Link>
                 ))}
                 <p className="pt-1 text-xs text-muted-foreground">
-                  Each draft is independent, so you can start a fresh video on this app at any time.
+                  Each draft is separate. Start another video without changing this profile or its other drafts.
                 </p>
               </div>
             )}
@@ -635,14 +636,15 @@ export default function AppProfileDetail() {
           <div className="surface space-y-3 rounded-2xl" data-testid="app-profile-angles">
             <span className="eyebrow flex items-center gap-1.5">
               <Target className="h-3 w-3" />
-              Content angles
+              Audience angles
             </span>
+            <p className="text-xs text-muted-foreground">Optional audience-and-problem starting points. Choose one in Create Video to focus template suggestions, or skip it for a broader match.</p>
 
             {angles.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 {approved
-                  ? "Content angles were generated when you approved this profile."
-                  : "Approve this profile to generate content angles."}
+                  ? "No audience angles are available yet. Re-research and approve an updated profile to refresh them. You can still choose a video goal without an angle."
+                  : "Approve this profile to create suggested audience angles for the video workflow."}
               </p>
             ) : (
               <div className="space-y-3">
@@ -660,6 +662,7 @@ export default function AppProfileDetail() {
 
           <div className="surface space-y-3 rounded-2xl" data-testid="app-profile-templates">
             <span className="eyebrow block">Suggested templates</span>
+            <p className="text-xs text-muted-foreground">These are app-level suggestions. Create Video ranks templates again for your selected video goal.</p>
             {recError && (
               <p className="text-xs text-muted-foreground">
                 Could not load suggestions ({recError}).
@@ -667,7 +670,9 @@ export default function AppProfileDetail() {
             )}
             {recommendations.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Recommendations appear once the profile is approved.
+                {approved
+                  ? "No template suggestions are available yet. You can still choose a goal in Create Video and review any suggestions there."
+                  : "Template suggestions appear after you approve the profile."}
               </p>
             ) : (
               <div className="space-y-2">
@@ -698,7 +703,7 @@ export default function AppProfileDetail() {
                   to={`/create?profile=${profileId}`}
                   className="block pt-1 text-center text-xs font-medium text-[color:var(--brand-indigo)] hover:underline"
                 >
-                  Pick one in the studio
+                  Choose a goal and compare suggestions in Create Video
                 </Link>
               </div>
             )}

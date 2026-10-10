@@ -1427,7 +1427,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           {generation ? (
             <>
               <p className="text-xs text-muted-foreground">
-                This finished render is the input. Nothing is downloaded or uploaded to get it here.
+                This finished Hook + Story is the source clip. You can replace it with your own footage; this editor styles one clip at a time and does not assemble separate clips.
               </p>
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <Badge variant="secondary">Hook + Story</Badge>
@@ -1441,8 +1441,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             </>
           ) : (
             <p className="text-xs text-muted-foreground">
-              Bring your own footage. Drop a clip in to use Demo + CTA on its own,
-              without generating a hook first.
+              Upload one video clip to start. It can be your own footage or a finished render—no Hook + Story generation is required. This editor styles one clip at a time; combine separate clips in your own editor.
             </p>
           )}
           <div className="flex flex-wrap items-center gap-2">
@@ -1486,6 +1485,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           )}
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
             <SubLabel>View style</SubLabel>
+            <p className="text-xs text-muted-foreground">Choose a floating phone or hand-held mockup. Drag the preview to adjust its framing; in hand-held mode, pick a scene below.</p>
             <div className="grid grid-cols-2 gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1">
               {[
                 ["floating", "Floating Phone"],
@@ -1617,16 +1617,20 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         <EditorSection title="Hook Text" open={openSections.hook} onToggle={() => toggleSection("hook")} testId="hook-controls">
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <Switch data-testid="hook-toggle" checked={hookEnabled} onCheckedChange={setHookEnabled} />
-            Show punch-in hook on frame 1
+            Show opening hook text
           </label>
-          <textarea
-            data-testid="hook-text-input"
-            value={hookText}
-            onChange={(e) => setHookText(e.target.value)}
-            rows={3}
-            placeholder="I built this so I'd stop journaling in Notes app"
-            className={TEXTAREA_CLASS}
-          />
+          <p className="text-xs text-muted-foreground">This is an on-screen text overlay; it does not change the clip&apos;s spoken script.</p>
+          <label className="space-y-1.5">
+            <span className="text-xs text-muted-foreground">Text to show at the opening</span>
+            <textarea
+              data-testid="hook-text-input"
+              value={hookText}
+              onChange={(e) => setHookText(e.target.value)}
+              rows={3}
+              placeholder="I built this so I'd stop journaling in Notes app"
+              className={TEXTAREA_CLASS}
+            />
+          </label>
           <ControlSlider label="On screen" value={hookDuration} min={RANGES.hookDuration.min} max={RANGES.hookDuration.max} step={RANGES.hookDuration.step} onChange={setHookDuration} testId="hook-duration-slider" format={(v) => `${v.toFixed(1)}s`} />
           {(hookOffsetX !== 0 || hookOffsetY !== 0) && (
             <ResetButton onClick={() => { setHookOffsetX(0); setHookOffsetY(0); }}>Reset position</ResetButton>
@@ -1637,22 +1641,29 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         <EditorSection title="End Card CTA" open={openSections.cta} onToggle={() => toggleSection("cta")} testId="cta-controls">
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <Switch data-testid="cta-toggle" checked={ctaEnabled} onCheckedChange={setCtaEnabled} />
-            Show lead-gen end card
+            Show closing call-to-action card
           </label>
-          <input
-            data-testid="cta-headline-input"
-            value={ctaHeadline}
-            onChange={(e) => setCtaHeadline(e.target.value)}
-            placeholder="Try it free — link in bio"
-            className={INPUT_CLASS}
-          />
-          <input
-            data-testid="cta-handle-input"
-            value={ctaHandle}
-            onChange={(e) => setCtaHandle(e.target.value)}
-            placeholder="@yourhandle"
-            className={INPUT_CLASS}
-          />
+          <p className="text-xs text-muted-foreground">Adds an on-screen card to the end of this clip. Write a clear next step, such as downloading your app or visiting your link.</p>
+          <label className="space-y-1.5">
+            <span className="text-xs text-muted-foreground">Call-to-action text</span>
+            <input
+              data-testid="cta-headline-input"
+              value={ctaHeadline}
+              onChange={(e) => setCtaHeadline(e.target.value)}
+              placeholder="Try it free — link in bio"
+              className={INPUT_CLASS}
+            />
+          </label>
+          <label className="space-y-1.5">
+            <span className="text-xs text-muted-foreground">Social handle (optional)</span>
+            <input
+              data-testid="cta-handle-input"
+              value={ctaHandle}
+              onChange={(e) => setCtaHandle(e.target.value)}
+              placeholder="@yourhandle"
+              className={INPUT_CLASS}
+            />
+          </label>
           <ControlSlider label="Visible for" value={ctaDuration} min={RANGES.ctaDuration.min} max={RANGES.ctaDuration.max} step={RANGES.ctaDuration.step} onChange={setCtaDuration} testId="cta-duration-slider" format={(v) => `${v.toFixed(1)}s`} />
           {(ctaOffsetX !== 0 || ctaOffsetY !== 0) && (
             <ResetButton onClick={() => { setCtaOffsetX(0); setCtaOffsetY(0); }}>Reset position</ResetButton>
@@ -1690,7 +1701,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               A select truncates both into one clipped line at 420px, and the
               dimensions are the part you actually check before exporting. */}
           <div className="space-y-2">
-            <SubLabel>Platform preset</SubLabel>
+            <SubLabel>Export size</SubLabel>
+            <p className="text-xs text-muted-foreground">Choose an output size for TikTok, Reels, Shorts, or keep the source clip&apos;s dimensions.</p>
             <div
               role="radiogroup"
               aria-label="Platform preset"
@@ -1721,6 +1733,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           </div>
           <div className="space-y-2">
             <SubLabel>Export format</SubLabel>
+            <p className="text-xs text-muted-foreground">Transparent backgrounds require WebM; otherwise choose MP4 or WebM to suit where you will edit or share the clip.</p>
             <select
               value={bg === "transparent" ? "webm" : exportFormat}
               disabled={bg === "transparent"}
@@ -1743,6 +1756,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             main groups is what made the panel taller than the preview it is
             meant to describe. */}
         <EditorSection title="Advanced" open={openSections.advanced} onToggle={() => toggleSection("advanced")}>
+          <p className="text-xs text-muted-foreground">Optional fine-tuning for mockup, screen placement, and video crop. Most exports do not need changes here.</p>
           <div className="space-y-2">
             <SubLabel>Mockup height</SubLabel>
             <div className="flex items-center gap-2">
@@ -1881,7 +1895,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   <Upload className="h-3.5 w-3.5" />
                   Upload a clip
                 </Button>
-                <p className="mt-2 text-xs text-muted-foreground">Live preview</p>
+                <p className="mt-2 text-xs text-muted-foreground">Upload one clip to preview and style it.</p>
               </div>
             )}
         </div>
@@ -2056,6 +2070,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                     </Button>
                     <span aria-hidden="true" className="text-muted-foreground/40">|</span>
                     <span className="eyebrow">Zoom Lock</span>
+                    <span className="text-xs text-muted-foreground">Hold the current zoom from this point in the clip.</span>
                     {zoomKeyframes.length > 0 && (
                       <span className="text-xs tabular-nums text-muted-foreground">
                         {zoomKeyframes.length}

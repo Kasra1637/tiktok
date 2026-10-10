@@ -7,7 +7,7 @@ import {
   AccountButton,
 } from "../components/auth/AuthControls";
 import {
-  Sparkles, Clapperboard, Film, ArrowRight, Zap, Target,
+  Sparkles, Clapperboard, Film, Zap, Target,
   FileText, X, Check, Wand2, Briefcase, LayoutTemplate, ShieldCheck, Video,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -23,25 +23,25 @@ const FEATURES = [
     icon: Target,
     title: "Make your message specific",
     description:
-      "Choose a goal, then add an audience angle if you want a tighter focus. Build the story around the problem your app solves.",
+      "Choose the required video goal, then optionally add an audience angle and tone. These guide template suggestions and the free script plan.",
   },
   {
     icon: LayoutTemplate,
     title: "Find an opening that fits",
     description:
-      "Compare templates recommended for your app and goal. See the fit score, reasons, and limitations before you choose.",
+      "Compare goal-matched templates by fit score, reasons, and caveats. Choose one, then add a clear presenter photo for the generated clip.",
   },
   {
     icon: FileText,
     title: "Make the script your own",
     description:
-      "Edit the hook, script, tone, and creative directions before rendering. A separate demo brief helps you plan what to record.",
+      "Review the free script plan, edit and save the hook, story, and visual directions, then check flagged claims. Render Hook + Story in the final step.",
   },
   {
     icon: Clapperboard,
     title: "Start with a photo, not a shoot",
     description:
-      "Use a presenter photo to guide an AI-generated Hook + Story. Review the result before using it—this is generated footage, not a recording of you.",
+      "The final step uses your approved plan and presenter photo to render one Hook + Story clip. It does not include your filmed demo, closing call to action, or on-screen text.",
   },
   {
     icon: ShieldCheck,
@@ -71,23 +71,23 @@ const FLOW_STEPS = [
   },
   {
     step: "2",
-    label: "Choose your message",
-    detail: "Set a goal for the video. Add an audience angle if you want to focus on a specific problem or use case.",
+    label: "Choose a goal and audience",
+    detail: "Set a goal for the video (required). Add an audience angle and tone if you want to focus the story; both are optional.",
   },
   {
     step: "3",
     label: "Pick a template",
-    detail: "Compare recommendations and their limitations. Choose an opening and add your presenter photo.",
+    detail: "Compare goal-matched recommendations and their caveats. Choose a template, then add a clear presenter photo.",
   },
   {
     step: "4",
-    label: "Review, then generate",
-    detail: "Edit the script and directions, review flagged claims, and mark the project ready. Start the video render when you’re happy with the plan.",
+    label: "Review, then render",
+    detail: "Review the free script plan, edit and save it, then check flagged claims. Once the plan passes its checks, render Hook + Story in the final step.",
   },
   {
     step: "5",
-    label: "Show the real product",
-    detail: "Record your demo. Style footage in Demo + CTA, then download your clips and publish them yourself.",
+    label: "Add your real product demo",
+    detail: "Record your demo separately. Demo + CTA styles one clip at a time; combine clips in your own editor, then download and publish them yourself.",
   },
 ];
 
@@ -188,7 +188,7 @@ const QUESTIONS = [
   },
   {
     question: "Can I change the script before generating?",
-    answer: "Yes. Edit the hook, script, tone, and creative directions, then review the claim check and mark the project ready. Starting the video render is a separate action.",
+    answer: "Yes. Edit the hook, script, tone, and creative directions, then save them and review the claim check. Once the plan passes its checks it is ready; rendering the video is a separate action.",
   },
   {
     question: "Does the video use my real face and voice?",
@@ -235,7 +235,7 @@ export default function Landing() {
             <span className="font-display text-lg font-bold tracking-tight">HookForge</span>
           </Link>
 
-          <nav aria-label="Landing page" className="hidden items-center gap-1 lg:flex">
+          <nav aria-label="Landing page" className="ml-auto hidden items-center gap-1 lg:flex">
             {NAV_LINKS.map((l) => (
               <a
                 key={l.href}
@@ -247,35 +247,15 @@ export default function Landing() {
             ))}
           </nav>
 
-          <div className="flex items-center gap-2">
+          <div className="ml-3 flex shrink-0 items-center gap-2 lg:ml-5">
             <UnauthedOnly>
               <SignInTrigger>
-                <button className="hidden rounded-xl px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-[color:var(--indigo-6)] hover:text-foreground sm:inline-flex">
+                <button className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-[color:var(--indigo-6)] hover:text-foreground">
                   Sign In
                 </button>
               </SignInTrigger>
-              {/* The same testid in both branches — signed-in and signed-out —
-                  so anything hooking the primary CTA finds exactly one. It used
-                  to be here for the onboarding tour, which pointed its last step
-                  at this button; the home page has no tour now, and the testid
-                  is kept because it marks the page's one primary action. */}
-              <SignUpTrigger>
-                <Button
-                  className="gap-2 rounded-xl bg-[color:var(--brand-indigo)] px-4 text-sm font-semibold text-black shadow-[var(--glow-indigo)] hover:bg-[color:var(--brand-indigo-dark)]"
-                  data-testid="landing-enter-app-button"
-                >
-                  Get Started <ArrowRight className="h-4 w-4" />
-                </Button>
-              </SignUpTrigger>
             </UnauthedOnly>
             <AuthedOnly>
-              <Button
-                asChild
-                className="gap-2 rounded-xl bg-[color:var(--brand-indigo)] px-4 text-sm font-semibold text-black shadow-[var(--glow-indigo)] hover:bg-[color:var(--brand-indigo-dark)]"
-                data-testid="landing-enter-app-button"
-              >
-                <Link to="/create">Create Video <ArrowRight className="h-4 w-4" /></Link>
-              </Button>
               <AccountButton />
             </AuthedOnly>
           </div>

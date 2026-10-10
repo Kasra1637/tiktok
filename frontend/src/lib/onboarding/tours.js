@@ -4,8 +4,8 @@
 // Every step anchors to a real `data-testid` already present in the app (or a
 // small set added specifically for onboarding). Copy is written to explain the
 // BENEFIT of each step, not just what it is, and to state the product's honest
-// limits: nothing is generated until the last step, publishing is always manual,
-// and the demo and the close are the founder's own footage.
+// limits: a free script plan is separate from the paid render, publishing is
+// always manual, and the demo and the close are the founder's own footage.
 //
 // Tours auto-OPEN on the first arrival at their route and not again (see
 // OnboardingProvider — a persisted seen-check, with "Show me around" as the
@@ -44,46 +44,46 @@ export const TOURS = {
     steps: [
       {
         target: '[data-testid="step-pill-profile"]',
-        title: "The studio, in five steps",
+        title: "Build a video in five steps",
         body:
-          "App Profile \u2192 Audience & goal \u2192 Template & photo \u2192 Review \u2192 Hook + Story. Jump between steps with these pills; only approved profiles get in, so every script builds on facts you have reviewed.",
+          "Choose an approved app, set a video goal, pick a matched template and presenter photo, review your free script plan, then render Hook + Story. Use these step tabs to move around; the plan and render are separate.",
       },
       {
         target: '[data-testid="step-pill-angle"]',
-        title: "Say what the video is for",
+        title: "Choose a goal and audience",
         body:
-          "The objective is required and is the heaviest signal in template ranking; the content angle is optional and narrows the match further. Nothing is generated until the last step.",
+          "Select the required goal first: it shapes template suggestions and the script. An audience angle and tone are optional ways to focus the story. The free script plan appears in Review; the video renders in the final step.",
       },
       {
         target: '[data-testid="create-what-you-get"]',
-        title: "What you get",
+        title: "Know what this creates",
         optional: true,
         body:
-          "One render of the template's length: a short hook, then a middle that stops where you would reach for your phone. The length comes from the template you pick \u2014 it is not a choice.",
+          "The final render is one short Hook + Story clip. Its template sets the length. Your filmed product demo and closing call to action are separate footage you add afterwards.",
       },
       {
         target: '[data-testid="step-pill-template"]',
-        title: "Templates, honestly scored",
+        title: "Choose a format and presenter",
         body:
-          "Ranked for this app and this goal, each card showing its fit score, why it fits, and where it falls short. The top pick is preselected \u2014 every card also says what the template needs from you.",
+          "Suggestions are tailored to the selected app and goal. Compare each fit score, reasons, and caveats; the top suggestion starts selected, but you can choose another. Add the presenter photo below—the template and photo belong to the same step.",
       },
       {
         target: '[data-testid="step-pill-review"]',
-        title: "Read before you render",
+        title: "Review the words first",
         body:
-          "The plan is free: hook line, script, a demo note for you (it never reaches the model), and a read-only shot timeline. The claim check runs here, and your banned list blocks the render outright.",
+          "Your script plan is free and is created when you reach Review with the required choices set. Read and edit the hook, story, and visual directions; check flagged claims, then save edits. A prohibited claim blocks rendering.",
       },
       {
         target: '[data-testid="step-pill-hook"]',
-        title: "The one render step",
+        title: "Render Hook + Story",
         body:
-          "Build the app-specific strategy first \u2014 free, and it is what makes the render about your app rather than a generic take. Then one render of the hook and the middle, delivered with a hook-to-middle camera cut and no on-screen text.",
+          "The app-specific strategy is built here and shown before you spend on a render. Read it, then generate the Hook + Story clip from your approved plan and presenter photo. This clip has no product demo, closing CTA, or on-screen text.",
       },
       {
         target: '[data-testid="create-no-autopost-note"]',
-        title: "Generated here, posted by hand",
+        title: "Finish the promo separately",
         body:
-          "You record the demo and add your own close after the middle. Nothing is ever published for you and no platform credentials are involved \u2014 finished renders land in History.",
+          "Record your product demo and add your closing call to action after Hook + Story. Demo + CTA styles one clip at a time; combine clips in your own editor. Renders are saved to History, and nothing is published automatically.",
       },
     ],
   },
@@ -95,40 +95,40 @@ export const TOURS = {
     steps: [
       {
         target: '[data-testid="brand-url-card"]',
-        title: "Start with your website",
+        title: "Optionally autofill from your website",
         body:
-          "Analyze reads your site and pre-fills the profile \u2014 name, niche, audience, tone \u2014 so you sharpen what it found instead of typing a form from scratch.",
+          "Enter your app website and choose Analyze to prefill basic profile details. This is a shortcut, not a required step; research your app below or fill in the profile yourself.",
       },
       {
         target: '[data-testid="app-research-card"]',
-        title: "Research the whole app",
+        title: "Research from any useful source",
         body:
-          "Add the App Store and Google Play links, any support pages, and your own notes. AI drafts the full App Profile \u2014 features, audiences, claims, video themes \u2014 as a draft for you to review.",
+          "Add at least one website, App Store, Google Play, or support URL. Add notes if useful, then choose Research app. The result is a draft—check it against your actual product before saving and approving.",
       },
       {
         target: '[data-testid="brand-manual-card"]',
-        title: "Everything is editable",
+        title: "Add accurate product detail",
         body:
-          "Refine what the research found: features, use cases, problems solved, what must never show on camera, viewer objections, and your approved / needs-review / banned claim lists. These drive every script.",
+          "Correct the research and add real features, audience segments, use moments, proof points, and feature-to-outcome statements. Set what must never appear and sort claims into approved, needs review, or banned; scripts use these details.",
       },
       {
         target: '[data-testid="save-brand-button"]',
-        title: "Save as often as you like",
+        title: "Save, then approve when ready",
         body:
-          "Saving stores the draft, and it can be edited and re-saved any time \u2014 nothing is generated from a draft. An app name is the only field required.",
+          "Save stores your profile details; it does not approve the profile or generate a video. Review the key facts and claims first. Only the app name is required to save, but fuller details make stronger scripts.",
       },
       {
         target: '[data-testid="approve-profile-button"], [data-testid="refresh-profile-button"]',
-        title: "Approval is the gate",
+        title: "Approve a reviewed profile",
         body:
-          "Only approved profiles enter the studio, generate content angles, or earn template recommendations. Re-research stages a proposal that changes nothing until you approve it again.",
+          "Approval makes this profile available in Create Video and creates its audience angles and template suggestions. Refreshing from sources creates a proposal; review and approve it before it replaces your current profile.",
       },
       {
         target: '[data-testid="find-video-to-remix-button"]',
-        title: "Next: the studio",
+        title: "Next: choose a video goal",
         optional: true,
         body:
-          "Open the studio to turn this profile into a video \u2014 or use Content angles up top to generate the audience angles the studio can target first.",
+          "Once approved, open Create Video to set a goal, optionally choose one of these audience angles, and get template suggestions. Reuse this profile for multiple videos.",
       },
     ],
   },
@@ -140,30 +140,30 @@ export const TOURS = {
     steps: [
       {
         target: '[data-testid="asset-profile-picker"], [data-testid="asset-library-header"]',
-        title: "Assets are per app",
+        title: "Choose which app owns the photo",
         body:
-          "Everything here belongs to the app chosen at the top, and the picker shows which of your apps are still awaiting approval. Upload anything you have the right to use \u2014 each upload records that confirmation.",
+          "Assets belong to one App Profile. Switch apps here when needed; then upload a photo you have permission to use. Approval is needed to generate a video, not to add a photo.",
       },
       {
         target: '[data-testid="asset-upload-panel"]',
-        title: "One upload: your photograph",
+        title: "Add the presenter photo",
         optional: true,
         body:
-          "Face-only product: the character reference is the only asset kind. The person on camera in every generated video is the person in this photo \u2014 the room and the scene are invented from your App Profile.",
+          "Upload a clear photo of the person you want on camera. This is the character reference used in generated videos; the setting and scene come from the App Profile. In Create Video, upload it on Template & photo.",
       },
       {
         target: '[data-testid="asset-rights-alert"]',
-        title: "Checked before it renders",
+        title: "Check the upload before using it",
         optional: true,
         body:
-          "Rights are confirmed per upload, and faces are counted up front: a photo with no detectable face \u2014 or several competing ones \u2014 is flagged here, which is what the video provider would otherwise refuse at the render.",
+          "Confirm you have the right to use the image. The upload is checked for faces; a photo with no clear face or several faces may be rejected by the video provider.",
       },
       {
         target: '[data-testid="asset-list"]',
-        title: "One face per project",
+        title: "Use one presenter per video",
         optional: true,
         body:
-          "Attach a character reference to a project and the slot is taken \u2014 the server refuses a render with two. Archive or delete old entries; retired asset kinds can never be re-attached.",
+          "A video uses one character-reference photo. In the studio, the uploaded photo attaches to that draft; you can remove it or replace it before rendering. Archive or delete photos you no longer need.",
       },
     ],
   },
@@ -175,46 +175,84 @@ export const TOURS = {
     steps: [
       {
         target: '[data-testid="app-profile-header"]',
-        title: "Your app profile, in one place",
+        title: "Manage this app profile",
         body:
-          "Draft or approved at a glance. New video deep-links the studio with this app preselected, and Edit opens the profile editor \u2014 everything below backs every video you make from this app.",
+          "Check whether the profile is a draft or approved. Edit opens its details; New video opens Create Video with this app selected. Reuse it for every video about this app.",
       },
       {
         target: '[data-testid="profile-facts"]',
-        title: "The facts scripts build on",
+        title: "Review the product facts",
         body:
-          "Features, use cases, problems solved, outcomes, and \u201Cnever show in the video\u201D \u2014 that last list is attached to every render prompt as an instruction to the model, so it is enforced, not advisory.",
+          "These features, use cases, outcomes, audience details, and proof points ground your video scripts. The “Never show in the video” list is passed as an instruction to the video generator.",
       },
       {
         target: '[data-testid="claim-guardrails"]',
-        title: "Claim guardrails",
+        title: "Review claim categories",
         optional: true,
         body:
-          "Approved claims are safe to use, \u201Cneeds review\u201D claims must be verified first, and the never-use list blocks the render outright. Fix the flagged claim in the plan and the block clears.",
+          "Check approved, needs-review, and banned claims here. The script plan runs a claim check; a prohibited claim blocks rendering until you edit the plan and the check passes. Verify claims yourself before publishing.",
       },
       {
         target: '[data-testid="what-works"]',
-        title: "The part that improves with use",
+        title: "Use your results as feedback",
         body:
-          "Log view numbers on finished videos and they land here, aggregated per opening. The next strategy reads this, so what actually carried views for this app shapes what gets written next.",
+          "After posting, enter a video's results in History. Recorded view counts appear here by template and can inform future strategies; they are manual inputs, not independently verified performance data.",
       },
       {
         target: '[data-testid="app-profile-angles"]',
-        title: "Content angles",
+        title: "Focus on an audience angle",
         body:
-          "Generate audience angles \u2014 the problem, the hook promise, the feature shown \u2014 and pick one in the studio to narrow template matching to that audience.",
+          "Approval creates suggested angles based on audience problems and product details. Choose an angle in Create Video if you want narrower template suggestions; skip it to keep the audience broad.",
       },
       {
         target: '[data-testid="app-profile-videos"]',
-        title: "Every draft on this app",
+        title: "Resume or start a video",
         body:
-          "Drafts are independent and resumable, and each one deep-links back into the studio at the right step. The profile is never consumed \u2014 reuse it for as many videos as you like.",
+          "Open a draft to continue its Create Video steps. Start a new video whenever you like; each draft is separate, and this approved profile remains available to reuse.",
       },
       {
         target: '[data-testid="app-profile-templates"]',
-        title: "Suggested templates",
+        title: "Start with a suggested format",
         body:
-          "Once the profile is approved, the ranked openings appear here with their fit reasons. Click one to open the studio with it selected \u2014 the full scored list lives on the Template & photo step.",
+          "Choose a template here to open Create Video with it preselected, then set the video's goal to see goal-matched suggestions. The full list and fit reasons appear on Template & photo.",
+      },
+    ],
+  },
+
+  // Targets DemoCtaStudio at /demo-cta.
+  "demo-cta": {
+    id: "demo-cta",
+    label: "Demo + CTA tour",
+    steps: [
+      {
+        target: '[data-testid="demo-cta-source"]',
+        title: "Start with one clip",
+        body:
+          "Upload your own footage or style a finished Hook + Story render. This editor handles one source clip at a time; join separate demo and story clips in your video editor.",
+      },
+      {
+        target: '[data-testid="view-mode-floating"]',
+        title: "Choose the phone look",
+        body:
+          "Pick a floating phone or hand-held mockup. Drag the preview to frame it; the hand-held option also lets you choose a scene.",
+      },
+      {
+        target: '[data-testid="hook-controls"]',
+        title: "Add opening text",
+        body:
+          "This is an optional on-screen overlay, separate from the clip's spoken hook. Set its text, timing, and position, then check the preview.",
+      },
+      {
+        target: '[data-testid="cta-controls"]',
+        title: "Add a closing card",
+        body:
+          "Write a clear next step and optional social handle. The card is an overlay on this clip; it does not join another clip or publish the video.",
+      },
+      {
+        target: '[data-testid="platform-preset-group"]',
+        title: "Choose export settings",
+        body:
+          "Select an output size and format for where you plan to edit or share the clip. Advanced controls are optional; preview before exporting to History.",
       },
     ],
   },
@@ -226,30 +264,30 @@ export const TOURS = {
     steps: [
       {
         target: '[data-testid="history-filters"]',
-        title: "Every render, accounted for",
+        title: "Find a video in History",
         body:
-          "Filter by app or status; the totals line shows results, completed and failed. Publishing stays manual \u2014 this is a production log, not a posting schedule.",
+          "Filter videos by app or status. Each row shows its render state and available actions. Completed videos are saved here; posting and publishing are always up to you.",
       },
       {
         target: '[data-testid="history-list"]',
-        title: "What each card holds",
+        title: "Play, download, or reuse a render",
         optional: true,
         body:
-          "The video, its status and model, with downloads, a duplicate button, and verdict controls. Marking a render \u201Clooks good\u201D or \u201Cnot good\u201D is recorded and steers what gets recommended next.",
+          "A completed row offers its video, status, model, download, and actions to duplicate or open it in Demo + CTA. Record a verdict to feed your own feedback into later recommendations.",
       },
       {
         target: '[data-testid="generation-details-button"]',
-        title: "Open the receipts",
+        title: "Inspect the render details",
         optional: true,
         body:
-          "Details shows the exact prompt sent to the model and the claim check as it stood at render time \u2014 the audit trail for any claim in a video you post.",
+          "Open Details to see the generation prompt and the claim-check report saved with this render. Use them to understand what the system generated; review claims before you publish.",
       },
       {
         target: '[data-testid="record-results-button"]',
-        title: "Tell it what worked",
+        title: "Record results after posting",
         optional: true,
         body:
-          "Log views and a verdict after you post \u2014 typed in by hand, never scraped. This is the one input that makes the next video for this app better: the recorded numbers feed the next strategy.",
+          "Enter views and other metrics yourself after you post, plus an optional outcome. These are not pulled from a platform or verified; your recorded feedback may help shape future suggestions.",
       },
     ],
   },
@@ -277,8 +315,9 @@ export const TOURS = {
 export function getTourIdForPath(pathname) {
   if (pathname === "/create") return "create";
   if (pathname === "/brand") return "brand";
-if (pathname === "/history") return "history";
-if (pathname === "/assets") return "assets";
+  if (pathname === "/history") return "history";
+  if (pathname === "/assets") return "assets";
+  if (pathname === "/demo-cta" || /^\/demo-cta\/[^/]+$/.test(pathname)) return "demo-cta";
   if (/^\/app-profiles\/[^/]+\/assets$/.test(pathname)) return "assets";
   if (/^\/app-profiles\/[^/]+$/.test(pathname)) return "app-profile";
   return null;

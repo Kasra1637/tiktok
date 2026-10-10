@@ -640,7 +640,7 @@ export default function AssetLibrary({
             <PageHeader
               icon={Images}
               title="Asset Library"
-              description="Your photograph. Every video is generated from it, so the person on camera is you — the scene around them is invented from the App Profile."
+              description="Upload and manage presenter photos for each app. A photo attached to a video guides who appears on camera; its setting comes from the App Profile."
             />
           </div>
         )}
@@ -652,7 +652,7 @@ export default function AssetLibrary({
           <EmptyState
             icon={Images}
             title="No app yet"
-            description="Assets belong to one app and can only be used in that app's videos. Research an app first, then come back to add the face it will be presented by."
+            description="Assets belong to one App Profile and are used only in that app's videos. Create an app profile first, then add a photo of the person you want on camera."
             action={
               <Button variant="brand" asChild>
                 <Link to="/brand">Set up your app</Link>
@@ -665,8 +665,8 @@ export default function AssetLibrary({
             title="Choose an App Profile"
             description={
               waiting
-                ? `Assets belong to one app. You have ${approved.length} approved and ${unapproved.length} still waiting for approval.`
-                : "Assets belong to one app and can only be used in that app's videos."
+                ? `Assets belong to one app. You have ${approved.length} approved and ${unapproved.length} still waiting for approval. Select an app below to manage its photos.`
+                : "Choose an app below to manage the presenter photos used in its videos."
             }
             action={
               <div className="flex flex-col items-center gap-2">
@@ -706,7 +706,7 @@ export default function AssetLibrary({
         <PageHeader
           icon={Images}
           title="Asset Library"
-          description="Your photograph. Every video is generated from it, so the person on camera is you — the scene around them is invented from the App Profile."
+          description="Upload and manage presenter photos for each app. A photo attached to a video guides who appears on camera; its setting comes from the App Profile."
           actions={
             <div className="flex flex-wrap items-center gap-2">
               {/* Shown whenever there is something to switch between. With a
@@ -758,8 +758,7 @@ export default function AssetLibrary({
         data-testid="asset-rights-alert"
       >
         <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />
-        Only upload assets you have the right to use. Upload the person you want
-        on camera. This image will be your video reference.
+        Upload only an image you have the right to use. Choose a clear photo of the person you want on camera; this becomes the video&apos;s presenter reference.
       </p>
 
       {error && (
@@ -778,8 +777,8 @@ export default function AssetLibrary({
           <Input
             value={label}
             onChange={(e) => setLabel(e.target.value)}
-            placeholder="Label, e.g. Founder face"
-            aria-label="Asset label"
+            placeholder="Optional label, e.g. Founder photo"
+            aria-label="Optional photo label"
           />
           <Button variant="brand" onClick={() => fileRef.current?.click()} disabled={busy}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
@@ -891,7 +890,7 @@ export default function AssetLibrary({
         // it says what the photo is for — so that branch stays.
         embedded ? null : (
           <p className="text-sm text-muted-foreground">
-            Add the character reference photograph the finished video will be generated from.
+            Add a clear photo of the person you want on camera. In Create Video, the uploaded photo attaches to your draft and guides its presenter.
           </p>
         )
       ) : embedded ? (

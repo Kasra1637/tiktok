@@ -55,11 +55,11 @@ import {
  * selectors for `document.querySelector`.
  */
 const NAV_ITEMS = [
-  { to: "/brand", label: "App Profile", icon: PenLine, testId: "brand-nav-link", hint: "Research, edit, approve" },
-  { to: "/demo-cta", label: "Demo + CTA", icon: Smartphone, testId: "demo-cta-nav-link", hint: "Phone mockup and close" },
-  { to: "/create", label: "Create Video", icon: Clapperboard, testId: "create-nav-link", hint: "Guided wizard" },
-  { to: "/assets", label: "Asset Library", icon: Images, testId: "assets-nav-link", hint: "Character reference" },
-  { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Everything you made" },
+  { to: "/brand", label: "App Profile", icon: PenLine, testId: "brand-nav-link", hint: "Research, review, approve" },
+  { to: "/demo-cta", label: "Demo + CTA", icon: Smartphone, testId: "demo-cta-nav-link", hint: "Style one clip; add overlays" },
+  { to: "/create", label: "Create Video", icon: Clapperboard, testId: "create-nav-link", hint: "Plan, review, render" },
+  { to: "/assets", label: "Asset Library", icon: Images, testId: "assets-nav-link", hint: "Presenter photos by app" },
+  { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Renders, exports, results" },
 ];
 
 /**

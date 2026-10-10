@@ -397,8 +397,7 @@ function stepCompletion({ profileId, objective, templateId, project, missingIden
     else if (step.key === "angle") state = objective ? "done" : "blocked";
     else if (step.key === "template") {
       if (!templateId) state = "blocked";
-      else if (!hasPhoto) state = "blocked";
-    }     else if (step.key === "review") {
+      else if (!hasPhoto) state = "blocked";    } else if (step.key === "review") {
       // A plan with unsaved edits is not reviewed. The step says so itself, and
       // a tick here would tell the founder they had finished reading a script
       // they had changed and not stored.
@@ -428,7 +427,7 @@ function nextStepMessage(stepStates, step) {
       return "Next: pick a template and add your photo. Both are needed before anything can be generated.";
     }
   }
-  if (step === 0) return "Nothing is generated until the last step.";
+  if (step === 0) return "Choose an approved App Profile to start. Your free script plan appears in Review; Hook + Story renders in the final step.";
   // "Everything is ready" has to be measured against the steps that CAN be
   // ready. The render step is deliberately never marked done -- it has no
   // completion state, because a project stays renderable and gets re-rendered
@@ -436,13 +435,13 @@ function nextStepMessage(stepStates, step) {
   // was unreachable. Comparing only the steps before it makes the message
   // reachable, and says it at the point where it is true.
   if (stepStates.slice(0, step).every((s) => s.state === "done")) {
-    return "Everything before this is ready. This is the only step that calls the model.";
+    return "Everything before this is ready. Review the app-specific strategy here, then render your Hook + Story.";
   }
   const first = stepStates.findIndex((s) => s.state !== "done");
   if (first > step) {
     return `${stepStates[first].step.label} is still ahead of you.`;
   }
-  return "Nothing is generated until the last step.";
+  return "The free script plan appears in Review. The Hook + Story video renders in the final step.";
 }
 
 export default function CreateVideo() {
@@ -1218,8 +1217,8 @@ export default function CreateVideo() {
       return (
         <StepShell
           icon={Briefcase}
-          title="Which app are you promoting?"
-          description="Only approved profiles can be used, so scripts only ever build on facts you have reviewed."
+          title="Choose an approved app"
+          description="Select the App Profile for this video. Its product details and claim guardrails guide the script."
         >
           {approved.length === 0 ? (
             <EmptyState
@@ -1228,7 +1227,7 @@ export default function CreateVideo() {
               description={describeEmptySelection(profiles)}
               action={
                 <Button variant="brand" asChild>
-                  <Link to="/app-profiles">Go to your app</Link>
+                  <Link to="/brand">Create or approve an App Profile</Link>
                 </Button>
               }
             />
@@ -1280,10 +1279,10 @@ export default function CreateVideo() {
                     </p>
                   )}
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Not selectable until reviewed.
+                    Draft profiles need review and approval before you can use them in a video.
                   </p>
                   <Button variant="secondary" size="sm" asChild className="mt-3">
-                    <Link to="/app-profiles">Review and approve</Link>
+                    <Link to="/brand">Review in App Profile</Link>
                   </Button>
                 </div>
               </div>
@@ -1297,28 +1296,27 @@ export default function CreateVideo() {
       return (
         <StepShell
           icon={Target}
-          title="Audience and goal"
-          description="Pick the audience segment, and say what this video is for. Both change which template is recommended."
+          title="Audience & goal"
+          description="Choose a video goal, then optionally focus on an audience angle and tone. These choices shape template suggestions and your script plan."
         >
-          <div className="space-y-4">
+          <div className="space-y-4" data-testid="audience-goal-step">
             {/* The content angle is optional, and this now says so. It was
                 labelled exactly like the objective and read as required, so a
                 founder who wanted to move fast reasonably skipped it — then had
                 no way to tell that skipping it narrowed the template match. */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium">
-                Content angle{" "}
+                Audience angle{" "}
                 <span className="font-normal text-muted-foreground">(optional)</span>
               </label>
               <p className="text-xs text-muted-foreground">
-                Optional — narrows the match.
+                Choose a saved angle to focus on one audience problem. Skip it for broader template suggestions.
               </p>
               {angles.length === 0 ? (
                 <Alert>
                   <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
                   <AlertDescription>
-                    No content angles on this profile yet. Generate them on the profile page if you
-                    want to target one audience — or skip this and pick an objective below.
+                    This profile has no saved audience angles yet. You can skip this and choose a video goal below, or add angles from the App Profile later.
                   </AlertDescription>
                 </Alert>
               ) : (
@@ -1366,16 +1364,15 @@ export default function CreateVideo() {
             <div className="space-y-1.5 rounded-xl border border-[color:var(--hairline)] p-4" data-testid="create-what-you-get">
               <span className="text-sm font-medium">What you get</span>
               <p className="text-sm">
-                One render of {pieceSeconds}s: a {pieceSplit.hookSeconds}s hook, then a{" "}
-                {pieceSplit.middleSeconds}s middle.
+                One {pieceSeconds}s Hook + Story clip: a {pieceSplit.hookSeconds}s hook, then a {pieceSplit.middleSeconds}s story.
               </p>
               <p className="text-xs text-muted-foreground">
                 {template
-                  ? `Length comes from ${template.name} — not a choice.`
-                  : "Choose a template — its length is used, not a choice."}
+                  ? `Length is set by ${template.name}. Choose a different template to change it.`
+                  : "Choose a template to see the clip length."}
               </p>
               <p className="text-xs text-muted-foreground">
-                Your demo, your close: you record the demo yourself and add your own call to action after it.
+                To complete the promo, record the demo yourself and add it after this clip with your own call to action. Neither is generated in this clip.
               </p>
             </div>
 
@@ -1395,7 +1392,7 @@ export default function CreateVideo() {
                 they trip over. */}
             <div className="space-y-1.5">
               <label htmlFor="objective" className="text-sm font-medium">
-                What is this video for? <span className="text-muted-foreground">(required)</span>
+                Video goal <span className="text-muted-foreground">(required)</span>
               </label>
               <div className="relative">
                 <select
@@ -1423,7 +1420,7 @@ export default function CreateVideo() {
               </div>
               {!objective && (
                 <p className="text-xs text-muted-foreground">
-                  Required. Strongest signal in template ranking.
+                  Required. This strongly affects template suggestions and the script plan.
                 </p>
               )}
             </div>
@@ -1436,6 +1433,9 @@ export default function CreateVideo() {
                 onChange={(e) => setTone(e.target.value)}
                 placeholder="e.g. calm and direct"
               />
+              <p className="text-xs text-muted-foreground">
+                Optional. Guides the script&apos;s voice, not the facts about your app.
+              </p>
             </div>
           </div>
         </StepShell>
@@ -1447,7 +1447,7 @@ export default function CreateVideo() {
         <StepShell
           icon={LayoutTemplate}
           title="Choose a template and add your photo"
-          description="Scored for this app and goal. Pick one, then attach your photo."
+          description="Compare goal-matched suggestions by fit reasons and caveats. Keep the preselected suggestion or choose another, then add a clear photo of the presenter below."
         >
           <div className="space-y-4">
             {/* No objective means no honest scoring to show. The card list used
@@ -1574,19 +1574,22 @@ export default function CreateVideo() {
                 the time anyone reaches this there is almost always something to
                 attach to. */}
             <div id="template-photo" className="space-y-3 border-t border-[color:var(--hairline)] pt-4">
-              <span className="eyebrow block">Your photo</span>
+              <span className="eyebrow block">Presenter photo</span>
+              <p className="text-sm text-muted-foreground">
+                Upload a clear photo of the person you want on camera. It guides the generated presenter; the scene is created from your App Profile.
+              </p>
               {!templateId ? (
                 <p className="text-sm text-muted-foreground">
-                  Pick a template above first — the draft that holds your photo is created from it.
+                  Choose a template above to attach a presenter photo to this draft.
                 </p>
               ) : !project ? (
                 <>
                   <p className="text-sm text-muted-foreground">
-                    Draft only — this holds your photo. Only a marked-ready project renders.
+                    Preparing the video draft for your photo…
                   </p>
                   <Button variant="secondary" size="sm" disabled={busy} onClick={() => ensureProject()}>
                     {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
-                    Create the draft
+                    Try preparing the draft again
                   </Button>
                 </>
               ) : (
@@ -1615,13 +1618,13 @@ export default function CreateVideo() {
         <StepShell
           icon={Sparkles}
           title="Hook + Story"
-          description="Render the piece from your approved plan: hook, then middle."
+          description="Review the app-specific strategy, then render the Hook + Story clip. This render does not include your filmed product demo, closing CTA, or on-screen text."
         >
           <div className="space-y-3">
             {!canGenerate ? (
               <div className="rounded-xl border border-[color:var(--hairline)] p-4">
                 <p className="text-sm text-muted-foreground">
-                  Pick an App Profile and a hook template first.
+                  Choose an approved App Profile, a video goal, and a template first. Review the free script plan before rendering.
                 </p>
               </div>
             ) : blockedOnAssets ? (
@@ -1632,7 +1635,7 @@ export default function CreateVideo() {
             ) : !project ? (
               <div className="rounded-xl border border-[color:var(--hairline)] p-4">
                 <p className="text-sm text-muted-foreground">
-                  Draft only — this holds your work. Only a marked-ready project renders.
+                  Preparing the video draft for your photo…
                 </p>
                 <Button
                   variant="brand"
@@ -1694,8 +1697,8 @@ if (step === 3) {
       return (
         <StepShell
           icon={CheckCircle2}
-          title="Review the plan"
-          description="Your plan writes itself here. Read it, edit anything, then check every claim in it. Free — nothing is generated until you open the next step."
+          title="Review your script plan"
+          description="Once your app, goal, and template are set, your free script plan appears here. Check the hook, script, and claim review; edit and save what you want to change. The video render happens in Hook + Story."
         >
         {!project?.script_version && planFailed && !busy ? (
           /* A plan attempt ran and failed. The page-level error above says why;
@@ -1746,7 +1749,7 @@ if (step === 3) {
              starts the plan on its own, no button press. */
           <div className="space-y-3 rounded-xl border border-[color:var(--hairline)] p-4">
             <p className="text-sm text-muted-foreground">
-              The plan writes itself once it has an App Profile, a template and a goal. Still missing:
+              Your free script plan appears once an App Profile, template, and video goal are set. Still missing:
             </p>
             <ul className="space-y-2 text-sm">
               {!profileId && (
@@ -1770,7 +1773,7 @@ if (step === 3) {
               )}
             </ul>
             <p className="text-xs text-muted-foreground">
-              Nothing to press — the plan starts on its own once the above is set.
+              No extra generate button is needed here. The free plan starts when the required choices are set.
             </p>
           </div>
         ) : (
@@ -1861,6 +1864,7 @@ if (step === 3) {
             )}
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Hook line</label>
+              <p className="text-xs text-muted-foreground">The opening line spoken in your generated Hook + Story clip.</p>
               <Input
                 value={editValue("hook_line", "")}
                 onChange={(e) => setEdits({ ...edits, hook_line: e.target.value })}
@@ -1868,6 +1872,7 @@ if (step === 3) {
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Script</label>
+              <p className="text-xs text-muted-foreground">The spoken story after the hook. The generated clip does not include your filmed product demo or closing CTA.</p>
               <Textarea
                 value={editValue("script", "")}
                 onChange={(e) => setEdits({ ...edits, script: e.target.value })}
@@ -1939,9 +1944,10 @@ if (step === 3) {
                 A note to you, not the model — never reaches the render.
               </p>
             </div>
-            <span className="eyebrow block">Look &amp; sound</span>
+            <span className="eyebrow block">Visual and audio direction</span>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Visual direction</label>
+              <p className="text-xs text-muted-foreground">Describe the generated scene and look. This is guidance for the rendered Hook + Story, not footage of your app demo.</p>
               <Textarea
                 value={editValue("visual_direction", "")}
                 onChange={(e) => setEdits({ ...edits, visual_direction: e.target.value })}
@@ -2061,7 +2067,9 @@ if (step === 3) {
               )}
             </div>
             {hasEdits && (
-              <p className="text-xs text-muted-foreground">Save your edits before marking ready.</p>
+              <p className="text-xs text-muted-foreground">
+                Save your edits before rendering. Your saved changes run through the claim check again.
+              </p>
             )}
             <MissingRequirements
               identity={missingIdentity}
@@ -2113,7 +2121,7 @@ if (step === 3) {
       <PageHeader
         icon={Clapperboard}
         title="Create Video"
-        description="Hook + Story from an approved profile and template. You record the demo and close."
+        description="Choose an approved app, set a goal, pick a template, then review a free script plan before rendering your Hook + Story. Record and assemble your product demo and call to action separately."
       />
 
       {/* Progress that tracks state rather than position.
@@ -2221,8 +2229,7 @@ if (step === 3) {
           demo and the close are footage the founder records, not something a
           render can supply. */}
       <p className="text-xs text-muted-foreground" data-testid="create-no-autopost-note">
-        Generated here, posted by hand. The demo and call to action are yours. This tool never
-        publishes or asks for platform credentials.
+        This studio creates the Hook + Story clip only. Record and assemble your product demo and closing CTA separately; Demo + CTA styles one clip at a time and does not combine clips. Nothing is published for you.
       </p>
     </div>
   );

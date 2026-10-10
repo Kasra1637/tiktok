@@ -79,7 +79,10 @@ function SourcePicker() {
 
   return (
     <div className="space-y-4">
-      <h2 className="font-display text-lg font-semibold tracking-tight">Start from a finished render</h2>
+      <div>
+        <h2 className="font-display text-lg font-semibold tracking-tight">Start from a finished render</h2>
+        <p className="mt-1 text-sm text-muted-foreground">You can also upload your own clip above—no Hook + Story render is required. This editor styles one source clip; combine your demo and closing CTA in your own editor if needed.</p>
+      </div>
       <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
         {rows.map((row) => (
           <SectionCard key={row.id} className="flex h-full flex-col !gap-3">
@@ -200,8 +203,8 @@ export function DemoCtaStudio() {
         title="Demo + CTA"
         description={
           generationId
-            ? "The finished Hook + Story, wrapped in a phone mockup with your demo and close. The export lands beside the original in History."
-            : "Wrap your own clip—or a finished render—in a phone mockup. Exports save to History."
+            ? "Style this finished Hook + Story clip with a phone mockup, hook overlay, and closing CTA. Exports save beside the original in History."
+            : "Style a clip in a phone mockup; combine clips separately. Export to History."
         }
       />
       {generationId ? (

@@ -258,7 +258,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        What the render follows. Everything after the middle is yours to record and add.
+        This strategy guides the Hook + Story render. It is not the product demo; record and add your demo and closing CTA separately.
       </p>
 
       {error && (
@@ -280,8 +280,8 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           <AlertTitle>Plan edited since this strategy was built</AlertTitle>
           <AlertDescription>
             This strategy was built from plan v{project?.strategy_script_version}, and the plan is
-            now v{project?.script_version}. Generating is blocked until you rebuild, because the
-            render would otherwise follow the words and directions you approved on the older plan.
+            now v{project?.script_version}. Rendering is blocked until you rebuild it to match your
+            saved plan; otherwise the clip would follow the older version.
           </AlertDescription>
         </Alert>
       )}
@@ -375,10 +375,9 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           </div>
           <div className="space-y-1">
             <span className="eyebrow">The scene</span>
-            <p className="text-xs text-muted-foreground">
-              One locked room and delivery for both sections, taken from the plan's visual and voice
-              direction, so the hook and the middle cannot disagree about where they are.
-            </p>
+          <p className="text-xs text-muted-foreground">
+            One scene and delivery style for both the hook and story, guided by your Review choices. This is generated footage, not a recording of your app.
+          </p>
           </div>
           <p className="text-xs text-muted-foreground">
             Built automatically when you generate, and shown here before then if you
