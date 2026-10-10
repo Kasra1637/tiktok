@@ -311,15 +311,30 @@ return (
         title={profile?.brand_name || "Untitled app"}
         description={profile?.brand_description ? sentenceCase(profile.brand_description) : undefined}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {/* Brand hierarchy, left to right: semantic status badge, secondary
+                edits, destructive icon, then the single coral CTA last. Wraps
+                under the title on narrow screens instead of squeezing. */}
             {approved ? (
-              <Badge className="border-green-500/25 bg-green-500/10 px-3 py-1 text-green-300">Approved</Badge>
+              <Badge className="border-green-500/25 bg-green-500/10 px-3 py-1 font-medium text-green-300">Approved</Badge>
             ) : (
               <Badge variant="secondary" className="px-3 py-1">Draft — needs review</Badge>
             )}
             <Button variant="secondary" size="sm" asChild>
               <Link to="/brand">Edit</Link>
             </Button>
+            {approved && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleRegenerateEverything}
+                disabled={regeneratingEverything}
+                title="Re-research this app, apply the refreshed profile, and regenerate its audience angles"
+              >
+                {regeneratingEverything ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                Refresh research & angles
+              </Button>
+            )}
             {/* Deletes the profile and everything scoped to it: content angles,
                 studio projects, generations, assets and their recorded
                 results. The endpoint and the api client both already existed
@@ -328,11 +343,12 @@ return (
                 radius is every finished video, not one regenerable row. */}
             <Button
               variant="ghost"
-              size="sm"
+              size="icon"
               onClick={openConfirm}
               aria-label="Delete app profile"
               title="Delete this app profile and everything built on it"
               data-testid="delete-profile-button"
+              className="h-8 w-8 text-muted-foreground hover:text-destructive"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
@@ -354,18 +370,6 @@ return (
                 Create Video
               </Link>
             </Button>
-            {approved && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleRegenerateEverything}
-                disabled={regeneratingEverything}
-                title="Re-research this app, apply the refreshed profile, and regenerate its audience angles"
-              >
-                {regeneratingEverything ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                Refresh research & angles
-              </Button>
-            )}
           </div>
         }
       />
