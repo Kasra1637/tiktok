@@ -127,6 +127,122 @@ OBJECTIVE_OUTCOMES = {
     "feel_seen_and_understood": "makes them feel described, not sold to",
 }
 
+# Why each suggested goal fits the angle it was suggested for, in plain words.
+#
+# OBJECTIVE_OUTCOMES above says what a goal DOES in general; this says why
+# that goal suits THIS angle kind. The picker shows it as optional explanatory
+# text under the outcome so founders can choose among the six suggestions. It
+# changes nothing about selection, ranking, or saving: every angle kind maps
+# exactly its six ANGLE_GOAL_RECOMMENDATIONS entries, and anything outside
+# the vocabulary simply has no fit line.
+#
+# Same honesty rule as the outcomes: each line describes the structural fit
+# between the angle's mechanic and the goal — never reach, conversion, or any
+# performance claim.
+ANGLE_GOAL_FIT_REASONS = {
+    "problem_solution": {
+        "address_user_problem": "Fits because this angle starts from the problem itself.",
+        "feel_seen_and_understood": "Fits because naming the problem makes viewers feel described.",
+        "avoid_common_mistake": "Fits because the problem often comes from a repeated habit.",
+        "create_curiosity": "Fits because the problem opens a gap the answer can fill.",
+        "ease_daily_moment": "Fits because the problem shows up in an ordinary moment.",
+        "educate_viewers": "Fits because the problem lets one correction land.",
+    },
+    "before_after": {
+        "achieve_desired_outcome": "Fits because this angle is built around the change.",
+        "address_user_problem": "Fits because the before names the starting problem.",
+        "create_curiosity": "Fits because the gap between before and after invites a look.",
+        "feel_seen_and_understood": "Fits because the before mirrors what viewers live now.",
+        "demonstrate_feature": "Fits because the change needs something to explain it.",
+        "ease_daily_moment": "Fits because the after lightens the same daily moment.",
+    },
+    "competitor_alternative": {
+        "compare_alternative": "Fits because this angle puts the choice side by side.",
+        "overcome_viewer_doubt": "Fits because switching raises doubts worth answering.",
+        "explain_app": "Fits because a new option needs a plain introduction.",
+        "build_awareness": "Fits because the alternative only helps if remembered.",
+        "demonstrate_feature": "Fits because the difference is easier watched than told.",
+        "achieve_desired_outcome": "Fits because the comparison ends on what changes.",
+    },
+    "feature_demonstration": {
+        "demonstrate_feature": "Fits because this angle centers on one thing working.",
+        "explain_app": "Fits because the feature needs its context named.",
+        "achieve_desired_outcome": "Fits because the demo points at what it makes possible.",
+        "educate_viewers": "Fits because watching corrects how it is usually done.",
+        "create_curiosity": "Fits because a glimpse leaves the rest wanted.",
+        "ease_daily_moment": "Fits because the feature lives in a daily routine.",
+    },
+    "common_mistake": {
+        "avoid_common_mistake": "Fits because this angle names the mistake directly.",
+        "educate_viewers": "Fits because the mistake is a chance to correct one belief.",
+        "address_user_problem": "Fits because the mistake explains the ongoing problem.",
+        "create_curiosity": "Fits because naming a mistake makes viewers check themselves.",
+        "feel_seen_and_understood": "Fits because admitting the mistake feels familiar.",
+        "achieve_desired_outcome": "Fits because avoiding it points at what opens up.",
+    },
+    "fast_tutorial": {
+        "educate_viewers": "Fits because this angle teaches one quick thing.",
+        "demonstrate_feature": "Fits because the lesson is easier shown than described.",
+        "explain_app": "Fits because a quick how-to still needs what it is for.",
+        "achieve_desired_outcome": "Fits because the tutorial ends on what they can now do.",
+        "create_curiosity": "Fits because a first step hints at the next ones.",
+        "avoid_common_mistake": "Fits because quick lessons can head off the usual error.",
+    },
+    "unexpected_benefit": {
+        "achieve_desired_outcome": "Fits because the surprise is a reachable outcome.",
+        "create_curiosity": "Fits because an unexpected claim invites a second look.",
+        "ease_daily_moment": "Fits because the benefit lands in an ordinary moment.",
+        "build_awareness": "Fits because a surprise makes the app memorable.",
+        "explain_app": "Fits because the surprise needs its context named.",
+        "feel_seen_and_understood": "Fits because the benefit names something viewers wanted.",
+    },
+    "founder_story": {
+        "build_awareness": "Fits because the origin story makes the app familiar.",
+        "introduce_new_app": "Fits because a new app needs its name and reason stated.",
+        "feel_seen_and_understood": "Fits because the story shares the viewers frustration.",
+        "overcome_viewer_doubt": "Fits because a personal story answers quiet skepticism.",
+        "create_curiosity": "Fits because an origin leaves viewers wanting what came next.",
+        "address_user_problem": "Fits because the story starts from the problem that prompted it.",
+    },
+    "daily_life_use_case": {
+        "ease_daily_moment": "Fits because this angle lives inside the routine.",
+        "feel_seen_and_understood": "Fits because the routine mirrors the viewers day.",
+        "achieve_desired_outcome": "Fits because the routine shows the outcome as ordinary.",
+        "build_awareness": "Fits because a familiar setting makes the app familiar.",
+        "demonstrate_feature": "Fits because the moment is easier shown in place.",
+        "address_user_problem": "Fits because the routine is where the friction shows.",
+    },
+    "product_comparison": {
+        "compare_alternative": "Fits because this angle lays the options out honestly.",
+        "overcome_viewer_doubt": "Fits because choosing raises doubts worth answering.",
+        "explain_app": "Fits because comparison needs each side plainly stated.",
+        "build_awareness": "Fits because being compared keeps the app in mind.",
+        "demonstrate_feature": "Fits because the difference reads clearest when shown.",
+        "achieve_desired_outcome": "Fits because the comparison ends on what each delivers.",
+    },
+    "objection_handling": {
+        "overcome_viewer_doubt": "Fits because this angle takes the doubt head-on.",
+        "feel_seen_and_understood": "Fits because voicing the doubt makes viewers feel heard.",
+        "compare_alternative": "Fits because doubts often compare against the old way.",
+        "address_user_problem": "Fits because the doubt points back to the real problem.",
+        "explain_app": "Fits because answering needs the app stated plainly.",
+        "educate_viewers": "Fits because the doubt rests on one correctable belief.",
+    },
+    "privacy_pricing_differentiation": {
+        "overcome_viewer_doubt": "Fits because cost and privacy worries need answering.",
+        "compare_alternative": "Fits because trust and price invite direct comparison.",
+        "explain_app": "Fits because what it costs and keeps private needs stating.",
+        "build_awareness": "Fits because a clear stance makes the app memorable.",
+        "create_curiosity": "Fits because a different stance invites a closer look.",
+        "educate_viewers": "Fits because pricing and privacy rest on one misunderstanding.",
+    },
+}
+
+
+def angle_goal_fit_reason(kind: Optional[str], goal: Optional[str]) -> str:
+    """Return the angle-specific fit line for one kind + goal, or "" when none."""
+    return ANGLE_GOAL_FIT_REASONS.get((kind or "").strip(), {}).get((goal or "").strip(), "")
+
 # Content angles, per the product spec. Angles are app-specific and get
 # generated per App Profile; this list is the controlled set of kinds.
 CONTENT_ANGLE_KINDS = [

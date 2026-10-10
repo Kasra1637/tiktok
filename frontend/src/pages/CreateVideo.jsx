@@ -321,6 +321,10 @@ function MissingRequirements({ identity, onGoToTemplatePhoto }) {
  * Goal picker shared by the Audience & goal step and Review recovery. Its
  * six angle-conditioned suggestions use the same state, so
  * selecting a goal still triggers the existing template/plan synchronization.
+ *
+ * Each card shows the goal's general outcome plus an optional angle-specific
+ * fit line explaining why that goal suits the selected angle. The fit line is
+ * explanatory text only: it never changes selection, ranking, or saving.
  */
 function AngleGoalPicker({
   angle,
@@ -329,6 +333,7 @@ function AngleGoalPicker({
   options,
   recommendations,
   outcomes,
+  fitReasons,
   onChooseAngle,
   availableAngles = [],
   onSelectAngle,
@@ -408,6 +413,14 @@ function AngleGoalPicker({
               {outcomes?.[goal] && (
                 <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
                   {outcomes[goal]}
+                </span>
+              )}
+              {fitReasons?.[goal] && (
+                <span
+                  data-testid={`goal-fit-${goal}`}
+                  className="mt-0.5 block text-xs leading-relaxed text-muted-foreground"
+                >
+                  {fitReasons[goal]}
                 </span>
               )}
               {index === 0 && <span className="sr-only">Best fit suggestion. </span>}
@@ -582,6 +595,9 @@ export default function CreateVideo() {
     ? facets?.angle_goal_recommendations?.[angle.kind] || []
     : [];
   const objectiveOutcomes = facets?.objective_outcomes || {};
+  const objectiveFitReasons = angle
+    ? facets?.angle_goal_fit_reasons?.[angle.kind] || {}
+    : {};
 
   useEffect(() => {
     let cancelled = false;
@@ -1514,6 +1530,7 @@ export default function CreateVideo() {
               options={objectiveOptions}
               recommendations={recommendedObjectives}
               outcomes={objectiveOutcomes}
+              fitReasons={objectiveFitReasons}
             />
 
             <div className="space-y-1.5">
@@ -1808,6 +1825,7 @@ if (step === 3) {
                 options={objectiveOptions}
                 recommendations={recommendedObjectives}
                 outcomes={objectiveOutcomes}
+                fitReasons={objectiveFitReasons}
                 onChooseAngle={() => setStep(1)}
                 availableAngles={angles}
                 onSelectAngle={setAngleId}
@@ -1876,6 +1894,7 @@ if (step === 3) {
                     options={objectiveOptions}
                     recommendations={recommendedObjectives}
                     outcomes={objectiveOutcomes}
+                    fitReasons={objectiveFitReasons}
                     onChooseAngle={() => setStep(1)}
                     availableAngles={angles}
                     onSelectAngle={setAngleId}

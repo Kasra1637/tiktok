@@ -4370,6 +4370,10 @@ async def template_facets(user_id: str = Depends(get_current_user_id)):
             for kind, goals in template_library.ANGLE_GOAL_RECOMMENDATIONS.items()
         },
         "objective_outcomes": template_library.OBJECTIVE_OUTCOMES,
+        "angle_goal_fit_reasons": {
+            kind: dict(reasons)
+            for kind, reasons in template_library.ANGLE_GOAL_FIT_REASONS.items()
+        },
         "content_angle_kinds": template_library.CONTENT_ANGLE_KINDS,
         "asset_kinds": template_library.ASSET_KINDS,
         "supported_durations": template_library.SUPPORTED_DURATIONS,
