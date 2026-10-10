@@ -215,6 +215,7 @@ const STRATEGY = {
   hook_line: "You do not have a focus problem.",
   hook_concept: "Name the thing they already know.",
   hook_promise: "A reason to keep watching.",
+  content_angle_id: "a1",
   strategy_summary: "Open on the misdiagnosis, then correct it.",
   audience_problem: "Too many things to hold at once.",
   emotional_triggers: ["recognition", "relief"],
@@ -1096,6 +1097,43 @@ async function main() {
     expectAbsent(ctx, "No photo attached", "the gate fired on a project that has a photo");
   });
 
+  await check("GenerationPanel refuses a project with no angle picked", async (ctx) => {
+    // The strategy and the render are built around one audience angle: a
+    // render without one is the generic framing the angle step exists to
+    // prevent. The founder is told before they decide to render.
+    await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
+      mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY, content_angle_id: "" } })(ctx)
+    );
+    expectText(ctx, "No audience angle picked", "the missing-angle gate did not render");
+    expectText(ctx, "Audience & goal", "the gate did not name the step that fixes it");
+    const generate = [...ctx.container.querySelectorAll("button")]
+      .find((b) => (b.textContent || "").includes("Generate the video"));
+    if (!generate) throw new Error("no Generate button to gate");
+    if (!generate.disabled) {
+      throw new Error("Generate stays enabled with no audience angle picked");
+    }
+  });
+
+  await check("GenerationPanel blocks a render after the angle changes", async (ctx) => {
+    // The strategy on this project was built for a1 (the fixture stamps it,
+    // as the server does). Switching the project to a2 without rebuilding
+    // must block the render, not silently film the old angle.
+    await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
+      mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY, content_angle_id: "a2" } })(ctx)
+    );
+    expectText(
+      ctx,
+      "The audience angle changed after this strategy was built",
+      "the angle drift has no warning on the render panel"
+    );
+    const generate = [...ctx.container.querySelectorAll("button")]
+      .find((b) => (b.textContent || "").includes("Generate the video"));
+    if (!generate) throw new Error("no Generate button to gate");
+    if (!generate.disabled) {
+      throw new Error("Generate stays enabled on a strategy built for another angle");
+    }
+  });
+
   await check("GenerationPanel explains an un-ready project that already rendered", async (ctx) => {
     // Saving a content edit on an approved project now returns it to draft, so
     // the "already rendered once" case is reachable rather than theoretical. The
@@ -1258,6 +1296,44 @@ async function main() {
     if (ctx.text().includes("What the viewer ends up with")) {
       throw new Error("an empty outcome block is rendered as if an outcome were withheld");
     }
+  });
+
+  await check("the strategy panel requires an angle before building", async (ctx) => {
+    // The strategy is built around one audience angle: building it with none
+    // picked can only produce the generic take the angle step exists to
+    // prevent. The button names the missing input, and the free build that
+    // fires on mount must not fire either.
+    apiCalls.length = 0;
+    await mount(HookContinuityPanel, {
+      project: { ...BASE_PROJECT, status: "ready_for_generation", content_angle_id: "" },
+    })(ctx);
+    await act(async () => {});
+    const build = [...ctx.container.querySelectorAll("button")]
+      .find((b) => (b.textContent || "").includes("Build the app-specific strategy"));
+    if (!build) throw new Error("no strategy build button to gate");
+    if (!build.disabled) {
+      throw new Error("the strategy builds with no audience angle picked");
+    }
+    if (!ctx.container.querySelector('[data-testid="strategy-needs-angle"]')) {
+      throw new Error("the gate does not name the Audience & goal step");
+    }
+    if (apiCalls.includes("generateStrategy")) {
+      throw new Error("the mount fired a strategy build with no angle picked");
+    }
+  });
+
+  await check("an angle change after the build marks the strategy stale", async (ctx) => {
+    // strategy_is_current only tracks plan versions, so without this an angle
+    // picked after the build would silently keep a strategy describing the
+    // wrong video.
+    await mount(HookContinuityPanel, {
+      project: { ...PROJECT_WITH_STRATEGY, content_angle_id: "a2" },
+    })(ctx);
+    expectText(
+      ctx,
+      "Audience angle changed since this strategy was built",
+      "the angle drift has no warning"
+    );
   });
 
   await check("the strategy review shows the hook boundary from the plan", async (ctx) => {
@@ -2957,6 +3033,49 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       throw new Error(
         `the pill does not say it is blocked: ${pill.getAttribute("aria-label")}`
       );
+    }
+  });
+
+  await check("no angle is silently reported as done on the progress pills", async (ctx) => {
+    // The objective alone used to satisfy this step, so the angle was cosmetic
+    // to completion. Now an objective with no picked angle is still blocked.
+    await withApi({
+      getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, content_angle_id: "" }),
+    }, async () => {
+      global.__SMOKE_PARAMS = "?project=p1";
+      try {
+        await mount(CreateVideo, {})(ctx);
+        await act(async () => {});
+      } finally {
+        global.__SMOKE_PARAMS = "";
+      }
+      const pill = ctx.container.querySelector('[data-testid="step-pill-angle"]');
+      if (!pill) throw new Error("the progress pills carry no state markers");
+      if (pill.getAttribute("data-state") === "done") {
+        throw new Error("the Audience step is ticked with an objective but no angle picked");
+      }
+      if (pill.getAttribute("aria-label") !== "Audience & goal: needs something from you") {
+        throw new Error(
+          `the pill does not say it is blocked: ${pill.getAttribute("aria-label")}`
+        );
+      }
+    });
+  });
+
+  await check("the Audience step says picking an angle is required", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await mount(CreateVideo, {})(ctx);
+    const pill = stepPill(ctx, "Audience & goal");
+    await act(async () => {
+      pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => {});
+    const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
+    if (!step?.textContent.includes("(required)")) {
+      throw new Error("the angle label does not say it is required");
+    }
+    if (!step.querySelector('[data-testid="angle-required-hint"]')) {
+      throw new Error("no guidance that an angle must be picked to continue");
     }
   });
 

@@ -178,21 +178,32 @@ export function HookContinuityPanel({ project, onProjectChange }) {
   // meaningful once a strategy exists; `_public_project` returns true when
   // either version is 0, which is missing history, not drift.
   const staleStrategy = Boolean(strategy) && project?.strategy_is_current === false;
+  // The strategy is built around one audience angle, and strategy_is_current
+  // only tracks plan versions — so an angle change after the build would
+  // otherwise leave a strategy describing the wrong video with no warning.
+  const angleStale =
+    hasStrategy &&
+    (strategy?.content_angle_id || "") !== (project?.content_angle_id || "");
+  const needsAngle = !project?.content_angle_id;
 
   const handleGenerateStrategy = async () => {
-    // Confirm only when the plan has moved on. A rebuild then means something
-    // specific — it discards a strategy built against an older plan, and
-    // nothing else on screen says that is what the button does. An ordinary
-    // rebuild of a strategy that is already current is harmless and stays one
-    // click; interrupting that every time would just teach the founder to
-    // dismiss the prompt without reading it.
-    if (hasStrategy && staleStrategy) {
+    // Confirm only when the plan has moved on or the angle has changed. A
+    // rebuild then means something specific — it discards a strategy built
+    // against an older plan or a different angle, and nothing else on screen
+    // says that is what the button does. An ordinary rebuild of a strategy
+    // that is already current is harmless and stays one click; interrupting
+    // that every time would just teach the founder to dismiss the prompt
+    // without reading it.
+    if (hasStrategy && (staleStrategy || angleStale)) {
       const ok = typeof window === "undefined" || typeof window.confirm !== "function"
         ? true
         : window.confirm(
-            `Rebuild from plan v${project?.script_version}? This replaces the strategy built ` +
-            `from plan v${project?.strategy_script_version}, and the render will follow the ` +
-            `newer one.`
+            angleStale && !staleStrategy
+              ? `Rebuild for the newly picked audience angle? This replaces the strategy built ` +
+                `for a different angle, and the render will follow the newer one.`
+              : `Rebuild from plan v${project?.script_version}? This replaces the strategy built ` +
+                `from plan v${project?.strategy_script_version}, and the render will follow the ` +
+                `newer one.`
           );
       if (!ok) return;
     }
@@ -231,7 +242,8 @@ export function HookContinuityPanel({ project, onProjectChange }) {
       project?.status !== "ready_for_generation" ||
       hasStrategy ||
       !projectId ||
-      busy
+      busy ||
+      needsAngle
     ) {
       return;
     }
@@ -241,7 +253,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
     // real reason (no strategy) rather than silently proceeding.
     handleGenerateStrategy();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleGenerateStrategy is a render-scoped closure; listing it would re-fire the free call on every render.
-  }, [project?.status, hasStrategy, projectId, busy]);
+  }, [project?.status, hasStrategy, projectId, busy, needsAngle]);
 
   const sections = plannedSections(strategy);
 
@@ -329,16 +341,32 @@ export function HookContinuityPanel({ project, onProjectChange }) {
         </Alert>
       )}
 
+      {angleStale && (
+        <Alert>
+          <Info className="h-4 w-4 text-[color:var(--brand-indigo)]" />
+          <AlertTitle>Audience angle changed since this strategy was built</AlertTitle>
+          <AlertDescription>
+            This strategy was built around a different angle. Rendering is blocked until you rebuild
+            it for the angle now picked; otherwise the clip would follow the older choice.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
         <Button
           variant="brand"
           onClick={handleGenerateStrategy}
-          disabled={busy || !projectId}
+          disabled={busy || !projectId || needsAngle}
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           {hasStrategy ? "Rebuild strategy" : "Build the app-specific strategy"}
         </Button>
-        {!hasStrategy && (
+        {needsAngle && (
+          <p className="text-xs text-muted-foreground" data-testid="strategy-needs-angle">
+            Pick an audience angle on the Audience &amp; goal step first — the strategy is built around it.
+          </p>
+        )}
+        {!hasStrategy && !needsAngle && (
           <p className="text-xs text-muted-foreground">
             Text only. It fixes the concept, the words and the locked scene so
             the one render is about this app rather than a generic take with a

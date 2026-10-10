@@ -93,7 +93,17 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
   // projects that need one.
   const hasStrategy = Boolean(project?.strategy?.hook_line);
   const staleStrategy = hasStrategy && project?.strategy_is_current === false;
-  const strategyReady = hasStrategy && !staleStrategy;
+  // The angle is required: the strategy and the render are built around it.
+  // Judged on the saved project, matching the server — the wizard's picked
+  // value reaches the row through the normal save before anything here runs.
+  const noAngle = !project?.content_angle_id;
+  // Same drift the strategy panel names: strategy_is_current only tracks plan
+  // versions, so an angle change after the build would otherwise render a
+  // strategy describing the wrong video.
+  const angleStale =
+    hasStrategy &&
+    (project?.strategy?.content_angle_id || "") !== (project?.content_angle_id || "");
+  const strategyReady = hasStrategy && !staleStrategy && !angleStale;
 
   // The presenter must be the founder's own face. Judged by the asset KIND on
   // what is attached, matching the server: a project can legitimately hold other
@@ -436,7 +446,7 @@ const handleGenerate = async () => {
         variant="brand"
         onClick={handleGenerate}
         disabled={
-          busy || inFlight || !ready || blocked || tooLong || !projectId || !strategyReady || noPhoto
+          busy || inFlight || !ready || blocked || tooLong || !projectId || !strategyReady || noPhoto || noAngle
         }
       >
         {busy || inFlight ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
@@ -447,11 +457,23 @@ const handleGenerate = async () => {
             : "Generate the video"}
       </Button>
 
+      {noAngle && (
+        <Alert variant="destructive">
+          <AlertTitle>No audience angle picked</AlertTitle>
+          <AlertDescription>
+            Pick one on the Audience &amp; goal step. The strategy and the render are built around
+            it — without one the piece falls back to generic framing.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {!strategyReady && (
         <p className="text-sm text-muted-foreground">
-          {staleStrategy
-            ? "The plan changed after this strategy was built. Rebuild it so it matches your saved plan, then render."
-            : "Read the app-specific strategy above, then generate. It guides the Hook + Story clip and is separate from your filmed product demo."}
+          {angleStale
+            ? "The audience angle changed after this strategy was built. Rebuild it for the angle now picked, then render."
+            : staleStrategy
+              ? "The plan changed after this strategy was built. Rebuild it so it matches your saved plan, then render."
+              : "Read the app-specific strategy above, then generate. It guides the Hook + Story clip and is separate from your filmed product demo."}
         </p>
       )}
 

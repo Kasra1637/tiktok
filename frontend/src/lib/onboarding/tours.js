@@ -52,7 +52,7 @@ export const TOURS = {
         target: '[data-testid="step-pill-angle"]',
         title: "Choose a goal and audience",
         body:
-          "Select the required goal first: it shapes template suggestions and the script. An audience angle and tone are optional ways to focus the story. The free script plan appears in Review; the video renders in the final step.",
+          "Select the required goal first: it shapes template suggestions and the script. An audience angle is also required — the strategy and the render are built around it. Tone stays optional. The free script plan appears in Review; the video renders in the final step.",
       },
       {
         target: '[data-testid="create-what-you-get"]',

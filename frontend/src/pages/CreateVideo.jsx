@@ -389,12 +389,15 @@ const STEP_STATE_COPY = {
  * themselves after reading, and ticking the step for it would claim the
  * workflow is finished when the last read is still ahead of them.
  */
-function stepCompletion({ profileId, objective, templateId, project, missingIdentity, hasEdits }) {
+function stepCompletion({ profileId, objective, angleId, templateId, project, missingIdentity, hasEdits }) {
   const hasPhoto = missingIdentity.length === 0;
   return STEPS.map((step) => {
     let state = "done";
     if (step.key === "profile") state = profileId ? "done" : "todo";
-    else if (step.key === "angle") state = objective ? "done" : "blocked";
+    // The angle is required, not optional: the strategy and the render are
+    // built around it, so a video without one is the generic framing this
+    // step exists to prevent. Objective alone no longer satisfies it.
+    else if (step.key === "angle") state = objective && angleId ? "done" : "blocked";
     else if (step.key === "template") {
       if (!templateId) state = "blocked";
       else if (!hasPhoto) state = "blocked";    } else if (step.key === "review") {
@@ -421,7 +424,7 @@ function nextStepMessage(stepStates, step) {
   const current = stepStates[step];
   if (current.state === "blocked") {
     if (current.step.key === "angle") {
-      return "Next: choose what this video is for. It is the strongest signal in the template score.";
+      return "Next: choose what this video is for and pick an audience angle. The strategy and the render are built around the angle — without one the piece falls back to generic framing.";
     }
     if (current.step.key === "template" && !stepStates[2].state.startsWith("d")) {
       return "Next: pick a template and add your photo. Both are needed before anything can be generated.";
@@ -1227,6 +1230,7 @@ export default function CreateVideo() {
   const stepStates = stepCompletion({
     profileId,
     objective,
+    angleId,
     templateId,
     project,
     missingIdentity,
@@ -1327,26 +1331,24 @@ export default function CreateVideo() {
           description="Choose a video goal, then optionally focus on an audience angle and tone. These choices shape template suggestions and your script plan."
         >
           <div className="space-y-4" data-testid="audience-goal-step">
-            {/* The content angle is optional, and this now says so. It was
-                labelled exactly like the objective and read as required, so a
-                founder who wanted to move fast reasonably skipped it — then had
-                no way to tell that skipping it narrowed the template match. */}
+            {/* The angle is required: the strategy and the render are built
+                around it, so a video without one is the generic framing this
+                step exists to prevent. */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium">
                 Audience angle{" "}
-                <span className="font-normal text-muted-foreground">(optional)</span>
+                <span className="font-normal text-muted-foreground">(required)</span>
               </label>
               <p className="text-xs text-muted-foreground">
-                Choose a saved angle to focus on one audience problem. Skip it for broader template suggestions.
+                Pick the audience problem this video is built around. The strategy and the render follow it.
               </p>
               {angles.length === 0 ? (
                 <div className="space-y-2">
                   <Alert>
                     <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
                     <AlertDescription>
-                      This profile has no audience angles yet. Generate them here to focus
-                      this video on one audience problem — or skip it and choose a goal
-                      below for broader suggestions.
+                      This profile has no audience angles yet. Generate them here —
+                      the strategy and the render need one to build on.
                     </AlertDescription>
                   </Alert>
                   {angleError && (
@@ -1397,6 +1399,11 @@ export default function CreateVideo() {
                       )}
                     </button>
                   ))}
+                  {!angleId && (
+                    <p className="text-xs text-muted-foreground" data-testid="angle-required-hint">
+                      Pick one to continue — the strategy and the render are built around it.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
