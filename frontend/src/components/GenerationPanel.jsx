@@ -507,6 +507,56 @@ const handleGenerate = async () => {
         </div>
       )}
 
+      {/* Pre-render summary: the exact decision the button below takes, stated
+          before the paid click. Model, duration, and resolution are the values
+          the request carries; cost is shown only when the capability record
+          carries reliable per-second pricing — the server deliberately keeps no
+          cost column, so without that the honest answer is "unavailable",
+          never an invented price. The includes/excludes line states that the
+          render produces Hook + Story only, not the founder's separately
+          filmed demo, closing CTA, or on-screen text. Read-only: it changes
+          nothing about confirmation, idempotency, or the safety gates. */}
+      <div
+        className="space-y-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-3"
+        data-testid="render-summary"
+      >
+        <span className="eyebrow block">Before you render</span>
+        <p className="text-xs text-muted-foreground" data-testid="render-summary-model">
+          Model: {models ? (capability?.name || selectedModel || models.default || "unknown") : "loading…"}
+        </p>
+        <p className="text-xs text-muted-foreground" data-testid="render-summary-duration">
+          Duration: {pieceSeconds}s in one render
+          {models && capability && tooLong
+            ? ` — exceeds ${capability.name}'s single-pass ceiling (${ceiling}s); the endpoint will refuse this render`
+            : ""}
+        </p>
+        <p className="text-xs text-muted-foreground" data-testid="render-summary-resolution">
+          Resolution: {models
+            ? (selectedResolution
+                ? `${selectedResolution}`
+                : `${capability?.resolution || "default"} (default)`)
+            : "loading…"}
+        </p>
+        <p className="text-xs text-muted-foreground" data-testid="render-summary-cost">
+          {(() => {
+            const perSecond = Number(
+              capability?.price_per_second ??
+              capability?.price_usd_per_second ??
+              capability?.cost_per_second
+            );
+            if (Number.isFinite(perSecond) && perSecond > 0 && Number(pieceSeconds) > 0) {
+              return `Estimated cost: $${(perSecond * Number(pieceSeconds)).toFixed(2)}`;
+            }
+            return "Cost estimate unavailable";
+          })()}
+        </p>
+        <p className="text-xs text-muted-foreground" data-testid="render-summary-scope">
+          Produces Hook + Story only: the hook and the middle, ending where viewers
+          reach for their phones. Does not include your filmed product demo, closing
+          CTA, or on-screen text. Nothing is published for you.
+        </p>
+      </div>
+
       <Button
         variant="brand"
         onClick={handleGenerate}

@@ -318,6 +318,203 @@ function MissingRequirements({ identity, onGoToTemplatePhoto }) {
 }
 
 /**
+ * What changed on Review and what it means downstream.
+ *
+ * Read-only explanatory panel: which edits are still unsaved, whether the
+ * downstream strategy needs rebuilding, and whether the newest rendered clip
+ * still reflects the current plan and strategy. It never edits, rebuilds, or
+ * renders anything itself — the existing Save, Rebuild, and Generate controls
+ * keep their confirmations and gates, and nothing here triggers a paid render.
+ *
+ * Honest about missing history. There is no plan-history table, so "what
+ * changed" is derived only from unsaved edits against the saved plan — never
+ * fabricated from a previous snapshot. The clip comparison reads the newest
+ * generation's recorded script/strategy versions; when the record carries no
+ * versions (or no finished clip exists) it says so instead of guessing.
+ */
+const REVIEW_EDIT_LABELS = {
+  hook_line: "Hook line",
+  script: "Script",
+  demo_brief: "Demo note",
+  visual_direction: "Visual direction",
+  voice_direction: "Voice direction",
+  tone: "Tone",
+  beat_timeline: "Shot timeline",
+};
+
+function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
+  const scriptVersion = Number(project?.script_version) || 0;
+  const strategy = project?.strategy || {};
+  const hasStrategy = Boolean(strategy?.hook_line);
+  const strategyVersion = Number(project?.strategy_version) || 0;
+  const strategyScriptVersion = Number(project?.strategy_script_version) || 0;
+  const staleStrategy = hasStrategy && project?.strategy_is_current === false;
+  const angleStale =
+    hasStrategy &&
+    String(strategy?.content_angle_id || "") !== String(project?.content_angle_id || "");
+
+  const [clip, setClip] = useState(null);
+  const [clipLoaded, setClipLoaded] = useState(false);
+  const projectId = project?.id;
+  useEffect(() => {
+    let cancelled = false;
+    if (!projectId || !scriptVersion) {
+      setClip(null);
+      setClipLoaded(false);
+      return undefined;
+    }
+    setClipLoaded(false);
+    api
+      .getGenerations({ studio_project_id: projectId, limit: 1 })
+      .then((data) => {
+        if (cancelled) return;
+        setClip(data?.generations?.[0] || null);
+        setClipLoaded(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setClip(null);
+        setClipLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, scriptVersion]);
+
+  if (!scriptVersion) return null;
+
+  const editedLabels = Object.keys(edits || {}).map(
+    (key) => REVIEW_EDIT_LABELS[key] || humanize(key)
+  );
+
+  let clipLine;
+  if (!clipLoaded) {
+    clipLine = "Checking for rendered clips…";
+  } else if (!clip) {
+    clipLine = "No rendered clip yet — nothing to compare.";
+  } else if (clip.status !== "completed") {
+    clipLine =
+      `Latest render is ${clip.status || "not finished"} — no finished clip to compare. ` +
+      "Finish or retry it on Hook + Story first.";
+  } else if (
+    typeof clip.script_version !== "number" ||
+    typeof clip.strategy_version !== "number"
+  ) {
+    clipLine =
+      "Rendered clip found, but its plan version was not recorded — " +
+      "treat it as older if you edited or rebuilt since rendering.";
+  } else if (
+    clip.script_version !== scriptVersion ||
+    clip.strategy_version !== strategyVersion
+  ) {
+    clipLine =
+      `Rendered clip reflects plan v${clip.script_version} and strategy v${clip.strategy_version}; ` +
+      `current is plan v${scriptVersion} and strategy v${strategyVersion}. ` +
+      "Re-render on Hook + Story after saving and rebuilding.";
+  } else {
+    clipLine =
+      `Rendered clip reflects current plan v${scriptVersion} and strategy v${strategyVersion}.`;
+  }
+
+  // A strategy row without a recorded version is missing history, not proof
+  // of a match: the server numbers every build, so v0 means the record
+  // predates the versioning rather than that it matches the current plan.
+  const strategyUnversioned = hasStrategy && !strategyVersion;
+  let strategyLine;
+  if (!hasStrategy) {
+    strategyLine = "No strategy built yet — build it on Hook + Story before rendering.";
+  } else if (strategyUnversioned) {
+    strategyLine =
+      "Strategy exists but its version was not recorded — rebuild it on Hook + Story " +
+      "before rendering if you edited since it was built.";
+  } else if (staleStrategy) {
+    strategyLine =
+      `Strategy v${strategyVersion} was built from plan v${strategyScriptVersion}; ` +
+      `the plan is now v${scriptVersion}. Rebuild the strategy before rendering, ` +
+      "or the clip follows the older plan.";
+  } else if (angleStale) {
+    strategyLine =
+      "Strategy was built for a different audience angle. Rebuild it for the angle " +
+      "now picked before rendering, or the clip follows the older choice.";
+  } else {
+    strategyLine = `Strategy v${strategyVersion} matches saved plan v${scriptVersion}.`;
+  }
+
+  const clipIsCurrent =
+    clipLoaded &&
+    clip &&
+    clip.status === "completed" &&
+    typeof clip.script_version === "number" &&
+    typeof clip.strategy_version === "number" &&
+    clip.script_version === scriptVersion &&
+    clip.strategy_version === strategyVersion;
+  const clipIsStale =
+    clipLoaded &&
+    clip &&
+    clip.status === "completed" &&
+    typeof clip.script_version === "number" &&
+    typeof clip.strategy_version === "number" &&
+    (clip.script_version !== scriptVersion || clip.strategy_version !== strategyVersion);
+  const clipUnversioned =
+    clipLoaded &&
+    clip &&
+    clip.status === "completed" &&
+    (typeof clip.script_version !== "number" || typeof clip.strategy_version !== "number");
+
+  const nextActions = [];
+  if (hasEdits) {
+    nextActions.push("Save edits below — saving re-checks claims and keeps the project approved.");
+  }
+  if (!hasStrategy || strategyUnversioned || staleStrategy || angleStale) {
+    nextActions.push("Rebuild the strategy on Hook + Story, then render.");
+  } else if (clipIsStale) {
+    nextActions.push("Re-render on Hook + Story — the saved plan and strategy are current.");
+  } else if (clipUnversioned) {
+    nextActions.push(
+      "Re-render on Hook + Story if you edited or rebuilt since rendering — " +
+      "the clip record carries no versions to compare."
+    );
+  } else if (clipLoaded && clip && clip.status !== "completed") {
+    nextActions.push("Finish or retry the latest render on Hook + Story first.");
+  } else if (!hasEdits && (clipIsCurrent || !clipLoaded || !clip)) {
+    nextActions.push("Render on Hook + Story when ready.");
+  }
+
+  return (
+    <div
+      className="space-y-2 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4"
+      data-testid="review-revisions"
+    >
+      <span className="eyebrow block">Revisions &amp; consequences</span>
+      <p className="text-sm" data-testid="revisions-plan">
+        Saved plan v{scriptVersion}
+        {(project?.hook_line || project?.script) ? " · has words" : " · empty"}.
+        {" "}
+        {hasEdits
+          ? `Unsaved edits in: ${editedLabels.join(", ")}.`
+          : "No unsaved edits — what you see matches the saved plan."}
+      </p>
+      <p className="text-xs text-muted-foreground" data-testid="revisions-strategy">
+        {strategyLine}
+      </p>
+      <p className="text-xs text-muted-foreground" data-testid="revisions-clip">
+        {clipLine}
+      </p>
+      {nextActions.length > 0 && (
+        <p className="text-xs text-muted-foreground" data-testid="revisions-next">
+          Next: {nextActions.join(" ")}
+        </p>
+      )}
+      {onGoToHookStory && (
+        <Button variant="secondary" size="sm" onClick={onGoToHookStory}>
+          Review strategy on Hook + Story
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/**
  * Goal picker shared by the Audience & goal step and Review recovery. Its
  * six angle-conditioned suggestions use the same state, so
  * selecting a goal still triggers the existing template/plan synchronization.
@@ -1954,6 +2151,12 @@ if (step === 3) {
                 </p>
               </div>
             )}
+            <ReviewRevisionsPanel
+              project={project}
+              edits={edits}
+              hasEdits={hasEdits}
+              onGoToHookStory={() => setStep(4)}
+            />
             <span className="eyebrow block">Script</span>
             {/* What the chosen template is aiming to leave them with, above the
                 hook and script it was picked to carry. The plan step showed the
