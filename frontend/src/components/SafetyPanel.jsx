@@ -1,6 +1,7 @@
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { Badge } from "./ui/badge";
-import { ShieldCheck, ShieldAlert, Ban, HelpCircle, Sparkles } from "lucide-react";
+import { ShieldCheck, ShieldAlert, Ban, Circle as HelpCircle, Sparkles } from "lucide-react";
+import { sentenceCase } from "../lib/copyCase";
 
 /**
  * Reviewer-facing claim-safety report.
@@ -57,7 +58,7 @@ export function SafetyPanel({ report, summary }) {
             {blocking.map((b, i) => (
               <li key={i}>
                 <span className="font-medium">&ldquo;{b.claim}&rdquo;</span>
-                <span className="text-muted-foreground"> — {b.reason}</span>
+                <span className="text-muted-foreground"> — {sentenceCase(b.reason)}</span>
               </li>
             ))}
           </ul>
@@ -71,7 +72,7 @@ export function SafetyPanel({ report, summary }) {
             {warnings.map((w, i) => (
               <li key={i} className="flex flex-wrap items-baseline gap-x-2">
                 <span className="font-medium">&ldquo;{w.claim}&rdquo;</span>
-                <span className="text-muted-foreground">{w.reason}</span>
+                <span className="text-muted-foreground">{sentenceCase(w.reason)}</span>
                 {w.disclosure_missing && (
                   <Badge variant="outline" className="text-[10px]">no disclosure</Badge>
                 )}

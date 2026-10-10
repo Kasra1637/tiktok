@@ -10,11 +10,8 @@ import EmptyState from "../components/EmptyState";
 import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } from "../lib/api";
 import { FactChip, FactList } from "../components/FactChip";
 import { recordSignal, recordReason } from "../lib/feedback";
-import {
-  History as HistoryIcon, Loader2, AlertTriangle, Download, Trash2,
-  RotateCcw, GitBranch, RefreshCw, ChevronRight, Film, TrendingUp,
-  Check, ThumbsDown, Info, Copy, X, Smartphone,
-} from "lucide-react";
+import { sentenceCase } from "../lib/copyCase";
+import { Factory as HistoryIcon, Loader as Loader2, TriangleAlert as AlertTriangle, Download, Trash as Trash2, RotateCcw, GitBranch, RefreshCw, ChevronRight, Film, TrendingUp, Check, ThumbsDown, Info, Copy, X, Smartphone } from "lucide-react";
 
 function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -223,14 +220,14 @@ function GenerationDetails({ generationId, onClose }) {
             </div>
 
             {detail.hook_line && (
-              <DetailRow label="Hook">{detail.hook_line}</DetailRow>
+              <DetailRow label="Hook">{sentenceCase(detail.hook_line)}</DetailRow>
             )}
 
             {detail.script && (
               <div className="space-y-0.5">
                 <span className="eyebrow block">Script as generated</span>
                 <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg bg-secondary/40 p-3 text-sm">
-                  {detail.script}
+                  {sentenceCase(detail.script)}
                 </pre>
               </div>
             )}
@@ -665,7 +662,7 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
 
           {row.hook_line && (
             <p className="text-sm leading-snug text-muted-foreground">
-              &ldquo;{row.hook_line}&rdquo;
+              &ldquo;{sentenceCase(row.hook_line)}&rdquo;
             </p>
           )}
 
@@ -818,7 +815,7 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
               {children.map((c) => (
                 <div key={c.id} className="flex items-center justify-between gap-2 text-xs">
                   <span className="truncate text-muted-foreground">
-                    {humanize(c.variation_kind)} &rarr; {c.project_hook || c.status}
+                    {humanize(c.variation_kind)} &rarr; {c.project_hook ? sentenceCase(c.project_hook) : c.status}
                   </span>
                   <StatusBadge status={c.status} />
                 </div>

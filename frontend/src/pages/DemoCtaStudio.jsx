@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { AlertTriangle, Loader2, Smartphone } from "lucide-react";
+import { TriangleAlert as AlertTriangle, Loader as Loader2, Smartphone } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Alert, AlertDescription } from "../components/ui/alert";
@@ -8,6 +8,7 @@ import PageHeader from "../components/PageHeader";
 import SectionCard from "../components/SectionCard";
 import EmptyState from "../components/EmptyState";
 import { api, getErrorMessage, mediaUrl, durableMediaUrl } from "../lib/api";
+import { sentenceCase } from "../lib/copyCase";
 import { DemoCtaEditor } from "../demoCta/DemoCtaEditor";
 
 /**
@@ -97,8 +98,8 @@ function SourcePicker() {
               )}
             </div>
             {row.hook_line ? (
-              <p className="line-clamp-2 text-xs text-muted-foreground" title={row.hook_line}>
-                &ldquo;{row.hook_line}&rdquo;
+              <p className="line-clamp-2 text-xs text-muted-foreground" title={sentenceCase(row.hook_line)}>
+                &ldquo;{sentenceCase(row.hook_line)}&rdquo;
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">No hook line recorded.</p>

@@ -34,11 +34,7 @@ import {
 } from "../lib/videoLength";
 // FileText was the "Creative plan" step's icon. That step held nothing but a
 // button and is now the top of Review, so the icon went with it.
-import {
-  Clapperboard, Loader2, AlertTriangle, Briefcase, Target, LayoutTemplate,
-  Image as ImageIcon, Check, Sparkles, RefreshCw,
-  Save, CheckCircle2, Star,
-} from "lucide-react";
+import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, LayoutTemplate, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, Star } from "lucide-react";
 // toast left with AttachedPhoto, the only place on this page that raised one.
 // Detaching now happens inside the photo section, which reports its own
 // outcome.
@@ -206,7 +202,7 @@ function RecommendationCard({ r, selected, onSelect }) {
             data-testid="template-fit-verdict"
           >
             <Check aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />
-            <span>{verdict}</span>
+            <span>{sentenceCase(verdict)}</span>
           </p>
           {/* Supporting detail: muted, marked as a list, tighter leading. A
               single-reason card renders the verdict alone with no list. */}
@@ -218,7 +214,7 @@ function RecommendationCard({ r, selected, onSelect }) {
                   className="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground"
                 >
                   <span aria-hidden="true" className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-current opacity-60" />
-                  <span>{reason}</span>
+                  <span>{sentenceCase(reason)}</span>
                 </li>
               ))}
             </ul>
@@ -235,7 +231,7 @@ function RecommendationCard({ r, selected, onSelect }) {
             Before you use it
           </p>
           {limits.map((limitation, i) => (
-            <p key={`l-${i}`} className="text-[11px] leading-relaxed text-muted-foreground">{limitation}</p>
+            <p key={`l-${i}`} className="text-[11px] leading-relaxed text-muted-foreground">{sentenceCase(limitation)}</p>
           ))}
         </div>
       )}
@@ -283,7 +279,7 @@ function TemplateShape({ template }) {
         <span className="font-medium">{total}s piece</span>: a {split.hookSeconds}s hook, then a{" "}
         {split.middleSeconds}s middle.
       </p>
-      {middle && <p className="text-xs text-muted-foreground">{middle}</p>}
+      {middle && <p className="text-xs text-muted-foreground">{sentenceCase(middle)}</p>}
     </div>
   );
 }
@@ -606,7 +602,7 @@ function AngleGoalPicker({
               </span>
               {outcomes?.[goal] && (
                 <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
-                  {outcomes[goal]}
+                  {sentenceCase(outcomes[goal])}
                 </span>
               )}
               {fitReasons?.[goal] && (
@@ -614,7 +610,7 @@ function AngleGoalPicker({
                   data-testid={`goal-fit-${goal}`}
                   className="mt-0.5 block text-xs leading-relaxed text-muted-foreground"
                 >
-                  {fitReasons[goal]}
+                  {sentenceCase(fitReasons[goal])}
                 </span>
               )}
               {index === 0 && <span className="sr-only">Best fit suggestion. </span>}
@@ -1686,7 +1682,7 @@ export default function CreateVideo() {
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium">{a.label}</span>
+                        <span className="text-sm font-medium">{sentenceCase(a.label)}</span>
                         <span className="flex items-center gap-1.5">
                           <Badge variant="secondary" className="text-[11px]">
                             {humanize(a.kind)}
@@ -2236,7 +2232,7 @@ if (step === 3) {
             {project?.strategy?.hook_line && typeof project?.spoken_middle === "string" && project.spoken_middle && (
               <div className="space-y-1.5 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4" data-testid="spoken-partition">
                 <span className="eyebrow block">What the middle will say</span>
-                <p className="text-sm">{project.spoken_middle}</p>
+                <p className="text-sm">{sentenceCase(project.spoken_middle)}</p>
                 {(() => {
                   const current = String(editValue("script", "") || "");
                   const kept = project.spoken_middle;
@@ -2318,7 +2314,7 @@ if (step === 3) {
                       <Badge variant="secondary" className="shrink-0 text-[11px]">
                         {b.start}&ndash;{b.end}s
                       </Badge>
-                      <span className="text-muted-foreground">{b.label}: {b.text}</span>
+                      <span className="text-muted-foreground">{b.label}: {sentenceCase(b.text)}</span>
                     </div>
                   ))}
                 </div>

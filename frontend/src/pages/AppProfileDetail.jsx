@@ -21,6 +21,7 @@ import {
 import { Input } from "../components/ui/input";
 import PageHeader from "../components/PageHeader";
 import { api, getErrorMessage } from "../lib/api";
+import { sentenceCase } from "../lib/copyCase";
 import { Briefcase, Loader as Loader2, TriangleAlert as AlertTriangle, ArrowLeft, Sparkles, Target, ShieldAlert, Lightbulb, Trash as Trash2, RefreshCw, MoveHorizontal as MoreHorizontal, Pencil } from "lucide-react";
 
 /** Read an array-or-empty field into a clean list. */
@@ -52,7 +53,7 @@ function ListBlock({ label, items, tone = "default" }) {
         {items.map((item, i) => (
           <li key={i} className="flex gap-2">
             <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-[color:var(--brand-indigo)]" />
-            <span>{item}</span>
+            <span>{sentenceCase(item)}</span>
           </li>
         ))}
       </ul>
@@ -88,7 +89,7 @@ function ChipList({ label, items, tone = "default" }) {
             key={i}
             className={`rounded-full border px-2.5 py-1 text-xs leading-5 ${chipClass}`}
           >
-            {item}
+            {sentenceCase(item)}
           </li>
         ))}
       </ul>
@@ -101,7 +102,7 @@ function Field({ label, value }) {
   return (
     <div>
       <span className="eyebrow block">{label}</span>
-      <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">{value}</p>
+      <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">{sentenceCase(value)}</p>
     </div>
   );
 }
@@ -332,7 +333,7 @@ export default function AppProfileDetail() {
       <PageHeader
         icon={Briefcase}
         title={profile?.brand_name || "Untitled app"}
-        description={profile?.brand_description || undefined}
+        description={profile?.brand_description ? sentenceCase(profile.brand_description) : undefined}
         actions={
           <div className="flex items-center gap-2">
             {approved ? (
@@ -510,20 +511,20 @@ export default function AppProfileDetail() {
                     key={`${s.outcome}-${i}`}
                     className="rounded-xl border border-[color:var(--hairline)] p-3 text-sm"
                   >
-                    <p className="font-medium">{s.outcome}</p>
+                    <p className="font-medium">{sentenceCase(s.outcome)}</p>
                     {s.who_feels_it && (
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Who feels it: {s.who_feels_it}
+                        Who feels it: {sentenceCase(s.who_feels_it)}
                       </p>
                     )}
                     {s.from_feature && (
                       <p className="mt-1 text-xs text-muted-foreground">
-                        From: {s.from_feature}
+                        From: {sentenceCase(s.from_feature)}
                       </p>
                     )}
                     {s.how_it_helps && (
                       <p className="mt-1 text-xs text-muted-foreground">
-                        How it helps: {s.how_it_helps}
+                        How it helps: {sentenceCase(s.how_it_helps)}
                       </p>
                     )}
                   </div>
@@ -539,15 +540,15 @@ export default function AppProfileDetail() {
                     key={`${o.objection}-${i}`}
                     className="rounded-xl border border-[color:var(--hairline)] p-3 text-sm"
                   >
-                    <p className="font-medium">{o.objection}</p>
+                    <p className="font-medium">{sentenceCase(o.objection)}</p>
                     {o.what_they_do_now && (
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Does now: {o.what_they_do_now}
+                        Does now: {sentenceCase(o.what_they_do_now)}
                       </p>
                     )}
                     {o.honest_answer && (
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Answer: {o.honest_answer}
+                        Answer: {sentenceCase(o.honest_answer)}
                       </p>
                     )}
                   </div>
@@ -573,13 +574,13 @@ export default function AppProfileDetail() {
                 {angles.map((a) => (
                   <div key={a.id} className="rounded-lg border border-[color:var(--hairline)] p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium">{a.label}</span>
+                      <span className="text-sm font-medium">{sentenceCase(a.label)}</span>
                       <Badge variant="secondary" className="text-[11px]">
                         {a.kind ? a.kind.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Angle"}
                       </Badge>
                     </div>
                     {a.user_problem && (
-                      <p className="mt-1 text-xs text-muted-foreground">{a.user_problem}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{sentenceCase(a.user_problem)}</p>
                     )}
                   </div>
                 ))}

@@ -892,6 +892,9 @@ check("a leading bare domain is left alone rather than link-broken",
 check("a value that does not open with a letter is out of scope",
   SC.sentenceCase("9:16 pacing keeps it vertical") === "9:16 pacing keeps it vertical",
   SC.sentenceCase("9:16 pacing keeps it vertical"));
+check("a brand name with an internal capital keeps its own spelling",
+  SC.sentenceCase("iOS") === "iOS" && SC.sentenceCase("iPhone users") === "iPhone users",
+  `${SC.sentenceCase("iOS")} / ${SC.sentenceCase("iPhone users")}`);
 check("empty, null and undefined are empty strings, not crashes",
   SC.sentenceCase("") === "" && SC.sentenceCase(null) === "" && SC.sentenceCase(undefined) === "");
 check("the trimmed variant strips leading and trailing whitespace",

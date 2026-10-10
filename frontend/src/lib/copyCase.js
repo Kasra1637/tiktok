@@ -50,6 +50,13 @@ const SENTENCE_BOUNDARY = /([.!?]\s+)/;
 const ADDRESS_LIKE = /^[^@\s]+@[^\s]+$/;
 const DOMAIN_LIKE = /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/|$)/i;
 
+// A leading token that carries an internal capital is a brand name, not a
+// sentence opener. "iOS", "iPhone" and "eBay" are spelled that way, and the
+// Platforms field is a list of exactly these (the profile schema's own example
+// is ["iOS", "Android"]), so capitalizing the first letter would render "IOS"
+// — a different product's name. Prose never has this shape.
+const MIXED_CASE_TOKEN = /^[a-z]+[A-Z]/;
+
 /**
  * Uppercase the first letter of every sentence in a string.
  *
@@ -69,7 +76,13 @@ export function sentenceCase(value) {
   // Prose that OPENS with an address or a domain is not a sentence opener we
   // should touch.
   const firstToken = trimmed.split(/\s/)[0];
-  if (ADDRESS_LIKE.test(firstToken) || DOMAIN_LIKE.test(firstToken)) return text;
+  if (
+    ADDRESS_LIKE.test(firstToken) ||
+    DOMAIN_LIKE.test(firstToken) ||
+    MIXED_CASE_TOKEN.test(firstToken)
+  ) {
+    return text;
+  }
 
   return text
     // Leading whitespace must not stop the match: without the \s*, a value
