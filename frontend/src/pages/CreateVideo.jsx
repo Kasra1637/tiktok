@@ -26,6 +26,7 @@ import {
   blockingRequirements,
 } from "../lib/templateRequirements";
 import { sentenceCase } from "../lib/copyCase";
+import { angleSubtitle } from "../lib/angleSubtitle";
 import {
   readPieceSeconds,
   sectionSplit,
@@ -1690,14 +1691,8 @@ export default function CreateVideo() {
                           {angleId === a.id && <Check className="h-4 w-4 text-[color:var(--brand-indigo)]" />}
                         </span>
                       </div>
-                      {a.user_problem && (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {/* Generated text: the angle prompt's schema example is a
-                              lowercase fragment, so every angle this app has ever
-                              produced opens lowercase. Normalized at display so
-                              rows already in the database are fixed too. */}
-                          {sentenceCase(a.user_problem)}
-                        </p>
+                      {angleSubtitle(a) && (
+                        <p className="mt-1 text-xs text-muted-foreground">{angleSubtitle(a)}</p>
                       )}
                     </button>
                   ))}

@@ -22,6 +22,7 @@ import { Input } from "../components/ui/input";
 import PageHeader from "../components/PageHeader";
 import { api, getErrorMessage } from "../lib/api";
 import { sentenceCase } from "../lib/copyCase";
+import { angleSubtitle } from "../lib/angleSubtitle";
 import { Briefcase, Loader as Loader2, TriangleAlert as AlertTriangle, ArrowLeft, Sparkles, Target, ShieldAlert, Lightbulb, Trash as Trash2, RefreshCw, MoveHorizontal as MoreHorizontal, Pencil } from "lucide-react";
 
 /** Read an array-or-empty field into a clean list. */
@@ -576,14 +577,12 @@ export default function AppProfileDetail() {
                 {angles.map((a) => (
                   <div key={a.id} className="rounded-lg border border-[color:var(--hairline)] p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium">{sentenceCase(a.label)}</span>
+                      <div className="text-sm font-medium">{sentenceCase(a.label)}</div>
                       <Badge variant="secondary" className="text-[11px]">
                         {a.kind ? a.kind.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Angle"}
                       </Badge>
                     </div>
-                    {a.user_problem && (
-                      <p className="mt-1 text-xs text-muted-foreground">{sentenceCase(a.user_problem)}</p>
-                    )}
+                    <p className="mt-1 text-xs text-muted-foreground">{angleSubtitle(a)}</p>
                   </div>
                 ))}
               </div>
