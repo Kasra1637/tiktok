@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -35,7 +35,7 @@ import {
 // button and is now the top of Review, so the icon went with it.
 import {
   Clapperboard, Loader2, AlertTriangle, Briefcase, Target, LayoutTemplate,
-  Image as ImageIcon, Check, Sparkles, RefreshCw, ChevronDown,
+  Image as ImageIcon, Check, Sparkles, RefreshCw,
   Save, CheckCircle2, Star,
 } from "lucide-react";
 // toast left with AttachedPhoto, the only place on this page that raised one.
@@ -318,35 +318,109 @@ function MissingRequirements({ identity, onGoToTemplatePhoto }) {
 }
 
 /**
- * The goal picker, offered on Review when the plan is blocked on it. Same
- * options as the Audience & goal step; choosing one writes it into the same
- * state, so the auto effect fires and the plan starts with no button press.
+ * Goal picker shared by the Audience & goal step and Review recovery. Its
+ * six angle-conditioned suggestions use the same state, so
+ * selecting a goal still triggers the existing template/plan synchronization.
  */
-function ReviewGoalPicker({ value, onPick, options }) {
-  return (
-    <div className="space-y-1.5">
-      <label htmlFor="review-objective" className="text-sm font-medium">
-        What is this video for? <span className="text-muted-foreground">(required)</span>
-      </label>
-      <div className="relative">
-        <select
-          id="review-objective"
-          value={value}
-          onChange={(e) => onPick(e.target.value)}
-          aria-required="true"
-          className="w-full appearance-none rounded-xl border border-[color:var(--hairline)] bg-transparent py-2.5 pl-3 pr-10 text-sm transition-colors hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)] focus:border-[color:var(--indigo-35)]"
-        >
-          <option value="">Choose an objective</option>
-          {(options || []).map((o) => (
-            <option key={o} value={o}>{humanize(o)}</option>
-          ))}
-        </select>
-        <ChevronDown
-          aria-hidden="true"
-          className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-        />
+function AngleGoalPicker({
+  angle,
+  value,
+  onPick,
+  options,
+  recommendations,
+  outcomes,
+  onChooseAngle,
+  availableAngles = [],
+  onSelectAngle,
+}) {
+  const knownGoals = Array.isArray(options) ? options : [];
+  const rankedGoals = (recommendations || []).filter((goal) => knownGoals.includes(goal));
+  const featured = [...new Set([...rankedGoals, ...knownGoals])].slice(0, 6);
+  const outsideRecommendation = Boolean(value && !featured.includes(value));
+
+  if (!angle) {
+    return (
+      <div className="space-y-2" data-testid="goal-waits-for-angle">
+        <Alert>
+          <Target className="h-4 w-4 text-[color:var(--brand-indigo)]" />
+          <AlertDescription>
+            Choose an audience angle first to see six goals recommended for it.
+            {onChooseAngle && availableAngles.length === 0 && (
+              <Button variant="secondary" size="sm" className="ml-2" onClick={onChooseAngle}>
+                Choose an angle
+              </Button>
+            )}
+          </AlertDescription>
+        </Alert>
+        {availableAngles.length > 0 && (
+          <div className="space-y-2" role="group" aria-label="Choose an audience angle">
+            {availableAngles.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                aria-pressed={false}
+                data-testid={`review-angle-${option.id}`}
+                onClick={() => onSelectAngle?.(option.id)}
+                className="w-full rounded-xl border border-[color:var(--hairline)] p-3 text-left text-sm hover:border-[color:var(--indigo-35)]"
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
-    </div>
+    );
+  }
+
+  return (
+    <section className="space-y-2" aria-labelledby="video-goal-label" data-testid="angle-goal-picker">
+      <div className="space-y-1">
+        <h3 id="video-goal-label" className="text-sm font-medium">
+          Video goal <span className="text-muted-foreground">(required)</span>
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          {featured.length > 0
+            ? `${featured.length === 6 ? "Six" : featured.length} suggestions for “${angle.label}”.`
+            : `Goal suggestions for “${angle.label}” are unavailable. Try reloading the page.`}{" "}
+          The angle stays the story’s focus; the goal shapes what the overall campaign should achieve.
+        </p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label={`Recommended video goals for ${angle.label}`}>
+        {featured.map((goal, index) => {
+          const selected = value === goal;
+          return (
+            <button
+              key={goal}
+              type="button"
+              aria-pressed={selected}
+              data-testid={`recommended-goal-${goal}`}
+              onClick={() => onPick(goal)}
+              className={`rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-35)] ${
+                selected
+                  ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
+                  : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)]"
+              }`}
+            >
+              <span className="flex items-center justify-between gap-2 text-sm font-medium">
+                {humanize(goal)}
+                {selected && <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-[color:var(--brand-indigo)]" />}
+              </span>
+              {outcomes?.[goal] && (
+                <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                  {outcomes[goal]}
+                </span>
+              )}
+              {index === 0 && <span className="sr-only">Best fit suggestion. </span>}
+            </button>
+          );
+        })}
+      </div>
+      {outsideRecommendation && (
+        <p className="text-xs text-muted-foreground" data-testid="goal-outside-recommendations">
+          Your current goal, {humanize(value)}, is outside these six suggestions. It stays selected unless you choose a suggested goal.
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -397,10 +471,11 @@ function stepCompletion({ profileId, objective, angleId, templateId, project, mi
     // The angle is required, not optional: the strategy and the render are
     // built around it, so a video without one is the generic framing this
     // step exists to prevent. Objective alone no longer satisfies it.
-    else if (step.key === "angle") state = objective && angleId ? "done" : "blocked";
+    else if (step.key === "angle") state = angleId && objective ? "done" : "blocked";
     else if (step.key === "template") {
       if (!templateId) state = "blocked";
-      else if (!hasPhoto) state = "blocked";    } else if (step.key === "review") {
+      else if (!hasPhoto) state = "blocked";
+    } else if (step.key === "review") {
       // A plan with unsaved edits is not reviewed. The step says so itself, and
       // a tick here would tell the founder they had finished reading a script
       // they had changed and not stored.
@@ -420,11 +495,13 @@ function stepCompletion({ profileId, objective, angleId, templateId, project, mi
 }
 
 /** The one sentence under the pills. Names the first thing actually waiting. */
-function nextStepMessage(stepStates, step) {
+function nextStepMessage(stepStates, step, angleId) {
   const current = stepStates[step];
   if (current.state === "blocked") {
     if (current.step.key === "angle") {
-      return "Next: choose what this video is for and pick an audience angle. The strategy and the render are built around the angle — without one the piece falls back to generic framing.";
+      return angleId
+        ? "Next: choose a video goal for this audience angle. Six suggested goals are ranked for its problem and promise."
+        : "Next: pick an audience angle first. Then choose from six goal suggestions tailored to it.";
     }
     if (current.step.key === "template" && !stepStates[2].state.startsWith("d")) {
       return "Next: pick a template and add your photo. Both are needed before anything can be generated.";
@@ -500,6 +577,11 @@ export default function CreateVideo() {
   const profileId = project?.brand_profile_id || selectedProfileId;
   const angle = angles.find((a) => a.id === angleId) || null;
   const template = templates.find((t) => t.id === templateId) || null;
+  const objectiveOptions = facets?.objectives || [];
+  const recommendedObjectives = angle
+    ? facets?.angle_goal_recommendations?.[angle.kind] || []
+    : [];
+  const objectiveOutcomes = facets?.objective_outcomes || {};
 
   useEffect(() => {
     let cancelled = false;
@@ -739,14 +821,14 @@ export default function CreateVideo() {
   // Once the custom set is ready, only its templates are shown. The ranked
   // curated fallback remains available when tailoring fails with no custom
   // set, so a model outage does not strand the step.
-  const tailoredIds = new Set(
-    (tailored.templates || []).map((t) => t?.id).filter(Boolean)
-  );
-  const visibleRecommendations = !recommendationsVisible
-    ? []
-    : tailoredReady
-      ? recommendations.filter((r) => tailoredIds.has(r?.template?.id))
-      : recommendations;
+  const visibleRecommendations = useMemo(() => {
+    if (!recommendationsVisible) return [];
+    if (!tailoredReady) return recommendations;
+    const tailoredIds = new Set(
+      (tailored.templates || []).map((t) => t?.id).filter(Boolean)
+    );
+    return recommendations.filter((r) => tailoredIds.has(r?.template?.id));
+  }, [recommendationsVisible, tailoredReady, tailored.templates, recommendations]);
 
   // Preselect the top pick only once its key is displayable. Deliberately not
   // "on every reload": a reload must never move a selection the founder made,
@@ -922,6 +1004,11 @@ export default function CreateVideo() {
   }, [profileId, templateId, angleId, objective, ensureProject]);
 
   const handleGeneratePlan = async () => {
+    if (!angle || !objective) {
+      setError("Choose an audience angle and a video goal before generating the plan.");
+      setPlanFailed(true);
+      return;
+    }
     const ready = await createProject();
     if (!ready) {
       // createProject already reported the error above. Record the outcome
@@ -1145,7 +1232,7 @@ export default function CreateVideo() {
   useEffect(() => {
     // The plan needs a profile, a template and a goal. The character photo is
     // required to RENDER, not to write the plan, so it does not gate this.
-    if (step !== 3 || busy || !canGenerate) return;
+    if (step !== 3 || busy || !canGenerate || !angle) return;
     if (!objective && project?.objective) {
       // The draft already holds the goal but this session's state does not:
       // adopt it so the gates below read one consistent choice and the plan
@@ -1162,7 +1249,7 @@ export default function CreateVideo() {
     planAutoAttempted.current = key;
     handleGeneratePlan();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleGeneratePlan is a render-scoped closure, same as handleGenerateStrategy in the auto-build below; the key ref guards re-fires, and listing it would re-run the effect on every render.
-  }, [step, busy, canGenerate, objective, profileId, templateId, angleId, tone, project?.id, project?.script_version, project?.objective]);
+  }, [step, busy, canGenerate, objective, profileId, templateId, angleId, angle, tone, project?.id, project?.script_version, project?.objective]);
 
   // Review reads the project's words, so it must read them from the server
   // rather than trust whatever the wizard last held. An eager draft update
@@ -1236,7 +1323,7 @@ export default function CreateVideo() {
     missingIdentity,
     hasEdits,
   });
-  const nextUp = nextStepMessage(stepStates, step);
+  const nextUp = nextStepMessage(stepStates, step, angleId);
 
   const stepContent = renderStep();
 
@@ -1328,7 +1415,7 @@ export default function CreateVideo() {
         <StepShell
           icon={Target}
           title="Audience & goal"
-          description="Choose a video goal, then optionally focus on an audience angle and tone. These choices shape template suggestions and your script plan."
+          description="Choose an audience angle, then a recommended video goal. Both shape template suggestions and your script plan."
         >
           <div className="space-y-4" data-testid="audience-goal-step">
             {/* The angle is required: the strategy and the render are built
@@ -1339,7 +1426,7 @@ export default function CreateVideo() {
                 Audience angle{" "}
                 <span className="font-normal text-muted-foreground">(required)</span>
               </label>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground" data-testid={!angle ? "angle-required-hint" : undefined}>
                 Pick the audience problem this video is built around. The strategy and the render follow it.
               </p>
               {angles.length === 0 ? (
@@ -1378,6 +1465,7 @@ export default function CreateVideo() {
                     <button
                       key={a.id}
                       type="button"
+                      aria-pressed={angleId === a.id}
                       onClick={() => setAngleId(a.id)}
                       className={`w-full rounded-xl border p-3 text-left transition-colors ${
                         angleId === a.id
@@ -1399,26 +1487,11 @@ export default function CreateVideo() {
                       )}
                     </button>
                   ))}
-                  {!angleId && (
-                    <p className="text-xs text-muted-foreground" data-testid="angle-required-hint">
-                      Pick one to continue — the strategy and the render are built around it.
-                    </p>
-                  )}
                 </div>
               )}
             </div>
 
-            {/* What gets generated, stated rather than chosen.
-                The two controls this used to sit between — a "what happens
-                after the hook" toggle and a total-length picker — are both gone,
-                and neither had anything left to decide. There is no hook-only
-                render to choose against a full one, and the length is the
-                template's: a template declares the length its mechanic suits, the
-                project seeds from it, and the render is that long in one pass.
-                A picker here would also have been a trap, because the plan's
-                beat timeline is written to whatever number was showing, so
-                changing it after the plan existed would leave a timeline that no
-                longer added up. */}
+            {/* The goal step is intentionally downstream of the angle. */}
             <div className="space-y-1.5 rounded-xl border border-[color:var(--hairline)] p-4" data-testid="create-what-you-get">
               <span className="text-sm font-medium">What you get</span>
               <p className="text-sm">
@@ -1434,54 +1507,14 @@ export default function CreateVideo() {
               </p>
             </div>
 
-            {/* The objective is REQUIRED, which it was not until now, and it is
-                the heaviest single signal in the template scorer: an exact
-                objective match scores 3.0 where a near-miss scores 0.5, and it is
-                also what generates the templates tailored to this app for this
-                goal. Leaving it optional meant the strongest recommendation
-                input was silently dropped whenever a founder skipped it, and the
-                template step then claimed to be "scored for this app" on
-                materially weaker signal than it said.
-
-                The audience segment is genuinely optional — it narrows the
-                match further, but a profile already describes its audience — so
-                this one is the required one and that one is not. Saying so here
-                is the difference between a rule the founder understands and one
-                they trip over. */}
-            <div className="space-y-1.5">
-              <label htmlFor="objective" className="text-sm font-medium">
-                Video goal <span className="text-muted-foreground">(required)</span>
-              </label>
-              <div className="relative">
-                <select
-                  id="objective"
-                  value={objective}
-                  onChange={(e) => setObjective(e.target.value)}
-                  aria-required="true"
-                  className={`w-full appearance-none rounded-xl border bg-transparent py-2.5 pl-3 pr-10 text-sm transition-colors focus:border-[color:var(--indigo-35)] ${
-                    objective
-                      ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
-                      : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)]"
-                  }`}
-                >
-                <option value="">Choose an objective</option>
-                {(facets?.objectives || []).map((o) => (
-                  <option key={o} value={o}>{humanize(o)}</option>
-                ))}
-                </select>
-                <ChevronDown
-                  aria-hidden="true"
-                  className={`pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 transition-colors ${
-                    objective ? "text-[color:var(--brand-indigo)]" : "text-muted-foreground"
-                  }`}
-                />
-              </div>
-              {!objective && (
-                <p className="text-xs text-muted-foreground">
-                  Required. This strongly affects template suggestions and the script plan.
-                </p>
-              )}
-            </div>
+            <AngleGoalPicker
+              angle={angle}
+              value={objective}
+              onPick={setObjective}
+              options={objectiveOptions}
+              recommendations={recommendedObjectives}
+              outcomes={objectiveOutcomes}
+            />
 
             <div className="space-y-1.5">
               <label htmlFor="tone" className="text-sm font-medium">Tone (optional)</label>
@@ -1767,13 +1800,23 @@ if (step === 3) {
             <p className="text-sm text-muted-foreground">
               The plan didn't generate. Fix what's missing below, then try again — still free.
             </p>
-            {!objective && (
-              <ReviewGoalPicker value={objective} onPick={setObjective} options={facets?.objectives || []} />
+            {(!objective || !angle) && (
+              <AngleGoalPicker
+                angle={angle}
+                value={objective}
+                onPick={setObjective}
+                options={objectiveOptions}
+                recommendations={recommendedObjectives}
+                outcomes={objectiveOutcomes}
+                onChooseAngle={() => setStep(1)}
+                availableAngles={angles}
+                onSelectAngle={setAngleId}
+              />
             )}
             <Button
               variant="brand"
               onClick={handleGeneratePlan}
-              disabled={busy || !canGenerate || !objective}
+              disabled={busy || !canGenerate || !objective || !angle}
             >
               <Sparkles className="h-4 w-4" />
               Try again
@@ -1782,7 +1825,7 @@ if (step === 3) {
               Writes hook, script, shots, and demo note. Editable below.
             </p>
           </div>
-        ) : !project?.script_version && (busy || loading || (canGenerate && effectiveObjective)) ? (
+        ) : !project?.script_version && (busy || loading || (canGenerate && effectiveObjective && angle)) ? (
           /* No plan and nothing wrong: an attempt is in flight, the draft is
              still loading, or every input is present and the auto effect fires
              next — reading the stored goal too, so a draft that already holds
@@ -1807,7 +1850,7 @@ if (step === 3) {
              starts the plan on its own, no button press. */
           <div className="space-y-3 rounded-xl border border-[color:var(--hairline)] p-4">
             <p className="text-sm text-muted-foreground">
-              Your free script plan appears once an App Profile, template, and video goal are set. Still missing:
+              Your free script plan appears once an App Profile, audience angle, template, and video goal are set. Still missing:
             </p>
             <ul className="space-y-2 text-sm">
               {!profileId && (
@@ -1824,9 +1867,19 @@ if (step === 3) {
                   </Button>
                 </li>
               )}
-              {!objective && (
+              {(!objective || !angle) && (
                 <li>
-                  <ReviewGoalPicker value={objective} onPick={setObjective} options={facets?.objectives || []} />
+                  <AngleGoalPicker
+                    angle={angle}
+                    value={objective}
+                    onPick={setObjective}
+                    options={objectiveOptions}
+                    recommendations={recommendedObjectives}
+                    outcomes={objectiveOutcomes}
+                    onChooseAngle={() => setStep(1)}
+                    availableAngles={angles}
+                    onSelectAngle={setAngleId}
+                  />
                 </li>
               )}
             </ul>

@@ -1,0 +1,45 @@
+bringing up nodes...
+bringing up nodes...
+
+........................................................................ [ 61%]
+.............................................                            [100%]
+============================== warnings summary ===============================
+..\..\..\AppData\Local\Programs\Python\Python312\Lib\site-packages\starlette\formparsers.py:12
+..\..\..\AppData\Local\Programs\Python\Python312\Lib\site-packages\starlette\formparsers.py:12
+  C:\Users\kasra\AppData\Local\Programs\Python\Python312\Lib\site-packages\starlette\formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+server.py:9025
+server.py:9025
+test_template_library_api.py::TestTemplateListing::test_lists_curated_templates
+test_template_library_api.py::TestRecommendations::test_facets_include_angle_goal_guidance_without_replacing_objectives
+test_template_library_api.py::TestContentAngles::test_manual_angle_requires_label_audience_and_problem
+test_template_library_api.py::TestFeedbackInfluence::test_repeated_template_rejection_lowers_score_and_names_it
+test_template_library_api.py::TestRegenerateEverything::test_regenerate_researches_applies_and_regenerates_angles
+test_template_library_api.py::TestTwoSectionTemplateMigration::test_an_old_shape_row_is_rewritten_to_two_sections
+  C:\Users\kasra\Documents\tiktok\backend\server.py:9025: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+..\..\..\AppData\Local\Programs\Python\Python312\Lib\site-packages\fastapi\applications.py:4495
+..\..\..\AppData\Local\Programs\Python\Python312\Lib\site-packages\fastapi\applications.py:4495
+test_template_library_api.py::TestTemplateListing::test_lists_curated_templates
+test_template_library_api.py::TestRecommendations::test_facets_include_angle_goal_guidance_without_replacing_objectives
+test_template_library_api.py::TestContentAngles::test_manual_angle_requires_label_audience_and_problem
+test_template_library_api.py::TestFeedbackInfluence::test_repeated_template_rejection_lowers_score_and_names_it
+test_template_library_api.py::TestRegenerateEverything::test_regenerate_researches_applies_and_regenerates_angles
+test_template_library_api.py::TestTwoSectionTemplateMigration::test_an_old_shape_row_is_rewritten_to_two_sections
+  C:\Users\kasra\AppData\Local\Programs\Python\Python312\Lib\site-packages\fastapi\applications.py:4495: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+117 passed, 18 warnings in 6.10s

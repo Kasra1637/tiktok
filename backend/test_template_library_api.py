@@ -717,6 +717,15 @@ class TestRegenerateEverything:
 
 
 class TestRecommendations:
+    def test_facets_include_angle_goal_guidance_without_replacing_objectives(self, api):
+        result = _run(api.template_facets(user_id=ANON))
+        assert result["objectives"] == api.template_library.VIDEO_OBJECTIVES
+        assert result["angle_goal_recommendations"] == {
+            kind: list(goals)
+            for kind, goals in api.template_library.ANGLE_GOAL_RECOMMENDATIONS.items()
+        }
+        assert result["objective_outcomes"] == api.template_library.OBJECTIVE_OUTCOMES
+
     def test_recommendations_returned_for_profile(self, api):
         profile = _approve_profile(api, name="Reco App")
         result = _run(api.recommend_templates(profile_id=profile["id"], user_id=ANON))

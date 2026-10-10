@@ -339,10 +339,34 @@ const TEMPLATE = {
 
 const ANGLE = {
   id: "a1",
-  kind: "problem",
+  kind: "problem_solution",
   label: "Too many lists",
   user_problem: "Nothing gets finished.",
   target_audience: "busy professionals",
+};
+
+const ANGLE_B = {
+  id: "a2",
+  kind: "feature_demonstration",
+  label: "One-tap timer",
+  user_problem: "Starting takes too many steps.",
+  target_audience: "busy professionals",
+};
+
+const ANGLE_GOALS = {
+  problem_solution: ["address_user_problem", "feel_seen_and_understood", "avoid_common_mistake", "create_curiosity", "ease_daily_moment", "educate_viewers"],
+  feature_demonstration: ["demonstrate_feature", "explain_app", "achieve_desired_outcome", "educate_viewers", "create_curiosity", "ease_daily_moment"],
+};
+const OBJECTIVE_OUTCOMES = {
+  address_user_problem: "gets them naming the problem out loud",
+  feel_seen_and_understood: "makes them feel described, not sold to",
+  avoid_common_mistake: "catches them before the mistake",
+  create_curiosity: "leaves them wanting the answer",
+  ease_daily_moment: "makes the daily moment feel lighter",
+  demonstrate_feature: "keeps them watching long enough to see it work",
+  explain_app: "walks them into what the app is without a feature list",
+  achieve_desired_outcome: "shows the outcome as reachable",
+  educate_viewers: "leaves them with one thing they got wrong",
 };
 
 // template_library.SUPPORTED_DURATIONS. Every one of them is a single render on
@@ -356,7 +380,13 @@ const apiStub = {
   pollGeneration: async () => SEGMENT,
   getTemplates: async () => ({ templates: [TEMPLATE] }),
   getTemplateFacets: async () => ({
-    objectives: ["address_user_problem", "demonstrate_feature"],
+    objectives: [
+      "address_user_problem", "feel_seen_and_understood", "avoid_common_mistake",
+      "create_curiosity", "ease_daily_moment", "demonstrate_feature", "explain_app",
+      "achieve_desired_outcome", "educate_viewers",
+    ],
+    angle_goal_recommendations: ANGLE_GOALS,
+    objective_outcomes: OBJECTIVE_OUTCOMES,
     supported_durations: SUPPORTED_DURATIONS,
     // Shaped like the real server response, which derives the per-duration
     // render count from the default studio model's single-pass ceiling
@@ -364,7 +394,7 @@ const apiStub = {
     duration_segments: { 8: 1, 10: 1, 12: 1, 15: 1 },
   }),
   getAppProfiles: async () => ({ profiles: [PROFILE] }),
-  getContentAngles: async () => ({ angles: [ANGLE] }),
+  getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B] }),
   // Empty by default: the base stub has angles, so this only answers checks
   // that override the read to empty and then exercise the generate button.
   generateContentAngles: async () => ({ angles: [] }),
@@ -664,6 +694,10 @@ async function check(label, fn) {
       err.errors.forEach((inner, n) => console.log(`         [inner ${n}] ${inner && inner.stack ? inner.stack : String(inner)}`));
     }
     failures.push(label);
+  } finally {
+    // End each check's effects while its own stub scope is settled; mounted
+    // roots otherwise keep polling and updating during unrelated checks.
+    await act(async () => { root.unmount(); });
   }
 }
 
@@ -979,15 +1013,11 @@ async function main() {
           if (ctx.text().includes("Generating your plan")) {
             throw new Error("Review shows the generating spinner while blocked on the missing goal");
           }
-          const select = ctx.container.querySelector("select#review-objective");
-          if (!select) {
-            throw new Error("Review does not offer the goal picker when the goal is missing");
-          }
-          // Choosing the goal writes the same state the Audience step writes,
-          // so the plan must start with no button press.
-          const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLSelectElement.prototype, "value").set;
-          setter.call(select, "address_user_problem");
-          select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+          const goalPicker = ctx.container.querySelector('[data-testid="angle-goal-picker"]');
+          if (!goalPicker) throw new Error("Review does not offer its missing goal picker");
+          const goalButton = goalPicker.querySelector('[data-testid="recommended-goal-address_user_problem"]');
+          if (!goalButton) throw new Error("Review does not offer the goal for its selected audience angle");
+          await clickEl(ctx, goalButton);
           await act(async () => {});
           await act(async () => {});
           if (plans.length === 0) {
@@ -1896,6 +1926,9 @@ async function main() {
     // founder reviewed. A re-render must not do that behind their back.
     global.__SMOKE_PARAMS = "?project=p1";
     let strategyCalls = 0;
+    let renderCalls = 0;
+    const originalConfirm = dom.window.confirm;
+    dom.window.confirm = () => true;
     try {
       await withApi(
         {
@@ -1903,7 +1936,10 @@ async function main() {
             strategyCalls += 1;
             return PROJECT_WITH_STRATEGY;
           },
-          generateVideo: async () => ({ ...SEGMENT, status: "submitted" }),
+          generateVideo: async () => {
+            renderCalls += 1;
+            return { ...SEGMENT, status: "submitted" };
+          },
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
@@ -1918,7 +1954,9 @@ async function main() {
       );
     } finally {
       global.__SMOKE_PARAMS = "";
+      dom.window.confirm = originalConfirm;
     }
+    if (renderCalls !== 1) throw new Error(`expected one confirmed render, saw ${renderCalls}`);
     if (strategyCalls !== 0) {
       throw new Error("generating replaced a strategy the founder had already reviewed");
     }
@@ -2582,9 +2620,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
             dom.window.HTMLTextAreaElement.prototype,
             "value"
           ).set;
-          setter.call(box, "My own unsaved words");
-          box.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
-          await act(async () => {});
+          await act(async () => {
+            setter.call(box, "My own unsaved words");
+            box.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+          });
           await act(async () => {
             resolveProject();
           });
@@ -3176,21 +3215,144 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
-  await check("the Audience step says picking an angle is required", async (ctx) => {
+  await check("goal options wait until the founder picks an audience angle", async (ctx) => {
+    await withApi({ getContentAngles: async () => ({ angles: [] }) }, async () => {
+      global.__SMOKE_PARAMS = "";
+      await mount(CreateVideo, {})(ctx);
+      await openStep(ctx, "Audience & goal");
+      const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
+      if (!step?.querySelector('[data-testid="angle-required-hint"]')
+          || !step.textContent.includes("(required)")) {
+        throw new Error("the step does not explain that an audience angle is required");
+      }
+      if (!step.querySelector('[data-testid="goal-waits-for-angle"]')) {
+        throw new Error("goal suggestions appear before an angle is selected");
+      }
+      if (step.querySelector('[data-testid^="recommended-goal-"]')) {
+        throw new Error("featured goal buttons appear without an angle");
+      }
+    });
+  });
+
+  await check("six goals are tailored when an angle is selected without an all-goals control", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await mount(CreateVideo, {})(ctx);
-    const pill = stepPill(ctx, "Audience & goal");
-    await act(async () => {
-      pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-    });
-    await act(async () => {});
+    await openStep(ctx, "Audience & goal");
     const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
-    if (!step?.textContent.includes("(required)")) {
-      throw new Error("the angle label does not say it is required");
+    const angleButtons = [...step.querySelectorAll("button")]
+      .filter((button) => button.textContent.includes(ANGLE.label));
+    if (angleButtons.length !== 1) throw new Error(`expected one angle control, saw ${angleButtons.length}`);
+    const angleButton = angleButtons[0];
+    await clickEl(ctx, angleButton);
+    const featured = [...step.querySelectorAll('[data-testid^="recommended-goal-"]')];
+    if (featured.length !== 6) throw new Error(`expected six featured goals, saw ${featured.length}`);
+    const expected = ANGLE_GOALS.problem_solution;
+    const shown = featured.map((button) => button.getAttribute("data-testid").slice("recommended-goal-".length));
+    if (JSON.stringify(shown) !== JSON.stringify(expected)) {
+      throw new Error(`the wrong goals were recommended: ${JSON.stringify(shown)}`);
     }
-    if (!step.querySelector('[data-testid="angle-required-hint"]')) {
-      throw new Error("no guidance that an angle must be picked to continue");
+    if (!step.textContent.includes(OBJECTIVE_OUTCOMES[expected[0]])) {
+      throw new Error("recommended goal choices do not explain their intended outcome");
     }
+    if (step.querySelector("select, details") || step.textContent.includes("See all goals")) {
+      throw new Error("the removed all-goals control is still present");
+    }
+    if (!step.textContent.includes("Six suggestions")) throw new Error("the copy does not describe six suggestions");
+  });
+
+  await check("changing an angle reranks goals without changing a chosen goal", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await mount(CreateVideo, {})(ctx);
+    await openStep(ctx, "Audience & goal");
+    const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
+    const buttons = [...step.querySelectorAll("button")];
+    await clickEl(ctx, buttons.find((button) => button.textContent.includes(ANGLE.label)));
+    await clickEl(ctx, step.querySelector('[data-testid="recommended-goal-address_user_problem"]'));
+    await act(async () => {});
+    await act(async () => {});
+    if (step.querySelector('[data-testid="recommended-goal-address_user_problem"]')?.getAttribute("aria-pressed") !== "true") {
+      throw new Error("selecting the first goal did not update its selected state");
+    }
+    await clickEl(ctx, [...step.querySelectorAll("button")].find((button) => button.textContent.includes(ANGLE_B.label)));
+    await act(async () => {});
+    await act(async () => {});
+    if (!step.querySelector('[data-testid="recommended-goal-demonstrate_feature"]')) {
+      throw new Error("changing angle did not rerank the six goal suggestions");
+    }
+    if (!step.querySelector('[data-testid="goal-outside-recommendations"]')
+        || !step.textContent.includes("Address User Problem")) {
+      throw new Error(`the existing goal was replaced instead of being preserved with a nudge; goal text was: ${step.textContent}`);
+    }
+  });
+
+  await check("a suggested goal reaches template ranking and project writes", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    const rankings = [];
+    const writes = [];
+    await withApi({
+      getTemplateRecommendations: async (profile, query) => {
+        rankings.push(query);
+        return { recommendations: [{ template: TEMPLATE, why_it_fits: [], limitations: [] }] };
+      },
+      createStudioProject: async (payload) => {
+        writes.push(payload);
+        return { ...BASE_PROJECT, ...payload };
+      },
+      updateStudioProject: async (id, payload) => {
+        writes.push(payload);
+        return { ...BASE_PROJECT, ...payload };
+      },
+    }, async () => {
+      await mount(CreateVideo, {})(ctx);
+      await openTemplateStep(ctx);
+      await openStep(ctx, "Audience & goal");
+      const goal = ctx.container.querySelector('[data-testid="recommended-goal-educate_viewers"]');
+      await clickEl(ctx, goal);
+      if (goal.getAttribute("aria-pressed") !== "true") throw new Error("the sixth goal was not selected");
+      await openStep(ctx, "Template & photo");
+      if (!rankings.some((query) => query.objective === "educate_viewers" && query.angle_id === "a1")) {
+        throw new Error("ranking did not receive the sixth suggested goal and selected angle");
+      }
+      if (!writes.some((payload) => payload.objective === "educate_viewers" && payload.content_angle_id === "a1")) {
+        throw new Error("project persistence did not receive the sixth suggested goal and selected angle");
+      }
+    });
+  });
+
+  await check("Review with a goal but no angle waits for a real angle before planning", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1";
+    let plans = 0;
+    try {
+      await withApi({
+        getStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
+        updateStudioProject: async (id, payload) => ({ ...BASE_PROJECT, ...payload }),
+        generatePlan: async () => { plans += 1; return PROJECT_WITH_STRATEGY; },
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openStep(ctx, "Review");
+        if (plans !== 0) throw new Error("a plan was generated before an angle was selected");
+        if (ctx.text().includes("Generating your plan")) throw new Error("Review spins while missing an angle");
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="review-angle-a1"]'));
+        await act(async () => {});
+        if (plans !== 1) throw new Error(`selecting an angle started ${plans} plans instead of one`);
+      });
+    } finally { global.__SMOKE_PARAMS = ""; }
+  });
+
+  await check("an unknown angle kind provides six fallback goals without all-goals controls", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi({ getContentAngles: async () => ({ angles: [{ ...ANGLE, kind: "legacy" }] }) }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openStep(ctx, "Audience & goal");
+        const goals = ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]');
+        if (goals.length !== 6) throw new Error("legacy angle does not provide six fallback goals");
+        if (ctx.container.querySelector("#all-video-goals")) throw new Error("legacy angle shows the removed selector");
+        const goal = ctx.container.querySelector('[data-testid="recommended-goal-demonstrate_feature"]');
+        await clickEl(ctx, goal);
+        if (goal.getAttribute("aria-pressed") !== "true") throw new Error("legacy angle blocks fallback selection");
+      });
+    } finally { global.__SMOKE_PARAMS = ""; }
   });
 
   await check("progress ticks mean done, not merely being to the left", async (ctx) => {
@@ -3324,7 +3486,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       },
       async () => {
         await mount(CreateVideo, {})(ctx);
-        await selectOption(ctx, selectLabelled(ctx, "objective"), "address_user_problem");
+        await openStep(ctx, "Audience & goal");
+        await clickEl(ctx, [...ctx.container.querySelectorAll("button")].find((button) => button.textContent.includes(ANGLE.label)));
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]'));
         const pill = stepPill(ctx, "Template & photo");
         await act(async () => {
           pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
@@ -3348,7 +3512,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       },
       async () => {
         await mount(CreateVideo, {})(ctx);
-        await selectOption(ctx, selectLabelled(ctx, "objective"), "address_user_problem");
+        await openStep(ctx, "Audience & goal");
+        await clickEl(ctx, [...ctx.container.querySelectorAll("button")].find((button) => button.textContent.includes(ANGLE.label)));
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]'));
         const pill = stepPill(ctx, "Template & photo");
         await act(async () => {
           pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
@@ -3478,11 +3644,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         // moved, and a write that does not happen proves nothing about what it
         // would have sent.
         await openStep(ctx, "Audience & goal");
-        const objectiveSelect = ctx.container.querySelector("#objective");
-        const options = Array.from(objectiveSelect.options).filter((o) => o.value);
-        const other = options.find((o) => o.value !== "address_user_problem");
-        if (!other) throw new Error("no second objective to switch to");
-        await selectOption(ctx, objectiveSelect, other.value);
+        const otherGoal = ctx.container.querySelector('[data-testid="recommended-goal-educate_viewers"]');
+        await clickEl(ctx, otherGoal);
+        if (otherGoal.getAttribute("aria-pressed") !== "true") throw new Error("the goal picker did not retain the sixth goal");
         await openStep(ctx, "Review");
         const generate = [...ctx.container.querySelectorAll("button")]
           .find((b) => /^(Generate|Regenerate) (the )?plan/.test((b.textContent || "").trim()));
@@ -5609,19 +5773,19 @@ async function openStep(ctx, label) {
 /**
  * Reach the template step the way the workflow now requires.
  *
- * The objective is required, and the template step refuses to show a ranked
- * list without one - which is correct, since the objective is the heaviest
- * signal in the score and the list would otherwise look identical while being
- * ranked on much weaker evidence. So every check about the template cards has to
- * set one first, exactly as a founder must.
+ * The video goal is required, and the template step refuses to show a ranked
+ * list without one. The fixture enters via the same angle-first suggested-goal
+ * control that the founder uses before opening templates.
  */
 async function openTemplateStep(ctx) {
   await openStep(ctx, "Audience & goal");
-  const select = ctx.container.querySelector("#objective");
-  if (!select) throw new Error("no objective control on the Audience step");
-  const first = select.querySelector("option[value]:not([value=''])");
-  if (!first) throw new Error("the objective control has no objectives to pick");
-  await selectOption(ctx, select, first.value);
+  const angleButton = [...ctx.container.querySelectorAll('[data-testid="audience-goal-step"] button')]
+    .find((button) => button.textContent.includes(ANGLE.label));
+  if (!angleButton) throw new Error("the audience step has no selectable audience angle");
+  await clickEl(ctx, angleButton);
+  const goalButton = ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]');
+  if (!goalButton) throw new Error("the audience step has no recommended goal control");
+  await clickEl(ctx, goalButton, "no recommended goal control");
   await openStep(ctx, "Template & photo");
 }
 
@@ -5678,14 +5842,6 @@ async function selectOption(ctx, select, value) {
     select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
   });
   await act(async () => {});
-}
-
-function selectLabelled(ctx, labelText) {
-  // The objective control is the only select whose options are the facet list.
-  const withOptions = [...ctx.container.querySelectorAll("select")]
-    .find((s) => [...s.options].some((o) => o.value.includes("user_problem")));
-  if (!withOptions) throw new Error(`no select carrying ${JSON.stringify(labelText)}`);
-  return withOptions;
 }
 
 // ---------------------------------------------------------------------------

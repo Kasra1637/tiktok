@@ -1,0 +1,476 @@
+yarn run v1.22.22
+$ node scripts/check-imports.cjs && node scripts/check-frontend-logic.cjs && node scripts/check-render-smoke.cjs
+
+======================================================================
+scanned 106 file(s); 0 with problems
+All named imports resolve.
+======================================================================
+frontend/src/lib/videoLength.js
+======================================================================
+
+DEFAULT_DURATION - the fallback, not a user choice
+  [PASS] it is 15s
+  [PASS] the fallback is inside the only eligible model's single pass
+  [PASS] the fallback is also inside a longer model's single pass
+  [PASS] it is a real number, not a string the template math would swallow
+
+DEFAULT_DURATION - the old helper it replaced is really gone
+  [PASS] resolveExtendLock is no longer exported
+  [PASS] plannedCoverage is no longer exported
+  [PASS] readExtendIntent is no longer exported
+  [PASS] highestSegmentIndex is no longer exported
+
+----------------------------------------------------------------------
+The hook is a boundary, not a clip
+----------------------------------------------------------------------
+
+clampHookSeconds - the boundary the backend will actually use
+  [PASS] 3s is left alone
+  [PASS] 2s is left alone
+  [PASS] 4s is left alone
+  [PASS] 5s is pulled down to the ceiling
+  [PASS] 9s is pulled down to the ceiling, not refused
+  [PASS] 1s is pulled up to the floor
+  [PASS] a negative length becomes 0, which means 'follow the template'
+  [PASS] 0 stays 0 rather than becoming the floor
+  [PASS] a missing value is 0, not NaN
+  [PASS] null is 0, not NaN
+  [PASS] garbage is 0, not NaN
+  [PASS] a legacy string integer still clamps
+  [PASS] a 2.6s boundary rounds to a whole second
+  [PASS] the floor and ceiling are the numbers the server uses
+  [PASS] the default boundary is inside the range
+
+----------------------------------------------------------------------
+The length is computed, so it is read rather than chosen
+----------------------------------------------------------------------
+
+readPieceSeconds - the project's own number wins
+  [PASS] a project at 10s reads 10s
+  [PASS] a project at 15s reads 15s even against a 12s template
+  [PASS] with no project the template's declared length is used
+  [PASS] with neither, the library default is used
+  [PASS] a project with no length yet falls through to the template
+  [PASS] a template with no declared length falls through to the default
+  [PASS] a null project and a null template are safe
+  [PASS] no arguments at all is safe
+  [PASS] a string length is coerced, not concatenated
+  [PASS] garbage lengths never reach the copy
+  [PASS] a length of null still yields a positive number
+  [PASS] a length of 0 still yields a positive number
+  [PASS] a length of -5 still yields a positive number
+  [PASS] a length of "x" still yields a positive number
+  [PASS] a length of undefined still yields a positive number
+  [PASS] a length of null still yields a positive number
+
+----------------------------------------------------------------------
+The replacement for the extend lock
+----------------------------------------------------------------------
+
+singlePassCeiling - read off the model, never assumed
+  [PASS] 15s on MiniMax
+  [PASS] 30s on a longer model
+  [PASS] an unknown capability is 0, not a hard-coded 15
+  [PASS] a missing capability is 0
+  [PASS] a non-numeric ceiling is 0
+  [PASS] a zero or negative ceiling is 0
+
+exceedsSinglePass - the refusal the endpoint will make
+  [PASS] 10s on MiniMax fits
+  [PASS] 15s on MiniMax is exactly the ceiling and still fits
+  [PASS] 16s on MiniMax does not fit
+  [PASS] 30s on MiniMax does not fit
+  [PASS] 30s on a 30s model fits
+  [PASS] 31s on a 30s model does not
+  [PASS] 8s is one render on the only eligible model
+  [PASS] 10s is one render on the only eligible model
+  [PASS] 12s is one render on the only eligible model
+  [PASS] 15s is one render on the only eligible model
+  [PASS] an unknown ceiling never blocks a render
+  [PASS] garbage against an unknown ceiling never blocks
+  [PASS] a zero length never trips the guard
+  [PASS] a negative length never trips the guard
+
+----------------------------------------------------------------------
+Two sections, in render order
+----------------------------------------------------------------------
+
+sectionSplit - the two numbers the founder is shown
+  [PASS] a 10s piece with a 3s hook splits 3 / 7
+  [PASS] the two sections always add up to the piece
+  [PASS] a boundary longer than the piece never yields a negative middle
+  [PASS] a boundary longer than the piece is itself pulled back to it
+  [PASS] a zero boundary leaves the whole piece as middle
+  [PASS] a piece with no boundary is all middle, not NaN
+  [PASS] a missing piece is all zeroes, never NaN
+  [PASS] garbage on both sides is all zeroes, never NaN
+  [PASS] [10, 3] survives a JSON round trip
+  [PASS] [8, 2] survives a JSON round trip
+  [PASS] [15, 4] survives a JSON round trip
+  [PASS] [8, 12] survives a JSON round trip
+  [PASS] [10, 0] survives a JSON round trip
+
+----------------------------------------------------------------------
+plannedSections - the two the render actually produces
+----------------------------------------------------------------------
+  [PASS] a well-formed strategy shows two sections
+  [PASS] the first is the hook
+  [PASS] the second is the middle
+  [PASS] the seconds survive
+  [PASS] the goal, script and action survive
+  [PASS] the roles come from position, not from the model
+  [PASS] an old eight-beat strategy is shown as two sections
+  [PASS] no retired role survives
+  [PASS] a legacy 'cta' goal is not rendered as a close of its own
+  [PASS] the two sections take the first two beats, in order
+  [PASS] no strategy at all still renders two rows
+  [PASS] a null strategy still renders two rows
+  [PASS] no arguments at all still renders two rows
+  [PASS] a non-array segments value is safe
+  [PASS] a shorter list is padded, not truncated to one
+  [PASS] the padded middle is empty rather than undefined
+  [PASS] a missing middle is present with zero seconds
+  [PASS] a non-dict beat does not throw
+  [PASS] missing seconds are 0, not NaN
+  [PASS] garbage seconds are 0, not NaN
+  [PASS] every section is index-labelled in render order
+
+======================================================================
+frontend/src/lib/profileSelection.js
+======================================================================
+
+partitionProfiles - nothing may be dropped
+  [PASS] every profile lands in exactly one bucket
+  [PASS] approved holds only approved
+  [PASS] unapproved holds none of the approved
+  [PASS] both approved profiles are selectable
+  [PASS] the two drafts are reported, not hidden
+  [PASS] a profile never appears in both buckets
+
+isProfileSelectable - the gate itself stays strict
+  [PASS] approved is selectable
+  [PASS] status "draft" is NOT selectable
+  [PASS] status "metadata_ready" is NOT selectable
+  [PASS] status "pending" is NOT selectable
+  [PASS] status "" is NOT selectable
+  [PASS] status null is NOT selectable
+  [PASS] status undefined is NOT selectable
+  [PASS] status "Approved" is NOT selectable
+  [PASS] a missing profile is not selectable
+  [PASS] gate and partition never disagree
+
+describeUnapprovedCount - the count a founder reads
+  [PASS] zero says nothing
+  [PASS] one is singular
+  [PASS] three is plural
+  [PASS] a nonsense count says nothing
+
+profileLabel - never a blank row
+  [PASS] a real name is used
+  [PASS] a missing name is not blank
+  [PASS] a whitespace name is not blank
+  [PASS] a null profile is not blank
+
+describeEmptySelection - names the profiles that are waiting
+  [PASS] with none waiting it says what to do next
+  [PASS] with one waiting it names it
+  [PASS] with one waiting it counts correctly
+  [PASS] with several waiting it names them all
+  [PASS] with several waiting it does not claim an approved app is waiting
+  [PASS] the empty state agrees with the partition
+
+resolveActiveProfileId - explicit sources win, in order
+  [PASS] the studio's prop is never overridden by a default
+  [PASS] a route param beats a remembered default
+  [PASS] ?profile= beats a remembered default
+  [PASS] the prop beats the param
+  [PASS] an explicit id is trusted while profiles are still loading
+
+resolveActiveProfileId - remembered, but only if it still exists
+  [PASS] a remembered id that still exists is used
+  [PASS] a remembered id that is gone is ignored, not used
+  [PASS] whitespace is not treated as an id
+  [PASS] a remembered id with whitespace still matches
+
+resolveActiveProfileId - never empty while an app exists
+  [PASS] the newest approved is the default
+  [PASS] newest means position 0, as the API ordered it
+  [PASS] one unapproved app is still usable, not a dead end
+  [PASS] a mixture prefers approved over a draft
+  [PASS] no profiles resolves to empty, which shows the editor link
+  [PASS] a missing profiles array is safe
+  [PASS] a non-array profiles value is safe
+  [PASS] no arguments at all is safe
+
+======================================================================
+frontend/src/lib/authRecovery.js
+======================================================================
+
+shouldRetryWithFreshToken - exactly one retry, only for 401
+  [PASS] a first-time 401 retries
+  [PASS] an already-retried 401 does not loop
+  [PASS] status 400 never retries
+  [PASS] status 403 never retries
+  [PASS] status 404 never retries
+  [PASS] status 500 never retries
+  [PASS] status null never retries
+  [PASS] status undefined never retries
+  [PASS] no arguments never retries
+
+shouldForceSignIn - dead session goes to sign-in, nothing else does
+  [PASS] dead session with credentials goes to sign-in
+  [PASS] a credential-less 401 never redirects (public page, backend problem)
+  [PASS] no-auth mode never redirects (no sign-in exists to go to)
+  [PASS] already on /sign-in never redirects (reload loop)
+  [PASS] already on /sign-up never redirects
+  [PASS] a sub-path of sign-in counts as the auth page
+  [PASS] no arguments never redirects
+  [PASS] a missing pathname is not an auth page
+
+======================================================================
+frontend/src/lib/templateRequirements.js
+======================================================================
+
+requiredAssetStatus - the draft's kinds decide, nothing else
+  [PASS] matching ignores case and whitespace
+  [PASS] template order is preserved
+  [PASS] an attached asset with no kind never matches
+  [PASS] a blank requirement is named but never met
+  [PASS] non-array required is safe
+  [PASS] non-array attached is safe
+  [PASS] no arguments is safe
+
+allRequiredAssetsAttached - the jump link's condition
+  [PASS] all attached
+  [PASS] one missing
+  [PASS] no requirements is vacuously complete
+  [PASS] no attachments meets nothing
+
+blocking requirements - only a missing face stops generation
+  [PASS] an attached reference never blocks
+  [PASS] a missing reference does block
+  [PASS] the blocker is the face even among retired kinds
+  [PASS] matching is still case-insensitive when blocking
+  [PASS] nothing required means nothing blocks
+  [PASS] a blank requirement never blocks
+  [PASS] a non-array requirement never blocks
+  [PASS] no keyframes means live sliders during preview
+  [PASS] no keyframes means live sliders during export
+  [PASS] before the first keyframe the preview shows live sliders
+  [PASS] before the first keyframe the export uses defaults
+  [PASS] between keyframes the active lock applies
+  [PASS] the second lock takes over at its timestamp
+  [PASS] past the last keyframe the preview returns to live sliders
+  [PASS] past the last keyframe the export keeps the last lock
+  [PASS] a near-duplicate timestamp updates the lock in place
+  [PASS] a distinct timestamp appends a lock
+  [PASS] sorting never mutates the input
+  [PASS] removing a lock keeps the rest
+  [PASS] tick intervals follow duration
+  [PASS] time formats as m:ss.d
+  [PASS] export filenames stay neutral and unbranded
+  [PASS] export filenames carry no superseded app branding
+  [PASS] export filenames sanitize hostile parts
+  [PASS] mp4 is detected by prefix, everything else is webm
+  [PASS] no recorder means no mime rather than a guess
+  [PASS] mp4 candidates lead with a 1080p-capable level
+  [PASS] transparent and webm choices still prefer webm first
+  [PASS] a recorder that supports nothing yields no candidates
+  [PASS] recordings under 32KB are not plausible
+  [PASS] an mp4 recording opens with an ftyp box
+  [PASS] a webm recording opens with the EBML header
+  [PASS] a truncated header sniffs as nothing, not as a guess
+  [PASS] the device catalog survived the port
+  [PASS] the preset catalog survived the port
+  [PASS] backgrounds, animations, environments and accents survived the port
+  [PASS] defaults match the standalone app
+  [PASS] slider ranges match the standalone app
+  [PASS] a tour nobody has opened is not seen
+  [PASS] marking a tour seen persists it and is idempotent
+  [PASS] a seen tour survives a reload through storage
+  [PASS] seen state is per tour, so one page does not suppress another
+  [PASS] corrupt or unexpected stored state reads as nothing seen
+  [PASS] storage that throws still lets the tour be treated as unseen, then seen
+  [PASS] fill stretches to the screen box instead of behaving like cover
+  [PASS] fill is genuinely different from cover for a mismatched aspect
+  [PASS] cover fills the screen and contain shows the whole clip
+  [PASS] only contain leaves the screen uncovered
+  [PASS] an unknown fit mode falls back to cover rather than breaking
+  [PASS] zoom applies in every mode, and below 1 re-opens a gap in cover
+  [PASS] missing dimensions produce no box rather than NaN geometry
+  [PASS] a nonsense zoom is treated as 1 rather than blanking the screen
+  [PASS] a handler's own detail is preferred over anything generic
+  [PASS] a bodyless 502 is reported as a restart, not as a raw status
+  [PASS] a bodyless 502 from an error with no data at all is still named
+  [PASS] other statuses keep their own message
+  [PASS] nothing usable falls back to a generic line
+
+======================================================================
+All frontend length/section logic behaves correctly.
+Mounting every wizard step and panel...
+  [PASS] no source file leaks JSX comment text into the page
+  [PASS] the photo upload lives on the template step, not its own
+  [PASS] no step offers time-range or audio controls for an asset
+  [PASS] the plan is written before a character photo is attached
+  [PASS] the plan is generated from the step that reviews it
+  [PASS] Review without a goal asks for it instead of spinning forever
+  [PASS] a failed plan offers retry instead of spinning forever
+  [PASS] GenerationPanel mounts
+  [PASS] GenerationPanel mounts with no project
+  [PASS] GenerationPanel shows the completed generation
+  [PASS] GenerationPanel blocks generation before the project is ready
+  [PASS] GenerationPanel refuses a ready project with no photograph
+  [PASS] GenerationPanel is silent about the photo once one is attached
+  [PASS] GenerationPanel refuses a project with no angle picked
+  [PASS] GenerationPanel blocks a render after the angle changes
+  [PASS] the resolution toggle appears only for models that offer a choice
+  [PASS] no resolution toggle renders for a model with no choice
+  [PASS] the chosen resolution reaches the render request
+  [PASS] switching models resets the resolution choice
+  [PASS] GenerationPanel explains an un-ready project that already rendered
+  [PASS] a storage failure is loud, offers the retry, and clears on success
+  [PASS] a transient poll failure neither stops the loop nor raises the banner
+  [PASS] GenerationPanel blocks generation while a claim is prohibited
+  [PASS] the strategy review presents the two sections and what they are
+  [PASS] the strategy review shows what the viewer ends up with
+  [PASS] a strategy with no outcome fields renders no outcome block
+  [PASS] the strategy panel requires an angle before building
+  [PASS] an angle change after the build marks the strategy stale
+  [PASS] the strategy review shows the hook boundary from the plan
+  [PASS] the strategy review shows what is said in each section
+  [PASS] the strategy review warns when approved words do not fit the middle
+  [PASS] the strategy review renders no render or chain control
+  [PASS] the strategy review mounts with no strategy
+  [PASS] the strategy review names a blocking claim
+  [PASS] the strategy review warns when no character reference is attached
+  [PASS] GenerationPanel offers no second render, approval or join
+  [PASS] GenerationPanel disables Generate when length exceeds single pass
+  [PASS] GenerationPanel tells the founder the demo and the close are theirs
+  [PASS] GenerationPanel promises no on-screen text
+  [PASS] GenerationPanel disables Generate while words do not fit
+  [PASS] no source file builds a request for a deleted endpoint
+  [PASS] no mounted path calls a deleted endpoint
+  [PASS] wizard renders step: App Profile
+  [PASS] wizard renders step: Audience & goal
+  [PASS] wizard renders step: Template & photo
+  [PASS] wizard renders step: Review
+  [PASS] wizard renders step: Hook + Story
+  [PASS] no render control appears before the plan step
+  [PASS] the render step holds the render controls once a plan exists
+  [PASS] generating is blocked until a strategy is built and read
+  [PASS] an existing strategy is not rebuilt when generating
+  [PASS] generating another video asks first, and a no renders nothing
+  [PASS] a failed strategy build leaves nothing generated and says so
+  [PASS] the stale-plan warning matches the server and blocks the click
+  [PASS] rebuilding a stale strategy asks first
+  [PASS] rebuilding a current strategy does not interrupt
+  [PASS] the render step refuses to run without an approved plan
+  [PASS] wizard deep-links to a drafted project and lands on the right step
+  [PASS] the read-only shot timeline says so, and says when it is stale
+  [PASS] Review states the length and offers no way to change it
+  [PASS] Review offers no caption editor
+  [PASS] Review shows the spoken partition without offering a manual trim
+  [PASS] Review reports a script that was trimmed on arrival
+  [PASS] Review shows the server's words, not a stale local copy
+  [PASS] Review offers no manual mark-ready control
+  [PASS] the Review re-read never downgrades a ready project
+  [PASS] Review never overwrites unsaved edits with a refetch
+  [PASS] no step in the wizard offers a length control
+  [PASS] the Audience step states the template's length, read-only
+  [PASS] the Audience step says the demo and the close are the founder's own
+  [PASS] the Audience step offers to generate missing angles
+  [PASS] a failed angle generation is named and stays retryable
+  [PASS] every length the studio offers is a single render
+  [PASS] the studio never offers a call to action or a product demo
+  [PASS] the top recommendation is preselected when the founder has not chosen
+  [PASS] every fit reason and limitation is on the card, with no toggle to hide them
+  [PASS] a card with no reasons or limitations shows neither block
+  [PASS] a one-reason card shows the verdict with no detail list
+  [PASS] the template step refuses to rank anything without an objective
+  [PASS] no objective is silently reported as done on the progress pills
+  [PASS] no angle is silently reported as done on the progress pills
+  [PASS] goal options wait until the founder picks an audience angle
+  [PASS] six goals are tailored when an angle is selected without an all-goals control
+  [PASS] changing an angle reranks goals without changing a chosen goal
+  [PASS] a suggested goal reaches template ranking and project writes
+  [PASS] Review with a goal but no angle waits for a real angle before planning
+  [PASS] an unknown angle kind provides six fallback goals without all-goals controls
+  [PASS] progress ticks mean done, not merely being to the left
+  [PASS] a plan with unsaved edits is not reported as reviewed
+  [PASS] reloading recommendations never replaces a hand-picked template
+  [PASS] wizard surfaces the tailored-template error instead of failing silently
+  [PASS] wizard requests tailored templates for the chosen objective
+  [PASS] pre-made templates stay hidden until the tailored set is ready
+  [PASS] no project write sends a length or an extend intent
+
+Mounting the landing page...
+[HookForge] Clerk is not configured, running in no-auth mode.
+  Sign-in/sign-up are disabled and all data is stored under the shared
+  "anonymous" user.
+
+  To enable authentication, set REACT_APP_CLERK_PUBLISHABLE_KEY at BUILD
+  time (CRA inlines it into the bundle):
+    • Local:  add it to frontend/.env then restart/rebuild
+    • Docker: pass --build-arg REACT_APP_CLERK_PUBLISHABLE_KEY=pk_...
+    • Render: add it as an Environment Variable, then redeploy
+
+  Get the key from https://dashboard.clerk.com -> API Keys.
+  [PASS] Landing mounts
+  [PASS] Landing claims nothing the product cannot keep
+  [PASS] Landing separates generated stories from real footage and editor overlays
+  [PASS] Landing headings, workflow, and navigation have real destinations
+  [PASS] Landing actions work in signed-out mode
+  [PASS] Landing actions work in signed-in mode
+  [PASS] Landing actions work in no-auth mode
+  [PASS] every onboarding tour step points at a real element
+  [PASS] every routable path maps to a tour that exists
+  [PASS] deleted routes map to no tour
+  [PASS] every live work page maps to a tour (and auth/legal pages do not)
+  [PASS] the problem/solution bullets are length-matched
+
+Mounting the App Profile detail page...
+  [PASS] a profile cannot be deleted without typing its name
+  [PASS] deleting a profile calls the endpoint and leaves the page
+  [PASS] a refused delete keeps the dialog open and shows why
+  [PASS] an unnamed profile still has to be confirmed
+  [PASS] the delete warning names what is lost (0 drafts, 0 angles, 0 recorded)
+  [PASS] the delete warning names what is lost (1 drafts, 0 angles, 0 recorded)
+  [PASS] the delete warning names what is lost (3 drafts, 2 angles, 0 recorded)
+  [PASS] the delete warning names what is lost (3 drafts, 0 angles, 3 recorded)
+  [PASS] the profile page offers to generate missing angles
+
+Checking the sidebar navigation model...
+  [PASS] App Profile leads the sidebar, and nothing still calls it "Your app"
+
+Checking the native Product Demo + CTA editor...
+  [PASS] a finished render offers the native Demo + CTA editor
+  [PASS] the studio's own download is untouched by the native entry
+  [PASS] the studio download never points at raw cloud storage
+  [PASS] no popup, opener or cross-origin message contract remains in the studio
+  [PASS] the Demo + CTA page lists finished renders and opens each in the editor
+  [PASS] Demo + CTA works on its own, without a Hook + Story
+  [PASS] the preview column is pinned, and the settings column is what scrolls
+  [PASS] which settings groups are open is remembered across visits
+  [PASS] the export action sits after the preview in the pinned column
+  [PASS] the player stacks scrubber, one control row, then export
+  [PASS] the editor opens a finished render only from its durable, fetchable copy
+  [PASS] the preview and the export button are chromeless and share one width
+  [PASS] swatches are fixed size and animation uses the app's chip
+  [PASS] the settings panel scrolls on a slim bar that never overlaps a card
+  [PASS] short viewports scroll the column instead of shrinking the frame
+  [PASS] an old stored open-groups value cannot open two groups
+  [PASS] the empty frame offers a real upload control
+  [PASS] a failed recording can never become a download
+  [PASS] group titles and slider labels read correctly
+  [PASS] History offers Demo + CTA on a finished clip
+  [PASS] History does not offer Demo + CTA on a clip that is not finished
+  [PASS] History plays the durable copy the API signed, not a stripped path
+  [PASS] History never plays the provider's temporary link
+  [PASS] History retries its recovered source and waits for actual decoding
+  [PASS] History surfaces recovery failure instead of claiming success
+  [PASS] a finished export puts itself in view
+  [PASS] the export's audio level is one defined number, not an accident
+  [PASS] both phone renderers share one fit, and neither paints a black void
+
+All 144 render smoke checks pass.
+Done in 18.02s.

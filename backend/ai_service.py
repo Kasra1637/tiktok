@@ -2314,6 +2314,8 @@ async def generate_creative_plan(
         "objective": objective or "(unstated)",
         "audience": (angle or {}).get("target_audience") or profile.get("target_audience") or "(unstated)",
         "content_angle": (angle or {}).get("kind") or "(none)",
+        "angle_label": (angle or {}).get("label") or "",
+        "angle_user_problem": (angle or {}).get("user_problem") or "",
         "angle_hook_promise": (angle or {}).get("hook_promise") or "",
         "angle_feature": (angle or {}).get("app_feature") or "",
         "angle_emotion": (angle or {}).get("desired_emotion") or "",
@@ -2351,6 +2353,12 @@ async def generate_creative_plan(
         f"CREATIVE BRIEF:\n{json.dumps(brief, indent=2)}\n\n"
         f"CLAIM RULES:\n{json.dumps(claims, indent=2)}\n"
         f"{feedback_context}\n"
+        "ANGLE + GOAL RULE: the selected audience angle defines whose problem this video "
+        "speaks to and the hook's framing; the video goal defines what the full campaign "
+        "including the founder's later demo/CTA should accomplish. Keep the generated hook "
+        "and middle rooted in the angle while advancing the goal through that same lens. "
+        "If they seem in tension, reconcile the goal through the angle rather than swapping "
+        "audiences or turning the generated clip into a feature list.\n"
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
         '  "hook_line": "the single spoken/typed hook line, max 12 words",\n'
@@ -3255,6 +3263,9 @@ async def generate_video_strategy(
         f"HOOK MECHANISM (the selected template must be honoured, not replaced):\n{json.dumps(mechanism, indent=2)}\n\n"
         f"CREATIVE BRIEF:\n{json.dumps(brief, indent=2)}\n\n"
         f"CLAIM RULES:\n{json.dumps(claim_rules, indent=2)}\n"
+        "ANGLE + GOAL RULE: keep the angle's viewer, problem and hook framing; "
+        "advance the goal through that lens, including the founder's later demo/CTA, "
+        "not a new audience or feature list.\n"
         f"{approved_plan_context}"
         f"{feedback_context}"
         f"{trend_context}"

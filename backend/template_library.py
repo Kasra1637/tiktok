@@ -84,6 +84,25 @@ VIDEO_OBJECTIVES = [
     "feel_seen_and_understood",
 ]
 
+# Six featured goals for each selected audience angle. The picker offers only
+# these suggestions; existing saved goals and the full objective vocabulary
+# remain valid for recommendations, persisted projects, and generation prompts.
+# Order is the UI ranking; every recognized angle kind has exactly six goals.
+ANGLE_GOAL_RECOMMENDATIONS = {
+    "problem_solution": ("address_user_problem", "feel_seen_and_understood", "avoid_common_mistake", "create_curiosity", "ease_daily_moment", "educate_viewers"),
+    "before_after": ("achieve_desired_outcome", "address_user_problem", "create_curiosity", "feel_seen_and_understood", "demonstrate_feature", "ease_daily_moment"),
+    "competitor_alternative": ("compare_alternative", "overcome_viewer_doubt", "explain_app", "build_awareness", "demonstrate_feature", "achieve_desired_outcome"),
+    "feature_demonstration": ("demonstrate_feature", "explain_app", "achieve_desired_outcome", "educate_viewers", "create_curiosity", "ease_daily_moment"),
+    "common_mistake": ("avoid_common_mistake", "educate_viewers", "address_user_problem", "create_curiosity", "feel_seen_and_understood", "achieve_desired_outcome"),
+    "fast_tutorial": ("educate_viewers", "demonstrate_feature", "explain_app", "achieve_desired_outcome", "create_curiosity", "avoid_common_mistake"),
+    "unexpected_benefit": ("achieve_desired_outcome", "create_curiosity", "ease_daily_moment", "build_awareness", "explain_app", "feel_seen_and_understood"),
+    "founder_story": ("build_awareness", "introduce_new_app", "feel_seen_and_understood", "overcome_viewer_doubt", "create_curiosity", "address_user_problem"),
+    "daily_life_use_case": ("ease_daily_moment", "feel_seen_and_understood", "achieve_desired_outcome", "build_awareness", "demonstrate_feature", "address_user_problem"),
+    "product_comparison": ("compare_alternative", "overcome_viewer_doubt", "explain_app", "build_awareness", "demonstrate_feature", "achieve_desired_outcome"),
+    "objection_handling": ("overcome_viewer_doubt", "feel_seen_and_understood", "compare_alternative", "address_user_problem", "explain_app", "educate_viewers"),
+    "privacy_pricing_differentiation": ("overcome_viewer_doubt", "compare_alternative", "explain_app", "build_awareness", "create_curiosity", "educate_viewers"),
+}
+
 # What each campaign objective leaves the viewer with, in the viewer's terms.
 #
 # This is what the recommender says when a template serves an objective: the

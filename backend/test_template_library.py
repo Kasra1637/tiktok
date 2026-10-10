@@ -68,6 +68,25 @@ class TestCuratedSeeds:
         for tpl in tl.CURATED_TEMPLATES:
             assert tpl["objective"] in tl.VIDEO_OBJECTIVES, tpl["name"]
 
+    def test_every_angle_has_six_unique_recommended_existing_goals(self):
+        assert set(tl.ANGLE_GOAL_RECOMMENDATIONS) == set(tl.CONTENT_ANGLE_KINDS)
+        for kind, goals in tl.ANGLE_GOAL_RECOMMENDATIONS.items():
+            assert len(goals) == 6, kind
+            assert len(set(goals)) == 6, kind
+            assert set(goals) <= set(tl.VIDEO_OBJECTIVES), kind
+
+    def test_pain_focused_angles_prioritize_viewer_problem_goals(self):
+        assert tl.ANGLE_GOAL_RECOMMENDATIONS["problem_solution"][:3] == (
+            "address_user_problem", "feel_seen_and_understood", "avoid_common_mistake"
+        )
+        assert "demonstrate_feature" not in tl.ANGLE_GOAL_RECOMMENDATIONS["problem_solution"]
+
+    def test_feature_angles_prioritize_feature_and_explanation_goals(self):
+        assert tl.ANGLE_GOAL_RECOMMENDATIONS["feature_demonstration"][:3] == (
+            "demonstrate_feature", "explain_app", "achieve_desired_outcome"
+        )
+
+
     def test_every_template_requires_exactly_the_character_reference(self):
         """
         Face-only library: the character reference is the single permitted

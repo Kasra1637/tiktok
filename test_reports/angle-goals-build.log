@@ -1,0 +1,26 @@
+yarn run v1.22.22
+$ craco build
+(node:26312) [DEP0176] DeprecationWarning: fs.F_OK is deprecated, use fs.constants.F_OK instead
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Creating an optimized production build...
+Compiled successfully.
+
+File sizes after gzip:
+
+  291.04 kB (-210 B)  build\static\js\main.91771cf6.js
+  15.98 kB (-15 B)    build\static\css\main.cfa1d531.css
+
+The project was built assuming it is hosted at /.
+You can control this with the homepage field in your package.json.
+
+The build folder is ready to be deployed.
+You may serve it with a static server:
+
+  yarn global add serve
+  serve -s build
+
+Find out more about deployment here:
+
+  https://cra.link/deployment
+
+Done in 10.93s.

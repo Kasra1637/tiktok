@@ -330,6 +330,49 @@ class TestGpt5MiniRequestShape:
             assert "temperature" not in payload
 
 
+class TestAngleGoalPromptWiring:
+    @pytest.mark.parametrize("flow", ["plan", "strategy"])
+    def test_an_override_advances_the_goal_without_replacing_the_angle(self, monkeypatch, flow):
+        import ai_service
+
+        captured = {}
+        plan = {
+            "hook_line": "Too many lists?", "script": "Too many lists? Start with one task.",
+            "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "Too many lists?"},
+                              {"start": 3, "end": 15, "label": "middle", "text": "Start with one task."}],
+            "visual_direction": "Desk", "demo_brief": "Record the timer afterwards.",
+            "voice_direction": "Calm", "sound_direction": "Room tone", "claims_used": [],
+        }
+        strategy = {key: "x" for key in ai_service.REQUIRED_STRATEGY_KEYS}
+        strategy.update({"scene": {}, "performance": {}, "segments": [],
+                         "messaging_pillars": [], "emotional_triggers": []})
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return plan if flow == "plan" else strategy
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        args = {
+            "profile": {"id": "profile-1", "brand_name": "Taskly", "core_features": ["Task timer"]},
+            "template": {"id": "template-1", "name": "Name the misdiagnosis", "hook_seconds": 3},
+            "angle": {"id": "angle-1", "kind": "problem_solution", "label": "Too many lists",
+                      "user_problem": "Nothing gets finished", "target_audience": "Busy professionals"},
+            "objective": "demonstrate_feature",
+        }
+        if flow == "plan":
+            _run(ai_service.generate_creative_plan(**args, duration_seconds=15))
+        else:
+            result = _run(ai_service.generate_video_strategy(**args, hook_seconds=3, total_duration=15))
+            assert result["objective"] == "demonstrate_feature"
+            assert result["content_angle_id"] == "angle-1"
+
+        prompt = captured["prompt"]
+        for required in ("ANGLE + GOAL RULE", "Busy professionals", "Nothing gets finished",
+                         "demonstrate_feature", "founder's later demo/CTA"):
+            assert required in prompt
+        assert "NEVER" in prompt and "product demonstration" in prompt
+
+
 class TestTruncatedResearchRetriesDoubled:
     """
     Production failure, 2026-10-10: app-profile research at max_tokens=4000
