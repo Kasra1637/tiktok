@@ -1583,28 +1583,21 @@ async def analyze_brand_from_text(url: str, page_text: str) -> dict:
         "context rather than leaving it empty. Return ONLY valid JSON."
     )
 
-    payload = {
-        "model": TEXT_MODEL,
-        "messages": [
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": prompt},
-        ],
-            **_temperature_param(TEXT_MODEL, 0.3),
-            "max_tokens": 1500,
-            "response_format": _response_format("brand analysis", BRAND_ANALYSIS_JSON_SCHEMA),
-        }
-
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-
-    full_text = data["choices"][0]["message"]["content"]
-    result = _parse_json_response(full_text, "Brand analysis")
+    # Routed through _chat_json (not a bare post) so truncation is detected
+    # and retried with a doubled budget instead of surfacing as "did not
+    # return valid JSON", and refusals are named as refusals.
+    result = await _chat_json(
+        system_message=system_message,
+        prompt=prompt,
+        context="Brand analysis",
+        max_tokens=1500,
+        timeout=60,
+        json_schema=BRAND_ANALYSIS_JSON_SCHEMA,
+    )
 
     missing = REQUIRED_BRAND_ANALYSIS_KEYS - set(result.keys())
     if missing:
-        logger.error(f"Brand analysis missing fields {missing}. Raw text: {full_text[:1500]!r}")
+        logger.error(f"Brand analysis missing fields {missing}.")
         raise RuntimeError(f"Brand analysis missing required fields: {missing}")
 
     return result
@@ -1716,30 +1709,23 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         "Keep every list to 8 items max. Return ONLY valid JSON."
     )
 
-    payload = {
-        "model": TEXT_MODEL,
-        "messages": [
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": prompt},
-        ],
-            **_temperature_param(TEXT_MODEL, 0.3),
-            # 4000 rather than 3000: outcome_statements adds up to six objects to
-            # the schema, and a reply cut off mid-object fails the whole research.
-            "max_tokens": 4000,
-            "response_format": _response_format("app profile", APP_PROFILE_JSON_SCHEMA),
-        }
-
-    async with httpx.AsyncClient(timeout=90) as client:
-        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-
-    full_text = data["choices"][0]["message"]["content"]
-    result = _parse_json_response(full_text, "App profile")
+    # Routed through _chat_json (not a bare post): 4000 tokens proved too
+    # small once reasoning tokens and the full strict schema share the
+    # budget — the reply truncated mid-object and surfaced as "did not
+    # return valid JSON". 8000 starts with headroom, and truncation is now
+    # detected and retried doubled instead of misreported.
+    result = await _chat_json(
+        system_message=system_message,
+        prompt=prompt,
+        context="App profile",
+        max_tokens=8000,
+        timeout=90,
+        json_schema=APP_PROFILE_JSON_SCHEMA,
+    )
 
     missing = REQUIRED_APP_PROFILE_KEYS - set(result.keys())
     if missing:
-        logger.error(f"App profile missing fields {missing}. Raw text: {full_text[:1500]!r}")
+        logger.error(f"App profile missing fields {missing}.")
         raise RuntimeError(f"App profile missing required fields: {missing}")
 
     for key in APP_PROFILE_LIST_KEYS:
@@ -1928,24 +1914,18 @@ async def generate_content_angles(profile: dict, max_angles: int = 8) -> list:
         "kinds — do not return eight variations of the same angle. Return ONLY valid JSON."
     )
 
-    payload = {
-        "model": TEXT_MODEL,
-        "messages": [
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": prompt},
-        ],
-            **_temperature_param(TEXT_MODEL, 0.4),
-            "max_tokens": 3000,
-            "response_format": _response_format("content angles", ANGLES_JSON_SCHEMA),
-        }
-
-    async with httpx.AsyncClient(timeout=90) as client:
-        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-
-    full_text = data["choices"][0]["message"]["content"]
-    parsed = _parse_json_response(full_text, "Content angles")
+    # Routed through _chat_json so truncation is detected and retried
+    # doubled instead of surfacing as unparseable JSON. The list-or-dict
+    # handling below stays: a provider that ignores response_format can
+    # still answer either way.
+    parsed = await _chat_json(
+        system_message=system_message,
+        prompt=prompt,
+        context="Content angles",
+        max_tokens=3000,
+        timeout=90,
+        json_schema=ANGLES_JSON_SCHEMA,
+    )
 
     if isinstance(parsed, dict):
         parsed = parsed.get("angles") or parsed.get("content_angles") or []
@@ -2435,28 +2415,20 @@ async def generate_creative_plan(
         "Return ONLY valid JSON."
     )
 
-    payload = {
-        "model": TEXT_MODEL,
-        "messages": [
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": prompt},
-        ],
-            **_temperature_param(TEXT_MODEL, 0.5),
-            "max_tokens": 3500,
-            "response_format": _response_format("creative plan", PLAN_JSON_SCHEMA),
-        }
-
-    async with httpx.AsyncClient(timeout=120) as client:
-        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-
-    full_text = data["choices"][0]["message"]["content"]
-    result = _parse_json_response(full_text, "Creative plan")
+    # Routed through _chat_json so truncation is detected and retried
+    # doubled instead of surfacing as unparseable JSON.
+    result = await _chat_json(
+        system_message=system_message,
+        prompt=prompt,
+        context="Creative plan",
+        max_tokens=3500,
+        timeout=120,
+        json_schema=PLAN_JSON_SCHEMA,
+    )
 
     missing = REQUIRED_PLAN_KEYS - set(result.keys())
     if missing:
-        logger.error(f"Creative plan missing fields {missing}. Raw: {full_text[:1500]!r}")
+        logger.error("Creative plan missing fields %s.", sorted(missing))
         raise RuntimeError(f"Creative plan missing required fields: {missing}")
 
     result["hook_line"] = (result.get("hook_line") or "").strip()[:200]

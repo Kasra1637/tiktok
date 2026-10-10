@@ -1464,10 +1464,10 @@ class TestPlanPromptSeesCompetitors:
         import ai_service
         captured = {}
 
-        # generate_creative_plan posts through httpx.AsyncClient directly rather
-        # than the shared _chat_json helper, so the seam is the context manager:
-        # replace AsyncClient with a stub whose post() records the request body
-        # and returns a well-formed completion.
+        # generate_creative_plan routes through the shared _chat_json helper,
+        # so the seam is the context manager: replace AsyncClient with a stub
+        # whose post() records the request body and returns a well-formed
+        # completion.
         class _Resp:
             status_code = 200
 

@@ -330,6 +330,51 @@ class TestGpt5MiniRequestShape:
             assert "temperature" not in payload
 
 
+class TestTruncatedResearchRetriesDoubled:
+    """
+    Production failure, 2026-10-10: app-profile research at max_tokens=4000
+    truncated mid-object under GPT-5 Mini (reasoning tokens share the
+    budget) and surfaced as "App profile did not return valid JSON" — a
+    formatting error for what was a length problem, with no retry. These
+    flows now route through _chat_json, so truncation is detected, retried
+    doubled, and named as truncation when it persists.
+    """
+
+    def _full_profile(self):
+        import ai_service
+        list_keys = set(ai_service.APP_PROFILE_LIST_KEYS) | {
+            "outcome_statements", "viewer_objections"}
+        profile = {
+            k: ([] if k in list_keys else "x")
+            for k in ai_service.REQUIRED_APP_PROFILE_KEYS}
+        profile["brand_name"] = "Vocolens"
+        return profile
+
+    def test_truncated_research_recovers_on_the_doubled_retry(self, monkeypatch):
+        import ai_service
+        half = '{"brand_name": "Vocolens", "brand_description": "Voice-first AI journal'
+        rec = _patch_client(monkeypatch, [
+            _completion(half, finish_reason="length"),
+            _completion(json.dumps(self._full_profile())),
+        ])
+        result = _run(ai_service.analyze_app_profile({"website": "text"}))
+        assert result["brand_name"] == "Vocolens"
+        assert len(rec.payloads) == 2
+        assert rec.payloads[0]["max_tokens"] == 8000
+        assert rec.payloads[1]["max_tokens"] == 16000
+        for payload in rec.payloads:
+            assert payload["response_format"]["type"] == "json_schema"
+
+    def test_persistently_truncated_research_names_truncation(self, monkeypatch):
+        import ai_service
+        half = '{"brand_name": "Vocolens", "brand_description": "Voice-first AI journal'
+        _patch_client(monkeypatch, [_completion(half, finish_reason="length")])
+        with pytest.raises(ai_service.TruncatedResponse) as err:
+            _run(ai_service.analyze_app_profile({"website": "text"}))
+        assert "cut off" in str(err.value)
+        assert "valid JSON" not in str(err.value)
+
+
 class TestStrategyBudget:
     def test_strategy_uses_a_budget_that_fits_its_schema(self):
         """
