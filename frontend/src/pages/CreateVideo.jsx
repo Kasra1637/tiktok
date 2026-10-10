@@ -557,7 +557,7 @@ function AngleGoalPicker({
                 aria-pressed={false}
                 data-testid={`review-angle-${option.id}`}
                 onClick={() => onSelectAngle?.(option.id)}
-                className="w-full rounded-xl border border-[color:var(--hairline)] p-3 text-left text-sm hover:border-[color:var(--indigo-35)]"
+                className="w-full rounded-xl border border-[color:var(--hairline)] p-3 text-left text-sm"
               >
                 {option.label}
               </button>
@@ -594,7 +594,7 @@ function AngleGoalPicker({
               className={`rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-35)] ${
                 selected
                   ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
-                  : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)]"
+                  : "border-[color:var(--hairline)]"
               }`}
             >
               <span className="flex items-center justify-between gap-2 text-sm font-medium">
@@ -1679,7 +1679,7 @@ export default function CreateVideo() {
                       className={`h-full w-full rounded-2xl border bg-card/70 p-5 text-left transition-colors ${
                         angleId === a.id
                           ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
-                          : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
+                          : "border-[color:var(--hairline)]"
                       }`}
                     >
                       <div className="flex items-center justify-between gap-3">

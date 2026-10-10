@@ -49,7 +49,7 @@ function ClaimPanel({ profile }) {
   return (
     <ProfileCard testid="claim-guardrails" eyebrow="Claim guardrails">
       <div>
-        <Badge className="border-amber-500/25 bg-amber-500/10 px-3 py-1 text-amber-300">
+        <Badge variant="indigo" className="px-3 py-1 font-medium">
           Needs review · {review.length}
         </Badge>
       </div>
@@ -275,11 +275,12 @@ export default function AppProfileDetail() {
   const usageMoments = list(profile?.usage_moments);
   const outcomeCount = Array.isArray(profile?.outcome_statements) ? profile.outcome_statements.length : 0;
   const objectionCount = Array.isArray(profile?.viewer_objections) ? profile.viewer_objections.length : 0;
-  const segments = list(profile?.icp_segments);
+  const claimApproved = list(profile?.claims_approved);
   const claimReview = list(profile?.claims_review);
-  const hasAudience = Boolean(profile?.target_audience || profile?.ideal_customer_profile) ||
-    segments.length > 0 ||
-    list(profile?.claims_approved).length + claimReview.length + list(profile?.claims_banned).length > 0;
+  const claimBanned = list(profile?.claims_banned);
+  // The group holds Claim Guardrails only now, so it renders when there is
+  // at least one claim to show.
+  const hasAudience = claimApproved.length + claimReview.length + claimBanned.length > 0;
 
   // Group visibility mirrors the cards: an empty group leaves no header
   // behind. Summaries are computed from the data, never hand-written.
@@ -306,7 +307,7 @@ export default function AppProfileDetail() {
     objectionCount > 0 && `${objectionCount} objection${objectionCount === 1 ? "" : "s"}`,
   ]);
   const audienceSummary = joinSummary([
-    segments.length > 0 && `${segments.length} segment${segments.length === 1 ? "" : "s"}`,
+    claimApproved.length > 0 && `${claimApproved.length} approved`,
     claimReview.length > 0 && `${claimReview.length} to review`,
   ]);
 
@@ -538,69 +539,14 @@ return (
           )}
         </SectionGroup>
         )}
-        {/* What Has Worked Here lived here; it belongs on Analytics with the
-            other recorded results, so this page keeps only groups. The
-            whatWorks fetch stays: the delete dialog counts recorded videos. */}
+        {/* What Has Worked Here and the supporting row are gone: recorded
+            results belong on Analytics. The whatWorks fetch stays — the
+            delete dialog counts recorded videos from it. */}
         {hasAudience && (
         <SectionGroup id="audience" label="Audience & guardrails" summary={audienceSummary} open={openGroup === "audience"} onToggle={toggleGroup}>
-          <CardGrid className="md:grid-cols-2">
-            <ProfileCard eyebrow="Audiences">
-              <ProfileField label="Primary audience" value={profile?.target_audience} />
-              <ProfileField label="Ideal customer" value={profile?.ideal_customer_profile} />
-              <InfoListBlock label="Segments" items={segments} />
-            </ProfileCard>
-            <ClaimPanel profile={profile || {}} />
-          </CardGrid>
+          <ClaimPanel profile={profile || {}} />
         </SectionGroup>
         )}
-      </div>
-
-      {/* Supporting content: What Has Worked Here (slim banner, auto-width),
-          Audiences, Claim Guardrails — 2 cards + 1 banner at >=1280px. */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1fr_auto]">
-        {/* What Has Worked Here — slim banner, auto width */}
-        <div className="xl:col-span-1">
-          <div className="border-b border-[color:var(--hairline)] bg-card/30 px-4 py-3">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                What has worked here
-              </span>
-            </div>
-            {!whatWorks || !whatWorks.has_signal ? (
-              <p className="text-sm leading-[22px] text-muted-foreground">
-                Nothing recorded yet. Add view numbers to a finished video and the next strategy
-                will know which of this app&apos;s openings actually carried them.
-              </p>
-            ) : (
-              <>
-                <p className="text-xs leading-[18px] text-muted-foreground">
-                  Across {whatWorks.videos} recorded videos. View counts are only directional —
-                  they do not prove that one template is better.
-                </p>
-                <dl className="space-y-2 text-sm leading-[22px] mt-2">
-                  {(whatWorks.top || []).map((row) => (
-                    <div key={row.template_id} className="flex min-h-8 items-center justify-between gap-3">
-                      <dt className="min-w-0 break-words">{row.template_id}</dt>
-                      <dd className="shrink-0 text-xs leading-[18px] text-muted-foreground">
-                        {row.views.toLocaleString()} views · save rate {Math.round(row.save_rate * 100)}%
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Audiences — keeps current internal structure */}
-        <ProfileCard eyebrow="Audiences">
-          <ProfileField label="Primary audience" value={profile?.target_audience} />
-          <ProfileField label="Ideal customer" value={profile?.ideal_customer_profile} />
-          <InfoListBlock label="Segments" items={segments} />
-        </ProfileCard>
-
-        {/* Claim Guardrails — keeps current internal structure */}
-        <ClaimPanel profile={profile || {}} />
       </div>
 
       <Dialog

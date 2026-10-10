@@ -20,8 +20,8 @@ import { sentenceCase } from "../lib/copyCase";
 export const profileToneClass = {
   default: "",
   approved: "border-green-500/25 bg-green-500/[0.07]",
-  review: "border-amber-500/25 bg-amber-500/[0.07]",
-  enforced: "border-red-500/25 bg-red-500/[0.07]",
+  review: "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]",
+  enforced: "border-[color:var(--hairline-strong)] bg-secondary/30",
 };
 
 export function ProfileCard({ eyebrow, eyebrowClassName, tone = "default", testid, className, children }) {
@@ -73,17 +73,12 @@ export function ProfileField({ label, value }) {
 export function InfoChipList({ label, items, tone = "default", labelClassName }) {
   if (!items.length) return null;
   const chipClass =
-    tone === "enforced"
-      ? "border-red-500/25 bg-red-500/10 text-foreground/90"
-      : tone === "review"
-        ? "border-amber-500/25 bg-amber-500/10 text-foreground/90"
-        : tone === "approved"
-          ? "border-green-500/25 bg-green-500/10 text-foreground/90"
-          : "border-[color:var(--hairline)] bg-secondary/40 text-foreground/90";
-  const labelTone =
-    tone === "enforced"
-      ? "text-[color:var(--destructive,oklch(0.65_0.2_25))]"
-      : "text-foreground";
+    tone === "review"
+      ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] text-foreground/90"
+      : tone === "approved"
+        ? "border-green-500/25 bg-green-500/10 text-foreground/90"
+        : "border-[color:var(--hairline)] bg-secondary/40 text-foreground/90";
+  const labelTone = "text-foreground";
   return (
     <div className="min-w-0">
       <span className={cn("text-[11px] font-semibold uppercase tracking-[0.08em]", labelTone, labelClassName)}>
@@ -111,9 +106,9 @@ export function InfoListBlock({ label, items, tone = "default" }) {
   if (!items.length) return null;
   const toneClass =
     tone === "banned"
-      ? "border-red-500/25 bg-red-500/[0.07]"
+      ? "border-[color:var(--hairline-strong)] bg-secondary/30"
       : tone === "review"
-        ? "border-amber-500/25 bg-amber-500/[0.07]"
+        ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
         : "border-[color:var(--hairline)] bg-secondary/20";
   return (
     <div className={cn("rounded-xl border p-4", toneClass)}>
