@@ -57,6 +57,42 @@ function ListBlock({ label, items, tone = "default" }) {
   );
 }
 
+/**
+ * A list rendered as wrapping chips rather than one long column of bullets.
+ *
+ * The research fields this page shows are mostly short phrases, and a stacked
+ * bullet list gave every one of them a full card width with the text hugging
+ * the left edge — the page read as a tall strip of empty space. Chips let a
+ * list use the horizontal room it is given: two or three phrases per row, the
+ * card shrinking to fit its content instead of stretching to fill the grid.
+ */
+function ChipList({ label, items, tone = "default" }) {
+  if (!items.length) return null;
+  const labelClass =
+    tone === "enforced"
+      ? "text-[color:var(--destructive,oklch(0.65_0.2_25))]"
+      : "text-foreground";
+  const chipClass =
+    tone === "enforced"
+      ? "border-red-500/30 bg-red-500/10 text-foreground/90"
+      : "border-[color:var(--hairline)] bg-secondary/40 text-foreground/90";
+  return (
+    <div>
+      <span className={`eyebrow block ${labelClass}`}>{label}</span>
+      <ul className="mt-2 flex flex-wrap gap-1.5">
+        {items.map((item, i) => (
+          <li
+            key={i}
+            className={`rounded-full border px-2.5 py-1 text-xs leading-5 ${chipClass}`}
+          >
+            {item}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function Field({ label, value }) {
   if (!value) return null;
   return (
@@ -358,24 +394,34 @@ export default function AppProfileDetail() {
         </Alert>
       )}
 
-      {/* Single column: drafts and angle management live in Create Video and
-          History now. This page is the profile itself: facts, results,
-          audiences, and claim guardrails. */}
-      <div className="space-y-4">
+      {/* Two columns on desktop: the research facts span the wide column and
+          the lighter panels (results, audiences, guardrails) take the rail.
+          One full-width column was the whole defect this page shipped with —
+          every card stretched past any text it held. */}
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
+        <div className="space-y-4 lg:col-span-2">
           <div className="surface space-y-4 rounded-2xl" data-testid="profile-facts">
             <span className="eyebrow block">Product facts</span>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Field label="Category" value={profile?.app_category || profile?.niche} />
               <Field label="Platforms" value={list(profile?.platforms).join(", ")} />
               <Field label="Tone / voice" value={profile?.tone_voice} />
             </div>
-            <ListBlock label="Core features" items={list(profile?.core_features)} />
-            <ListBlock label="Primary use cases" items={list(profile?.primary_use_cases)} />
-            <ListBlock label="Problems solved" items={list(profile?.problems_solved)} />
-            <ListBlock label="Desired outcomes" items={list(profile?.desired_outcomes)} />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <ChipList label="Core features" items={list(profile?.core_features)} />
+              <ChipList label="Primary use cases" items={list(profile?.primary_use_cases)} />
+              <ChipList label="Problems solved" items={list(profile?.problems_solved)} />
+              <ChipList label="Desired outcomes" items={list(profile?.desired_outcomes)} />
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Field label="Differentiators" value={profile?.differentiation} />
+              <Field label="Known limitations" value={profile?.known_limitations} />
+              <Field label="The proof moment" value={profile?.proof_moment} />
+            </div>
             {Array.isArray(profile?.outcome_statements) && profile.outcome_statements.length > 0 && (
               <div className="space-y-2">
                 <span className="eyebrow block">Feature-to-outcome statements</span>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 {profile.outcome_statements.map((s, i) => (
                   <div
                     key={`${s.outcome}-${i}`}
@@ -399,24 +445,13 @@ export default function AppProfileDetail() {
                     )}
                   </div>
                 ))}
+                </div>
               </div>
             )}
-            <ListBlock label="Competitor apps" items={list(profile?.competitors)} />
-            <Field label="Differentiators" value={profile?.differentiation} />
-            <Field label="Known limitations" value={profile?.known_limitations} />
-            {/* Labelled as enforced because it is: this list is attached to
-                every video prompt, so it is an instruction to the model rather
-                than context it may use or ignore. The wording matters — the old
-                label promised the same enforcement over a field that had none. */}
-            <ListBlock
-              label="Never show in the video (enforced)"
-              items={list(profile?.must_not_show)}
-            />
-            <ListBlock label="When the app is reached for" items={list(profile?.usage_moments)} />
-            <Field label="The proof moment" value={profile?.proof_moment} />
             {Array.isArray(profile?.viewer_objections) && profile.viewer_objections.length > 0 && (
               <div className="space-y-2">
                 <span className="eyebrow block">Why they would not download</span>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 {profile.viewer_objections.map((o, i) => (
                   <div
                     key={`${o.objection}-${i}`}
@@ -435,9 +470,27 @@ export default function AppProfileDetail() {
                     )}
                   </div>
                 ))}
+                </div>
               </div>
             )}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {/* Labelled as enforced because it is: this list is attached to
+                  every video prompt, so it is an instruction to the model rather
+                  than context it may use or ignore. The wording matters — the old
+                  label promised the same enforcement over a field that had none. */}
+              <ChipList
+                label="Never show in the video (enforced)"
+                items={list(profile?.must_not_show)}
+                tone="enforced"
+              />
+              <ChipList label="When the app is reached for" items={list(profile?.usage_moments)} />
+              <ChipList label="Competitor apps" items={list(profile?.competitors)} />
+            </div>
           </div>
+        </div>
+
+        {/* The rail: three lighter panels sharing one column. */}
+        <div className="space-y-4">
 
           {/* The only part of the profile that improves with use. Everything
               above was scraped once from the URL; this is the founder's own
@@ -481,6 +534,7 @@ export default function AppProfileDetail() {
           </div>
 
           <ClaimPanel profile={profile || {}} />
+        </div>
       </div>
 
       <Dialog
