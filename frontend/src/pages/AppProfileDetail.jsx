@@ -114,7 +114,7 @@ function Field({ label, value }) {
  */
 function SectionCard({ testid, eyebrow, children }) {
   return (
-    <div className="surface space-y-3 rounded-2xl" {...(testid ? { "data-testid": testid } : {})}>
+    <div className="surface flex flex-col space-y-3 rounded-2xl" {...(testid ? { "data-testid": testid } : {})}>
       {eyebrow && <span className="eyebrow block">{eyebrow}</span>}
       {children}
     </div>
@@ -435,7 +435,7 @@ export default function AppProfileDetail() {
               </div>
             </SectionCard>
           ) : null}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
             {coreFeatures.length > 0 ? (
               <SectionCard>
                 <ChipList label="Core features" items={coreFeatures} />
@@ -458,7 +458,7 @@ export default function AppProfileDetail() {
             ) : null}
           </div>
           {profile?.differentiation || profile?.known_limitations || profile?.proof_moment ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-3">
               {profile?.differentiation ? (
                 <SectionCard>
                   <Field label="Differentiators" value={profile.differentiation} />
@@ -476,36 +476,44 @@ export default function AppProfileDetail() {
               ) : null}
             </div>
           ) : null}
-          {mustNotShow.length > 0 || usageMoments.length > 0 || competitors.length > 0 ? (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              {/* Labelled as enforced because it is: this list is attached to
-                  every video prompt, so it is an instruction to the model rather
-                  than context it may use or ignore. The wording matters — the old
-                  label promised the same enforcement over a field that had none. */}
-              {mustNotShow.length > 0 ? (
-                <SectionCard>
+          {(() => {
+            const directionCards = [
+              mustNotShow.length > 0 ? (
+                <SectionCard key="must-not-show">
                   <ChipList
                     label="Never show in the video (enforced)"
                     items={mustNotShow}
                     tone="enforced"
                   />
                 </SectionCard>
-              ) : null}
-              {usageMoments.length > 0 ? (
-                <SectionCard>
+              ) : null,
+              usageMoments.length > 0 ? (
+                <SectionCard key="usage-moments">
                   <ChipList label="When the app is reached for" items={usageMoments} />
                 </SectionCard>
-              ) : null}
-              {competitors.length > 0 ? (
-                <SectionCard>
+              ) : null,
+              competitors.length > 0 ? (
+                <SectionCard key="competitors">
                   <ChipList label="Competitor apps" items={competitors} />
                 </SectionCard>
-              ) : null}
-            </div>
-          ) : null}
+              ) : null,
+            ].filter(Boolean);
+            if (!directionCards.length) return null;
+            return (
+              <div className={`grid items-stretch gap-4 ${
+                directionCards.length === 1
+                  ? "grid-cols-1"
+                  : directionCards.length === 3
+                    ? "grid-cols-1 md:grid-cols-3"
+                    : "grid-cols-1 md:grid-cols-2"
+              }`}>
+                {directionCards}
+              </div>
+            );
+          })()}
             {Array.isArray(profile?.outcome_statements) && profile.outcome_statements.length > 0 && (
               <SectionCard eyebrow="Feature-to-outcome statements">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="grid grid-cols-1 items-stretch gap-3 md:grid-cols-2">
                 {profile.outcome_statements.map((s, i) => (
                   <div
                     key={`${s.outcome}-${i}`}
@@ -534,7 +542,7 @@ export default function AppProfileDetail() {
             )}
             {Array.isArray(profile?.viewer_objections) && profile.viewer_objections.length > 0 && (
               <SectionCard eyebrow="Why they would not download">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="grid grid-cols-1 items-stretch gap-3 md:grid-cols-2">
                 {profile.viewer_objections.map((o, i) => (
                   <div
                     key={`${o.objection}-${i}`}
