@@ -521,9 +521,9 @@ class TestAppSpecificity:
                 f"render prompt invents the person's appearance: {invented}"
             )
 
-        # And the photograph is named as the only authority on who they are.
+        # And the photograph is named as the only authority on the person.
         assert "The person on camera is the person in the attached character reference" in prompt
-        assert "The image is the only authority on who they are" in prompt
+        assert "The image is the only authority on the person" in prompt
 
     def test_a_project_with_no_strategy_is_refused(self, api, monkeypatch):
         """
