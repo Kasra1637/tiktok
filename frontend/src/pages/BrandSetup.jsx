@@ -8,7 +8,7 @@ import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import PageHeader from "../components/PageHeader";
 import { api, getErrorMessage } from "../lib/api";
-import { Globe, Sparkles, Briefcase, Loader2, Save, CheckCircle2, AlertTriangle, ArrowRight, Wand2, Smartphone, RefreshCw, BadgeCheck } from "lucide-react";
+import { Globe, Sparkles, Briefcase, Loader as Loader2, Save, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ArrowRight, Wand as Wand2, Smartphone, RefreshCw, BadgeCheck } from "lucide-react";
 import { toast } from "sonner";
 
 const EMPTY_FORM = {
@@ -168,6 +168,17 @@ function Field({ label, hint, children }) {
       <label className="block text-sm font-medium">{label}</label>
       {children}
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+function FormSection({ title, children }) {
+  return (
+    <div className="rounded-xl border border-[color:var(--hairline)] p-5">
+      <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">{title}</h3>
+      <div className="space-y-5">
+        {children}
+      </div>
     </div>
   );
 }
@@ -581,11 +592,7 @@ export default function BrandSetup() {
         </Alert>
       )}
 
-      {/* ---------- Manual details ----------
-          Padding lives in `.surface` in `index.css` (24px / 32px), so this
-          card matches every other content card in the app. The fields
-          themselves are untouched; this is container padding and vertical
-          rhythm only, so the form does not reflow. */}
+      {/* ---------- Manual details ---------- */}
       <div className="surface space-y-4 rounded-2xl" data-testid="brand-manual-card">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -616,311 +623,285 @@ export default function BrandSetup() {
               </Alert>
             )}
 
-            <div className="space-y-5">
-              <Field label="App name">
-                <Input
-                  value={form.brand_name}
-                  onChange={handleFieldChange("brand_name")}
-                  placeholder="For example: Voxel — Voice Journaling App"
-                  data-testid="brand-name-field"
-                />
-              </Field>
-
-              <Field label="Description">
-                <Textarea
-                  value={form.brand_description}
-                  onChange={handleFieldChange("brand_description")}
-                  placeholder="What does the app do?"
-                  className="min-h-[90px]"
-                  data-testid="brand-description-field"
-                />
-              </Field>
-
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                <Field label="App category">
+            <div className="space-y-8">
+              {/* ── Basics ── */}
+              <FormSection title="Basics">
+                <Field label="App name">
                   <Input
-                    value={form.app_category}
-                    onChange={handleFieldChange("app_category")}
-                    placeholder="For example: Health & Fitness"
-                    data-testid="app-category-field"
+                    value={form.brand_name}
+                    onChange={handleFieldChange("brand_name")}
+                    placeholder="For example: Voxel — Voice Journaling App"
+                    data-testid="brand-name-field"
                   />
                 </Field>
-                <Field label="Niche">
-                  <Input
-                    value={form.niche}
-                    onChange={handleFieldChange("niche")}
-                    placeholder="For example: Fitness supplements"
-                    data-testid="brand-niche-field"
+
+                <Field label="Description">
+                  <Textarea
+                    value={form.brand_description}
+                    onChange={handleFieldChange("brand_description")}
+                    placeholder="What does the app do?"
+                    className="min-h-[90px]"
+                    data-testid="brand-description-field"
                   />
                 </Field>
-              </div>
 
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                <Field label="Platforms" hint="Comma-separated.">
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                  <Field label="App category">
+                    <Input
+                      value={form.app_category}
+                      onChange={handleFieldChange("app_category")}
+                      placeholder="For example: Health & Fitness"
+                      data-testid="app-category-field"
+                    />
+                  </Field>
+                  <Field label="Niche">
+                    <Input
+                      value={form.niche}
+                      onChange={handleFieldChange("niche")}
+                      placeholder="For example: Fitness supplements"
+                      data-testid="brand-niche-field"
+                    />
+                  </Field>
+                </div>
+
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                  <Field label="Platforms" hint="Comma-separated.">
+                    <Input
+                      value={form.platforms}
+                      onChange={handleFieldChange("platforms")}
+                      placeholder="For example: iOS, Android"
+                      data-testid="app-platforms-field"
+                    />
+                  </Field>
+                  <Field label="Tone / voice">
+                    <Input
+                      value={form.tone_voice}
+                      onChange={handleFieldChange("tone_voice")}
+                      placeholder="For example: Playful, high-energy, no-nonsense"
+                      data-testid="brand-tone-field"
+                    />
+                  </Field>
+                </div>
+              </FormSection>
+
+              {/* ── What the app does ── */}
+              <FormSection title="What the app does">
+                <Field label="Core features" hint="Comma-separated — only features the app really has.">
                   <Input
-                    value={form.platforms}
-                    onChange={handleFieldChange("platforms")}
-                    placeholder="For example: iOS, Android"
-                    data-testid="app-platforms-field"
+                    value={form.core_features}
+                    onChange={handleFieldChange("core_features")}
+                    placeholder="Comma-separated, for example: Voice journaling, Reminders"
+                    data-testid="app-features-field"
                   />
                 </Field>
-              </div>
 
-              <Field label="Core features" hint="Comma-separated — only features the app really has.">
-                <Input
-                  value={form.core_features}
-                  onChange={handleFieldChange("core_features")}
-                  placeholder="Comma-separated, for example: Voice journaling, Reminders"
-                  data-testid="app-features-field"
-                />
-              </Field>
-
-              <Field label="Primary use cases" hint="Comma-separated.">
-                <Input
-                  value={form.primary_use_cases}
-                  onChange={handleFieldChange("primary_use_cases")}
-                  placeholder="Comma-separated, for example: Evening reflection, Habit tracking"
-                  data-testid="app-usecases-field"
-                />
-              </Field>
-
-              <Field label="Problems solved" hint="Comma-separated.">
-                <Input
-                  value={form.problems_solved}
-                  onChange={handleFieldChange("problems_solved")}
-                  placeholder="Comma-separated, for example: Forgetting to journal, Blank-page friction"
-                  data-testid="app-problems-field"
-                />
-              </Field>
-
-              <Field label="Desired outcomes" hint="Comma-separated.">
-                <Input
-                  value={form.desired_outcomes}
-                  onChange={handleFieldChange("desired_outcomes")}
-                  placeholder="Comma-separated, for example: Consistent journaling habit"
-                  data-testid="app-outcomes-field"
-                />
-              </Field>
-
-              {/* The pitch material. Four lines per statement, separated by a
-                  blank line — outcome / who feels it / source feature named
-                  verbatim / how it helps in benefit terms. The link is the
-                  field: without the source feature the video can only list
-                  features, and approval requires at least one statement. */}
-              <Field
-                label="Feature-to-outcome statements"
-                hint="Four lines per statement, blank line between: the benefit / who feels it / the feature it comes from / how it helps. These become the video's pitch."
-              >
-                <Textarea
-                  value={form.outcome_statements}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, outcome_statements: e.target.value }))
-                  }
-                  placeholder={
-                    "Fall asleep without checking your phone\nNight-time scrollers\nSleep timer\nThe wind-down starts itself so there is no reason to pick the phone back up\n\n" +
-                    "Wake up knowing what matters today\nOverloaded planners\nMorning brief\nOne glance replaces the whole list-scroll"
-                  }
-                  className="min-h-[140px]"
-                  data-testid="app-outcome-statements-field"
-                />
-              </Field>
-
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                <Field label="Competitor apps" hint="Comma-separated.">
+                <Field label="Primary use cases" hint="Comma-separated.">
                   <Input
-                    value={form.competitors}
-                    onChange={handleFieldChange("competitors")}
-                    placeholder="For example: Day One, Journey"
-                    data-testid="app-competitors-field"
+                    value={form.primary_use_cases}
+                    onChange={handleFieldChange("primary_use_cases")}
+                    placeholder="Comma-separated, for example: Evening reflection, Habit tracking"
+                    data-testid="app-usecases-field"
                   />
                 </Field>
-                <Field label="Target audience">
+
+                <Field label="Problems solved" hint="Comma-separated.">
                   <Input
-                    value={form.target_audience}
-                    onChange={handleFieldChange("target_audience")}
-                    placeholder="For example: Busy professionals 25-40"
-                    data-testid="brand-audience-field"
+                    value={form.problems_solved}
+                    onChange={handleFieldChange("problems_solved")}
+                    placeholder="Comma-separated, for example: Forgetting to journal, Blank-page friction"
+                    data-testid="app-problems-field"
                   />
                 </Field>
-              </div>
 
-              {/* Enforced, not advisory: this list is attached to every video
-                  prompt, so a detail here is an instruction to the model
-                  rather than background it can use or ignore. known_limitations
-                  is the advisory sibling and stays readable-only below. */}
-              <Field
-                label="Never show in the video"
-                hint="One per line. Attached to every render — use it for things a camera could actually depict."
-              >
-                <Textarea
-                  value={productsToText(form.must_not_show)}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, must_not_show: e.target.value }))
-                  }
-                  placeholder={"One per line, for example:\nA hospital corridor\nA competitor's app icon\nAnyone under 18"}
-                  className="min-h-[80px]"
-                  data-testid="app-must-not-show-field"
-                />
-              </Field>
+                <Field label="Desired outcomes" hint="Comma-separated.">
+                  <Input
+                    value={form.desired_outcomes}
+                    onChange={handleFieldChange("desired_outcomes")}
+                    placeholder="Comma-separated, for example: Consistent journaling habit"
+                    data-testid="app-outcomes-field"
+                  />
+                </Field>
 
-              {/* These two exist because the strategy asks for a scene and a
-                  demonstration, and no profile field supplied either. The model
-                  was inventing a kitchen at 7am for every app and then being
-                  told to "show it in use" with nothing saying what that is. */}
-              <Field
-                label="When is the app reached for?"
-                hint="Concrete moments, not categories — these set the scene the video is shot in."
-              >
-                <Textarea
-                  value={productsToText(form.usage_moments)}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, usage_moments: e.target.value }))
-                  }
-                  placeholder={"One per line, for example:\nEnd of a night shift\n7am before the house wakes up\nPayday"}
-                  className="min-h-[80px]"
-                  data-testid="app-usage-moments-field"
-                />
-              </Field>
+                {/* The pitch material. Four lines per statement, separated by a
+                    blank line — outcome / who feels it / source feature named
+                    verbatim / how it helps in benefit terms. The link is the
+                    field: without the source feature the video can only list
+                    features, and approval requires at least one statement. */}
+                <Field
+                  label="Feature-to-outcome statements"
+                  hint="Four lines per statement, blank line between: the benefit / who feels it / the feature it comes from / how it helps. These become the video's pitch."
+                >
+                  <Textarea
+                    value={form.outcome_statements}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, outcome_statements: e.target.value }))
+                    }
+                    placeholder={
+                      "Fall asleep without checking your phone\nNight-time scrollers\nSleep timer\nThe wind-down starts itself so there is no reason to pick the phone back up\n\n" +
+                      "Wake up knowing what matters today\nOverloaded planners\nMorning brief\nOne glance replaces the whole list-scroll"
+                    }
+                    className="min-h-[140px]"
+                    data-testid="app-outcome-statements-field"
+                  />
+                </Field>
+              </FormSection>
 
-              <Field
-                label="The proof moment"
-                hint="One moment the camera can film that makes the main claim believable."
-              >
-                <Input
-                  value={form.proof_moment}
-                  onChange={handleFieldChange("proof_moment")}
-                  placeholder="For example: The envelope splits the moment the transfer lands"
-                  data-testid="app-proof-moment-field"
-                />
-              </Field>
+              {/* ── Video direction ── */}
+              <FormSection title="Video direction">
+                {/* These two exist because the strategy asks for a scene and a
+                    demonstration, and no profile field supplied either. The model
+                    was inventing a kitchen at 7am for every app and then being
+                    told to "show it in use" with nothing saying what that is. */}
+                <Field
+                  label="When is the app reached for?"
+                  hint="Concrete moments, not categories — these set the scene the video is shot in."
+                >
+                  <Textarea
+                    value={productsToText(form.usage_moments)}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, usage_moments: e.target.value }))
+                    }
+                    placeholder={"One per line, for example:\nEnd of a night shift\n7am before the house wakes up\nPayday"}
+                    className="min-h-[80px]"
+                    data-testid="app-usage-moments-field"
+                  />
+                </Field>
 
-              {/* The arc's material. Three lines per objection, separated by a
-                  blank line — the "does now" line is what makes an objection
-                  answerable rather than just a complaint to acknowledge. */}
-              <Field
-                label="Why they would not download"
-                hint="Three lines per objection, blank line between: the objection / what they use now / your honest answer. These become the video's argument."
-              >
-                <Textarea
-                  value={form.viewer_objections}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, viewer_objections: e.target.value }))
-                  }
-                  placeholder={
-                    "It is just another subscription\nThree other habit trackers I already pay for\nOne that costs nothing and works offline\n\n" +
-                    "I do not have time to set it up\nI abandon anything that takes a setup call\nIt logs the first task in under a second"
-                  }
-                  className="min-h-[140px]"
-                  data-testid="app-viewer-objections-field"
-                />
-              </Field>
+                <Field
+                  label="The proof moment"
+                  hint="One moment the camera can film that makes the main claim believable."
+                >
+                  <Input
+                    value={form.proof_moment}
+                    onChange={handleFieldChange("proof_moment")}
+                    placeholder="For example: The envelope splits the moment the transfer lands"
+                    data-testid="app-proof-moment-field"
+                  />
+                </Field>
 
-              <Field label="Ideal Customer">
-                <Textarea
-                  value={form.ideal_customer_profile}
-                  onChange={handleFieldChange("ideal_customer_profile")}
-                  placeholder="Demographics, interests, pain points..."
-                  className="min-h-[80px]"
-                  data-testid="brand-ideal-customer-field"
-                />
-              </Field>
+                {/* Enforced, not advisory: this list is attached to every video
+                    prompt, so a detail here is an instruction to the model
+                    rather than background it can use or ignore. known_limitations
+                    is the advisory sibling and stays readable-only below. */}
+                <Field
+                  label="Never show in the video"
+                  hint="One per line. Attached to every render — use it for things a camera could actually depict."
+                >
+                  <Textarea
+                    value={productsToText(form.must_not_show)}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, must_not_show: e.target.value }))
+                    }
+                    placeholder={"One per line, for example:\nA hospital corridor\nA competitor's app icon\nAnyone under 18"}
+                    className="min-h-[80px]"
+                    data-testid="app-must-not-show-field"
+                  />
+                </Field>
 
-              <Field label="Audience segments" hint="One segment per line.">
-                <Textarea
-                  value={form.icp_segments}
-                  onChange={handleFieldChange("icp_segments")}
-                  placeholder={"One per line, for example:\nBusy parents — 2-minute evening check-ins"}
-                  className="min-h-[80px]"
-                  data-testid="app-icp-segments-field"
-                />
-              </Field>
+                {/* The arc's material. Three lines per objection, separated by a
+                    blank line — the "does now" line is what makes an objection
+                    answerable rather than just a complaint to acknowledge. */}
+                <Field
+                  label="Why they would not download"
+                  hint="Three lines per objection, blank line between: the objection / what they use now / your honest answer. These become the video's argument."
+                >
+                  <Textarea
+                    value={form.viewer_objections}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, viewer_objections: e.target.value }))
+                    }
+                    placeholder={
+                      "It is just another subscription\nThree other habit trackers I already pay for\nOne that costs nothing and works offline\n\n" +
+                      "I do not have time to set it up\nI abandon anything that takes a setup call\nIt logs the first task in under a second"
+                    }
+                    className="min-h-[140px]"
+                    data-testid="app-viewer-objections-field"
+                  />
+                </Field>
+              </FormSection>
 
-              <Field label="What Sets You Apart">
-                <Textarea
-                  value={form.differentiation}
-                  onChange={handleFieldChange("differentiation")}
-                  placeholder="Unique strengths, selling propositions, signature angles..."
-                  className="min-h-[80px]"
-                  data-testid="brand-differentiation-field"
-                />
-              </Field>
+              {/* ── Audience ── */}
+              <FormSection title="Audience">
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                  <Field label="Target audience">
+                    <Input
+                      value={form.target_audience}
+                      onChange={handleFieldChange("target_audience")}
+                      placeholder="For example: Busy professionals 25-40"
+                      data-testid="brand-audience-field"
+                    />
+                  </Field>
+                  <Field label="Competitor apps" hint="Comma-separated.">
+                    <Input
+                      value={form.competitors}
+                      onChange={handleFieldChange("competitors")}
+                      placeholder="For example: Day One, Journey"
+                      data-testid="app-competitors-field"
+                    />
+                  </Field>
+                </div>
 
-              <Field label="Tone / voice">
-                <Input
-                  value={form.tone_voice}
-                  onChange={handleFieldChange("tone_voice")}
-                  placeholder="For example: Playful, high-energy, no-nonsense"
-                  data-testid="brand-tone-field"
-                />
-              </Field>
+                <Field label="Ideal Customer">
+                  <Textarea
+                    value={form.ideal_customer_profile}
+                    onChange={handleFieldChange("ideal_customer_profile")}
+                    placeholder="Demographics, interests, pain points..."
+                    className="min-h-[80px]"
+                    data-testid="brand-ideal-customer-field"
+                  />
+                </Field>
 
-              <Field label="Approved claims" hint="Comma-separated — factual claims safe for promos.">
-                <Input
-                  value={form.claims_approved}
-                  onChange={handleFieldChange("claims_approved")}
-                  placeholder="Comma-separated"
-                  data-testid="app-claims-approved-field"
-                />
-              </Field>
+                <Field label="Audience segments" hint="One segment per line.">
+                  <Textarea
+                    value={form.icp_segments}
+                    onChange={handleFieldChange("icp_segments")}
+                    placeholder={"One per line, for example:\nBusy parents — 2-minute evening check-ins"}
+                    className="min-h-[80px]"
+                    data-testid="app-icp-segments-field"
+                  />
+                </Field>
 
-              <Field label="Claims needing review" hint="Comma-separated — verify before use.">
-                <Input
-                  value={form.claims_review}
-                  onChange={handleFieldChange("claims_review")}
-                  placeholder="Comma-separated"
-                  data-testid="app-claims-review-field"
-                />
-              </Field>
+                <Field label="What Sets You Apart">
+                  <Textarea
+                    value={form.differentiation}
+                    onChange={handleFieldChange("differentiation")}
+                    placeholder="Unique strengths, selling propositions, signature angles..."
+                    className="min-h-[80px]"
+                    data-testid="brand-differentiation-field"
+                  />
+                </Field>
+              </FormSection>
 
-              <Field label="Banned claims" hint="Comma-separated — promos must never make these.">
-                <Input
-                  value={form.claims_banned}
-                  onChange={handleFieldChange("claims_banned")}
-                  placeholder="Comma-separated, for example: Guaranteed results, Fake reviews"
-                  data-testid="app-claims-banned-field"
-                />
-              </Field>
+              {/* ── Claim guardrails ── */}
+              <FormSection title="Claim guardrails">
+                <Field label="Approved claims" hint="Comma-separated — factual claims safe for promos.">
+                  <Input
+                    value={form.claims_approved}
+                    onChange={handleFieldChange("claims_approved")}
+                    placeholder="Comma-separated"
+                    data-testid="app-claims-approved-field"
+                  />
+                </Field>
+
+                <Field label="Claims needing review" hint="Comma-separated — verify before use.">
+                  <Input
+                    value={form.claims_review}
+                    onChange={handleFieldChange("claims_review")}
+                    placeholder="Comma-separated"
+                    data-testid="app-claims-review-field"
+                  />
+                </Field>
+
+                <Field label="Banned claims" hint="Comma-separated — promos must never make these.">
+                  <Input
+                    value={form.claims_banned}
+                    onChange={handleFieldChange("claims_banned")}
+                    placeholder="Comma-separated, for example: Guaranteed results, Fake reviews"
+                    data-testid="app-claims-banned-field"
+                  />
+                </Field>
+              </FormSection>
             </div>
-
-            <Button
-              onClick={handleSave}
-              disabled={saving}
-              variant="accent"
-              size="lg"
-              className="w-full"
-              data-testid="save-brand-button"
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {saving ? "Saving..." : brand?.id ? "Save App Profile" : "Create App Profile"}
-            </Button>
-
-            {brand?.id && status !== "approved" && (
-              <Button
-                onClick={() => handleApprove(true)}
-                disabled={approving}
-                variant="brand"
-                size="lg"
-                className="w-full"
-                data-testid="approve-profile-button"
-              >
-                {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
-                {approving ? "Approving..." : "Review complete — approve profile"}
-              </Button>
-            )}
-
-            {brand?.id && status === "approved" && (
-              <Button
-                onClick={handleRefresh}
-                disabled={refreshing}
-                variant="secondary"
-                size="lg"
-                className="w-full gap-1.5"
-                data-testid="refresh-profile-button"
-              >
-                {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                {refreshing ? "Re-researching..." : "Refresh from sources (needs re-approval)"}
-              </Button>
-            )}
 
             {brand?.id && (
               <Alert className="border-[color:var(--indigo-15)] bg-[color:var(--indigo-6)]">
@@ -946,6 +927,49 @@ export default function BrandSetup() {
             )}
           </>
         )}
+      </div>
+
+      {/* ---------- Sticky action bar ---------- */}
+      <div className="sticky bottom-0 z-10 border-t border-[color:var(--hairline)] bg-background/80 py-4 backdrop-blur-sm">
+        <div className="mx-auto flex w-full max-w-6xl items-center gap-3">
+          <Button
+            onClick={handleSave}
+            disabled={saving}
+            variant="accent"
+            size="lg"
+            data-testid="save-brand-button"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {saving ? "Saving..." : brand?.id ? "Save App Profile" : "Create App Profile"}
+          </Button>
+
+          {brand?.id && status !== "approved" && (
+            <Button
+              onClick={() => handleApprove(true)}
+              disabled={approving}
+              variant="brand"
+              size="lg"
+              data-testid="approve-profile-button"
+            >
+              {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
+              {approving ? "Approving..." : "Review complete — approve profile"}
+            </Button>
+          )}
+
+          {brand?.id && status === "approved" && (
+            <Button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              variant="secondary"
+              size="lg"
+              className="gap-1.5"
+              data-testid="refresh-profile-button"
+            >
+              {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {refreshing ? "Re-researching..." : "Refresh from sources (needs re-approval)"}
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );

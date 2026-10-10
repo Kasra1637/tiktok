@@ -12,13 +12,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
 import { Input } from "../components/ui/input";
 import PageHeader from "../components/PageHeader";
 import { api, getErrorMessage } from "../lib/api";
-import {
-  Briefcase, Loader2, AlertTriangle, ArrowLeft, Sparkles, Target,
-  ShieldAlert, Lightbulb, Trash2, RefreshCw,
-} from "lucide-react";
+import { Briefcase, Loader as Loader2, TriangleAlert as AlertTriangle, ArrowLeft, Sparkles, Target, ShieldAlert, Lightbulb, Trash as Trash2, RefreshCw, MoveHorizontal as MoreHorizontal, Pencil } from "lucide-react";
 
 /** Read an array-or-empty field into a clean list. */
 function list(value) {
@@ -337,29 +340,6 @@ export default function AppProfileDetail() {
             ) : (
               <Badge variant="secondary" className="px-3 py-1">Draft — needs review</Badge>
             )}
-            <Button variant="secondary" size="sm" asChild>
-              <Link to="/brand">Edit</Link>
-            </Button>
-            {/* Deletes the profile and everything scoped to it: content angles,
-                studio projects, generations, assets and their recorded
-                results. The endpoint and the api client both already existed
-                and nothing called them; this is the control that reaches them.
-                Type-to-confirm rather than window.confirm because the blast
-                radius is every finished video, not one regenerable row. */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={openConfirm}
-              aria-label="Delete app profile"
-              title="Delete this app profile and everything built on it"
-              data-testid="delete-profile-button"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-            {/* An App Profile is not consumed by making a video: the same
-                approved profile backs every video, and the studio reuses its
-                angles, assets and templates. This is the way back in, on the
-                page where someone is looking at the app itself. */}
             <Button variant="brand" size="sm" asChild>
               <Link
                 to={`/create?profile=${encodeURIComponent(profileId)}`}
@@ -374,18 +354,37 @@ export default function AppProfileDetail() {
                 Create Video
               </Link>
             </Button>
-            {approved && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleRegenerateEverything}
-                disabled={regeneratingEverything}
-                title="Re-research this app, apply the refreshed profile, and regenerate its audience angles"
-              >
-                {regeneratingEverything ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                Refresh research &amp; angles
-              </Button>
-            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" aria-label="More actions">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem asChild>
+                  <Link to="/brand" className="flex items-center gap-2">
+                    <Pencil className="h-3.5 w-3.5" /> Edit profile
+                  </Link>
+                </DropdownMenuItem>
+                {approved && (
+                  <DropdownMenuItem
+                    onClick={handleRegenerateEverything}
+                    disabled={regeneratingEverything}
+                    className="flex items-center gap-2"
+                  >
+                    {regeneratingEverything ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                    Refresh research &amp; angles
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem
+                  onClick={openConfirm}
+                  className="flex items-center gap-2 text-destructive focus:text-destructive"
+                  data-testid="delete-profile-button"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Delete profile
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         }
       />
@@ -437,22 +436,22 @@ export default function AppProfileDetail() {
           ) : null}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {coreFeatures.length > 0 ? (
-              <SectionCard eyebrow="Core features">
+              <SectionCard>
                 <ChipList label="Core features" items={coreFeatures} />
               </SectionCard>
             ) : null}
             {useCases.length > 0 ? (
-              <SectionCard eyebrow="Primary use cases">
+              <SectionCard>
                 <ChipList label="Primary use cases" items={useCases} />
               </SectionCard>
             ) : null}
             {problems.length > 0 ? (
-              <SectionCard eyebrow="Problems solved">
+              <SectionCard>
                 <ChipList label="Problems solved" items={problems} />
               </SectionCard>
             ) : null}
             {outcomes.length > 0 ? (
-              <SectionCard eyebrow="Desired outcomes">
+              <SectionCard>
                 <ChipList label="Desired outcomes" items={outcomes} />
               </SectionCard>
             ) : null}
@@ -460,17 +459,17 @@ export default function AppProfileDetail() {
           {profile?.differentiation || profile?.known_limitations || profile?.proof_moment ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {profile?.differentiation ? (
-                <SectionCard eyebrow="Differentiators">
+                <SectionCard>
                   <Field label="Differentiators" value={profile.differentiation} />
                 </SectionCard>
               ) : null}
               {profile?.known_limitations ? (
-                <SectionCard eyebrow="Known limitations">
+                <SectionCard>
                   <Field label="Known limitations" value={profile.known_limitations} />
                 </SectionCard>
               ) : null}
               {profile?.proof_moment ? (
-                <SectionCard eyebrow="The proof moment">
+                <SectionCard>
                   <Field label="The proof moment" value={profile.proof_moment} />
                 </SectionCard>
               ) : null}
@@ -483,7 +482,7 @@ export default function AppProfileDetail() {
                   than context it may use or ignore. The wording matters — the old
                   label promised the same enforcement over a field that had none. */}
               {mustNotShow.length > 0 ? (
-                <SectionCard eyebrow="Never show in the video (enforced)">
+                <SectionCard>
                   <ChipList
                     label="Never show in the video (enforced)"
                     items={mustNotShow}
@@ -492,12 +491,12 @@ export default function AppProfileDetail() {
                 </SectionCard>
               ) : null}
               {usageMoments.length > 0 ? (
-                <SectionCard eyebrow="When the app is reached for">
+                <SectionCard>
                   <ChipList label="When the app is reached for" items={usageMoments} />
                 </SectionCard>
               ) : null}
               {competitors.length > 0 ? (
-                <SectionCard eyebrow="Competitor apps">
+                <SectionCard>
                   <ChipList label="Competitor apps" items={competitors} />
                 </SectionCard>
               ) : null}
@@ -558,8 +557,35 @@ export default function AppProfileDetail() {
             )}
         </div>
 
-        {/* The rail: three lighter panels sharing one column. */}
+        {/* The rail: lighter panels sharing one column. */}
         <div className="space-y-4">
+
+          <SectionCard testid="content-angles">
+            <span className="eyebrow flex items-center gap-1.5">
+              <Target className="h-3 w-3" /> Content angles
+            </span>
+            {angles.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No audience angles yet. Generate them in Create Video or refresh this profile's research.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {angles.map((a) => (
+                  <div key={a.id} className="rounded-lg border border-[color:var(--hairline)] p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium">{a.label}</span>
+                      <Badge variant="secondary" className="text-[11px]">
+                        {a.kind ? a.kind.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Angle"}
+                      </Badge>
+                    </div>
+                    {a.user_problem && (
+                      <p className="mt-1 text-xs text-muted-foreground">{a.user_problem}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </SectionCard>
 
           {/* The only part of the profile that improves with use. Everything
               above was scraped once from the URL; this is the founder's own
