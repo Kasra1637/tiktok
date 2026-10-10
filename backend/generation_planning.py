@@ -129,8 +129,12 @@ CONDENSE_BELOW = 4500
 # on-screen-text section became a no-text rule (burned-in captions removed);
 # the condensed floor rose by 23 for the same rewrite, which states the rule
 # in full rather than pointing at a captions step that no longer exists.
-FULL_PROMPT_FLOOR = 3047
-CONDENSED_PROMPT_FLOOR = 1823
+# Both rose by 129 for the voice-only audio rule: with dialogue and music
+# synthesized in one inseparable pass, the ban has to be explicit fixed text,
+# and it applies in both modes — a music bed under the speech is wrong at any
+# budget.
+FULL_PROMPT_FLOOR = 3176
+CONDENSED_PROMPT_FLOOR = 1952
 
 # What the variables are given at the default ceiling, derived rather than
 # measured: the default ceiling is a TOTAL, and the floor is part of it.
@@ -406,7 +410,6 @@ def build_single_pass_prompt(
     script = _clip(plan.get("script"), 400)
     visual = _clip(plan.get("visual_direction"), 120)
     voice = _clip(plan.get("voice_direction"), 120)
-    sound = _clip(plan.get("sound_direction"), 120)
     tpl = template or {}
     tone = _clip(plan.get("tone") or tpl.get("tone"), 120)
 
@@ -478,13 +481,22 @@ def build_single_pass_prompt(
         sections.append(f"Camera and pacing: {pacing}")
     if voice:
         sections.append(f"Voice direction: {voice}")
+    else:
+        # A plan with no voice direction still needs a delivery: without this
+        # the model invents its own pace, usually slow and flat.
+        sections.append(
+            "Delivery: fast, upbeat, high-energy — brisk confident pace, "
+            "like a creator talking to a friend."
+        )
     if tone:
         sections.append(f"Tone: {tone}")
-    if sound:
-        sections.append(
-            f"Sound direction: {sound}. Use only original or licensed audio; "
-            f"do not reference or imitate a specific commercial recording."
-        )
+    # Voice-only audio, stated outright rather than read from the plan: music
+    # is banned from these renders, so the founder's saved sound direction —
+    # which this line used to print — is deliberately not read here.
+    sections.append(
+        "The only audio is the presenter's spoken voice. No background music, "
+        "no songs, no ambient music, no sound effects — voice only."
+    )
     # No call to action is appended, deliberately. The plan no longer carries a
     # `cta` field and the strategy no longer carries `cta_strategy`; the founder
     # adds their own in their editor. Reading a stale value here would put a
@@ -1097,6 +1109,13 @@ def _assemble_prompt(
     sections.append(
         "No text appears on screen at all — no captions, no titles, no labels. "
         "Render a clean frame and do not draw any text yourself."
+    )
+    # Voice-only audio, stated outright: the model synthesizes dialogue and
+    # music in one pass with no way to separate them afterwards, so without
+    # this every render arrives with a music bed under the speech.
+    sections.append(
+        "The only audio is the presenter's spoken voice. No background music, "
+        "no songs, no ambient music, no sound effects — voice only."
     )
     # The condensed handoff block above already carries this prohibition, merged
     # so the same rule is not stated twice on a budget that cannot afford it.

@@ -2017,23 +2017,13 @@ if (step === 3) {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Voice direction</label>
-                <Textarea
-                  value={editValue("voice_direction", "")}
-                  onChange={(e) => setEdits({ ...edits, voice_direction: e.target.value })}
-                  className="min-h-[70px]"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Sound direction</label>
-                <Textarea
-                  value={editValue("sound_direction", "")}
-                  onChange={(e) => setEdits({ ...edits, sound_direction: e.target.value })}
-                  className="min-h-[70px]"
-                />
-              </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Voice direction</label>
+              <Textarea
+                value={editValue("voice_direction", "")}
+                onChange={(e) => setEdits({ ...edits, voice_direction: e.target.value })}
+                className="min-h-[70px]"
+              />
             </div>
 
             <span className="eyebrow block">Checks</span>

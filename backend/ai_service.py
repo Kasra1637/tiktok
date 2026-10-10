@@ -2096,7 +2096,7 @@ async def generate_creative_plan(
         '  "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "what happens and what is said"}, {"start": 3, "end": 10, "label": "middle", "text": "what happens and what is said"}],\n'
         '  "visual_direction": "what the camera shows across both sections, as one paragraph",\n'
         '  "demo_brief": "ONE sentence telling the FOUNDER what to record for their own demo. This never reaches the generated video.",\n'
-        '  "voice_direction": "delivery direction for the voiceover or on-camera talent",\n'
+        '  "voice_direction": "delivery direction for the voiceover or on-camera talent — default to fast, upbeat, high-energy delivery",\n'
         '  "sound_direction": "sound and music direction, rights-safe (no named commercial tracks)",\n'
         '  "claims_used": ["exact strings from claims.approved that appear in the script"]\n'
         "}\n"
@@ -3036,7 +3036,7 @@ async def generate_video_strategy(
         '  },\n'
         '  "performance": {\n'
         f'    "movement": "how they move and what they do with their hands and face",\n'
-        f'    "voice_delivery": "tone, pace and energy of the voice",\n'
+        f'    "voice_delivery": "tone, pace and energy of the voice — default to fast, upbeat, high-energy delivery unless the plan says otherwise",\n'
         '  },\n'
         '  "segments": [\n'
         f'    {{"index": 0, "role": "hook", "seconds": {hook_seconds}, "goal": "what these seconds must achieve",'

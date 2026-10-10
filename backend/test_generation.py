@@ -618,9 +618,33 @@ class TestSinglePassPrompt:
         prompt = gp.build_single_pass_prompt(PLAN, PROFILE, TEMPLATE, 20)
         assert "CONTINUES an existing video" not in prompt
 
-    def test_sound_direction_forbids_named_commercial_tracks(self):
+    def test_the_fallback_bans_background_music(self):
+        """
+        Dialogue and music arrive in one inseparable native-audio pass, so the
+        ban has to be explicit prompt text — otherwise every fallback render
+        arrives with a music bed under the speech. The founder's saved sound
+        direction is deliberately not read: music is banned from these renders,
+        so printing it would hand the model an instruction the product overrides.
+        """
         prompt = gp.build_single_pass_prompt(PLAN, PROFILE, TEMPLATE, 20)
-        assert "licensed audio" in prompt
+        assert "No background music" in prompt
+        assert "voice only" in prompt
+        assert "Sound direction:" not in prompt
+        # The fixture's own sound direction must not leak through either.
+        assert "Lo-fi bed" not in prompt
+        assert "licensed audio" not in prompt
+
+    def test_the_fallback_defaults_to_energetic_delivery(self):
+        """
+        A plan with no voice direction still needs a delivery: without this the
+        model invents its own pace, usually slow and flat. A plan that HAS one
+        keeps it — the default only fills the gap.
+        """
+        voiceless = {k: v for k, v in PLAN.items() if k != "voice_direction"}
+        prompt = gp.build_single_pass_prompt(voiceless, PROFILE, TEMPLATE, 20)
+        assert "fast, upbeat, high-energy" in prompt
+        voiced = gp.build_single_pass_prompt(PLAN, PROFILE, TEMPLATE, 20)
+        assert "Voice direction: Warm and unhurried" in voiced
 
     def test_no_composited_assets_section(self):
         # Face-only product: the photograph is covered by the person anchor
@@ -816,6 +840,20 @@ class TestRenderPromptLengthCap:
             f"verbose render prompt is {len(prompt)} chars, over the "
             f"{gp.RENDER_PROMPT_LIMIT} ceiling — a submit this long 400s."
         )
+
+    def test_the_render_bans_background_music(self):
+        """
+        Same inseparable-track problem as the fallback: the main path never
+        had a sound section at all, so music arrived purely on model defaults.
+        The ban is fixed text, unconditional on strategy content, so an empty
+        strategy already carries it.
+        """
+        prompt = gp.build_segment_prompt(
+            strategy={}, profile={}, template={}, duration=12,
+            assets={}, plan={"hook_seconds": 3},
+        )
+        assert "No background music" in prompt
+        assert "voice only" in prompt
 
     def test_clipping_never_amputates_the_identity_close(self):
         """

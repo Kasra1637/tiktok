@@ -1533,6 +1533,24 @@ class TestPlanPromptSeesCompetitors:
         assert "state anything factual about a competitor" in prompt
         assert "never put a competitor's name" in prompt
 
+    def test_plan_prompt_seeds_energetic_voice_default(self, monkeypatch):
+        """
+        Same no-knob problem one step earlier: the plan's voice_direction is
+        what the founder sees and edits on Review, and what the strategy model
+        later copies into voice_delivery — so the seed has to ask for fast and
+        energetic here, or flat delivery is baked in two steps before the render.
+        """
+        import ai_service
+        captured = self._capture(monkeypatch)
+        asyncio.run(ai_service.generate_creative_plan(
+            profile={"brand_name": "ShiftLog"},
+            template={"name": "T"},
+            objective="address_user_problem",
+            duration_seconds=20,
+        ))
+        prompt = json.dumps(captured["messages"])
+        assert "fast, upbeat, high-energy delivery" in prompt
+
 
 class TestSpokenBudgetReachesThePlanPrompt:
     """

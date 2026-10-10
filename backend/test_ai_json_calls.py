@@ -371,6 +371,43 @@ class TestStrategyBudget:
         # not pitch it.
         assert '"primary_feature": "the ONE feature this video shows' in prompt
 
+    def test_the_strategy_schema_defaults_to_energetic_delivery(self, monkeypatch):
+        """
+        Delivery has no numeric knob on any provider — the only lever is the
+        prose the strategy model writes into voice_delivery, so the schema
+        must ask for fast and energetic up front. Otherwise every strategy
+        invents its own pace, usually slow and flat, and the scene lock then
+        enforces exactly that.
+        """
+        import ai_service
+
+        captured = {}
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return {
+                "strategy_summary": "s", "audience_problem": "p",
+                "emotional_triggers": ["t"], "hook_concept": "c",
+                "hook_line": "h", "hook_promise": "p", "hook_action": "a",
+                "messaging_pillars": ["m"], "primary_feature": "f",
+                "desired_outcome": "o", "mechanism_beat": "mb",
+                "payoff_beat": "pb", "differentiation_beat": "b",
+                "scene": {"environment": "kitchen"},
+                "performance": {"movement": "still"},
+                "segments": [{"index": 0, "role": "hook", "seconds": 3,
+                              "goal": "g", "script": "s", "action": "a"},
+                             {"index": 1, "role": "middle", "seconds": 17,
+                              "goal": "g", "script": "s", "action": "a"}],
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        asyncio.run(ai_service.generate_video_strategy(
+            profile={"brand_name": "Sleeply"},
+            template={"name": "T", "hook_seconds": 3},
+            hook_seconds=3,
+        ))
+        assert "fast, upbeat, high-energy" in captured["prompt"]
+
     def test_a_fully_populated_prompt_stays_under_a_ceiling(self, monkeypatch):
         """
         The guard I promised and did not write the first time.
