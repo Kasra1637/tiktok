@@ -291,8 +291,8 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           <ShieldQuestion className="h-4 w-4 text-[color:var(--brand-indigo)]" />
           <AlertTitle>No character reference attached</AlertTitle>
           <AlertDescription>
-            Attach a <code>character_reference</code> image on the Template &amp; photo step, or the
-            presenter will be invented by the model rather than being you.
+            Attach a <code>character_reference</code> image on the Template &amp; photo step. Otherwise,
+            the model will invent the presenter instead of using you.
           </AlertDescription>
         </Alert>
       )}
@@ -491,13 +491,12 @@ export function HookContinuityPanel({ project, onProjectChange }) {
                 <AlertTriangle className="h-4 w-4" />
                 <AlertTitle>Your script does not all fit in the middle</AlertTitle>
                 <AlertDescription>
-                  {project.spoken_overflow.dropped_chars} characters of your approved script
-                  do not fit in a {project.spoken_overflow.middle_seconds}s middle
-                  (spoken budget: {project.spoken_overflow.budget} characters). Anything
-                  past that is not spoken in the render. Shorten it on the Review
-                  step, or press Regenerate plan there — a generated plan is trimmed
-                  to fit on arrival — then rebuild the strategy here. Or pick a
-                  longer template and rebuild.
+                  Your approved script has {project.spoken_overflow.dropped_chars} characters that
+                  do not fit in the {project.spoken_overflow.middle_seconds}s middle (spoken budget:
+                  {project.spoken_overflow.budget} characters). Anything past that is not spoken in
+                  the render. Shorten it on the Review step, or press Regenerate plan there — a
+                  generated plan is trimmed to fit on arrival — then rebuild the strategy here. Or
+                  pick a longer template and rebuild.
                 </AlertDescription>
               </Alert>
             )}

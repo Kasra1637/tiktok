@@ -94,7 +94,7 @@ function AttachedReference({ attachment, onDetach, busy }) {
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-3">
       <span className="min-w-0 flex-1 truncate text-sm font-medium">{name}</span>
-      <span className="shrink-0 text-xs text-muted-foreground">used for the whole video</span>
+      <span className="shrink-0 text-xs text-muted-foreground">Used for the whole video</span>
       {onDetach && (
         <Button
           variant="ghost"
@@ -165,7 +165,7 @@ function AssetRow({
             )}
             {Number(asset.face_count) >= 2 && (
               <Badge variant="outline" className="text-[11px]">
-                {asset.face_count} faces — may be flagged
+                Faces detected: {asset.face_count} — may be flagged
               </Badge>
             )}
             {attachable && attached && (
@@ -777,7 +777,7 @@ export default function AssetLibrary({
           <Input
             value={label}
             onChange={(e) => setLabel(e.target.value)}
-            placeholder="Optional label, e.g. Founder photo"
+            placeholder="Optional label — for example: Founder photo"
             aria-label="Optional photo label"
           />
           <Button variant="brand" onClick={() => fileRef.current?.click()} disabled={busy}>

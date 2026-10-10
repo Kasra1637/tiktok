@@ -621,7 +621,7 @@ export default function BrandSetup() {
                 <Input
                   value={form.brand_name}
                   onChange={handleFieldChange("brand_name")}
-                  placeholder="e.g. Voxel — Voice Journaling App"
+                  placeholder="For example: Voxel — Voice Journaling App"
                   data-testid="brand-name-field"
                 />
               </Field>
@@ -641,7 +641,7 @@ export default function BrandSetup() {
                   <Input
                     value={form.app_category}
                     onChange={handleFieldChange("app_category")}
-                    placeholder="e.g. Health & Fitness"
+                    placeholder="For example: Health & Fitness"
                     data-testid="app-category-field"
                   />
                 </Field>
@@ -649,7 +649,7 @@ export default function BrandSetup() {
                   <Input
                     value={form.niche}
                     onChange={handleFieldChange("niche")}
-                    placeholder="e.g. Fitness supplements"
+                    placeholder="For example: Fitness supplements"
                     data-testid="brand-niche-field"
                   />
                 </Field>
@@ -660,7 +660,7 @@ export default function BrandSetup() {
                   <Input
                     value={form.platforms}
                     onChange={handleFieldChange("platforms")}
-                    placeholder="e.g. iOS, Android"
+                    placeholder="For example: iOS, Android"
                     data-testid="app-platforms-field"
                   />
                 </Field>
@@ -670,7 +670,7 @@ export default function BrandSetup() {
                 <Input
                   value={form.core_features}
                   onChange={handleFieldChange("core_features")}
-                  placeholder="Comma-separated, e.g. Voice journaling, Reminders"
+                  placeholder="Comma-separated, for example: Voice journaling, Reminders"
                   data-testid="app-features-field"
                 />
               </Field>
@@ -679,7 +679,7 @@ export default function BrandSetup() {
                 <Input
                   value={form.primary_use_cases}
                   onChange={handleFieldChange("primary_use_cases")}
-                  placeholder="Comma-separated, e.g. Evening reflection, Habit tracking"
+                  placeholder="Comma-separated, for example: Evening reflection, Habit tracking"
                   data-testid="app-usecases-field"
                 />
               </Field>
@@ -688,7 +688,7 @@ export default function BrandSetup() {
                 <Input
                   value={form.problems_solved}
                   onChange={handleFieldChange("problems_solved")}
-                  placeholder="Comma-separated, e.g. Forgetting to journal, Blank-page friction"
+                  placeholder="Comma-separated, for example: Forgetting to journal, Blank-page friction"
                   data-testid="app-problems-field"
                 />
               </Field>
@@ -697,7 +697,7 @@ export default function BrandSetup() {
                 <Input
                   value={form.desired_outcomes}
                   onChange={handleFieldChange("desired_outcomes")}
-                  placeholder="Comma-separated, e.g. Consistent journaling habit"
+                  placeholder="Comma-separated, for example: Consistent journaling habit"
                   data-testid="app-outcomes-field"
                 />
               </Field>
@@ -730,7 +730,7 @@ export default function BrandSetup() {
                   <Input
                     value={form.competitors}
                     onChange={handleFieldChange("competitors")}
-                    placeholder="e.g. Day One, Journey"
+                    placeholder="For example: Day One, Journey"
                     data-testid="app-competitors-field"
                   />
                 </Field>
@@ -738,7 +738,7 @@ export default function BrandSetup() {
                   <Input
                     value={form.target_audience}
                     onChange={handleFieldChange("target_audience")}
-                    placeholder="e.g. Busy professionals 25-40"
+                    placeholder="For example: Busy professionals 25-40"
                     data-testid="brand-audience-field"
                   />
                 </Field>
@@ -757,7 +757,7 @@ export default function BrandSetup() {
                   onChange={(e) =>
                     setForm((prev) => ({ ...prev, must_not_show: e.target.value }))
                   }
-                  placeholder={"One per line, e.g.\nA hospital corridor\nA competitor's app icon\nAnyone under 18"}
+                  placeholder={"One per line, for example:\nA hospital corridor\nA competitor's app icon\nAnyone under 18"}
                   className="min-h-[80px]"
                   data-testid="app-must-not-show-field"
                 />
@@ -776,7 +776,7 @@ export default function BrandSetup() {
                   onChange={(e) =>
                     setForm((prev) => ({ ...prev, usage_moments: e.target.value }))
                   }
-                  placeholder={"One per line, e.g.\nEnd of a night shift\n7am before the house wakes up\nPayday"}
+                  placeholder={"One per line, for example:\nEnd of a night shift\n7am before the house wakes up\nPayday"}
                   className="min-h-[80px]"
                   data-testid="app-usage-moments-field"
                 />
@@ -789,7 +789,7 @@ export default function BrandSetup() {
                 <Input
                   value={form.proof_moment}
                   onChange={handleFieldChange("proof_moment")}
-                  placeholder="e.g. The envelope splits the moment the transfer lands"
+                  placeholder="For example: The envelope splits the moment the transfer lands"
                   data-testid="app-proof-moment-field"
                 />
               </Field>
@@ -829,7 +829,7 @@ export default function BrandSetup() {
                 <Textarea
                   value={form.icp_segments}
                   onChange={handleFieldChange("icp_segments")}
-                  placeholder={"One per line, e.g.\nBusy parents — 2-minute evening check-ins"}
+                  placeholder={"One per line, for example:\nBusy parents — 2-minute evening check-ins"}
                   className="min-h-[80px]"
                   data-testid="app-icp-segments-field"
                 />
@@ -849,7 +849,7 @@ export default function BrandSetup() {
                 <Input
                   value={form.tone_voice}
                   onChange={handleFieldChange("tone_voice")}
-                  placeholder="e.g. Playful, high-energy, no-nonsense"
+                  placeholder="For example: Playful, high-energy, no-nonsense"
                   data-testid="brand-tone-field"
                 />
               </Field>
@@ -876,7 +876,7 @@ export default function BrandSetup() {
                 <Input
                   value={form.claims_banned}
                   onChange={handleFieldChange("claims_banned")}
-                  placeholder="Comma-separated, e.g. Guaranteed results, Fake reviews"
+                  placeholder="Comma-separated, for example: Guaranteed results, Fake reviews"
                   data-testid="app-claims-banned-field"
                 />
               </Field>

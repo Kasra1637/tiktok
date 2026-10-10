@@ -397,11 +397,10 @@ const handleGenerate = async () => {
         <Alert variant="destructive" data-testid="generate-overflow-blocked">
           <AlertTitle>Script too long for this piece</AlertTitle>
           <AlertDescription>
-            {project.spoken_overflow.dropped_chars} characters of your approved script do not
-            fit in a {project.spoken_overflow.middle_seconds}s middle. A generated
-            plan is trimmed to fit on arrival, so this is your own edit above —
-            shorten it, or press Regenerate plan on the Review step, then rebuild the
-            strategy and generate.
+            Your approved script has {project.spoken_overflow.dropped_chars} characters that do not
+            fit in the {project.spoken_overflow.middle_seconds}s middle. A generated plan is trimmed
+            to fit on arrival, so this is your own edit above — shorten it, or press Regenerate plan
+            on the Review step, then rebuild the strategy and generate.
           </AlertDescription>
         </Alert>
       )}

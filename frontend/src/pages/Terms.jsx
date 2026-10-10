@@ -24,13 +24,13 @@ export default function Terms() {
       <LegalSection number={3} title="User Responsibilities">
         <p>You agree to:</p>
         <LegalList>
-          <LegalItem><strong>Only upload assets</strong> you own or have explicit permission to use for app promotion</LegalItem>
-          <LegalItem><strong>Use approved product facts</strong> and avoid fabricated features, pricing, reviews, testimonials, or guaranteed outcomes</LegalItem>
+          <LegalItem><strong>Only upload assets</strong> that you own or have explicit permission to use for app promotion</LegalItem>
+          <LegalItem><strong>Use approved product facts</strong> and avoid fabricating features, pricing, reviews, testimonials, or guaranteed outcomes</LegalItem>
           <LegalItem><strong>Not create misleading content</strong> that could deceive others about a product, person, or result</LegalItem>
-          <LegalItem><strong>Not use the app for harassment,</strong> impersonation without consent, or creation of non-consensual intimate imagery</LegalItem>
-          <LegalItem><strong>Comply with all applicable laws</strong> regarding AI-generated content and digital media in your jurisdiction</LegalItem>
+          <LegalItem><strong>Not use the app for harassment,</strong> impersonate others without consent, or create non-consensual intimate imagery</LegalItem>
+          <LegalItem><strong>Comply with all applicable laws</strong> that govern AI-generated content and digital media in your jurisdiction</LegalItem>
           <LegalItem><strong>Respect TikTok creators' content</strong> — the app is for inspiration and reusable mechanics, not direct copying or plagiarism</LegalItem>
-          <LegalItem><strong>Not use generated content</strong> in ways that violate TikTok's, Instagram's, or any platform's community guidelines</LegalItem>
+          <LegalItem><strong>Not use generated content</strong> in a way that violates TikTok's, Instagram's, or any other platform's community guidelines</LegalItem>
         </LegalList>
       </LegalSection>
 

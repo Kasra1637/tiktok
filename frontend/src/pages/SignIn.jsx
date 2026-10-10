@@ -28,8 +28,8 @@ export default function SignIn() {
           <div className="surface-solid w-full max-w-[400px] rounded-2xl text-center">
             <p className="font-display text-sm font-semibold">Authentication isn&apos;t configured</p>
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              Set <code className="font-mono">REACT_APP_CLERK_PUBLISHABLE_KEY</code> at build time to
-              enable sign in. Until then the app runs without accounts.
+              Set <code className="font-mono">REACT_APP_CLERK_PUBLISHABLE_KEY</code> at build time.
+              This enables sign in; until then, the app runs without accounts.
             </p>
             <Link
               to="/"

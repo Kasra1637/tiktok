@@ -273,7 +273,7 @@ export default function Landing() {
           >
             <span className="text-shine">Give your app a story</span>
             <br />
-            <span className="text-gradient-brand">worth watching.</span>
+            <span className="text-gradient-brand">Worth watching.</span>
           </h1>
 
           <p

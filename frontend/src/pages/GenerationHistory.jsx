@@ -136,7 +136,7 @@ function PerformanceForm({ generation, onSaved, openInitially = false }) {
         <Input
           value={form.notes}
           onChange={(e) => setForm({ ...form, notes: e.target.value })}
-          placeholder="Notes, e.g. posted 3pm"
+          placeholder="Notes, e.g. Posted 3pm"
           aria-label="Notes"
         />
       </div>
