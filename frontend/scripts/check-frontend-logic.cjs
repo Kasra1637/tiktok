@@ -280,7 +280,7 @@ console.log("-".repeat(70));
 // product does not generate.
 const TWO = [
   { index: 0, role: "hook", seconds: 3, goal: "stop the scroll", script: "You do not have a focus problem.", action: "look up" },
-  { index: 1, role: "middle", seconds: 7, goal: "develop it, stop at the reach", script: "You have too many lists.", action: "count on fingers" },
+  { index: 1, role: "middle", seconds: 7, goal: "Develop it, stop at the reach", script: "You have too many lists.", action: "count on fingers" },
 ];
 const shown = L.plannedSections({ segments: TWO });
 check("a well-formed strategy shows two sections", shown.length === 2, shown.length);
@@ -288,7 +288,7 @@ check("the first is the hook", shown[0].role === "hook", shown[0].role);
 check("the second is the middle", shown[1].role === "middle", shown[1].role);
 check("the seconds survive", shown[0].seconds === 3 && shown[1].seconds === 7, shown);
 check("the goal, script and action survive",
-  shown[1].goal === "develop it, stop at the reach" && shown[1].action === "count on fingers",
+  shown[1].goal === "Develop it, stop at the reach" && shown[1].action === "count on fingers",
   shown[1]);
 check("the roles come from position, not from the model",
   L.plannedSections({ segments: [{ role: "cta" }, { role: "fix" }] }).map((s) => s.role).join() === "hook,middle",
@@ -858,6 +858,47 @@ check("other statuses keep their own message",
 check("nothing usable falls back to a generic line",
   EM.errorMessageFor({}) === "Something went wrong. Please try again.");
 
+// ---------------------------------------------------------------------------
+// copyCase.js -- the last mile of the capitalization passes.
+//
+// The source was swept twice for lowercase copy that ships to the founder
+// (0e40336, 91e5931). Neither could reach text a MODEL wrote: angles, tailored
+// template outcomes and strategy fields are generated from schema examples that
+// read like "the concrete problem this angle speaks to", so every one of them
+// opens lowercase and renders that way.
+//
+// These assertions exist because getting this wrong in the obvious direction is
+// silent. A naive .replace(/^./) on the six JSX continuation literals in
+// CreateVideo.jsx turns "Hook + Story " + "before rendering" into "Hook + Story
+// Before rendering" -- a real sentence, broken. So the first, second and third
+// cases below are the shapes a careless version produces.
+const SC = loadModule(path.resolve(__dirname, "..", "src", "lib", "copyCase.js"));
+
+check("a lowercase opening sentence is capitalized",
+  SC.sentenceCase("develop it, stop at the reach") === "Develop it, stop at the reach",
+  SC.sentenceCase("develop it, stop at the reach"));
+check("a second sentence after a full stop is capitalized too",
+  SC.sentenceCase("nothing gets finished. it stays with them")
+    === "Nothing gets finished. It stays with them",
+  SC.sentenceCase("nothing gets finished. it stays with them"));
+check("text that is already correct is returned untouched",
+  SC.sentenceCase("Leaves them wanting the answer.") === "Leaves them wanting the answer.");
+check("a leading email is never touched -- a broken mailto is worse than a lowercase letter",
+  SC.sentenceCase("privacy@hookforge.app is the address") === "privacy@hookforge.app is the address",
+  SC.sentenceCase("privacy@hookforge.app is the address"));
+check("a leading bare domain is left alone rather than link-broken",
+  SC.sentenceCase("taskly.com/sync is where it happens") === "taskly.com/sync is where it happens",
+  SC.sentenceCase("taskly.com/sync is where it happens"));
+check("a value that does not open with a letter is out of scope",
+  SC.sentenceCase("9:16 pacing keeps it vertical") === "9:16 pacing keeps it vertical",
+  SC.sentenceCase("9:16 pacing keeps it vertical"));
+check("empty, null and undefined are empty strings, not crashes",
+  SC.sentenceCase("") === "" && SC.sentenceCase(null) === "" && SC.sentenceCase(undefined) === "");
+check("the trimmed variant strips leading and trailing whitespace",
+  SC.sentenceCaseTrimmed("  stops mid-scroll  ") === "Stops mid-scroll",
+  SC.sentenceCaseTrimmed("  stops mid-scroll  "));
+
+// ---------------------------------------------------------------------------
 console.log("\n" + "=".repeat(70));
 if (failures.length === 0) {
   console.log("All frontend length/section logic behaves correctly.");

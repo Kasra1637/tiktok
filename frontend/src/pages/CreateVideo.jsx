@@ -25,6 +25,7 @@ import {
 import {
   blockingRequirements,
 } from "../lib/templateRequirements";
+import { sentenceCase } from "../lib/copyCase";
 import {
   readPieceSeconds,
   sectionSplit,
@@ -133,9 +134,11 @@ function RecommendationCard({ r, selected, onSelect }) {
   // The viewer-facing outcome, when the row carries one. Curated rows always
   // do; tailored rows do once regenerated. Rendered as the card's lead line
   // in body weight so the first thing read is the result, not the mechanic.
+  // Tailored rows are model-written, so this can open lowercase next to the
+  // hand-written recommendation copy on the same card.
   const outcome =
     typeof r.template.outcome === "string" && r.template.outcome.trim()
-      ? r.template.outcome.trim()
+      ? sentenceCase(r.template.outcome.trim())
       : "";
   return (
     <div
@@ -1690,7 +1693,13 @@ export default function CreateVideo() {
                         </span>
                       </div>
                       {a.user_problem && (
-                        <p className="mt-1 text-xs text-muted-foreground">{a.user_problem}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {/* Generated text: the angle prompt's schema example is a
+                              lowercase fragment, so every angle this app has ever
+                              produced opens lowercase. Normalized at display so
+                              rows already in the database are fixed too. */}
+                          {sentenceCase(a.user_problem)}
+                        </p>
                       )}
                     </button>
                   ))}
@@ -1841,9 +1850,11 @@ export default function CreateVideo() {
                     secondary label. Director-speak (opening_structure) follows
                     in muted text for the founder who wants the how. */}
                 {typeof template.outcome === "string" && template.outcome.trim() && (
-                  <p className="mt-1 text-sm text-foreground/90">{template.outcome.trim()}</p>
+                  /* Tailored templates are model-written, so this line can open
+                     lowercase next to the hand-written copy above it. */
+                  <p className="mt-1 text-sm text-foreground/90">{sentenceCase(template.outcome.trim())}</p>
                 )}
-                <p className="mt-1 text-xs text-muted-foreground">{template.opening_structure}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{sentenceCase(template.opening_structure)}</p>
                 <TemplateShape template={template} />
                 {/* The requirement is stated in one line rather than as a
                     checklist. It was a fourth place the same photograph was
@@ -2164,7 +2175,7 @@ if (step === 3) {
             {typeof template?.outcome === "string" && template.outcome.trim() && (
               <div className="rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4">
                 <span className="eyebrow block">What this is aiming to leave them with</span>
-                <p className="mt-1 text-sm">{template.outcome.trim()}</p>
+                <p className="mt-1 text-sm">{sentenceCase(template.outcome.trim())}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   The outcome this template is built for, in the viewer&apos;s terms. The script
                   below is written to it — a framing, not a result this video can promise.

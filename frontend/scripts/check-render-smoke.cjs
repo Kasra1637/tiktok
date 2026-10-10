@@ -1399,7 +1399,7 @@ async function main() {
     // The goal, straight from the strategy â€” this is the review surface's
     // reason to exist, so it has to reach the screen and not just be fetched.
     expectText(ctx, "stop the scroll", "the hook's goal did not render");
-    expectText(ctx, "develop it, stop at the reach", "the middle's goal did not render");
+    expectText(ctx, "Develop it, stop at the reach", "the middle's goal did not render");
   });
 
   // The three outcome fields already govern the whole render -- the segment

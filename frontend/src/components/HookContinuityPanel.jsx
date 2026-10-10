@@ -4,6 +4,7 @@ import { Badge } from "./ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage } from "../lib/api";
 import { plannedSections } from "../lib/videoLength";
+import { sentenceCase } from "../lib/copyCase";
 import {
   Loader2, AlertTriangle, Info, MapPin, ShieldQuestion, Sparkles, Target,
 } from "lucide-react";
@@ -104,7 +105,7 @@ function StrategyBlock({ title, icon: Icon, rows, description }) {
             <dt className="text-xs font-medium text-muted-foreground">
               {strategyLabel(label)}
             </dt>
-            <dd className="mt-0.5 text-sm leading-snug">{String(value)}</dd>
+            <dd className="mt-0.5 text-sm leading-snug">{sentenceCase(String(value))}</dd>
           </div>
         ))}
       </dl>
@@ -126,7 +127,8 @@ const SECTION_COPY = {
  * asked for and what the render will produce.
  */
 function SectionRow({ section }) {
-  const goal = section.goal;
+  // Model-written, so normalized at display like every other generated field.
+  const goal = sentenceCase(section.goal);
   return (
     <li className="space-y-1">
       <div className="flex flex-wrap items-center gap-2">
@@ -136,7 +138,7 @@ function SectionRow({ section }) {
       <p className="text-xs text-muted-foreground">{SECTION_COPY[section.role]}</p>
       {goal && <p className="text-sm">{goal}</p>}
       {section.action && (
-        <p className="text-sm text-muted-foreground">What they do: {section.action}</p>
+        <p className="text-sm text-muted-foreground">What they do: {sentenceCase(section.action)}</p>
       )}
       {/* The words the viewer hears, which is the entire point of this panel
           and was missing from it. These are the founder's approved words: the
@@ -148,7 +150,7 @@ function SectionRow({ section }) {
       {typeof section.script === "string" && section.script.trim() && (
         <p className="text-sm" data-testid={`section-spoken-${section.role}`}>
           <span className="font-medium">What is said here: </span>
-          {section.script.trim()}
+          {sentenceCase(section.script.trim())}
         </p>
       )}
     </li>
@@ -418,7 +420,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
         <div className="space-y-3 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-3">
           <div className="space-y-1">
             <span className="eyebrow">Hook concept</span>
-            <p className="text-sm">{strategy.hook_concept}</p>
+            <p className="text-sm">{sentenceCase(strategy.hook_concept)}</p>
             {/* The hook line itself is NOT printed here. It is the same string as
                 the Review step's "Hook line", verbatim, because the strategy
                 prompt is told to echo the founder-approved line rather than write
@@ -433,7 +435,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           </div>
           <div className="space-y-1">
             <span className="eyebrow">Why this works for this app</span>
-            <p className="text-sm">{strategy.strategy_summary}</p>
+            <p className="text-sm">{sentenceCase(strategy.strategy_summary)}</p>
           </div>
           {/* The three outcome fields, shown because they already govern the
               whole render (generation_planning reads them into the segment
