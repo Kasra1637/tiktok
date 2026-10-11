@@ -5,6 +5,7 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Alert, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
+import PageFrame from "../components/PageFrame";
 import SectionCard from "../components/SectionCard";
 import EmptyState from "../components/EmptyState";
 import { api, getErrorMessage, mediaUrl, durableMediaUrl } from "../lib/api";
@@ -197,7 +198,7 @@ function EditorRoute({ generationId }) {
 export function DemoCtaStudio() {
   const { generationId } = useParams();
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-5">
+    <PageFrame className="space-y-5">
       <PageHeader
         icon={Smartphone}
         eyebrow="Studio"
@@ -216,7 +217,7 @@ export function DemoCtaStudio() {
       {/* Full-width and below the two-column editor: a second way in, not a
           competing column competing for the same height. */}
       {!generationId && <SourcePicker />}
-    </div>
+    </PageFrame>
   );
 }
 

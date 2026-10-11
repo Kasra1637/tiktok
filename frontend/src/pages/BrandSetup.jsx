@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { rememberCurrentAppId } from "../lib/currentApp";
+import { cn } from "../lib/utils";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import PageHeader from "../components/PageHeader";
+import PageFrame, { PAGE_WIDTH_CLASS } from "../components/PageFrame";
 import { api, getErrorMessage } from "../lib/api";
 import { Sparkles, Briefcase, Loader as Loader2, Save, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ArrowRight, Smartphone, RefreshCw, BadgeCheck } from "lucide-react";
 import { toast } from "sonner";
@@ -388,7 +390,7 @@ export default function BrandSetup() {
     .map((s) => s.label);
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6">
+    <PageFrame width="narrow" className="space-y-6">
       <PageHeader
         icon={Briefcase}
         title="App Profile"
@@ -889,7 +891,7 @@ export default function BrandSetup() {
           was meant to remove. */}
       {researchedProfile && (
         <div className="sticky bottom-0 z-10 border-t border-[color:var(--hairline)] bg-background/80 py-4 backdrop-blur-sm">
-          <div className="mx-auto flex w-full max-w-6xl items-center gap-3">
+          <div className={cn(PAGE_WIDTH_CLASS.narrow, "flex items-center gap-3")}>
             <Button
               onClick={handleSave}
               disabled={saving}
@@ -930,6 +932,6 @@ export default function BrandSetup() {
           </div>
         </div>
       )}
-    </div>
+    </PageFrame>
   );
 }

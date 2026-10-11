@@ -6,6 +6,7 @@ import { Textarea } from "../components/ui/textarea";
 import { Badge } from "../components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
+import PageFrame from "../components/PageFrame";
 import EmptyState from "../components/EmptyState";
 import SafetyPanel from "../components/SafetyPanel";
 import HookContinuityPanel from "../components/HookContinuityPanel";
@@ -2416,14 +2417,14 @@ if (step === 3) {
 
   if (loading) {
     return (
-      <div className="space-y-6" aria-label="Loading studio" data-testid="studio-loading">
+      <PageFrame className="space-y-6">
         <div className="flex items-center gap-1.5">
           {STEPS.map((s) => (
             <span key={s.key} className="h-7 w-24 shrink-0 animate-pulse rounded-full border border-[color:var(--hairline)]" />
           ))}
         </div>
         <div className="surface rounded-2xl">
-          <div className="mx-auto w-full max-w-6xl space-y-4">
+          <div className="w-full space-y-4" aria-label="Loading studio" data-testid="studio-loading">
             <div className="flex items-start gap-3">
               <span className="h-10 w-10 shrink-0 animate-pulse rounded-xl border border-[color:var(--hairline)]" />
               <div className="flex-1 space-y-2">
@@ -2435,12 +2436,12 @@ if (step === 3) {
             <div className="h-24 animate-pulse rounded-2xl border border-[color:var(--hairline)]" />
           </div>
         </div>
-      </div>
+      </PageFrame>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6">
+    <PageFrame className="space-y-6">
       <PageHeader
         icon={Clapperboard}
         title="Create Video"
@@ -2519,9 +2520,12 @@ if (step === 3) {
         </Alert>
       )}
 
-      <div className="surface rounded-2xl">
-        <div className="mx-auto w-full max-w-6xl">{stepContent}</div>
-      </div>
+<div className="surface rounded-2xl">
+          {/* Full width: the card's own surface padding is the gutter, so the
+              step gets the whole frame like the rest of this editor page and
+              no second width value is introduced here. */}
+          <div className="w-full">{stepContent}</div>
+        </div>
 
       {/* Back and Next used to live here and were pure duplication: every step
           pill above is already a button, and clicking one leaves any step, so
@@ -2554,6 +2558,6 @@ if (step === 3) {
       <p className="text-xs text-muted-foreground" data-testid="create-no-autopost-note">
         This studio creates the Hook + Story clip only. Record and assemble your product demo and closing CTA separately; Demo + CTA styles one clip at a time and does not combine clips. Nothing is published for you.
       </p>
-    </div>
+    </PageFrame>
   );
 }

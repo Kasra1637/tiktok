@@ -14,6 +14,7 @@ import {
 } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import PageHeader from "../components/PageHeader";
+import PageFrame from "../components/PageFrame";
 import { sentenceCase } from "../lib/copyCase";
 import { ProfileCard, ProfileField, InfoChipList, InfoListBlock, CardGrid, StatementCard, SectionGroup } from "../components/profileUi";
 import { api, getErrorMessage } from "../lib/api";
@@ -314,7 +315,7 @@ export default function AppProfileDetail() {
   ]);
 
 return (
-    <div className="space-y-6">
+    <PageFrame width="narrow" className="space-y-6">
       <Button variant="ghost" size="sm" asChild className="-ml-2">
         {/* Was "All profiles" -> /app-profiles. There is no list page any
             more, and the editor is where an app is created, approved and
@@ -610,6 +611,6 @@ return (
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageFrame>
   );
 }

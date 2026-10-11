@@ -5,6 +5,7 @@ import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
+import PageFrame from "../components/PageFrame";
 import EmptyState from "../components/EmptyState";
 import { api, getErrorMessage, mediaUrl } from "../lib/api";
 import { FactChip, FactList } from "../components/FactChip";
@@ -698,7 +699,7 @@ export default function AssetLibrary({
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-4">
+    <PageFrame className="space-y-4">
       {/* Only the standalone route owns a title. Embedded, the wizard step
           header above already says this. */}
       {!embedded && (
@@ -918,6 +919,6 @@ export default function AssetLibrary({
         </div>
       )}
       </div>
-    </div>
+    </PageFrame>
   );
 }

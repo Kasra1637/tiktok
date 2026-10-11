@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Alert, AlertDescription } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
 import PageHeader from "../components/PageHeader";
+import PageFrame from "../components/PageFrame";
 import { SectionCard } from "../components/SectionCard";
 import { FactChip, FactList } from "../components/FactChip";
 import WhatWorksCard from "../components/WhatWorksCard";
@@ -317,7 +318,7 @@ export default function Analytics() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6">
+    <PageFrame className="space-y-6">
       {/* The header carries the testid rather than PageHeader: that component takes a
         fixed prop list and drops anything else, so a testid passed to it would
         silently never appear. */}
@@ -450,7 +451,7 @@ export default function Analytics() {
         is what you typed in, and is never presented as verified. Logged results feed your
         next strategy.
       </p>
-    </div>
+    </PageFrame>
   );
 }
 
