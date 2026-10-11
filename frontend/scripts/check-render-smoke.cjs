@@ -4017,6 +4017,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   await runSidebarNavChecks();
 
   console.log("");
+  console.log("Checking the icon system...");
+  await runIconChecks();
+
+  console.log("");
   console.log("Mounting the Analytics results ledger...");
   await runAnalyticsChecks();
 
@@ -4513,6 +4517,130 @@ async function runSidebarNavChecks() {
       }
     }
   );
+}
+
+/**
+ * The icon system: three sizes, and nothing that lies about its role.
+ *
+ * Icons carried the whole app's meaning at a glance, which is exactly why
+ * they drift: each page grew its own glyph and its own size for the same
+ * role, and nothing complained. Three concrete failures this pins:
+ *
+ * - A card wearing the glyph of an error. "Known limitations" is content the
+ *   founder is told to respect; drawing it with AlertTriangle -- the same
+ *   glyph as every destructive Alert -- made a content card read as broken.
+ * - A small button wearing a large icon. A 16px glyph in a size="sm" button
+ *   is a different optical weight from the same glyph at 14px, and the eye
+ *   reads it as a different control.
+ * - A dead import. A lucide icon that is imported and never rendered costs
+ *   nothing at runtime, but it is evidence: something that used to be there
+ *   was removed without taking its import, and the next reader assumes the
+ *   glyph is still in use.
+ *
+ * Sizes are read from the shipped source rather than asserted per page,
+ * because the point is that there are three sizes and no fourth.
+ */
+async function runIconChecks() {
+  const iconFiles = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        // components/ui is the vendored shadcn layer; its glyph sizing is the
+        // primitives' own contract, not this app's.
+        if (entry.name === "ui") continue;
+        walk(full);
+      } else if (entry.name.endsWith(".jsx") || entry.name.endsWith(".js")) {
+        iconFiles.push(full);
+      }
+    }
+  };
+  walk(SRC);
+
+  await check("no page imports a lucide icon it never renders", async () => {
+    const dead = [];
+    for (const abs of iconFiles) {
+      const text = fs.readFileSync(abs, "utf8");
+      const m = text.match(/import\s*\{([^}]*)\}\s*from\s*"lucide-react"/);
+      if (!m) continue;
+      const body = text.replace(m[0], "");
+      for (const raw of m[1].split(",")) {
+        const name = raw.trim().split(/\s+as\s+/).filter(Boolean).pop();
+        if (!name) continue;
+        const used = new RegExp(`\\b${name}\\b`).test(body);
+        if (!used) dead.push(`${path.relative(SRC, abs)}: ${name}`);
+      }
+    }
+    if (dead.length) {
+      throw new Error(
+        `lucide icons imported but never rendered:\n        ${dead.join("\n        ")}`
+      );
+    }
+  });
+
+  await check("a size=sm button never carries a 16px icon", async () => {
+    const bad = [];
+    for (const abs of iconFiles) {
+      const lines = fs.readFileSync(abs, "utf8").split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        if (!/size="sm"/.test(lines[i])) continue;
+        // The opening tag ends at the first line that closes it; only the
+        // children between there and </Button> are inside the button. A plain
+        // N-line window ran past </Button> into the next Alert and reported its
+        // glyph as a button's, so the span is measured rather than guessed.
+        let open = i;
+        while (open < lines.length && !/>\s*$/.test(lines[open])) open++;
+        let close = open;
+        while (close < lines.length && !/<\/Button>/.test(lines[close])) close++;
+        if (open >= lines.length || close >= lines.length) continue;
+        const children = lines.slice(open, close).join(" ");
+        const glyph = children.match(/<([A-Z][A-Za-z0-9]*)\s+className="[^"]*\bh-4\b/);
+        if (glyph) bad.push(`${path.relative(SRC, abs)}:${i + 1} ${glyph[1]}`);
+      }
+    }
+    if (bad.length) {
+      throw new Error(
+        `16px icons in size="sm" buttons (should be 14px / h-3.5):\n        ${bad.join("\n        ")}`
+      );
+    }
+  });
+
+  await check("a content card never wears the destructive-alert glyph", async () => {
+    const abs = path.join(SRC, "pages", "AppProfileDetail.jsx");
+    const src = fs.readFileSync(abs, "utf8");
+    // ProfileCard is the content card. AlertTriangle is reserved for the
+    // destructive Alerts, so a ProfileCard that names it makes a research
+    // field look like a failure.
+    for (const m of src.matchAll(/<ProfileCard[^>]*icon=\{(\w+)\}/g)) {
+      if (m[1] === "AlertTriangle") {
+        throw new Error(
+          "a ProfileCard is drawn with AlertTriangle, the glyph every " +
+            "destructive Alert uses. A content card must not read as an error."
+        );
+      }
+    }
+  });
+
+  await check("an eyebrow icon is always 12px", async () => {
+    // The one size for a glyph beside a label. A 16px glyph next to an 11px
+    // uppercase label is heavier than the label it introduces.
+    //
+    // Only the hand-written eyebrow rows are matched, not ProfileCard and
+    // SectionCard: those apply the size inside the component, and a wrapper
+    // may forward the glyph as a prop (`icon={icon}`) rather than naming one.
+    const bad = [];
+    for (const abs of iconFiles) {
+      const src = fs.readFileSync(abs, "utf8");
+      for (const m of src.matchAll(
+        /className="eyebrow flex items-center gap-1\.5">\s*<(\w+)\s+className="([^"]*)"/g
+      )) {
+        if (!/\bh-3\b/.test(m[2])) bad.push(`${path.relative(SRC, abs)} ${m[1]}: ${m[2]}`);
+      }
+    }
+    if (bad.length) {
+      throw new Error(`eyebrow icons off the 12px token:\n        ${bad.join("\n        ")}`);
+    }
+  });
 }
 
 /**

@@ -19,8 +19,8 @@ import { sentenceCase } from "../lib/copyCase";
 import { ProfileCard, ProfileField, InfoChipList, InfoListBlock, CardGrid, StatementCard, SectionGroup } from "../components/profileUi";
 import { api, getErrorMessage } from "../lib/api";
 import {
-  Briefcase, Loader2, AlertTriangle, ArrowLeft, Sparkles,
-  ShieldAlert, Lightbulb, Trash2, RefreshCw, Package, Layers,
+  Briefcase, Loader2, AlertTriangle, ArrowLeft,
+  ShieldAlert, Lightbulb, Trash2, RefreshCw, ClipboardCheck, Info, Package, Layers,
   ListChecks, Ban, CircleCheck, Flag, Zap, Eye, GitBranch,
   Clock, ThumbsDown,
 } from "lucide-react";
@@ -394,7 +394,7 @@ return (
 
       {!approved && (
         <Alert>
-          <ShieldAlert className="h-4 w-4 text-[color:var(--brand-indigo)]" />
+          <ClipboardCheck className="h-4 w-4 text-[color:var(--brand-indigo)]" />
           <AlertTitle>Review and approve before generating</AlertTitle>
           <AlertDescription className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
             <span className="text-muted-foreground">
@@ -482,7 +482,7 @@ return (
             {profile?.known_limitations || profile?.proof_moment ? (
               <div className="flex h-full min-w-0 flex-col gap-4">
                 {profile?.known_limitations ? (
-                    <ProfileCard eyebrow="Known limitations" icon={AlertTriangle}>
+                    <ProfileCard eyebrow="Known limitations" icon={Info}>
                     <ProfileField label="Known limitations" value={profile.known_limitations} />
                   </ProfileCard>
                 ) : null}

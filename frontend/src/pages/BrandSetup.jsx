@@ -10,7 +10,7 @@ import { Badge } from "../components/ui/badge";
 import PageHeader from "../components/PageHeader";
 import PageFrame, { PAGE_WIDTH_CLASS } from "../components/PageFrame";
 import { api, getErrorMessage } from "../lib/api";
-import { Sparkles, Briefcase, Loader as Loader2, Save, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ArrowRight, Smartphone, RefreshCw, BadgeCheck } from "lucide-react";
+import { Sparkles, Briefcase, Loader as Loader2, Save, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ArrowRight, Smartphone, RefreshCw, BadgeCheck, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 
 const EMPTY_FORM = {
@@ -547,7 +547,9 @@ export default function BrandSetup() {
       <div ref={manualCardRef} className="surface space-y-4 rounded-2xl" data-testid="brand-manual-card">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <span className="eyebrow block">Profile</span>
+            <span className="eyebrow flex items-center gap-1.5">
+              <SlidersHorizontal className="h-3 w-3 shrink-0" aria-hidden="true" /> Profile
+            </span>
             <h2 className="font-display text-base font-semibold">App Profile Details</h2>
           </div>
           <Badge variant="secondary" className="shrink-0 text-xs">

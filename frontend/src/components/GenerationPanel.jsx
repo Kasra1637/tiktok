@@ -697,7 +697,9 @@ const handleGenerate = async () => {
                   render, in this app, rather than leaving the founder to find
                   it elsewhere. */}
               <div className="space-y-2 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-3">
-                <span className="eyebrow block">Product Demo + CTA</span>
+                <span className="eyebrow flex items-center gap-1.5">
+                  <Smartphone className="h-3 w-3 shrink-0" aria-hidden="true" /> Product Demo + CTA
+                </span>
                 <p className="text-xs text-muted-foreground">
                   Use this video as is, or open it in Demo + CTA to add your demo in a phone
                   mockup and your call to action. Exports save beside the original in History.

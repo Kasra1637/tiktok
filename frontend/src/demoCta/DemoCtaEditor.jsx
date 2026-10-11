@@ -2143,7 +2143,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           {recording && <Progress value={Math.round(progress * 100)} />}
           {saving && (
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" /> Saving to History…
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving to History…
             </p>
           )}
           {error && (

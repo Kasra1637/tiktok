@@ -12,7 +12,7 @@ import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } fro
 import { FactChip, FactList } from "../components/FactChip";
 import { recordSignal, recordReason } from "../lib/feedback";
 import { sentenceCase } from "../lib/copyCase";
-import { Factory as HistoryIcon, Loader as Loader2, TriangleAlert as AlertTriangle, Download, Trash as Trash2, RotateCcw, GitBranch, RefreshCw, ChevronRight, Film, TrendingUp, Check, ThumbsDown, Info, Copy, X, Smartphone } from "lucide-react";
+import { Factory as HistoryIcon, Loader as Loader2, TriangleAlert as AlertTriangle, Download, Trash as Trash2, RotateCcw, GitBranch, RefreshCw, ChevronRight, Film, TrendingUp, Check, ThumbsDown, Info, Copy, X, Smartphone, CircleHelp, Wrench } from "lucide-react";
 
 function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -726,7 +726,10 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
               navigation a list rather than a pile of buttons. */}
           {row.status === "completed" && (
             <div className="space-y-2 pt-1">
-              <span className="eyebrow block">How did this turn out?</span>
+              <span className="eyebrow flex items-center gap-1.5">
+                <CircleHelp className="h-3 w-3 shrink-0" aria-hidden="true" />
+                How did this turn out?
+              </span>
               <div className="flex flex-wrap items-center gap-1.5">
                 <Button
                   variant="ghost"
@@ -766,7 +769,10 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
               status filter still offers "archived", so a row archived before
               this change remains findable — just not archivable again. */}
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-            <span className="eyebrow block">Work with this render</span>
+            <span className="eyebrow flex items-center gap-1.5">
+              <Wrench className="h-3 w-3 shrink-0" aria-hidden="true" />
+              Work with this render
+            </span>
             <div className="flex flex-wrap items-center gap-1.5">
               <Button variant="ghost" size="sm" onClick={loadChildren}>
                 <GitBranch className="h-3.5 w-3.5" /> Variations

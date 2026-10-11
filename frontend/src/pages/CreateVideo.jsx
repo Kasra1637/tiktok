@@ -1894,7 +1894,7 @@ export default function CreateVideo() {
                     Preparing the video draft for your photo…
                   </p>
                   <Button variant="secondary" size="sm" disabled={busy} onClick={() => ensureProject()}>
-                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
+                    {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="h-3.5 w-3.5" />}
                     Try preparing the draft again
                   </Button>
                 </>
@@ -1950,7 +1950,7 @@ export default function CreateVideo() {
                   disabled={busy}
                   onClick={() => ensureProject()}
                 >
-                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                  {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                   Create the draft
                 </Button>
               </div>
@@ -2141,7 +2141,7 @@ if (step === 3) {
                     handleGeneratePlan();
                   }}
                 >
-                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                   Regenerate plan
                 </Button>
                 <p className="text-xs text-muted-foreground" data-testid="plan-version-status">
