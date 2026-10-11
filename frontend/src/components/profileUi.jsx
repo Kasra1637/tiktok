@@ -24,7 +24,7 @@ export const profileToneClass = {
   enforced: "border-[color:var(--hairline-strong)] bg-secondary/30",
 };
 
-export function ProfileCard({ eyebrow, eyebrowClassName, tone = "default", testid, className, children }) {
+export function ProfileCard({ eyebrow, eyebrowClassName, tone = "default", testid, className, icon: Icon, children }) {
   return (
     <section
       className={cn(
@@ -38,10 +38,11 @@ export function ProfileCard({ eyebrow, eyebrowClassName, tone = "default", testi
         <>
           <h3
             className={cn(
-              "text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground",
+              "flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground",
               eyebrowClassName
             )}
           >
+            {Icon && <Icon className="h-3 w-3 shrink-0" aria-hidden="true" />}
             {eyebrow}
           </h3>
           <div aria-hidden="true" className="h-px bg-[color:var(--hairline)]" />
@@ -81,10 +82,14 @@ export function InfoChipList({ label, items, tone = "default", labelClassName })
   const labelTone = "text-foreground";
   return (
     <div className="min-w-0">
-      <span className={cn("text-[11px] font-semibold uppercase tracking-[0.08em]", labelTone, labelClassName)}>
-        {label}
-      </span>
-      <ul className="mt-3 flex flex-wrap gap-3">
+      {/* Label is optional: when the card eyebrow already says it, repeating it
+          here renders the same string twice. */}
+      {label ? (
+        <span className={cn("text-[11px] font-semibold uppercase tracking-[0.08em]", labelTone, labelClassName)}>
+          {label}
+        </span>
+      ) : null}
+      <ul className={cn("flex flex-wrap gap-3", label ? "mt-3" : "mt-0")}>
         {items.map((item, i) => (
           <li
             key={i}

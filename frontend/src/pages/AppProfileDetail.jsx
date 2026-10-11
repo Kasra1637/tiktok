@@ -18,8 +18,10 @@ import { sentenceCase } from "../lib/copyCase";
 import { ProfileCard, ProfileField, InfoChipList, InfoListBlock, CardGrid, StatementCard, SectionGroup } from "../components/profileUi";
 import { api, getErrorMessage } from "../lib/api";
 import {
-  Briefcase, Loader2, AlertTriangle, ArrowLeft,
-  ShieldAlert, Lightbulb, Trash2, RefreshCw,
+  Briefcase, Loader2, AlertTriangle, ArrowLeft, Sparkles,
+  ShieldAlert, Lightbulb, Trash2, RefreshCw, Package, Layers,
+  ListChecks, Ban, CircleCheck, Flag, Zap, Eye, GitBranch,
+  Clock, ThumbsDown,
 } from "lucide-react";
 
 /** Read an array-or-empty field into a clean list. */
@@ -47,7 +49,7 @@ function ClaimPanel({ profile }) {
   const banned = list(profile.claims_banned);
   if (!approved.length && !review.length && !banned.length) return null;
   return (
-    <ProfileCard testid="claim-guardrails" eyebrow="Claim guardrails">
+    <ProfileCard testid="claim-guardrails" eyebrow="Claim guardrails" icon={ShieldAlert}>
       <div>
         <Badge variant="indigo" className="px-3 py-1 font-medium">
           Needs review · {review.length}
@@ -413,7 +415,7 @@ return (
         {hasEssentials && (
         <SectionGroup id="essentials" label="Essentials" summary={essentialsSummary} open={openGroup === "essentials"} onToggle={toggleGroup}>
         {basics.some(Boolean) ? (
-          <ProfileCard testid="profile-facts" eyebrow="Product facts">
+          <ProfileCard testid="profile-facts" eyebrow="Product facts" icon={Package}>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_1fr_2fr]">
               <ProfileField label="Category" value={basics[0]} />
               <ProfileField label="Platforms" value={basics[1]} />
@@ -424,12 +426,12 @@ return (
         {coreFeatures.length > 0 || useCases.length > 0 ? (
           <CardGrid className="md:grid-cols-2">
             {coreFeatures.length > 0 ? (
-              <ProfileCard eyebrow="Core features">
+              <ProfileCard eyebrow="Core features" icon={Layers}>
                 <InfoChipList label="Core features" items={coreFeatures} />
               </ProfileCard>
             ) : null}
             {useCases.length > 0 ? (
-              <ProfileCard eyebrow="Primary use cases">
+              <ProfileCard eyebrow="Primary use cases" icon={ListChecks}>
                 <InfoChipList label="Primary use cases" items={useCases} />
               </ProfileCard>
             ) : null}
@@ -440,9 +442,8 @@ return (
             than context it may use or ignore. The wording matters — the old
             label promised the same enforcement over a field that had none. */}
         {mustNotShow.length > 0 ? (
-          <ProfileCard eyebrow="Never show in the video (enforced)" tone="enforced">
+          <ProfileCard eyebrow="Never show in the video (enforced)" tone="enforced" icon={Ban}>
             <InfoChipList
-              label="Never show in the video (enforced)"
               items={mustNotShow}
               tone="enforced"
             />
@@ -454,12 +455,12 @@ return (
         <SectionGroup id="problems" label="Problems & outcomes" summary={problemsSummary} open={openGroup === "problems"} onToggle={toggleGroup}>
           <CardGrid className="md:grid-cols-2">
             {problems.length > 0 ? (
-              <ProfileCard eyebrow="Problems solved">
+              <ProfileCard eyebrow="Problems solved" icon={CircleCheck}>
                 <InfoChipList label="Problems solved" items={problems} />
               </ProfileCard>
             ) : null}
             {outcomes.length > 0 ? (
-              <ProfileCard eyebrow="Desired outcomes">
+              <ProfileCard eyebrow="Desired outcomes" icon={Flag}>
                 <InfoChipList label="Desired outcomes" items={outcomes} />
               </ProfileCard>
             ) : null}
@@ -472,7 +473,7 @@ return (
           <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
             {profile?.differentiation ? (
               <div className="h-full md:row-span-2">
-                <ProfileCard eyebrow="Differentiators">
+                <ProfileCard eyebrow="Differentiators" icon={Zap}>
                   <ProfileField label="Differentiators" value={profile.differentiation} />
                 </ProfileCard>
               </div>
@@ -480,12 +481,12 @@ return (
             {profile?.known_limitations || profile?.proof_moment ? (
               <div className="flex h-full min-w-0 flex-col gap-4">
                 {profile?.known_limitations ? (
-                  <ProfileCard eyebrow="Known limitations">
+                    <ProfileCard eyebrow="Known limitations" icon={AlertTriangle}>
                     <ProfileField label="Known limitations" value={profile.known_limitations} />
                   </ProfileCard>
                 ) : null}
                 {profile?.proof_moment ? (
-                  <ProfileCard eyebrow="The proof moment">
+                    <ProfileCard eyebrow="The proof moment" icon={Eye}>
                     <ProfileField label="The proof moment" value={profile.proof_moment} />
                   </ProfileCard>
                 ) : null}
@@ -494,7 +495,7 @@ return (
           </div>
         ) : null}
           {Array.isArray(profile?.outcome_statements) && profile.outcome_statements.length > 0 && (
-            <ProfileCard eyebrow="Feature-to-outcome statements">
+            <ProfileCard eyebrow="Feature-to-outcome statements" icon={GitBranch}>
               <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
               {profile.outcome_statements.map((s, i) => (
                 <StatementCard
@@ -516,12 +517,12 @@ return (
         {hasContext && (
         <SectionGroup id="context" label="Context & objections" summary={contextSummary} open={openGroup === "context"} onToggle={toggleGroup}>
         {usageMoments.length > 0 ? (
-          <ProfileCard eyebrow="When the app is reached for">
+          <ProfileCard eyebrow="When the app is reached for" icon={Clock}>
             <InfoChipList label="When the app is reached for" items={usageMoments} />
           </ProfileCard>
         ) : null}
           {Array.isArray(profile?.viewer_objections) && profile.viewer_objections.length > 0 && (
-            <ProfileCard eyebrow="Why they would not download">
+            <ProfileCard eyebrow="Why they would not download" icon={ThumbsDown}>
               <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
               {profile.viewer_objections.map((o, i) => (
                 <StatementCard
