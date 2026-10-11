@@ -3855,6 +3855,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     "/app-profiles/abc": "pages/AppProfileDetail.jsx",
     "/app-profiles/abc/assets": "pages/AssetLibrary.jsx",
     "/history": "pages/GenerationHistory.jsx",
+    "/analytics": "pages/Analytics.jsx",
   };
   const TOUR_LIVE_PATHS = Object.keys(TOUR_ROUTE_PAGE);
 
@@ -3979,7 +3980,6 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         "/terms",
         // Redirect-only routes: the destination page opens its own tour.
         "/app-profiles",
-        "/analytics",
         "/templates",
         "/templates/t-1",
       ]
@@ -4017,8 +4017,194 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   await runSidebarNavChecks();
 
   console.log("");
+  console.log("Mounting the Analytics results ledger...");
+  await runAnalyticsChecks();
+
+  console.log("");
   console.log("Checking the native Product Demo + CTA editor...");
   await runDemoCtaChecks();
+}
+
+/**
+ * The Analytics page: the results ledger and the loop it closes.
+ *
+ * The page exists to answer one question the retired Analytics page never
+ * asked - what did my own videos do, and what has the app learned from it. Every
+ * number is one the founder typed in by hand, so the page has no instrumentation
+ * of its own and these checks are about the three things that could quietly
+ * break that promise:
+ *
+ * - a verdict that is not the founder's (an inferred or defaulted one)
+ * - a deep link that does not land on the row it names
+ * - a completed video that disappears instead of showing up as a nudge
+ *
+ * The nudge row matters most. Silently dropping unrecorded completions is the
+ * failure mode that makes the page look better than the founder's actual
+ * practice: a ledger of only logged videos implies they logged everything.
+ */
+async function runAnalyticsChecks() {
+  const PROFILE = { id: "p1", brand_name: "Threadly", status: "approved" };
+
+  const RECORDED = {
+    id: "gen-logged",
+    brand_profile_id: "p1",
+    status: "completed",
+    hook_line: "The list that replaced eleven lists",
+    created_at: "2026-09-01T10:00:00Z",
+    performance: {
+      views: 12400,
+      likes: 900,
+      comments: 40,
+      shares: 25,
+      saves: 310,
+      outcome: "successful",
+      notes: "Posted 3pm",
+    },
+  };
+
+  const NUDGE = {
+    id: "gen-bare",
+    brand_profile_id: "p1",
+    status: "completed",
+    hook_line: "A hook nobody logged",
+    created_at: "2026-09-04T10:00:00Z",
+    performance: null,
+  };
+
+  const FAILED = {
+    id: "gen-failed",
+    brand_profile_id: "p1",
+    status: "failed",
+    hook_line: "Never rendered",
+    created_at: "2026-09-02T10:00:00Z",
+    performance: null,
+  };
+
+  const WORKS = {
+    has_signal: true,
+    videos: 3,
+    top: [{ template_id: "confession-open", videos: 2, views: 12400, save_rate: 0.025, share_rate: 0.002 }],
+    bottom: [{ template_id: "feature-list", videos: 1, views: 210, save_rate: 0.004, share_rate: 0.001 }],
+  };
+
+  const stub = (generations, extra = {}) => ({
+    getAppProfiles: async () => ({ profiles: [PROFILE] }),
+    getProfileWhatWorks: async () => WORKS,
+    getGenerationHistory: async () => ({ generations }),
+    getFeedback: async () => ({
+      feedback: [],
+      summary: {
+        total: 4,
+        by_event: { marked_successful: 1 },
+        top_signals: [{ signal: "template_changed", count: 3 }],
+        top_reasons: [{ reason: "poor_performance", count: 1 }],
+        explained: 1,
+      },
+    }),
+    ...extra,
+  });
+
+  async function mountAnalytics(ctx, generations, extra) {
+    const Analytics = load("pages/Analytics.jsx").default;
+    await withApi(stub(generations, extra), async () => {
+      await mount(Analytics, {})(ctx);
+    });
+  }
+
+  await check("Analytics mounts and shows the ledger for the selected app", async (ctx) => {
+    await mountAnalytics(ctx, [RECORDED, NUDGE, FAILED]);
+    expectText(ctx, "Analytics", "the page has no title");
+    if (!ctx.container.querySelector('[data-testid="analytics-ledger"]')) {
+      throw new Error("the results ledger is not on the page");
+    }
+    // The failed render is filtered out: there is no clip to record results
+    // against, so listing it would invite numbers for a video that was never
+    // produced.
+    expectAbsent(ctx, "Never rendered", "a failed render must not appear in the ledger");
+    expectText(ctx, "12,400", "the recorded view count is not shown");
+  });
+
+  await check(
+    "a completed video with nothing logged becomes a nudge, not a missing row",
+    async (ctx) => {
+      await mountAnalytics(ctx, [RECORDED, NUDGE]);
+      const nudge = ctx.container.querySelector('[data-testid="analytics-nudge-gen-bare"]');
+      if (!nudge) {
+        throw new Error(
+          "a finished video with no numbers is absent. Dropping it silently makes " +
+            "the ledger look like everything got logged."
+        );
+      }
+      expectText(ctx, "nothing logged yet", "the nudge does not say what is missing");
+      // The link has to be the one History reads to open the record form,
+      // otherwise the founder lands on the row with the form closed.
+      const link = nudge.querySelector("a");
+      const href = link ? link.getAttribute("href") || "" : "";
+      if (!href.includes("/history") || !href.includes("generation=gen-bare")) {
+        throw new Error(
+          `the nudge does not deep-link to this video's record form: ${href}`
+        );
+      }
+    }
+  );
+
+  await check("a recorded row links back to its own History row", async (ctx) => {
+    await mountAnalytics(ctx, [RECORDED]);
+    const row = ctx.container.querySelector('[data-testid="analytics-row-gen-logged"]');
+    if (!row) throw new Error("the recorded row is missing");
+    const href =
+      [...row.querySelectorAll("a")]
+        .map((a) => a.getAttribute("href") || "")
+        .find((h) => h.includes("generation=")) || "";
+    if (!href.includes("gen-logged")) {
+      throw new Error(`the row does not link to its own generation: ${href}`);
+    }
+  });
+
+  await check("What Has Worked Here shows both ends, including the bottom", async (ctx) => {
+    await mountAnalytics(ctx, [RECORDED]);
+    const card = ctx.container.querySelector('[data-testid="what-works"]');
+    if (!card) throw new Error("the What Has Worked Here card is not on the page");
+    expectText(ctx, "Carried the most views", "the top of the table is missing");
+    // The bottom was fetched by the API and displayed nowhere for as long as the
+    // card lived on the App Profile page. Knowing what carried views is half the
+    // evidence; the other half is knowing what did not.
+    expectText(ctx, "Carried the least", "the bottom of the table is still displayed nowhere");
+    expectText(ctx, "feature-list", "the weakest template is not named");
+  });
+
+  await check("the page says its numbers are manual and unverified", async (ctx) => {
+    await mountAnalytics(ctx, [RECORDED]);
+    expectText(ctx, "no platform data is scraped", "the page does not disclaim scraping");
+    expectText(ctx, "never presented as verified", "the page does not disclaim verification");
+    // The loop-closure line is the reason the page exists; without it the ledger
+    // reads as a report rather than as an input to the next render.
+    expectText(ctx, "feed your", "the loop-closure line is missing");
+  });
+
+  await check("an app with no finished videos says so instead of showing an empty table", async (ctx) => {
+    await mountAnalytics(ctx, []);
+    expectText(ctx, "No finished videos", "an empty ledger is not explained");
+  });
+
+  await check("no app at all points at the profile editor", async (ctx) => {
+    const Analytics = load("pages/Analytics.jsx").default;
+    await withApi(
+      {
+        getAppProfiles: async () => ({ profiles: [] }),
+        getProfileWhatWorks: async () => null,
+        getGenerationHistory: async () => ({ generations: [] }),
+        getFeedback: async () => null,
+      },
+      async () => {
+        await mount(Analytics, {})(ctx);
+      }
+    );
+    expectText(ctx, "Create an App Profile", "a founder with no app is told nothing");
+    if (!ctx.container.querySelector('a[href="/brand"]')) {
+      throw new Error("there is no way forward from an empty Analytics page");
+    }
+  });
 }
 
 /**
@@ -4062,7 +4248,16 @@ async function runSidebarNavChecks() {
             "opens on a dead end."
         );
       }
-      const expected = ["/brand", "/demo-cta", "/create", "/assets", "/history"];
+      // Analytics is last on purpose: it reads results the pages above it produced,
+      // so leading with it would open on an empty ledger during setup.
+      const expected = [
+        "/brand",
+        "/demo-cta",
+        "/create",
+        "/assets",
+        "/history",
+        "/analytics",
+      ];
       const actual = items.map((i) => i.to);
       if (actual.join("|") !== expected.join("|")) {
         throw new Error(

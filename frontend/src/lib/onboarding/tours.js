@@ -272,6 +272,33 @@ export const TOURS = {
       },
     ],
   },
+
+  // Targets Analytics at /analytics.
+  analytics: {
+    id: "analytics",
+    label: "Analytics tour",
+    steps: [
+      {
+        target: '[data-testid="analytics-profile-picker"], [data-testid="analytics-header"]',
+        title: "Pick the app you are reading",
+        body:
+          "Results are per App Profile, because which opening works depends on the app. Switch apps here to read another one's numbers.",
+      },
+      {
+        target: '[data-testid="analytics-ledger"]',
+        title: "Every video you logged",
+        body:
+          "One row per finished video, with the views, likes, comments, shares and saves you entered and the verdict you gave it. A finished video with nothing logged gets a short nudge row instead — it is the one the app is learning nothing from.",
+      },
+      {
+        target: '[data-testid="what-works"]',
+        title: "What this app has learned",
+        optional: true,
+        body:
+          "The same numbers, rolled up per template: which openings carried the most views, and which carried the least. This is the only part of a profile that improves with use — the next strategy reads it.",
+      },
+    ],
+  },
 };
 
 /**
@@ -279,7 +306,7 @@ export const TOURS = {
  *
  * Order matters: /app-profiles/:id/assets is a prefix-sibling of
  * /app-profiles/:id, so the assets form is matched first and exactly.
- * Redirect-only routes (/app-profiles, /analytics, /templates,
+ * Redirect-only routes (/app-profiles, /templates,
  * /templates/:id) and the public auth/legal pages map to null — a redirect's
  * destination opens its own tour, and a sign-in page is not a section anyone
  * needs a tour of.
@@ -297,6 +324,7 @@ export function getTourIdForPath(pathname) {
   if (pathname === "/create") return "create";
   if (pathname === "/brand") return "brand";
   if (pathname === "/history") return "history";
+  if (pathname === "/analytics") return "analytics";
   if (pathname === "/assets") return "assets";
   if (pathname === "/demo-cta" || /^\/demo-cta\/[^/]+$/.test(pathname)) return "demo-cta";
   if (/^\/app-profiles\/[^/]+\/assets$/.test(pathname)) return "assets";

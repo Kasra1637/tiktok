@@ -9,6 +9,7 @@ import {
   Images,
   PenLine,
   History as HistoryIcon,
+  TrendingUp,
   PanelLeftClose,
   PanelLeftOpen,
   X,
@@ -24,8 +25,9 @@ import {
  * leading with either of those puts a screen in front of the founder whose
  * inputs do not exist yet. Then the two things you make, then the assets they
  * are generated from, then what you have already made. The retired Discover /
- * Saved Hooks / Research Archive / Trend Research / Analytics pages are gone, so
- * there is no Research group and no Insight link.
+ * Saved Hooks / Research Archive / Trend Research pages are gone, so there is no
+ * Research group and no Insight link. Analytics is back, last, and it is about
+ * the founder's own logged results rather than an Insight group.
  *
  * App Profile leads rather than Create Video for that reason, and it is named
  * for what the page actually holds. "Your app" described one app, while the page
@@ -60,6 +62,10 @@ const NAV_ITEMS = [
   { to: "/create", label: "Create Video", icon: Clapperboard, testId: "create-nav-link", hint: "Plan, review, render" },
   { to: "/assets", label: "Asset Library", icon: Images, testId: "assets-nav-link", hint: "Presenter photos by app" },
   { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Renders, exports, results" },
+  /* Results, last: it is the one page that only means something once the pages
+     above it have produced something. Leading with it would open on an empty
+     ledger for anyone still setting up. */
+  { to: "/analytics", label: "Analytics", icon: TrendingUp, testId: "analytics-nav-link", hint: "Results, verdicts, learnings" },
 ];
 
 /**

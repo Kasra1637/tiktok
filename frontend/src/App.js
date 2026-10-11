@@ -17,6 +17,7 @@ import AppProfileDetail from "./pages/AppProfileDetail";
 import CreateVideo from "./pages/CreateVideo";
 import DemoCtaStudio from "./pages/DemoCtaStudio";
 import AssetLibrary from "./pages/AssetLibrary";
+import Analytics from "./pages/Analytics";
 import { OnboardingProvider } from "./components/onboarding/OnboardingProvider";
 
 function App() {
@@ -63,11 +64,14 @@ function App() {
                             real. The public "/" for signed-out visitors is the
                             landing page, declared above and unaffected. */}
                         <Route path="/" element={<Navigate to="/create" replace />} />
-                        {/* Analytics is gone. It reported this operator's own
-                            activity and what it cost them, and the product does
-                            not meter that. A redirect rather than a dead route,
-                            so a bookmark lands where the work is. */}
-                        <Route path="/analytics" element={<Navigate to="/create" replace />} />
+                        {/* Results and what the app learned from them. The page
+                            this route used to serve reported what a render cost
+                            this operator, and the product stopped metering that,
+                            so the route was retired. It is back with a different
+                            question: what the founder's own logged results say.
+                            That data was already collected and already fed the
+                            next strategy — it simply had nowhere to be read. */}
+                        <Route path="/analytics" element={<Analytics />} />
                         {/* The template library is gone: templates are picked
                             per App Profile inside the Create Video wizard, so
                             there is nowhere standalone left to land. Redirects
