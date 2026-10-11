@@ -1773,7 +1773,7 @@ async function main() {
     await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
       mount(CreateVideo, {})(ctx)
     );
-    expectText(ctx, "Choose an approved app", "step 0 did not render its heading");
+    // The step no longer renders a title; the empty state is the primary content
     expectText(ctx, "No approved App Profile", "step 0 did not render its empty state");
   });
 

@@ -632,15 +632,17 @@ function AngleGoalPicker({
 function StepShell({ icon: Icon, title, description, children }) {
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
-          <Icon className="h-[18px] w-[18px]" />
-        </span>
-        <div>
-          <h2 className="font-display text-base font-semibold">{title}</h2>
-          {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
+      {Icon && (
+        <div className="flex items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
+            <Icon className="h-[18px] w-[18px]" />
+          </span>
+          <div>
+            {title && <h2 className="font-display text-base font-semibold">{title}</h2>}
+            {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
+          </div>
         </div>
-      </div>
+      )}
       {children}
     </div>
   );
@@ -1541,11 +1543,7 @@ export default function CreateVideo() {
       // never become permissive while still claiming it excludes the rest.
       const { approved, unapproved } = partitionProfiles(profiles);
       return (
-        <StepShell
-          icon={Briefcase}
-          title="Choose an approved app"
-          description="Select the App Profile for this video. Its product details and claim guardrails guide the script."
-        >
+        <StepShell>
           {approved.length === 0 ? (
             <EmptyState
               icon={Briefcase}
