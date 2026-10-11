@@ -9,7 +9,7 @@ import { FactChip, FactList } from "../components/FactChip";
 import WhatWorksCard from "../components/WhatWorksCard";
 import { api, getErrorMessage } from "../lib/api";
 import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
-import { TrendingUp, Loader2, AlertTriangle, Info, CircleCheck, CircleX, Copy } from "lucide-react";
+import { TrendingUp, Loader2, AlertTriangle, Info, CircleCheck, CircleX, Copy, ClipboardList, Crosshair, Users, Scale, Activity } from "lucide-react";
 
 /**
  * Recorded results, what the loop learned, and why logging pays off.
@@ -385,6 +385,7 @@ export default function Analytics() {
           that owns the clip so the founder can act on it without hunting. */}
       <SectionCard
         title="Recorded results"
+        icon={ClipboardList}
         className="space-y-3"
         data-testid="analytics-ledger"
       >
@@ -425,6 +426,7 @@ export default function Analytics() {
           formatKey={humanize}
           noneLabel="No objective set"
           copy={facets?.objective_outcomes || null}
+          icon={Crosshair}
         />
       )}
       {selectedId && (
@@ -435,6 +437,7 @@ export default function Analytics() {
           formatKey={(v) => v}
           noneLabel="No audience set"
           copy={null}
+          icon={Users}
         />
       )}
 
@@ -585,7 +588,7 @@ function TrendSpark({ points }) {
   const first = points[0];
   const last = points[points.length - 1];
   return (
-    <SectionCard title="Views over time" className="space-y-2" data-testid="analytics-trend">
+    <SectionCard title="Views over time" icon={TrendingUp} className="space-y-2" data-testid="analytics-trend">
       <svg
         viewBox={`0 0 ${W} ${H}`}
         className="h-10 w-full text-[color:var(--brand-indigo)]"
@@ -625,12 +628,12 @@ function TrendSpark({ points }) {
  * evidence. Below that the bucket is listed and explicitly unranked, which is
  * the honest middle between hiding thin data and ranking it.
  */
-function DimensionBreakdown({ title, testid, buckets, formatKey, noneLabel, copy }) {
+function DimensionBreakdown({ title, testid, buckets, formatKey, noneLabel, copy, icon }) {
   if (!buckets.length) return null;
   const leader = leadBucket(buckets);
   const anyComparable = buckets.some((b) => b.comparable);
   return (
-    <SectionCard title={title} className="space-y-3" data-testid={testid}>
+    <SectionCard title={title} icon={icon} className="space-y-3" data-testid={testid}>
       {leader && (
         <p className="text-sm">
           {leader.label === "(none)" ? noneLabel : formatKey(leader.label)} leads —{" "}
@@ -751,7 +754,7 @@ export function buildAnalyticsSummaryText({
 function VerdictTallies({ tallies, total }) {
   if (!total) return null;
   return (
-    <SectionCard title="Verdicts" className="space-y-3" data-testid="analytics-tallies">
+    <SectionCard title="Verdicts" icon={Scale} className="space-y-3" data-testid="analytics-tallies">
       <div className="flex flex-wrap items-center gap-2">
         <FactChip className="border-green-500/25 text-green-300">
           {tallies.successful} worked
@@ -803,7 +806,7 @@ function SignalCounts({ summary }) {
   const signals = summary?.top_signals || [];
   if (!signals.length) return null;
   return (
-    <SectionCard title="What happened" className="space-y-2" data-testid="analytics-signals">
+    <SectionCard title="What happened" icon={Activity} className="space-y-2" data-testid="analytics-signals">
       <p className="text-xs text-muted-foreground">
         Captured automatically as you worked. These are facts about the workflow, not
         opinions about why.

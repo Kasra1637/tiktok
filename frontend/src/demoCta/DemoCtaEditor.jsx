@@ -2173,7 +2173,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
              cannot receive a ref, and this card is the scroll target for the
              auto-scroll above. */
           <div ref={resultCardRef}>
-            <SectionCard title="Export ready">
+            <SectionCard title="Export ready" icon={Download}>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>{result.mime.includes("mp4") ? "MP4" : "WebM"} • {(result.size / 1024 / 1024).toFixed(2)} MB</span>
                 {saved ? (
