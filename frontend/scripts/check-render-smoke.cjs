@@ -4021,6 +4021,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   await runAnalyticsChecks();
 
   console.log("");
+  console.log("Checking the App Profile sticky review bar...");
+  await runBrandSetupStickyBarChecks();
+
+  console.log("");
   console.log("Checking the native Product Demo + CTA editor...");
   await runDemoCtaChecks();
 }
@@ -4547,6 +4551,104 @@ async function runDeleteDialogChecks() {
       }
     );
   });
+}
+
+/**
+ * App Profile: the sticky review bar only exists once research produced a draft.
+ *
+ * "Save App Profile" and "Review complete" are review affordances over a
+ * machine-written draft. Before research runs there is nothing to review, so the
+ * bar is withheld. But the bar was also the only save on the page, so gating it
+ * alone would quietly remove the ability to store a hand-typed profile -- the one
+ * failure mode here is a form you can fill and never save, which no other gate
+ * would catch.
+ *
+ * The signal under test is `last_research_at`, which the server writes on exactly
+ * the research and refresh paths and on neither analyze-url nor a manual create.
+ * Both halves are asserted: the bar appears for a researched profile, and a
+ * hand-typed one keeps a save.
+ */
+async function runBrandSetupStickyBarChecks() {
+  const BrandSetup = load("pages/BrandSetup.jsx").default;
+
+  const researched = {
+    id: "p1",
+    brand_name: "Threadly",
+    brand_description: "One list, not eleven.",
+    status: "draft",
+    website_url: "https://threadly.example",
+    last_research_at: "2026-09-01T10:00:00Z",
+    research_sources: [{ label: "website", ok: true }],
+  };
+
+  const handTyped = {
+    id: "p2",
+    brand_name: "Handmade",
+    brand_description: "",
+    status: "draft",
+    // No last_research_at: the founder typed this one.
+  };
+
+  async function mountWith(ctx, active) {
+    await withApi(
+      {
+        getActiveBrand: async () => active,
+        getAppProfiles: async () => ({ profiles: [active] }),
+      },
+      async () => {
+        await mount(BrandSetup, {})(ctx);
+      }
+    );
+    await act(async () => {});
+  }
+
+  await check(
+    "the sticky review bar appears once research has generated the profile",
+    async (ctx) => {
+      await mountWith(ctx, researched);
+      if (!ctx.container.querySelector('[data-testid="save-brand-button"]')) {
+        throw new Error(
+          "the sticky bar is missing for a researched profile. The founder has a " +
+            "generated draft to review and no way to save or approve it."
+        );
+      }
+      if (!ctx.container.querySelector('[data-testid="approve-profile-button"]')) {
+        throw new Error("a researched draft cannot be approved from the sticky bar");
+      }
+      // Exactly one Save on the page. Two would leave the founder choosing
+      // between them for no reason, which is the ambiguity the gate removed.
+      const saves = ctx.container.querySelectorAll(
+        '[data-testid="save-brand-button"], [data-testid="save-manual-profile-button"]'
+      );
+      if (saves.length !== 1) {
+        throw new Error(
+          `expected exactly one Save on a researched profile, found ${saves.length}`
+        );
+      }
+    }
+  );
+
+  await check(
+    "a hand-typed profile keeps a Save even though it gets no sticky review bar",
+    async (ctx) => {
+      await mountWith(ctx, handTyped);
+      if (ctx.container.querySelector('[data-testid="save-brand-button"]')) {
+        throw new Error(
+          "the sticky review bar is showing for a profile research never ran. " +
+            "There is no generated draft to review."
+        );
+      }
+      const manualSave = ctx.container.querySelector(
+        '[data-testid="save-manual-profile-button"]'
+      );
+      if (!manualSave) {
+        throw new Error(
+          "a hand-typed profile has no Save at all. The sticky bar was the only " +
+            "save on this page, so the form can now be filled and never stored."
+        );
+      }
+    }
+  );
 }
 
 /**

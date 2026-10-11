@@ -381,6 +381,14 @@ export default function BrandSetup() {
   };
 
   const status = brand?.status || "draft";
+  // Did research build this profile, rather than the founder typing it?
+  //
+  // `last_research_at` is written by exactly one path on the server: the
+  // /app-profiles/research INSERT, and the /refresh UPDATE that re-runs it.
+  // Both analyze-url and a hand-typed create leave it null. That makes it the
+  // honest signal for "there is a generated draft here worth reviewing", rather
+  // than inferring it from a non-empty field the founder may have typed.
+  const researchedProfile = Boolean(brand?.last_research_at);
   const pendingProposal = brand?.pending_research;
   // What the last research run actually read. Rides on the refresh response
   // (and vanishes on the next load/save, which is correct — it describes
@@ -892,6 +900,25 @@ export default function BrandSetup() {
               </FormSection>
             </div>
 
+            {/* The manual path's own Save. Rendered only when research has not
+                run, because the sticky bar owns saving for a researched profile
+                and two Saves would leave the founder choosing between them for
+                no reason. Without this the gate would silently remove the only
+                way to store a hand-typed profile. */}
+            {!researchedProfile && (
+              <Button
+                onClick={handleSave}
+                disabled={saving}
+                variant="accent"
+                size="lg"
+                className="w-full sm:w-auto"
+                data-testid="save-manual-profile-button"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {saving ? "Saving..." : brand?.id ? "Save App Profile" : "Create App Profile"}
+              </Button>
+            )}
+
             {brand?.id && (
               <Alert className="border-[color:var(--indigo-15)] bg-[color:var(--indigo-6)]">
                 <CheckCircle2 className="h-4 w-4 text-[color:var(--brand-indigo)]" />
@@ -918,48 +945,59 @@ export default function BrandSetup() {
         )}
       </div>
 
-      {/* ---------- Sticky action bar ---------- */}
-      <div className="sticky bottom-0 z-10 border-t border-[color:var(--hairline)] bg-background/80 py-4 backdrop-blur-sm">
-        <div className="mx-auto flex w-full max-w-6xl items-center gap-3">
-          <Button
-            onClick={handleSave}
-            disabled={saving}
-            variant="accent"
-            size="lg"
-            data-testid="save-brand-button"
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {saving ? "Saving..." : brand?.id ? "Save App Profile" : "Create App Profile"}
-          </Button>
+      {/* ---------- Sticky action bar ----------
+          Only for a profile research generated. "Save" and "Review complete"
+          are review affordances over a machine-written draft, so before
+          research runs there is nothing to review and the bar would be two
+          buttons over an empty form.
 
-          {brand?.id && status !== "approved" && (
+          A hand-typed profile therefore has no sticky bar, which would leave it
+          unsaveable — so the manual card carries its own Save below. The two
+          never show at once: two Saves on one page is the ambiguity this gate
+          was meant to remove. */}
+      {researchedProfile && (
+        <div className="sticky bottom-0 z-10 border-t border-[color:var(--hairline)] bg-background/80 py-4 backdrop-blur-sm">
+          <div className="mx-auto flex w-full max-w-6xl items-center gap-3">
             <Button
-              onClick={() => handleApprove(true)}
-              disabled={approving}
-              variant="brand"
+              onClick={handleSave}
+              disabled={saving}
+              variant="accent"
               size="lg"
-              data-testid="approve-profile-button"
+              data-testid="save-brand-button"
             >
-              {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
-              {approving ? "Approving..." : "Review complete — approve profile"}
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {saving ? "Saving..." : "Save App Profile"}
             </Button>
-          )}
 
-          {brand?.id && status === "approved" && (
-            <Button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              variant="secondary"
-              size="lg"
-              className="gap-1.5"
-              data-testid="refresh-profile-button"
-            >
-              {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              {refreshing ? "Re-researching..." : "Refresh from sources (needs re-approval)"}
-            </Button>
-          )}
+            {status !== "approved" && (
+              <Button
+                onClick={() => handleApprove(true)}
+                disabled={approving}
+                variant="brand"
+                size="lg"
+                data-testid="approve-profile-button"
+              >
+                {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
+                {approving ? "Approving..." : "Review complete — approve profile"}
+              </Button>
+            )}
+
+            {status === "approved" && (
+              <Button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                variant="secondary"
+                size="lg"
+                className="gap-1.5"
+                data-testid="refresh-profile-button"
+              >
+                {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                {refreshing ? "Re-researching..." : "Refresh from sources (needs re-approval)"}
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
