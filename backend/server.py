@@ -887,6 +887,7 @@ async def init_db():
                 signal TEXT,
                 reason TEXT,
                 detail TEXT,
+                step TEXT,
                 created_at TEXT,
                 user_id TEXT DEFAULT 'anonymous'
             );
@@ -1400,6 +1401,15 @@ async def init_db():
         if "signal" not in {row[1] for row in await cursor.fetchall()}:
             logger.info("Migration: adding signal column to feedback_events")
             await conn.execute("ALTER TABLE feedback_events ADD COLUMN signal TEXT")
+        await conn.commit()
+        # Migration: feedback_events gains a `step` column naming the
+        # CreateVideo step a thumbs verdict was given on (audience_goal,
+        # template_photo, review, hook_story). Existing rows predate the
+        # thumbs loop, so they keep NULL rather than a fabricated step.
+        cursor = await conn.execute("PRAGMA table_info(feedback_events)")
+        if "step" not in {row[1] for row in await cursor.fetchall()}:
+            logger.info("Migration: adding step column to feedback_events")
+            await conn.execute("ALTER TABLE feedback_events ADD COLUMN step TEXT")
         await conn.commit()
 
         # Migration: assets gains a face count. Existing image/video rows
@@ -8893,7 +8903,29 @@ async def record_feedback(payload: FeedbackRequest, user_id: str = Depends(get_c
             detail=f"Reason '{payload.reason}' is not valid for {event}. "
                    f"Allowed: {', '.join(allowed) or 'none'}.",
         )
-    if not signal and not reason:
+    # Thumbs verdicts are standalone judgments: they need a valid step, and
+    # they must not carry a signal or reason, so a thumb can never be
+    # miscounted as an automatic trigger or a stated cause.
+    is_thumb = event in ("thumb_up", "thumb_down")
+    step = feedback_mod.normalize_step(payload.step)
+    if is_thumb:
+        if not step:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Thumbs feedback needs a valid step. Known: {', '.join(feedback_mod.THUMB_STEPS)}.",
+            )
+        if signal or reason:
+            raise HTTPException(
+                status_code=400,
+                detail="Thumbs feedback carries no signal or reason; the step is the context.",
+            )
+    elif (payload.step or "").strip():
+        if not step:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown step '{payload.step}'.",
+            )
+    if not signal and not reason and not is_thumb:
         raise HTTPException(
             status_code=400,
             detail="Feedback needs a signal or a reason.",
@@ -8903,16 +8935,16 @@ async def record_feedback(payload: FeedbackRequest, user_id: str = Depends(get_c
     await _execute(
         """INSERT INTO feedback_events
            (id, brand_profile_id, studio_project_id, generation_id, template_id,
-            event, signal, reason, detail, created_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            event, signal, reason, detail, step, created_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (event_id, (payload.brand_profile_id or "").strip() or None,
          (payload.studio_project_id or "").strip() or None,
          (payload.generation_id or "").strip() or None,
          (payload.template_id or "").strip() or None,
          event, signal or None, reason or None, (payload.detail or "")[:500],
-         now_iso(), user_id),
+         step or None, now_iso(), user_id),
     )
-    return {"id": event_id, "event": event, "signal": signal, "reason": reason}
+    return {"id": event_id, "event": event, "signal": signal, "reason": reason, "step": step}
 
 
 @api_router.get("/feedback")
@@ -8929,7 +8961,11 @@ async def list_feedback(
         "ORDER BY created_at DESC LIMIT ?",
         tuple(params) + (max(1, min(int(limit or 100), 500)),),
     )
-    return {"feedback": rows, "summary": feedback_mod.summarize(rows)}
+    return {
+        "feedback": rows,
+        "summary": feedback_mod.summarize(rows),
+        "thumbs": feedback_mod.summarize_thumbs(rows),
+    }
 
 
 # GET /api/dashboard is gone with the Dashboard page. It aggregated totals,

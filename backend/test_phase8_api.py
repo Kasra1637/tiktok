@@ -212,9 +212,16 @@ class TestApproveAppProfile:
 class TestFeedbackCatalog:
     def test_catalog_lists_events_with_reasons(self, api):
         catalog = _run(api.feedback_catalog())
-        assert len(catalog["events"]) == 8
+        assert len(catalog["events"]) == 10
         for event in catalog["events"]:
-            assert event["reasons"], event["key"]
+            # Thumbs verdicts are standalone: the step is the context, so
+            # they carry no reason vocabulary by design.
+            if event["key"] in ("thumb_up", "thumb_down"):
+                assert event["reasons"] == []
+            else:
+                assert event["reasons"], event["key"]
+        import feedback as fb
+        assert catalog["thumb_steps"] == list(fb.THUMB_STEPS)
 
     def test_every_reason_has_a_label(self, api):
         import feedback as fb
@@ -291,6 +298,44 @@ class TestRecordFeedback:
         assert any(f.get("detail") == "felt flat" for f in listed["feedback"])
         # Only fixed reasons are counted in the summary.
         assert all("reason" in r for r in listed["summary"]["top_reasons"])
+
+    def test_thumb_up_with_a_valid_step_is_recorded(self, api):
+        from models import FeedbackRequest
+        profile = _profile(api, "FB THUMB")
+        created = _run(api.record_feedback(
+            FeedbackRequest(event="thumb_up", step="review",
+                            brand_profile_id=profile["id"],
+                            detail="plan v3"), ANON))
+        assert created["event"] == "thumb_up"
+        assert created["step"] == "review"
+        listed = _run(api.list_feedback(user_id=ANON))
+        assert listed["thumbs"]["review"]["up"] >= 1
+
+    def test_thumb_without_a_step_is_rejected(self, api):
+        from models import FeedbackRequest
+        with pytest.raises(HTTPException) as err:
+            _run(api.record_feedback(FeedbackRequest(event="thumb_down"), ANON))
+        assert err.value.status_code == 400
+
+    def test_thumb_with_a_signal_is_rejected(self, api):
+        from models import FeedbackRequest
+        with pytest.raises(HTTPException) as err:
+            _run(api.record_feedback(
+                FeedbackRequest(event="thumb_up", step="review", signal="approved"), ANON))
+        assert err.value.status_code == 400
+
+    def test_thumbs_do_not_pollute_signal_aggregates(self):
+        import feedback as fb
+        rows = [
+            {"event": "thumb_up", "step": "review"},
+            {"event": "thumb_down", "step": "review"},
+            {"event": "thumb_up", "step": "hook_story"},
+            {"event": "video_regenerated", "signal": "regenerated"},
+        ]
+        assert fb.summarize_thumbs(rows)["review"] == {"up": 1, "down": 1, "total": 2}
+        assert fb.summarize_thumbs(rows)["hook_story"] == {"up": 1, "down": 0, "total": 1}
+        # Automatic-trigger aggregates never see thumbs rows as signals.
+        assert fb.summarize(rows)["top_signals"] == [{"signal": "regenerated", "count": 1}]
 
     def test_listing_is_scoped_to_user(self, api):
         from models import FeedbackRequest

@@ -75,6 +75,35 @@ export async function recordSignal(event, signal, refs = {}) {
 }
 
 /**
+ * Record a thumbs verdict for one CreateVideo step.
+ *
+ * Thumbs are standalone judgments: no signal, no reason. The step is the
+ * context (audience_goal | template_photo | review | hook_story) and detail
+ * optionally names the item version (e.g. "plan v3") for debugging.
+ *
+ * @param {string} step One of the THUMB_STEPS served by GET /feedback/catalog.
+ * @param {number} verdict 1 for up, -1 for down, 0 clears without recording.
+ * @returns {Promise<boolean>} whether it was recorded.
+ */
+export async function recordThumb(step, verdict, refs = {}) {
+  if (verdict !== 1 && verdict !== -1) return false;
+  try {
+    await api.recordFeedback({
+      event: verdict === 1 ? "thumb_up" : "thumb_down",
+      step,
+      detail: refs.detail || "",
+      brand_profile_id: refs.brand_profile_id || "",
+      studio_project_id: refs.studio_project_id || "",
+      generation_id: refs.generation_id || "",
+      template_id: refs.template_id || "",
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Record an explicit judgment the founder actually stated.
  *
  * Used only where the founder picks a verdict rather than the software

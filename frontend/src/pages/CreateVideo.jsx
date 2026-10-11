@@ -11,9 +11,10 @@ import EmptyState from "../components/EmptyState";
 import SafetyPanel from "../components/SafetyPanel";
 import HookContinuityPanel from "../components/HookContinuityPanel";
 import GenerationPanel from "../components/GenerationPanel";
+import { ThumbPair } from "../components/ThumbPair";
 import AssetLibrary from "./AssetLibrary";
 import { api, getErrorMessage } from "../lib/api";
-import { recordSignal, classifyScriptEdit } from "../lib/feedback";
+import { recordSignal, recordThumb, classifyScriptEdit } from "../lib/feedback";
 import {
   partitionProfiles,
   profileLabel,
@@ -780,6 +781,14 @@ export default function CreateVideo() {
   // there is no hook-only render to choose between.
   const [tone, setTone] = useState("");
   const [edits, setEdits] = useState({});
+  // Thumbs verdict on the saved Review plan: up advances to Hook + Story,
+  // down records the rejection and asks the AI for a fresh plan. Manual
+  // editing stays untouched — this is an additive fast path, not a
+  // replacement, so the claim check and ready gate keep working as before.
+  const [reviewThumb, setReviewThumb] = useState(0);
+  // Consecutive AI refinements per saved plan version. Capped so a thumbs-down
+  // loop can never spin the text model unboundedly on one plan.
+  const reviewRefinesRef = useRef({});
 
   const profileId = project?.brand_profile_id || selectedProfileId;
   const angle = angles.find((a) => a.id === angleId) || null;
@@ -1282,6 +1291,7 @@ export default function CreateVideo() {
       setError(readyError ? getErrorMessage(readyError) : null);
       setProject(settled);
       setEdits({});
+      setReviewThumb(0);
       // Straight to the top of Review, which is this step now: the plan is the
       // thing to read, and the render step below it is the first one that
       // calls the model. The old indices were 5 (Review) and 6 (Hook and
@@ -1353,6 +1363,7 @@ export default function CreateVideo() {
       setError(readyError ? getErrorMessage(readyError) : null);
       setProject(settled);
       setEdits({});
+      setReviewThumb(0);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -1360,7 +1371,35 @@ export default function CreateVideo() {
     }
   };
 
-  
+  // Thumbs-down on Review asks the AI for a better plan; thumbs-up records
+  // the approval and moves to Hook + Story. Down reuses the existing plan
+  // generation (claim check + ready marking included), capped at three
+  // refinements per saved plan version so the loop always terminates.
+  const handleReviewThumb = async (next) => {
+    setReviewThumb(next);
+    if (next === 0 || !project?.id) return;
+    recordThumb("review", next, {
+      brand_profile_id: profileId,
+      studio_project_id: project.id,
+      template_id: project.template_id,
+      detail: `plan v${Number(project.script_version) || 0}`,
+    });
+    if (next === 1) {
+      setStep(4);
+      return;
+    }
+    const versionKey = String(Number(project.script_version) || 0);
+    const used = Number(reviewRefinesRef.current[versionKey] || 0);
+    if (used >= 3) {
+      setError(
+        "Three fresh plans written for this version already — edit the script by hand or pick another template before refining again."
+      );
+      return;
+    }
+    reviewRefinesRef.current[versionKey] = used + 1;
+    await handleGeneratePlan();
+    setReviewThumb(0);
+  };
 
   // A template can be selected either via URL param (templateId) or stored
   // on the project (project.template_id). The URL param wins when present
@@ -2156,6 +2195,20 @@ if (step === 3) {
               hasEdits={hasEdits}
               onGoToHookStory={() => setStep(4)}
             />
+            <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-4" data-testid="review-thumb-loop">
+              <span className="eyebrow block">Does this plan work?</span>
+              <ThumbPair
+                value={reviewThumb}
+                disabled={busy || !project?.script_version}
+                upLabel="Looks good"
+                downLabel="Write a better one"
+                testId="review-thumb"
+                onChange={handleReviewThumb}
+              />
+              <p className="text-xs text-muted-foreground">
+                Thumbs up moves to Hook + Story. Thumbs down writes a fresh plan (claim-checked, up to three per version). Editing by hand still works.
+              </p>
+            </div>
             <span className="eyebrow block">Script</span>
             {/* What the chosen template is aiming to leave them with, above the
                 hook and script it was picked to carry. The plan step showed the

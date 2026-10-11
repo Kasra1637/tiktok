@@ -28,6 +28,11 @@ generated video's CTA was unclear asked about something that was never in it.
 from collections import Counter
 
 # What happened.
+# thumb_up / thumb_down are explicit founder verdicts from the thumbs-only AI
+# loop (Audience & goal, Template & photo, Review, Hook + Story). They carry
+# no signal or reason: the `step` column says where the verdict was given and
+# `detail` optionally names the item version (e.g. plan v3). Existing
+# aggregates ignore them; summarize_thumbs() reads them per step.
 EVENTS = (
     "template_rejected",
     "script_edited",
@@ -37,7 +42,24 @@ EVENTS = (
     "video_downloaded",
     "marked_successful",
     "marked_unsuccessful",
+    "thumb_up",
+    "thumb_down",
 )
+
+# CreateVideo steps that accept a thumbs verdict. Stored lowercase in the
+# `step` column so counts group cleanly regardless of UI labels.
+THUMB_STEPS = (
+    "audience_goal",
+    "template_photo",
+    "review",
+    "hook_story",
+)
+
+
+def normalize_step(step: str) -> str:
+    """Validate a thumbs step. Returns '' when unrecognised."""
+    s = (step or "").strip().lower().replace("-", "_").replace(" ", "_")
+    return s if s in THUMB_STEPS else ""
 
 # Factual triggers, captured automatically. Each maps to the event it explains.
 SIGNALS = {
@@ -214,10 +236,40 @@ def catalog() -> dict:
             {"key": signal, "event": event}
             for signal, event in SIGNALS.items()
         ],
+        "thumb_steps": list(THUMB_STEPS),
         "heavy_edit": {
             "ratio": HEAVY_EDIT_RATIO,
             "min_chars": HEAVY_EDIT_MIN_CHARS,
         },
+    }
+
+
+def summarize_thumbs(events) -> dict:
+    """
+    Per-step thumbs verdicts for the AI refinement loop.
+
+    Only thumb_up / thumb_down rows are counted, grouped by their step. Rows
+    naming an unknown step are ignored rather than lumped into a bucket,
+    so a typo cannot inflate another step's down count.
+    """
+    per_step = {step: {"up": 0, "down": 0} for step in THUMB_STEPS}
+    for row in events or []:
+        if not isinstance(row, dict):
+            continue
+        event = row.get("event") or ""
+        if event not in ("thumb_up", "thumb_down"):
+            continue
+        step = normalize_step(row.get("step") or "")
+        if not step:
+            continue
+        per_step[step]["up" if event == "thumb_up" else "down"] += 1
+    return {
+        step: {
+            "up": counts["up"],
+            "down": counts["down"],
+            "total": counts["up"] + counts["down"],
+        }
+        for step, counts in per_step.items()
     }
 
 

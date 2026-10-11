@@ -485,6 +485,7 @@ class FeedbackRequest(BaseModel):
     signal: Optional[str] = ""
     reason: Optional[str] = ""
     detail: Optional[str] = ""
+    step: Optional[str] = ""
     brand_profile_id: Optional[str] = ""
     studio_project_id: Optional[str] = ""
     generation_id: Optional[str] = ""
