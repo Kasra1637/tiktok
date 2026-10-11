@@ -326,7 +326,7 @@ export default function Analytics() {
         <PageHeader
           icon={TrendingUp}
           title="Analytics"
-          description="Every result you have logged, and what the app has learned from it."
+          description="Every result you have logged, plus what the app has learned about what works for your audience."
           actions={
             <div className="flex flex-wrap items-center gap-2">
               {selectedId ? (

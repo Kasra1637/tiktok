@@ -641,7 +641,7 @@ export default function AssetLibrary({
             <PageHeader
               icon={Images}
               title="Asset Library"
-              description="Upload and manage presenter photos for each app. A photo attached to a video guides who appears on camera; its setting comes from the App Profile."
+              description="Upload the presenter photo for each app; that photo decides who appears on camera in your videos."
             />
           </div>
         )}
@@ -707,7 +707,7 @@ export default function AssetLibrary({
         <PageHeader
           icon={Images}
           title="Asset Library"
-          description="Upload and manage presenter photos for each app. A photo attached to a video guides who appears on camera; its setting comes from the App Profile."
+          description="Upload the presenter photo for each app; that photo decides who appears on camera in your videos."
           actions={
             <div className="flex flex-wrap items-center gap-2">
               {/* Shown whenever there is something to switch between. With a

@@ -4509,7 +4509,7 @@ async function runSidebarNavChecks() {
       }
       // The route and testid must not move with the label: the onboarding tour
       // and every existing deep link depend on them.
-      if (!/to: "\/brand", label: "App Profile", icon: PenLine, testId: "brand-nav-link"/.test(src)) {
+      if (!/to: "\/brand", label: "App Profile", icon: Briefcase, testId: "brand-nav-link"/.test(src)) {
         throw new Error(
           "the App Profile link changed its route or testId. brand-nav-link is " +
             "referenced by convention and /brand by every existing deep link."
@@ -5254,14 +5254,13 @@ async function runDemoCtaChecks() {
             "is the one picker control; this one only duplicated it."
         );
       }
-      // The standalone header describes the page in one sentence. 85 chars is
-      // the budget: anything longer pushes the editor down on the small screens
-      // this route is most useful on.
+      // The standalone header describes the page in one sentence, on the same
+      // 95-99 char budget as every other page masthead.
       const STANDALONE_COPY =
-        "Style a clip in a phone mockup; combine clips separately. Export to History.";
-      if (STANDALONE_COPY.length > 85) {
+        "Style any clip in a phone mockup, combine clips separately, then export that result to History.";
+      if (STANDALONE_COPY.length < 95 || STANDALONE_COPY.length > 99) {
         throw new Error(
-          `the standalone copy is ${STANDALONE_COPY.length} chars, over the 85 budget`
+          `the standalone copy is ${STANDALONE_COPY.length} chars, outside the 95-99 budget`
         );
       }
       if (!ctx.text().includes(STANDALONE_COPY)) {

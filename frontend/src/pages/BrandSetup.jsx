@@ -394,7 +394,7 @@ export default function BrandSetup() {
       <PageHeader
         icon={Briefcase}
         title="App Profile"
-        description="Research a mobile app. Enter your app's App Store URL, Google Play URL, or both, plus any support pages. Add optional notes, then choose Research app. Review the draft for accuracy before saving and approving it."
+        description="Research a mobile app from its store listing, review the draft for accuracy, then approve the app."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {profiles.length > 1 && (

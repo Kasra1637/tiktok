@@ -205,8 +205,8 @@ export function DemoCtaStudio() {
         title="Demo + CTA"
         description={
           generationId
-            ? "Style this finished Hook + Story clip with a phone mockup, hook overlay, and closing CTA. Exports save beside the original in History."
-            : "Style a clip in a phone mockup; combine clips separately. Export to History."
+            ? "Style a finished Hook + Story clip in a phone mockup, add a hook overlay and CTA, then export it."
+            : "Style any clip in a phone mockup, combine clips separately, then export that result to History."
         }
       />
       {generationId ? (

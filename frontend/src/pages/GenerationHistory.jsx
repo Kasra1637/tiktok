@@ -926,7 +926,7 @@ export default function GenerationHistory() {
       <PageHeader
         icon={HistoryIcon}
         title="Generation History"
-        description="Find renders and exports, check status, download clips, and manually log post results. Publishing is always manual."
+        description="Review renders and exports, download your clips, and log the results you posted for each video."
       />
 
       {error && (
