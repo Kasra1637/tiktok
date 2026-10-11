@@ -3563,6 +3563,33 @@ def _approval_gaps(profile: dict, pending: Optional[dict] = None) -> list:
     return [label for label, ok in checks if not ok]
 
 
+async def _angle_feedback_for_profile(brand_profile_id: str, user_id: str) -> dict:
+    """
+    History verdicts attributed to the angle kind and objective behind each video.
+
+    A verdict names a generation (or a project, for step verdicts), never an
+    angle — so the attribution walks generation -> project -> angle kind +
+    objective. Kinds and objectives are fixed vocabularies, which is what makes
+    the counts survive an angle regeneration that replaces every angle row id.
+    Only verdict events are read; downloads, edits, and other triggers are not
+    judgments about what worked and cannot steer generation.
+    """
+    rows = await _fetch_all(
+        """SELECT ca.kind AS kind, sp.objective AS objective, f.event AS event
+           FROM feedback_events f
+           LEFT JOIN generations g ON g.id = f.generation_id
+           JOIN studio_projects sp
+             ON sp.id = COALESCE(g.studio_project_id, f.studio_project_id)
+           LEFT JOIN content_angles ca ON ca.id = sp.content_angle_id
+           WHERE f.brand_profile_id = ? AND f.user_id = ?
+             AND f.event IN ('marked_successful', 'video_approved',
+                             'marked_unsuccessful', 'generation_rejected')
+           ORDER BY f.created_at DESC LIMIT 200""",
+        (brand_profile_id, user_id),
+    )
+    return feedback_mod.summarize_angle_feedback(rows)
+
+
 async def _auto_generate_content_angles(profile: dict, user_id: str) -> None:
     """
     Best-effort content angle generation after a profile is approved.
@@ -3572,9 +3599,10 @@ async def _auto_generate_content_angles(profile: dict, user_id: str) -> None:
     the profile and regenerate later (or the next listing backfills them).
     """
     try:
+        angle_feedback = await _angle_feedback_for_profile(profile.get("id"), user_id)
         angles = await _log_model_call(
             "content_angles", "text", TEXT_MODEL,
-            lambda: generate_content_angles(profile),
+            lambda: generate_content_angles(profile, angle_feedback=angle_feedback),
             user_id,
             brand_profile_id=profile.get("id"),
         )
@@ -4025,9 +4053,10 @@ async def generate_profile_content_angles(profile_id: str, user_id: str = Depend
         )
 
     try:
+        angle_feedback = await _angle_feedback_for_profile(profile_id, user_id)
         angles = await _log_model_call(
             "content_angles", "text", TEXT_MODEL,
-            lambda: generate_content_angles(profile),
+            lambda: generate_content_angles(profile, angle_feedback=angle_feedback),
             user_id,
             brand_profile_id=profile_id,
         )

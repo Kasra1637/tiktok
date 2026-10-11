@@ -1769,7 +1769,8 @@ def _normalize_outcome_statements(result: dict) -> None:
     result["outcome_statements"] = kept
 
 
-async def generate_content_angles(profile: dict, max_angles: int = 8) -> list:
+async def generate_content_angles(profile: dict, max_angles: int = 8,
+                                  angle_feedback: Optional[dict] = None) -> list:
     """
     Generate content angles for an approved App Profile.
 
@@ -1791,6 +1792,9 @@ async def generate_content_angles(profile: dict, max_angles: int = 8) -> list:
         profile: an App Profile row (brand_profiles) with fields already
             parsed into Python values by row_to_dict.
         max_angles: hard cap on returned angles.
+        angle_feedback: History verdicts attributed to angle kinds and
+            objectives (feedback.summarize_angle_feedback). Counts only;
+            rendered into the prompt, or a stated none-yet when empty.
     """
     def _list(name):
         val = profile.get(name)
@@ -1858,6 +1862,14 @@ async def generate_content_angles(profile: dict, max_angles: int = 8) -> list:
         "trial term, or imply a feature the profile does not list. Vary the "
         "kinds — do not return eight variations of the same angle. Return ONLY valid JSON."
     )
+
+    # History verdicts, when any exist. Counts and fixed kind/objective names
+    # only — the same rule as every other prompt layer. Rendered always, so
+    # an empty record reads as "no evidence yet" rather than as silence the
+    # model could fill with an invented best performer.
+    if angle_feedback is not None:
+        prompt += f"\n\n{feedback.build_angle_feedback_section(angle_feedback)}"
+
 
     # Routed through _chat_json so truncation is detected and retried
     # doubled instead of surfacing as unparseable JSON. The list-or-dict

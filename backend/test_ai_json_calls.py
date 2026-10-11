@@ -327,6 +327,53 @@ class TestGpt5MiniRequestShape:
             assert "temperature" not in payload
 
 
+class TestAngleFeedbackPromptWiring:
+    ANGLE = {
+        "kind": "problem_solution", "label": "Too many lists",
+        "target_audience": "Busy professionals", "user_problem": "Nothing gets finished",
+        "hook_promise": "Finish one thing", "app_feature": "Task timer",
+        "desired_emotion": "Relief", "claims_to_respect": [],
+    }
+
+    def _capture(self, monkeypatch):
+        import ai_service
+        captured = {}
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return [dict(self.ANGLE)]
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        return captured
+
+    def test_verdicts_reach_the_angle_prompt(self, monkeypatch):
+        import ai_service
+        import feedback as feedback_mod
+        captured = self._capture(monkeypatch)
+        summary = feedback_mod.summarize_angle_feedback([
+            {"kind": "problem_solution", "objective": "demonstrate_feature",
+             "event": "marked_successful"},
+        ])
+        _run(ai_service.generate_content_angles(
+            {"brand_name": "Taskly"}, angle_feedback=summary))
+        assert "problem_solution (1 win(s), 0 flop(s))" in captured["prompt"]
+
+    def test_no_record_reads_as_no_evidence_not_silence(self, monkeypatch):
+        import ai_service
+        import feedback as feedback_mod
+        captured = self._capture(monkeypatch)
+        _run(ai_service.generate_content_angles(
+            {"brand_name": "Taskly"},
+            angle_feedback=feedback_mod.summarize_angle_feedback([])))
+        assert "PAST VERDICTS: none recorded" in captured["prompt"]
+
+    def test_omitted_feedback_leaves_the_prompt_untouched(self, monkeypatch):
+        import ai_service
+        captured = self._capture(monkeypatch)
+        _run(ai_service.generate_content_angles({"brand_name": "Taskly"}))
+        assert "PAST VERDICTS" not in captured["prompt"]
+
+
 class TestAngleGoalPromptWiring:
     @pytest.mark.parametrize("flow", ["plan", "strategy"])
     def test_an_override_advances_the_goal_without_replacing_the_angle(self, monkeypatch, flow):

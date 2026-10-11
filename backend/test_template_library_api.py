@@ -930,6 +930,47 @@ class TestFeedbackInfluence:
         assert "regenerated" not in section
 
 
+class TestAngleFeedback:
+    def test_verdicts_group_by_kind_and_objective(self):
+        import feedback as feedback_mod
+        summary = feedback_mod.summarize_angle_feedback([
+            {"kind": "problem_solution", "objective": "demonstrate_feature",
+             "event": "marked_successful"},
+            {"kind": "problem_solution", "objective": "demonstrate_feature",
+             "event": "video_approved"},
+            {"kind": "founder_story", "objective": "demonstrate_feature",
+             "event": "generation_rejected"},
+            # Not a verdict: never steers generation.
+            {"kind": "problem_solution", "objective": "demonstrate_feature",
+             "event": "video_downloaded"},
+            # Attributable to nothing: skipped, not lumped.
+            {"kind": "", "objective": "", "event": "marked_successful"},
+        ])
+        assert summary["total"] == 3
+        assert {"name": "problem_solution", "wins": 2, "flops": 0} in summary["kinds"]
+        assert {"name": "founder_story", "wins": 0, "flops": 1} in summary["kinds"]
+        assert {"name": "demonstrate_feature", "wins": 2, "flops": 1} in summary["objectives"]
+
+    def test_empty_record_is_stated_not_silent(self):
+        import feedback as feedback_mod
+        section = feedback_mod.build_angle_feedback_section(
+            feedback_mod.summarize_angle_feedback([]))
+        assert "none recorded" in section
+
+    def test_section_names_wins_and_flops_without_inventing_more(self):
+        import feedback as feedback_mod
+        section = feedback_mod.build_angle_feedback_section(
+            feedback_mod.summarize_angle_feedback([
+                {"kind": "problem_solution", "objective": "",
+                 "event": "marked_successful"},
+                {"kind": "founder_story", "objective": "",
+                 "event": "marked_unsuccessful"},
+            ]))
+        assert "problem_solution (1 win(s), 0 flop(s))" in section
+        assert "founder_story (0 win(s), 1 flop(s))" in section
+        assert "Weak evidence, not proof" in section
+
+
 class TestCrossUserIsolation:
     def test_another_users_custom_template_is_hidden(self, api):
         import uuid as _uuid

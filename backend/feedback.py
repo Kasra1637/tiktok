@@ -222,6 +222,101 @@ def allowed_reasons(event: str) -> list:
     ]
 
 
+# History verdicts that attribute to the angle and objective behind a video.
+#
+# The rows these aggregate are pre-joined server-side (feedback event ->
+# generation -> project -> angle kind + objective), because neither the event
+# nor the generation names an angle on its own. Kinds and objectives are
+# fixed vocabularies, so the counts survive an angle regeneration that
+# replaces every angle row id — per-id attribution would be wiped by the
+# very refresh it is meant to improve.
+ANGLE_POSITIVE_EVENTS = ("marked_successful", "video_approved")
+ANGLE_NEGATIVE_EVENTS = ("marked_unsuccessful", "generation_rejected")
+
+
+def summarize_angle_feedback(rows) -> dict:
+    """
+    History verdicts grouped by the angle kind and objective behind each video.
+
+    `rows` are pre-joined dicts carrying `kind`, `objective`, and `event`.
+    Only the verdict events above are counted; anything else (a download, a
+    thumb on another step) is ignored rather than lumped into a bucket.
+    A row naming no kind and no objective says nothing attributable and is
+    skipped for the same reason.
+    """
+    kinds: dict = {}
+    objectives: dict = {}
+    total = 0
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        event = row.get("event") or ""
+        if event in ANGLE_POSITIVE_EVENTS:
+            verdict = "wins"
+        elif event in ANGLE_NEGATIVE_EVENTS:
+            verdict = "flops"
+        else:
+            continue
+        kind = (row.get("kind") or "").strip()
+        objective = (row.get("objective") or "").strip()
+        if not kind and not objective:
+            continue
+        total += 1
+        if kind:
+            bucket = kinds.setdefault(kind, {"wins": 0, "flops": 0})
+            bucket[verdict] += 1
+        if objective:
+            bucket = objectives.setdefault(objective, {"wins": 0, "flops": 0})
+            bucket[verdict] += 1
+
+    def _ranked(buckets):
+        return [
+            {"name": name, "wins": counts["wins"], "flops": counts["flops"]}
+            for name, counts in sorted(
+                buckets.items(),
+                key=lambda item: (-item[1]["wins"] - item[1]["flops"], item[0]),
+            )
+        ][:5]
+
+    return {"total": total, "kinds": _ranked(kinds), "objectives": _ranked(objectives)}
+
+
+def build_angle_feedback_section(summary: dict) -> str:
+    """
+    Render angle verdicts as prompt context, or say plainly that there are none.
+
+    Only counts travel: no video text, no founder notes. A thin record is
+    labelled weak evidence so one verdict cannot permanently steer generation.
+    """
+    summary = summary or {}
+    kinds = summary.get("kinds") or []
+    objectives = summary.get("objectives") or []
+    if not kinds and not objectives:
+        return (
+            "PAST VERDICTS: none recorded for this app yet. There is no evidence "
+            "about which angles work, so propose from the verified facts and do "
+            "not assume any approach is proven."
+        )
+
+    def _describe(entries):
+        return "; ".join(
+            f"{entry['name']} ({entry['wins']} win(s), {entry['flops']} flop(s))"
+            for entry in entries
+        )
+
+    lines = [
+        "PAST VERDICTS from the founder's own History verdicts "
+        f"({summary.get('total', 0)} attributed verdict(s)). Weak evidence, not proof: "
+        "lean toward what won and away from what flopped, but do not exclude "
+        "a kind or objective on one verdict alone.",
+    ]
+    if kinds:
+        lines.append("Angle kinds: " + _describe(kinds) + ".")
+    if objectives:
+        lines.append("Objectives: " + _describe(objectives) + ".")
+    return "\n".join(lines)
+
+
 def catalog() -> dict:
     """Events, their permitted reasons, and the automatic triggers."""
     return {
