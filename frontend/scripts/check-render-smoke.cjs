@@ -4054,7 +4054,11 @@ async function runAnalyticsChecks() {
     brand_profile_id: "p1",
     status: "completed",
     hook_line: "The list that replaced eleven lists",
+    template_id: "confession-open",
+    objective: "address_user_problem",
+    audience: "busy professionals 25-40",
     created_at: "2026-09-01T10:00:00Z",
+    completed_at: "2026-09-01T10:05:00Z",
     performance: {
       views: 12400,
       likes: 900,
@@ -4066,13 +4070,63 @@ async function runAnalyticsChecks() {
     },
   };
 
+  // Same objective as RECORDED, so mounts of all three make one comparable
+  // bucket. Views chosen so the median is unambiguous: 2400.
+  const RECORDED2 = {
+    ...RECORDED,
+    id: "gen-logged-2",
+    hook_line: "Second opening, same goal",
+    created_at: "2026-09-10T10:00:00Z",
+    performance: { ...RECORDED.performance, views: 2400, saves: 60, shares: 5, outcome: "successful", notes: "" },
+  };
+
+  const RECORDED3 = {
+    ...RECORDED,
+    id: "gen-logged-3",
+    hook_line: "Third opening, same goal",
+    created_at: "2026-09-20T10:00:00Z",
+    performance: { ...RECORDED.performance, views: 900, saves: 9, shares: 1, outcome: "unsuccessful", notes: "" },
+  };
+
+  // A lone bucket: one logged video in its objective. It must be listed and
+  // must never be ranked, because one video is not a comparison.
+  const SOLO = {
+    ...RECORDED,
+    id: "gen-solo",
+    hook_line: "The only educate-viewers video",
+    objective: "educate_viewers",
+    template_id: "feature-list",
+    created_at: "2026-09-15T10:00:00Z",
+    performance: { ...RECORDED.performance, views: 210, saves: 1, shares: 0, outcome: "unsuccessful", notes: "" },
+  };
+
+  // Logged, but with no view count. The rates over it must be dashes, never
+  // NaN, Infinity, or a confident-looking 0%.
+  const ZERO = {
+    ...RECORDED,
+    id: "gen-zero",
+    hook_line: "Logged without views",
+    created_at: "2026-09-25T10:00:00Z",
+    performance: { views: 0, likes: 0, comments: 0, shares: 0, saves: 3, outcome: "", notes: "" },
+  };
+
   const NUDGE = {
     id: "gen-bare",
     brand_profile_id: "p1",
     status: "completed",
     hook_line: "A hook nobody logged",
+    template_id: "feature-list",
     created_at: "2026-09-04T10:00:00Z",
+    completed_at: "2026-09-04T10:05:00Z",
     performance: null,
+  };
+
+  const NUDGE_NEWER = {
+    ...NUDGE,
+    id: "gen-bare-newer",
+    hook_line: "A newer hook nobody logged",
+    created_at: "2026-10-01T10:00:00Z",
+    completed_at: "2026-10-01T10:05:00Z",
   };
 
   const FAILED = {
@@ -4095,6 +4149,12 @@ async function runAnalyticsChecks() {
     getAppProfiles: async () => ({ profiles: [PROFILE] }),
     getProfileWhatWorks: async () => WORKS,
     getGenerationHistory: async () => ({ generations }),
+    getTemplateFacets: async () => ({
+      objectives: ["address_user_problem", "educate_viewers"],
+      objective_outcomes: {
+        address_user_problem: "Gets them naming the problem out loud",
+      },
+    }),
     getFeedback: async () => ({
       feedback: [],
       summary: {
@@ -4198,6 +4258,7 @@ async function runAnalyticsChecks() {
         getAppProfiles: async () => ({ profiles: [] }),
         getProfileWhatWorks: async () => null,
         getGenerationHistory: async () => ({ generations: [] }),
+        getTemplateFacets: async () => ({ objective_outcomes: {} }),
         getFeedback: async () => null,
       },
       async () => {
@@ -4207,6 +4268,153 @@ async function runAnalyticsChecks() {
     expectText(ctx, "Create an App Profile", "a founder with no app is told nothing");
     if (!ctx.container.querySelector('a[href="/brand"]')) {
       throw new Error("there is no way forward from an empty Analytics page");
+    }
+  });
+
+  // --- The decision layer: rates, template tags, nudge order, trend, the
+  // guarded breakdowns, and the copy that leaves the browser. ---
+
+  await check("a row shows save and share rates, and a zero-view row shows dashes", async (ctx) => {
+    // RECORDED: 310 saves / 12400 views = 2.5%, 25 shares = 0.2%. The ZERO
+    // row has counts but no denominator, so its rates must be dashes: NaN,
+    // Infinity, or a confident 0% would each turn "no data" into a verdict.
+    await mountAnalytics(ctx, [RECORDED, ZERO]);
+    const row = ctx.container.querySelector('[data-testid="analytics-row-gen-logged"]');
+    if (!row) throw new Error("the recorded row is missing");
+    const text = row.textContent || "";
+    if (!text.includes("save rate 2.5%")) {
+      throw new Error(`the save rate is not shown as 2.5%: ${text.slice(0, 200)}`);
+    }
+    if (!text.includes("share rate 0.2%")) {
+      throw new Error(`the share rate is not shown as 0.2%: ${text.slice(0, 200)}`);
+    }
+    const zero = ctx.container.querySelector('[data-testid="analytics-row-gen-zero"]');
+    if (!zero) throw new Error("the zero-view row is missing");
+    const zeroText = zero.textContent || "";
+    if (!zeroText.includes("save rate —")) {
+      throw new Error("a rate over nothing is not a dash");
+    }
+    for (const bad of ["NaN", "Infinity", "save rate 0.0%", "save rate 0%"]) {
+      if (zeroText.includes(bad)) {
+        throw new Error(`a rate over nothing rendered as a number: ${bad}`);
+      }
+    }
+  });
+
+  await check("a row names its template, connecting it to the ranking", async (ctx) => {
+    await mountAnalytics(ctx, [RECORDED]);
+    const row = ctx.container.querySelector('[data-testid="analytics-row-gen-logged"]');
+    if (!row) throw new Error("the recorded row is missing");
+    if (!(row.textContent || "").includes("template confession-open")) {
+      throw new Error(
+        "the row does not name its template, so it cannot be connected to the " +
+          "top/bottom ranking that names the same template"
+      );
+    }
+  });
+
+  await check("nudge rows run oldest first and say how long each waited", async (ctx) => {
+    // Mounted newest-first on purpose: the page must reorder them itself.
+    await mountAnalytics(ctx, [NUDGE_NEWER, NUDGE]);
+    const html = ctx.container.innerHTML;
+    const oldAt = html.indexOf("analytics-nudge-gen-bare\"");
+    const newAt = html.indexOf("analytics-nudge-gen-bare-newer");
+    if (oldAt === -1 || newAt === -1) throw new Error("a nudge row is missing");
+    if (!(oldAt < newAt)) {
+      throw new Error("nudge rows are not oldest-first: the longest-waiting clip is buried");
+    }
+    const old = ctx.container.querySelector('[data-testid="analytics-nudge-gen-bare"]');
+    if (!((old.textContent || "").includes("finished"))) {
+      throw new Error("the oldest nudge does not say how long it has waited");
+    }
+  });
+
+  await check("the trend shows logged views over time as dots on a line", async (ctx) => {
+    await mountAnalytics(ctx, [RECORDED, RECORDED2]);
+    const card = ctx.container.querySelector('[data-testid="analytics-trend"]');
+    if (!card) throw new Error("the views-over-time card is not on the page");
+    const dots = card.querySelectorAll("circle");
+    if (dots.length !== 2) {
+      throw new Error(`expected one dot per logged video (2), found ${dots.length}`);
+    }
+    // The written equivalent is the part a screen reader gets, so it is
+    // asserted, not the shape.
+    expectText(ctx, "2 logged videos", "the trend does not state its own sample size");
+  });
+
+  await check("a lone objective bucket is listed and explicitly unranked", async (ctx) => {
+    // Two buckets, one video each. Nothing here may be compared, because one
+    // video is not a comparison — ranking them would be the confident lie.
+    await mountAnalytics(ctx, [RECORDED, SOLO]);
+    const card = ctx.container.querySelector('[data-testid="analytics-by-objective"]');
+    if (!card) throw new Error("the objective breakdown is not on the page");
+    const text = card.textContent || "";
+    if (!text.includes("not enough logged videos to compare")) {
+      throw new Error("a single-video bucket is not marked as unrankable");
+    }
+    if (text.includes("leads")) {
+      throw new Error("a lead was named with no comparable bucket in the card");
+    }
+  });
+
+  await check("three logged videos make a bucket comparable and name the lead", async (ctx) => {
+    // 12400 / 2400 / 900 -> median 2400 -> "2.4k". The lead line must name its
+    // own n, and the card must stay inside description, never promise.
+    await mountAnalytics(ctx, [RECORDED, RECORDED2, RECORDED3]);
+    const card = ctx.container.querySelector('[data-testid="analytics-by-objective"]');
+    if (!card) throw new Error("the objective breakdown is not on the page");
+    const text = card.textContent || "";
+    for (const needle of ["leads", "2.4k", "3 logged"]) {
+      if (!text.includes(needle)) {
+        throw new Error(`the comparable bucket does not read as one: missing ${needle}`);
+      }
+    }
+    if (!text.includes("Gets them naming the problem out loud")) {
+      throw new Error("the facets outcome copy is not shown under its objective");
+    }
+    expectAbsent(ctx, "guarantee", "the breakdown promises what the outcome copy forbids");
+  });
+
+  await check("the audience breakdown reads raw labels, never code-shaped ones", async (ctx) => {
+    await mountAnalytics(ctx, [RECORDED]);
+    const card = ctx.container.querySelector('[data-testid="analytics-by-audience"]');
+    if (!card) throw new Error("the audience breakdown is not on the page");
+    // "busy professionals 25-40" is a label, not a code: humanizing it would
+    // title-case a sentence the founder wrote.
+    expectText(ctx, "busy professionals 25-40", "the audience label was reshaped");
+  });
+
+  await check("the header offers a copy of the summary", async (ctx) => {
+    await mountAnalytics(ctx, [RECORDED]);
+    if (!ctx.container.querySelector('[data-testid="analytics-copy-summary"]')) {
+      throw new Error("there is no way to take the learning out of the browser");
+    }
+  });
+
+  await check("the copied text carries the verdicts, the templates and the loop line", async () => {
+    // Asserted against the builder directly: mocking the clipboard would test
+    // jsdom, not the product. What matters is that the text leaving the page
+    // contains the three things the page exists for.
+    const { buildAnalyticsSummaryText } = load("pages/Analytics.jsx");
+    const text = buildAnalyticsSummaryText({
+      profileName: "Threadly",
+      generatedAt: "Oct 11, 2026",
+      recorded: [RECORDED],
+      tallies: { successful: 1, unsuccessful: 0, undecided: 0 },
+      whatWorks: WORKS,
+      objectiveOutcomes: null,
+      signals: [{ signal: "template_changed", count: 3 }],
+    });
+    for (const needle of [
+      "Threadly",
+      "confession-open",
+      "1 worked",
+      "Template Changed",
+      "feed your",
+    ]) {
+      if (!text.includes(needle)) {
+        throw new Error(`the copied summary drops ${JSON.stringify(needle)}`);
+      }
     }
   });
 }

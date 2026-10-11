@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 import { Alert, AlertDescription } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
 import PageHeader from "../components/PageHeader";
 import { SectionCard } from "../components/SectionCard";
-import { FactChip } from "../components/FactChip";
+import { FactChip, FactList } from "../components/FactChip";
 import WhatWorksCard from "../components/WhatWorksCard";
 import { api, getErrorMessage } from "../lib/api";
 import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
-import { TrendingUp, Loader2, AlertTriangle, Info, CircleCheck, CircleX } from "lucide-react";
+import { TrendingUp, Loader2, AlertTriangle, Info, CircleCheck, CircleX, Copy } from "lucide-react";
 
 /**
  * Recorded results, what the loop learned, and why logging pays off.
@@ -39,12 +40,115 @@ function humanize(value) {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/**
+ * One ratio the platforms reward, computed only over a real denominator.
+ *
+ * Views are what the founder typed in and can be 0, null, or missing. A rate
+ * over nothing is not 0% — rendering it as a number would turn "no data" into
+ * "bad data", which is exactly the direction a low-views keeper must not read.
+ */
+function rateText(part, whole) {
+  const w = Number(whole);
+  if (!Number.isFinite(w) || w <= 0) return "—";
+  return `${(((Number(part) || 0) / w) * 100).toFixed(1)}%`;
+}
+
+/** Short counts for lead lines and the copied summary: 2400 -> "2.4k". */
+function compact(n) {
+  const v = Number(n) || 0;
+  if (v < 1000) return String(Math.round(v));
+  const k = v / 1000;
+  return `${k >= 100 ? Math.round(k) : k.toFixed(1).replace(/\.0$/, "")}k`;
+}
+
+/**
+ * How long a finished clip has waited to be logged.
+ *
+ * Completed rows stay listed as nudges until the founder records them, and a
+ * three-week-old nudge is a different urgency from a three-hour-old one. The
+ * input prefers completed_at (when the clip was actually produced) and falls
+ * back to created_at.
+ */
+function finishedAgeLabel(iso) {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return "";
+  const days = Math.floor((Date.now() - t) / 86400000);
+  if (days < 1) return "finished today";
+  if (days === 1) return "finished yesterday";
+  if (days < 7) return `finished ${days}d ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return `finished ${weeks}w ago`;
+  return `finished ${new Date(t).toLocaleDateString()}`;
+}
+
+/** Median, because one 500k outlier must not be allowed to define a bucket. */
+function median(nums) {
+  const xs = (nums || []).filter((n) => Number.isFinite(n)).sort((a, b) => a - b);
+  if (!xs.length) return null;
+  const mid = Math.floor(xs.length / 2);
+  return xs.length % 2 ? xs[mid] : Math.round((xs[mid - 1] + xs[mid]) / 2);
+}
+
+/**
+ * How many logged videos a bucket needs before it may be compared.
+ *
+ * Named, not a bare literal, because this number is a judgment call rather
+ * than a fact: it is the smallest n at which a median of logged views starts
+ * to say anything, and raising it later must not require finding every place
+ * a "3" happens to appear.
+ */
+const COMPARABLE_AT = 3;
+
+/**
+ * Group recorded rows by a free-form dimension (objective, audience).
+ *
+ * Buckets with zero view counts are shown but refuse to produce a median: a
+ * bucket whose rows carry no views has nothing to rank on, and inventing a
+ * zero median would read as a measured failure rather than missing data.
+ */
+function bucketDimension(rows, key) {
+  const map = new Map();
+  for (const row of rows || []) {
+    const raw = row?.[key];
+    const label = typeof raw === "string" && raw.trim() ? raw.trim() : "(none)";
+    if (!map.has(label)) map.set(label, []);
+    map.get(label).push(row);
+  }
+  return [...map.entries()].map(([label, members]) => {
+    const counted = members
+      .map((m) => Number(m.performance?.views))
+      .filter((v) => Number.isFinite(v) && v > 0);
+    return {
+      label,
+      n: members.length,
+      views: counted.reduce((a, b) => a + b, 0),
+      med: median(counted),
+      comparable: members.length >= COMPARABLE_AT,
+    };
+  });
+}
+
+/**
+ * The bucket a breakdown may name as leading: comparable, with view counts,
+ * and the highest median. Anything else is a candidate the data cannot vouch
+ * for, so a null return means the card shows counts and waits.
+ */
+function leadBucket(buckets) {
+  const pool = (buckets || []).filter((b) => b.comparable && b.med != null);
+  if (!pool.length) return null;
+  return pool.reduce((a, b) => (b.med > a.med ? b : a));
+}
+
 export default function Analytics() {
   const [profiles, setProfiles] = useState([]);
   const [selectedId, setSelectedId] = useState("");
   const [whatWorks, setWhatWorks] = useState(null);
   const [generations, setGenerations] = useState([]);
   const [feedback, setFeedback] = useState(null);
+  // Objective outcome copy ("Gets them naming the problem out loud") lives in
+  // /templates/facets and is fetched once: it is global, not per profile, and
+  // the breakdown must still render when it fails, falling back to labels.
+  const [facets, setFacets] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -103,12 +207,50 @@ export default function Analytics() {
     loadProfileData(selectedId);
   }, [selectedId, loadProfileData]);
 
+  useEffect(() => {
+    api.getTemplateFacets().then(setFacets).catch(() => setFacets(null));
+  }, []);
+
   const selectProfile = (id) => {
     setSelectedId(id);
     // Persisted so returning here is one click, not a re-pick. Same key the
     // rest of the app uses, so an app chosen here is the app the Asset Library
     // opens on.
     rememberCurrentAppId(id);
+  };
+
+  // The learning leaves the browser: one plain block with the ledger, the
+  // verdicts and the breakdowns, for a doc or a collaborator. Built from the
+  // same derived structures the cards render, so the copy can never disagree
+  // with the page.
+  const copySummary = async () => {
+    const profile = profiles.find((p) => p.id === selectedId);
+    const text = buildAnalyticsSummaryText({
+      profileName: profile?.brand_name || "Untitled app",
+      generatedAt: new Date().toLocaleDateString(),
+      recorded,
+      tallies,
+      whatWorks,
+      objectiveOutcomes: facets?.objective_outcomes || null,
+      signals: feedback?.summary?.top_signals || [],
+    });
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // Older contexts with no async clipboard: a transient textarea is the
+        // only copy path that works everywhere.
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      toast.success("Summary copied.");
+    } catch {
+      toast.error("Could not copy the summary.");
+    }
   };
 
   // Completed rows only. A failed render has nothing to record results against,
@@ -119,7 +261,38 @@ export default function Analytics() {
     [generations]
   );
   const recorded = useMemo(() => ledger.filter((g) => g.performance), [ledger]);
-  const unrecorded = useMemo(() => ledger.filter((g) => !g.performance), [ledger]);
+  // Nudges run oldest first: the clip that has waited longest to be logged is
+  // the one the loop is losing first, so it goes on top rather than wherever
+  // creation order happened to leave it.
+  const unrecorded = useMemo(
+    () =>
+      ledger
+        .filter((g) => !g.performance)
+        .sort(
+          (a, b) =>
+            new Date(a.completed_at || a.created_at).getTime() -
+            new Date(b.completed_at || b.created_at).getTime()
+        ),
+    [ledger]
+  );
+
+  // Views over time, logged videos only. A row with no view count carries no
+  // trend evidence, so it is skipped rather than plotted as a zero that would
+  // read as a collapse. Renders nothing when there is nothing to plot.
+  const trendPoints = useMemo(
+    () =>
+      recorded
+        .map((r) => ({
+          t: new Date(r.performance?.created_at || r.created_at).getTime(),
+          views: Number(r.performance?.views),
+        }))
+        .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.views) && p.views > 0)
+        .sort((a, b) => a.t - b.t),
+    [recorded]
+  );
+
+  const objectiveBuckets = useMemo(() => bucketDimension(recorded, "objective"), [recorded]);
+  const audienceBuckets = useMemo(() => bucketDimension(recorded, "audience"), [recorded]);
 
   const tallies = useMemo(
   () => tallyVerdicts(recorded, feedback?.summary),
@@ -154,21 +327,34 @@ export default function Analytics() {
           title="Analytics"
           description="Every result you have logged, and what the app has learned from it."
           actions={
-            profiles.length > 1 ? (
-              <select
-                value={selectedId}
-                onChange={(e) => selectProfile(e.target.value)}
-                aria-label="Select App Profile"
-                data-testid="analytics-profile-picker"
-                className="rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3 py-1.5 text-xs font-medium"
-              >
-                {profiles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.brand_name || "Untitled app"}
-                  </option>
-                ))}
-              </select>
-            ) : null
+            <div className="flex flex-wrap items-center gap-2">
+              {selectedId ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={copySummary}
+                  data-testid="analytics-copy-summary"
+                  title="Copy this app's results as plain text"
+                >
+                  <Copy className="h-3.5 w-3.5" /> Copy summary
+                </Button>
+              ) : null}
+              {profiles.length > 1 ? (
+                <select
+                  value={selectedId}
+                  onChange={(e) => selectProfile(e.target.value)}
+                  aria-label="Select App Profile"
+                  data-testid="analytics-profile-picker"
+                  className="rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3 py-1.5 text-xs font-medium"
+                >
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.brand_name || "Untitled app"}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+            </div>
           }
         />
       </div>
@@ -188,6 +374,11 @@ export default function Analytics() {
       )}
 
       {selectedId && <WhatWorksCard data={whatWorks} />}
+
+      {/* The one question the ledger alone cannot answer: is this app getting
+          better or worse. Chronological logged views, nothing invented — a row
+          with no view count is skipped, not plotted as a zero. */}
+      {selectedId && <TrendSpark points={trendPoints} />}
 
       {/* The ledger is the page. What Has Worked Here is the aggregate of these
           rows; the rows are the evidence, and each one links to the History row
@@ -222,6 +413,31 @@ export default function Analytics() {
         <VerdictTallies tallies={tallies} total={recorded.length} />
       )}
 
+      {/* Which video goal to pick next, read off the founder's own logged
+          results. Counts are always shown; a comparison only appears once a
+          bucket clears COMPARABLE_AT. Descriptions, never promises — the same
+          rule the outcome copy follows. */}
+      {selectedId && (
+        <DimensionBreakdown
+          title="By objective"
+          testid="analytics-by-objective"
+          buckets={objectiveBuckets}
+          formatKey={humanize}
+          noneLabel="No objective set"
+          copy={facets?.objective_outcomes || null}
+        />
+      )}
+      {selectedId && (
+        <DimensionBreakdown
+          title="By audience"
+          testid="analytics-by-audience"
+          buckets={audienceBuckets}
+          formatKey={(v) => v}
+          noneLabel="No audience set"
+          copy={null}
+        />
+      )}
+
       {selectedId && (
         <SignalCounts summary={feedback?.summary} />
       )}
@@ -247,6 +463,7 @@ function LedgerRow({ row, nudge = false }) {
   const verdict = perf?.outcome ? VERDICT_COPY[perf.outcome] : null;
 
   if (nudge) {
+    const age = finishedAgeLabel(row.completed_at || row.created_at);
     return (
       <div
         className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-[color:var(--hairline)] px-3 py-2"
@@ -254,6 +471,7 @@ function LedgerRow({ row, nudge = false }) {
       >
         <span className="min-w-0 truncate text-sm text-muted-foreground">
           {row.hook_line || row.template_id || "Finished video"} — nothing logged yet
+          {age ? ` · ${age}` : ""}
         </span>
         {/* `?generation=` is the same deep link History reads to open the record
             form, so this lands on the form rather than on the row. */}
@@ -301,6 +519,34 @@ function LedgerRow({ row, nudge = false }) {
         ))}
       </div>
 
+      {/* The row's template, so a result connects to the ranking it feeds. The
+          What Has Worked Here card names templates in aggregate; this chip is
+          what lets the founder see that this 12k-view row IS the
+          confession-open the top list is talking about. */}
+      {row.template_id ? (
+        <FactList className="mt-1.5">
+          <FactChip>template {row.template_id}</FactChip>
+        </FactList>
+      ) : null}
+
+      {/* The two ratios worth comparing. A low-view video with a strong save
+          rate is a keeper; the raw counts above cannot say that, and the
+          top-list ranking by views actively argues against it. */}
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <span>
+          save rate{" "}
+          <span className="font-semibold tabular-nums text-foreground">
+            {rateText(perf.saves, perf.views)}
+          </span>
+        </span>
+        <span>
+          share rate{" "}
+          <span className="font-semibold tabular-nums text-foreground">
+            {rateText(perf.shares, perf.views)}
+          </span>
+        </span>
+      </div>
+
       {/* The reason is the only part of a verdict the founder supplied, so it is
           shown verbatim and kept short. It is what makes a rejection countable
           later instead of a bare no. */}
@@ -317,6 +563,182 @@ function LedgerRow({ row, nudge = false }) {
       </div>
     </div>
   );
+}
+
+/**
+ * Logged views over time, as a sparkline with a written equivalent.
+ *
+ * Hand-rolled SVG rather than a chart dependency: this is one polyline with
+ * dots and no interactivity, and a dependency would buy tooltips nobody asked
+ * for. The muted line under it states the same first-to-last movement in
+ * words, so the trend is readable without parsing the shape — and so a screen
+ * reader gets the conclusion instead of a silent image.
+ */
+function TrendSpark({ points }) {
+  if (!points.length) return null;
+  const W = 100;
+  const H = 34;
+  const P = 5;
+  const max = Math.max(...points.map((p) => p.views), 1);
+  const x = (i) => (points.length === 1 ? W / 2 : P + (i * (W - 2 * P)) / (points.length - 1));
+  const y = (v) => H - P - (v / max) * (H - 2 * P);
+  const first = points[0];
+  const last = points[points.length - 1];
+  return (
+    <SectionCard title="Views over time" className="space-y-2" data-testid="analytics-trend">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="h-10 w-full text-[color:var(--brand-indigo)]"
+        role="img"
+        aria-label={`Logged views across ${points.length} videos`}
+      >
+        {points.length > 1 && (
+          <polyline
+            points={points.map((p, i) => `${x(i)},${y(p.views)}`).join(" ")}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        )}
+        {points.map((p, i) => (
+          <circle key={i} cx={x(i)} cy={y(p.views)} r="2" fill="currentColor" />
+        ))}
+      </svg>
+      <p className="text-xs text-muted-foreground">
+        {points.length === 1
+          ? `${compact(last.views)} views · 1 logged video`
+          : `${compact(first.views)} → ${compact(last.views)} · ${points.length} logged videos`}
+      </p>
+    </SectionCard>
+  );
+}
+
+/**
+ * Recorded results by one dimension, with the count always shown and the
+ * comparison earned.
+ *
+ * Every bucket renders its n and its total views — those are facts about what
+ * was logged. But a lead line only appears when a bucket clears COMPARABLE_AT
+ * with view counts to rank on, and it names its own n so the claim carries its
+ * evidence. Below that the bucket is listed and explicitly unranked, which is
+ * the honest middle between hiding thin data and ranking it.
+ */
+function DimensionBreakdown({ title, testid, buckets, formatKey, noneLabel, copy }) {
+  if (!buckets.length) return null;
+  const leader = leadBucket(buckets);
+  const anyComparable = buckets.some((b) => b.comparable);
+  return (
+    <SectionCard title={title} className="space-y-3" data-testid={testid}>
+      {leader && (
+        <p className="text-sm">
+          {leader.label === "(none)" ? noneLabel : formatKey(leader.label)} leads —{" "}
+          {compact(leader.med)} median views across {leader.n} logged videos.
+        </p>
+      )}
+      <div className="space-y-2.5">
+        {buckets.map((b) => (
+          <div key={b.label}>
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className="min-w-0 truncate">
+                {b.label === "(none)" ? noneLabel : formatKey(b.label)}
+              </span>
+              <FactChip>{b.n} logged</FactChip>
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {compact(b.views)} views total
+              {b.med != null ? ` · median ${compact(b.med)}` : " · no view counts logged"}
+              {!b.comparable ? " · not enough logged videos to compare" : ""}
+            </p>
+            {copy?.[b.label] ? (
+              <p className="text-xs text-muted-foreground">{copy[b.label]}</p>
+            ) : null}
+          </div>
+        ))}
+      </div>
+      {!anyComparable && (
+        <p className="text-xs text-muted-foreground">
+          The counts above are real; the ranking waits. A comparison needs
+          enough logged videos in one bucket to mean anything.
+        </p>
+      )}
+    </SectionCard>
+  );
+}
+
+/**
+ * The whole page as plain text, for a doc or a collaborator.
+ *
+ * Exported (rather than kept inside the click handler) so the shape is
+ * assertable without mocking the clipboard: the smoke gate reads the built
+ * text directly and checks that the verdicts, the templates and the loop line
+ * all survived the trip out of the browser.
+ */
+export function buildAnalyticsSummaryText({
+  profileName,
+  generatedAt,
+  recorded,
+  tallies,
+  whatWorks,
+  objectiveOutcomes,
+  signals,
+}) {
+  const lines = [];
+  lines.push(`HookForge Analytics — ${profileName || "Untitled app"} (${generatedAt})`);
+  const rows = recorded || [];
+  const totalViews = rows.reduce((a, r) => a + (Number(r.performance?.views) || 0), 0);
+  lines.push(`Logged videos: ${rows.length} · total views logged: ${totalViews.toLocaleString()}`);
+  if (tallies) {
+    lines.push(
+      `Verdicts: ${tallies.successful} worked, ${tallies.unsuccessful} did not work, ${tallies.undecided} no verdict`
+    );
+  }
+  const top = whatWorks?.top || [];
+  const bottom = whatWorks?.bottom || [];
+  if (top.length || bottom.length) lines.push("");
+  if (top.length) {
+    lines.push("Carried the most views:");
+    for (const t of top) {
+      lines.push(
+        `- ${t.template_id} — ${Number(t.views).toLocaleString()} views, save ${Math.round((t.save_rate || 0) * 100)}%`
+      );
+    }
+  }
+  if (bottom.length) {
+    lines.push("Carried the least:");
+    for (const b of bottom) {
+      lines.push(
+        `- ${b.template_id} — ${Number(b.views).toLocaleString()} views, save ${Math.round((b.save_rate || 0) * 100)}%`
+      );
+    }
+  }
+  const buckets = bucketDimension(rows, "objective");
+  if (buckets.length) {
+    lines.push("");
+    lines.push("By objective:");
+    const leader = leadBucket(buckets);
+    for (const b of buckets) {
+      const label = b.label === "(none)" ? "Unset" : humanize(b.label);
+      const marked = leader && b.label === leader.label ? " (leads)" : "";
+      lines.push(
+        `- ${label} — ${b.n} logged, median ${b.med != null ? compact(b.med) : "—"} views${marked}${
+          !b.comparable ? " (not enough to compare)" : ""
+        }`
+      );
+    }
+  }
+  const sigs = signals || [];
+  if (sigs.length) {
+    lines.push("");
+    lines.push("What happened (automatic):");
+    for (const s of sigs) lines.push(`- ${humanize(s.signal)} — ${s.count}`);
+  }
+  lines.push("");
+  lines.push(
+    "Logged results feed your next strategy. Every figure typed in by hand; nothing scraped or verified."
+  );
+  return lines.join("\n");
 }
 
 /**
