@@ -725,7 +725,7 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
               stay, because they are what makes the verdict a question and the
               navigation a list rather than a pile of buttons. */}
           {row.status === "completed" && (
-            <div className="space-y-2 pt-1">
+            <div className="space-y-2 pt-1" data-testid="history-verdict">
               <span className="eyebrow flex items-center gap-1.5">
                 <CircleHelp className="h-3 w-3 shrink-0" aria-hidden="true" />
                 How did this turn out?

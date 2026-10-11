@@ -251,7 +251,14 @@ export const TOURS = {
         title: "Play, download, or reuse a render",
         optional: true,
         body:
-          "A completed row offers its video, status, model, download, and actions to duplicate or open it in Demo + CTA. Record a verdict to feed your own feedback into later recommendations.",
+          "A completed row offers its video, status, model, download, and actions to duplicate or open it in Demo + CTA. Your verdicts below are what teach the studio: they steer future audience angles, template suggestions, and script plans for this app.",
+      },
+      {
+        target: '[data-testid="history-verdict"]',
+        title: "Say what worked",
+        optional: true,
+        body:
+          "Answer how each finished video turned out — Looks good or Not good. One tap each, no diagnosis needed. Wins lean future angles, templates, and plans toward what worked here; flops steer them away. A verdict with no numbers still counts.",
       },
       {
         target: '[data-testid="generation-details-button"]',
@@ -265,7 +272,7 @@ export const TOURS = {
         title: "Record results after posting",
         optional: true,
         body:
-          "Enter views and other metrics yourself after you post, plus an optional outcome. These are not pulled from a platform or verified; your recorded feedback may help shape future suggestions.",
+          "Enter views and other metrics yourself after you post, plus a Worked or Did not work verdict. Numbers are never pulled from a platform or verified. Logged views power the per-template learning that the next strategy reads; the verdict joins the same loop as the quick Looks good above.",
       },
     ],
   },
