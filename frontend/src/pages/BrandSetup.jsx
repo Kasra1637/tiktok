@@ -454,9 +454,6 @@ export default function BrandSetup() {
               </span>
               <div className="min-w-0">
                 <h2 className="font-display text-base font-semibold">Research a mobile app</h2>
-                <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">
-                  Enter your app's App Store URL, Google Play URL, or both, plus any support pages. Add optional notes, then choose Research app. Review the draft for accuracy before saving and approving it.
-                </p>
               </div>
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
