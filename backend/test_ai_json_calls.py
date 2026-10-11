@@ -279,7 +279,7 @@ class TestGpt5MiniRequestShape:
                 check(node.get("items", {}), f"{path}[]")
 
         for name in (
-            "BRAND_ANALYSIS_JSON_SCHEMA", "APP_PROFILE_JSON_SCHEMA",
+            "APP_PROFILE_JSON_SCHEMA",
             "ANGLES_JSON_SCHEMA", "PLAN_JSON_SCHEMA", "STRATEGY_JSON_SCHEMA",
         ):
             check(getattr(ai_service, name), name)
@@ -287,7 +287,7 @@ class TestGpt5MiniRequestShape:
     def test_direct_flows_send_response_format(self, monkeypatch):
         """
         The flows that post httpx directly (not through _chat_json) must
-        still carry the envelope: brand research, app research, angles, plan.
+        still carry the envelope: app research, angles, plan.
         """
         import ai_service
 
@@ -313,18 +313,15 @@ class TestGpt5MiniRequestShape:
             "claims_used": [],
         }
         rec = _patch_client(monkeypatch, [
-            _completion(json.dumps(
-                {k: "" for k in ai_service.REQUIRED_BRAND_ANALYSIS_KEYS})),
             _completion(json.dumps(profile)),
             _completion(json.dumps({"angles": [angle]})),
             _completion(json.dumps(plan)),
         ])
-        _run(ai_service.analyze_brand_from_text("https://x.example", "text"))
-        _run(ai_service.analyze_app_profile({"website": "text"}))
+        _run(ai_service.analyze_app_profile({"app_store": "text"}))
         _run(ai_service.generate_content_angles({"brand_name": "B"}))
         _run(ai_service.generate_creative_plan(
             profile={"brand_name": "B"}, template={"name": "T"}))
-        assert len(rec.payloads) == 4
+        assert len(rec.payloads) == 3
         for payload in rec.payloads:
             assert payload["response_format"]["type"] == "json_schema"
             assert "temperature" not in payload

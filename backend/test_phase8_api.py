@@ -972,9 +972,12 @@ class TestNoPlatformAutomation:
         legacy-history pages were removed along with their backends. Their
         routes must not be registered anywhere — a leftover route is a live
         paid-AI endpoint (analysis) or a dead page behind a bookmark.
+        Website autofill (POST /brand/analyze-url) joined them: profiles are
+        created from store listings only, so its route must stay gone too.
         """
         paths = {getattr(r, "path", "") for r in api.api_router.routes}
         for gone in (
+            "/api/brand/analyze-url",
             "/api/niches",
             "/api/niches/{niche_key}/videos",
             "/api/niches/{niche_key}/trending",
@@ -1021,12 +1024,12 @@ class TestResearchRecordsOnlyWhatItRead:
     detail view renders the list as though it were provenance.
     """
 
-    def _research(self, api, monkeypatch, *, website=True, appstore=True):
+    def _research(self, api, monkeypatch, *, appstore=True, play=True):
         from models import AppProfileResearchRequest
 
         async def fake_fetch(url, max_chars):
-            # Only the website resolves. The store listing is behind a bot check.
-            if url.startswith("https://apps.apple.com"):
+            # Only the App Store listing resolves. Google Play is behind a bot check.
+            if url.startswith("https://play.google.com"):
                 return ""
             return "ShiftLog logs a shift in one tap. Built for night-shift nurses."
 
@@ -1047,8 +1050,8 @@ class TestResearchRecordsOnlyWhatItRead:
         monkeypatch.setattr(api, "_fetch_url_text", fake_fetch)
         monkeypatch.setattr(api, "analyze_app_profile", fake_analyze)
         return _run(api.research_app_profile(payload=AppProfileResearchRequest(
-            website_url="https://shiftlog.example" if website else "",
             appstore_url="https://apps.apple.com/x" if appstore else "",
+            play_url="https://play.google.com/y" if play else "",
         ), user_id=ANON)), seen
 
     def test_a_failed_source_is_not_recorded_as_read(self, api, monkeypatch):
@@ -1059,9 +1062,9 @@ class TestResearchRecordsOnlyWhatItRead:
         if isinstance(recorded, str):
             import json as _json
             recorded = _json.loads(recorded or "[]")
-        assert recorded == ["website"]
+        assert recorded == ["app_store"]
         # And the model was not handed an empty entry labelled as a source.
-        assert list(seen[0]) == ["website"]
+        assert list(seen[0]) == ["app_store"]
         assert all((v or "").strip() for v in seen[0].values())
 
     def test_a_partially_failed_research_still_succeeds(self, api, monkeypatch):
@@ -1069,6 +1072,6 @@ class TestResearchRecordsOnlyWhatItRead:
         Losing one source is not losing the profile. The point is that the gap
         is recorded, not that partial research is refused.
         """
-        profile, _ = self._research(api, monkeypatch, appstore=False)
+        profile, _ = self._research(api, monkeypatch, play=False)
         assert profile["brand_name"] == "ShiftLog"
         assert profile["status"] == "draft"

@@ -4022,7 +4022,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
 
   console.log("");
   console.log("Checking the App Profile sticky review bar...");
-  await runBrandSetupStickyBarChecks();
+  await runBrandSetupChecks();
 
   console.log("");
   console.log("Checking the native Product Demo + CTA editor...");
@@ -4775,8 +4775,13 @@ async function runDeleteDialogChecks() {
  * the research and refresh paths and on neither analyze-url nor a manual create.
  * Both halves are asserted: the bar appears for a researched profile, and a
  * hand-typed one keeps a save.
+ *
+ * Profiles are created from store listings only: the details card renders
+ * once research returns a profile, never before. So these also pin the two
+ * halves of that gate — nothing to correct before research, and the draft
+ * revealed the moment it exists.
  */
-async function runBrandSetupStickyBarChecks() {
+async function runBrandSetupChecks() {
   const BrandSetup = load("pages/BrandSetup.jsx").default;
 
   const researched = {
@@ -4784,9 +4789,9 @@ async function runBrandSetupStickyBarChecks() {
     brand_name: "Threadly",
     brand_description: "One list, not eleven.",
     status: "draft",
-    website_url: "https://threadly.example",
+    appstore_url: "https://apps.apple.com/threadly",
     last_research_at: "2026-09-01T10:00:00Z",
-    research_sources: [{ label: "website", ok: true }],
+    research_sources: [{ label: "app_store", ok: true }],
   };
 
   const handTyped = {
@@ -4855,6 +4860,88 @@ async function runBrandSetupStickyBarChecks() {
             "save on this page, so the form can now be filled and never stored."
         );
       }
+    }
+  );
+
+  await check(
+    "with no profile the details stay hidden and only research is offered",
+    async (ctx) => {
+      // Before research there is no draft to correct, so the manual card must
+      // not render — and neither may the removed website autofill.
+      await withApi(
+        {
+          getActiveBrand: async () => {
+            throw new Error("no brand yet");
+          },
+          getAppProfiles: async () => ({ profiles: [] }),
+        },
+        async () => {
+          await mount(BrandSetup, {})(ctx);
+        }
+      );
+      await act(async () => {});
+      if (!ctx.container.querySelector('[data-testid="app-research-card"]')) {
+        throw new Error("the research card is missing: there is no way to create a profile");
+      }
+      for (const gone of [
+        "brand-manual-card",
+        "brand-url-card",
+        "save-brand-button",
+        "save-manual-profile-button",
+      ]) {
+        if (ctx.container.querySelector(`[data-testid="${gone}"]`)) {
+          throw new Error(
+            `a profile-less page still renders ${gone}: review controls with nothing to review`
+          );
+        }
+      }
+    }
+  );
+
+  await check(
+    "research reveals the details card for the draft it just created",
+    async (ctx) => {
+      // Everything inside withApi: the override only lives for the callback,
+      // and the submit below must still see it.
+      await withApi(
+        {
+          getActiveBrand: async () => {
+            throw new Error("no brand yet");
+          },
+          getAppProfiles: async () => ({ profiles: [researched] }),
+          researchAppProfile: async () => researched,
+        },
+        async () => {
+          await mount(BrandSetup, {})(ctx);
+          await act(async () => {});
+          if (ctx.container.querySelector('[data-testid="brand-manual-card"]')) {
+            throw new Error("the details card renders before any profile exists");
+          }
+          await typeInto(
+            ctx,
+            ctx.container.querySelector('[data-testid="appstore-url-input"]'),
+            "https://apps.apple.com/threadly",
+            "no App Store input to research from"
+          );
+          // Submitted the way the form submits it, so this pins the wiring
+          // and not just the handler existing.
+          await act(async () => {
+            ctx.container
+              .querySelector('[data-testid="app-research-card"]')
+              .dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true }));
+          });
+          await act(async () => {});
+          if (!ctx.container.querySelector('[data-testid="brand-manual-card"]')) {
+            throw new Error(
+              "research succeeded but the details card never appeared: the draft " +
+                "exists and the founder cannot see it"
+            );
+          }
+          if (!ctx.container.querySelector('[data-testid="save-brand-button"]')) {
+            throw new Error("the revealed draft has no sticky save to store corrections with");
+          }
+        }
+      );
     }
   );
 }

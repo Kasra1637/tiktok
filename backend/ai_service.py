@@ -182,11 +182,6 @@ REQUIRED_VIDEO_PROMPT_KEYS = {
     "scene_details", "brand_narrative", "full_video_prompt", "suggested_duration_seconds",
 }
 
-REQUIRED_BRAND_ANALYSIS_KEYS = {
-    "brand_name", "brand_description", "niche",
-    "target_audience", "ideal_customer_profile", "differentiation", "tone_voice",
-}
-
 # Full App Profile schema produced by analyze_app_profile(). List fields come
 # back as JSON arrays of short strings; icp_segments entries are "Segment
 # label — needs / hook promise" one-liners so they stay editable text.
@@ -293,18 +288,6 @@ def _strict_object(properties: dict) -> dict:
         "required": sorted(properties),
         "additionalProperties": False,
     }
-
-
-BRAND_ANALYSIS_JSON_SCHEMA = _strict_object({
-    "brand_name": _str_prop(),
-    "brand_description": _str_prop(),
-    "niche": _str_prop(),
-    "target_audience": _str_prop(),
-    "ideal_customer_profile": _str_prop(),
-    "differentiation": _str_prop(),
-    "tone_voice": _str_prop(),
-})
-# Mirrors REQUIRED_BRAND_ANALYSIS_KEYS above.
 
 
 APP_PROFILE_JSON_SCHEMA = _strict_object({
@@ -1562,58 +1545,6 @@ async def poll_video_job(job_id: str) -> dict:
         logger.info(f"Poll video {job_id}: status={data.get('status')}, has_urls={bool(data.get('unsigned_urls'))}")
         return data
 
-
-
-async def analyze_brand_from_text(url: str, page_text: str) -> dict:
-    """Extract structured brand information from a website's scraped text using OpenRouter."""
-    system_message = (
-        "You are an expert brand strategist and audience researcher. You read raw text scraped from a "
-        "company's website and extract a clear, structured summary of the brand — including a deep read "
-        "on their ideal customer and what makes them different from competitors — for use in short-form "
-        "video scriptwriting. Respond with STRICT JSON only, no markdown fences, no extra commentary."
-    )
-
-    prompt = (
-        f"Website URL: {url}\n\n"
-        "Raw scraped page text:\n"
-        f"\"\"\"\n{page_text}\n\"\"\"\n\n"
-        "Based on the above, return ONLY a JSON object with this exact schema:\n"
-        "{\n"
-        '  "brand_name": "the brand/company/channel name",\n'
-        '  "brand_description": "1-3 sentence description of what the brand does",\n'
-        '  "niche": "the brand\'s niche/category/industry",\n'
-        '  "target_audience": "short label for who the brand is trying to reach (e.g. \'busy professionals 25-40\')",\n'
-        '  "ideal_customer_profile": "Who are you trying to reach? A rich 2-4 sentence description of the '
-        'ideal customer/viewer covering demographics (age range, gender skew, income/life-stage if inferable), '
-        'interests, pain points this brand solves for them, and where they likely spend time online '
-        '(e.g. TikTok, Instagram Reels, YouTube Shorts, specific communities/forums)",\n'
-        '  "differentiation": "What Sets You Apart? A 2-4 sentence description of what makes this brand '
-        'different from others in its space — standout strengths, unique selling propositions, or signature '
-        'angles that competitors don\'t have",\n'
-        '  "tone_voice": "a short description of the brand\'s tone/voice (e.g. playful, premium, no-nonsense)"\n'
-        "}\n"
-        "If any field cannot be determined from the text, make a reasonable best-effort guess based on "
-        "context rather than leaving it empty. Return ONLY valid JSON."
-    )
-
-    # Routed through _chat_json (not a bare post) so truncation is detected
-    # and retried with a doubled budget instead of surfacing as "did not
-    # return valid JSON", and refusals are named as refusals.
-    result = await _chat_json(
-        system_message=system_message,
-        prompt=prompt,
-        context="Brand analysis",
-        max_tokens=1500,
-        timeout=60,
-        json_schema=BRAND_ANALYSIS_JSON_SCHEMA,
-    )
-
-    missing = REQUIRED_BRAND_ANALYSIS_KEYS - set(result.keys())
-    if missing:
-        logger.error(f"Brand analysis missing fields {missing}.")
-        raise RuntimeError(f"Brand analysis missing required fields: {missing}")
-
-    return result
 
 
 async def analyze_app_profile(sources: dict, notes: str = "") -> dict:

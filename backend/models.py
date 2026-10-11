@@ -61,18 +61,14 @@ class BrandContextRequest(BaseModel):
     use_original_sound: bool = False
 
 
-class AnalyzeBrandUrlRequest(BaseModel):
-    url: str
-
-
 class AppProfileResearchRequest(BaseModel):
     """
-    Research a mobile app from its public pages and generate a draft App Profile.
+    Research a mobile app from its store listings and generate a draft App Profile.
 
-    At least one URL is required. support_urls is capped server-side; notes
+    An App Store URL, a Google Play URL, or both are required — store listings
+    are the only creation path. support_urls is capped server-side; notes
     are founder-supplied context passed straight to the research prompt.
     """
-    website_url: Optional[str] = None
     appstore_url: Optional[str] = None
     play_url: Optional[str] = None
     support_urls: Optional[List[str]] = None

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { rememberCurrentAppId } from "../lib/currentApp";
 import { Button } from "../components/ui/button";
@@ -8,7 +8,7 @@ import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import PageHeader from "../components/PageHeader";
 import { api, getErrorMessage } from "../lib/api";
-import { Globe, Sparkles, Briefcase, Loader as Loader2, Save, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ArrowRight, Wand as Wand2, Smartphone, RefreshCw, BadgeCheck } from "lucide-react";
+import { Sparkles, Briefcase, Loader as Loader2, Save, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ArrowRight, Smartphone, RefreshCw, BadgeCheck } from "lucide-react";
 import { toast } from "sonner";
 
 const EMPTY_FORM = {
@@ -184,12 +184,10 @@ function FormSection({ title, children }) {
 export default function BrandSetup() {
   const navigate = useNavigate();
 
-  const [websiteUrl, setWebsiteUrl] = useState("");
   const [appstoreUrl, setAppstoreUrl] = useState("");
   const [playUrl, setPlayUrl] = useState("");
   const [supportUrls, setSupportUrls] = useState("");
   const [notes, setNotes] = useState("");
-  const [analyzing, setAnalyzing] = useState(false);
   const [researching, setResearching] = useState(false);
   const [analyzeError, setAnalyzeError] = useState(null);
 
@@ -200,11 +198,14 @@ export default function BrandSetup() {
   const [saving, setSaving] = useState(false);
   const [approving, setApproving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // The details card only exists once research has produced a profile, so the
+  // scroll target below is a ref rather than a query: it is either mounted or
+  // it is not, and nothing else on the page answers to this name.
+  const manualCardRef = useRef(null);
 
   const applyProfile = (data) => {
     setBrand(data);
     setForm(profileToForm(data));
-    setWebsiteUrl(data.website_url || "");
     setAppstoreUrl(data.appstore_url || "");
     setPlayUrl(data.play_url || "");
     setSupportUrls(productsToText(data.support_urls));
@@ -248,37 +249,16 @@ export default function BrandSetup() {
       .catch((err) => toast.error(getErrorMessage(err)));
   };
 
-  const handleAnalyzeUrl = async (e) => {
-    e.preventDefault();
-    if (!websiteUrl.trim()) {
-      toast.error("Please enter a website URL first.");
-      return;
-    }
-    setAnalyzing(true);
-    setAnalyzeError(null);
-    try {
-      const data = await api.analyzeBrandUrl(websiteUrl.trim());
-      applyProfile(data);
-      refreshProfilesList();
-      toast.success("We analyzed your website and pre-filled your brand profile below!");
-    } catch (err) {
-      setAnalyzeError(getErrorMessage(err));
-    } finally {
-      setAnalyzing(false);
-    }
-  };
-
   const handleResearchApp = async (e) => {
     e.preventDefault();
-    if (!websiteUrl.trim() && !appstoreUrl.trim() && !playUrl.trim() && !supportUrls.trim()) {
-      toast.error("Enter at least one URL: website, App Store, Google Play, or a support page.");
+    if (!appstoreUrl.trim() && !playUrl.trim()) {
+      toast.error("Enter your app's App Store URL, Google Play URL, or both.");
       return;
     }
     setResearching(true);
     setAnalyzeError(null);
     try {
       const data = await api.researchAppProfile({
-        website_url: websiteUrl.trim() || undefined,
         appstore_url: appstoreUrl.trim() || undefined,
         play_url: playUrl.trim() || undefined,
         support_urls: textToProducts(supportUrls),
@@ -287,6 +267,12 @@ export default function BrandSetup() {
       applyProfile(data);
       refreshProfilesList();
       toast.success("App research complete — review the draft profile, then approve it.");
+      // The details card only renders once a profile exists. Scroll it into
+      // view now that research just created one, so the founder lands on the
+      // draft instead of staring at the form they just submitted.
+      requestAnimationFrame(() => {
+        manualCardRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+      });
     } catch (err) {
       setAnalyzeError(getErrorMessage(err));
     } finally {
@@ -308,7 +294,6 @@ export default function BrandSetup() {
     setSaving(true);
     try {
       const payload = {
-        website_url: websiteUrl.trim() || undefined,
         appstore_url: appstoreUrl.trim() || undefined,
         play_url: playUrl.trim() || undefined,
         support_urls: textToProducts(supportUrls),
@@ -448,55 +433,9 @@ export default function BrandSetup() {
         }
       />
 
-      {/* ---------- Autofill from website ---------- */}
-      <div className="border-gradient relative rounded-2xl p-[1px]">
-        <div className="surface-solid relative overflow-hidden rounded-2xl">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background: "radial-gradient(500px circle at 100% 0%, rgba(99,102,241,0.10), transparent 60%)",
-            }}
-          />
-          <form onSubmit={handleAnalyzeUrl} className="relative space-y-3" data-testid="brand-url-card">
-            <div className="flex items-start gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
-                <Wand2 className="h-[18px] w-[18px]" />
-              </span>
-              <div className="min-w-0">
-                <h2 className="font-display text-base font-semibold">Autofill from your website</h2>
-                <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">
-                  Enter your app website and choose Analyze to prefill basic details below. It is an optional shortcut; you can also research store listings or fill in the profile yourself.
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <div className="relative flex-1">
-                <Globe className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={websiteUrl}
-                  onChange={(e) => setWebsiteUrl(e.target.value)}
-                  placeholder="https://yourbrand.com"
-                  data-testid="brand-url-input"
-                  className="pl-10"
-                />
-              </div>
-              <Button
-                type="submit"
-                disabled={analyzing}
-                variant="brand"
-                className="shrink-0"
-                data-testid="analyze-brand-url-button"
-              >
-                {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                {analyzing ? "Analyzing..." : "Analyze"}
-              </Button>
-            </div>
-          </form>
-        </div>
-      </div>
-
-      {/* ---------- App research (website + store listings) ---------- */}
+      {/* ---------- App research (store listings) ----------
+          Profiles are created from App Store and Google Play URLs only. The
+          details card below renders once research returns a profile. */}
       <div className="border-gradient relative rounded-2xl p-[1px]">
         <div className="surface-solid relative overflow-hidden rounded-2xl">
           <div
@@ -514,7 +453,7 @@ export default function BrandSetup() {
               <div className="min-w-0">
                 <h2 className="font-display text-base font-semibold">Research a mobile app</h2>
                 <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">
-                  Enter at least one source URL—your website, App Store, Google Play, or a support page. Add optional notes, then choose Research app. Review the draft for accuracy before saving and approving it.
+                  Enter your app's App Store URL, Google Play URL, or both, plus any support pages. Add optional notes, then choose Research app. Review the draft for accuracy before saving and approving it.
                 </p>
               </div>
             </div>
@@ -597,18 +536,21 @@ export default function BrandSetup() {
         </Alert>
       )}
 
-      {/* ---------- Manual details ---------- */}
-      <div className="surface space-y-4 rounded-2xl" data-testid="brand-manual-card">
+      {/* ---------- Manual details ----------
+          Rendered only once a profile exists — research creates it, and the
+          research handler scrolls it into view at that point. Before that
+          there is no draft to correct, so the page is just the research card.
+          (A legacy hand-typed profile picked from storage still opens here.) */}
+      {brand?.id && (
+      <div ref={manualCardRef} className="surface space-y-4 rounded-2xl" data-testid="brand-manual-card">
         <div className="flex items-center justify-between gap-3">
           <div>
             <span className="eyebrow block">Profile</span>
             <h2 className="font-display text-base font-semibold">App Profile Details</h2>
           </div>
-          {brand?.id && (
-            <Badge variant="secondary" className="shrink-0 text-xs">
-              {brand.website_url ? "From website + edits" : "Manually entered"}
-            </Badge>
-          )}
+          <Badge variant="secondary" className="shrink-0 text-xs">
+            {researchedProfile ? "Researched + edits" : "Manually entered"}
+          </Badge>
         </div>
 
         {loadingActive ? (
@@ -617,17 +559,6 @@ export default function BrandSetup() {
           </p>
         ) : (
           <>
-            {!brand && (
-              <Alert data-testid="no-brand-profile-alert">
-                <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-                <AlertTitle>No App Profile yet</AlertTitle>
-                <AlertDescription>
-                  Research an app above to fill this in automatically, or just type the
-                  details in below and hit Save — no URLs required.
-                </AlertDescription>
-              </Alert>
-            )}
-
             <div className="space-y-8">
               {/* ── Basics ── */}
               <FormSection title="Basics">
@@ -944,6 +875,7 @@ export default function BrandSetup() {
           </>
         )}
       </div>
+      )}
 
       {/* ---------- Sticky action bar ----------
           Only for a profile research generated. "Save" and "Review complete"

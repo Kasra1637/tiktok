@@ -163,7 +163,6 @@ client.interceptors.response.use(
 
 export const api = {
   // Brand profile / Content Remixer
-  analyzeBrandUrl: (url) => client.post("/brand/analyze-url", { url }).then((r) => r.data),
   getActiveBrand: () => client.get("/brand/active").then((r) => r.data),
   // All saved brands for the current user, active first — powers the brand
   // picker so generation flows don't require re-entering a URL.

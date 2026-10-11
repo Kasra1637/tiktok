@@ -89,21 +89,18 @@ export const TOURS = {
   },
 
   // Targets BrandSetup — research, edit and approve an App Profile at /brand.
+  // Profiles are created from store listings only; the details card appears
+  // once research returns one, so every step below targets something that
+  // exists from that point on.
   brand: {
     id: "brand",
     label: "App Profile tour",
     steps: [
       {
-        target: '[data-testid="brand-url-card"]',
-        title: "Optionally autofill from your website",
-        body:
-          "Enter your app website and choose Analyze to prefill basic profile details. This is a shortcut, not a required step; research your app below or fill in the profile yourself.",
-      },
-      {
         target: '[data-testid="app-research-card"]',
-        title: "Research from any useful source",
+        title: "Research from the store listings",
         body:
-          "Add at least one website, App Store, Google Play, or support URL. Add notes if useful, then choose Research app. The result is a draft—check it against your actual product before saving and approving.",
+          "Add your app's App Store URL, Google Play URL, or both, plus support pages if useful. Add notes if useful, then choose Research app. The result is a draft—check it against your actual product before saving and approving. The details appear below once research finishes.",
       },
       {
         target: '[data-testid="brand-manual-card"]',

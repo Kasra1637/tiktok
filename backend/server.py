@@ -39,7 +39,7 @@ import ai_service
 import feedback as feedback_mod
 from ai_service import (
     generate_video,
-    poll_video_job, analyze_brand_from_text, analyze_app_profile,
+    poll_video_job, analyze_app_profile,
     generate_content_angles, generate_creative_plan,
     page_text_with_metadata,
     TEXT_MODEL,
@@ -47,7 +47,7 @@ from ai_service import (
     bind_spoken_words, spoken_budget,
 )
 from models import (
-    AnalyzeBrandUrlRequest, AppProfileResearchRequest, ApproveAppProfileRequest,
+    AppProfileResearchRequest, ApproveAppProfileRequest,
     BrandProfileCreateRequest, BrandProfileUpdateRequest,
     CreateContentAngleRequest, UpdateContentAngleRequest,
     CreateStudioProjectRequest, UpdateStudioProjectRequest, GeneratePlanRequest,
@@ -3001,93 +3001,13 @@ def _build_sound_reference(music_context: Optional[dict], use_original_sound: bo
 
 
 # ---------------------------------------------------------------------------
-# Brand profile ("Your Brand" — URL analysis + manual editing)
+# Brand profile (manual creation)
 # ---------------------------------------------------------------------------
-@api_router.post("/brand/analyze-url")
-async def analyze_brand_url(payload: AnalyzeBrandUrlRequest, user_id: str = Depends(get_current_user_id)):
-    require_ai_configured()
-    url = payload.url.strip()
-    if not url:
-        raise HTTPException(status_code=400, detail="Please provide a website URL.")
-    if not url.lower().startswith(("http://", "https://")):
-        url = f"https://{url}"
-
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        )
-    }
-    try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers=headers) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-            html = resp.text
-    except Exception as e:
-        logger.error(f"Failed to fetch brand URL {url}: {e}")
-        raise HTTPException(
-            status_code=400,
-            detail=f"Could not fetch this URL. Please check it and try again. ({str(e)[:150]})",
-        )
-
-    page_text = page_text_with_metadata(html)[:BRAND_URL_TEXT_MAX_CHARS]
-    if not page_text.strip():
-        raise HTTPException(
-            status_code=400,
-            detail="Could not extract any readable text from this URL. Please try a different page.",
-        )
-
-    try:
-        extracted = await analyze_brand_from_text(url, page_text)
-    except Exception as e:
-        logger.error(f"Brand analysis failed for {url}: {e}")
-        raise HTTPException(status_code=502, detail=f"AI brand analysis failed. Please try again. ({str(e)[:150]})")
-
-    # Re-analysing the same site refreshes that profile in place rather than
-    # inserting another row. Previously every re-analysis created a duplicate,
-    # which orphaned the user's manual edits and left stale profiles behind
-    # competing to be the "active" one.
-    #
-    # The lookup is scoped to the caller. Matching on website_url alone meant two
-    # founders who research the same site shared one row: the second request
-    # overwrote the first's name, audience, claims and raw text, and then
-    # returned that row -- including the other user's id. Refresh-in-place is a
-    # per-user convenience, not a per-URL one.
-    now = now_iso()
-    existing = await _fetch_one(
-        "SELECT id FROM brand_profiles WHERE website_url = ? AND user_id = ?", (url, user_id)
-    )
-    values = (
-        extracted.get("brand_name"), extracted.get("brand_description"),
-        extracted.get("niche"),
-        extracted.get("target_audience"), extracted.get("ideal_customer_profile"),
-        extracted.get("differentiation"), extracted.get("tone_voice"), page_text,
-    )
-    if existing:
-        brand_id = existing["id"]
-        await _execute(
-            """UPDATE brand_profiles
-               SET brand_name = ?, brand_description = ?, niche = ?,
-                   target_audience = ?, ideal_customer_profile = ?, differentiation = ?,
-                   tone_voice = ?, raw_extracted_text = ?, updated_at = ?
-               WHERE id = ? AND user_id = ?""",
-             values + (now, brand_id, user_id),
-        )
-        logger.info(f"Refreshed existing brand profile {brand_id} from {url}")
-    else:
-        brand_id = str(uuid.uuid4())
-        await _execute(
-            """INSERT INTO brand_profiles
-               (id, website_url, brand_name, brand_description, niche,
-                 target_audience, ideal_customer_profile, differentiation, tone_voice,
-                 raw_extracted_text, created_at, updated_at, user_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (brand_id, url) + values + (now, now, user_id),
-        )
-        logger.info(f"Created brand profile {brand_id} from {url}")
-    return await _fetch_one(
-        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (brand_id, user_id)
-    )
+# Profiles are created from App Store and Google Play listings via
+# POST /app-profiles/research below. The website autofill endpoint
+# (POST /brand/analyze-url) was deleted with that whole path: the only way
+# to create a profile is a store listing, so there is no website analysis
+# left to serve. The website_url column stays dormant for legacy rows.
 
 
 @api_router.post("/brand", status_code=201)
@@ -3254,15 +3174,14 @@ APP_RESEARCH_MAX_SUPPORT_URLS = 5
 
 @api_router.post("/app-profiles/research", status_code=201)
 async def research_app_profile(payload: AppProfileResearchRequest, user_id: str = Depends(get_current_user_id)):
-    """Research a mobile app from its public pages and draft an App Profile.
+    """Research a mobile app from its store listings and draft an App Profile.
 
-    Fetches the website, App Store and Google Play pages plus up to 5 support
+    Fetches the App Store and Google Play pages plus up to 5 support
     URLs, then asks OpenRouter to draft the full profile. The result is stored
     as status='draft' — the founder must review and approve it (POST
     /app-profiles/{id}/approve) before it drives video generation.
     """
     require_ai_configured()
-    website = _normalize_url(payload.website_url or "")
     appstore = _normalize_url(payload.appstore_url or "")
     play = _normalize_url(payload.play_url or "")
     support: list = []
@@ -3271,10 +3190,10 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
         if n and n not in support:
             support.append(n)
     support = support[:APP_RESEARCH_MAX_SUPPORT_URLS]
-    if not (website or appstore or play or support):
+    if not (appstore or play):
         raise HTTPException(
             status_code=400,
-            detail="Provide at least one URL: website, App Store, Google Play, or a support URL.",
+            detail="Provide your app's App Store URL, Google Play URL, or both.",
         )
 
     sources: dict = {}
@@ -3285,9 +3204,6 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
     # and a founder reading the list had no way to know the rest were empty.
     requested_sources: list = []
     source_failures: list = []
-    if website:
-        requested_sources.append("website")
-        sources["website"] = await _fetch_url_text(website, APP_RESEARCH_CAPS["website"])
     if appstore:
         requested_sources.append("app_store")
         sources["app_store"] = await _fetch_url_text(appstore, APP_RESEARCH_CAPS["app_store"])
@@ -3303,8 +3219,7 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
     if not read_sources:
         raise HTTPException(
             status_code=400,
-            detail="Could not extract readable text from any URL. Check the links and try again, "
-                   "or create the profile manually.",
+            detail="Could not extract readable text from any URL. Check the links and try again.",
         )
     if source_failures:
         # Loud, not silent. A partial profile built from the sources that did
@@ -3347,7 +3262,10 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
              status, version, last_research_at, research_sources)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (brand_id, website, profile.get("brand_name") or "Untitled app",
+        # website_url is always "" here: research no longer accepts a website,
+        # and the column itself stays for legacy rows SQLite cannot cheaply
+        # drop it from.
+        (brand_id, "", profile.get("brand_name") or "Untitled app",
 
          profile.get("brand_description") or "", profile.get("niche") or "",
          profile.get("target_audience") or "",
