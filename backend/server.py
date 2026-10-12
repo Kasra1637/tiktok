@@ -4394,12 +4394,12 @@ def _score_template_for_angle(
         weighted.append((weight, reason))
 
     # Brand-tailored templates were generated from this exact profile, so
-    # they start with a head start — bounded like every other signal, and
-    # named so the founder sees why rather than trusting a black box.
+    # they start with a head start. The bonus is silent now: the tailored
+    # set is already labelled "Tailored for this app" on the template step,
+    # so a per-card bullet repeating it was noise, not evidence. Ranking is
+    # unchanged — the +2.0 still applies, it just no longer narrates itself.
     if (template.get("brand_profile_id") or "") and template.get("brand_profile_id") == (profile.get("id") or ""):
-        brand_name = (profile.get("brand_name") or "this app").strip()
         score += 2.0
-        add(2.0, f"Tailored for {brand_name} — generated from this app's approved profile.")
 
     angle = angle or {}
     tpl_objective = (template.get("objective") or "").strip()

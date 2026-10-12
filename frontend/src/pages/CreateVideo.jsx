@@ -2043,7 +2043,6 @@ if (step === 3) {
         <StepShell
           icon={CheckCircle2}
           title="Review your script plan"
-          description="Once your app, goal, and template are set, your free script plan appears here. Check the hook, script, and claim review; edit and save what you want to change. The video render happens in Hook + Story."
         >
         {!project?.script_version && planFailed && !busy ? (
           /* A plan attempt ran and failed. The page-level error above says why;

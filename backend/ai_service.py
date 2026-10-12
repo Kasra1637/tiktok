@@ -2236,6 +2236,12 @@ async def generate_creative_plan(
     middle_seconds = max(1, int(duration_seconds or 0) - int(hook_seconds or 0))
     middle_budget = spoken_budget(middle_seconds)
     hook_budget = spoken_budget(hook_seconds)
+    # Floor the hook at roughly three-quarters of its spoken budget so the
+    # line fills the opening beat instead of leaving dead air: at ~6 chars
+    # a word, a 60-char (3s) hook wants at least ~7 words and an 80-char
+    # (4s) hook at least ~10. The ceiling stays word-agnostic — the char
+    # budget downstream is what refuses an over-long line.
+    hook_min_words = max(6, int(hook_budget * 0.75 // 6))
 
     structure = {
         "template_name": template.get("name") or "(no template)",
@@ -2300,7 +2306,7 @@ async def generate_creative_plan(
         "audiences or turning the generated clip into a feature list.\n"
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
-        '  "hook_line": "the single spoken/typed hook line, max 12 words",\n'
+        f'  "hook_line": "the single spoken/typed hook line, {hook_min_words}-12 words (about {hook_seconds}s of speech — long enough to fill the hook beat, never a short fragment)",\n'
         '  "script": "the full spoken script for BOTH sections, plain text, no stage directions",\n'
         '  "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "what happens and what is said"}, {"start": 3, "end": 10, "label": "middle", "text": "what happens and what is said"}],\n'
         '  "visual_direction": "what the camera shows across both sections, as one paragraph",\n'
@@ -3007,6 +3013,10 @@ async def generate_video_strategy(
     # same ceilings still apply.
     _strategy_hook_budget = spoken_budget(hook_seconds)
     _strategy_middle_budget = spoken_budget(plan_seconds)
+    # Same hook floor as the plan prompt: roughly three-quarters of the
+    # hook's spoken budget, so the strategy's own hook line fills the
+    # opening beat when there is no approved plan to bind to.
+    _strategy_hook_min_words = max(6, int(_strategy_hook_budget * 0.75 // 6))
 
     facts = {
         "app_name": profile.get("brand_name") or "(unnamed app)",
@@ -3205,7 +3215,7 @@ async def generate_video_strategy(
         '  "audience_problem": "the concrete problem this viewer actually has, in their words",\n'
         '  "emotional_triggers": ["2-4 emotions this video should trigger, each tied to this app\'s use case"],\n'
         '  "hook_concept": "what the first seconds DO, visually and dramatically — not a slogan",\n'
-        '  "hook_line": "the single spoken hook line, max 12 words",\n'
+        f'  "hook_line": "the single spoken hook line, {_strategy_hook_min_words}-12 words (about {hook_seconds}s of speech — long enough to fill the hook beat, never a short fragment)",\n'
         '  "hook_promise": "what the hook promises the viewer in the next few seconds",\n'
         '  "hook_action": "the opening physical performance: ordered, timed beats across face, gaze, head, shoulders, hands and props, already moving in frame one",\n'
         '  "hook_dialogue": "the exact words spoken in the hook, or the delivery direction if none",\n'

@@ -1093,13 +1093,15 @@ class TestBrandTailoredTemplates:
             assert r["origin"] == "custom"
             assert r["review_status"] == "approved"
             assert r["required_assets"] == ["character_reference"]
-        # Surfaced first in this profile's picker, with the reason rendered.
+        # Surfaced first in this profile's picker. The bonus is silent now —
+        # the tailored set is labelled on the step — so this asserts the
+        # surfacing and the absence of the bullet, not a reason string.
         recs = _run(api.recommend_templates(
             profile_id=profile["id"], objective="address_user_problem", user_id=ANON))
         mine = [r for r in recs["recommendations"]
                 if r["template"].get("brand_profile_id") == profile["id"]]
         assert mine
-        assert any("Tailored for" in reason for r in mine for reason in r["why_it_fits"])
+        assert not any("Tailored for" in reason for r in mine for reason in r["why_it_fits"])
         _clean_brand_rows(api, profile["id"])
 
     def test_cache_hit_makes_no_model_call(self, api, monkeypatch):

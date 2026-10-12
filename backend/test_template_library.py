@@ -410,7 +410,10 @@ class TestRecommendationScorer:
         tailored = _score_template_for_angle(
             self._template(brand_profile_id="p1"), profile, angle, "")
         assert tailored["score"] > generic["score"]
-        assert any("Tailored for Taskly" in r for r in tailored["reasons"])
+        # The bonus is silent: the tailored set is labelled on the step, so
+        # no per-card bullet repeats it — while the ranking still prefers it.
+        assert tailored["reasons"]
+        assert not any("Tailored for" in r for r in tailored["reasons"])
 
     def test_other_brands_template_gets_no_bonus(self):
         angle = {"kind": "problem_solution", "target_audience": "", "app_feature": "",
@@ -467,7 +470,9 @@ class TestRecommendationScorer:
                                 problems_solved=["I keep procrastinating and losing track of time"])
         result = _score_template_for_angle(template, profile, angle, "demonstrate_feature")
         assert result["score"] == 10.0
-        assert len(result["reasons"]) == 7
+        # Six bullets, not seven: the tailored +2.0 is a silent bonus with no
+        # per-card reason, so only the six evidenced signals narrate themselves.
+        assert len(result["reasons"]) == 6
 
     def test_heavy_rejections_floor_at_zero(self):
         """
