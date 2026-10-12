@@ -36,7 +36,7 @@ export function ProfileCard({ eyebrow, eyebrowClassName, tone = "default", testi
   return (
     <section
       className={cn(
-        "flex h-full flex-col gap-2 rounded-2xl border border-[color:var(--hairline)] bg-card/70 px-4 py-3",
+        "row-pad flex h-full flex-col gap-2 rounded-2xl border border-[color:var(--hairline)] bg-card/70",
         profileToneClass[tone],
         className
       )}
@@ -169,14 +169,14 @@ export function SectionGroup({ id, label, summary, open, onToggle, children }) {
     <section
       aria-label={label}
       data-testid={`group-${id}`}
-      className="surface min-w-0 overflow-hidden rounded-2xl !space-y-0 !p-0"
+      className="surface surface-flush min-w-0 overflow-hidden rounded-2xl space-y-0"
     >
       <button
         type="button"
         aria-expanded={open}
         aria-controls={contentId}
         onClick={() => onToggle(id, !open)}
-        className="flex w-full min-w-0 items-center justify-between gap-2 px-4 py-3 text-left transition duration-150 hover:bg-[color:var(--indigo-6)]"
+        className="row-pad flex w-full min-w-0 items-center justify-between gap-2 text-left transition duration-150 hover:bg-[color:var(--indigo-6)]"
       >
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-medium leading-[22px]">{label}</span>
@@ -199,7 +199,7 @@ export function SectionGroup({ id, label, summary, open, onToggle, children }) {
         style={{ gridTemplateRows: open ? "1fr" : "0fr", opacity: open ? 1 : 0 }}
       >
         <div className="min-h-0 overflow-hidden">
-          <div className="space-y-2 border-t border-[color:var(--hairline)] px-4 py-3">{children}</div>
+          <div className="row-pad space-y-2 border-t border-[color:var(--hairline)]">{children}</div>
         </div>
       </div>
     </section>

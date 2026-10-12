@@ -153,12 +153,12 @@ const TEXTAREA_CLASS =
  */
 function EditorSection({ title, icon, open, onToggle, testId, children }) {
   return (
-    <SectionCard className="!space-y-0 !p-0" data-testid={testId}>
+    <SectionCard flush data-testid={testId}>
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition duration-150 hover:bg-[color:var(--indigo-6)]"
+        className="row-pad flex w-full items-center justify-between gap-2 text-left transition duration-150 hover:bg-[color:var(--indigo-6)]"
       >
         <GroupLabel as="h2" icon={icon}>{title}</GroupLabel>
         <ChevronDown

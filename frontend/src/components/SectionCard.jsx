@@ -12,6 +12,10 @@ import { IconTile } from "./IconTile";
  *
  * `compact` is for cards that are themselves items in a grid (a render tile):
  * 16px padding and no heading tile.
+ *
+ * `flush` is for a card whose first child is a full-bleed row (an accordion
+ * header, a group bar): the card chrome stays, the gutter goes, and the row
+ * brings its own `row-pad`. It replaces `!p-0 !space-y-0` at the call sites.
  */
 export function SectionCard({
   title,
@@ -19,6 +23,7 @@ export function SectionCard({
   description,
   actions,
   compact = false,
+  flush = false,
   headingLevel = "h2",
   children,
   className,
@@ -27,7 +32,12 @@ export function SectionCard({
   const Heading = headingLevel;
   return (
     <div
-      className={cn(compact ? "surface-compact" : "surface", "space-y-4 rounded-2xl", className)}
+      className={cn(
+        compact ? "surface-compact" : "surface",
+        flush ? "surface-flush space-y-0" : "space-y-4",
+        "rounded-2xl",
+        className
+      )}
       {...rest}
     >
       {(title || actions) && (
