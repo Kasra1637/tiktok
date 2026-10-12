@@ -3381,6 +3381,77 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
+  // -------------------------------------------------------------------------
+  // The picked angle shows the fields the strategy is written from.
+  //
+  // Closed, an angle is one line — the field its KIND is best summarized by —
+  // which is what makes the list comparable. That line is a summary: the
+  // promise, the feature it demonstrates and the claims bounding it were never
+  // visible in the flow that renders them, so the founder chose from a model's
+  // one-line abstraction and the first sight of the rest was the strategy. The
+  // picked row now opens onto its own fields; the others stay closed, because
+  // two open panels side by side are two half-read angles.
+  // -------------------------------------------------------------------------
+  await check("the picked audience angle shows the fields the strategy uses", async (ctx) => {
+    const FULL_ANGLE = {
+      id: "a3",
+      kind: "problem_solution",
+      label: "The nightly reset",
+      target_audience: "shift workers who plan at midnight",
+      user_problem: "Plans get made after the day is over",
+      hook_promise: "Tomorrow is decided in one tap",
+      app_feature: "One-tap shift logging",
+      desired_emotion: "Relief",
+      claims_to_respect: ["works offline", "no iOS support"],
+    };
+    await withApi({ getContentAngles: async () => ({ angles: [FULL_ANGLE, ANGLE] }) }, async () => {
+      global.__SMOKE_PARAMS = "";
+      await mount(CreateVideo, {})(ctx);
+      await openStep(ctx, "Audience & goal");
+      const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
+      if (step.querySelector('[data-testid^="angle-details-"]')) {
+        throw new Error("an angle shows its fields before it is picked");
+      }
+      // Closed rows keep the subtitle, so the list can still be compared.
+      if (!step.textContent.includes("Plans get made after the day is over")) {
+        throw new Error("the closed angle row lost its one-line summary");
+      }
+
+      await clickEl(ctx, step.querySelector('[data-testid="angle-option-a3"]'), "no angle row to pick");
+      const detail = step.querySelector('[data-testid="angle-details-a3"]');
+      if (!detail) throw new Error("picking an angle did not show its fields");
+      const shown = detail.textContent;
+      for (const field of [
+        "Audience", "Shift workers who plan at midnight",
+        "Problem", "Plans get made after the day is over",
+        "First 3 seconds promise", "Tomorrow is decided in one tap",
+        "Feature shown", "One-tap shift logging",
+        "Emotion by the end", "Relief",
+        "Bounded by", "Works offline; No iOS support",
+      ]) {
+        if (!shown.includes(field)) {
+          throw new Error(`the picked angle does not show ${JSON.stringify(field)}: ${shown}`);
+        }
+      }
+      if (step.querySelectorAll('[data-testid^="angle-details-"]').length !== 1) {
+        throw new Error("more than one angle is open at once");
+      }
+
+      await clickEl(ctx, step.querySelector('[data-testid="angle-option-a1"]'), "no second angle row to pick");
+      if (step.querySelector('[data-testid="angle-details-a3"]')) {
+        throw new Error("the previously picked angle stayed open after another was picked");
+      }
+      const secondDetail = step.querySelector('[data-testid="angle-details-a1"]');
+      if (!secondDetail?.textContent.includes("Busy professionals")) {
+        throw new Error("the newly picked angle does not show its own audience");
+      }
+      if (step.querySelector('[data-testid="angle-option-a1"]').getAttribute("aria-expanded") !== "true"
+          || step.querySelector('[data-testid="angle-option-a3"]').getAttribute("aria-expanded") !== "false") {
+        throw new Error("the angle bars do not report which one is open");
+      }
+    });
+  });
+
   await check("a suggested goal reaches template ranking and project writes", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     const rankings = [];

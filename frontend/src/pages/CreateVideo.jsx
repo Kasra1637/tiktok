@@ -28,7 +28,7 @@ import {
   blockingRequirements,
 } from "../lib/templateRequirements";
 import { sentenceCase } from "../lib/copyCase";
-import { angleSubtitle } from "../lib/angleSubtitle";
+import { angleSubtitle, angleDetails } from "../lib/angleSubtitle";
 import {
   readPieceSeconds,
   sectionSplit,
@@ -37,7 +37,7 @@ import {
 } from "../lib/videoLength";
 // FileText was the "Creative plan" step's icon. That step held nothing but a
 // button and is now the top of Review, so the icon went with it.
-import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, LayoutTemplate, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, Star } from "lucide-react";
+import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, LayoutTemplate, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, Star, ChevronDown } from "lucide-react";
 // toast left with AttachedPhoto, the only place on this page that raised one.
 // Detaching now happens inside the photo section, which reports its own
 // outcome.
@@ -1727,33 +1727,76 @@ export default function CreateVideo() {
                   </Button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 items-stretch gap-4">
-                  {angles.map((a) => (
-                    <button
-                      key={a.id}
-                      type="button"
-                      aria-pressed={angleId === a.id}
-                      onClick={() => setAngleId(a.id)}
-                      className={`h-full w-full rounded-2xl border bg-card/70 p-5 text-left transition-colors ${
-                        angleId === a.id
-                          ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
-                          : "border-[color:var(--hairline)]"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-sm font-medium leading-[22px]">{sentenceCase(a.label)}</span>
-                        <span className="flex items-center gap-1.5">
-                          <Badge variant="secondary" className="text-[11px]">
+                /* Selection opens the angle. The list is scanned by subtitle —
+                   the one field that says most about this kind of angle — and
+                   the picked row then shows what the strategy is written from:
+                   audience, problem, promise, feature, the emotion it aims at,
+                   and any claim bounding it. Only the picked row opens, because
+                   two open panels side by side are two half-read angles, and
+                   the fields are what the render downstream is held to. */
+                <div className="space-y-2" data-testid="audience-angle-list">
+                  {angles.map((a) => {
+                    const picked = angleId === a.id;
+                    const details = picked ? angleDetails(a) : [];
+                    return (
+                      <div
+                        key={a.id}
+                        className={`overflow-hidden rounded-2xl border bg-card/70 ${
+                          picked
+                            ? "border-[color:var(--indigo-35)]"
+                            : "border-[color:var(--hairline)]"
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          aria-pressed={picked}
+                          aria-expanded={picked}
+                          aria-controls={picked ? `angle-details-${a.id}` : undefined}
+                          onClick={() => setAngleId(a.id)}
+                          data-testid={`angle-option-${a.id}`}
+                          className={`flex w-full min-w-0 items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[color:var(--indigo-6)] ${
+                            picked ? "bg-[color:var(--indigo-6)]" : ""
+                          }`}
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-medium leading-[22px]">
+                              {sentenceCase(a.label)}
+                            </span>
+                            {!picked && angleSubtitle(a) && (
+                              <span className="mt-0.5 block text-xs leading-[18px] text-muted-foreground">
+                                {angleSubtitle(a)}
+                              </span>
+                            )}
+                          </span>
+                          <Badge variant="secondary" className="shrink-0 text-[11px]">
                             {humanize(a.kind)}
                           </Badge>
-                          {angleId === a.id && <Check className="h-4 w-4 text-[color:var(--brand-indigo)]" />}
-                        </span>
+                          {picked && <Check className="h-4 w-4 shrink-0 text-[color:var(--brand-indigo)]" />}
+                          <ChevronDown
+                            className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
+                              picked ? "rotate-180" : ""
+                            }`}
+                          />
+                        </button>
+                        {picked && details.length > 0 && (
+                          <dl
+                            id={`angle-details-${a.id}`}
+                            data-testid={`angle-details-${a.id}`}
+                            className="space-y-2 border-t border-[color:var(--hairline)] px-4 py-3"
+                          >
+                            {details.map((row) => (
+                              <div key={row.label} className="min-w-0">
+                                <dt className="eyebrow">{row.label}</dt>
+                                <dd className="mt-0.5 text-sm leading-[22px] text-foreground/90">
+                                  {row.value}
+                                </dd>
+                              </div>
+                            ))}
+                          </dl>
+                        )}
                       </div>
-                      {angleSubtitle(a) && (
-                        <p className="mt-3 text-xs leading-[18px] text-muted-foreground">{angleSubtitle(a)}</p>
-                      )}
-                    </button>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

@@ -51,11 +51,10 @@ function ClaimPanel({ profile }) {
   if (!approved.length && !review.length && !banned.length) return null;
   return (
     <ProfileCard testid="claim-guardrails" eyebrow="Claim guardrails" icon={ShieldAlert}>
-      <div>
-        <Badge variant="indigo" className="px-3 py-1 font-medium">
-          Needs review · {review.length}
-        </Badge>
-      </div>
+      {/* The "Needs review · N" badge that sat here was the same tier the list
+          below already names, said again one line above it — and this group's
+          bar counts what is to review as well. It also read "Needs review · 0"
+          on a profile with nothing to check. The tiers are the headings. */}
       <p className="text-xs leading-[18px] text-muted-foreground">The plan checks these phrases before rendering. Review each claim for accuracy before publishing; an automated check is not a guarantee.</p>
       <InfoListBlock label="Approved — safe to use" items={approved} tone="approved" />
       <InfoListBlock label="Needs review — verify first" items={review} tone="review" />
@@ -413,16 +412,20 @@ return (
             </div>
           </ProfileCard>
         ) : null}
+        {/* The card's eyebrow is the title. Passing the same string again as
+            the list's own label printed it twice, one line apart — the label
+            is omitted wherever the eyebrow already says it, and kept only
+            where the two genuinely differ (Never show, Product facts). */}
         {coreFeatures.length > 0 || useCases.length > 0 ? (
           <CardGrid className="md:grid-cols-2">
             {coreFeatures.length > 0 ? (
               <ProfileCard eyebrow="Core features" icon={Layers}>
-                <InfoChipList label="Core features" items={coreFeatures} />
+                <InfoChipList items={coreFeatures} />
               </ProfileCard>
             ) : null}
             {useCases.length > 0 ? (
               <ProfileCard eyebrow="Primary use cases" icon={ListChecks}>
-                <InfoChipList label="Primary use cases" items={useCases} />
+                <InfoChipList items={useCases} />
               </ProfileCard>
             ) : null}
           </CardGrid>
@@ -446,12 +449,12 @@ return (
           <CardGrid className="md:grid-cols-2">
             {problems.length > 0 ? (
               <ProfileCard eyebrow="Problems solved" icon={CircleCheck}>
-                <InfoChipList label="Problems solved" items={problems} />
+                <InfoChipList items={problems} />
               </ProfileCard>
             ) : null}
             {outcomes.length > 0 ? (
               <ProfileCard eyebrow="Desired outcomes" icon={Flag}>
-                <InfoChipList label="Desired outcomes" items={outcomes} />
+                <InfoChipList items={outcomes} />
               </ProfileCard>
             ) : null}
           </CardGrid>
@@ -464,7 +467,7 @@ return (
             {profile?.differentiation ? (
               <div className="h-full md:row-span-2">
                 <ProfileCard eyebrow="Differentiators" icon={Zap}>
-                  <ProfileField label="Differentiators" value={profile.differentiation} />
+                  <ProfileField value={profile.differentiation} />
                 </ProfileCard>
               </div>
             ) : null}
@@ -472,12 +475,12 @@ return (
               <div className="flex h-full min-w-0 flex-col gap-4">
                 {profile?.known_limitations ? (
                     <ProfileCard eyebrow="Known limitations" icon={Info}>
-                    <ProfileField label="Known limitations" value={profile.known_limitations} />
+                    <ProfileField value={profile.known_limitations} />
                   </ProfileCard>
                 ) : null}
                 {profile?.proof_moment ? (
                     <ProfileCard eyebrow="The proof moment" icon={Eye}>
-                    <ProfileField label="The proof moment" value={profile.proof_moment} />
+                    <ProfileField value={profile.proof_moment} />
                   </ProfileCard>
                 ) : null}
               </div>
@@ -508,7 +511,7 @@ return (
         <SectionGroup id="context" label="Context & objections" icon={Clock} summary={contextSummary} open={openGroup === "context"} onToggle={toggleGroup}>
         {usageMoments.length > 0 ? (
           <ProfileCard eyebrow="When the app is reached for" icon={Clock}>
-            <InfoChipList label="When the app is reached for" items={usageMoments} />
+            <InfoChipList items={usageMoments} />
           </ProfileCard>
         ) : null}
           {Array.isArray(profile?.viewer_objections) && profile.viewer_objections.length > 0 && (

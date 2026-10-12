@@ -54,15 +54,27 @@ export function ProfileCard({ eyebrow, eyebrowClassName, tone = "default", testi
   );
 }
 
-/** One label inside a card: the shared 12px eyebrow + 14/22 body. */
+/**
+ * One label inside a card: the shared 12px eyebrow + 14/22 body.
+ *
+ * `label` is optional for the same reason it is on InfoChipList: when the
+ * card's own eyebrow already says it, naming it again here prints the same
+ * string twice, one line apart. A label-less field renders its value alone,
+ * with the margin the label would have carried.
+ */
 export function ProfileField({ label, value }) {
   if (!value) return null;
   return (
     <div className="min-w-0">
-      <h4 className="eyebrow">
-        {label}
-      </h4>
-      <p className="mt-1 whitespace-pre-wrap text-sm leading-[22px] text-foreground/90">{sentenceCase(value)}</p>
+      {label ? <h4 className="eyebrow">{label}</h4> : null}
+      <p
+        className={cn(
+          "whitespace-pre-wrap text-sm leading-[22px] text-foreground/90",
+          label && "mt-1"
+        )}
+      >
+        {sentenceCase(value)}
+      </p>
     </div>
   );
 }
