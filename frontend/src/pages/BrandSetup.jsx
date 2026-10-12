@@ -10,7 +10,7 @@ import { Badge } from "../components/ui/badge";
 import PageHeader from "../components/PageHeader";
 import PageFrame, { PAGE_WIDTH_CLASS } from "../components/PageFrame";
 import { api, getErrorMessage } from "../lib/api";
-import { Sparkles, Briefcase, Loader as Loader2, Save, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ArrowRight, Smartphone, RefreshCw, BadgeCheck, SlidersHorizontal } from "lucide-react";
+import { Sparkles, Briefcase, Loader as Loader2, Save, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ArrowRight, Smartphone, RefreshCw, BadgeCheck, SlidersHorizontal, Package, Layers, Clapperboard, Users, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 
 const EMPTY_FORM = {
@@ -172,10 +172,17 @@ function Field({ label, hint, children }) {
   );
 }
 
-function FormSection({ title, children }) {
+/* Section icons sit left of the title in brand indigo, matching the inline
+   label icons elsewhere (GenerationPanel, SafetyPanel). Each section passes
+   the icon that names its content; Claim guardrails reuses the ShieldAlert
+   the detail page's guardrails card already uses. */
+function FormSection({ title, icon: Icon, children }) {
   return (
     <div className="rounded-xl border border-[color:var(--hairline)] p-5">
-      <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">{title}</h3>
+      <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        {Icon && <Icon className="h-4 w-4 shrink-0 text-[color:var(--brand-indigo)]" aria-hidden="true" />}
+        {title}
+      </h3>
       <div className="space-y-5">
         {children}
       </div>
@@ -562,7 +569,7 @@ export default function BrandSetup() {
           <>
             <div className="space-y-8">
               {/* ── Basics ── */}
-              <FormSection title="Basics">
+              <FormSection title="Basics" icon={Package}>
                 <Field label="App name">
                   <Input
                     value={form.brand_name}
@@ -622,7 +629,7 @@ export default function BrandSetup() {
               </FormSection>
 
               {/* ── What the app does ── */}
-              <FormSection title="What the app does">
+              <FormSection title="What the app does" icon={Layers}>
                 <Field label="Core features" hint="Comma-separated — only features the app really has.">
                   <Input
                     value={form.core_features}
@@ -684,7 +691,7 @@ export default function BrandSetup() {
               </FormSection>
 
               {/* ── Video direction ── */}
-              <FormSection title="Video direction">
+              <FormSection title="Video direction" icon={Clapperboard}>
                 {/* These two exist because the strategy asks for a scene and a
                     demonstration, and no profile field supplied either. The model
                     was inventing a kitchen at 7am for every app and then being
@@ -758,7 +765,7 @@ export default function BrandSetup() {
               </FormSection>
 
               {/* ── Audience ── */}
-              <FormSection title="Audience">
+              <FormSection title="Audience" icon={Users}>
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                   <Field label="Target audience">
                     <Input
@@ -802,7 +809,7 @@ export default function BrandSetup() {
               </FormSection>
 
               {/* ── Claim guardrails ── */}
-              <FormSection title="Claim guardrails">
+              <FormSection title="Claim guardrails" icon={ShieldAlert}>
                 <Field label="Approved claims" hint="Comma-separated — factual claims safe for promos.">
                   <Input
                     value={form.claims_approved}
