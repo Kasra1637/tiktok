@@ -8,7 +8,7 @@ import {
   Smartphone,
   Images,
   Briefcase,
-  Factory as HistoryIcon,
+  History as HistoryIcon,
   TrendingUp,
   PanelLeftClose,
   PanelLeftOpen,

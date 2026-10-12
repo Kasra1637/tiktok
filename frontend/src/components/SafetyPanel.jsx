@@ -74,7 +74,7 @@ export function SafetyPanel({ report, summary }) {
                 <span className="font-medium">&ldquo;{w.claim}&rdquo;</span>
                 <span className="text-muted-foreground">{sentenceCase(w.reason)}</span>
                 {w.disclosure_missing && (
-                  <Badge variant="outline" className="text-[10px]">no disclosure</Badge>
+                  <Badge variant="outline" className="text-xs">no disclosure</Badge>
                 )}
               </li>
             ))}
@@ -114,7 +114,7 @@ export function SafetyPanel({ report, summary }) {
         {used.length ? (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {used.map((c, i) => (
-              <Badge key={i} variant="secondary" className="text-[11px]">{c}</Badge>
+              <Badge key={i} variant="secondary" className="text-xs">{c}</Badge>
             ))}
           </div>
         ) : (

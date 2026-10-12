@@ -133,7 +133,7 @@ function SectionRow({ section }) {
     <li className="space-y-1">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium capitalize">{section.role}</span>
-        <Badge variant="outline" className="text-[11px]">{section.seconds}s</Badge>
+        <Badge variant="outline" className="text-xs">{section.seconds}s</Badge>
       </div>
       <p className="text-xs text-muted-foreground">{SECTION_COPY[section.role]}</p>
       {goal && <p className="text-sm">{goal}</p>}
@@ -267,7 +267,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           The strategy behind the piece
         </span>
         {strategy && (
-          <Badge variant="outline" className="text-[11px]">strategy v{project.strategy_version}</Badge>
+          <Badge variant="outline" className="text-xs">strategy v{project.strategy_version}</Badge>
         )}
       </div>
 

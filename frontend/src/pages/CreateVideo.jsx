@@ -8,6 +8,9 @@ import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import PageFrame from "../components/PageFrame";
 import EmptyState from "../components/EmptyState";
+import { IconTile } from "../components/IconTile";
+import { GroupLabel } from "../components/SectionCard";
+import { Skeleton } from "../components/ui/skeleton";
 import SafetyPanel from "../components/SafetyPanel";
 import HookContinuityPanel from "../components/HookContinuityPanel";
 import GenerationPanel from "../components/GenerationPanel";
@@ -161,7 +164,7 @@ function RecommendationCard({ r, selected, onSelect }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-sm font-medium">{r.template.name}</span>
         <span className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="text-[11px]">
+          <Badge variant="outline" className="text-xs">
             {r.suggested_duration}s
           </Badge>
           {Number.isFinite(score) && (
@@ -171,14 +174,14 @@ function RecommendationCard({ r, selected, onSelect }) {
             // open-ended.
             <Badge
               variant="outline"
-              className="text-[11px]"
+              className="text-xs"
               data-testid="template-fit-score"
               title="Fit score — a weighted sum of the factors this template matched, on a 0–10 scale. Only comparable against the other templates below."
             >
               Fit {score}/10
             </Badge>
           )}
-          <Badge variant="secondary" className="text-[11px]">
+          <Badge variant="secondary" className="text-xs">
             {formatTemplateUse(r.template.times_used)}
           </Badge>
           {selected && <Check className="h-4 w-4 text-[color:var(--brand-indigo)]" />}
@@ -197,9 +200,7 @@ function RecommendationCard({ r, selected, onSelect }) {
       )}
       {reasons.length > 0 && (
         <div className="mt-2 space-y-1.5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-            Why it fits
-          </p>
+          <p className="eyebrow">Why it fits</p>
           {/* The verdict: the strongest match, in body weight with the same
               tick the step pills use for "positive", so it reads as the reason
               rather than one of several. */}
@@ -232,12 +233,9 @@ function RecommendationCard({ r, selected, onSelect }) {
         // warning mark, so shape separates it from the reasons above. Never
         // amber -- on this page amber reads as an error state.
         <div className="mt-2 space-y-1 border-l-2 border-[color:var(--hairline)] pl-2.5">
-          <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-            <AlertTriangle aria-hidden="true" className="h-3 w-3" />
-            Before you use it
-          </p>
+          <GroupLabel as="p" icon={AlertTriangle}>Before you use it</GroupLabel>
           {limits.map((limitation, i) => (
-            <p key={`l-${i}`} className="text-[11px] leading-relaxed text-muted-foreground">{sentenceCase(limitation)}</p>
+            <p key={`l-${i}`} className="text-xs leading-relaxed text-muted-foreground">{sentenceCase(limitation)}</p>
           ))}
         </div>
       )}
@@ -661,12 +659,10 @@ function StepShell({ icon: Icon, title, description, children }) {
     <div className="space-y-4">
       {Icon && (
         <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
-            <Icon className="h-[18px] w-[18px]" />
-          </span>
+          <IconTile icon={Icon} size="section" />
           <div>
-            {title && <h2 className="font-display text-base font-semibold">{title}</h2>}
-            {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
+            {title && <h2 className="font-display text-base font-semibold leading-8">{title}</h2>}
+            {description && <p className="text-sm text-muted-foreground">{description}</p>}
           </div>
         </div>
       )}
@@ -1807,7 +1803,7 @@ setObjective("");
                               </span>
                             )}
                           </span>
-                          <Badge variant="secondary" className="shrink-0 text-[11px]">
+                          <Badge variant="secondary" className="shrink-0 text-xs">
                             {humanize(a.kind)}
                           </Badge>
                           {/* Founder verdicts for this angle KIND, not a rating.
@@ -1817,7 +1813,7 @@ setObjective("");
                             <span
                               data-testid={`angle-evidence-${a.id}`}
                               title="Founder verdicts on videos built from this kind of angle"
-                              className="shrink-0 text-[11px] text-muted-foreground"
+                              className="shrink-0 text-xs text-muted-foreground"
                             >
                               {formatVerdicts(a.evidence)}
                             </span>
@@ -1995,7 +1991,7 @@ setObjective("");
               <div className="rounded-xl border border-[color:var(--hairline)] p-3 text-sm">
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{template.name}</span>
-                  <Badge variant="secondary" className="text-[11px]">
+                  <Badge variant="secondary" className="text-xs">
                     {humanize(template.category)}
                   </Badge>
                   {/* Says which of the two states the founder is in. A
@@ -2004,7 +2000,7 @@ setObjective("");
                       — but nothing on screen would otherwise distinguish that
                       from a pick they made. */}
                   {!templateChosenByHand.current && (
-                    <Badge variant="secondary" className="text-[11px]">
+                    <Badge variant="secondary" className="text-xs">
                       Suggested
                     </Badge>
                   )}
@@ -2548,12 +2544,12 @@ if (step === 3) {
               >
                 <summary className="flex cursor-pointer flex-wrap items-center gap-2">
                   <span className="eyebrow block">Shot timeline</span>
-                  <Badge variant="outline" className="text-[11px]">read-only</Badge>
+                  <Badge variant="outline" className="text-xs">read-only</Badge>
                 </summary>
                 <div className="mt-2 space-y-1.5 text-sm">
                   {editValue("beat_timeline", []).map((b, i) => (
                     <div key={i} className="flex gap-2">
-                      <Badge variant="secondary" className="shrink-0 text-[11px]">
+                      <Badge variant="secondary" className="shrink-0 text-xs">
                         {b.start}&ndash;{b.end}s
                       </Badge>
                       <span className="text-muted-foreground">{b.label}: {sentenceCase(b.text)}</span>
@@ -2664,22 +2660,22 @@ if (step === 3) {
   if (loading) {
     return (
       <PageFrame className="space-y-6">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           {STEPS.map((s) => (
-            <span key={s.key} className="h-7 w-24 shrink-0 animate-pulse rounded-full border border-[color:var(--hairline)]" />
+            <Skeleton key={s.key} className="h-7 w-24 shrink-0 rounded-full" />
           ))}
         </div>
         <div className="surface rounded-2xl">
           <div className="w-full space-y-4" aria-label="Loading studio" data-testid="studio-loading">
             <div className="flex items-start gap-3">
-              <span className="h-10 w-10 shrink-0 animate-pulse rounded-xl border border-[color:var(--hairline)]" />
+              <Skeleton className="h-8 w-8 shrink-0 rounded-lg" />
               <div className="flex-1 space-y-2">
-                <div className="h-4 w-40 animate-pulse rounded bg-secondary/60" />
-                <div className="h-3 w-full animate-pulse rounded bg-secondary/40" />
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-3 w-full" />
               </div>
             </div>
-            <div className="h-24 animate-pulse rounded-2xl border border-[color:var(--hairline)]" />
-            <div className="h-24 animate-pulse rounded-2xl border border-[color:var(--hairline)]" />
+            <Skeleton className="h-24 rounded-2xl" />
+            <Skeleton className="h-24 rounded-2xl" />
           </div>
         </div>
       </PageFrame>

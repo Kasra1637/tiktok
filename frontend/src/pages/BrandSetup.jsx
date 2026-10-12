@@ -8,9 +8,13 @@ import { Textarea } from "../components/ui/textarea";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import PageHeader from "../components/PageHeader";
+import { IconTile } from "../components/IconTile";
+import { GroupLabel } from "../components/SectionCard";
+import { AppPicker } from "../components/AppPicker";
+import { Skeleton } from "../components/ui/skeleton";
 import PageFrame, { PAGE_WIDTH_CLASS } from "../components/PageFrame";
 import { api, getErrorMessage } from "../lib/api";
-import { Sparkles, Briefcase, Loader as Loader2, Save, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ArrowRight, Smartphone, RefreshCw, BadgeCheck, SlidersHorizontal, Package, Layers, Clapperboard, Users, ShieldAlert } from "lucide-react";
+import { Sparkles, Briefcase, Loader as Loader2, Save, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ArrowRight, Smartphone, RefreshCw, BadgeCheck, SlidersHorizontal, Package, Layers, Compass, Users, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 
 const EMPTY_FORM = {
@@ -164,7 +168,7 @@ function profileToForm(data) {
 /** Labelled form field wrapper — keeps every input in this page aligned. */
 function Field({ label, hint, children }) {
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       <label className="block text-sm font-medium">{label}</label>
       {children}
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
@@ -172,21 +176,16 @@ function Field({ label, hint, children }) {
   );
 }
 
-/* Section icons sit left of the title in brand indigo, matching the inline
-   label icons elsewhere (GenerationPanel, SafetyPanel). Each section passes
-   the icon that names its content; Claim guardrails reuses the ShieldAlert
-   the detail page's guardrails card already uses. */
-function FormSection({ title, icon: Icon, children }) {
+/* A group inside the App Profile Details card: uppercase label with a 12px
+   icon, divided from the previous group by a hairline rather than boxed. */
+function FormSection({ title, icon, children }) {
   return (
-    <div className="rounded-xl border border-[color:var(--hairline)] p-5">
-      <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-        {Icon && <Icon className="h-4 w-4 shrink-0 text-[color:var(--brand-indigo)]" aria-hidden="true" />}
-        {title}
-      </h3>
-      <div className="space-y-5">
+    <section className="space-y-4 border-t border-[color:var(--hairline)] pt-6 first:border-t-0 first:pt-0">
+      <GroupLabel as="h3" icon={icon}>{title}</GroupLabel>
+      <div className="space-y-4">
         {children}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -405,19 +404,13 @@ export default function BrandSetup() {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {profiles.length > 1 && (
-              <select
-                value={brand?.id || ""}
-                onChange={(e) => handleSelectProfile(e.target.value)}
-                className="rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3 py-1.5 text-xs font-medium"
-                data-testid="app-profile-picker"
-                aria-label="Select App Profile"
-              >
-                {profiles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.brand_name || "Untitled app"} ({p.status || "draft"})
-                  </option>
-                ))}
-              </select>
+              <AppPicker
+                profiles={profiles}
+                value={brand?.id}
+                onChange={handleSelectProfile}
+                showStatus
+                testId="app-profile-picker"
+              />
             )}
             {brand?.id ? (
               <Badge variant={status === "approved" ? "indigo" : "secondary"} className="px-3 py-1">
@@ -454,13 +447,11 @@ export default function BrandSetup() {
               background: "radial-gradient(500px circle at 0% 0%, rgba(99,102,241,0.10), transparent 60%)",
             }}
           />
-          <form onSubmit={handleResearchApp} className="relative space-y-3" data-testid="app-research-card">
+          <form onSubmit={handleResearchApp} className="relative space-y-4" data-testid="app-research-card">
             <div className="flex items-start gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]">
-                <Smartphone className="h-[18px] w-[18px]" />
-              </span>
+              <IconTile icon={Smartphone} size="section" />
               <div className="min-w-0">
-                <h2 className="font-display text-base font-semibold">Research a mobile app</h2>
+                <h2 className="font-display text-base font-semibold leading-8">Research a mobile app</h2>
               </div>
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -522,7 +513,7 @@ export default function BrandSetup() {
             <Button
               variant="secondary"
               size="sm"
-              className="shrink-0 gap-1.5"
+              className="shrink-0"
               onClick={() => handleApprove(true)}
               disabled={approving}
               data-testid="approve-pending-button"
@@ -549,12 +540,10 @@ export default function BrandSetup() {
           (A legacy hand-typed profile picked from storage still opens here.) */}
       {brand?.id && (
       <div ref={manualCardRef} className="surface space-y-4 rounded-2xl" data-testid="brand-manual-card">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <span className="eyebrow flex items-center gap-1.5">
-              <SlidersHorizontal className="h-3 w-3 shrink-0" aria-hidden="true" /> Profile
-            </span>
-            <h2 className="font-display text-base font-semibold">App Profile Details</h2>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <IconTile icon={SlidersHorizontal} size="section" />
+            <h2 className="font-display text-base font-semibold leading-8">App Profile Details</h2>
           </div>
           <Badge variant="secondary" className="shrink-0 text-xs">
             {researchedProfile ? "Researched + edits" : "Manually entered"}
@@ -562,12 +551,14 @@ export default function BrandSetup() {
         </div>
 
         {loadingActive ? (
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading your brand profile...
-          </p>
+          <div className="space-y-4" aria-label="Loading your app profile">
+            <Skeleton className="h-10 w-full rounded-xl" />
+            <Skeleton className="h-24 w-full rounded-xl" />
+            <Skeleton className="h-10 w-2/3 rounded-xl" />
+          </div>
         ) : (
           <>
-            <div className="space-y-8">
+            <div className="space-y-6">
               {/* ── Basics ── */}
               <FormSection title="Basics" icon={Package}>
                 <Field label="App name">
@@ -691,7 +682,7 @@ export default function BrandSetup() {
               </FormSection>
 
               {/* ── Video direction ── */}
-              <FormSection title="Video direction" icon={Clapperboard}>
+              <FormSection title="Video direction" icon={Compass}>
                 {/* These two exist because the strategy asks for a scene and a
                     demonstration, and no profile field supplied either. The model
                     was inventing a kitchen at 7am for every app and then being
@@ -849,7 +840,6 @@ export default function BrandSetup() {
                 onClick={handleSave}
                 disabled={saving}
                 variant="accent"
-                size="lg"
                 className="w-full sm:w-auto"
                 data-testid="save-manual-profile-button"
               >
@@ -871,7 +861,7 @@ export default function BrandSetup() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    className="shrink-0 gap-1.5"
+                    className="shrink-0"
                     onClick={() => navigate("/create")}
                     data-testid="find-video-to-remix-button"
                   >
@@ -902,7 +892,6 @@ export default function BrandSetup() {
               onClick={handleSave}
               disabled={saving}
               variant="accent"
-              size="lg"
               data-testid="save-brand-button"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -914,7 +903,6 @@ export default function BrandSetup() {
                 onClick={() => handleApprove(true)}
                 disabled={approving}
                 variant="brand"
-                size="lg"
                 data-testid="approve-profile-button"
               >
                 {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
@@ -927,8 +915,6 @@ export default function BrandSetup() {
                 onClick={handleRefresh}
                 disabled={refreshing}
                 variant="secondary"
-                size="lg"
-                className="gap-1.5"
                 data-testid="refresh-profile-button"
               >
                 {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}

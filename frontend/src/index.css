@@ -231,31 +231,36 @@ select option:checked {
 /* ---------- Surfaces ----------
    Unified card padding lives HERE, not in JSX `p-*` utilities.
    Outer section widths (`max-w-6xl`, AppShell `max-w-[1400px]`) are untouched —
-   this only narrows the inner content by giving every card roomier gutters:
-   24px mobile / 32px desktop. `.surface` is un-layered CSS so it beats any
-   leftover Tailwind `p-*` on the same element; remove `p-*` from card JSX. */
-.surface {
-    background-color: hsl(228 14% 10% / 0.72);
+   16px on phones, 24px from tablet up. `.surface` is un-layered CSS so it beats
+   any leftover Tailwind `p-*` on the same element; remove `p-*` from card JSX. */
+.surface,
+.surface-solid,
+.surface-compact {
     border: 1px solid var(--hairline);
     box-shadow: var(--shadow-md), inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
-    padding: 24px;
+    padding: 16px;
+}
+.surface,
+.surface-compact {
+    background-color: hsl(228 14% 10% / 0.72);
+}
+.surface-solid {
+    background-color: hsl(228 14% 10%);
 }
 @media (min-width: 768px) {
-    .surface {
-        padding: 32px;
+    .surface,
+    .surface-solid {
+        padding: 24px;
     }
 }
 
-.surface-solid {
-    background-color: hsl(228 14% 10%);
+/* A small bordered aside inside a card (ratings, warnings, pre-render notes).
+   Never a full card nested inside a card. */
+.inset-panel {
     border: 1px solid var(--hairline);
-    box-shadow: var(--shadow-md), inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
-    padding: 24px;
-}
-@media (min-width: 768px) {
-    .surface-solid {
-        padding: 32px;
-    }
+    border-radius: 0.75rem;
+    background-color: hsl(var(--secondary) / 0.3);
+    padding: 16px;
 }
 
 .surface-glass {
@@ -274,19 +279,14 @@ select option:checked {
 /* A control-dense card: same surface as `.surface`, tighter gutter.
  *
  * The Demo + CTA settings panel is a stack of eleven collapsible groups beside a
- * preview. At the standard 24/32px the groups were taller than the video they
+ * preview. At the standard card gutter the groups were taller than the video they
  * were describing, so the panel set the page's scale and the preview became the
  * small element. This is a sanctioned exception for a control-dense panel, kept
  * here rather than as `!p-0` at every call site, because un-layered `.surface`
  * beats any Tailwind `p-*` on the same element and the override has to be
  * explicit somewhere. Group headers own their own padding; this only reduces
- * the card's outer gutter to 16px. */
-.surface-compact {
-    background-color: hsl(228 14% 10% / 0.72);
-    border: 1px solid var(--hairline);
-    box-shadow: var(--shadow-md), inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
-    padding: 16px;
-}
+ * the card's outer gutter to 16px at every width. Its rules are merged into
+ * the `.surface` block above. */
 
 /* Demo + CTA sticky-column geometry.
  *

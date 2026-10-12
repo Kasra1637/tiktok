@@ -35,7 +35,7 @@ export function ComponentThumbs({
 
   return (
     <div
-      className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[color:var(--hairline)] px-4 py-3"
+      className="inset-panel flex flex-wrap items-center justify-between gap-2"
       data-testid={testId}
     >
       <div className="min-w-0 space-y-0.5">

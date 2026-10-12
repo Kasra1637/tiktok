@@ -5,10 +5,13 @@ import { Button } from "../components/ui/button";
 import PageHeader from "../components/PageHeader";
 import PageFrame from "../components/PageFrame";
 import { SectionCard } from "../components/SectionCard";
+import { AppPicker } from "../components/AppPicker";
+import { EmptyState } from "../components/EmptyState";
+import { Skeleton } from "../components/ui/skeleton";
 import { FactChip } from "../components/FactChip";
 import { api, getErrorMessage } from "../lib/api";
 import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
-import { TrendingUp, Loader2, AlertTriangle, Info, Activity } from "lucide-react";
+import { TrendingUp, AlertTriangle, Activity } from "lucide-react";
 
 /**
  * What happened as you worked, captured automatically.
@@ -92,77 +95,59 @@ export default function Analytics() {
     rememberCurrentAppId(id);
   };
 
-  if (loading) {
-    return (
-      <p className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading analytics...
-      </p>
-    );
-  }
-
-  if (error && !profiles.length) {
-    return (
-      <Alert variant="destructive">
-        <AlertTriangle className="h-4 w-4" />
-        <AlertDescription>{error}</AlertDescription>
-      </Alert>
-    );
-  }
-
   return (
     <PageFrame className="space-y-6">
-      {/* The header carries the testid rather than PageHeader: that component takes a
-        fixed prop list and drops anything else, so a testid passed to it would
-        silently never appear. */}
-      <div data-testid="analytics-header">
-        <PageHeader
-          icon={TrendingUp}
-          title="Analytics"
-          description="What happened as you worked, captured automatically — facts about the workflow, not judgments about why."
-          actions={
-            <div className="flex flex-wrap items-center gap-2">
-              {profiles.length > 1 ? (
-                <select
-                  value={selectedId}
-                  onChange={(e) => selectProfile(e.target.value)}
-                  aria-label="Select App Profile"
-                  data-testid="analytics-profile-picker"
-                  className="rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3 py-1.5 text-xs font-medium"
-                >
-                  {profiles.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.brand_name || "Untitled app"}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
-            </div>
-          }
-        />
-      </div>
+      <PageHeader
+        icon={TrendingUp}
+        title="Analytics"
+        description="What happened as you worked, captured automatically — facts about the workflow, not judgments about why."
+        data-testid="analytics-header"
+        actions={
+          profiles.length > 1 ? (
+            <AppPicker
+              profiles={profiles}
+              value={selectedId}
+              onChange={selectProfile}
+              testId="analytics-profile-picker"
+            />
+          ) : null
+        }
+      />
 
-      {!profiles.length && (
-        <Alert>
-          <Info className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-          <AlertDescription className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-            <span className="text-muted-foreground">
-              Create an App Profile to get started.
-            </span>
-            <Button variant="secondary" size="sm" className="shrink-0" asChild>
-              <Link to="/brand">Open App Profile</Link>
-            </Button>
-          </AlertDescription>
+      {error && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
-      {selectedId && (
-        <SignalCounts summary={feedback?.summary} />
-      )}
-
-      {selectedId && !feedback?.summary?.top_signals?.length && !loading && (
-        <p className="text-sm text-muted-foreground">
-          Nothing captured yet — signals appear here as you work with this app.
-        </p>
+      {loading ? (
+        <div className="surface space-y-4 rounded-2xl" aria-label="Loading analytics" data-testid="analytics-loading">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-4/5" />
+        </div>
+      ) : !profiles.length ? (
+        !error && (
+          <EmptyState
+            icon={TrendingUp}
+            title="No app yet"
+            description="Create an App Profile to get started. Signals appear here as you work with it."
+            action={
+              <Button variant="brand" asChild>
+                <Link to="/brand">Open App Profile</Link>
+              </Button>
+            }
+          />
+        )
+      ) : feedback?.summary?.top_signals?.length ? (
+        <SignalCounts summary={feedback.summary} />
+      ) : (
+        <EmptyState
+          icon={Activity}
+          title="Nothing captured yet"
+          description="Signals appear here as you work with this app."
+        />
       )}
     </PageFrame>
   );
@@ -180,19 +165,20 @@ function SignalCounts({ summary }) {
   const signals = summary?.top_signals || [];
   if (!signals.length) return null;
   return (
-    <SectionCard title="What happened" icon={Activity} className="space-y-2" data-testid="analytics-signals">
-      <p className="text-xs text-muted-foreground">
-        Captured automatically as you worked. These are facts about the workflow, not
-        opinions about why.
-      </p>
-      {signals.map((s) => (
-        <div key={s.signal} className="flex items-center justify-between gap-3 text-sm">
-          <span className="min-w-0 truncate text-muted-foreground">
-            {humanize(s.signal)}
-          </span>
-          <FactChip>{s.count}</FactChip>
-        </div>
-      ))}
+    <SectionCard
+      title="What happened"
+      icon={Activity}
+      description="Captured automatically as you worked."
+      data-testid="analytics-signals"
+    >
+      <ul className="divide-y divide-[color:var(--hairline)]">
+        {signals.map((s) => (
+          <li key={s.signal} className="flex items-center justify-between gap-4 py-2 text-sm">
+            <span className="min-w-0 truncate text-muted-foreground">{humanize(s.signal)}</span>
+            <FactChip>{s.count}</FactChip>
+          </li>
+        ))}
+      </ul>
     </SectionCard>
   );
 }

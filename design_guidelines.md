@@ -123,11 +123,25 @@ Elevation ramp: `--shadow-xs` → `--shadow-sm` → `--shadow-md` → `--shadow-
 
 Radii: cards `rounded-2xl`, buttons/inputs/chips `rounded-xl`, pills `rounded-full`.
 
-Card padding is unified in `index.css`: `.surface` / `.surface-solid` default to
-`24px` mobile / `32px` desktop (`p-6 md:p-8`). Do not add `p-4`, `p-5`, `p-6`,
-`sm:p-7`, or `md:p-6` to card JSX — outer section widths stay untouched
-(`max-w-6xl` pages inside AppShell `max-w-[1400px]`), inner content narrows via
-this gutter alone. `.surface-glass` hero/CTAs keep bespoke `px/py`.
+Card padding is unified in `index.css`: `.surface` / `.surface-solid` are
+`16px` on phones and `24px` from 768px up; `.surface-compact` (cards that are
+items in a grid) stays `16px`. Do not add `p-*` to card JSX. `.inset-panel` is
+the one small bordered box allowed inside a card (16px padding, 12px radius).
+
+### Container levels (every sidebar page)
+
+| Level | Built with | Icon | Heading |
+|---|---|---|---|
+| Page | `PageHeader` | 40px `IconTile size="page"` | page title |
+| Section card | `SectionCard` | 32px `IconTile size="section"` | `h2`, 16px semibold |
+| Group inside a card | `GroupLabel` + hairline divider, never a nested box | 12px, only on collapsible groups or cards with 3+ groups | `.eyebrow` (all caps) |
+| Field / detail row | label + control | none | 14px medium label |
+
+Spacing: 24px between page sections (`space-y-6`), 16px between cards and
+between fields (`space-y-4`), 8px from a label to its control. Loading states
+use `Skeleton` blocks shaped like the content, not a spinner line. App
+switchers use `AppPicker`; generation status uses `StatusBadge`. All caps is
+reserved for `.eyebrow` group labels, never section or page titles.
 
 ---
 

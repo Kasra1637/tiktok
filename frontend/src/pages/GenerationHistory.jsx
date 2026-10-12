@@ -8,32 +8,24 @@ import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import PageFrame from "../components/PageFrame";
 import EmptyState from "../components/EmptyState";
+import { StatusBadge } from "../components/StatusBadge";
+import { AppPicker, PILL_SELECT_CLASS } from "../components/AppPicker";
+import { GroupLabel } from "../components/SectionCard";
+import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } from "../lib/api";
 import { FactChip, FactList } from "../components/FactChip";
 import { recordSignal } from "../lib/feedback";
 import { sentenceCase } from "../lib/copyCase";
-import { Factory as HistoryIcon, Loader as Loader2, TriangleAlert as AlertTriangle, Download, Trash as Trash2, RotateCcw, GitBranch, RefreshCw, ChevronRight, Film, Info, Copy, X, Smartphone, Wrench } from "lucide-react";
+import { History as HistoryIcon, Loader as Loader2, TriangleAlert as AlertTriangle, Download, Trash as Trash2, RotateCcw, GitBranch, RefreshCw, ChevronRight, Film, Info, Copy, X, Smartphone } from "lucide-react";
 
 function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function StatusBadge({ status }) {
-  const map = {
-    submitted: ["Queued", "secondary"],
-    generating: ["Generating", "indigo"],
-    completed: ["Completed", "indigo"],
-    failed: ["Failed", "destructive"],
-    archived: ["Archived", "secondary"],
-  };
-  const [label, variant] = map[status] || [humanize(status), "secondary"];
-  return <Badge variant={variant} className="text-xs">{label}</Badge>;
-}
-
 function DetailRow({ label, children }) {
   if (children === null || children === undefined || children === "") return null;
   return (
-    <div className="space-y-0.5">
+    <div className="space-y-1">
       <span className="eyebrow block">{label}</span>
       <div className="text-sm">{children}</div>
     </div>
@@ -81,14 +73,15 @@ function GenerationDetails({ generationId, onClose }) {
 
         {error && <p className="text-sm text-destructive">{error}</p>}
         {!detail && !error && (
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading...
-          </p>
+          <div className="space-y-2" aria-label="Loading details">
+            <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="h-4 w-3/4" />
+          </div>
         )}
 
         {detail && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <DetailRow label="Model">{detail.model}</DetailRow>
               <DetailRow label="Status">{humanize(detail.status)}</DetailRow>
               <DetailRow label="Script version">v{detail.script_version}</DetailRow>
@@ -107,38 +100,34 @@ function GenerationDetails({ generationId, onClose }) {
             )}
 
             {detail.script && (
-              <div className="space-y-0.5">
-                <span className="eyebrow block">Script as generated</span>
-                <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg bg-secondary/40 p-3 text-sm">
+              <DetailRow label="Script as generated">
+                <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-xl bg-secondary/40 p-4 text-sm">
                   {sentenceCase(detail.script)}
                 </pre>
-              </div>
+              </DetailRow>
             )}
 
             {detail.prompt_used && (
-              <div className="space-y-0.5">
-                <span className="eyebrow block">Exact prompt sent to the model</span>
-                <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg bg-secondary/40 p-3 text-xs">
+              <DetailRow label="Exact prompt sent to the model">
+                <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-xl bg-secondary/40 p-4 text-xs">
                   {detail.prompt_used}
                 </pre>
-              </div>
+              </DetailRow>
             )}
 
             {detail.safety_report && (
-              <div className="space-y-1">
-                <span className="eyebrow block">Claim check at generation time</span>
-                <p className="text-sm text-muted-foreground">
+              <DetailRow label="Claim check at generation time">
+                <span className="text-muted-foreground">
                   {detail.safety_report.passed ? "Passed" : "Failed"}
                   {detail.safety_summary ? ` — ${detail.safety_summary}` : ""}
-                </p>
-              </div>
+                </span>
+              </DetailRow>
             )}
 
             {detail.error && (
-              <div className="space-y-1">
-                <span className="eyebrow block">Recorded error</span>
-                <p className="text-sm text-destructive">{detail.error}</p>
-              </div>
+              <DetailRow label="Recorded error">
+                <span className="text-destructive">{detail.error}</span>
+              </DetailRow>
             )}
           </div>
         )}
@@ -401,7 +390,7 @@ function GenerationRow({ row, onChanged }) {
                  copy exists at all because the durable save failed — and in the
                  second case there is nothing to download either, so promising
                  one was a dead end. The repair below is the way through both. */
-              <div className="rounded-xl border border-dashed border-[color:var(--hairline-strong)] p-3">
+              <div className="rounded-xl border border-dashed border-[color:var(--hairline-strong)] p-4">
                 <p className="text-sm">
                   {stuckGenerating
                     ? "Still marked as generating"
@@ -409,7 +398,7 @@ function GenerationRow({ row, onChanged }) {
                       ? "Preview unavailable"
                       : "No durable copy"}
                 </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
+                <p className="mt-1 text-xs text-muted-foreground">
                   {stuckGenerating
                     ? "This render may already be finished at the provider — nothing has checked since it was submitted. Check again to fetch it."
                     : downloadUrl
@@ -438,7 +427,7 @@ function GenerationRow({ row, onChanged }) {
                 That muscle-memory safeguard is gone by request, so the label is
                 spelled out and the icon is tinted rather than neutral -- it
                 should read as destructive at a glance. */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               {saveUrl && (
                 <Button
                   variant="ghost"
@@ -504,7 +493,7 @@ function GenerationRow({ row, onChanged }) {
           </div>
         )}
 
-        <div className="min-w-0 space-y-3">
+        <div className="min-w-0 space-y-4">
           {/* Identity, then what it says. The model/duration badges that
               used to sit opposite the app name are gone from here — they are
               facts about the render, not about which video this is, and they
@@ -515,12 +504,12 @@ function GenerationRow({ row, onChanged }) {
             </span>
             <StatusBadge status={row.status} />
             {row.parent_generation_id && (
-              <Badge variant="outline" className="text-[11px]">
-                <GitBranch className="mr-1 h-2.5 w-2.5" /> Variation
+              <Badge variant="outline" className="gap-1 text-xs">
+                <GitBranch className="h-3 w-3" /> Variation
               </Badge>
             )}
             {row.variation_kind && (
-              <Badge variant="secondary" className="text-[11px]">
+              <Badge variant="secondary" className="text-xs">
                 {humanize(row.variation_kind)}
               </Badge>
             )}
@@ -578,12 +567,9 @@ function GenerationRow({ row, onChanged }) {
               beside Download where the thing being destroyed is visible. The
               status filter still offers "archived", so a row archived before
               this change remains findable — just not archivable again. */}
-          <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-            <span className="eyebrow flex items-center gap-1.5">
-              <Wrench className="h-3 w-3 shrink-0" aria-hidden="true" />
-              Work with this render
-            </span>
-            <div className="flex flex-wrap items-center gap-1.5">
+          <div className="space-y-2 border-t border-[color:var(--hairline)] pt-4">
+            <GroupLabel>Work with this render</GroupLabel>
+            <div className="flex flex-wrap items-center gap-2">
               <Button variant="ghost" size="sm" onClick={loadChildren}>
                 <GitBranch className="h-3.5 w-3.5" /> Variations
                 {children.length > 0 && ` (${children.length})`}
@@ -626,9 +612,9 @@ function GenerationRow({ row, onChanged }) {
       )}
 
       {showVariations && (
-        <div className="space-y-3 border-t border-[color:var(--hairline)] pt-3">
+        <div className="mt-4 space-y-4 border-t border-[color:var(--hairline)] pt-4">
           {children.length > 0 && (
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {children.map((c) => (
                 <div key={c.id} className="flex items-center justify-between gap-2 text-xs">
                   <span className="truncate text-muted-foreground">
@@ -645,7 +631,7 @@ function GenerationRow({ row, onChanged }) {
               value={varKind}
               onChange={(e) => setVarKind(e.target.value)}
               aria-label="Variation type"
-              className="rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
+              className="h-10 rounded-xl border border-[color:var(--hairline)] bg-transparent px-3 text-sm"
             >
               {variationKinds.map((v) => (
                 <option key={v.key} value={v.key}>{v.label}</option>
@@ -723,7 +709,7 @@ export default function GenerationHistory() {
   const failed = rows.filter((r) => r.status === "failed").length;
 
   return (
-    <PageFrame className="space-y-5">
+    <PageFrame className="space-y-6">
       <PageHeader
         icon={HistoryIcon}
         title="Generation History"
@@ -739,25 +725,21 @@ export default function GenerationHistory() {
 
       <div className="surface flex flex-wrap items-center gap-2 rounded-2xl" data-testid="history-filters">
         <label className="sr-only" htmlFor="history-app-filter">Filter History by app</label>
-        <select
+        <AppPicker
           id="history-app-filter"
+          profiles={profiles}
           value={profileFilter}
-          onChange={(e) => setProfileFilter(e.target.value)}
-          aria-label="Filter by app"
-          className="rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3 py-1.5 text-xs font-medium"
-        >
-          <option value="">All apps</option>
-          {profiles.map((p) => (
-            <option key={p.id} value={p.id}>{p.brand_name}</option>
-          ))}
-        </select>
+          onChange={setProfileFilter}
+          allLabel="All apps"
+          ariaLabel="Filter by app"
+        />
         <label className="sr-only" htmlFor="history-status-filter">Filter History by status</label>
         <select
           id="history-status-filter"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
           aria-label="Filter by status"
-          className="rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3 py-1.5 text-xs font-medium"
+          className={PILL_SELECT_CLASS}
         >
           <option value="">All statuses</option>
           {["completed", "failed", "generating", "submitted", "archived"].map((s) => (
@@ -777,15 +759,15 @@ export default function GenerationHistory() {
            a page whose cards are stacked means the layout jumps the moment data
            lands, which is the same flash the studio loader was changed to
            remove. */
-        <div className="space-y-3" aria-label="Loading history" data-testid="history-loading">
+        <div className="space-y-4" aria-label="Loading history" data-testid="history-loading">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="surface space-y-3 rounded-2xl">
+            <div key={i} className="surface space-y-4 rounded-2xl">
               <div className="flex items-center justify-between gap-2">
-                <div className="h-4 w-32 animate-pulse rounded bg-secondary/60" />
-                <div className="h-4 w-20 animate-pulse rounded bg-secondary/40" />
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-20" />
               </div>
-              <div className="h-3 w-3/5 animate-pulse rounded bg-secondary/40" />
-              <div className="h-40 w-full max-w-[240px] animate-pulse rounded-lg bg-secondary/30" />
+              <Skeleton className="h-4 w-3/5" />
+              <Skeleton className="h-40 w-full max-w-[240px]" />
             </div>
           ))}
         </div>
@@ -797,13 +779,13 @@ export default function GenerationHistory() {
           action={
             <Button variant="brand" asChild>
               <Link to="/create">
-                Create a video <ChevronRight className="h-3.5 w-3.5" />
+                Create a video <ChevronRight className="h-4 w-4" />
               </Link>
             </Button>
           }
         />
       ) : (
-        <div className="space-y-3" data-testid="history-list">
+        <div className="space-y-4" data-testid="history-list">
           {rows.map((row) => (
             <GenerationRow
               key={row.id}

@@ -3,17 +3,20 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
-import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
+import { Alert, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import PageFrame from "../components/PageFrame";
 import EmptyState from "../components/EmptyState";
+import { SectionCard } from "../components/SectionCard";
+import { AppPicker } from "../components/AppPicker";
+import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, mediaUrl } from "../lib/api";
 import { FactChip, FactList } from "../components/FactChip";
 import { resolveActiveProfileId, profileLabel, partitionProfiles } from "../lib/profileSelection";
 import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
 import {
   Images, Loader2, AlertTriangle, Upload, Trash2, Archive, ArchiveRestore,
-  ShieldCheck, Paperclip, Music, Link2, Check, ImageOff, X,
+  ShieldCheck, Paperclip, UserRound, Music, Link2, Check, ImageOff, X,
 } from "lucide-react";
 
 // Face-only product: the character reference is the single permitted upload.
@@ -144,33 +147,33 @@ function AssetRow({
   // question of what went wrong.
   const slotHeldByAnother = attachDisabled && !busy && asset.kind === "character_reference";
   return (
-    <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-3">
+    <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-4">
       <div className="flex items-center gap-3">
         <AssetThumb asset={asset} isVideo={isVideo} isAudio={isAudio} />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="truncate text-sm font-medium">
               {asset.label || asset.name || humanize(asset.kind)}
             </span>
             {asset.status === "archived" && (
-              <Badge variant="outline" className="text-[11px]">Archived</Badge>
+              <Badge variant="outline" className="text-xs">Archived</Badge>
             )}
             {!asset.rights_confirmed && (
-              <Badge variant="outline" className="text-[11px]">Rights unconfirmed</Badge>
+              <Badge variant="outline" className="text-xs">Rights unconfirmed</Badge>
             )}
             {/* Pre-flight face check, counted at upload time. A photo with no
                 detectable face — or several competing ones — is what the
                 video provider's privacy filter refuses at generation time. */}
             {asset.face_count === 0 && (
-              <Badge variant="outline" className="text-[11px]">No face detected — may be refused</Badge>
+              <Badge variant="outline" className="text-xs">No face detected — may be refused</Badge>
             )}
             {Number(asset.face_count) >= 2 && (
-              <Badge variant="outline" className="text-[11px]">
+              <Badge variant="outline" className="text-xs">
                 Faces detected: {asset.face_count} — may be flagged
               </Badge>
             )}
             {attachable && attached && (
-              <Badge variant="outline" className="text-[11px]">
+              <Badge variant="outline" className="text-xs">
                 <Check className="mr-1 h-3 w-3" /> Attached
               </Badge>
             )}
@@ -305,36 +308,6 @@ function UsageHistory({ uses }) {
       Used in {uses.length} project{uses.length === 1 ? "" : "s"}
       {names.length > 0 ? ` · ${names.join(", ")}` : ""}
     </p>
-  );
-}
-
-/**
- * Which app's assets are on screen. The sidebar's Asset Library link carries no
- * profile, so without this the page could not answer that question at all.
- *
- * Every option shows its approval state. Someone looking for a missing app needs
- * to be able to tell "this one is here but not approved yet" from "this one is
- * gone" at a glance, which a bare list of names cannot do.
- */
-function ProfilePicker({ profiles, value, onChange }) {
-  return (
-    <select
-      value={value || ""}
-      onChange={(e) => onChange(e.target.value)}
-      aria-label="Choose which app these assets belong to"
-      data-testid="asset-profile-picker"
-      className="rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3 py-2 text-sm font-medium"
-    >
-      <option value="" disabled>
-        Choose an app...
-      </option>
-      {profiles.map((p) => (
-        <option key={p.id} value={p.id}>
-          {profileLabel(p)}
-          {p.status === "approved" ? "" : " (needs approval)"}
-        </option>
-      ))}
-    </select>
   );
 }
 
@@ -635,20 +608,17 @@ export default function AssetLibrary({
     const { approved, unapproved } = partitionProfiles(profiles);
     const waiting = unapproved.length > 0;
     return (
-      <div className="space-y-4">
+      <PageFrame className="space-y-6">
         {!embedded && (
-          <div data-testid="asset-library-header">
-            <PageHeader
-              icon={Images}
-              title="Asset Library"
-              description="Upload the presenter photo for each app; that photo decides who appears on camera in your videos."
-            />
-          </div>
+          <PageHeader
+            data-testid="asset-library-header"
+            icon={Images}
+            title="Asset Library"
+            description="Upload the presenter photo for each app; that photo decides who appears on camera in your videos."
+          />
         )}
         {loading ? (
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading your apps...
-          </p>
+          <Skeleton className="h-48 w-full rounded-2xl" aria-label="Loading your apps" />
         ) : profiles.length === 0 ? (
           <EmptyState
             icon={Images}
@@ -672,10 +642,14 @@ export default function AssetLibrary({
             action={
               <div className="flex flex-col items-center gap-2">
                 {selectableProfiles.length > 1 ? (
-                  <ProfilePicker
+                  <AppPicker
                     profiles={selectableProfiles}
                     value=""
                     onChange={handleSwitchProfile}
+                    placeholder="Choose an app..."
+                    showStatus
+                    ariaLabel="Choose which app these assets belong to"
+                    testId="asset-profile-picker"
                   />
                 ) : (
                   <Button variant="brand" asChild>
@@ -694,17 +668,17 @@ export default function AssetLibrary({
             }
           />
         )}
-      </div>
+      </PageFrame>
     );
   }
 
   return (
-    <PageFrame className="space-y-4">
+    <PageFrame className="space-y-6">
       {/* Only the standalone route owns a title. Embedded, the wizard step
           header above already says this. */}
       {!embedded && (
-        <div data-testid="asset-library-header">
         <PageHeader
+          data-testid="asset-library-header"
           icon={Images}
           title="Asset Library"
           description="Upload the presenter photo for each app; that photo decides who appears on camera in your videos."
@@ -713,10 +687,14 @@ export default function AssetLibrary({
               {/* Shown whenever there is something to switch between. With a
                   single app it would be a one-option menu, which is noise. */}
               {profiles.length > 1 && (
-                <ProfilePicker
+                <AppPicker
                   profiles={profiles}
                   value={activeProfileId}
                   onChange={handleSwitchProfile}
+                  placeholder="Choose an app..."
+                  showStatus
+                  ariaLabel="Choose which app these assets belong to"
+                  testId="asset-profile-picker"
                 />
               )}
               {/* The approval state is stated here unconditionally, not left to
@@ -726,18 +704,17 @@ export default function AssetLibrary({
                   app needs to be able to see. */}
               {activeProfile && (
                 <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <span>Assets for {profileLabel(activeProfile)}</span>
+                  {profiles.length === 1 && <span>Assets for {profileLabel(activeProfile)}</span>}
                   {activeProfile.status === "approved" ? (
-                    <Badge variant="outline" className="text-[10px]">Approved</Badge>
+                    <Badge variant="outline" className="text-xs">Approved</Badge>
                   ) : (
-                    <Badge variant="secondary" className="text-[10px]">Needs approval</Badge>
+                    <Badge variant="secondary" className="text-xs">Needs approval</Badge>
                   )}
                 </span>
               )}
             </div>
           }
         />
-        </div>
       )}
 
       {/* Rights. A full Alert box for one sentence made the section read as a
@@ -759,7 +736,7 @@ export default function AssetLibrary({
         data-testid="asset-rights-alert"
       >
         <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />
-        Upload only an image you have the right to use. Choose a clear photo of the person you want on camera; this becomes the video&apos;s presenter reference.
+        Upload only an image you have the right to use.
       </p>
 
       {error && (
@@ -773,7 +750,12 @@ export default function AssetLibrary({
       {/* One surface: the upload control and the photograph it produces sit
           together, so an upload no longer appears to "turn up" in a separate
           component further down the step. */}
-      <div className="surface space-y-3 rounded-2xl" data-testid="asset-upload-panel">
+      <SectionCard
+        title={embedded ? undefined : "Presenter photos"}
+        icon={UserRound}
+        description={embedded ? undefined : "A clear photo of the person you want on camera. It becomes the video's presenter reference."}
+        data-testid="asset-upload-panel"
+      >
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
           <Input
             value={label}
@@ -798,7 +780,7 @@ export default function AssetLibrary({
         {/* The photograph this video renders from, in the same surface as the
             control that put it there. */}
         {attachedReference && (
-          <div className="border-t border-[color:var(--hairline)] pt-3">
+          <div className="border-t border-[color:var(--hairline)] pt-4">
             <AttachedReference
               attachment={attachedReference}
               onDetach={handleDetach}
@@ -807,7 +789,7 @@ export default function AssetLibrary({
           </div>
         )}
         {attachedAsset && (
-          <div className="border-t border-[color:var(--hairline)] pt-3">
+          <div className="border-t border-[color:var(--hairline)] pt-4">
             <AssetRow
               asset={attachedAsset}
               onDelete={handleDelete}
@@ -828,7 +810,7 @@ export default function AssetLibrary({
             studio needs one face, and a wall of unused photographs read as
             more to do. */}
         {embedded && otherAssets.length > 0 && (
-          <div className="border-t border-[color:var(--hairline)] pt-3">
+          <div className="border-t border-[color:var(--hairline)] pt-4">
             {!showAllPhotos ? (
               <Button
                 variant="ghost"
@@ -838,7 +820,7 @@ export default function AssetLibrary({
                 {otherAssets.length} other photo{otherAssets.length === 1 ? "" : "s"}
               </Button>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {otherAssets.map((a) => (
                   <AssetRow
                     key={a.id}
@@ -861,7 +843,7 @@ export default function AssetLibrary({
         )}
 
         {!embedded && (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[color:var(--hairline)] pt-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[color:var(--hairline)] pt-4">
             <span className="text-xs text-muted-foreground">
               {assets.length} asset{assets.length === 1 ? "" : "s"}
             </span>
@@ -876,14 +858,15 @@ export default function AssetLibrary({
             </Button>
           </div>
         )}
-      </div>
+      </SectionCard>
 
       <div data-testid="asset-list">
       {loading ? (
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading assets...
-        </p>
-) : assets.length === 0 ? (
+        <div className="space-y-4" aria-label="Loading assets">
+          <Skeleton className="h-20 w-full rounded-xl" />
+          <Skeleton className="h-20 w-full rounded-xl" />
+        </div>
+      ) : assets.length === 0 ? (
         // Nothing here. This was a line telling an embedded reader to press the
         // Upload button sitting directly above it, which is a pointer to a
         // control they can already see, next to an input they can already type
@@ -891,7 +874,7 @@ export default function AssetLibrary({
         // it says what the photo is for — so that branch stays.
         embedded ? null : (
           <p className="text-sm text-muted-foreground">
-            Add a clear photo of the person you want on camera. In Create Video, the uploaded photo attaches to your draft and guides its presenter.
+            No photos yet. In Create Video, an uploaded photo attaches to your draft and guides its presenter.
           </p>
         )
       ) : embedded ? (
@@ -900,7 +883,7 @@ export default function AssetLibrary({
         // shows when there is nothing attached yet.
         null
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {assets.map((a) => (
             <AssetRow
               key={a.id}

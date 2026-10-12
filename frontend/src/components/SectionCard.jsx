@@ -1,36 +1,61 @@
 import { cn } from "../lib/utils";
+import { IconTile } from "./IconTile";
 
 /**
- * A content card: the app's one container for a group of related things.
+ * The page's container levels, shared by every sidebar page:
  *
- * Padding lives in `.surface` in `index.css` (24px / 32px) — do not add `p-*`
- * here or at call sites. Outer widths are untouched; this only narrows the
- * inner content with roomier gutters.
+ * - Section card (this): a main block of the page. 32px icon tile + 16px
+ *   heading, optional one-line description. Padding lives in `.surface`.
+ * - Group (`GroupLabel`): an uppercase `.eyebrow` label inside a card, divided
+ *   from its neighbours by a hairline rather than a nested box.
+ * - Inset box (`.inset-panel`): a small bordered aside inside a card.
  *
- * `title` renders as `.eyebrow`: a GROUP LABEL, and keeping that distinction is
- * the point. Identity in this app is the display face at semibold (which app,
- * which video); a card holding a set of things has no identity and gets a quiet
- * uppercase label instead. The retired Analytics page used a display heading for
- * those, which made a breakdown title compete with the numbers beneath it.
- *
- * Pass no `title` for a card that IS one thing rather than a set.
+ * `compact` is for cards that are themselves items in a grid (a render tile):
+ * 16px padding and no heading tile.
  */
-export function SectionCard({ title, icon: Icon, actions, children, className, ...rest }) {
+export function SectionCard({
+  title,
+  icon,
+  description,
+  actions,
+  compact = false,
+  headingLevel = "h2",
+  children,
+  className,
+  ...rest
+}) {
+  const Heading = headingLevel;
   return (
-    <div className={cn("surface space-y-2 rounded-2xl", className)} {...rest}>
+    <div
+      className={cn(compact ? "surface-compact" : "surface", "space-y-4 rounded-2xl", className)}
+      {...rest}
+    >
       {(title || actions) && (
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           {title && (
-            <span className="eyebrow flex items-center gap-1.5">
-              {Icon && <Icon className="h-3 w-3" />}
-              {title}
-            </span>
+            <div className="flex min-w-0 items-start gap-3">
+              {icon && <IconTile icon={icon} size="section" />}
+              <div className="min-w-0">
+                <Heading className="font-display text-base font-semibold leading-8">{title}</Heading>
+                {description && <p className="text-sm text-muted-foreground">{description}</p>}
+              </div>
+            </div>
           )}
-          {actions}
+          {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
         </div>
       )}
       {children}
     </div>
+  );
+}
+
+/** Uppercase label for a group inside a card. Icons only on groups people scan between. */
+export function GroupLabel({ icon: Icon, as: Tag = "span", className, children }) {
+  return (
+    <Tag className={cn("eyebrow flex items-center gap-2", className)}>
+      {Icon && <Icon className="h-3 w-3 shrink-0" />}
+      {children}
+    </Tag>
   );
 }
 

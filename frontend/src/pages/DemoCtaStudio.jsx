@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { TriangleAlert as AlertTriangle, Loader as Loader2, Smartphone } from "lucide-react";
+import { TriangleAlert as AlertTriangle, Film, Smartphone } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Alert, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import PageFrame from "../components/PageFrame";
 import SectionCard from "../components/SectionCard";
-import EmptyState from "../components/EmptyState";
+import { IconTile } from "../components/IconTile";
+import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, mediaUrl, durableMediaUrl } from "../lib/api";
 import { sentenceCase } from "../lib/copyCase";
 import { DemoCtaEditor } from "../demoCta/DemoCtaEditor";
@@ -66,9 +67,10 @@ function SourcePicker() {
 
   if (!rows) {
     return (
-      <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Finding finished renders…
-      </p>
+      <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]" aria-label="Finding finished renders">
+        <Skeleton className="h-36 rounded-2xl" />
+        <Skeleton className="h-36 rounded-2xl" />
+      </div>
     );
   }
 
@@ -80,20 +82,23 @@ function SourcePicker() {
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="font-display text-lg font-semibold tracking-tight">Start from a finished render</h2>
-        <p className="mt-1 text-sm text-muted-foreground">You can also upload your own clip above—no Hook + Story render is required. This editor styles one source clip; combine your demo and closing CTA in your own editor if needed.</p>
+    <section className="space-y-4">
+      <div className="flex items-start gap-3">
+        <IconTile icon={Film} size="section" />
+        <div>
+          <h2 className="font-display text-base font-semibold leading-8">Start from a finished render</h2>
+          <p className="text-sm text-muted-foreground">Or pick one of your Hook + Story renders instead of uploading a clip.</p>
+        </div>
       </div>
-      <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
+      <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
         {rows.map((row) => (
-          <SectionCard key={row.id} className="flex h-full flex-col !gap-3">
+          <SectionCard key={row.id} compact className="flex h-full flex-col">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-display text-sm font-semibold">
                 {row.brand_name || "Unassigned app"}
               </span>
               {typeof row.duration === "number" && (
-                <Badge variant="secondary" className="font-mono text-[11px] tabular-nums">
+                <Badge variant="secondary" className="font-mono text-xs tabular-nums">
                   {row.duration}s
                 </Badge>
               )}
@@ -124,7 +129,7 @@ function SourcePicker() {
           </SectionCard>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -176,9 +181,7 @@ function EditorRoute({ generationId }) {
 
   if (!generation) {
     return (
-      <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading the finished render…
-      </p>
+      <Skeleton className="h-96 w-full rounded-2xl" aria-label="Loading the finished render" />
     );
   }
 
@@ -198,10 +201,9 @@ function EditorRoute({ generationId }) {
 export function DemoCtaStudio() {
   const { generationId } = useParams();
   return (
-    <PageFrame className="space-y-5">
+    <PageFrame className="space-y-6">
       <PageHeader
         icon={Smartphone}
-        eyebrow="Studio"
         title="Demo + CTA"
         description={
           generationId

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
+import { StatusBadge } from "./StatusBadge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage, mediaUrl, downloadMediaUrl } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
@@ -42,18 +43,6 @@ import {
  * refuses to do.
  */
 const POLL_INTERVAL_MS = 6000;
-
-function StatusBadge({ status }) {
-  const map = {
-    submitted: ["Queued", "secondary"],
-    generating: ["Generating", "indigo"],
-    completed: ["Completed", "indigo"],
-    failed: ["Failed", "destructive"],
-    archived: ["Archived", "secondary"],
-  };
-  const [label, variant] = map[status] || [status, "secondary"];
-  return <Badge variant={variant} className="text-xs">{label}</Badge>;
-}
 
 /** localStorage key holding one project's chosen video model. */
 function modelStorageKey(projectId) {
@@ -594,14 +583,14 @@ const handleGenerate = async () => {
       {generation && (
         <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3 text-sm">
           <div className="flex flex-wrap items-center gap-2">
-            {generation.model && <Badge variant="outline" className="text-[11px]">{generation.model}</Badge>}
+            {generation.model && <Badge variant="outline" className="text-xs">{generation.model}</Badge>}
             {generation.duration && (
-              <Badge variant="outline" className="text-[11px]">
+              <Badge variant="outline" className="text-xs">
                 <Clock className="mr-1 h-2.5 w-2.5" />{generation.duration}s
               </Badge>
             )}
             {generation.attempt > 1 && (
-              <Badge variant="outline" className="text-[11px]">attempt {generation.attempt}</Badge>
+              <Badge variant="outline" className="text-xs">attempt {generation.attempt}</Badge>
             )}
           </div>
 

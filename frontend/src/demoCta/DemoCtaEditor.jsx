@@ -8,12 +8,16 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  Film,
   Info,
   Loader2,
+  Megaphone,
   Pause,
   Play,
   RotateCcw,
+  SlidersHorizontal,
   Smartphone,
+  Type,
   Upload,
   X,
 } from "lucide-react";
@@ -25,7 +29,7 @@ import { Slider } from "../components/ui/slider";
 import { Switch } from "../components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
 import { useReducedMotion } from "framer-motion";
-import { SectionCard } from "../components/SectionCard";
+import { SectionCard, GroupLabel } from "../components/SectionCard";
 import { Chip } from "../components/Chip";
 import { api, getErrorMessage } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
@@ -147,7 +151,7 @@ const TEXTAREA_CLASS =
  *
  * `open`/`onToggle` are lifted so the parent can persist which groups are open.
  */
-function EditorSection({ title, open, onToggle, testId, children }) {
+function EditorSection({ title, icon, open, onToggle, testId, children }) {
   return (
     <SectionCard className="!space-y-0 !p-0" data-testid={testId}>
       <button
@@ -156,12 +160,12 @@ function EditorSection({ title, open, onToggle, testId, children }) {
         aria-expanded={open}
         className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition duration-150 hover:bg-[color:var(--indigo-6)]"
       >
-        <span className="eyebrow">{title}</span>
+        <GroupLabel icon={icon}>{title}</GroupLabel>
         <ChevronDown
           className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`}
         />
       </button>
-      {open && <div className="space-y-3 px-4 pb-4">{children}</div>}
+      {open && <div className="space-y-4 px-4 pb-4">{children}</div>}
     </SectionCard>
   );
 }
@@ -1423,7 +1427,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           ref={settingsRef}
           className="demo-cta-panel-scroll space-y-3 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-2.5"
         >
-        <EditorSection title="Source & Look" open={openSections.source} onToggle={() => toggleSection("source")} testId="demo-cta-source">
+        <EditorSection title="Source & Look" icon={Film} open={openSections.source} onToggle={() => toggleSection("source")} testId="demo-cta-source">
           {generation ? (
             <>
               <p className="text-xs text-muted-foreground">
@@ -1434,8 +1438,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 {videoMeta && <span className="text-muted-foreground">{videoMeta.w}x{videoMeta.h} • {videoMeta.d.toFixed(1)}s</span>}
               </div>
               {loadingSource && (
-                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Loader2 className="h-3 w-3 animate-spin" /> Loading the finished render…
+                <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading the finished render…
                 </p>
               )}
             </>
@@ -1614,7 +1618,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           )}
         </EditorSection>
 
-        <EditorSection title="Hook Text" open={openSections.hook} onToggle={() => toggleSection("hook")} testId="hook-controls">
+        <EditorSection title="Hook Text" icon={Type} open={openSections.hook} onToggle={() => toggleSection("hook")} testId="hook-controls">
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <Switch data-testid="hook-toggle" checked={hookEnabled} onCheckedChange={setHookEnabled} />
             Show opening hook text
@@ -1638,7 +1642,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           <p className="text-xs italic text-muted-foreground">Drag the hook text on the preview to reposition</p>
         </EditorSection>
 
-        <EditorSection title="End Card CTA" open={openSections.cta} onToggle={() => toggleSection("cta")} testId="cta-controls">
+        <EditorSection title="End Card CTA" icon={Megaphone} open={openSections.cta} onToggle={() => toggleSection("cta")} testId="cta-controls">
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <Switch data-testid="cta-toggle" checked={ctaEnabled} onCheckedChange={setCtaEnabled} />
             Show closing call-to-action card
@@ -1695,7 +1699,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           </p>
         </EditorSection>
 
-        <EditorSection title="Output" open={openSections.output} onToggle={() => toggleSection("output")}>
+        <EditorSection title="Output" icon={Download} open={openSections.output} onToggle={() => toggleSection("output")}>
           {/* Platform preset as a two-line list rather than a native select:
               "TikTok / Reels / Shorts" as the value and "1080×1920" beneath it.
               A select truncates both into one clipped line at 420px, and the
@@ -1755,7 +1759,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             because they are set once and then left alone; keeping them in the
             main groups is what made the panel taller than the preview it is
             meant to describe. */}
-        <EditorSection title="Advanced" open={openSections.advanced} onToggle={() => toggleSection("advanced")}>
+        <EditorSection title="Advanced" icon={SlidersHorizontal} open={openSections.advanced} onToggle={() => toggleSection("advanced")}>
           <p className="text-xs text-muted-foreground">Optional fine-tuning for mockup, screen placement, and video crop. Most exports do not need changes here.</p>
           <div className="space-y-2">
             <SubLabel>Mockup height</SubLabel>
@@ -2142,7 +2146,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         <div className="space-y-2">
           {recording && <Progress value={Math.round(progress * 100)} />}
           {saving && (
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving to History…
             </p>
           )}

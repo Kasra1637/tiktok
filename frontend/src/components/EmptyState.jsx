@@ -1,6 +1,8 @@
 import { motion, useReducedMotion } from "framer-motion";
+import { IconTile } from "./IconTile";
 
-export function EmptyState({ icon: Icon, title, description, action }) {
+export function EmptyState({ icon, title, description, action, headingLevel = "h2" }) {
+  const Heading = headingLevel;
   const reduceMotion = useReducedMotion();
 
   return (
@@ -16,25 +18,24 @@ export function EmptyState({ icon: Icon, title, description, action }) {
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 top-0 h-40"
           style={{
-            background: "radial-gradient(400px circle at 50% 0%, rgba(99,102,241,0.10), transparent 70%)",
+            background: "radial-gradient(400px circle at 50% 0%, var(--indigo-10), transparent 70%)",
           }}
         />
-        <div className="relative flex flex-col items-center justify-center gap-3.5">
-          {Icon && (
+        <div className="relative flex flex-col items-center justify-center gap-4">
+          {icon && (
             <motion.span
               initial={reduceMotion ? { scale: 1 } : { scale: 0.85 }}
               animate={{ scale: 1 }}
               transition={{ duration: 0.3, ease: "easeOut", delay: 0.05 }}
-              className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)] shadow-[var(--shadow-md)]"
             >
-              <Icon className="h-6 w-6" />
+              <IconTile icon={icon} size="empty" />
             </motion.span>
           )}
-          <h3 className="font-display text-lg font-semibold tracking-tight">{title}</h3>
+          <Heading className="font-display text-lg font-semibold tracking-tight">{title}</Heading>
           {description && (
             <p className="max-w-md text-sm leading-relaxed text-muted-foreground">{description}</p>
           )}
-          {action && <div className="mt-1.5">{action}</div>}
+          {action && <div>{action}</div>}
         </div>
       </div>
     </motion.div>
