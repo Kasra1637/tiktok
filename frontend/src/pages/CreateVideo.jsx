@@ -9,7 +9,6 @@ import PageHeader from "../components/PageHeader";
 import PageFrame from "../components/PageFrame";
 import EmptyState from "../components/EmptyState";
 import { IconTile } from "../components/IconTile";
-import { GroupLabel } from "../components/SectionCard";
 import { Skeleton } from "../components/ui/skeleton";
 import SafetyPanel from "../components/SafetyPanel";
 import HookContinuityPanel from "../components/HookContinuityPanel";
@@ -229,15 +228,17 @@ function RecommendationCard({ r, selected, onSelect }) {
         </div>
       )}
       {limits.length > 0 && (
-        // A caveat, not evidence: inset with a left hairline border and a muted
-        // warning mark, so shape separates it from the reasons above. Never
-        // amber -- on this page amber reads as an error state.
-        <div className="mt-2 space-y-1 border-l-2 border-[color:var(--hairline)] pl-2.5">
-          <GroupLabel as="p" icon={AlertTriangle}>Before you use it</GroupLabel>
+        <ul className="space-y-1">
           {limits.map((limitation, i) => (
-            <p key={`l-${i}`} className="text-xs leading-relaxed text-muted-foreground">{sentenceCase(limitation)}</p>
+            <li
+              key={`l-${i}`}
+              className="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground"
+            >
+              <span aria-hidden="true" className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-current opacity-60" />
+              <span>{sentenceCase(limitation)}</span>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );

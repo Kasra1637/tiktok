@@ -3289,9 +3289,6 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!text.includes("Why it fits")) {
       throw new Error("the fit reasons are not labelled");
     }
-    if (!text.includes("Before you use it")) {
-      throw new Error("the limitations are not labelled as caveats");
-    }
 
     // The score is the sort key and was already computed server-side; showing it
     // is what stops "is four reasons better than two" being a reasonable
@@ -3310,19 +3307,6 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
     if (!verdict.textContent.includes(FOUR_REASONS[0])) {
       throw new Error("the verdict is not the strongest (first) reason");
-    }
-    // The caveat block is a container of its own, so a limitation can never
-    // read as one more reason. Shape, not color, does the separating: amber
-    // reads as an error state on this page.
-    const caveatLabel = [...ctx.container.querySelectorAll("p")].find((p) =>
-      (p.textContent || "").includes("Before you use it")
-    );
-    if (!caveatLabel) {
-      throw new Error("the limitations have no caveat label");
-    }
-    const caveatBox = caveatLabel.closest("div");
-    if (!caveatBox || !/border-l-2/.test(caveatBox.className || "")) {
-      throw new Error("the limitations are not grouped inside the caveat container");
     }
   });
 
@@ -3356,8 +3340,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
     const text = ctx.text();
     // An empty heading is worse than no heading.
-    if (text.includes("Why it fits") || text.includes("Before you use it")) {
-      throw new Error("an empty reasons or limitations block is still rendered");
+    if (text.includes("Why it fits")) {
+      throw new Error("an empty reasons block is still rendered");
     }
     if (!text.includes("Fit 5")) {
       throw new Error("the fit score is missing");
