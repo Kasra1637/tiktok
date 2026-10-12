@@ -2056,9 +2056,14 @@ setObjective("");
         <StepShell
           icon={LayoutTemplate}
           title="Choose a template and add your photo"
-          description="Compare goal-matched suggestions by fit reasons and caveats. Keep the preselected suggestion or choose another, then add a clear photo of the presenter below."
+          description="Compare goal-matched suggestions by fit reasons and caveats. Keep the preselected suggestion or choose another."
         >
           <div className="space-y-4">
+            {/* The description stops at the template. "Then add a clear photo
+                of the presenter below" repeated the rail's "pick a template
+                and add your photo" and then pre-empted the Presenter photo
+                section's own instruction, which sits directly under it. The
+                photo is described where it is attached, not twice above it. */}
             {/* No objective means no honest scoring to show. The card list used
                 to render anyway with the empty rationale the scorer returns, so a
                 founder could pick the top card from reasons that did not mention
@@ -2244,9 +2249,16 @@ setObjective("");
         <StepShell
           icon={Sparkles}
           title="Hook + Story"
-          description="Review the app-specific strategy, then render the Hook + Story clip. This render does not include your filmed product demo, closing CTA, or on-screen text."
         >
           <div className="space-y-3">
+            {/* No step description here, deliberately, for the same reason the
+                Audience step has none. The progress rail above already says
+                "Everything before this is ready. Review the app-specific
+                strategy here, then render your Hook + Story", and the render
+                panel states the piece's own scope — "Produces Hook + Story
+                only ... Does not include your filmed product demo, closing
+                CTA, or on-screen text". A description between them restated
+                both facts and made this the third copy of each. */}
             {!canGenerate ? (
               <div className="rounded-xl border border-[color:var(--hairline)] p-4">
                 <p className="text-sm text-muted-foreground">

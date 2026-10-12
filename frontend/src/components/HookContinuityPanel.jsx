@@ -271,8 +271,14 @@ export function HookContinuityPanel({ project, onProjectChange }) {
         )}
       </div>
 
+      {/* The demo-and-close caveat is not repeated here. It is stated before
+          the render (the panel's "Before you render" summary), after it ("What
+          you have, and what is left"), and once at the page level ("This
+          studio creates the Hook + Story clip only..."), which is where the
+          app's "nothing is published for you" note lives. A fourth copy in the
+          strategy header said nothing the other three had not. */}
       <p className="text-xs text-muted-foreground">
-        This strategy guides the Hook + Story render. It is not the product demo; record and add your demo and closing CTA separately.
+        This strategy guides the Hook + Story render.
       </p>
 
       {error && (
@@ -501,10 +507,11 @@ export function HookContinuityPanel({ project, onProjectChange }) {
                 <SectionRow key={section.role} section={section} />
               ))}
             </ol>
+            {/* The "no demo, no closing card" restatement is gone: the list
+                above already ends where the founder's demo takes over, and the
+                panel below the render names the demo and the close as theirs. */}
             <p className="text-xs text-muted-foreground">
-              That is the whole generated piece, in one render. There is no product demo in it and
-              no closing card: attach your own demo after the middle, add your close after that, and
-              post the result yourself.
+              That is the whole generated piece, in one render.
             </p>
             {/* Words that do not fit are not spoken. The middle's seconds hold a
                 fixed number of characters, and anything past that is dropped
