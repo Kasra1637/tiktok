@@ -532,6 +532,7 @@ function AngleGoalPicker({
   onChooseAngle,
   availableAngles = [],
   onSelectAngle,
+  objectiveEvidence = {},
 }) {
   const knownGoals = Array.isArray(options) ? options : [];
   const rankedGoals = (recommendations || []).filter((goal) => knownGoals.includes(goal));
@@ -627,6 +628,17 @@ function AngleGoalPicker({
                   className="mt-0.5 block text-xs leading-relaxed text-muted-foreground"
                 >
                   {formatVerdicts(angle.evidence)} at this angle kind
+                </span>
+              )}
+              {/* Objective-level tally: wins/flops per GOAL, shared across kinds.
+                  Same counts, same styling, different axis — the goal picker is
+                  the surface where the objective axis answers "what wins here". */}
+              {formatVerdicts(objectiveEvidence?.[goal]) && (
+                <span
+                  data-testid={`goal-objective-evidence-${goal}`}
+                  className="mt-0.5 block text-xs leading-relaxed text-muted-foreground"
+                >
+                  {formatVerdicts(objectiveEvidence[goal])} for this goal
                 </span>
               )}
               {index === 0 && <span className="sr-only">Best fit suggestion. </span>}
@@ -759,6 +771,17 @@ export default function CreateVideo() {
   const [step, setStep] = useState(0);
   const [profiles, setProfiles] = useState([]);
   const [angles, setAngles] = useState([]);
+  // The GOAL axis of the verdict tally, keyed by objective name and fetched
+  // with the angles (`objective_evidence` on the same response). Own state,
+  // because it is not per angle: a goal's verdicts are shared across kinds, so
+  // they cannot hang off one angle row. Cleared wherever angles are cleared.
+  const [objectiveEvidence, setObjectiveEvidence] = useState({});
+  const adoptAngles = useCallback((data, onAngles = () => {}) => {
+    setAngles(data?.angles || []);
+    setObjectiveEvidence(data?.objective_evidence || {});
+    onAngles(data?.angles || []);
+    return data?.angles;
+  }, []);
   // Angles can be generated from in here, not just on the profile page:
   // sending the founder out of the wizard to make an optional angle usable
   // was a round trip the flow never offered a way back from.
@@ -848,7 +871,7 @@ export default function CreateVideo() {
             // request whose late resolution updated state after the check (or
             // the founder) had moved on.
             syncedProjectsRef.current[draft.id] = draft.updated_at || "";
-            setAngles(angleData.angles || []);
+            adoptAngles(angleData);
             setAngleId(draft.content_angle_id || "");
             setTemplateId(draft.template_id || "");
             setObjective(draft.objective || "");
@@ -882,7 +905,10 @@ export default function CreateVideo() {
           // other writer. Reading it from URL params alone left it empty.
           setSelectedProfileId(chosen.id);
           setStep(1);
-          api.getContentAngles(chosen.id).then((d) => setAngles(d.angles || [])).catch(() => setAngles([]));
+          api.getContentAngles(chosen.id).then((d) => adoptAngles(d)).catch(() => {
+            setAngles([]);
+            setObjectiveEvidence({});
+          });
         }
       })
       .catch((err) => {
@@ -1009,7 +1035,7 @@ export default function CreateVideo() {
     setAngleError(null);
     try {
       const data = await api.generateContentAngles(profileId);
-      setAngles(data.angles || []);
+      adoptAngles(data);
       if (!data.angles?.length) {
         setAngleError("The model returned no usable angles. Try again.");
       }
@@ -1093,16 +1119,17 @@ export default function CreateVideo() {
     // them over means the new app's plan is built toward another app's goal,
     // and the Audience & goal step shows a choice the founder already made for
     // a product they just switched away from.
-    setObjective("");
-    setTone("");
-    // The latch is per-app, not per-session: a deliberate pick for one app says
-    // nothing about the next one, so the new app starts from its own top pick.
-    templateChosenByHand.current = false;
-    try {
-      const d = await api.getContentAngles(id);
-      setAngles(d.angles || []);
-    } catch {
-      setAngles([]);
+setObjective("");
+        setTone("");
+        // The latch is per-app, not per-session: a deliberate pick for one app says
+        // nothing about the next one, so the new app starts from its own top pick.
+        templateChosenByHand.current = false;
+        try {
+          const d = await api.getContentAngles(id);
+          adoptAngles(d);
+        } catch {
+          setAngles([]);
+          setObjectiveEvidence({});
     }
     setStep(1);
   };
@@ -1841,15 +1868,16 @@ export default function CreateVideo() {
             </div>
 
             <div className="surface rounded-2xl">
-              <AngleGoalPicker
-                angle={angle}
-                value={objective}
-                onPick={setObjective}
-                options={objectiveOptions}
-                recommendations={recommendedObjectives}
-                outcomes={objectiveOutcomes}
-                fitReasons={objectiveFitReasons}
-              />
+<AngleGoalPicker
+              angle={angle}
+              value={objective}
+              onPick={setObjective}
+              options={objectiveOptions}
+              recommendations={recommendedObjectives}
+              outcomes={objectiveOutcomes}
+              fitReasons={objectiveFitReasons}
+              objectiveEvidence={objectiveEvidence}
+            />
             </div>
 
             <div className="surface space-y-1.5 rounded-2xl">

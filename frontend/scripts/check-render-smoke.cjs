@@ -3527,7 +3527,89 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  await check("a suggested goal reaches template ranking and project writes", async (ctx) => {
+  // The objective axis on goal cards: same counts, different key. The goal
+  // picker is the surface where "what wins at this goal" should guide choice,
+  // not the angle-kind axis. The evidence map is keyed by objective name
+  // and is shared across kinds; the picker just reads it.
+  await check("goal cards show objective-level counts alongside angle-kind counts", async (ctx) => {
+    const PROVEN_OBJ = {
+      ...ANGLE,
+      objective: "address_user_problem",
+      evidence: { wins: 2, flops: 1 },
+      objective_evidence: { address_user_problem: { wins: 3, flops: 1 } },
+    };
+    await withApi(
+      { getContentAngles: async () => ({ angles: [PROVEN_OBJ, ANGLE_B], objective_evidence: { address_user_problem: { wins: 3, flops: 1 } } }) },
+      async () => {
+        global.__SMOKE_PARAMS = "";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Audience & goal");
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+          const objLine = ctx.container.querySelector('[data-testid="goal-objective-evidence-address_user_problem"]');
+          if (!objLine) throw new Error("the goal card shows no objective-level count");
+          if (!objLine.textContent.includes("3 wins") || !objLine.textContent.includes("1 flop")) {
+            throw new Error(`objective line does not read as counts: ${objLine.textContent}`);
+          }
+          if (objLine.textContent.includes("%")) {
+            throw new Error("objective line presents a rate instead of counts");
+          }
+          const kindLine = ctx.container.querySelector('[data-testid="goal-angle-evidence-address_user_problem"]');
+          if (!kindLine) throw new Error("the goal card lost its angle-kind count");
+          if (!kindLine.textContent.includes("2 wins") || !kindLine.textContent.includes("1 flop")) {
+            throw new Error(`kind line does not read as counts: ${kindLine.textContent}`);
+          }
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
+// The objective axis must not reorder the six-goal list — it annotates.
+  await check("objective evidence does not reorder the goal list", async (ctx) => {
+    const PROVEN_OBJ = {
+      ...ANGLE,
+      objective: "address_user_problem",
+      evidence: { wins: 2, flops: 1 },
+      objective_evidence: { address_user_problem: { wins: 3, flops: 1 } },
+    };
+    await withApi(
+      { getContentAngles: async () => ({ angles: [PROVEN_OBJ, ANGLE_B], objective_evidence: { address_user_problem: { wins: 3, flops: 1 } } }) },
+      async () => {
+        global.__SMOKE_PARAMS = "";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Audience & goal");
+          // Wait for facet recommendations to load - need to flush effects and wait for async
+          await act(async () => {});
+          await act(async () => {});
+          await new Promise((r) => setTimeout(r, 200));
+          // Debug: check if angle state is set
+          const angleEl = ctx.container.querySelector('[data-testid="angle-option-a1"]');
+          if (!angleEl) throw new Error("angle option a1 not found");
+          await clickEl(ctx, angleEl, "no angle row to pick");
+          await act(async () => {});
+          await new Promise((r) => setTimeout(r, 200));
+          const goals = [...ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]')]
+            .map((el) => el.getAttribute("data-testid").replace("recommended-goal-", ""));
+          if (goals.length === 0) {
+            const html = ctx.container.innerHTML;
+            throw new Error(`no goal cards found. HTML: ${html.slice(0, 3000)}`);
+          }
+          const expected = ANGLE_GOALS.problem_solution;
+          if (goals.join("|") !== expected.join("|")) {
+            throw new Error(`goal order moved: ${goals.join(", ")}`);
+          }
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
+  // formatVerdicts prints counts and stays silent on empty evidence
+  await check("formatVerdicts prints counts and stays silent on empty evidence", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     const rankings = [];
     const writes = [];
@@ -4543,19 +4625,24 @@ async function runIconChecks() {
     }
   });
 
-  await check("a content card never wears the destructive-alert glyph", async () => {
+  await check("content cards and group bars wear no heading glyph", async () => {
+    // Profile Detail was restyled onto the Content Angles tokens, and the
+    // angle rows carry no glyph beside a heading — not even the brand-indigo
+    // one every profile card and group bar used to open with. (AlertTriangle
+    // was always the worst case of the old pattern: the glyph every
+    // destructive Alert wears, on a research card.) A card that still passes
+    // `icon=` is off the unified design, so the prop itself is what fails.
     const abs = path.join(SRC, "pages", "AppProfileDetail.jsx");
     const src = fs.readFileSync(abs, "utf8");
-    // ProfileCard is the content card. AlertTriangle is reserved for the
-    // destructive Alerts, so a ProfileCard that names it makes a research
-    // field look like a failure.
-    for (const m of src.matchAll(/<ProfileCard[^>]*icon=\{(\w+)\}/g)) {
-      if (m[1] === "AlertTriangle") {
-        throw new Error(
-          "a ProfileCard is drawn with AlertTriangle, the glyph every " +
-            "destructive Alert uses. A content card must not read as an error."
-        );
-      }
+    const bad = [
+      ...src.matchAll(/<ProfileCard[^>]*icon=\{(\w+)\}/g),
+      ...src.matchAll(/<SectionGroup[^>]*icon=\{(\w+)\}/g),
+    ].map((m) => m[1]);
+    if (bad.length) {
+      throw new Error(
+        `ProfileCard/SectionGroup still carry heading glyphs: ${bad.join(", ")}. ` +
+          "The unified design is sentence-case headings with no icon."
+      );
     }
   });
 
@@ -4814,6 +4901,52 @@ async function runDeleteDialogChecks() {
         }
         if (ctx.container.querySelector('[data-testid="generate-angles-button"]')) {
           throw new Error("angle generation is still offered on the profile page");
+        }
+      }
+    );
+  });
+
+  // The restyle onto the Content Angles tokens, pinned on the rendered
+  // output rather than the source: 14/500 sentence-case headings with no
+  // uppercase and no glyph, chips at the 12px Badge shape, and the angle
+  // panel's hairline content chrome under an open group bar.
+  await check("Profile Detail headings use the Content Angles tokens", async (ctx) => {
+    const RICH = {
+      ...PROFILE,
+      app_category: "Productivity",
+      tone_voice: "direct and plain",
+      core_features: ["One shared list"],
+      use_cases: ["Weekly planning"],
+    };
+    await withApi(
+      stubProfileApi({ getAppProfile: async () => RICH }),
+      async () => {
+        await mountProfileDetail()(ctx);
+        await act(async () => {});
+        const group = ctx.container.querySelector('[data-testid="group-essentials"]');
+        if (!group) throw new Error("the essentials group did not render");
+        const bar = group.querySelector("button");
+        const barTitle = bar && bar.querySelector("span span");
+        if (!barTitle) throw new Error("the group bar has no title span");
+        if (!/font-medium/.test(barTitle.className) || /uppercase/.test(barTitle.className)) {
+          throw new Error(`the group bar title is off the 14/500 sentence-case token: ${barTitle.className}`);
+        }
+        if (barTitle.querySelector("svg")) {
+          throw new Error("the group bar title still carries a glyph");
+        }
+        const cardTitle = group.querySelector('[data-testid="profile-facts"] h3');
+        if (!cardTitle) throw new Error("the product-facts card has no heading");
+        if (!/font-medium/.test(cardTitle.className) || /\beyebrow\b/.test(cardTitle.className)) {
+          throw new Error(`the card heading is still the old uppercase eyebrow: ${cardTitle.className}`);
+        }
+        const chip = group.querySelector("li");
+        if (!chip) throw new Error("the core-features chips did not render");
+        if (!/text-xs/.test(chip.className) || /text-\[13px\]/.test(chip.className)) {
+          throw new Error(`chips are off the 12px Badge token: ${chip.className}`);
+        }
+        const content = group.querySelector("div.min-h-0 > div");
+        if (!content || !/border-t/.test(content.className)) {
+          throw new Error("the open group lost the angle panel's hairline content chrome");
         }
       }
     );

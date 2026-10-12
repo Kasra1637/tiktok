@@ -586,6 +586,103 @@ class TestContentAngles:
         assert _run(api.list_content_angles(profile_id=p1["id"], user_id=ANON))["angles"][0]["evidence"] == {"wins": 1, "flops": 0}
         assert _run(api.list_content_angles(profile_id=p2["id"], user_id=ANON))["angles"][0]["evidence"] == {"wins": 0, "flops": 0}
 
+    def test_objective_evidence_aggregates_by_goal_and_is_scoped(self, api):
+        """
+        The objectives axis of the same aggregate surfaces on the response.
+        Two angles sharing an objective share that objective's tally; the map
+        is keyed by objective name and scoped by profile.
+        """
+        import uuid as _uuid
+        from models import CreateContentAngleRequest, CreateStudioProjectRequest
+        profile = _make_profile(api, ANON, name="Objective Evidence")
+        _run(api.approve_app_profile(profile_id=profile["id"], payload={}, user_id=ANON))
+
+        # Two angles sharing the same objective
+        a1 = _run(api.create_manual_content_angle(
+            profile_id=profile["id"],
+            payload=CreateContentAngleRequest(
+                kind="problem_solution", label="A", target_audience="a", user_problem="p"),
+            user_id=ANON))
+        a2 = _run(api.create_manual_content_angle(
+            profile_id=profile["id"],
+            payload=CreateContentAngleRequest(
+                kind="feature_demonstration", label="B", target_audience="a", user_problem="p"),
+            user_id=ANON))
+
+        # The objective lives on the project (that is what a video was made
+        # FOR), not on the angle — the join reads sp.objective.
+        project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
+            brand_profile_id=profile["id"], content_angle_id=a1["id"],
+            objective="address_user_problem"), user_id=ANON))
+
+        # One video_approved verdict for the shared objective "address_user_problem"
+        _run(api._execute(
+            "INSERT INTO feedback_events (id, brand_profile_id, studio_project_id, event, created_at, user_id)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (str(_uuid.uuid4()), profile["id"], project["id"],
+             "video_approved", "2026-01-01T00:00:00", ANON)))
+
+        listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
+        assert listed["objective_evidence"] == {"address_user_problem": {"wins": 1, "flops": 0}}
+        # Angle rows keep the kind axis only; the goal axis is response-level.
+        for a in listed["angles"]:
+            assert a["evidence"] in ({"wins": 1, "flops": 0}, {"wins": 0, "flops": 0})
+
+        # Cross-profile isolation holds for objective axis too
+        p2 = _make_profile(api, ANON, name="Other App")
+        _run(api.approve_app_profile(profile_id=p2["id"], payload={}, user_id=ANON))
+        _run(api.create_manual_content_angle(
+            profile_id=p2["id"],
+            payload=CreateContentAngleRequest(kind="problem_solution", label="X", target_audience="a", user_problem="p"),
+            user_id=ANON))
+        listed2 = _run(api.list_content_angles(profile_id=p2["id"], user_id=ANON))
+        assert listed2["objective_evidence"] == {}  # no verdicts for p2
+
+    def test_objective_evidence_does_not_leak_across_objectives(self, api):
+        """
+        Different objectives keep separate tallies even in the same profile.
+        """
+        import uuid as _uuid
+        from models import CreateContentAngleRequest, CreateStudioProjectRequest
+        profile = _make_profile(api, ANON, name="Multi-Objective")
+        _run(api.approve_app_profile(profile_id=profile["id"], payload={}, user_id=ANON))
+
+        # Angle 1: objective A
+        a1 = _run(api.create_manual_content_angle(
+            profile_id=profile["id"],
+            payload=CreateContentAngleRequest(
+                kind="problem_solution", label="Obj A", target_audience="a", user_problem="p"),
+            user_id=ANON))
+        p1 = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
+            brand_profile_id=profile["id"], content_angle_id=a1["id"],
+            objective="address_user_problem"), user_id=ANON))
+        _run(api._execute(
+            "INSERT INTO feedback_events (id, brand_profile_id, studio_project_id, event, created_at, user_id)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (str(_uuid.uuid4()), profile["id"], p1["id"],
+             "video_approved", "2026-01-01T00:00:00", ANON)))
+
+        # Angle 2: objective B
+        a2 = _run(api.create_manual_content_angle(
+            profile_id=profile["id"],
+            payload=CreateContentAngleRequest(
+                kind="feature_demonstration", label="Obj B", target_audience="a", user_problem="p"),
+            user_id=ANON))
+        p2 = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
+            brand_profile_id=profile["id"], content_angle_id=a2["id"],
+            objective="demonstrate_feature"), user_id=ANON))
+        _run(api._execute(
+            "INSERT INTO feedback_events (id, brand_profile_id, studio_project_id, event, created_at, user_id)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (str(_uuid.uuid4()), profile["id"], p2["id"],
+             "marked_unsuccessful", "2026-01-02T00:00:00", ANON)))
+
+        listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
+        obj_map = listed["objective_evidence"]
+        assert obj_map["address_user_problem"] == {"wins": 1, "flops": 0}
+        assert obj_map["demonstrate_feature"] == {"wins": 0, "flops": 1}
+        assert len(obj_map) == 2
+
 
 CANNED_ANGLES = [
     {
@@ -599,7 +696,6 @@ CANNED_ANGLES = [
         "claims_to_respect": [],
     },
 ]
-
 
 def _failing_log(api, monkeypatch, calls=None):
     """A model layer that always fails, recording which operation asked."""

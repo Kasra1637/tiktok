@@ -3890,6 +3890,13 @@ async def list_content_angles(profile_id: str, user_id: str = Depends(get_curren
     by their own history rather than by model confidence alone. It is counts,
     never a rate: one win is one verdict, and the UI says so. Ordering is
     still the generation rank — the counts annotate, they do not reorder.
+
+    Both axes of the summary travel: `angles[].evidence` is the ANGLE KIND's
+    tally (one chip per angle row), and `objective_evidence` is the video
+    GOAL's tally for the whole profile (one count per goal card). The goal
+    axis is the one that answers "what wins at the goal I am about to pick",
+    which the kind axis cannot — a goal is shared across kinds, so its verdicts
+    are the only evidence that speaks to that choice.
     """
     profile = await _fetch_one(
         "SELECT id, status FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
@@ -3926,11 +3933,19 @@ async def list_content_angles(profile_id: str, user_id: str = Depends(get_curren
         str(entry.get("name") or ""): {"wins": int(entry.get("wins") or 0), "flops": int(entry.get("flops") or 0)}
         for entry in (verdicts.get("kinds") or [])
     }
+    # Same summary, other axis: keyed by objective name, which is the fixed
+    # vocabulary the goal picker presents. Scoped by brand_profile_id exactly
+    # like the kind axis, so nothing leaks between apps.
+    objective_evidence = {
+        str(entry.get("name") or ""): {"wins": int(entry.get("wins") or 0), "flops": int(entry.get("flops") or 0)}
+        for entry in (verdicts.get("objectives") or [])
+    }
     return {
         "angles": [
             _serialize_angle_row(r, by_kind.get(str(r.get("kind") or "")))
             for r in rows
-        ]
+        ],
+        "objective_evidence": objective_evidence,
     }
 
 
