@@ -1819,10 +1819,19 @@ setObjective("");
         <StepShell
           icon={Target}
           title="Audience & goal"
-          description="Choose an audience angle, then a recommended video goal. Both shape template suggestions and your script plan."
         >
           <div className="space-y-4" data-testid="audience-goal-step">
-            {/* The angle is required: the strategy and the render are built
+            {/* No step description here, deliberately. The progress rail above
+                already carries the sentence this step used to repeat — "Next:
+                pick an audience angle first. Then choose from six goal
+                suggestions tailored to it" — and the angle's own hint below
+                says the same thing a third time from the angle's side. A
+                "Choose an audience angle, then a recommended video goal…"
+                line between them stacked one instruction three deep in the same
+                viewport. The title, the two required labels, and each field's
+                own hint carry the step on their own.
+
+                The angle is required: the strategy and the render are built
                 around it, so a video without one is the generic framing this
                 step exists to prevent. Each block on this step is its own
                 bordered card so the picker, the goal list, and the tone field
