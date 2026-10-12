@@ -1819,17 +1819,18 @@ setObjective("");
         <StepShell
           icon={Target}
           title="Audience & goal"
+          description="Two required choices: the problem this video speaks to, and the goal it aims at."
         >
           <div className="space-y-4" data-testid="audience-goal-step">
-            {/* No step description here, deliberately. The progress rail above
-                already carries the sentence this step used to repeat — "Next:
-                pick an audience angle first. Then choose from six goal
-                suggestions tailored to it" — and the angle's own hint below
-                says the same thing a third time from the angle's side. A
-                "Choose an audience angle, then a recommended video goal…"
-                line between them stacked one instruction three deep in the same
-                viewport. The title, the two required labels, and each field's
-                own hint carry the step on their own.
+            {/* The description frames the step and stops there. It used to
+                read "Choose an audience angle, then a recommended video
+                goal..." — the progress rail's own sentence directly above it
+                ("Next: pick an audience angle first. Then choose from six goal
+                suggestions tailored to it"), with the same consequence the
+                angle's hint below states. That stacked one instruction three
+                deep in a single viewport. What is left names the two choices in
+                plain words and claims nothing the rail or the hints already
+                say.
 
                 The angle is required: the strategy and the render are built
                 around it, so a video without one is the generic framing this
@@ -2249,16 +2250,15 @@ setObjective("");
         <StepShell
           icon={Sparkles}
           title="Hook + Story"
+          description="Your approved plan becomes the strategy below, and the strategy becomes this one clip."
         >
           <div className="space-y-3">
-            {/* No step description here, deliberately, for the same reason the
-                Audience step has none. The progress rail above already says
-                "Everything before this is ready. Review the app-specific
-                strategy here, then render your Hook + Story", and the render
-                panel states the piece's own scope — "Produces Hook + Story
-                only ... Does not include your filmed product demo, closing
-                CTA, or on-screen text". A description between them restated
-                both facts and made this the third copy of each. */}
+            {/* The description states the chain — plan, strategy, clip — and
+                stops there. It used to read "Review the app-specific strategy,
+                then render the Hook + Story clip", which is the progress
+                rail's sentence above it almost word for word, followed by the
+                piece's scope, which the render panel states itself. Neither
+                fact needed a third copy. */}
             {!canGenerate ? (
               <div className="rounded-xl border border-[color:var(--hairline)] p-4">
                 <p className="text-sm text-muted-foreground">
