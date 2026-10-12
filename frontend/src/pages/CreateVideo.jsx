@@ -2389,30 +2389,66 @@ if (step === 3) {
                 never handed a broken plan to repair by hand — and if they write
                 their own over-length words, regenerating the plan is the fix,
                 not a second button beside their own editor. */}
+            {/* Both spoken lines counted, against the length each one aims at.
+                The hook line used to be the one count nothing showed: the middle
+                had a budget and the opening line had none, so an over-long hook
+                was stored, sent and cut mid-sentence with nothing on screen
+                saying so. The numbers here are the server's own
+                (spoken_check), measured on the saved plan — which is the plan a
+                render validates — rather than a second arithmetic in the
+                browser that could disagree with what the render does. */}
+            {project?.spoken_check && (
+              <div className="space-y-1.5 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4" data-testid="spoken-counts">
+                <span className="eyebrow block">How the two lines measure up</span>
+                {[
+                  { key: "hook", label: "Hook line" },
+                  { key: "script", label: "Script" },
+                ].map(({ key, label }) => {
+                  const line = project.spoken_check[key] || {};
+                  const chars = Number(line.chars) || 0;
+                  const target = Number(line.target) || 0;
+                  const ceiling = Number(line.ceiling) || 0;
+                  const overCeiling = line.verdict === "over_ceiling";
+                  return (
+                    <p key={key} className="text-xs text-muted-foreground">
+                      <span className="font-medium">{label}: </span>
+                      {chars} characters{target ? `, aiming for about ${target}` : ""}
+                      {overCeiling
+                        ? ` — past the ${ceiling} characters these seconds can speak, so it is cut back before the render.`
+                        : chars > target
+                          ? " — longer than the target, which is a choice, not a fault."
+                          : "."}
+                    </p>
+                  );
+                })}
+                <p className="text-xs text-muted-foreground">
+                  {project.spoken_check.story?.coherent
+                    ? "The hook names the problem and the script closes it."
+                    : "The two lines should read as one thought: the hook naming the problem this viewer has, the script answering it."}
+                </p>
+              </div>
+            )}
             {project?.strategy?.hook_line && typeof project?.spoken_middle === "string" && project.spoken_middle && (
               <div className="space-y-1.5 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4" data-testid="spoken-partition">
                 <span className="eyebrow block">What the middle will say</span>
                 <p className="text-sm">{sentenceCase(project.spoken_middle)}</p>
-                {(() => {
-                  const current = String(editValue("script", "") || "");
-                  const kept = project.spoken_middle;
-                  const tail = current.startsWith(kept) ? current.slice(kept.length).trim() : "";
-                  if (!tail) {
-                    return (
-                      <p className="text-xs text-muted-foreground">
-                        Your whole script fits in the middle — every word above is spoken.
-                      </p>
-                    );
-                  }
-                  return (
-                    <p className="text-xs text-muted-foreground">
-                      <span className="font-medium">Not spoken: </span>{tail}{" "}
-                      {current.length - kept.length} characters past the middle&apos;s spoken
-                      budget. Regenerate the plan to have it rewritten to fit, or shorten the
-                      script above and rebuild the strategy.
-                    </p>
-                  );
-                })()}
+                {/* What is not spoken is counted by the server, not sliced out
+                    of the script here. The kept words are no longer always a
+                    prefix of the script — an over-long middle gives up the
+                    sentences in the MIDDLE of itself and keeps the one that
+                    resolves the hook — so a browser slice would name words that
+                    are in fact spoken and miss the ones that are not. */}
+                {(Number(project?.spoken_overflow?.dropped_chars) || 0) > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    {project.spoken_overflow.dropped_chars} characters of the script are past the
+                    middle&apos;s spoken budget and are not spoken. Regenerate the plan to have it
+                    rewritten to fit, or shorten the script above and rebuild the strategy.
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Your whole script fits in the middle — every word above is spoken.
+                  </p>
+                )}
               </div>
             )}
             {/* `cta` and `feature_emphasis` used to sit here as two editable

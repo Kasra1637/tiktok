@@ -4846,6 +4846,17 @@ def _public_project(row: dict) -> dict:
     else:
         out["spoken_overflow"] = {}
         out["spoken_middle"] = ""
+    # Both spoken lines counted against the lengths they aim at, and read as one
+    # story: the measurement the render path acts on before it builds a prompt,
+    # reported here so the founder sees the same numbers the render will. A pure
+    # function of (plan, seconds), so it is recomputed rather than stored — a
+    # hand-edited script or a changed hook length is reflected immediately.
+    out["spoken_check"] = ai_service.check_spoken_story(
+        out.get("hook_line"),
+        out.get("script"),
+        out.get("hook_seconds") or 3,
+        out.get("duration_seconds") or 0,
+    )
     # What the arrival clamp cut from this plan, and the budget it cut against.
     # Reported from the stored count rather than recomputed from the script,
     # because after the clamp the stored script fits by construction: the count
@@ -5344,7 +5355,12 @@ async def generate_plan(
     clamp = ai_service.partition_spoken_words(
         plan, int(row.get("hook_seconds") or 3), duration
     )
-    trimmed_chars = int(clamp["dropped_chars"] or 0)
+    # The hook's own cut counts here too: a hook line longer than its opening
+    # beat is sized back by the same rule, and what comes off it is spoken at
+    # the head of the middle rather than dropped. Either way the founder is
+    # told, because a shorter opening line than the model wrote otherwise reads
+    # as the studio losing words.
+    trimmed_chars = int(clamp["dropped_chars"] or 0) + int(clamp["hook_dropped_chars"] or 0)
     if trimmed_chars or clamp["middle_text"] != (plan.get("script") or "").strip():
         # `script` is stored as the MIDDLE only. The prompt asks the model for
         # the whole piece, which is right for the words and wrong for the
@@ -5888,7 +5904,43 @@ async def _submit_generation(
     # render on a generic take with the app's name in it -- the one outcome the
     # strategy exists to prevent, bought precisely when something had already
     # gone wrong once.
+    # Validate the two spoken lines and rewrite what the piece cannot speak,
+    # BEFORE the strategy is bound and before the prompt is built, so the words
+    # this measured are the words the video model receives. No model call and no
+    # provider request: the rewrite is arithmetic on the founder's own words — a
+    # hook line cut back to its opening sentence, with what came off it spoken at
+    # the head of the middle, and a middle cut from its own middle so the
+    # sentence that resolves the hook survives the cut. hook_seconds and the
+    # piece's seconds are passed exactly as the render gate passes them, so the
+    # words that fit here are the words the gate above already agreed fit.
+    plan_words, spoken_repair = ai_service.repair_spoken_story(
+        {"hook_line": project.get("hook_line"), "script": project.get("script")},
+        project.get("hook_seconds") or 3,
+        project.get("duration_seconds") or 0,
+    )
+    if spoken_repair["rewritten"]:
+        logger.info(
+            f"Spoken words for project {project['id']} were rewritten before the render: "
+            f"{json.dumps(spoken_repair['changes'])}"
+        )
+    # The plan the prompt is built from, with the repaired words in it. The row
+    # itself is untouched: this is what this render speaks, not an edit to the
+    # plan the founder approved.
+    render_plan = {**project, **plan_words}
+
     strategy = strategy or _project_strategy(project)
+    # The strategy carries the spoken words too — the hook in section 0 and the
+    # middle in section 1 — so the same repaired words are bound into it. Only
+    # when something was rewritten: an untouched plan needs no rebinding, and a
+    # strategy the founder wrote by hand keeps the words this otherwise leaves
+    # alone.
+    if strategy and spoken_repair["rewritten"]:
+        strategy, _ = bind_spoken_words(
+            strategy,
+            plan_words,
+            project.get("hook_seconds") or 3,
+            project.get("duration_seconds") or 0,
+        )
     # Each provider has its own prompt ceiling. Hailuo's was measured live at
     # 7,000; others are lower, and sending them a Hailuo-sized prompt 400s
     # after the founder has asked for it. The builder scales every field
@@ -5901,12 +5953,12 @@ async def _submit_generation(
             template=template,
             duration=seconds,
             assets=project.get("assets") or [],
-            plan=project,
+            plan=render_plan,
             prompt_budget=prompt_budget,
         )
     else:
         prompt = generation_planning.build_single_pass_prompt(
-            plan=project,
+            plan=render_plan,
             profile=profile,
             template=template,
             duration=seconds,
@@ -6123,9 +6175,15 @@ async def _submit_generation(
         f"attempt {attempt}) model={model_key} duration={seconds}s "
         f"continuity={reported.get('guarantee') or 'n/a'}"
     )
-    return _public_generation_detail(
+    detail = _public_generation_detail(
         await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
     )
+    # What was rewritten, when anything was. The words in the render are not
+    # quite the approved words, and the founder is told rather than left to hear
+    # the difference once the clip comes back.
+    if spoken_repair["rewritten"]:
+        detail["spoken_repair"] = spoken_repair
+    return detail
 
 
 @api_router.get("/studio/video-models")

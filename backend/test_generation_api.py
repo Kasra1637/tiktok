@@ -1425,3 +1425,68 @@ class TestClipDownload:
         assert path is None
         assert "403" in err
         assert seen["calls"] == 1
+
+
+class TestSpokenWordsBeforeTheRender:
+    """
+    Both counts and the one story, validated on the way to the provider.
+
+    The hook line used to reach the render uncounted: partition_spoken_words
+    sized the middle and passed the hook through untouched, so an opening line
+    several times the length of the opening beat was sent whole and then cut
+    mid-sentence by the prompt builder, with nothing telling the founder.
+    """
+
+    def _project_with_a_long_hook(self, api, name):
+        project, _profile, _template = _ready_project(api, name)
+        hook = (
+            "Do you know what triggers your emotions and keeps them running the "
+            "whole day? Most people never find out."
+        )
+        script = "Most evenings blur together. Yours ends with one sentence written down."
+        strategy = {
+            "hook_line": hook,
+            "segments": [
+                {"index": 0, "role": "hook", "seconds": 3, "goal": "name the problem",
+                 "script": hook, "action": "hold the look"},
+                {"index": 1, "role": "middle", "seconds": 12, "goal": "answer it",
+                 "script": script, "action": "count"},
+            ],
+        }
+        _run(api._execute(
+            "UPDATE studio_projects SET hook_line = ?, script = ?, strategy = ?,"
+            " strategy_version = 2, strategy_script_version = script_version WHERE id = ?",
+            (hook, script, json.dumps(strategy), project["id"])))
+        return project["id"], hook
+
+    def test_an_overlong_hook_reaches_the_provider_cut_back_not_cut_off(self, api, monkeypatch):
+        calls = _mock_submit(api, monkeypatch)
+        from models import StudioGenerationRequest
+        project_id, hook = self._project_with_a_long_hook(api, "Spoken Words")
+        result = _run(api.submit_project_generation(
+            project_id=project_id, payload=StudioGenerationRequest(), user_id=ANON))
+        assert len(calls) == 1
+        prompt = calls[0]["prompt"]
+        # The uncounted hook line never reaches the provider.
+        assert hook not in prompt
+        # Its opening sentence does, restored as the question it was ...
+        assert "Do you know what triggers your emotions and keeps them?" in prompt
+        # ... and what came off it is spoken by the middle rather than deleted.
+        assert "Most people never find out." in prompt
+        # The generation says what was rewritten, rather than leaving the
+        # founder to hear the difference once the clip comes back.
+        assert result["spoken_repair"]["rewritten"] is True
+        after = result["spoken_repair"]["after"]
+        assert after["hook"]["chars"] <= after["hook"]["ceiling"]
+        assert after["story"]["problem_in_hook"] is True
+
+    def test_a_plan_that_already_fits_is_sent_as_written(self, api, monkeypatch):
+        calls = _mock_submit(api, monkeypatch)
+        from models import StudioGenerationRequest
+        project, _, _ = _ready_project(api, "Fit As Written")
+        result = _run(api.submit_project_generation(
+            project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        # Nothing is rewritten that does not have to be: the approved words are
+        # the words, and no extra judgement is run over them on the way out.
+        assert "spoken_repair" not in result
+        assert FAKE_STRATEGY["hook_line"] in calls[0]["prompt"]

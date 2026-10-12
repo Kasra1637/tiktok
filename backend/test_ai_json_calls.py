@@ -485,10 +485,22 @@ class TestScriptVoiceAndTarget:
         assert "natural delivery, not an arbitrary maximum" in src
         assert "NEVER pad with filler words" in src
 
-    def test_an_over_length_script_is_rewritten_before_generation(self):
+    def test_an_over_length_script_is_rewritten_by_the_one_rule(self):
+        """One arithmetic does the rewriting, not a second one beside it.
+
+        `partition_spoken_words` sizes both spoken lines: the plan arrival clamp
+        calls it before the row is written, and the render path calls it (as
+        `repair_spoken_story`) before the prompt is built. A separate condensing
+        helper existed for a moment and cut the script's TAIL, which is where
+        the payoff sentence lives; it is gone.
+        """
         src = (BACKEND_DIR / "ai_service.py").read_text(encoding="utf-8")
-        assert "condense_script_to_target" in src
-        assert "condensed before" in src
+        assert "def partition_spoken_words" in src
+        assert "def repair_spoken_story" in src
+        assert "condense_script_to_target" not in src
+        server_src = (BACKEND_DIR / "server.py").read_text(encoding="utf-8")
+        assert "partition_spoken_words(" in server_src
+        assert "repair_spoken_story(" in server_src
 
 
 class TestStrategyBudget:

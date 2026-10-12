@@ -2256,13 +2256,20 @@ async def generate_creative_plan(
     # budget, so asking for less here is the fix at its cause rather than a
     # trim the founder keeps getting sent back to do.
     middle_seconds = max(1, int(duration_seconds or 0) - int(hook_seconds or 0))
-    middle_budget = spoken_budget(middle_seconds)
-    hook_budget = spoken_budget(hook_seconds)
+    # What each line is asked to AIM at, and the ceiling its seconds impose.
+    # See the SPOKEN WORDS rule below: the target is what makes the hook an
+    # opening line rather than a paragraph. One source for all four numbers,
+    # so the prompt and the render cannot disagree about them.
+    targets = spoken_targets(hook_seconds, duration_seconds)
+    hook_budget = targets["hook"]["ceiling"]
+    middle_budget = targets["script"]["ceiling"]
+    hook_target = targets["hook"]["target"]
+    script_target = targets["script"]["target"]
     # Floor the hook at roughly three-quarters of its spoken budget so the
     # line fills the opening beat instead of leaving dead air: at ~6 chars
     # a word, a 60-char (3s) hook wants at least ~7 words and an 80-char
-    # (4s) hook at least ~10. The ceiling stays word-agnostic — the char
-    # budget downstream is what refuses an over-long line.
+    # (4s) hook at least ~10. The ceiling stays word-agnostic — the target
+    # and the ceiling downstream are what size an over-long line back.
     hook_min_words = max(6, int(hook_budget * 0.75 // 6))
 
     structure = {
@@ -2359,22 +2366,28 @@ async def generate_creative_plan(
         # The spoken budget, in characters, is the same number the render gate
         # imposes downstream (hook spoken separately over the opening beat, the
         # rest over the middle). A script past it is not shortened gracefully at
-        # render time: the render gate refuses and sends the founder back to
-        # trim by hand, and the trimmed-away text is usually the payoff
-        # sentence. Sizing the request is the fix at its cause — and the
-        # request must aim CLOSE TO the budget, not well under it: a script far
-        # under budget leaves dead air the video has to stretch across the full
-        # duration, which reads as slow delivery.
-        f"- SPOKEN BUDGET: the hook line is spoken over the first {hook_seconds}s and the rest of "
-        f"the script over the {middle_seconds}s middle. At a natural spoken pace that is a TARGET of "
-        f"about {hook_budget} characters for the hook line and about {middle_budget} characters for "
-        "the rest of the script, counted after the hook line is removed. This is the length for "
-        "natural delivery, not an arbitrary maximum: reach it with dialogue that is naturally that "
-        "long. NEVER pad with filler words, extra spaces or stray punctuation to hit it. Aim to land "
-        "CLOSE TO each target — use the full middle target and end on the payoff sentence as the last "
-        "thing said inside it. Text past either target is not spoken in the video and the render is "
-        "refused until it is cut, and a script far under the target leaves dead air the video has to "
+        # render time, and the trimmed-away text is usually the payoff sentence.
+        # Sizing the request is the fix at its cause.
+        #
+        # Both lines are stated as TARGETS rather than as budget ceilings. A
+        # ceiling invites filling it, and a filled hook ceiling is a paragraph
+        # where the opening line has to be short, sharp, and about one problem.
+        f"- SPOKEN WORDS: the hook line is spoken over the first {hook_seconds}s and the rest of "
+        f"the script over the {middle_seconds}s middle. Aim for about {hook_target} characters for "
+        f"the hook line and about {script_target} characters for the rest of the script, counted "
+        "after the hook line is removed. This is the length for natural delivery, not an arbitrary maximum: "
+        "reach it with dialogue that is naturally that long. NEVER pad with "
+        "filler words, extra spaces or stray punctuation to hit it. Land CLOSE TO each target "
+        "rather than filling the seconds, and end on the payoff sentence as the last thing said "
+        f"inside the middle. The hard ceilings are {hook_budget} and {middle_budget} characters: "
+        "a hook line past its ceiling is cut back to its opening sentence and the rest is spoken "
+        "after it, and a script past its ceiling is not spoken in the video — the render is "
+        "refused until it is cut. A script well under its target leaves dead air the video has to "
         "stretch across the full duration.\n"
+        "- ONE STORY, TWO LINES: the hook line names ONE problem this viewer actually has, in "
+        "their own words, and the script resolves that same problem — same subject, same viewer, "
+        "the second line answering the first. Never restate the hook in the script, never open a "
+        "second problem, and never leave the hook's problem unanswered.\n"
         "- NEVER write a product demonstration into either beat. Do not film the app in use, "
         "do not show a screen, and do not narrate what the app does while something unrelated "
         "happens on camera. Showing the working product is the founder's recording, attached "
@@ -2422,20 +2435,12 @@ async def generate_creative_plan(
 
     result["hook_line"] = (result.get("hook_line") or "").strip()[:200]
     result["script"] = (result.get("script") or "").strip()[:6000]
-    # Pre-generation validation. Measure the script against the middle's natural
-    # target NOW, before it is stored or rendered, and rewrite it concisely when
-    # it is over — preserving meaning and customer voice — rather than letting
-    # the render gate refuse the whole video for input the model overshot.
-    _middle_seconds = max(1, int(duration_seconds or 0) - int(hook_seconds or 0))
-    _condensed, _dropped = condense_script_to_target(
-        result["script"], result["hook_line"], spoken_budget(_middle_seconds)
-    )
-    if _dropped:
-        result["script"] = _condensed
-        logger.info(
-            "Plan script was %s characters over the %ss spoken target; condensed before "
-            "generation", _dropped, _middle_seconds,
-        )
+    # An over-length answer is rewritten to fit before it is stored, so an
+    # oversized script cannot reach the video model and be refused there. That
+    # rewrite is NOT done here: it is `partition_spoken_words`, applied by the
+    # caller that knows the piece's seconds and owns the stored row (see
+    # server.generate_plan). Sizing the words twice, with two different cuts,
+    # would mean a plan this function called short and the render called long.
     for key in (
         "visual_direction", "demo_brief", "voice_direction", "sound_direction",
     ):
@@ -2755,19 +2760,368 @@ SPOKEN_CHARS_PER_SECOND = 15
 
 def spoken_budget(seconds) -> int:
     """
-    The character TARGET for natural delivery in a section of `seconds`.
+    What a section of `seconds` holds at the middle's conversational pace.
 
     This is the length for a natural read, not a hard technical ceiling the
-    video model imposes: 10 seconds is about 150 characters at conversational
-    pace. It is the same number the prompt asks the model to aim for and the
-    render gate measures against, so the words the founder approves are the
-    words that fit.
+    video model imposes: 10 seconds is about 150 characters at 15 characters a
+    second. It is the same number the prompt asks the model to aim for and the
+    render measures against, so the words the founder approves are the words
+    that fit — and it is what `spoken_targets` caps a line's natural target
+    with when the piece is shorter than the target.
     """
     try:
         secs = float(seconds or 0)
     except (TypeError, ValueError):
         secs = 0.0
     return max(60, int(round(secs * SPOKEN_CHARS_PER_SECOND)))
+
+
+# The pace an OPENING line is sized at, which is not the middle's.
+#
+# The first seconds of a piece are read briskly — that is the delivery a 2-4s
+# hook window is built for — and 20 characters a second is the brisk figure
+# this file carried before the middle's pace was retuned to the conversational
+# 15. Sizing the opening at the middle's pace would hold a 3s hook to 45
+# characters and a 4s one to 60, which is a fragment rather than a hook line.
+HOOK_CHARS_PER_SECOND = 20
+
+
+def hook_ceiling(seconds) -> int:
+    """The character ceiling for an opening line of `seconds`, at the brisk pace."""
+    try:
+        secs = float(seconds or 0)
+    except (TypeError, ValueError):
+        secs = 0.0
+    return max(60, int(round(secs * HOOK_CHARS_PER_SECOND)))
+
+
+# ---------------------------------------------------------------------------
+#
+# What the two spoken lines aim at, and the one story they have to tell.
+#
+# The approved words are the founder's, and the render refuses what the piece
+# cannot speak. But "cannot speak" was the only count anything checked, and it
+# left two gaps a founder could see and not act on. The hook line was never
+# counted at all: partition_spoken_words sized the middle and passed the hook
+# through untouched, so a 200-character hook line was stored, bound into the
+# opening section, and cut to 150 mid-sentence by the prompt builder with
+# nothing on screen saying so. And a spoken budget was a ceiling to FILL, so
+# the prompt asked for a 240-character opening line on a 15s piece — a
+# paragraph where a scroll-stopper has to be.
+#
+# So both lines are counted, and counted against a TARGET that the prompts then
+# aim at. 70 characters is roughly twelve words: two beats of speech, the shape
+# an opening line that stops a scroll actually takes. 150 is one developed
+# thought after it, which is what a middle is — the problem the hook named,
+# answered. A line under its target is a choice rather than a fault, so nothing
+# here refuses one; the ceiling is still what the render enforces.
+HOOK_TARGET_CHARS = 70
+SCRIPT_TARGET_CHARS = 150
+
+# How far off a target still counts as on target. Reported, never enforced:
+# these are speaking targets, not quotas.
+TARGET_BAND = 0.25
+
+# Words that mark an opening as naming a problem — or asking one — rather than
+# stating a benefit. Matched against normalized text (lowercased, punctuation
+# stripped to spaces), so case and punctuation do not decide it. Deliberately
+# generous: the templates include openings that are not problems at all (a
+# curiosity gap, an ordinary morning), so this reads the line rather than
+# gating it.
+_PROBLEM_MARKERS = (
+    "why", "how come", "can t", "cannot", "won t", "don t", "doesn t", "didn t",
+    "no one", "nothing", "nobody", "stop", "stuck", "struggle", "struggling",
+    "tired", "hate", "waste", "wasting", "wish", "keeps", "always", "never",
+    "problem", "hard", "harder", "hardest", "wrong", "failing", "forgetting",
+    "losing", "lost", "dread", "mess", "chaos", "guessing", "overwhelmed",
+    "endless", "too much", "again", "every time",
+)
+
+# Words that mark a body as resolving rather than piling on: the change has
+# happened, or the fix is named. Same generosity and the same honesty rule —
+# this is a read of the words, not a proof about them.
+_RESOLUTION_MARKERS = (
+    "now", "so i", "instead", "finally", "turns out", "the fix", "fixes",
+    "fixed", "solves", "solved", "helps", "helping", "lets you", "let me",
+    "ends with", "one tap", "no more", "never again", "since then", "started",
+    "made it", "makes it", "gives you", "which is why", "that s why",
+    "the answer", "written down", "stops", "worked",
+)
+
+
+def spoken_targets(hook_seconds=3, total_seconds=12) -> dict:
+    """
+    What each spoken line aims at, and the most its seconds can hold.
+
+    The target is the natural speaking length above, never above the ceiling: a
+    2s hook cannot hold 70 characters at any pace this product renders at, so
+    aiming there would only guarantee an over-length line. `ceiling` is what
+    the render, the arrival clamp and the Review step already measure against —
+    `spoken_budget` for the middle, and the brisk `hook_budget` for the
+    opening, which is read fast — so this adds the aim, it does not move the
+    limit.
+    """
+    hook_limit = hook_ceiling(hook_seconds)
+    middle_seconds = max(1, int(total_seconds or 0) - int(hook_seconds or 0))
+    script_ceiling = spoken_budget(middle_seconds)
+    return {
+        "hook_seconds": int(hook_seconds or 0),
+        "middle_seconds": middle_seconds,
+        "hook": {"target": min(HOOK_TARGET_CHARS, hook_limit), "ceiling": hook_limit},
+        "script": {
+            "target": min(SCRIPT_TARGET_CHARS, script_ceiling),
+            "ceiling": script_ceiling,
+        },
+    }
+
+
+def _split_sentences(text: str) -> list:
+    """
+    Split a line into sentences, each keeping its own terminator.
+
+    A terminator only ends a sentence when what follows is a space or the end
+    of the line, so "Dr. Smith" and "12.5" stay whole. The same rule
+    `_first_sentence` applies to the opening, applied to every sentence.
+    """
+    stripped = str(text or "").strip()
+    if not stripped:
+        return []
+    sentences = []
+    start = 0
+    for index, ch in enumerate(stripped):
+        if ch not in ".!?":
+            continue
+        following = stripped[index + 1: index + 2]
+        if following == "" or following in " \n\t":
+            sentence = stripped[start: index + 1].strip()
+            if sentence:
+                sentences.append(sentence)
+            start = index + 1
+    tail = stripped[start:].strip()
+    if tail:
+        sentences.append(tail)
+    return sentences
+
+
+def _keep_tail(text: str, limit: int) -> str:
+    """
+    The end of a sentence, cut back to a word boundary and stripped of its mark.
+
+    Used only for a resolving sentence that is itself longer than the body can
+    speak. The end of that sentence is its conclusion — the payoff beat is the
+    last thing said — so the tail is the part worth keeping, where the head of
+    it is the setup that led there.
+    """
+    window = str(text or "").strip()[-max(1, int(limit)):]
+    space = window.find(" ")
+    if space > 0:
+        window = window[space + 1:]
+    # Only the front is cleaned: the cut leaves the previous sentence's mark on
+    # the way in, and the closing mark is part of the sentence that survives.
+    return window.lstrip(" ,.!?;:-").rstrip()
+
+
+def trim_spoken_body(text: str, limit: int):
+    """
+    Cut a spoken body to fit `limit`, keeping the sentence that resolves it.
+
+    `trim_to_sentence` keeps the opening and cuts the tail, which for a spoken
+    body means cutting the resolution — the payoff the hook set up in the first
+    place, and the one sentence the middle exists to say. So a body is cut from
+    the MIDDLE outwards instead: whole sentences go from between the opening
+    (the line that links back to the hook) and the closing sentence (the one
+    that answers it), and only when those two are still too long does the
+    opening give way, at its own sentence-then-word boundary. The payoff is the
+    last thing cut, never the first.
+
+    Returns (kept, dropped), `dropped` counted in characters, so a caller
+    reports exactly how much of the approved words is not spoken.
+    """
+    text = str(text or "").strip()
+    if not text or limit <= 0 or len(text) <= limit:
+        return text, 0
+    sentences = _split_sentences(text)
+    if len(sentences) < 2:
+        return trim_to_sentence(text, limit)
+    kept = list(sentences)
+    while len(kept) > 2 and len(" ".join(kept)) > limit:
+        del kept[1]
+    joined = " ".join(kept)
+    if len(joined) > limit:
+        # Only the opening and the payoff are left, and both are the story. The
+        # opening gives way first: it is the half a viewer can reconstruct from
+        # the hook, and the payoff is the half they cannot.
+        payoff = kept[-1]
+        if len(payoff) >= limit:
+            payoff = _keep_tail(payoff, limit)
+        room = limit - len(payoff) - 1
+        head = trim_to_sentence(kept[0], room)[0] if room > 0 else ""
+        joined = (head + " " + payoff).strip() if head else payoff
+    return joined, len(text) - len(joined)
+
+
+def _trim_hook_line(text: str, limit: int):
+    """
+    Cut a hook line back to fit `limit`, keeping it readable as an opening.
+
+    Sentence boundary first. When the opening sentence is itself longer than
+    the limit there is no sentence to cut at, so the cut lands on a word
+    boundary — and a line cut that way loses its terminator along with its
+    tail. The terminator is restored from the sentence the cut came out of,
+    because punctuation is not spoken: "Do you know what triggers your emotions
+    and keeps them" is a fragment, while "...and keeps them?" is the question
+    it was.
+    """
+    text = str(text or "").strip()
+    if not text or limit <= 0 or len(text) <= limit:
+        return text, 0
+    kept, _dropped = trim_to_sentence(text, limit)
+    if kept and kept[-1] not in ".!?":
+        for index, ch in enumerate(text):
+            if ch in ".!?" and index >= len(kept) - 1:
+                kept = kept + ch
+                break
+    return kept, len(text) - len(kept)
+
+
+def _summarize_line(text: str, spec: dict) -> dict:
+    """One line's count, the target it aims at, and the ceiling it must hold."""
+    chars = len(str(text or "").strip())
+    if chars > spec["ceiling"]:
+        verdict = "over_ceiling"
+    elif chars < spec["target"] * (1 - TARGET_BAND):
+        verdict = "under_target"
+    else:
+        verdict = "on_target"
+    return {
+        "chars": chars,
+        "target": spec["target"],
+        "ceiling": spec["ceiling"],
+        "verdict": verdict,
+    }
+
+
+def _opens_a_problem(text: str) -> bool:
+    """Whether an opening line names a problem rather than stating a benefit."""
+    stripped = str(text or "").strip()
+    if not stripped:
+        return False
+    if stripped.endswith("?"):
+        return True
+    normalized = _normalize_spoken(stripped)
+    padded = f" {normalized} "
+    return any(f" {marker} " in padded for marker in _PROBLEM_MARKERS)
+
+
+def _closes_the_problem(text: str) -> bool:
+    """Whether a body reads as resolving, rather than adding more of the same."""
+    normalized = _normalize_spoken(text)
+    if not normalized:
+        return False
+    padded = f" {normalized} "
+    return any(f" {marker} " in padded for marker in _RESOLUTION_MARKERS)
+
+
+def check_spoken_story(hook_line, script, hook_seconds=3, total_seconds=12) -> dict:
+    """
+    Both spoken lines measured, and read as ONE story.
+
+    Counts each line against the target it aims at and the ceiling it must
+    hold, and reads the two together: the hook should open a problem — a
+    question, a cost, something the viewer is doing that keeps failing — and
+    the script should close the one the hook opened, rather than restating it
+    or answering a different question.
+
+    Nothing here refuses anything. The ceiling is what the render enforces and
+    an under-target line is a choice, so the story verdict is reported to the
+    founder rather than acted on. Pure, so the Review step and the render path
+    measure the same words the same way.
+    """
+    targets = spoken_targets(hook_seconds, total_seconds)
+    hook = str(hook_line or "").strip()
+    body = str(script or "").strip()
+    story = {
+        "problem_in_hook": _opens_a_problem(hook),
+        "resolution_in_script": _closes_the_problem(body),
+        # The plan's script is written as the whole piece, so a copy of the
+        # hook at its head is the hook being said twice rather than a middle.
+        "restates_hook": bool(hook and body) and strip_leading_hook(hook, body) != body,
+    }
+    story["coherent"] = bool(
+        story["problem_in_hook"] and story["resolution_in_script"] and not story["restates_hook"]
+    )
+    return {
+        "hook": _summarize_line(hook, targets["hook"]),
+        "script": _summarize_line(body, targets["script"]),
+        "story": story,
+        "hook_seconds": targets["hook_seconds"],
+        "middle_seconds": targets["middle_seconds"],
+        "over_ceiling": bool(
+            len(hook) > targets["hook"]["ceiling"] or len(body) > targets["script"]["ceiling"]
+        ),
+    }
+
+
+def repair_spoken_story(plan, hook_seconds=3, total_seconds=12) -> tuple:
+    """
+    Validate the two spoken lines before a render, and rewrite what cannot be spoken.
+
+    Returns (words, report). `words` holds `hook_line` and `script` exactly as
+    the video model must receive them; nothing else from the plan is touched.
+    The rewrite is the partition rule and nothing more:
+
+    - a hook line longer than its seconds is cut back to its opening sentence,
+      and what comes off is spoken at the head of the middle instead of being
+      deleted. The words stay in the video; they simply stop being the opening
+      line, which is what "the hook names the problem and the script answers
+      it" means in practice — a resolution that had drifted into the hook is
+      handed to the middle that has to carry it;
+    - a middle longer than its seconds keeps its opening and its resolving
+      sentence and gives up the sentences in between, so the payoff survives
+      the cut.
+
+    No model call and no provider request: this is arithmetic on the founder's
+    own words, run inside the render path so the words measured here are the
+    words sent. The report carries the count either side of the rewrite and
+    every change made, so a shortened line is reported rather than silent.
+    """
+    source = plan if isinstance(plan, dict) else {}
+    hook_line = str(source.get("hook_line") or "").strip()
+    script = str(source.get("script") or "").strip()
+    hook_seconds = hook_seconds or 3
+    total_seconds = total_seconds or 0
+
+    part = partition_spoken_words(source, hook_seconds, total_seconds)
+    spoken_hook = part["hook_line"]
+
+    changes = []
+    if spoken_hook != hook_line:
+        changes.append({
+            "field": "hook_line",
+            "reason": "over_ceiling",
+            "removed_chars": part["hook_dropped_chars"],
+            "moved_to_script": len(part["hook_spill"]),
+        })
+    if hook_line and strip_leading_hook(hook_line, script) != script:
+        # The script opened with the hook, so the two lines said the same thing
+        # twice and the hook's characters were charged to the middle's seconds.
+        changes.append({"field": "script", "reason": "restated_hook"})
+    if part["dropped_chars"]:
+        changes.append({
+            "field": "script",
+            "reason": "over_ceiling",
+            "removed_chars": part["dropped_chars"],
+            "kept_chars": len(part["kept"]),
+        })
+
+    report = {
+        "before": check_spoken_story(hook_line, script, hook_seconds, total_seconds),
+        "after": check_spoken_story(spoken_hook, part["kept"], hook_seconds, total_seconds),
+        "changes": changes,
+        "rewritten": bool(changes),
+        "middle_seconds": part["middle_seconds"],
+    }
+    return {"hook_line": spoken_hook, "script": part["kept"]}, report
 
 
 def trim_to_sentence(text: str, limit: int):
@@ -2790,83 +3144,6 @@ def trim_to_sentence(text: str, limit: int):
         space = window.rfind(" ")
         kept = (window[:space] if space > 0 else window).strip()
     return kept, len(text) - len(kept)
-
-
-def condense_script_to_target(script: str, hook_line: str, limit: int):
-    """
-    Rewrite a script that is too long for natural delivery down to its target.
-
-    The prompt asks the model for a script sized to the piece, but the model
-    does not always comply — and the render gate then refuses the whole video
-    for input the model overshot. So the over-length answer is condensed here,
-    BEFORE it is stored or sent anywhere: at a sentence boundary where one
-    exists, keeping whole sentences in order, preserving the meaning and the
-    customer's voice. Nothing is invented, reworded or padded; the opening
-    hook sentence is never dropped (it is bound back from `hook_line`), and
-    the payoff — the last sentence — is dropped only when nothing else can go.
-
-    Returns (text, dropped_chars); dropped_chars is 0 when the script already
-    fits. The arithmetic is `trim_to_sentence`, the same rule the render gate
-    uses, so a script this returns is one the gate accepts.
-    """
-    text = str(script or "").strip()
-    if not text or limit <= 0 or len(text) <= limit:
-        return text, 0
-
-    sentences = _split_sentences(text)
-    if len(sentences) <= 1:
-        return trim_to_sentence(text, limit)
-
-    hook_norm = _normalize_spoken(hook_line)
-    # The opening sentence is the hook line when the script opens with it; it
-    # is restored from `hook_line` downstream, so cutting it would silence the
-    # opening rather than shorten the middle. Never drop it.
-    protect_first = bool(hook_norm) and _normalize_spoken(sentences[0]) == hook_norm
-
-    kept = [sentences[0]] if protect_first else []
-    kept_len = len(sentences[0]) if protect_first else 0
-    for index, sentence in enumerate(sentences):
-        if protect_first and index == 0:
-            continue
-        addition = len(sentence) + (1 if kept else 0)
-        if kept_len + addition > limit:
-            break
-        kept.append(sentence)
-        kept_len += addition
-    if not kept:
-        return trim_to_sentence(text, limit)
-    condensed = " ".join(kept).strip()
-    if len(condensed) >= len(text):
-        return text, 0
-    return condensed, len(text) - len(condensed)
-
-
-def _split_sentences(text: str) -> list:
-    """
-    Split `text` into sentences, keeping each terminator.
-
-    A terminator ends a sentence only when whitespace (or the end) follows, so
-    an abbreviation such as "Dr. Smith" is not split, and each returned piece
-    is stripped so rejoining with single spaces is stable.
-    """
-    stripped = str(text or "").strip()
-    if not stripped:
-        return []
-    sentences = []
-    start = 0
-    for index, ch in enumerate(stripped):
-        if ch not in ".!?":
-            continue
-        following = stripped[index + 1: index + 2]
-        if following == "" or following in " \n\t":
-            piece = stripped[start: index + 1].strip()
-            if piece:
-                sentences.append(piece)
-            start = index + 1
-    tail = stripped[start:].strip()
-    if tail:
-        sentences.append(tail)
-    return sentences
 
 
 def _normalize_spoken(text: str) -> str:
@@ -2959,17 +3236,36 @@ def partition_spoken_words(plan, hook_seconds=3, total_seconds=12) -> dict:
         hook_line = str(plan.get("hook_line") or "").strip()
         script = str(plan.get("script") or "").strip()
 
+    targets = spoken_targets(hook_seconds, total_seconds)
+
+    # The hook is counted FIRST, and against its own seconds. It used to pass
+    # through untouched, which is how a hook line several times the length of
+    # the opening beat was stored, bound into section 0, and cut mid-sentence by
+    # the prompt builder with nothing telling the founder. The cut keeps the
+    # opening sentence and hands the rest to the middle below, so the words are
+    # still spoken — just after the hook, which is where a resolution belongs.
+    spoken_hook, hook_dropped = _trim_hook_line(hook_line, targets["hook"]["ceiling"])
+    # Only the front is cleaned: the cut can leave a leading mark behind it,
+    # and the closing mark belongs to the sentence the spill ends with.
+    hook_spill = hook_line[len(spoken_hook):].lstrip(" ,.!?;:-") if spoken_hook else ""
+
     middle_text = strip_leading_hook(hook_line, script)
-    middle_seconds = max(1, int(total_seconds or 0) - int(hook_seconds or 0))
-    budget = spoken_budget(middle_seconds)
-    kept, dropped = trim_to_sentence(middle_text, budget)
+    if hook_spill:
+        middle_text = f"{hook_spill} {middle_text}".strip() if middle_text else hook_spill
+
+    budget = targets["script"]["ceiling"]
+    kept, dropped = trim_spoken_body(middle_text, budget)
     return {
-        "hook_line": hook_line,
+        "hook_line": spoken_hook,
+        "hook_spill": hook_spill,
+        "hook_dropped_chars": hook_dropped,
         "middle_text": middle_text,
         "kept": kept,
         "dropped_chars": dropped,
         "budget": budget,
-        "middle_seconds": middle_seconds,
+        "target": targets["script"]["target"],
+        "hook_target": targets["hook"]["target"],
+        "middle_seconds": targets["middle_seconds"],
     }
 
 
@@ -3140,8 +3436,11 @@ async def generate_video_strategy(
     # words fill the piece when there is no approved plan to bind to; when
     # there is one, bind_spoken_words rewrites the sections from it and the
     # same ceilings still apply.
-    _strategy_hook_budget = spoken_budget(hook_seconds)
+    _strategy_hook_budget = hook_ceiling(hook_seconds)
     _strategy_middle_budget = spoken_budget(plan_seconds)
+    # The aims, not the ceilings: see the SPOKEN WORDS rule below.
+    _strategy_hook_target = min(HOOK_TARGET_CHARS, _strategy_hook_budget)
+    _strategy_middle_target = min(SCRIPT_TARGET_CHARS, _strategy_middle_budget)
     # Same hook floor as the plan prompt: roughly three-quarters of the
     # hook's spoken budget, so the strategy's own hook line fills the
     # opening beat when there is no approved plan to bind to.
@@ -3386,15 +3685,20 @@ async def generate_video_strategy(
         + "- There are exactly TWO sections and they are the whole video. Segment 0 is the hook. "
         f"Segment 1 is the middle and runs {plan_seconds} seconds to the end. Never return a third "
         "section.\n"
-        + f"- SPOKEN BUDGET: the hook section speaks for {hook_seconds}s and the middle for "
-        f"{plan_seconds}s — a TARGET of about {_strategy_hook_budget} characters of hook dialogue "
-        f"and about {_strategy_middle_budget} characters of middle script for natural delivery. "
-        "This is the length for a natural read, not an arbitrary maximum: reach it with dialogue "
-        "that is naturally that long. NEVER pad with filler words, extra spaces or stray "
-        "punctuation to hit it. Aim to land CLOSE TO each target — use the full middle target and "
-        "end on the payoff beat as the last thing said inside it. Text past either target is cut "
-        "and the render is refused until it fits, and a script far under the target leaves dead "
-        "air the video has to stretch across the full duration.\n"
+        + f"- SPOKEN WORDS: the hook section speaks for {hook_seconds}s and the middle for "
+        f"{plan_seconds}s — aim for about {_strategy_hook_target} characters of hook dialogue and "
+        f"about {_strategy_middle_target} characters of middle script. This is the length for a "
+        "natural read, not an arbitrary maximum: reach it with dialogue that is naturally that "
+        "long. NEVER pad with filler words, extra spaces or stray punctuation to hit it. Land "
+        "CLOSE TO each target rather than filling the seconds, and end on the payoff beat as the "
+        f"last thing said inside the middle. The hard ceilings are {_strategy_hook_budget} and "
+        f"{_strategy_middle_budget} characters: a line past its ceiling is cut back or the render "
+        "is refused. A script far under its target leaves dead air the video has to stretch "
+        "across the full duration.\n"
+        "- ONE STORY, TWO LINES: the hook's script names ONE problem this viewer actually has, in "
+        "their own words, and the middle's script resolves that same problem — same subject, same "
+        "viewer, the second answering the first. If the two sections would not read as one "
+        "thought, rewrite the middle until they do.\n"
         "- The middle develops the hook — the situation, the pain, the reaction, the action, the "
         "transition — and its job is to end at the moment the viewer would reach for the app. It "
         "does NOT satisfy them, and it does not continue past that point.\n"

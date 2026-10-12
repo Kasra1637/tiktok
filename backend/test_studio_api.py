@@ -1575,13 +1575,21 @@ class TestSpokenBudgetReachesThePlanPrompt:
         # The exact numbers the render gate would derive downstream (7s middle
         # at 15 chars/sec = 105, and the 3s hook floors at 60). If the prompt and
         # the gate ever disagree again, this fails first.
-        assert "SPOKEN BUDGET" in prompt
-        assert "105 characters for" in prompt
+        assert "SPOKEN WORDS" in prompt
+        assert "about 105 characters for the rest of the script" in prompt
         assert "first 3s" in prompt
-        assert "60 characters for the hook line" in prompt
-        # Target, not under-fill: the model must reach the target, or the
-        # video stretches a short script across the full duration (slow delivery).
+        assert "about 60 characters for the hook line" in prompt
+        # Targets, not quotas. The prompt names the aim and the hard ceilings
+        # separately, asks for a line near the target rather than a filled
+        # budget — a filled hook ceiling is a paragraph, not an opening line —
+        # and refuses padding to reach it.
         assert "CLOSE TO each target" in prompt
+        assert "hard ceilings are 60 and 105" in prompt
+        assert "natural delivery, not an arbitrary maximum" in prompt
+        assert "NEVER pad with filler words" in prompt
+        # One story across the two lines: the hook names the problem, the script
+        # resolves it, and neither says the other's line.
+        assert "ONE STORY, TWO LINES" in prompt
         assert "room to spare" not in prompt
         assert "render is refused" in prompt
 
@@ -1596,25 +1604,35 @@ class TestSpokenBudgetReachesThePlanPrompt:
             duration_seconds=15,
         ))
         prompt = json.dumps(captured["messages"])
-        assert "180 characters for" in prompt
-        # And the two targets must never collide: the hook budget is on the
-        # hook line, the middle budget on the remainder after it.
-        assert "60 characters for the hook line" in prompt
+        assert "about 150 characters for the rest of the script" in prompt
+        # The middle's ceiling is what twelve seconds hold at the conversational
+        # pace (180); the SCRIPT's aim stays the natural 150, which is the
+        # length a piece this long is written to read at. Both are named.
+        assert "hard ceilings are 60 and 180" in prompt
+        # And the two aims must never collide: the hook target is on the hook
+        # line, the middle target on the remainder after it.
+        assert "about 60 characters for the hook line" in prompt
         assert "CLOSE TO each target" in prompt
-        assert "payoff sentence as the last thing said inside it" in prompt
+        assert "payoff sentence as the last thing said inside the middle" in prompt
 
     def test_the_strategy_prompt_carries_the_same_spoken_budget(self, monkeypatch):
-        """The strategy prompt sizes its section scripts to the same ceilings.
+        """The strategy prompt sizes its section scripts to the same targets.
 
         _StrategyCapture runs hook_seconds=5, total_duration=20, so the middle
-        is 15s: 75 chars of hook dialogue and 225 of middle script at the
-        15 chars/sec pace. Same target wording as the plan prompt.
+        is 15s. The targets are the natural speaking lengths — 70 characters of
+        hook dialogue, the brisk fit for a five-second opening, and 150 of
+        middle script — and the hard ceilings the seconds allow (100 for the
+        hook at the opening pace, 225 for the middle at 15 chars/sec) are named
+        beside them as limits rather than as amounts to fill. Same wording as
+        the plan prompt.
         """
         prompt = _StrategyCapture(monkeypatch).run()
-        assert "SPOKEN BUDGET" in prompt
-        assert "75 characters of hook dialogue" in prompt
-        assert "225 characters of middle script" in prompt
+        assert "SPOKEN WORDS" in prompt
+        assert "about 70 characters of hook dialogue" in prompt
+        assert "about 150 characters of middle script" in prompt
+        assert "hard ceilings are 100 and 225" in prompt
         assert "CLOSE TO each target" in prompt
+        assert "ONE STORY, TWO LINES" in prompt
         assert "room to spare" not in prompt
 
 
@@ -1906,9 +1924,10 @@ class TestSpokenWordsGate:
         assert overflow["dropped_chars"] > 0
         assert overflow["budget"] == 105  # 7s middle at the current 15 chars/sec pace
         assert overflow["middle_seconds"] == 7
-        # The trim target: exactly the kept prefix, so trimming to it and
-        # saving is stable — rebinding the trimmed script yields the same words.
-        assert out["spoken_middle"] == "First sentence that fits."
+        # The trim target: exactly the words the middle speaks — the opening and
+        # the sentence that resolves the hook — so trimming to it and saving is
+        # stable, and rebinding the kept words yields the same ones.
+        assert out["spoken_middle"] == "First sentence that fits. Final payoff sentence."
 
     def test_overflow_refuses_the_render_with_the_fix_named(self):
         import server
@@ -1931,6 +1950,26 @@ class TestSpokenWordsGate:
         ))
         assert overflow == {}
 
+    def test_the_counts_and_the_story_reach_the_review_step(self):
+        import server
+        out = server._public_project(self._project(
+            "Most evenings blur together. Yours ends with one sentence written down."
+        ))
+        check = out["spoken_check"]
+        assert check["hook"]["chars"] == 40
+        assert check["hook"]["target"] == 60        # what three seconds of speech holds
+        assert check["script"]["chars"] == 71
+        assert check["script"]["target"] == 105     # what the 7s middle aims at
+        assert check["over_ceiling"] is False
+        # The hook asks the question and the middle closes it, so the pair reads
+        # as one story rather than as two lines that happen to follow each other.
+        assert check["story"] == {
+            "problem_in_hook": True,
+            "resolution_in_script": True,
+            "restates_hook": False,
+            "coherent": True,
+        }
+
     def test_a_feature_inventory_refuses_the_render(self):
         """The user-visible half of the guarantee: the spoken words of a real
         posted video were a feature list, so the gate must fire on that shape
@@ -1945,3 +1984,77 @@ class TestSpokenWordsGate:
         with pytest.raises(Exception) as exc:
             server._require_claims_clear(project, {})
         assert getattr(exc.value, "status_code", None) == 409
+
+
+class TestSpokenCounts:
+    """
+    Both spoken lines counted, and the one story they have to tell.
+
+    The render has always refused words the piece cannot speak, but "cannot
+    speak" was the only count anything checked: the hook line was never
+    measured at all, and a spoken budget was a ceiling to fill rather than a
+    natural length to aim at.
+    """
+
+    def test_the_targets_are_the_natural_speaking_lengths(self):
+        import ai_service
+        # The default piece: 15s with a 3s hook. The hook's target is what its
+        # three seconds hold at the current pace; the script's is the natural
+        # 150, well inside the 12s middle's 240.
+        fifteen = ai_service.spoken_targets(3, 15)
+        assert fifteen["hook"]["target"] == 60
+        assert fifteen["hook"]["ceiling"] == 60
+        assert ai_service.SCRIPT_TARGET_CHARS == 150
+        assert fifteen["script"]["target"] == 150
+        assert fifteen["script"]["ceiling"] == 180
+        # A longer opening beat holds the full hook target.
+        four = ai_service.spoken_targets(4, 15)
+        assert four["hook"]["target"] == ai_service.HOOK_TARGET_CHARS == 70
+        # A shorter piece caps the aim: a target is never more than the seconds
+        # can speak, or the prompt would be asking for an over-length line.
+        assert ai_service.spoken_targets(2, 8)["script"]["target"] == 90
+
+    def test_a_hook_over_its_ceiling_is_cut_back_and_still_spoken_after_it(self):
+        import ai_service
+        hook = (
+            "Do you know what triggers your emotions and keeps them running the "
+            "whole day? Most people never find out."
+        )
+        words, report = ai_service.repair_spoken_story(
+            {"hook_line": hook, "script": "Most evenings blur together."}, 3, 15
+        )
+        # The opening sentence, restored as the question it was: punctuation is
+        # not spoken, and a cut line without its mark reads as a fragment.
+        assert words["hook_line"] == "Do you know what triggers your emotions and keeps them?"
+        # Nothing is lost. What came off the hook is spoken at the head of the
+        # middle instead of being deleted: a cut mid-clause is picked up
+        # mid-clause, so the two lines still read as one continuous piece and
+        # the resolution is never dropped for sitting past the opening beat.
+        assert words["script"] == (
+            "running the whole day? Most people never find out. "
+            "Most evenings blur together."
+        )
+        assert report["rewritten"] is True
+        assert report["changes"][0]["field"] == "hook_line"
+        assert report["after"]["story"]["problem_in_hook"] is True
+
+    def test_a_line_under_its_target_is_reported_not_rewritten(self):
+        import ai_service
+        words, report = ai_service.repair_spoken_story(
+            {"hook_line": "Stop writing empty pages", "script": "Taskly gives you one prompt."},
+            3, 15,
+        )
+        assert report["rewritten"] is False
+        assert words["hook_line"] == "Stop writing empty pages"
+        assert words["script"] == "Taskly gives you one prompt."
+        # Short is a choice, not a fault: only what cannot be spoken is cut.
+        assert report["before"]["script"]["verdict"] == "under_target"
+
+    def test_a_script_that_just_repeats_the_hook_is_reported(self):
+        import ai_service
+        hook = "Do you know what triggers your emotions?"
+        check = ai_service.check_spoken_story(
+            hook, f"{hook} I never used to notice mine.", 3, 15
+        )
+        assert check["story"]["restates_hook"] is True
+        assert check["story"]["coherent"] is False

@@ -477,6 +477,80 @@ for (const name of RETIRED_API_METHODS) {
 }
 
 // ---------------------------------------------------------------------------
+// Resolver cache + module loader (uses real babel transpilation)
+// ---------------------------------------------------------------------------
+const importMap = new Map();
+const resolveCache = new Map();
+
+// The smoke check mounts real components from this project, so it must call
+// the same module loader the app's toolchain resolves. A fresh `require` for
+// every mount would be correct in isolation but slow on a checkout this size;
+// caching by resolved file path keeps the suite practical without weakening
+// what is being asserted.
+function resolve(name) {
+  if (!resolveCache.has(name)) {
+    const resolved = require.resolve(name, { paths: [SRC] });
+    resolveCache.set(name, resolved);
+  }
+  return resolveCache.get(name);
+}
+
+function createTranspiledModule(resolvedPath, code) {
+  const module = { exports: {} };
+  const wrapped =
+    `(() => { return {
+  id: ${JSON.stringify(resolvedPath)},
+  exports: module.exports,
+  hot: __hot__,
+  filename: ${JSON.stringify(resolvedPath)},
+},` +
+    babel.transformSync(code, {
+      filename: resolvedPath,
+      babelrc: false,
+      configFile: false,
+      parserOpts: { plugins: ["jsx"] },
+      sourceType: "module",
+      ast: false,
+      code: true,
+    }).code +
+    `})()`;
+  return wrapped;
+}
+
+function importModule(specifier) {
+  if (importMap.has(specifier)) return importMap.get(specifier);
+  if (importMap.size > 800) {
+    throw new Error(
+      "too many distinct imports resolved while loading the smoke graph — " +
+        "a dependency is importing far more modules than the file being mounted " +
+        "should need, so this check refuses to load silently"
+    );
+  }
+  const resolved = resolve(specifier);
+  if (importMap.has(resolved)) return importMap.get(resolved);
+  let code;
+  try {
+    code = fs.readFileSync(resolved, "utf8");
+  } catch {
+    throw new Error(
+      `cannot read ${specifier} as ${resolved} — the smoke harness can only load `
+        + "modules that exist on disk"
+    );
+  }
+  let compiled;
+  if (resolved.endsWith(".jsx") || resolved.endsWith(".js")) {
+    compiled = createTranspiledModule(resolved, code);
+  } else {
+    // Plain .json/.node/else: fall back to a real require so the harness does
+    // not silently fake a dependency it cannot represent.
+    compiled = require(resolved);
+  }
+  importMap.set(resolved, compiled);
+  importMap.set(specifier, compiled);
+  return compiled;
+}
+
+// ---------------------------------------------------------------------------
 // Transpile + stub loader
 // ---------------------------------------------------------------------------
 const cache = new Map();
@@ -2400,11 +2474,60 @@ async function main() {
     );
   });
 
-  // The partition the render actually speaks: what fits, and what is dropped.
-  // There is deliberately no trim control. A generated script is measured and
-  // cut to fit before it is stored, so the founder is never handed a broken
-  // plan to repair by hand — and the overflow this block reports can now only
-  // come from their own edit, which the copy names as such.
+  // Both spoken lines, counted against the length each aims at. The hook line
+  // used to be the one count nothing showed: the middle had a budget and the
+  // opening line had none. The numbers come from the server's own measurement
+  // of the saved plan, which is the plan a render validates.
+  await check("Review shows both spoken counts against their targets", async (ctx) => {
+    await withApi(
+      {
+        getStudioProject: async () => ({
+          ...PROJECT_WITH_STRATEGY,
+          spoken_check: {
+            hook: { chars: 40, target: 60, ceiling: 60, verdict: "on_target" },
+            script: { chars: 71, target: 140, ceiling: 140, verdict: "under_target" },
+            story: {
+              problem_in_hook: true,
+              resolution_in_script: true,
+              restates_hook: false,
+              coherent: true,
+            },
+            over_ceiling: false,
+          },
+        }),
+      },
+      async () => {
+        global.__SMOKE_PARAMS = "?project=p1";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Review");
+          expectText(
+            ctx,
+            "Hook line: 40 characters, aiming for about 60",
+            "the hook count and its target are not shown"
+          );
+          expectText(
+            ctx,
+            "Script: 71 characters, aiming for about 140",
+            "the script count and its target are not shown"
+          );
+          expectText(
+            ctx,
+            "The hook names the problem and the script closes it.",
+            "the story verdict is not shown"
+          );
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
+  // The partition the render actually speaks: what it says, and how much of the
+  // script is not spoken. There is deliberately no trim control. A generated
+  // script is measured and cut to fit before it is stored, so the founder is
+  // never handed a broken plan to repair by hand — and the overflow this block
+  // reports can now only come from their own edit, which the copy names as such.
   await check("Review shows the spoken partition without offering a manual trim", async (ctx) => {
     const kept = "Most evenings blur together.";
     await withApi(
@@ -2423,7 +2546,15 @@ async function main() {
           await openStep(ctx, "Review");
           expectText(ctx, "What the middle will say", "the spoken partition is not shown");
           expectText(ctx, kept, "the kept spoken line is not shown");
-          expectText(ctx, "Not spoken:", "the dropped tail is not shown");
+          // The dropped words are no longer a tail sliced out of the script:
+          // an over-long middle gives up the sentences in the middle of itself
+          // and keeps the one that resolves the hook. So the block reports the
+          // COUNT the server dropped, which is the only honest number left.
+          expectText(
+            ctx,
+            "200 characters of the script are past",
+            "the dropped count is not shown"
+          );
           expectText(
             ctx,
             "Regenerate the plan",

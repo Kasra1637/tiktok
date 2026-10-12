@@ -1796,7 +1796,13 @@ class TestBindSpokenWords:
         )
         assert overflow["dropped_chars"] > 0
         assert overflow["budget"] == ai_service.spoken_budget(7)
-        assert bound["segments"][1]["script"] == "First sentence that fits."
+        # The opening and the sentence that RESOLVES the hook are what survive.
+        # The rule used to keep the prefix and cut the tail, and the tail is
+        # where the payoff lives: an over-long plan lost the one sentence the
+        # middle exists to say. The sentences in between are what give way.
+        assert bound["segments"][1]["script"] == (
+            "First sentence that fits. Final payoff sentence."
+        )
         # The budget is per-second, not flat: a longer middle speaks more.
         assert ai_service.spoken_budget(7) > ai_service.spoken_budget(3)
 
@@ -1884,24 +1890,28 @@ class TestBindSpokenWords:
         assert f'spoken, performed naturally: "{plan["script"]}"' in prompt
 
 
-class TestCondenseScriptToTarget:
+class TestOverLengthScriptIsRewrittenToFit:
     """
-    A script the model overshot is rewritten to its natural target BEFORE it is
-    stored or sent, so an oversized answer cannot reach the video model and be
-    refused. Condensing keeps whole sentences in order, invents nothing, and
-    never pads.
+    A script the model overshot is rewritten to fit BEFORE it is stored or sent,
+    so an oversized answer cannot reach the video model and be refused there.
+
+    The rewrite is ONE rule — partition_spoken_words, the same arithmetic the
+    render gate and the Review step read — and it keeps whole sentences,
+    invents nothing and pads nothing. It drops the sentences in the MIDDLE of
+    the body rather than its tail, so the sentence that resolves the hook is
+    the last thing cut instead of the first.
     """
 
     def test_a_script_within_target_is_returned_unchanged(self):
         import ai_service
         text = "Short and natural."
-        kept, dropped = ai_service.condense_script_to_target(text, "Short.", 100)
-        assert kept == text
-        assert dropped == 0
+        part = ai_service.partition_spoken_words(
+            {"hook_line": "Why does it always go wrong?", "script": text}, 3, 10)
+        assert part["kept"] == text
+        assert part["dropped_chars"] == 0
 
     def test_an_over_length_script_is_condensed_to_whole_sentences(self):
         import ai_service
-        # A 10-second target is ~150 characters.
         script = (
             "It changed my evenings completely. "
             "I used to lie awake for hours. "
@@ -1909,40 +1919,57 @@ class TestCondenseScriptToTarget:
             "The wind-down starts on its own. "
             "I stopped checking my phone in bed."
         )
-        assert len(script) > 150
-        kept, dropped = ai_service.condense_script_to_target(script, "", 150)
-        assert dropped > 0
-        assert len(kept) <= 150
+        # The middle of a 10s piece with a 3s hook is 7s: 105 characters at the
+        # conversational pace.
+        part = ai_service.partition_spoken_words(
+            {"hook_line": "", "script": script}, 3, 10)
+        kept = part["kept"]
+        assert part["dropped_chars"] > 0
+        assert len(kept) <= ai_service.spoken_budget(7)
         assert kept.endswith(".")
-        # Whole sentences, in order, taken verbatim from the original.
-        assert script.startswith(kept)
         assert "  " not in kept
+        # Whole sentences, taken verbatim: the opening that links back to the
+        # hook, and the closing sentence that resolves it.
+        assert kept.startswith("It changed my evenings completely.")
+        assert kept.endswith("I stopped checking my phone in bed.")
 
-    def test_the_opening_hook_sentence_is_never_dropped(self):
+    def test_the_opening_hook_line_is_spoken_from_its_own_column(self):
+        """The hook is never cut away, and never doubled into the middle.
+
+        The plan's script is written as the whole piece, so it opens with the
+        hook line; the hook is spoken from its own column, so keeping that copy
+        in the middle would say the opening twice and charge its characters to
+        the middle's seconds.
+        """
         import ai_service
         hook = "Do you know what triggers your emotions?"
         script = hook + " " + "I never used to notice mine. " * 6
-        kept, dropped = ai_service.condense_script_to_target(script, hook, 150)
-        assert dropped > 0
-        assert kept.startswith(hook)
+        plan = {"hook_line": hook, "script": script}
+        part = ai_service.partition_spoken_words(plan, 3, 10)
+        assert part["dropped_chars"] > 0
+        assert part["hook_line"] == hook
+        assert not part["kept"].startswith(hook)
+        bound, _ = ai_service.bind_spoken_words(
+            {"segments": [{"role": "hook"}, {"role": "middle"}]}, plan, 3, 10)
+        assert bound["segments"][0]["script"] == hook
 
     def test_a_single_over_length_sentence_falls_back_to_a_word_cut(self):
         import ai_service
         script = "word " * 80
-        kept, dropped = ai_service.condense_script_to_target(script, "", 100)
-        assert dropped > 0
-        assert len(kept) <= 100
-        assert kept.endswith("word")
+        part = ai_service.partition_spoken_words(
+            {"hook_line": "", "script": script}, 3, 10)
+        assert part["dropped_chars"] > 0
+        assert len(part["kept"]) <= ai_service.spoken_budget(7)
+        assert part["kept"].endswith("word")
 
-    def test_the_result_always_fits_the_target(self):
-        """The condensed text must be one the render gate accepts, or the
-        rewrite has only moved the refusal one step later."""
+    def test_the_result_always_fits_the_render_gate(self):
+        """The rewritten text must be one the render gate accepts, or the
+        rewrite has only moved the refusal one step later — and re-running the
+        rule over it must be a no-op, so saving the trimmed words is stable."""
         import ai_service
         plan = {"hook_line": "Hook.", "script": "Hook. " + "Sentence here. " * 40}
-        # The middle of a 10s piece with a 3s hook is 7s — condense to THAT,
-        # exactly as generate_creative_plan does.
-        kept, _ = ai_service.condense_script_to_target(
-            plan["script"], "Hook.", ai_service.spoken_budget(7))
-        part = ai_service.partition_spoken_words(
-            {"hook_line": "Hook.", "script": kept}, 3, 10)
-        assert part["dropped_chars"] == 0
+        part = ai_service.partition_spoken_words(plan, 3, 10)
+        again = ai_service.partition_spoken_words(
+            {"hook_line": part["hook_line"], "script": part["kept"]}, 3, 10)
+        assert again["dropped_chars"] == 0
+        assert again["kept"] == part["kept"]
