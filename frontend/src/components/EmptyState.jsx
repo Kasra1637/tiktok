@@ -11,7 +11,7 @@ export function EmptyState({ icon, title, description, action, headingLevel = "h
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.28, ease: "easeOut" }}
     >
-      <div className="relative overflow-hidden rounded-3xl border border-dashed border-[color:var(--hairline-strong)] bg-card/40 px-6 py-14 text-center backdrop-blur-sm">
+      <div className="relative overflow-hidden rounded-2xl border border-dashed border-[color:var(--hairline-strong)] bg-card/40 px-6 py-14 text-center backdrop-blur-sm">
         {/* Soft indigo pool behind the icon keeps the dashed box from reading
             as an error state. */}
         <div

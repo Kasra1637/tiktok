@@ -115,18 +115,29 @@ Composite classes in `index.css`; prefer them over ad-hoc borders and shadows.
 | `.surface-glass` | Blurred chrome that sits over content (sidebar, top bar) |
 | `.surface-sunken` | Inset wells (code panels, empty slots) |
 | `.surface-interactive` | Adds hover lift; respects `prefers-reduced-motion` |
+| `.inset-panel` | The one bordered aside allowed **inside** a card (12px radius, 16px gutter) |
+| `.inset-panel-strong` | The same aside, one step louder, for a group that carries a state the reader must not miss |
+| `.surface-flush` | A card that owns its own inner padding — accordion groups and list rows |
+| `.row-pad` | The row rhythm inside a card: 16px gutter, 12px block |
 | `.border-gradient` | Masked pseudo-element for a lit top-left edge |
 
 Elevation ramp: `--shadow-xs` → `--shadow-sm` → `--shadow-md` → `--shadow-lg` →
 `--shadow-xl` (layered, not a single flat blur). Brand glows `--glow-indigo` /
 `--glow-coral` are for primary CTAs and active states **only**.
 
-Radii: cards `rounded-2xl`, buttons/inputs/chips `rounded-xl`, pills `rounded-full`.
+Radii: cards `rounded-2xl` (16px), asides and rows `rounded-xl` (12px), pills
+`rounded-full`. **`.surface` owns its own radius and padding** — do not re-type
+`rounded-2xl` or `p-*` on a card; it was re-typed at every call site and a
+forgotten utility produced a square card.
 
 Card padding is unified in `index.css`: `.surface` / `.surface-solid` are
 `16px` on phones and `24px` from 768px up; `.surface-compact` (cards that are
-items in a grid) stays `16px`. Do not add `p-*` to card JSX. `.inset-panel` is
-the one small bordered box allowed inside a card (16px padding, 12px radius).
+items in a grid) stays `16px`; `.surface-flush` is `0` for a card whose first
+child is a full-bleed row. Do not add `p-*` to card JSX.
+
+**Never nest `.surface` inside `.surface`.** A card inside an identical card
+is a box in a box: same fill, same border, same gutter. The level inside a
+card is `.inset-panel`.
 
 ### Container levels (every sidebar page)
 
@@ -135,10 +146,24 @@ the one small bordered box allowed inside a card (16px padding, 12px radius).
 | Page | `PageHeader` | 40px `IconTile size="page"` | page title |
 | Section card | `SectionCard` | 32px `IconTile size="section"` | `h2`, 16px semibold |
 | Group inside a card | `GroupLabel` + hairline divider, never a nested box | 12px, only on collapsible groups or cards with 3+ groups | `.eyebrow` (all caps) |
+| Aside inside a card | `.inset-panel` (12px radius, 16px gutter) | none | 14px medium, or an `.eyebrow` |
+| Row inside a card | `.row-pad` (16px gutter, 12px block) + hairline | none | 14px medium label |
 | Field / detail row | label + control | none | 14px medium label |
 
-Spacing: 24px between page sections (`space-y-6`), 16px between cards and
-between fields (`space-y-4`), 8px from a label to its control. Loading states
+Spacing, in these steps and no others:
+
+| Gap | Token | Job |
+|---|---|---|
+| 24px | `space-y-6` / `gap-6` | between page sections — every sidebar page's `PageFrame` |
+| 16px | `space-y-4` / `gap-4` | between cards in a list; between blocks inside a card |
+| 12px | `space-y-3` / `gap-3` | between related blocks that are not one stack |
+| 8px | `space-y-2` / `gap-2` | items in a list; a label to its control; a field's own stack (label, hint, control) |
+| 6px | `gap-1.5` | inline clusters only — a glyph beside its label, two controls in a row |
+| 4px | `space-y-1` / `mt-1` | a label to its value; text under a title inside a card |
+
+`mt-*` is for a pair only (a title and the line under it) — never for block
+spacing, which is `space-y-*` on the parent. `mt-0.5` is reserved for optical
+alignment of a small icon beside text. Loading states
 use `Skeleton` blocks shaped like the content, not a spinner line. App
 switchers use `AppPicker`; generation status uses `StatusBadge`. All caps is
 reserved for `.eyebrow` group labels, never section or page titles.
@@ -151,10 +176,24 @@ reserved for `.eyebrow` group labels, never section or page titles.
   persisted to `localStorage`) plus a mobile-only sticky top bar with a drawer.
   Live width is published to `--app-sidebar-w` so fixed chrome outside the
   subtree can dodge the panel.
-- **Content width:** `mx-auto w-full max-w-[1400px] px-4 md:px-6 lg:px-8`.
-- **Detail pages:** `grid grid-cols-1 gap-5 lg:grid-cols-[380px_1fr]` — media
-  rail left, analysis right.
-- **Feed:** responsive card grid, 9/16 `AspectRatio`.
+- **Content width:** `AppShell`'s `<main>` owns the outer frame —
+  `mx-auto w-full max-w-[1400px] px-4 py-6 md:px-6 md:py-8 lg:px-8`. Every page
+  inside the sidebar opens with `PageFrame`, which decides only what sits inside
+  that frame. Two tokens, and only two:
+  - `default` — the whole frame. Studio and editor pages, which spend their room
+    on grids, players and lists: Create Video, Demo + CTA, History, Analytics.
+  - `narrow` — 1150px, centred. The App Profile family, where a full-width form
+    field or a prose card is a line the eye cannot sweep: App Profile, Profile
+    Detail, Asset Library.
+
+  **The width must not change between two pages a reader moves between**, so a
+  page belongs to a family rather than to itself: Brand Setup links to Profile
+  Detail, and Profile Detail is where an app's photos live. `PAGE_WIDTH_CLASS`
+  is exported so a second container that has to line up with the first — Brand
+  Setup's sticky action bar — reuses the exact class string instead of
+  re-typing a pixel value that can drift. A page embedded in another page
+  (Asset Library inside Create Video's template step) passes `default`: it is
+  inside a card, not a frame.
 
 ### Responsive rules
 

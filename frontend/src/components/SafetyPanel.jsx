@@ -66,7 +66,7 @@ export function SafetyPanel({ report, summary }) {
       )}
 
       {warnings.length > 0 && (
-        <div className="rounded-xl border border-[color:var(--hairline-strong)] bg-secondary/25 p-4">
+        <div className="inset-panel inset-panel-strong">
           <span className="eyebrow">Risk warnings</span>
           <ul className="mt-2 space-y-1.5 text-sm">
             {warnings.map((w, i) => (
@@ -83,7 +83,7 @@ export function SafetyPanel({ report, summary }) {
       )}
 
       {undeclared.length > 0 && (
-        <div className="rounded-xl border border-[color:var(--hairline-strong)] bg-secondary/25 p-4">
+        <div className="inset-panel inset-panel-strong">
           <span className="eyebrow">Declared but not in the script</span>
           <p className="mt-1 text-xs text-muted-foreground">
             The generator reported using these, but they do not appear in the text.
@@ -97,7 +97,7 @@ export function SafetyPanel({ report, summary }) {
       )}
 
       {unverified.length > 0 && (
-        <div className="rounded-xl border border-[color:var(--hairline-strong)] bg-secondary/25 p-4">
+        <div className="inset-panel inset-panel-strong">
           <span className="eyebrow">Needs verification</span>
           <ul className="mt-2 space-y-1 text-sm">
             {unverified.map((u, i) => (
@@ -107,7 +107,7 @@ export function SafetyPanel({ report, summary }) {
         </div>
       )}
 
-      <div className="rounded-xl border border-[color:var(--hairline)] p-4">
+      <div className="inset-panel">
         <span className="eyebrow flex items-center gap-1.5">
           <Sparkles className="h-3 w-3" /> Verified claims used ({used.length})
         </span>

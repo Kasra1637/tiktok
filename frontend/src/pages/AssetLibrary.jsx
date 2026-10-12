@@ -16,7 +16,7 @@ import { resolveActiveProfileId, profileLabel, partitionProfiles } from "../lib/
 import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
 import {
   Images, Loader2, AlertTriangle, Upload, Trash2, Archive, ArchiveRestore,
-  ShieldCheck, Paperclip, UserRound, Music, Link2, Check, ImageOff, X,
+  ShieldCheck, Paperclip, UserRound, Music, Link2, Check, ImageOff, X, Info,
 } from "lucide-react";
 
 // Face-only product: the character reference is the single permitted upload.
@@ -147,7 +147,7 @@ function AssetRow({
   // question of what went wrong.
   const slotHeldByAnother = attachDisabled && !busy && asset.kind === "character_reference";
   return (
-    <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-4">
+    <div className="inset-panel space-y-2">
       <div className="flex items-center gap-3">
         <AssetThumb asset={asset} isVideo={isVideo} isAudio={isAudio} />
         <div className="min-w-0 flex-1">
@@ -608,7 +608,7 @@ export default function AssetLibrary({
     const { approved, unapproved } = partitionProfiles(profiles);
     const waiting = unapproved.length > 0;
     return (
-      <PageFrame className="space-y-6">
+      <PageFrame width={embedded ? "default" : "narrow"} className="space-y-6">
         {!embedded && (
           <PageHeader
             data-testid="asset-library-header"
@@ -673,7 +673,7 @@ export default function AssetLibrary({
   }
 
   return (
-    <PageFrame className="space-y-6">
+    <PageFrame width={embedded ? "default" : "narrow"} className="space-y-6">
       {/* Only the standalone route owns a title. Embedded, the wizard step
           header above already says this. */}
       {!embedded && (
@@ -745,7 +745,12 @@ export default function AssetLibrary({
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      {notice && <Alert><AlertDescription>{notice}</AlertDescription></Alert>}
+      {notice && (
+        <Alert>
+          <Info className="h-4 w-4 text-[color:var(--brand-indigo)]" />
+          <AlertDescription>{notice}</AlertDescription>
+        </Alert>
+      )}
 
       {/* One surface: the upload control and the photograph it produces sit
           together, so an upload no longer appears to "turn up" in a separate

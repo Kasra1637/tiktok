@@ -198,7 +198,7 @@ function RecommendationCard({ r, selected, onSelect }) {
         </p>
       )}
       {reasons.length > 0 && (
-        <div className="mt-2 space-y-1.5">
+        <div className="mt-2 space-y-2">
           <p className="eyebrow">Why it fits</p>
           {/* The verdict: the strongest match, in body weight with the same
               tick the step pills use for "positive", so it reads as the reason
@@ -302,7 +302,7 @@ function MissingRequirements({ identity, onGoToTemplatePhoto }) {
   if (!identity || identity.length === 0) return null;
 
   return (
-    <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-4">
+    <div className="inset-panel space-y-2">
       <p className="text-sm font-medium">
         This template needs a character reference before it can generate
       </p>
@@ -480,7 +480,7 @@ function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
 
   return (
     <div
-      className="space-y-2 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4"
+      className="inset-panel space-y-2"
       data-testid="review-revisions"
     >
       <span className="eyebrow block">Revisions &amp; consequences</span>
@@ -646,7 +646,7 @@ function AngleGoalPicker({
               {fitReasons?.[goal] && (
                 <span
                   data-testid={`goal-fit-${goal}`}
-                  className="mt-0.5 block text-xs leading-relaxed text-muted-foreground"
+                  className="mt-1 block text-xs leading-relaxed text-muted-foreground"
                 >
                   {sentenceCase(fitReasons[goal])}
                 </span>
@@ -657,7 +657,7 @@ function AngleGoalPicker({
               {formatVerdicts(angle?.evidence) && (
                 <span
                   data-testid={`goal-angle-evidence-${goal}`}
-                  className="mt-0.5 block text-xs leading-relaxed text-muted-foreground"
+                  className="mt-1 block text-xs leading-relaxed text-muted-foreground"
                 >
                   {formatVerdicts(angle.evidence)} at this angle kind
                 </span>
@@ -668,7 +668,7 @@ function AngleGoalPicker({
               {formatVerdicts(objectiveEvidence?.[goal]) && (
                 <span
                   data-testid={`goal-objective-evidence-${goal}`}
-                  className="mt-0.5 block text-xs leading-relaxed text-muted-foreground"
+                  className="mt-1 block text-xs leading-relaxed text-muted-foreground"
                 >
                   {formatVerdicts(objectiveEvidence[goal])} for this goal
                 </span>
@@ -1770,7 +1770,7 @@ setObjective("");
                     <span className="font-display text-sm font-semibold">{p.brand_name}</span>
                     {profileId === p.id && <Check className="h-4 w-4 text-[color:var(--brand-indigo)]" />}
                   </div>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     {p.app_category || p.niche || "Category not set"}
                   </p>
                 </button>
@@ -1791,12 +1791,12 @@ setObjective("");
                       <summary className="cursor-pointer text-xs text-muted-foreground">
                         Show all {unapproved.length} apps
                       </summary>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         {unapproved.map(profileLabel).join(", ")}
                       </p>
                     </details>
                   ) : (
-                    <p className="mt-0.5 text-xs text-muted-foreground">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {unapproved.map(profileLabel).join(", ")}
                     </p>
                   )}
@@ -1837,7 +1837,7 @@ setObjective("");
                 step exists to prevent. Each block on this step is its own
                 bordered card so the picker, the goal list, and the tone field
                 read as separate organized units. */}
-            <div className="surface space-y-2 rounded-2xl">
+            <div className="inset-panel space-y-2">
               <label className="text-sm font-medium">
                 Audience angle{" "}
                 <span className="font-normal text-muted-foreground">(required)</span>
@@ -1938,7 +1938,7 @@ setObjective("");
                               {sentenceCase(a.label)}
                             </span>
                             {!picked && angleSubtitle(a) && (
-                              <span className="mt-0.5 block text-xs leading-[18px] text-muted-foreground">
+                              <span className="mt-1 block text-xs leading-[18px] text-muted-foreground">
                                 {angleSubtitle(a)}
                               </span>
                             )}
@@ -1974,7 +1974,7 @@ setObjective("");
                             {details.map((row) => (
                               <div key={row.label} className="min-w-0">
                                 <dt className="eyebrow">{row.label}</dt>
-                                <dd className="mt-0.5 text-sm leading-[22px] text-foreground/90">
+                                <dd className="mt-1 text-sm leading-[22px] text-foreground/90">
                                   {row.value}
                                 </dd>
                               </div>
@@ -1989,7 +1989,7 @@ setObjective("");
             </div>
 
             {/* The goal step is intentionally downstream of the angle. */}
-            <div className="surface space-y-1.5 rounded-2xl" data-testid="create-what-you-get">
+            <div className="inset-panel space-y-2" data-testid="create-what-you-get">
               <span className="text-sm font-medium">What you get</span>
               <p className="text-sm">
                 One {pieceSeconds}s Hook + Story clip: a {pieceSplit.hookSeconds}s hook, then a {pieceSplit.middleSeconds}s story.
@@ -2004,7 +2004,7 @@ setObjective("");
               </p>
             </div>
 
-            <div className="surface rounded-2xl">
+            <div className="inset-panel">
 <AngleGoalPicker
               angle={angle}
               value={objective}
@@ -2035,7 +2035,7 @@ setObjective("");
               />
             )}
 
-            <div className="surface space-y-1.5 rounded-2xl">
+            <div className="inset-panel space-y-2">
               <label htmlFor="tone" className="text-sm font-medium">Tone (optional)</label>
               <Input
                 id="tone"
@@ -2104,7 +2104,7 @@ setObjective("");
               <p className="text-xs text-muted-foreground">{tailorError}</p>
             )}
             {objective && recommendationsVisible && visibleRecommendations.length === 0 && (
-              <div className="rounded-xl border border-[color:var(--hairline)] p-4">
+              <div className="inset-panel">
                 <p className="text-sm">No templates recommended for this app yet.</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {recError
@@ -2136,7 +2136,7 @@ setObjective("");
             )}
 
             {template && (
-              <div className="rounded-xl border border-[color:var(--hairline)] p-3 text-sm">
+              <div className="inset-panel text-sm">
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{template.name}</span>
                   <Badge variant="secondary" className="text-xs">
@@ -2260,7 +2260,7 @@ setObjective("");
                 piece's scope, which the render panel states itself. Neither
                 fact needed a third copy. */}
             {!canGenerate ? (
-              <div className="rounded-xl border border-[color:var(--hairline)] p-4">
+              <div className="inset-panel">
                 <p className="text-sm text-muted-foreground">
                   Choose an approved App Profile, a video goal, and a template first. Review the free script plan before rendering.
                 </p>
@@ -2271,7 +2271,7 @@ setObjective("");
                 onGoToTemplatePhoto={scrollToTemplatePhoto}
               />
             ) : !project ? (
-              <div className="rounded-xl border border-[color:var(--hairline)] p-4">
+              <div className="inset-panel">
                 <p className="text-sm text-muted-foreground">
                   Preparing the video draft for your photo…
                 </p>
@@ -2289,7 +2289,7 @@ setObjective("");
             ) : (
               <>
                 {!project?.script_version ? (
-                  <div className="rounded-xl border border-[color:var(--hairline)] p-4">
+                  <div className="inset-panel">
                     <p className="text-sm text-muted-foreground">
                       There's no plan yet. Generate one on Review first — it is free.
                     </p>
@@ -2357,7 +2357,7 @@ if (step === 3) {
              this offers the retry. Manual and enabled: the auto latch already
              consumed this selection-set, so nothing here fires on its own. The
              photo is not listed: it is required to render, never to plan. */
-          <div className="space-y-3 rounded-xl border border-[color:var(--hairline)] p-4">
+          <div className="inset-panel space-y-3">
             <p className="text-sm text-muted-foreground">
               The plan didn't generate. Fix what's missing below, then try again — still free.
             </p>
@@ -2396,7 +2396,7 @@ if (step === 3) {
              next — reading the stored goal too, so a draft that already holds
              one spins instead of flashing the picker. Only these three cases
              may show a spinner. */
-          <div className="space-y-3 rounded-xl border border-[color:var(--hairline)] p-4">
+          <div className="inset-panel space-y-3">
             <div className="flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
               <span className="text-sm font-medium">
@@ -2413,7 +2413,7 @@ if (step === 3) {
           /* No plan and the auto effect cannot fire: a profile, a template or
              the goal is missing. Name it and fix it here — choosing the goal
              starts the plan on its own, no button press. */
-          <div className="space-y-3 rounded-xl border border-[color:var(--hairline)] p-4">
+          <div className="inset-panel space-y-3">
             <p className="text-sm text-muted-foreground">
               Your free script plan appears once an App Profile, audience angle, template, and video goal are set. Still missing:
             </p>
@@ -2510,7 +2510,7 @@ if (step === 3) {
               hasEdits={hasEdits}
               onGoToHookStory={() => setStep(4)}
             />
-            <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-4" data-testid="review-thumb-loop">
+            <div className="inset-panel space-y-2" data-testid="review-thumb-loop">
               <span className="eyebrow block">Does this plan work?</span>
               <ThumbPair
                 value={reviewThumb}
@@ -2535,7 +2535,7 @@ if (step === 3) {
                 rather than the aim. Renders nothing for a tailored template
                 generated before outcomes existed. */}
             {typeof template?.outcome === "string" && template.outcome.trim() && (
-              <div className="rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4">
+              <div className="inset-panel">
                 <span className="eyebrow block">What this is aiming to leave them with</span>
                 <p className="mt-1 text-sm">{sentenceCase(template.outcome.trim())}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -2562,7 +2562,7 @@ if (step === 3) {
                 </p>
               </div>
             )}
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <label className="text-sm font-medium">Hook line</label>
               <p className="text-xs text-muted-foreground">The opening line spoken in your generated Hook + Story clip.</p>
               <Input
@@ -2570,7 +2570,7 @@ if (step === 3) {
                 onChange={(e) => setEdits({ ...edits, hook_line: e.target.value })}
               />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <label className="text-sm font-medium">Script</label>
               <p className="text-xs text-muted-foreground">The spoken story after the hook. The generated clip does not include your filmed product demo or closing CTA.</p>
               <Textarea
@@ -2600,7 +2600,7 @@ if (step === 3) {
                 render validates — rather than a second arithmetic in the
                 browser that could disagree with what the render does. */}
             {project?.spoken_check && (
-              <div className="space-y-1.5 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4" data-testid="spoken-counts">
+              <div className="inset-panel space-y-2" data-testid="spoken-counts">
                 <span className="eyebrow block">How the two lines measure up</span>
                 {[
                   { key: "hook", label: "Hook line" },
@@ -2631,7 +2631,7 @@ if (step === 3) {
               </div>
             )}
             {project?.strategy?.hook_line && typeof project?.spoken_middle === "string" && project.spoken_middle && (
-              <div className="space-y-1.5 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4" data-testid="spoken-partition">
+              <div className="inset-panel space-y-2" data-testid="spoken-partition">
                 <span className="eyebrow block">What the middle will say</span>
                 <p className="text-sm">{sentenceCase(project.spoken_middle)}</p>
                 {/* What is not spoken is counted by the server, not sliced out
@@ -2665,7 +2665,7 @@ if (step === 3) {
                 the founder should record, and it is deliberately never passed to
                 the render, so correcting it here cannot smuggle a feature
                 instruction back into the video. */}
-            <div className="space-y-1.5 rounded-xl border border-[color:var(--hairline)] p-4">
+            <div className="inset-panel space-y-2">
               <label htmlFor="review-demo-brief" className="text-sm font-medium">
                 What you record for the demo
               </label>
@@ -2681,7 +2681,7 @@ if (step === 3) {
               </p>
             </div>
             <span className="eyebrow block">Visual and audio direction</span>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <label className="text-sm font-medium">Visual direction</label>
               <p className="text-xs text-muted-foreground">Describe the generated scene and look. This is guidance for the rendered Hook + Story, not footage of your app demo.</p>
               <Textarea
@@ -2699,14 +2699,14 @@ if (step === 3) {
                 where the damage is visible. */}
             {editValue("beat_timeline", []).length > 0 && (
               <details
-                className="rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4"
+                className="inset-panel"
                 data-testid="shot-timeline"
               >
                 <summary className="flex cursor-pointer flex-wrap items-center gap-2">
                   <span className="eyebrow block">Shot timeline</span>
                   <Badge variant="outline" className="text-xs">read-only</Badge>
                 </summary>
-                <div className="mt-2 space-y-1.5 text-sm">
+                <div className="mt-2 space-y-2 text-sm">
                   {editValue("beat_timeline", []).map((b, i) => (
                     <div key={i} className="flex gap-2">
                       <Badge variant="secondary" className="shrink-0 text-xs">
@@ -2731,7 +2731,7 @@ if (step === 3) {
                 were clamped to that number, so the only way to a different
                 length is a different template and a regenerated plan. */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <span className="text-sm font-medium">Length of the generated piece</span>
                 <p className="rounded-lg border border-[color:var(--hairline)] px-3 py-2 text-sm">
                   {pieceSeconds} seconds
@@ -2742,7 +2742,7 @@ if (step === 3) {
                     : "Set by the hook template you pick."}
                 </p>
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <label htmlFor="review-tone" className="text-sm font-medium">Tone</label>
                 <Input
                   id="review-tone"
@@ -2753,7 +2753,7 @@ if (step === 3) {
               </div>
             </div>
 
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <label className="text-sm font-medium">Voice direction</label>
               <Textarea
                 value={editValue("voice_direction", "")}
@@ -2923,7 +2923,15 @@ if (step === 3) {
       )}
 
 <div className="surface rounded-2xl">
-          {/* Full width: the card's own surface padding is the gutter, so the
+          {/* The step card is the ONLY card on a step. Its blocks — the angle
+              picker, "What you get", the goal list, the tone field — were
+              `.surface` too, so a card sat inside an identical card: same fill,
+              same border, same 24px gutter, 48px of inset before any text and a
+              third 24px inside. They are `.inset-panel` asides now (12px
+              radius, 16px gutter), which is the level SectionCard's own header
+              comment reserves for "a small bordered aside inside a card".
+
+              Full width: the card's own surface padding is the gutter, so the
               step gets the whole frame like the rest of this editor page and
               no second width value is introduced here. */}
           <div className="w-full">{stepContent}</div>

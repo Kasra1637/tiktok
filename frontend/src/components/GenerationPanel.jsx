@@ -6,6 +6,7 @@ import { StatusBadge } from "./StatusBadge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage, mediaUrl, downloadMediaUrl } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
+import { CONTROL_CLASS } from "./formControls";
 import {
   exceedsSinglePass, readPieceSeconds, singlePassCeiling,
 } from "../lib/videoLength";
@@ -372,7 +373,7 @@ const handleGenerate = async () => {
   const tooLong = exceedsSinglePass(pieceSeconds, capability);
 
   return (
-    <div className="space-y-3 rounded-2xl border border-[color:var(--hairline)] p-4">
+    <div className="inset-panel space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="flex items-center gap-2 font-display text-sm font-semibold">
           <Clapperboard className="h-4 w-4 text-[color:var(--brand-indigo)]" />
@@ -454,7 +455,7 @@ const handleGenerate = async () => {
               }
             }}
             disabled={inFlight}
-            className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
+            className={CONTROL_CLASS}
           >
             {models.models.map((m) => (
               <option key={m.key} value={m.key}>
@@ -481,7 +482,7 @@ const handleGenerate = async () => {
                   }
                 }}
                 disabled={inFlight}
-                className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
+                className={CONTROL_CLASS}
               >
                 <option value="">{capability?.resolution || ""} (default)</option>
                 {(capability.supported_resolutions || [])
@@ -508,7 +509,7 @@ const handleGenerate = async () => {
           line's job (CreateVideo's create-no-autopost-note), and three copies of
           it on one screen made none of them the answer. */}
       <div
-        className="space-y-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-3"
+        className="inset-panel space-y-1"
         data-testid="render-summary"
       >
         <span className="eyebrow block">Before you render</span>
@@ -671,7 +672,7 @@ const handleGenerate = async () => {
                   look finished. It is not: the middle deliberately ends where
                   the presenter would reach for their phone, so the demo and the
                   close are both outside it. */}
-              <div className="space-y-1 rounded-xl border border-[color:var(--hairline)] p-3">
+              <div className="inset-panel space-y-1">
                 <span className="eyebrow block">What you have, and what is left</span>
                 {/* "No text appears on screen — nothing is published for you"
                     is gone: the pre-render summary above already says the piece

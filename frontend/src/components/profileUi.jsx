@@ -16,7 +16,8 @@ import { sentenceCase } from "../lib/copyCase";
  * - body 14/22, meta 12/18, chips 12/18 at the Badge shape the kind tag uses
  * - item gap 8 (gap-2 / space-y-2) and card padding px-4 py-3 — the angle
  *   row's rhythm, not a roomier one of our own
- * - card radius 16 (rounded-2xl), nested sub-card radius 12 (rounded-xl) + padding 16 (p-4)
+ * - card radius 16 (rounded-2xl); nested sub-cards are the shared
+ *   `.inset-panel` (12px radius, 16px gutter) rather than a local copy of it
  * - one background + 1px hairline border everywhere, and no rule under a
  *   heading — the angle rows have none
  *
@@ -36,7 +37,7 @@ export function ProfileCard({ eyebrow, eyebrowClassName, tone = "default", testi
   return (
     <section
       className={cn(
-        "flex h-full flex-col gap-2 rounded-2xl border border-[color:var(--hairline)] bg-card/70 px-4 py-3",
+        "row-pad flex h-full flex-col gap-2 rounded-2xl border border-[color:var(--hairline)] bg-card/70",
         profileToneClass[tone],
         className
       )}
@@ -169,19 +170,19 @@ export function SectionGroup({ id, label, summary, open, onToggle, children }) {
     <section
       aria-label={label}
       data-testid={`group-${id}`}
-      className="surface min-w-0 overflow-hidden rounded-2xl !space-y-0 !p-0"
+      className="surface surface-flush min-w-0 overflow-hidden rounded-2xl space-y-0"
     >
       <button
         type="button"
         aria-expanded={open}
         aria-controls={contentId}
         onClick={() => onToggle(id, !open)}
-        className="flex w-full min-w-0 items-center justify-between gap-2 px-4 py-3 text-left transition duration-150 hover:bg-[color:var(--indigo-6)]"
+        className="row-pad flex w-full min-w-0 items-center justify-between gap-2 text-left transition duration-150 hover:bg-[color:var(--indigo-6)]"
       >
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-medium leading-[22px]">{label}</span>
           {summary ? (
-            <span className="mt-0.5 block truncate text-xs leading-[18px] text-muted-foreground">
+            <span className="mt-1 block truncate text-xs leading-[18px] text-muted-foreground">
               {summary}
             </span>
           ) : null}
@@ -199,7 +200,7 @@ export function SectionGroup({ id, label, summary, open, onToggle, children }) {
         style={{ gridTemplateRows: open ? "1fr" : "0fr", opacity: open ? 1 : 0 }}
       >
         <div className="min-h-0 overflow-hidden">
-          <div className="space-y-2 border-t border-[color:var(--hairline)] px-4 py-3">{children}</div>
+          <div className="row-pad space-y-2 border-t border-[color:var(--hairline)]">{children}</div>
         </div>
       </div>
     </section>
@@ -220,7 +221,7 @@ export function StatementCard({ title, rows, spanFull }) {
   return (
     <div
       className={cn(
-        "flex h-full flex-col gap-3 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4",
+        "inset-panel flex h-full flex-col gap-3",
         spanFull && "md:col-span-2"
       )}
     >

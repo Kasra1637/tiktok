@@ -229,14 +229,19 @@ select option:checked {
 }
 
 /* ---------- Surfaces ----------
-   Unified card padding lives HERE, not in JSX `p-*` utilities.
+   A card's padding AND radius live HERE, not in JSX utilities.
    Outer section widths (`max-w-6xl`, AppShell `max-w-[1400px]`) are untouched —
    16px on phones, 24px from tablet up. `.surface` is un-layered CSS so it beats
-   any leftover Tailwind `p-*` on the same element; remove `p-*` from card JSX. */
+   any leftover Tailwind `p-*` on the same element; remove `p-*` from card JSX.
+
+   The radius is owned here for the same reason: it was re-typed as
+   `rounded-2xl` at every call site, so a forgotten utility produced a square
+   card. The one card radius is 16px; the nested aside is 12px (`.inset-panel`). */
 .surface,
 .surface-solid,
 .surface-compact {
     border: 1px solid var(--hairline);
+    border-radius: 1rem;
     box-shadow: var(--shadow-md), inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
     padding: 16px;
 }
@@ -263,6 +268,14 @@ select option:checked {
     padding: 16px;
 }
 
+/* The same aside, one step louder: a stronger hairline and a slightly heavier
+   fill, for groups that carry a state the reader must not miss (the claim
+   guardrail's risk warnings, needs-review and banned lists). */
+.inset-panel-strong {
+    border-color: var(--hairline-strong);
+    background-color: hsl(var(--secondary) / 0.25);
+}
+
 .surface-glass {
     background-color: hsl(228 14% 9% / 0.7);
     backdrop-filter: blur(16px) saturate(140%);
@@ -276,17 +289,26 @@ select option:checked {
     box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
-/* A control-dense card: same surface as `.surface`, tighter gutter.
+/* A card that owns its own inner padding: accordion groups and list rows.
  *
- * The Demo + CTA settings panel is a stack of eleven collapsible groups beside a
- * preview. At the standard card gutter the groups were taller than the video they
- * were describing, so the panel set the page's scale and the preview became the
- * small element. This is a sanctioned exception for a control-dense panel, kept
- * here rather than as `!p-0` at every call site, because un-layered `.surface`
- * beats any Tailwind `p-*` on the same element and the override has to be
- * explicit somewhere. Group headers own their own padding; this only reduces
- * the card's outer gutter to 16px at every width. Its rules are merged into
- * the `.surface` block above. */
+ * The Demo + CTA settings panel is a stack of collapsible groups beside a
+ * preview, and the Profile Detail page is a stack of accordion groups. Both
+ * want the card chrome but no gutter of their own, because their first row is
+ * a full-bleed header. They used to say `!p-0 !space-y-0` — an `!important`
+ * escape, twice, for the same missing variant. Un-layered `.surface` beats
+ * Tailwind utilities, so the override has to live here, once. */
+.surface-flush {
+    padding: 0;
+}
+
+/* The row rhythm inside a card: 16px gutter, 12px block.
+ *
+ * The angle rows on Create Video, the Profile Detail accordion bars, the
+ * Demo + CTA group headers and the Profile Detail cards all use this exact
+ * pair. It was re-typed in four components; it is one rule. */
+.row-pad {
+    padding: 12px 16px;
+}
 
 /* Demo + CTA sticky-column geometry.
  *

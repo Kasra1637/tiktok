@@ -15,6 +15,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } from "../lib/api";
 import { FactChip, FactList } from "../components/FactChip";
 import { recordSignal } from "../lib/feedback";
+import { CONTROL_CLASS } from "../components/formControls";
 import { sentenceCase } from "../lib/copyCase";
 import { History as HistoryIcon, Loader as Loader2, TriangleAlert as AlertTriangle, Download, Trash as Trash2, RotateCcw, GitBranch, RefreshCw, ChevronRight, Film, Info, Copy, X, Smartphone } from "lucide-react";
 
@@ -631,7 +632,7 @@ function GenerationRow({ row, onChanged }) {
               value={varKind}
               onChange={(e) => setVarKind(e.target.value)}
               aria-label="Variation type"
-              className="h-10 rounded-xl border border-[color:var(--hairline)] bg-transparent px-3 text-sm"
+              className={CONTROL_CLASS}
             >
               {variationKinds.map((v) => (
                 <option key={v.key} value={v.key}>{v.label}</option>
