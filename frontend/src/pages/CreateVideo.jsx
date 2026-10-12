@@ -1837,7 +1837,7 @@ setObjective("");
                 step exists to prevent. Each block on this step is its own
                 bordered card so the picker, the goal list, and the tone field
                 read as separate organized units. */}
-            <div className="surface space-y-2 rounded-2xl">
+            <div className="inset-panel space-y-2">
               <label className="text-sm font-medium">
                 Audience angle{" "}
                 <span className="font-normal text-muted-foreground">(required)</span>
@@ -1989,7 +1989,7 @@ setObjective("");
             </div>
 
             {/* The goal step is intentionally downstream of the angle. */}
-            <div className="surface space-y-1.5 rounded-2xl" data-testid="create-what-you-get">
+            <div className="inset-panel space-y-1.5" data-testid="create-what-you-get">
               <span className="text-sm font-medium">What you get</span>
               <p className="text-sm">
                 One {pieceSeconds}s Hook + Story clip: a {pieceSplit.hookSeconds}s hook, then a {pieceSplit.middleSeconds}s story.
@@ -2004,7 +2004,7 @@ setObjective("");
               </p>
             </div>
 
-            <div className="surface rounded-2xl">
+            <div className="inset-panel">
 <AngleGoalPicker
               angle={angle}
               value={objective}
@@ -2035,7 +2035,7 @@ setObjective("");
               />
             )}
 
-            <div className="surface space-y-1.5 rounded-2xl">
+            <div className="inset-panel space-y-1.5">
               <label htmlFor="tone" className="text-sm font-medium">Tone (optional)</label>
               <Input
                 id="tone"
@@ -2923,7 +2923,15 @@ if (step === 3) {
       )}
 
 <div className="surface rounded-2xl">
-          {/* Full width: the card's own surface padding is the gutter, so the
+          {/* The step card is the ONLY card on a step. Its blocks — the angle
+              picker, "What you get", the goal list, the tone field — were
+              `.surface` too, so a card sat inside an identical card: same fill,
+              same border, same 24px gutter, 48px of inset before any text and a
+              third 24px inside. They are `.inset-panel` asides now (12px
+              radius, 16px gutter), which is the level SectionCard's own header
+              comment reserves for "a small bordered aside inside a card".
+
+              Full width: the card's own surface padding is the gutter, so the
               step gets the whole frame like the rest of this editor page and
               no second width value is introduced here. */}
           <div className="w-full">{stepContent}</div>
