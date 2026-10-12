@@ -16,7 +16,7 @@ import { resolveActiveProfileId, profileLabel, partitionProfiles } from "../lib/
 import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
 import {
   Images, Loader2, AlertTriangle, Upload, Trash2, Archive, ArchiveRestore,
-  ShieldCheck, Paperclip, UserRound, Music, Link2, Check, ImageOff, X,
+  ShieldCheck, Paperclip, UserRound, Music, Link2, Check, ImageOff, X, Info,
 } from "lucide-react";
 
 // Face-only product: the character reference is the single permitted upload.
@@ -745,7 +745,12 @@ export default function AssetLibrary({
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      {notice && <Alert><AlertDescription>{notice}</AlertDescription></Alert>}
+      {notice && (
+        <Alert>
+          <Info className="h-4 w-4 text-[color:var(--brand-indigo)]" />
+          <AlertDescription>{notice}</AlertDescription>
+        </Alert>
+      )}
 
       {/* One surface: the upload control and the photograph it produces sit
           together, so an upload no longer appears to "turn up" in a separate
