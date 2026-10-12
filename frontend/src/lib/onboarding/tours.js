@@ -241,10 +241,10 @@ export const TOURS = {
     label: "History tour",
     steps: [
       {
-        target: '[data-testid="history-filters"]',
+        target: '[data-testid="history-header"], [data-testid="history-list"]',
         title: "Find a video in History",
         body:
-          "Filter videos by app or status. Each row shows its render state and available actions. Completed videos are saved here; posting and publishing are always up to you.",
+          "Filter videos by app or status from the title bar. Each row shows its render state and available actions. Completed videos are saved here; posting and publishing are always up to you.",
       },
       {
         target: '[data-testid="history-list"]',

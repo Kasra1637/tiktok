@@ -160,7 +160,7 @@ function EditorSection({ title, icon, open, onToggle, testId, children }) {
         aria-expanded={open}
         className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition duration-150 hover:bg-[color:var(--indigo-6)]"
       >
-        <GroupLabel icon={icon}>{title}</GroupLabel>
+        <GroupLabel as="h2" icon={icon}>{title}</GroupLabel>
         <ChevronDown
           className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`}
         />

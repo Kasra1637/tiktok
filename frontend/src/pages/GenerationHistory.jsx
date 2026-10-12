@@ -711,9 +711,34 @@ export default function GenerationHistory() {
   return (
     <PageFrame className="space-y-6">
       <PageHeader
+        data-testid="history-header"
         icon={HistoryIcon}
         title="Generation History"
         description="Review renders and exports, and download your clips."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <AppPicker
+              profiles={profiles}
+              value={profileFilter}
+              onChange={setProfileFilter}
+              allLabel="All apps"
+              ariaLabel="Filter by app"
+            />
+            <label className="sr-only" htmlFor="history-status-filter">Filter by status</label>
+            <select
+              id="history-status-filter"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              aria-label="Filter by status"
+              className={PILL_SELECT_CLASS}
+            >
+              <option value="">All statuses</option>
+              {["completed", "failed", "generating", "submitted", "archived"].map((s) => (
+                <option key={s} value={s}>{humanize(s)}</option>
+              ))}
+            </select>
+          </div>
+        }
       />
 
       {error && (
@@ -722,37 +747,6 @@ export default function GenerationHistory() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-
-      <div className="surface flex flex-wrap items-center gap-2 rounded-2xl" data-testid="history-filters">
-        <label className="sr-only" htmlFor="history-app-filter">Filter History by app</label>
-        <AppPicker
-          id="history-app-filter"
-          profiles={profiles}
-          value={profileFilter}
-          onChange={setProfileFilter}
-          allLabel="All apps"
-          ariaLabel="Filter by app"
-        />
-        <label className="sr-only" htmlFor="history-status-filter">Filter History by status</label>
-        <select
-          id="history-status-filter"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          aria-label="Filter by status"
-          className={PILL_SELECT_CLASS}
-        >
-          <option value="">All statuses</option>
-          {["completed", "failed", "generating", "submitted", "archived"].map((s) => (
-            <option key={s} value={s}>{humanize(s)}</option>
-          ))}
-        </select>
-        {rows.length > 0 && (
-          <span className="ml-auto text-xs text-muted-foreground">
-            {rows.length} result{rows.length === 1 ? "" : "s"} · {completed} completed ·{" "}
-            {failed} failed
-          </span>
-        )}
-      </div>
 
       {loading ? (
         /* Mirrors the real row rather than a centered spinner: a bare spinner on
@@ -786,6 +780,11 @@ export default function GenerationHistory() {
         />
       ) : (
         <div className="space-y-4" data-testid="history-list">
+          {rows.length > 1 && (
+            <p className="text-xs text-muted-foreground">
+              {rows.length} results · {completed} completed · {failed} failed
+            </p>
+          )}
           {rows.map((row) => (
             <GenerationRow
               key={row.id}
