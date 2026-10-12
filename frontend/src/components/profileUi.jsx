@@ -3,20 +3,22 @@ import { cn } from "../lib/utils";
 import { sentenceCase } from "../lib/copyCase";
 
 /**
- * Shared profile card system — one card language for the App Profile page
- * and the Create Video Audience & goal step.
+ * Shared profile card system — the App Profile page's card language, on the
+ * same tokens as the Content Angles list on Create Video's Audience & goal
+ * step. The two screens are read side by side, so what a heading, a label
+ * and a piece of chrome look like is decided here to match that list.
  *
- * Tokens (no one-off pixels):
- * - card gap 16 (gap-4), card padding 20 (p-5), item gap 12 (gap-3)
+ * Tokens (no one-off pixels), all taken from the Content Angles block:
+ * - headings 14/500 sentence case (the angle row's title token) — never
+ *   uppercase, never tracked, and no glyph beside them; the angle rows carry none
+ * - field labels are the shared `.eyebrow` (12/600 uppercase muted) — the same
+ *   label the angle detail panel uses for its own fields
+ * - body 14/22, meta 12/18, chips 12/18 at the Badge shape the kind tag uses
+ * - item gap 8 (gap-2 / space-y-2) and card padding px-4 py-3 — the angle
+ *   row's rhythm, not a roomier one of our own
  * - card radius 16 (rounded-2xl), nested sub-card radius 12 (rounded-xl) + padding 16 (p-4)
- * - every label is the shared `.eyebrow` (12/600 uppercase muted) — the same
- *   primitive the App Profile page's own labels use, so the two pages agree
- * - group titles match the App Profile page's section headings: 14px semibold
- *   uppercase, tracked wider, with a 16px brand-indigo glyph
- * - body 14/22, meta 12/18, chip 13/18
- * - eyebrow glyphs are 12px (h-3) beside a 12px label, 16px (h-4) beside a
- *   group title — the app's one icon scale
- * - one background + 1px hairline border everywhere
+ * - one background + 1px hairline border everywhere, and no rule under a
+ *   heading — the angle rows have none
  *
  * Rows that must stay equal-height use `items-stretch` on the grid and
  * `h-full` on the card. No fixed heights, no overflow-hidden, no line-clamp —
@@ -30,24 +32,20 @@ export const profileToneClass = {
   enforced: "border-[color:var(--hairline-strong)] bg-secondary/30",
 };
 
-export function ProfileCard({ eyebrow, eyebrowClassName, tone = "default", testid, className, icon: Icon, children }) {
+export function ProfileCard({ eyebrow, eyebrowClassName, tone = "default", testid, className, children }) {
   return (
     <section
       className={cn(
-        "flex h-full flex-col gap-3 rounded-2xl border border-[color:var(--hairline)] bg-card/70 p-5",
+        "flex h-full flex-col gap-2 rounded-2xl border border-[color:var(--hairline)] bg-card/70 px-4 py-3",
         profileToneClass[tone],
         className
       )}
       {...(testid ? { "data-testid": testid } : {})}
     >
       {eyebrow && (
-        <>
-          <h3 className={cn("eyebrow flex items-center gap-1.5", eyebrowClassName)}>
-            {Icon && <Icon className="h-3 w-3 shrink-0" aria-hidden="true" />}
-            {eyebrow}
-          </h3>
-          <div aria-hidden="true" className="h-px bg-[color:var(--hairline)]" />
-        </>
+        <h3 className={cn("text-sm font-medium leading-[22px]", eyebrowClassName)}>
+          {sentenceCase(eyebrow)}
+        </h3>
       )}
       {children}
     </section>
@@ -80,9 +78,10 @@ export function ProfileField({ label, value }) {
 }
 
 /**
- * The single static chip renderer. Fixed 10px radius + 6x12 padding +
- * 32px min-height; wrapping never changes the radius, fill stays subtle
- * with no heavy border.
+ * The single static chip renderer. The Badge shape the angle rows' kind tag
+ * uses — 6px radius, 10x4 padding, 12/18 text — so a chip and a kind badge
+ * are the same element at the same size; wrapping never changes the radius.
+ * Fill stays subtle with no heavy border.
  */
 export function InfoChipList({ label, items, tone = "default", labelClassName }) {
   if (!items.length) return null;
@@ -105,12 +104,12 @@ export function InfoChipList({ label, items, tone = "default", labelClassName })
           {label}
         </span>
       ) : null}
-      <ul className={cn("flex flex-wrap gap-3", label ? "mt-3" : "mt-0")}>
+      <ul className={cn("flex flex-wrap gap-3", label ? "mt-2" : "mt-0")}>
         {items.map((item, i) => (
           <li
             key={i}
             className={cn(
-              "inline-flex min-h-8 items-center rounded-[10px] border px-3 py-1.5 text-[13px] leading-[18px]",
+              "inline-flex items-center rounded-md border px-2.5 py-1 text-xs leading-[18px]",
               chipClass
             )}
           >
@@ -136,7 +135,7 @@ export function InfoListBlock({ label, items, tone = "default" }) {
       <span className="eyebrow">
         {label}
       </span>
-      <ul className="mt-3 space-y-3 text-sm leading-[22px] text-foreground/90">
+      <ul className="mt-2 space-y-2 text-sm leading-[22px] text-foreground/90">
         {items.map((item, i) => (
           <li key={i} className="flex gap-3">
             <span className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-[color:var(--brand-indigo)]" />
@@ -152,19 +151,19 @@ export function InfoListBlock({ label, items, tone = "default" }) {
  * One collapsible group of cards — never per card, so equal-height rows
  * stay equal.
  *
- * The bar chrome is the Demo + CTA EditorSection's: a dark rounded-2xl
- * surface, px-4 py-3 header row, chevron right. The label and its glyph,
- * though, are the App Profile page's section heading — 14px semibold
- * uppercase tracked wider, with a 16px brand-indigo icon — because this page
- * is opened from that one and the two have to read as the same product. A
- * section title is one step larger than the card eyebrows it introduces,
- * which is the hierarchy the parent page already sets.
+ * The bar chrome is the Content Angles row's, because this page is read
+ * against that list: px-4 py-3, a 14/500 sentence-case title with the count
+ * summary beneath it in the row's 12/18 meta token, chevron right, indigo
+ * hover. Opening reveals the angle panel's content chrome — a hairline under
+ * the bar, then px-4 py-3 with 8px between cards. The old 14px uppercase
+ * tracked heading and its brand-indigo glyph are gone with the restyle: the
+ * angle rows carry neither.
  *
  * Native button = clickable + keyboard accessible with aria-expanded.
  * Grid-rows animation (200ms) opens without layout jump; the overflow-hidden
  * lives on the animation wrapper, never on a card.
  */
-export function SectionGroup({ id, label, summary, open, onToggle, icon: Icon, children }) {
+export function SectionGroup({ id, label, summary, open, onToggle, children }) {
   const contentId = `profile-group-${id}`;
   return (
     <section
@@ -179,19 +178,14 @@ export function SectionGroup({ id, label, summary, open, onToggle, icon: Icon, c
         onClick={() => onToggle(id, !open)}
         className="flex w-full min-w-0 items-center justify-between gap-2 px-4 py-3 text-left transition duration-150 hover:bg-[color:var(--indigo-6)]"
       >
-        <span className="flex min-w-0 shrink-0 items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          {Icon && (
-            <Icon className="h-4 w-4 shrink-0 text-[color:var(--brand-indigo)]" aria-hidden="true" />
-          )}
-          {label}
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium leading-[22px]">{label}</span>
+          {summary ? (
+            <span className="mt-0.5 block truncate text-xs leading-[18px] text-muted-foreground">
+              {summary}
+            </span>
+          ) : null}
         </span>
-        {summary ? (
-          <span className="min-w-0 flex-1 truncate text-xs leading-[18px] text-muted-foreground">
-            {summary}
-          </span>
-        ) : (
-          <span className="flex-1" />
-        )}
         <ChevronDown
           className={cn(
             "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
@@ -205,16 +199,16 @@ export function SectionGroup({ id, label, summary, open, onToggle, icon: Icon, c
         style={{ gridTemplateRows: open ? "1fr" : "0fr", opacity: open ? 1 : 0 }}
       >
         <div className="min-h-0 overflow-hidden">
-          <div className="space-y-3 px-4 pb-4">{children}</div>
+          <div className="space-y-2 border-t border-[color:var(--hairline)] px-4 py-3">{children}</div>
         </div>
       </div>
     </section>
   );
 }
 
-/** Equal-height grid: stretch rows, 16px gaps, top-aligned content. */
+/** Equal-height grid: stretch rows, 8px gaps, top-aligned content. */
 export function CardGrid({ className, children }) {
-  return <div className={cn("grid grid-cols-1 items-stretch gap-4", className)}>{children}</div>;
+  return <div className={cn("grid grid-cols-1 items-stretch gap-2", className)}>{children}</div>;
 }
 
 /**

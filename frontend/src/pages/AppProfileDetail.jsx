@@ -20,9 +20,7 @@ import { ProfileCard, ProfileField, InfoChipList, InfoListBlock, CardGrid, State
 import { api, getErrorMessage } from "../lib/api";
 import {
   Briefcase, Loader2, AlertTriangle, ArrowLeft,
-  ShieldAlert, Lightbulb, Trash2, RefreshCw, ClipboardCheck, Info, Package, Layers,
-  ListChecks, Ban, CircleCheck, Flag, Zap, Eye, GitBranch,
-  Clock, ThumbsDown,
+  Lightbulb, Trash2, RefreshCw, ClipboardCheck,
 } from "lucide-react";
 
 /** Read an array-or-empty field into a clean list. */
@@ -39,8 +37,9 @@ function list(value) {
   return [];
 }
 
-/* Shared card language (Step 1): one background, 1px hairline, radius 16,
-   padding 20, 16px card gaps, 12px item gaps. Research phrases render as
+/* Shared card language: one background, 1px hairline, radius 16, px-4 py-3
+   padding and 8px gaps — the Content Angles rows' tokens, so this page reads
+   like the angle list on Create Video. Research phrases render as
    wrapping chips so lists use their horizontal room instead of stretching
    one phrase per row down a tall strip of empty space. */
 
@@ -50,7 +49,7 @@ function ClaimPanel({ profile }) {
   const banned = list(profile.claims_banned);
   if (!approved.length && !review.length && !banned.length) return null;
   return (
-    <ProfileCard testid="claim-guardrails" eyebrow="Claim guardrails" icon={ShieldAlert}>
+    <ProfileCard testid="claim-guardrails" eyebrow="Claim guardrails">
       {/* The "Needs review · N" badge that sat here was the same tier the list
           below already names, said again one line above it — and this group's
           bar counts what is to review as well. It also read "Needs review · 0"
@@ -400,31 +399,31 @@ return (
           no gap above. Accordion-exclusive with persisted single-open state;
           Essentials open by default, the rest collapsed; no bulk
           expand/collapse. */}
-      <div className="min-w-0 space-y-3">
+      <div className="min-w-0 space-y-2">
         {hasEssentials && (
-        <SectionGroup id="essentials" label="Essentials" icon={Package} summary={essentialsSummary} open={openGroup === "essentials"} onToggle={toggleGroup}>
+        <SectionGroup id="essentials" label="Essentials" summary={essentialsSummary} open={openGroup === "essentials"} onToggle={toggleGroup}>
         {basics.some(Boolean) ? (
-          <ProfileCard testid="profile-facts" eyebrow="Product facts" icon={Package}>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_1fr_2fr]">
+          <ProfileCard testid="profile-facts" eyebrow="Product facts">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_2fr]">
               <ProfileField label="Category" value={basics[0]} />
               <ProfileField label="Platforms" value={basics[1]} />
               <ProfileField label="Tone / voice" value={basics[2]} />
             </div>
           </ProfileCard>
         ) : null}
-        {/* The card's eyebrow is the title. Passing the same string again as
+        {/* The card's heading is the title. Passing the same string again as
             the list's own label printed it twice, one line apart — the label
-            is omitted wherever the eyebrow already says it, and kept only
+            is omitted wherever the heading already says it, and kept only
             where the two genuinely differ (Never show, Product facts). */}
         {coreFeatures.length > 0 || useCases.length > 0 ? (
           <CardGrid className="md:grid-cols-2">
             {coreFeatures.length > 0 ? (
-              <ProfileCard eyebrow="Core features" icon={Layers}>
+              <ProfileCard eyebrow="Core features">
                 <InfoChipList items={coreFeatures} />
               </ProfileCard>
             ) : null}
             {useCases.length > 0 ? (
-              <ProfileCard eyebrow="Primary use cases" icon={ListChecks}>
+              <ProfileCard eyebrow="Primary use cases">
                 <InfoChipList items={useCases} />
               </ProfileCard>
             ) : null}
@@ -435,7 +434,7 @@ return (
             than context it may use or ignore. The wording matters — the old
             label promised the same enforcement over a field that had none. */}
         {mustNotShow.length > 0 ? (
-          <ProfileCard eyebrow="Never show in the video (enforced)" tone="enforced" icon={Ban}>
+          <ProfileCard eyebrow="Never show in the video (enforced)" tone="enforced">
             <InfoChipList
               items={mustNotShow}
               tone="enforced"
@@ -445,15 +444,15 @@ return (
         </SectionGroup>
         )}
         {hasProblems && (
-        <SectionGroup id="problems" label="Problems & outcomes" icon={CircleCheck} summary={problemsSummary} open={openGroup === "problems"} onToggle={toggleGroup}>
+        <SectionGroup id="problems" label="Problems & outcomes" summary={problemsSummary} open={openGroup === "problems"} onToggle={toggleGroup}>
           <CardGrid className="md:grid-cols-2">
             {problems.length > 0 ? (
-              <ProfileCard eyebrow="Problems solved" icon={CircleCheck}>
+              <ProfileCard eyebrow="Problems solved">
                 <InfoChipList items={problems} />
               </ProfileCard>
             ) : null}
             {outcomes.length > 0 ? (
-              <ProfileCard eyebrow="Desired outcomes" icon={Flag}>
+              <ProfileCard eyebrow="Desired outcomes">
                 <InfoChipList items={outcomes} />
               </ProfileCard>
             ) : null}
@@ -461,25 +460,25 @@ return (
         </SectionGroup>
         )}
         {hasMessaging && (
-        <SectionGroup id="messaging" label="Messaging" icon={Zap} summary={messagingSummary} open={openGroup === "messaging"} onToggle={toggleGroup}>
+        <SectionGroup id="messaging" label="Messaging" summary={messagingSummary} open={openGroup === "messaging"} onToggle={toggleGroup}>
         {profile?.differentiation || profile?.known_limitations || profile?.proof_moment ? (
-          <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 items-stretch gap-2 md:grid-cols-2">
             {profile?.differentiation ? (
               <div className="h-full md:row-span-2">
-                <ProfileCard eyebrow="Differentiators" icon={Zap}>
+                <ProfileCard eyebrow="Differentiators">
                   <ProfileField value={profile.differentiation} />
                 </ProfileCard>
               </div>
             ) : null}
             {profile?.known_limitations || profile?.proof_moment ? (
-              <div className="flex h-full min-w-0 flex-col gap-4">
+              <div className="flex h-full min-w-0 flex-col gap-2">
                 {profile?.known_limitations ? (
-                    <ProfileCard eyebrow="Known limitations" icon={Info}>
+                    <ProfileCard eyebrow="Known limitations">
                     <ProfileField value={profile.known_limitations} />
                   </ProfileCard>
                 ) : null}
                 {profile?.proof_moment ? (
-                    <ProfileCard eyebrow="The proof moment" icon={Eye}>
+                    <ProfileCard eyebrow="The proof moment">
                     <ProfileField value={profile.proof_moment} />
                   </ProfileCard>
                 ) : null}
@@ -488,8 +487,8 @@ return (
           </div>
         ) : null}
           {Array.isArray(profile?.outcome_statements) && profile.outcome_statements.length > 0 && (
-            <ProfileCard eyebrow="Feature-to-outcome statements" icon={GitBranch}>
-              <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
+            <ProfileCard eyebrow="Feature-to-outcome statements">
+              <div className="grid grid-cols-1 items-stretch gap-2 md:grid-cols-2">
               {profile.outcome_statements.map((s, i) => (
                 <StatementCard
                   key={`${s.outcome}-${i}`}
@@ -508,15 +507,15 @@ return (
         </SectionGroup>
         )}
         {hasContext && (
-        <SectionGroup id="context" label="Context & objections" icon={Clock} summary={contextSummary} open={openGroup === "context"} onToggle={toggleGroup}>
+        <SectionGroup id="context" label="Context & objections" summary={contextSummary} open={openGroup === "context"} onToggle={toggleGroup}>
         {usageMoments.length > 0 ? (
-          <ProfileCard eyebrow="When the app is reached for" icon={Clock}>
+          <ProfileCard eyebrow="When the app is reached for">
             <InfoChipList items={usageMoments} />
           </ProfileCard>
         ) : null}
           {Array.isArray(profile?.viewer_objections) && profile.viewer_objections.length > 0 && (
-            <ProfileCard eyebrow="Why they would not download" icon={ThumbsDown}>
-              <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
+            <ProfileCard eyebrow="Why they would not download">
+              <div className="grid grid-cols-1 items-stretch gap-2 md:grid-cols-2">
               {profile.viewer_objections.map((o, i) => (
                 <StatementCard
                   key={`${o.objection}-${i}`}
@@ -537,7 +536,7 @@ return (
             above; recorded-results history lived here once and is gone with
             the manual-results loop. */}
         {hasAudience && (
-        <SectionGroup id="audience" label="Audience & guardrails" icon={ShieldAlert} summary={audienceSummary} open={openGroup === "audience"} onToggle={toggleGroup}>
+        <SectionGroup id="audience" label="Audience & guardrails" summary={audienceSummary} open={openGroup === "audience"} onToggle={toggleGroup}>
           <ClaimPanel profile={profile || {}} />
         </SectionGroup>
         )}
