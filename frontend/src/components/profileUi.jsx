@@ -9,7 +9,13 @@ import { sentenceCase } from "../lib/copyCase";
  * Tokens (no one-off pixels):
  * - card gap 16 (gap-4), card padding 20 (p-5), item gap 12 (gap-3)
  * - card radius 16 (rounded-2xl), nested sub-card radius 12 (rounded-xl) + padding 16 (p-4)
- * - label 11px uppercase muted, body 14/22, meta 12/18, chip 13/18
+ * - every label is the shared `.eyebrow` (12/600 uppercase muted) — the same
+ *   primitive the App Profile page's own labels use, so the two pages agree
+ * - group titles match the App Profile page's section headings: 14px semibold
+ *   uppercase, tracked wider, with a 16px brand-indigo glyph
+ * - body 14/22, meta 12/18, chip 13/18
+ * - eyebrow glyphs are 12px (h-3) beside a 12px label, 16px (h-4) beside a
+ *   group title — the app's one icon scale
  * - one background + 1px hairline border everywhere
  *
  * Rows that must stay equal-height use `items-stretch` on the grid and
@@ -36,12 +42,7 @@ export function ProfileCard({ eyebrow, eyebrowClassName, tone = "default", testi
     >
       {eyebrow && (
         <>
-          <h3
-            className={cn(
-              "flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground",
-              eyebrowClassName
-            )}
-          >
+          <h3 className={cn("eyebrow flex items-center gap-1.5", eyebrowClassName)}>
             {Icon && <Icon className="h-3 w-3 shrink-0" aria-hidden="true" />}
             {eyebrow}
           </h3>
@@ -53,12 +54,12 @@ export function ProfileCard({ eyebrow, eyebrowClassName, tone = "default", testi
   );
 }
 
-/** One label inside a card: 11px uppercase muted + 14/22 body. */
+/** One label inside a card: the shared 12px eyebrow + 14/22 body. */
 export function ProfileField({ label, value }) {
   if (!value) return null;
   return (
     <div className="min-w-0">
-      <h4 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+      <h4 className="eyebrow">
         {label}
       </h4>
       <p className="mt-1 whitespace-pre-wrap text-sm leading-[22px] text-foreground/90">{sentenceCase(value)}</p>
@@ -79,13 +80,16 @@ export function InfoChipList({ label, items, tone = "default", labelClassName })
       : tone === "approved"
         ? "border-green-500/25 bg-green-500/10 text-foreground/90"
         : "border-[color:var(--hairline)] bg-secondary/40 text-foreground/90";
-  const labelTone = "text-foreground";
   return (
     <div className="min-w-0">
       {/* Label is optional: when the card eyebrow already says it, repeating it
-          here renders the same string twice. */}
+          here renders the same string twice.
+
+          It is the shared eyebrow, not a bespoke 11px row: every other label
+          on this page and on the App Profile page is `.eyebrow`, and one
+          label at a different size is what made the two pages disagree. */}
       {label ? (
-        <span className={cn("text-[11px] font-semibold uppercase tracking-[0.08em]", labelTone, labelClassName)}>
+        <span className={cn("eyebrow block", labelClassName)}>
           {label}
         </span>
       ) : null}
@@ -117,7 +121,7 @@ export function InfoListBlock({ label, items, tone = "default" }) {
         : "border-[color:var(--hairline)] bg-secondary/20";
   return (
     <div className={cn("rounded-xl border p-4", toneClass)}>
-      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+      <span className="eyebrow">
         {label}
       </span>
       <ul className="mt-3 space-y-3 text-sm leading-[22px] text-foreground/90">
@@ -134,13 +138,21 @@ export function InfoListBlock({ label, items, tone = "default" }) {
 
 /**
  * One collapsible group of cards — never per card, so equal-height rows
- * stay equal. Styled to match the Demo + CTA EditorSection bar: a dark
- * rounded-2xl surface, px-4 py-3 header row, uppercase eyebrow label,
- * chevron right. Native button = clickable + keyboard accessible with
- * aria-expanded. Grid-rows animation (200ms) opens without layout jump;
- * the overflow-hidden lives on the animation wrapper, never on a card.
+ * stay equal.
+ *
+ * The bar chrome is the Demo + CTA EditorSection's: a dark rounded-2xl
+ * surface, px-4 py-3 header row, chevron right. The label and its glyph,
+ * though, are the App Profile page's section heading — 14px semibold
+ * uppercase tracked wider, with a 16px brand-indigo icon — because this page
+ * is opened from that one and the two have to read as the same product. A
+ * section title is one step larger than the card eyebrows it introduces,
+ * which is the hierarchy the parent page already sets.
+ *
+ * Native button = clickable + keyboard accessible with aria-expanded.
+ * Grid-rows animation (200ms) opens without layout jump; the overflow-hidden
+ * lives on the animation wrapper, never on a card.
  */
-export function SectionGroup({ id, label, summary, open, onToggle, children }) {
+export function SectionGroup({ id, label, summary, open, onToggle, icon: Icon, children }) {
   const contentId = `profile-group-${id}`;
   return (
     <section
@@ -155,7 +167,12 @@ export function SectionGroup({ id, label, summary, open, onToggle, children }) {
         onClick={() => onToggle(id, !open)}
         className="flex w-full min-w-0 items-center justify-between gap-2 px-4 py-3 text-left transition duration-150 hover:bg-[color:var(--indigo-6)]"
       >
-        <span className="eyebrow min-w-0 shrink-0">{label}</span>
+        <span className="flex min-w-0 shrink-0 items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          {Icon && (
+            <Icon className="h-4 w-4 shrink-0 text-[color:var(--brand-indigo)]" aria-hidden="true" />
+          )}
+          {label}
+        </span>
         {summary ? (
           <span className="min-w-0 flex-1 truncate text-xs leading-[18px] text-muted-foreground">
             {summary}

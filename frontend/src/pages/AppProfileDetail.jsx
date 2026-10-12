@@ -403,7 +403,7 @@ return (
           expand/collapse. */}
       <div className="min-w-0 space-y-3">
         {hasEssentials && (
-        <SectionGroup id="essentials" label="Essentials" summary={essentialsSummary} open={openGroup === "essentials"} onToggle={toggleGroup}>
+        <SectionGroup id="essentials" label="Essentials" icon={Package} summary={essentialsSummary} open={openGroup === "essentials"} onToggle={toggleGroup}>
         {basics.some(Boolean) ? (
           <ProfileCard testid="profile-facts" eyebrow="Product facts" icon={Package}>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_1fr_2fr]">
@@ -442,7 +442,7 @@ return (
         </SectionGroup>
         )}
         {hasProblems && (
-        <SectionGroup id="problems" label="Problems & outcomes" summary={problemsSummary} open={openGroup === "problems"} onToggle={toggleGroup}>
+        <SectionGroup id="problems" label="Problems & outcomes" icon={CircleCheck} summary={problemsSummary} open={openGroup === "problems"} onToggle={toggleGroup}>
           <CardGrid className="md:grid-cols-2">
             {problems.length > 0 ? (
               <ProfileCard eyebrow="Problems solved" icon={CircleCheck}>
@@ -458,7 +458,7 @@ return (
         </SectionGroup>
         )}
         {hasMessaging && (
-        <SectionGroup id="messaging" label="Messaging" summary={messagingSummary} open={openGroup === "messaging"} onToggle={toggleGroup}>
+        <SectionGroup id="messaging" label="Messaging" icon={Zap} summary={messagingSummary} open={openGroup === "messaging"} onToggle={toggleGroup}>
         {profile?.differentiation || profile?.known_limitations || profile?.proof_moment ? (
           <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
             {profile?.differentiation ? (
@@ -505,7 +505,7 @@ return (
         </SectionGroup>
         )}
         {hasContext && (
-        <SectionGroup id="context" label="Context & objections" summary={contextSummary} open={openGroup === "context"} onToggle={toggleGroup}>
+        <SectionGroup id="context" label="Context & objections" icon={Clock} summary={contextSummary} open={openGroup === "context"} onToggle={toggleGroup}>
         {usageMoments.length > 0 ? (
           <ProfileCard eyebrow="When the app is reached for" icon={Clock}>
             <InfoChipList label="When the app is reached for" items={usageMoments} />
@@ -534,7 +534,7 @@ return (
             above; recorded-results history lived here once and is gone with
             the manual-results loop. */}
         {hasAudience && (
-        <SectionGroup id="audience" label="Audience & guardrails" summary={audienceSummary} open={openGroup === "audience"} onToggle={toggleGroup}>
+        <SectionGroup id="audience" label="Audience & guardrails" icon={ShieldAlert} summary={audienceSummary} open={openGroup === "audience"} onToggle={toggleGroup}>
           <ClaimPanel profile={profile || {}} />
         </SectionGroup>
         )}
