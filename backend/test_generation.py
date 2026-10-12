@@ -152,18 +152,18 @@ class TestCapabilities:
         assert vp.capability("minimax-h3")["supported_resolutions"] == []
         assert vp.capability("minimax-h3-max")["supported_resolutions"] == []
 
-    def test_first_frame_models_are_told_to_open_in_the_prompted_scene(self):
+    def test_a_pinned_opening_frame_is_told_to_open_in_the_prompted_scene(self):
         """
-        First-frame models open ON the attached photo, so without an explicit
-        instruction the opening is the uploaded room and the prompted scene
-        only arrives mid-clip. The photo supplies the person; the place comes
+        A model that pins the photo as its first frame opens ON that photo, so
+        without an explicit instruction the opening is the uploaded room and
+        the prompted scene only arrives mid-clip. Hailuo 3 Max is the renderer
+        that still pins one; the photo supplies the person, the place comes
         from text — asserted on the anchor and on both prompt paths.
         """
-        cap = vp.capability("heygen-video-1")
+        cap = vp.capability("minimax-h3-max")
         assert cap["supports_first_frame"] is True
-        assert cap["supports_last_frame"] is False
-        assert cap["max_reference_images"] == 0
-        assert vp.accepts_identity_reference("heygen-video-1") is True
+        assert cap["identity_via_first_frame"] is True
+        assert vp.accepts_identity_reference("minimax-h3-max") is True
         assets = [{"kind": "character_reference", "label": "Founder face"}]
         anchor = gp.person_anchor_notes(assets)
         assert "only authority on the person" in anchor
@@ -176,6 +176,27 @@ class TestCapabilities:
         fallback = gp.build_single_pass_prompt(
             dict(PLAN, assets=assets), PROFILE, TEMPLATE, 20)
         assert "never the photo's room" in fallback
+
+    def test_heygen_never_pins_the_photo_as_its_opening_frame(self):
+        """
+        A first frame is a pixel pin, not a hint: with the founder's photograph
+        in that slot the opening of every HeyGen clip WAS that photo — its room,
+        its light, its framing, its wardrobe — and the planned scene only
+        arrived once the model had morphed away from it. No prompt can overrule
+        a pinned frame, which is why the "open in the locked scene" instruction
+        never fixed it.
+
+        Identity therefore rides as an input_references image, the field Hailuo
+        3 uses, so the whole clip is generated from the plan. The model still
+        *lists* first_frame support — that is a fact the drift check verifies —
+        so what this pins is that nothing routes our photo into that slot.
+        """
+        cap = vp.capability("heygen-video-1")
+        assert cap.get("identity_via_first_frame") is not True
+        assert cap["max_reference_images"] == 1
+        assert vp.accepts_identity_reference("heygen-video-1") is True
+        # Listed by OpenRouter, deliberately unused — see above.
+        assert cap["supports_first_frame"] is True
 
     def test_an_removed_provider_falls_back_to_the_default(self):
         """
@@ -1027,6 +1048,110 @@ class TestProviderRefusalMessage:
         assert ai_service.describe_provider_refusal("HTTP 500 internal error") is None
         assert ai_service.describe_provider_refusal("") is None
         assert ai_service.describe_provider_refusal(None) is None
+
+
+class TestRefusalNamesWhereThePhotoWent:
+    """
+    The founder-facing refusal describes the request we actually sent.
+
+    Keying that description off frame_images alone reported "without your
+    photo" on every reference-image render — false, and it sends someone to
+    re-upload a file that did reach the provider. It matters most on the
+    reference route: a provider that refuses input_references is exactly the
+    case this message exists to make legible, and the first live HeyGen render
+    is what settles whether it does.
+    """
+
+    _PNG = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+        "0000000d49444154789c626001000000ffff0300000600055d3866680000000049454e44ae426082"
+    )
+
+    @staticmethod
+    def _refusing_client(monkeypatch):
+        """A provider that 400s a parameter it will not accept.
+
+        Returns the list of request bodies it was sent, so a test can assert on
+        the payload the refusal is describing rather than only the message.
+        """
+        import ai_service
+
+        sent = []
+
+        class _Resp:
+            status_code = 400
+            text = '{"error": {"message": "unsupported parameter: input_references"}}'
+
+            def json(self):
+                return {}
+
+        class _Client:
+            def __init__(self, *a, **k):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+            async def post(self, url, headers=None, json=None):
+                sent.append(json)
+                return _Resp()
+
+        monkeypatch.setattr(ai_service.httpx, "AsyncClient", _Client)
+        monkeypatch.setattr(ai_service, "OPENROUTER_API_KEY", "test")
+        return sent
+
+    def _refusal(self, monkeypatch, **kwargs):
+        """Run one submit against the refusing provider; return (message, bodies)."""
+        import asyncio
+
+        import ai_service
+
+        sent = self._refusing_client(monkeypatch)
+        with pytest.raises(RuntimeError) as err:
+            asyncio.run(ai_service.generate_video(
+                prompt="A founder reaches for their phone.", duration=10, **kwargs))
+        return str(err.value), sent
+
+    def test_a_reference_render_says_the_photo_was_attached(self, monkeypatch):
+        """
+        The route HeyGen takes. No frame pin may appear in the request — that
+        absence is the whole fix — and the refusal has to say the photo was
+        attached, because otherwise the founder goes looking for a missed
+        upload instead of at the field the provider refused.
+        """
+        message, sent = self._refusal(
+            monkeypatch,
+            model="heygen-video-1",
+            input_references=[{
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{self._PNG.hex()}"},
+            }],
+        )
+        assert len(sent) == 1
+        assert "frame_images" not in sent[0], \
+            "a pinned frame is what made the opening the uploaded photo"
+        assert [ref["type"] for ref in sent[0]["input_references"]] == ["image_url"]
+        assert "reference image" in message
+        assert "without your photo" not in message
+
+    def test_a_pinned_frame_render_says_the_photo_opens_it(self, monkeypatch, tmp_path):
+        self._refusing_client(monkeypatch)
+        face = tmp_path / "face.png"
+        face.write_bytes(self._PNG)
+        message, sent = self._refusal(
+            monkeypatch, model="minimax-h3-max", reference_image_path=face)
+        assert sent[0]["frame_images"][0]["frame_type"] == "first_frame"
+        assert "opening frame" in message
+        assert "without your photo" not in message
+
+    def test_a_render_with_no_photo_says_so(self, monkeypatch):
+        self._refusing_client(monkeypatch)
+        message, sent = self._refusal(monkeypatch, model="minimax-h3")
+        assert "frame_images" not in sent[0]
+        assert "without your photo" in message
 
 
 class TestPerProviderPromptBudget:

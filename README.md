@@ -163,7 +163,7 @@ worst bugs in that path (an orphaned filter chain, a 600-second output) exited
 |---|---|---|
 | `minimax-h3` | 5–15s | 2K, native audio. **Cannot** combine `frame_images` with `input_references`. 20s and 30s need a second generation. |
 | `minimax-h3-max` *(opt-in)* | 5–15s | 768p (not 2K), faster with tighter prompt adherence; the audio flag is not sent for this model. Photo as first frame. |
-| `heygen-video-1` *(opt-in)* | 5–15s | Business-video renderer with synthesized audio in one call, 768p. The cropped founder photo is sent as the first frame, the same path as the other models. For talking-head hooks and demos. |
+| `heygen-video-1` *(opt-in)* | 5–15s | Business-video renderer with synthesized audio in one call, 768p. The cropped founder photo rides as an identity reference, so the clip is generated from the plan from its first frame — it is never sent as the opening frame, which would open the video on the photo itself. For talking-head hooks and demos. |
 
 Other constraints:
 

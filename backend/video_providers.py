@@ -81,17 +81,32 @@ _CAPABILITY_NOTES = {
     },
     "heygen-video-1": {
         "vertical": True,
-        # Conservative start despite the listing accepting references: H3 Max
-        # proved a listed field the serving provider 400s, and only a live
-        # refs render proves acceptance. The count is 0 and identity rides as
-        # the opening frame instead, the same path as the other models;
-        # enabling input_references later is a data-only flip once proven.
-        "max_reference_images": 0,
+        # One reference image, and it is a REFERENCE — not the opening frame.
+        #
+        # A first frame is a pixel pin, not a hint: the render starts on the
+        # uploaded photograph itself, so the opening of every clip was that
+        # photo — its room, its light, its framing, its wardrobe — and the
+        # planned scene only appeared once the model had morphed away from it.
+        # That is the one thing a prompt cannot overrule, which is why telling
+        # the model to "open in the locked scene, never the photo's room" never
+        # fixed it.
+        #
+        # Identity therefore rides in input_references, the same field Hailuo 3
+        # uses, and the whole clip — first frame to last — is generated from the
+        # plan. The field is listed for this model but not yet proven live: the
+        # first render on it is what settles that, exactly as H3 Max proved the
+        # opposite for itself.
+        "max_reference_images": 1,
         "max_reference_videos": 0,
         "max_reference_audio": 0,
+        # The model does accept a first frame (listed), and we deliberately never
+        # send one, so nothing can pin the opening back to the photograph. It
+        # stays True because it is a fact about the model that the drift check
+        # verifies against OpenRouter's listing — identity_via_first_frame is
+        # the field that records where OUR photo actually goes, and for this
+        # model it stays unset.
         "supports_first_frame": True,
         "supports_last_frame": False,
-        "identity_via_first_frame": True,
         # No documented prompt ceiling for this model; the lowest figure in
         # the catalog (Grok's 4,096) until the first live render settles it
         # from the submit log.
@@ -100,8 +115,9 @@ _CAPABILITY_NOTES = {
             "Business-video renderer with synthesized audio in one call at "
             "768p, 5-15s — the only entry besides Hailuo 3 with real audio, "
             "at a third of its listed 2K price. "
-            "For talking-head hooks and demos. The cropped founder photo is "
-            "sent as the first frame, the same path as the other models. "
+            "For talking-head hooks and demos. The cropped founder photo rides "
+            "as an identity reference, so the video is generated from the plan "
+            "from its first frame rather than opening on the photograph. "
             "Opt-in: Hailuo 3 is still the default."
         ),
     },

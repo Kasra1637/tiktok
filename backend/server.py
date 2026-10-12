@@ -5621,7 +5621,7 @@ async def _studio_identity_references(
     works: image reference in, matching person out.
 
     Returns the cropped face PATH, not a request payload, because different
-    models carry it in different fields: Hailuo 3 takes it as an
+    models carry it in different fields: Hailuo 3 and HeyGen take it as an
     input_references identity guide, while Hailuo 3 Max refuses
     input_references outright (proven live) and takes it as the opening frame
     instead. The caller (_submit_generation) picks the field from the model's
@@ -5893,8 +5893,8 @@ async def _submit_generation(
     # Avatar influencer: the attached character_reference rides along as the
     # identity guide, following the proven legacy face-swap mechanics (identity
     # image + prompt lock, no V2V video involved). WHICH request field carries
-    # it depends on the model, because providers differ: Hailuo 3 takes it as
-    # an input_references identity guide, while Hailuo 3 Max refuses
+    # it depends on the model, because providers differ: Hailuo 3 and HeyGen
+    # take it as an input_references identity guide, while Hailuo 3 Max refuses
     # input_references outright (proven live: the serving provider 400s it)
     # and takes it as the opening frame instead, which OpenRouter documents
     # as supported for that model. Sending the wrong field spends a failed
@@ -5916,9 +5916,12 @@ async def _submit_generation(
             [_identity_reference_payload(face_path)] if face_path is not None else None
         )
     # No seam frame, no clip reference, no continuity plan to honour: there is
-    # only ever one render, so there is never a previous clip to anchor to. For
-    # other first-frame models, including HeyGen, the founder's photograph is the
-    # single visual anchor.
+    # only ever one render, so there is never a previous clip to anchor to.
+    # HeyGen used to appear in this list and no longer does: pinning the
+    # photograph as its opening frame made the first second of every clip the
+    # photo's own room and light instead of the planned scene, so its identity
+    # now rides as a reference image and Hailuo 3 Max is the only first-frame
+    # renderer left.
     continuity_frame = None
 
     generation_id = str(uuid.uuid4())

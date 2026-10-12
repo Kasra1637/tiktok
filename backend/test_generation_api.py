@@ -1024,6 +1024,8 @@ class TestStudioIdentityReference:
         # Hailuo 3 keeps the reference-image field, so nothing goes in the
         # frame slot — that routing is H3 Max's alone.
         assert calls[0].get("reference_image_path") is None
+        # Hailuo 3 and HeyGen both keep the reference-image field, so nothing
+        # goes in the frame slot for either — that routing is H3 Max's alone.
         # The photograph is named as the only authority on who the person is.
         assert "The person on camera is the person in the attached character reference" in (
             calls[0]["prompt"]
@@ -1196,6 +1198,36 @@ class TestModelSelectionAtTheApiBoundary:
         assert face is not None, "the photo must still ride along, as the first frame"
         assert Path(str(face)).is_file()
         # ...and the two-section prompt is identical on both models.
+        assert "The person on camera is the person in the attached character reference" in (
+            calls[0]["prompt"])
+
+    def test_heygen_carries_identity_as_a_reference_not_a_pinned_frame(self, api, monkeypatch):
+        """
+        The whole-clip rule for HeyGen: no frame may be pinned.
+
+        Sending the founder's photograph in the frame slot is what made the
+        opening of every clip the uploaded photo itself — its room, its light,
+        its framing — with the planned scene only arriving once the model had
+        morphed away from it. Identity goes into input_references instead, the
+        field Hailuo 3 uses, so the first frame is already the plan and the
+        provider generates the whole clip from it.
+        """
+        from models import StudioGenerationRequest
+        calls = _mock_submit(api, monkeypatch)
+        project, _, _ = _ready_project(api, "HeyGen Face", duration=10)
+        _run(api.submit_project_generation(
+            project_id=project["id"],
+            payload=StudioGenerationRequest(model="heygen-video-1"),
+            user_id=ANON))
+        assert len(calls) == 1
+        assert calls[0].get("reference_image_path") is None, \
+            "HeyGen must never pin the photo as the opening frame"
+        refs = calls[0].get("input_references") or []
+        assert len(refs) == 1
+        assert refs[0]["type"] == "image_url"
+        assert refs[0]["image_url"]["url"].startswith("data:image/png;base64,")
+        # The face still reaches the render, and the prompt still names it as
+        # the only authority on who the person is.
         assert "The person on camera is the person in the attached character reference" in (
             calls[0]["prompt"])
 

@@ -113,8 +113,9 @@ VIDEO_MODELS = {
     },
 # HeyGen Video: general-purpose short-form business video (brand moments,
     # product demos) with synthesized audio in a single call — dialogue,
-    # ambience and effects — from a prompt and the founder's photo as the first
-    # frame. The first catalog entry besides Hailuo 3 with real audio.
+    # ambience and effects — from a prompt and the founder's photo as an
+    # identity reference. The first catalog entry besides Hailuo 3 with real
+    # audio.
     #
     # Facts below come from OpenRouter's own video model endpoint
     # (GET /api/v1/videos/models), verified live at entry time:
@@ -125,18 +126,24 @@ VIDEO_MODELS = {
     #     on render evidence.
     #   supported_durations  5-15  -> min 5 / max 15, exactly the studio's
     #     floor and ceiling, so no new trim edge cases.
-    #   supported_frame_images  first_frame only  -> the cropped founder photo
-    #     is sent as the first frame, the same path as the other models.
+    #   supported_frame_images  first_frame  -> listed, and deliberately NOT
+    #     sent. A first frame pins the opening to the uploaded photograph: the
+    #     render began on that photo's own room, light and framing, and only
+    #     reached the planned scene once it had morphed away from it. Identity
+    #     rides as an input_references image instead (video_providers:
+    #     max_reference_images=1 with no identity_via_first_frame), so every
+    #     frame of the clip comes from the plan.
     #   generate_audio  false (accepted, defaults off), NOT null  -> the field
     #     is sendable, and the studio defaults to requesting audio whenever
     #     the provider offers it (server.py). If real clips come back silent
     #     or the field is ever refused, flip supports_native_audio to False.
     #
-    # supports_references starts False on purpose despite the listing
-    # accepting references in general: H3 Max taught that a listed field the
-    # serving provider 400s is a paid failure, and only a live refs render
-    # proves acceptance. Identity still flows via identity_via_first_frame,
-    # so nothing about the founder's face is lost by starting here.
+    # supports_references is True because the founder's photo does ride as an
+    # input_references image for this model. The field is listed but not yet
+    # proven live — H3 Max taught that a listed field can still 400 — so the
+    # first render on this model is what settles it. If it is refused, the
+    # submit fails with the provider's words in the log rather than silently
+    # falling back to pinning the opening on the photograph.
     #
     # Opt-in, default stays Hailuo 3: audio + 768p at a third of the listed
     # 2K price is a default-challenger on paper, but likeness is unproven
@@ -146,13 +153,13 @@ VIDEO_MODELS = {
         "name": "HeyGen Video",
         "description": (
             "Business-video renderer with synthesized audio in one call — "
-            "dialogue, ambience and effects. The cropped founder photo is "
-            "sent as the first frame, the same path as the other models. "
-            "768p, 5-15s. For talking-head hooks and demos. Opt-in."
+            "dialogue, ambience and effects. The cropped founder photo rides "
+            "as an identity reference, so the whole clip is generated from "
+            "the plan. 768p, 5-15s. For talking-head hooks and demos. Opt-in."
         ),
         "max_duration": 15,
         "min_duration": 5,
-        "supports_references": False,
+        "supports_references": True,
         "supports_native_audio": True,  # listed as accepted; studio requests it by default
         "supports_v2v_motion": False,
         "resolution": "768p",
@@ -1497,12 +1504,27 @@ async def generate_video(
                 # cannot set and offers no action. Describe the request we
                 # actually sent instead — that is what makes the next step
                 # obvious — and leave the provider's own words in the log above.
+                #
+                # Where the photo went is part of that description, and it is
+                # read from the payload rather than assumed: keying off
+                # frame_images alone reported "without your photo" on every
+                # reference-image render, which is false and sends the founder
+                # to re-upload a file that did reach the provider.
+                if payload.get("frame_images"):
+                    photo_route = "with your photo as the opening frame"
+                elif any(
+                    ref.get("type") == "image_url"
+                    for ref in (payload.get("input_references") or [])
+                ):
+                    photo_route = "with your photo attached as a reference image"
+                else:
+                    photo_route = "without your photo"
                 raise RuntimeError(
                     f"The provider rejected this render before it started "
                     f"(HTTP {resp.status_code}), so no clip was produced. We sent "
                     f"{model_config.get('name', model_id)}, {payload['duration']}s, "
                     f"{payload['resolution']}, {payload['aspect_ratio']}, "
-                    f"{'with' if payload.get('frame_images') else 'without'} your photo. "
+                    f"{photo_route}. "
                     f"The full provider response is in the server log."
                 )
             break

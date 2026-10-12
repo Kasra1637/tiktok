@@ -1145,10 +1145,14 @@ def _assemble_prompt(
     person_anchor = person_anchor_notes(assets or [])
     if person_anchor:
         sections.append(person_anchor)
-        # First-frame models open ON the attached photo: without this the
-        # opening is the uploaded room and the prompted scene only arrives
-        # mid-clip. One tight sentence — heygen's 4096 ceiling leaves no room
-        # for more, and the anchor above already carries the rationale.
+        # A model that pins the photo as its first frame opens ON that photo:
+        # without this the opening is the uploaded room and the prompted scene
+        # only arrives mid-clip. HeyGen used to be that shape and no longer is
+        # (its identity rides as a reference image), but Hailuo 3 Max still
+        # pins one — and even a *reference* image biases the room a model
+        # invents — so the sentence stays on every render with a person.
+        # One tight sentence: heygen's 4096 ceiling is the catalog's lowest,
+        # and the anchor above already carries the rationale.
         sections.append(
             "Open in the locked scene, never the photo's room: the photo "
             "supplies only the person."
