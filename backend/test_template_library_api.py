@@ -1386,3 +1386,137 @@ class TestBrandTailoredTemplates:
             "SELECT id FROM hook_templates WHERE brand_profile_id = ?", (profile["id"],)))
         assert rows == []
         _run(api._execute("DELETE FROM brand_profiles WHERE id = ?", (profile["id"],)))
+
+
+class TestRegenerateContentAngles:
+    """The user-facing regen buttons: replace AI angles, keep hand-written
+    ones, and cycle the goal suggestions without a model call."""
+
+    def test_regenerate_requires_approved_profile(self, api, monkeypatch):
+        profile = _make_profile(api, ANON, name="Regen Draft")
+        calls = []
+        _canned_log(api, monkeypatch, CANNED_ANGLES, calls)
+        with pytest.raises(HTTPException) as err:
+            _run(api.regenerate_content_angles(profile_id=profile["id"], user_id=ANON))
+        assert err.value.status_code == 409
+        assert calls == []
+
+    def test_regenerate_replaces_generated_and_keeps_manual(self, api, monkeypatch):
+        """The core guarantee: a founder's hand-written angle survives a
+        regeneration they requested, and the generated set is replaced."""
+        from models import CreateContentAngleRequest
+        profile = _make_profile(api, ANON, name="Regen Mixed")
+        _run(api.approve_app_profile(profile_id=profile["id"], payload={}, user_id=ANON))
+        manual = _run(api.create_manual_content_angle(
+            profile_id=profile["id"],
+            payload=CreateContentAngleRequest(
+                label="Founder wrote this", target_audience="a", user_problem="p"),
+            user_id=ANON))
+        _canned_log(api, monkeypatch, CANNED_ANGLES)
+        out = _run(api.regenerate_content_angles(profile_id=profile["id"], user_id=ANON))
+        assert out["manual_kept"] == 1
+        listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
+        labels = [a["label"] for a in listed["angles"]]
+        assert "Stop stalling on starts" in labels
+        assert "Founder wrote this" in labels
+        by_id = {a["id"]: a for a in listed["angles"]}
+        assert by_id[manual["id"]]["origin"] == "manual"
+        generated = [a for a in listed["angles"] if a["id"] != manual["id"]]
+        assert all(a["origin"] == "generated" for a in generated)
+        # Manual rows move behind the fresh generated set.
+        assert listed["angles"][-1]["id"] == manual["id"]
+
+    def test_regenerate_model_failure_leaves_everything_intact(self, api, monkeypatch):
+        """Generate-then-replace: a model failure deletes nothing."""
+        from models import CreateContentAngleRequest
+        profile = _make_profile(api, ANON, name="Regen Fails")
+        _run(api.approve_app_profile(profile_id=profile["id"], payload={}, user_id=ANON))
+        manual = _run(api.create_manual_content_angle(
+            profile_id=profile["id"],
+            payload=CreateContentAngleRequest(
+                label="Keep me", target_audience="a", user_problem="p"),
+            user_id=ANON))
+        _failing_log(api, monkeypatch)
+        with pytest.raises(HTTPException) as err:
+            _run(api.regenerate_content_angles(profile_id=profile["id"], user_id=ANON))
+        assert err.value.status_code == 502
+        listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
+        assert [a["id"] for a in listed["angles"]] == [manual["id"]]
+
+    def test_regenerate_404s_for_unknown_profiles(self, api, monkeypatch):
+        _canned_log(api, monkeypatch, CANNED_ANGLES)
+        with pytest.raises(HTTPException) as err:
+            _run(api.regenerate_content_angles(
+                profile_id=str(uuid.uuid4()), user_id=ANON))
+        assert err.value.status_code == 404
+
+
+class TestGoalSuggestionsCycle:
+    """The Shuffle button: same six goals, deterministic next order, no model
+    call, and the picked order persists on the angle row."""
+
+    def _angle_with_kind(self, api, profile_id, kind="problem_solution"):
+        from models import CreateContentAngleRequest
+        return _run(api.create_manual_content_angle(
+            profile_id=profile_id,
+            payload=CreateContentAngleRequest(
+                kind=kind, label="Shufflable", target_audience="a", user_problem="p"),
+            user_id=ANON))
+
+    def test_shuffle_cycles_deterministically_and_persists(self, api):
+        profile = _make_profile(api, ANON, name="Shuffle Rider")
+        angle = self._angle_with_kind(api, profile["id"])
+        static = api.template_library.ANGLE_GOAL_RECOMMENDATIONS["problem_solution"]
+        seen = []
+        for _ in range(6):
+            out = _run(api.regenerate_angle_goal_suggestions(
+                profile_id=profile["id"], angle_id=angle["id"], user_id=ANON))
+            assert sorted(out["suggestions"]) == sorted(static)
+            assert out["suggestions"] != []
+            seen.append(tuple(out["suggestions"]))
+            # Persisted: the serializer computes the same order the endpoint
+            # just returned, without a second shuffle call.
+            listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
+            row = next(a for a in listed["angles"] if a["id"] == angle["id"])
+            assert row["goal_suggestions"] == list(out["suggestions"])
+            assert row["goal_variant"] == out["goal_variant"]
+        # The cycle repeats: picks 5 and 6 repeat picks 1 and 2.
+        assert seen[4] == seen[0]
+        assert seen[5] == seen[1]
+
+    def test_shuffle_starts_from_variant_one_not_zero(self, api):
+        """Shuffle means shuffle: the first press leaves the curated order,
+        so the founder always sees a change."""
+        profile = _make_profile(api, ANON, name="Shuffle Start")
+        angle = self._angle_with_kind(api, profile["id"])
+        out = _run(api.regenerate_angle_goal_suggestions(
+            profile_id=profile["id"], angle_id=angle["id"], user_id=ANON))
+        assert out["goal_variant"] == 1
+        static = api.template_library.ANGLE_GOAL_RECOMMENDATIONS["problem_solution"]
+        assert out["suggestions"] != list(static)
+        out2 = _run(api.regenerate_angle_goal_suggestions(
+            profile_id=profile["id"], angle_id=angle["id"], user_id=ANON))
+        assert out2["goal_variant"] == 2
+        assert out2["suggestions"] != out["suggestions"]
+
+    def test_goal_suggestions_readback_matches_saved_order(self, api):
+        profile = _make_profile(api, ANON, name="Shuffle Read")
+        angle = self._angle_with_kind(api, profile["id"])
+        out = _run(api.regenerate_angle_goal_suggestions(
+            profile_id=profile["id"], angle_id=angle["id"], user_id=ANON))
+        read = _run(api.angle_goal_suggestions(
+            profile_id=profile["id"], angle_id=angle["id"], user_id=ANON))
+        assert read == out
+
+    def test_shuffle_404s_for_foreign_and_missing_angles(self, api):
+        profile = _make_profile(api, ANON, name="Shuffle Owner")
+        p2 = _make_profile(api, OTHER_USER, name="Shuffle Stranger")
+        angle = self._angle_with_kind(api, profile["id"])
+        with pytest.raises(HTTPException) as err:
+            _run(api.regenerate_angle_goal_suggestions(
+                profile_id=p2["id"], angle_id=angle["id"], user_id=ANON))
+        assert err.value.status_code == 404
+        with pytest.raises(HTTPException) as err:
+            _run(api.regenerate_angle_goal_suggestions(
+                profile_id=profile["id"], angle_id=str(uuid.uuid4()), user_id=ANON))
+        assert err.value.status_code == 404

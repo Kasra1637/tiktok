@@ -187,6 +187,20 @@ export const api = {
     client.get(`/app-profiles/${profileId}/content-angles`).then((r) => r.data),
   generateContentAngles: (profileId) =>
     client.post(`/app-profiles/${profileId}/content-angles`).then((r) => r.data),
+  // Regenerate replaces only the AI-derived angles; hand-written angles are
+  // kept server-side, so this is safe to offer on a populated list.
+  regenerateContentAngles: (profileId) =>
+    client.post(`/app-profiles/${profileId}/content-angles/regenerate`).then((r) => r.data),
+  // Cycle this angle's six goal suggestions to the next deterministic variant
+  // order. Free: no model call. Persisted server-side, so reloads keep it.
+  regenerateContentAngleGoals: (profileId, angleId) =>
+    client
+      .post(`/app-profiles/${profileId}/content-angles/${angleId}/regenerate-goals`)
+      .then((r) => r.data),
+  getContentAngleGoalSuggestions: (profileId, angleId) =>
+    client
+      .get(`/app-profiles/${profileId}/content-angles/${angleId}/goal-suggestions`)
+      .then((r) => r.data),
   createContentAngle: (profileId, payload) =>
     client.post(`/app-profiles/${profileId}/content-angles/manual`, payload).then((r) => r.data),
   updateContentAngle: (profileId, angleId, payload) =>

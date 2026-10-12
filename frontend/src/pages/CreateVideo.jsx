@@ -532,9 +532,21 @@ function AngleGoalPicker({
   availableAngles = [],
   onSelectAngle,
   objectiveEvidence = {},
+  // The six suggestions in the angle's PERSISTED variant order, from the
+  // server (angle.goal_suggestions). Falls back to the static facet list
+  // when the angle row carries none.
+  suggestions,
+  onRegenerate,
+  regenerating = false,
 }) {
   const knownGoals = Array.isArray(options) ? options : [];
-  const rankedGoals = (recommendations || []).filter((goal) => knownGoals.includes(goal));
+  const orderedGoals =
+    Array.isArray(suggestions) && suggestions.length > 0
+      ? suggestions.filter((goal) => knownGoals.includes(goal))
+      : [];
+  const rankedGoals = orderedGoals.length > 0
+    ? orderedGoals
+    : (recommendations || []).filter((goal) => knownGoals.includes(goal));
   const featured = [...new Set([...rankedGoals, ...knownGoals])].slice(0, 6);
   const outsideRecommendation = Boolean(value && !featured.includes(value));
 
@@ -575,9 +587,29 @@ function AngleGoalPicker({
   return (
     <section className="space-y-2" aria-labelledby="video-goal-label" data-testid="angle-goal-picker">
       <div className="space-y-1">
-        <h3 id="video-goal-label" className="text-sm font-medium">
-          Video goal <span className="text-muted-foreground">(required)</span>
-        </h3>
+        <div className="flex items-start justify-between gap-2">
+          <h3 id="video-goal-label" className="text-sm font-medium">
+            Video goal <span className="text-muted-foreground">(required)</span>
+          </h3>
+          {onRegenerate && featured.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 shrink-0"
+              onClick={onRegenerate}
+              disabled={regenerating}
+              title="Show a different ordering of these six suggestions. Your selection is kept."
+              data-testid="regenerate-goals-button"
+            >
+              {regenerating ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
+              {regenerating ? "Shuffling…" : "Shuffle"}
+            </Button>
+          )}
+        </div>
         <p className="text-xs text-muted-foreground">
           {featured.length > 0
             ? `${featured.length === 6 ? "Six" : featured.length} suggestions for “${angle.label}”.`
@@ -784,6 +816,9 @@ export default function CreateVideo() {
   // was a round trip the flow never offered a way back from.
   const [generatingAngles, setGeneratingAngles] = useState(false);
   const [angleError, setAngleError] = useState(null);
+  // Cycling goal suggestions on the selected angle. Persists server-side per
+  // angle, so the re-read of the angles list is the new state.
+  const [cyclingGoals, setCyclingGoals] = useState(false);
   const [facets, setFacets] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
   const [recError, setRecError] = useState(null);
@@ -1042,6 +1077,45 @@ export default function CreateVideo() {
       setGeneratingAngles(false);
     }
   }, [profileId]);
+
+  // Regenerating the audience angles without leaving the wizard. Offered on
+  // a populated list too, because the regenerate endpoint keeps hand-written
+  // angles server-side: what the founder wrote on the profile page survives
+  // this call. (The bare generate endpoint replaces the whole set and stays
+  // empty-list-only — that distinction is why these are two buttons.)
+  const handleRegenerateAngles = useCallback(async () => {
+    if (!profileId) return;
+    setGeneratingAngles(true);
+    setAngleError(null);
+    try {
+      const data = await api.regenerateContentAngles(profileId);
+      adoptAngles(data);
+      if (!data.angles?.length) {
+        setAngleError("The model returned no usable angles. Try again.");
+      }
+    } catch (err) {
+      setAngleError(getErrorMessage(err));
+    } finally {
+      setGeneratingAngles(false);
+    }
+  }, [profileId]);
+
+  // Cycle the selected angle's six goal suggestions. Free (no model call),
+  // and the server persists the variant, so re-reading the list brings back
+  // the exact new order for every consumer of the angles state.
+  const handleRegenerateGoals = useCallback(async () => {
+    if (!profileId || !angleId) return;
+    setCyclingGoals(true);
+    try {
+      await api.regenerateContentAngleGoals(profileId, angleId);
+      const data = await api.getContentAngles(profileId);
+      adoptAngles(data);
+    } catch (err) {
+      setAngleError(getErrorMessage(err));
+    } finally {
+      setCyclingGoals(false);
+    }
+  }, [profileId, angleId, adoptAngles]);
 
   useEffect(() => {
     if (step !== 2 || !profileId || !objective) return;
@@ -1770,6 +1844,26 @@ setObjective("");
                    two open panels side by side are two half-read angles, and
                    the fields are what the render downstream is held to. */
                 <div className="space-y-2" data-testid="audience-angle-list">
+                  {/* Regeneration for a populated app: the endpoint replaces
+                      only AI-derived angles and keeps hand-written ones
+                      server-side, so this cannot discard founder work. */}
+                  <div className="pt-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={handleRegenerateAngles}
+                      disabled={generatingAngles}
+                      data-testid="regenerate-angles-button"
+                    >
+                      {generatingAngles ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-3.5 w-3.5" />
+                      )}
+                      {generatingAngles ? "Regenerating…" : "Regenerate angles"}
+                    </Button>
+                  </div>
                   {angles.map((a) => {
                     const picked = angleId === a.id;
                     const details = picked ? angleDetails(a) : [];
@@ -1874,6 +1968,9 @@ setObjective("");
               outcomes={objectiveOutcomes}
               fitReasons={objectiveFitReasons}
               objectiveEvidence={objectiveEvidence}
+              suggestions={angle?.goal_suggestions}
+              onRegenerate={handleRegenerateGoals}
+              regenerating={cyclingGoals}
             />
             </div>
 
@@ -2219,6 +2316,9 @@ if (step === 3) {
                 onChooseAngle={() => setStep(1)}
                 availableAngles={angles}
                 onSelectAngle={setAngleId}
+                suggestions={angle?.goal_suggestions}
+                onRegenerate={handleRegenerateGoals}
+                regenerating={cyclingGoals}
               />
             )}
             <Button
@@ -2285,11 +2385,14 @@ if (step === 3) {
                     recommendations={recommendedObjectives}
                     outcomes={objectiveOutcomes}
                     fitReasons={objectiveFitReasons}
-                    onChooseAngle={() => setStep(1)}
-                    availableAngles={angles}
-                    onSelectAngle={setAngleId}
-                  />
-                </li>
+                  onChooseAngle={() => setStep(1)}
+                  availableAngles={angles}
+                  onSelectAngle={setAngleId}
+                  suggestions={angle?.goal_suggestions}
+                  onRegenerate={handleRegenerateGoals}
+                  regenerating={cyclingGoals}
+                />
+              </li>
               )}
             </ul>
             <p className="text-xs text-muted-foreground">

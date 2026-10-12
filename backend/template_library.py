@@ -250,6 +250,53 @@ def angle_goal_fit_reason(kind: Optional[str], goal: Optional[str]) -> str:
     """Return the angle-specific fit line for one kind + goal, or "" when none."""
     return ANGLE_GOAL_FIT_REASONS.get((kind or "").strip(), {}).get((goal or "").strip(), "")
 
+
+# How many variants of the six-suggestion set one angle can cycle through.
+# A shuffle of six goals has 720 orders; four variants stay far enough apart
+# to feel like a fresh take while keeping the whole cycle small and testable.
+GOAL_SUGGESTION_VARIANTS = 4
+
+
+def goal_suggestions_for_kind(kind: Optional[str], variant: int = 0) -> list:
+    """
+    The six suggested goals for one angle kind, in a deterministic variant
+    order.
+
+    Variant 0 is the curated ranking (ANGLE_GOAL_RECOMMENDATIONS as written).
+    Each higher variant applies a rotation seeded by (kind, variant), so the
+    same angle kind always produces the SAME order for a given variant —
+    shuffling with a clock would make a page reload move a ranking the
+    founder is reading mid-scroll. The six goals never change; only their
+    order cycles, and the codebase's cache-stability rule (server-side
+    preference state, hand-pick latches) is what "different versions" means
+    here: Regenerate promises a different ORDER, not a different vocabulary.
+    Unknown kinds normalize first, so the picker never renders an empty card
+    grid for a retired kind name.
+    """
+    k = normalize_angle_kind(kind)
+    goals = ANGLE_GOAL_RECOMMENDATIONS.get(k)
+    if not goals:
+        return []
+    variant = int(variant) % GOAL_SUGGESTION_VARIANTS if variant is not None else 0
+    if variant <= 0:
+        return list(goals)
+    # Rotation, not random.Random: a pure rotation is stable across Python
+    # runs and trivially testable. The step depends only on the kind's name
+    # and the variant, so the same angle kind always produces the SAME order
+    # for a given variant, and no process-salted hash() can creep in.
+    step = ((k.count("_") + variant * 5 + 2) % 6) or 1
+    return list(goals[step:]) + list(goals[:step])
+
+
+def next_goal_suggestion_variant(variant, count: int = GOAL_SUGGESTION_VARIANTS) -> int:
+    """Cycle: -1/None/0 -> 1 -> 2 -> ... -> last -> 1 (variant 0 is the initial
+    curated set, so regeneration only ever moves forward through variants)."""
+    try:
+        current = int(variant) if variant is not None else 0
+    except (TypeError, ValueError):
+        current = 0
+    return (current % count) + 1
+
 # Content angles, per the product spec. Angles are app-specific and get
 # generated per App Profile; this list is the controlled set of kinds.
 CONTENT_ANGLE_KINDS = [

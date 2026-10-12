@@ -1168,6 +1168,19 @@ async def init_db():
             # job. Existing rows get NULL, which means "no key supplied" and
             # keeps every historical render re-submittable exactly as before.
             ("generations", "idempotency_key", "TEXT"),
+            # Which variant of the six goal suggestions this angle shows.
+            # 0 is the curated ranking; the Shuffle button cycles 1..3.
+            # Persisted on the angle so a page reload re-shows the exact order
+            # the founder last asked for instead of silently reverting it.
+            ("content_angles", "goal_variant", "INTEGER DEFAULT 0"),
+            # Authorship of the row: 'manual' rows are founder-authored and
+            # survive every regeneration pass; 'generated' rows are derived
+            # data and are replaced. The backfill below marks every
+            # pre-column row 'generated', which is the truth: manual rows
+            # used to go through the same INSERT as generated ones, and a
+            # row that predates the column degrades to the derived-data rule
+            # rather than being wrongly protected from a rewrite.
+            ("content_angles", "origin", "TEXT DEFAULT 'generated'"),
         ]
         for table, column, decl in influencer_migrations:
             cursor = await conn.execute(f"PRAGMA table_info({table})")
@@ -1175,6 +1188,16 @@ async def init_db():
             if column not in cols:
                 logger.info(f"Migration: adding {table}.{column}")
                 await conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+        await conn.commit()
+
+        # Backfill content_angles.origin after the column above added it:
+        # every row this table has accumulated so far came through the AI
+        # generation INSERT, so 'generated' is correct for all of them;
+        # only NEW manual rows are written with origin='manual'. Empty on a
+        # fresh database; a no-op after the first run.
+        await conn.execute(
+            "UPDATE content_angles SET origin = 'generated' WHERE origin IS NULL OR origin = ''"
+        )
         await conn.commit()
 
         # Migration: generations gains an index on the segment chain so the
@@ -3580,8 +3603,8 @@ async def _auto_generate_content_angles(profile: dict, user_id: str) -> None:
             """INSERT INTO content_angles
                (id, brand_profile_id, kind, label, target_audience, user_problem,
                  hook_promise, app_feature, desired_emotion,
-                 claims_to_respect, rank, created_at, user_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 claims_to_respect, rank, created_at, user_id, origin)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated')""",
             (angle_id, profile.get("id"), angle["kind"], angle["label"],
              angle["target_audience"], angle["user_problem"], angle["hook_promise"],
              angle["app_feature"], angle["desired_emotion"],
@@ -3887,6 +3910,14 @@ def _serialize_angle_row(row: dict, evidence: Optional[dict] = None) -> dict:
         "desired_emotion": row.get("desired_emotion") or "",
         "claims_to_respect": row.get("claims_to_respect") or [],
         "rank": row.get("rank") or 0,
+        "goal_variant": int(row.get("goal_variant") or 0),
+        "origin": row.get("origin") or "generated",
+        # The six suggestions in THIS row's saved variant order, computed
+        # server-side so every consumer (wizard, review recovery) agrees
+        # without each client re-deriving the rotation.
+        "goal_suggestions": template_library.goal_suggestions_for_kind(
+            row.get("kind"), int(row.get("goal_variant") or 0)
+        ),
         "created_at": row.get("created_at"),
         "evidence": evidence or {"wins": 0, "flops": 0},
     }
@@ -4074,8 +4105,8 @@ async def generate_profile_content_angles(profile_id: str, user_id: str = Depend
 """INSERT INTO content_angles
                (id, brand_profile_id, kind, label, target_audience, user_problem,
                  hook_promise, app_feature, desired_emotion,
-                 claims_to_respect, rank, created_at, user_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 claims_to_respect, rank, created_at, user_id, origin)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated')""",
             (angle_id, profile_id, angle["kind"], angle["label"],
              angle["target_audience"], angle["user_problem"], angle["hook_promise"],
              angle["app_feature"], angle["desired_emotion"],
@@ -4115,11 +4146,11 @@ async def create_manual_content_angle(
     now = now_iso()
     claims = _normalize_str_list(payload.claims_to_respect)
     await _execute(
-"""INSERT INTO content_angles
+        """INSERT INTO content_angles
            (id, brand_profile_id, kind, label, target_audience, user_problem,
              hook_promise, app_feature, desired_emotion,
-             claims_to_respect, rank, created_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             claims_to_respect, rank, created_at, user_id, origin)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual')""",
         (angle_id, profile_id, template_library.normalize_angle_kind(payload.kind), label,
          (payload.target_audience or "").strip(), (payload.user_problem or "").strip(),
          (payload.hook_promise or "").strip(), (payload.app_feature or "").strip(),
@@ -4164,6 +4195,150 @@ async def update_content_angle(
     return _serialize_angle_row(
         await _fetch_one("SELECT * FROM content_angles WHERE id = ?", (angle_id,))
     )
+
+
+@api_router.post("/app-profiles/{profile_id}/content-angles/regenerate")
+async def regenerate_content_angles(profile_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Regenerate the AI-derived audience angles for an APPROVED App Profile.
+
+    Same generate-then-replace flow as POST /content-angles, with one
+    deliberate difference: hand-written angles survive. Rows tagged
+    origin='manual' are founder-authored content, not derived data — the
+    model writes nothing like them, and a regen the founder asked for must
+    not delete writing they did. Generate runs BEFORE any delete, so a
+    model failure leaves the previous set (generated and manual alike)
+    fully intact.
+    """
+    require_ai_configured()
+    profile = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="App Profile not found")
+    if profile.get("status") != "approved":
+        raise HTTPException(
+            status_code=409,
+            detail="Review and approve this App Profile before regenerating content angles.",
+        )
+
+    try:
+        angle_feedback = await _angle_feedback_for_profile(profile_id, user_id)
+        angles = await _log_model_call(
+            "content_angles", "text", TEXT_MODEL,
+            lambda: generate_content_angles(profile, angle_feedback=angle_feedback),
+            user_id,
+            brand_profile_id=profile_id,
+        )
+    except Exception as e:
+        logger.error(f"Content angle regeneration failed for profile {profile_id}: {e}")
+        raise HTTPException(status_code=502, detail=f"AI content angle generation failed. Please try again. ({str(e)[:150]})")
+
+    # Manual rows first -- their ids are needed after the replacement set is
+    # written. Nothing is deleted yet.
+    manual_rows = await _fetch_all(
+        "SELECT * FROM content_angles WHERE brand_profile_id = ? AND user_id = ? AND origin = 'manual' "
+        "ORDER BY rank ASC, created_at ASC",
+        (profile_id, user_id),
+    )
+
+    # The guarded delete: only derived rows are replaced. A manual row can
+    # still be removed through the ordinary DELETE endpoint, by its founder.
+    await _execute(
+        "DELETE FROM content_angles WHERE brand_profile_id = ? AND (origin IS NULL OR origin != 'manual')",
+        (profile_id,),
+    )
+    now = now_iso()
+    saved = []
+    for rank, angle in enumerate(angles):
+        angle_id = str(uuid.uuid4())
+        await _execute(
+            """INSERT INTO content_angles
+               (id, brand_profile_id, kind, label, target_audience, user_problem,
+                 hook_promise, app_feature, desired_emotion,
+                 claims_to_respect, rank, created_at, user_id, origin)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated')""",
+            (angle_id, profile_id, angle["kind"], angle["label"],
+             angle["target_audience"], angle["user_problem"], angle["hook_promise"],
+             angle["app_feature"], angle["desired_emotion"],
+             json.dumps(angle["claims_to_respect"]), rank, now, user_id),
+        )
+        saved.append({**angle, "id": angle_id, "rank": rank})
+    # Manual rows move to the back of the generated set's rank range -- the
+    # same back-of-list position the manual endpoint gives a newly hand-written
+    # angle -- so the fresh AI set presents first.
+    base_rank = len(saved)
+    for offset, row in enumerate(manual_rows):
+        await _execute(
+            "UPDATE content_angles SET rank = ? WHERE id = ? AND brand_profile_id = ? AND user_id = ?",
+            (base_rank + offset, row.get("id"), profile_id, user_id),
+        )
+    logger.info(
+        "Regenerated %d content angle(s) (kept %d manual) for profile %s",
+        len(saved), len(manual_rows), profile_id,
+    )
+    return {"angles": saved, "manual_kept": len(manual_rows)}
+
+
+@api_router.post("/app-profiles/{profile_id}/content-angles/{angle_id}/regenerate-goals")
+async def regenerate_angle_goal_suggestions(
+    profile_id: str, angle_id: str, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Show a different ordering of this angle's six goal suggestions.
+
+    No model call and no model_requests row: the suggestions are the same six
+    curated goals every time — what changes is their ORDER, advanced one
+    deterministic variant step (template_library.goal_suggestions_for_kind).
+    The picked variant is persisted on the angle row, so a reload re-shows
+    the exact ordering the founder last asked for rather than silently
+    reverting — the same cache-stability rule the goal picker's existing
+    "selected goal outside the suggestions" state already relies on.
+
+    Not gated on profile approval deliberately: the variant is presentation
+    state, not derived data — reordering suggestions for an angle the founder
+    can already see changes no claim, no fact, and no plan.
+    """
+    row = await _fetch_one(
+        "SELECT id, kind, goal_variant FROM content_angles "
+        "WHERE id = ? AND brand_profile_id = ? AND user_id = ?",
+        (angle_id, profile_id, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Content angle not found")
+
+    next_variant = template_library.next_goal_suggestion_variant(row.get("goal_variant"))
+    suggestions = template_library.goal_suggestions_for_kind(row.get("kind"), next_variant)
+    await _execute(
+        "UPDATE content_angles SET goal_variant = ? WHERE id = ? AND brand_profile_id = ? AND user_id = ?",
+        (next_variant, angle_id, profile_id, user_id),
+    )
+    return {
+        "goal_variant": next_variant,
+        "suggestions": suggestions,
+    }
+
+
+@api_router.get("/app-profiles/{profile_id}/content-angles/{angle_id}/goal-suggestions")
+async def angle_goal_suggestions(
+    profile_id: str, angle_id: str, user_id: str = Depends(get_current_user_id)
+):
+    """Read-only view of the same six suggestions in the angle's saved variant
+    order, for a step that renders the picker without a full angles reload."""
+    row = await _fetch_one(
+        "SELECT kind, goal_variant FROM content_angles "
+        "WHERE id = ? AND brand_profile_id = ? AND user_id = ?",
+        (angle_id, profile_id, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Content angle not found")
+    variant = int(row.get("goal_variant") or 0)
+    return {
+        "goal_variant": variant,
+        "suggestions": template_library.goal_suggestions_for_kind(
+            row.get("kind"), variant
+        ),
+    }
 
 
 @api_router.delete("/app-profiles/{profile_id}/content-angles/{angle_id}")
