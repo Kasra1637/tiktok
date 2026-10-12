@@ -268,6 +268,14 @@ select option:checked {
     padding: 16px;
 }
 
+/* The same aside, one step louder: a stronger hairline and a slightly heavier
+   fill, for groups that carry a state the reader must not miss (the claim
+   guardrail's risk warnings, needs-review and banned lists). */
+.inset-panel-strong {
+    border-color: var(--hairline-strong);
+    background-color: hsl(var(--secondary) / 0.25);
+}
+
 .surface-glass {
     background-color: hsl(228 14% 9% / 0.7);
     backdrop-filter: blur(16px) saturate(140%);

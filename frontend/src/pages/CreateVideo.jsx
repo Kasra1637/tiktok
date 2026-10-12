@@ -302,7 +302,7 @@ function MissingRequirements({ identity, onGoToTemplatePhoto }) {
   if (!identity || identity.length === 0) return null;
 
   return (
-    <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-4">
+    <div className="inset-panel space-y-2">
       <p className="text-sm font-medium">
         This template needs a character reference before it can generate
       </p>
@@ -480,7 +480,7 @@ function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
 
   return (
     <div
-      className="space-y-2 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4"
+      className="inset-panel space-y-2"
       data-testid="review-revisions"
     >
       <span className="eyebrow block">Revisions &amp; consequences</span>
@@ -2104,7 +2104,7 @@ setObjective("");
               <p className="text-xs text-muted-foreground">{tailorError}</p>
             )}
             {objective && recommendationsVisible && visibleRecommendations.length === 0 && (
-              <div className="rounded-xl border border-[color:var(--hairline)] p-4">
+              <div className="inset-panel">
                 <p className="text-sm">No templates recommended for this app yet.</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {recError
@@ -2136,7 +2136,7 @@ setObjective("");
             )}
 
             {template && (
-              <div className="rounded-xl border border-[color:var(--hairline)] p-3 text-sm">
+              <div className="inset-panel text-sm">
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{template.name}</span>
                   <Badge variant="secondary" className="text-xs">
@@ -2260,7 +2260,7 @@ setObjective("");
                 piece's scope, which the render panel states itself. Neither
                 fact needed a third copy. */}
             {!canGenerate ? (
-              <div className="rounded-xl border border-[color:var(--hairline)] p-4">
+              <div className="inset-panel">
                 <p className="text-sm text-muted-foreground">
                   Choose an approved App Profile, a video goal, and a template first. Review the free script plan before rendering.
                 </p>
@@ -2271,7 +2271,7 @@ setObjective("");
                 onGoToTemplatePhoto={scrollToTemplatePhoto}
               />
             ) : !project ? (
-              <div className="rounded-xl border border-[color:var(--hairline)] p-4">
+              <div className="inset-panel">
                 <p className="text-sm text-muted-foreground">
                   Preparing the video draft for your photo…
                 </p>
@@ -2289,7 +2289,7 @@ setObjective("");
             ) : (
               <>
                 {!project?.script_version ? (
-                  <div className="rounded-xl border border-[color:var(--hairline)] p-4">
+                  <div className="inset-panel">
                     <p className="text-sm text-muted-foreground">
                       There's no plan yet. Generate one on Review first — it is free.
                     </p>
@@ -2357,7 +2357,7 @@ if (step === 3) {
              this offers the retry. Manual and enabled: the auto latch already
              consumed this selection-set, so nothing here fires on its own. The
              photo is not listed: it is required to render, never to plan. */
-          <div className="space-y-3 rounded-xl border border-[color:var(--hairline)] p-4">
+          <div className="inset-panel space-y-3">
             <p className="text-sm text-muted-foreground">
               The plan didn't generate. Fix what's missing below, then try again — still free.
             </p>
@@ -2396,7 +2396,7 @@ if (step === 3) {
              next — reading the stored goal too, so a draft that already holds
              one spins instead of flashing the picker. Only these three cases
              may show a spinner. */
-          <div className="space-y-3 rounded-xl border border-[color:var(--hairline)] p-4">
+          <div className="inset-panel space-y-3">
             <div className="flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
               <span className="text-sm font-medium">
@@ -2413,7 +2413,7 @@ if (step === 3) {
           /* No plan and the auto effect cannot fire: a profile, a template or
              the goal is missing. Name it and fix it here — choosing the goal
              starts the plan on its own, no button press. */
-          <div className="space-y-3 rounded-xl border border-[color:var(--hairline)] p-4">
+          <div className="inset-panel space-y-3">
             <p className="text-sm text-muted-foreground">
               Your free script plan appears once an App Profile, audience angle, template, and video goal are set. Still missing:
             </p>
@@ -2510,7 +2510,7 @@ if (step === 3) {
               hasEdits={hasEdits}
               onGoToHookStory={() => setStep(4)}
             />
-            <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-4" data-testid="review-thumb-loop">
+            <div className="inset-panel space-y-2" data-testid="review-thumb-loop">
               <span className="eyebrow block">Does this plan work?</span>
               <ThumbPair
                 value={reviewThumb}
@@ -2535,7 +2535,7 @@ if (step === 3) {
                 rather than the aim. Renders nothing for a tailored template
                 generated before outcomes existed. */}
             {typeof template?.outcome === "string" && template.outcome.trim() && (
-              <div className="rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4">
+              <div className="inset-panel">
                 <span className="eyebrow block">What this is aiming to leave them with</span>
                 <p className="mt-1 text-sm">{sentenceCase(template.outcome.trim())}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -2600,7 +2600,7 @@ if (step === 3) {
                 render validates — rather than a second arithmetic in the
                 browser that could disagree with what the render does. */}
             {project?.spoken_check && (
-              <div className="space-y-1.5 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4" data-testid="spoken-counts">
+              <div className="inset-panel space-y-1.5" data-testid="spoken-counts">
                 <span className="eyebrow block">How the two lines measure up</span>
                 {[
                   { key: "hook", label: "Hook line" },
@@ -2631,7 +2631,7 @@ if (step === 3) {
               </div>
             )}
             {project?.strategy?.hook_line && typeof project?.spoken_middle === "string" && project.spoken_middle && (
-              <div className="space-y-1.5 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4" data-testid="spoken-partition">
+              <div className="inset-panel space-y-1.5" data-testid="spoken-partition">
                 <span className="eyebrow block">What the middle will say</span>
                 <p className="text-sm">{sentenceCase(project.spoken_middle)}</p>
                 {/* What is not spoken is counted by the server, not sliced out
@@ -2665,7 +2665,7 @@ if (step === 3) {
                 the founder should record, and it is deliberately never passed to
                 the render, so correcting it here cannot smuggle a feature
                 instruction back into the video. */}
-            <div className="space-y-1.5 rounded-xl border border-[color:var(--hairline)] p-4">
+            <div className="inset-panel space-y-1.5">
               <label htmlFor="review-demo-brief" className="text-sm font-medium">
                 What you record for the demo
               </label>
@@ -2699,7 +2699,7 @@ if (step === 3) {
                 where the damage is visible. */}
             {editValue("beat_timeline", []).length > 0 && (
               <details
-                className="rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4"
+                className="inset-panel"
                 data-testid="shot-timeline"
               >
                 <summary className="flex cursor-pointer flex-wrap items-center gap-2">

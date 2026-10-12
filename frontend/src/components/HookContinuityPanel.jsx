@@ -260,7 +260,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
   const sections = plannedSections(strategy);
 
   return (
-    <div className="space-y-3 rounded-2xl border border-[color:var(--hairline)] p-4">
+    <div className="inset-panel space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="flex items-center gap-2 font-display text-sm font-semibold">
           <Sparkles className="h-4 w-4 text-[color:var(--brand-indigo)]" />

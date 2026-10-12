@@ -16,7 +16,8 @@ import { sentenceCase } from "../lib/copyCase";
  * - body 14/22, meta 12/18, chips 12/18 at the Badge shape the kind tag uses
  * - item gap 8 (gap-2 / space-y-2) and card padding px-4 py-3 — the angle
  *   row's rhythm, not a roomier one of our own
- * - card radius 16 (rounded-2xl), nested sub-card radius 12 (rounded-xl) + padding 16 (p-4)
+ * - card radius 16 (rounded-2xl); nested sub-cards are the shared
+ *   `.inset-panel` (12px radius, 16px gutter) rather than a local copy of it
  * - one background + 1px hairline border everywhere, and no rule under a
  *   heading — the angle rows have none
  *
@@ -220,7 +221,7 @@ export function StatementCard({ title, rows, spanFull }) {
   return (
     <div
       className={cn(
-        "flex h-full flex-col gap-3 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-4",
+        "inset-panel flex h-full flex-col gap-3",
         spanFull && "md:col-span-2"
       )}
     >

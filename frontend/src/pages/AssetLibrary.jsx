@@ -147,7 +147,7 @@ function AssetRow({
   // question of what went wrong.
   const slotHeldByAnother = attachDisabled && !busy && asset.kind === "character_reference";
   return (
-    <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-4">
+    <div className="inset-panel space-y-2">
       <div className="flex items-center gap-3">
         <AssetThumb asset={asset} isVideo={isVideo} isAudio={isAudio} />
         <div className="min-w-0 flex-1">
