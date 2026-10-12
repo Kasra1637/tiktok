@@ -134,31 +134,30 @@ export function InfoListBlock({ label, items, tone = "default" }) {
 
 /**
  * One collapsible group of cards — never per card, so equal-height rows
- * stay equal. Lightweight bar header (not a card): label, data-computed
- * summary, chevron. Native button = clickable + keyboard accessible with
+ * stay equal. Styled to match the Demo + CTA EditorSection bar: a dark
+ * rounded-2xl surface, px-4 py-3 header row, uppercase eyebrow label,
+ * chevron right. Native button = clickable + keyboard accessible with
  * aria-expanded. Grid-rows animation (200ms) opens without layout jump;
  * the overflow-hidden lives on the animation wrapper, never on a card.
  */
 export function SectionGroup({ id, label, summary, open, onToggle, children }) {
   const contentId = `profile-group-${id}`;
   return (
-    <section aria-label={label} data-testid={`group-${id}`} className="min-w-0">
+    <section
+      aria-label={label}
+      data-testid={`group-${id}`}
+      className="surface min-w-0 overflow-hidden rounded-2xl !space-y-0 !p-0"
+    >
       <button
         type="button"
         aria-expanded={open}
         aria-controls={contentId}
         onClick={() => onToggle(id, !open)}
-        className={cn(
-          "group flex w-full min-w-0 items-center gap-3 rounded-[10px] px-1 py-1 text-left transition-colors hover:bg-secondary/30",
-          "sticky top-0 z-10 bg-background/80 backdrop-blur-sm",
-          open && "border-l-2 border-[color:var(--brand-indigo)] pl-2 -ml-1"
-        )}
+        className="flex w-full min-w-0 items-center justify-between gap-2 px-4 py-3 text-left transition duration-150 hover:bg-[color:var(--indigo-6)]"
       >
-        <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground transition-colors group-hover:text-foreground">
-          {label}
-        </span>
+        <span className="eyebrow min-w-0 shrink-0">{label}</span>
         {summary ? (
-          <span className="min-w-0 flex-1 text-xs leading-[18px] text-muted-foreground">
+          <span className="min-w-0 flex-1 truncate text-xs leading-[18px] text-muted-foreground">
             {summary}
           </span>
         ) : (
@@ -166,8 +165,8 @@ export function SectionGroup({ id, label, summary, open, onToggle, children }) {
         )}
         <ChevronDown
           className={cn(
-            "h-4 w-4 shrink-0 text-muted-foreground transition-all duration-200 group-hover:text-foreground",
-            open && "rotate-180 text-[color:var(--brand-indigo)]"
+            "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+            open && "rotate-180"
           )}
         />
       </button>
@@ -177,7 +176,7 @@ export function SectionGroup({ id, label, summary, open, onToggle, children }) {
         style={{ gridTemplateRows: open ? "1fr" : "0fr", opacity: open ? 1 : 0 }}
       >
         <div className="min-h-0 overflow-hidden">
-          <div className="space-y-4 pt-3">{children}</div>
+          <div className="space-y-3 px-4 pb-4">{children}</div>
         </div>
       </div>
     </section>
