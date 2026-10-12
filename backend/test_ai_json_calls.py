@@ -462,6 +462,35 @@ class TestTruncatedResearchRetriesDoubled:
         assert "valid JSON" not in str(err.value)
 
 
+class TestScriptVoiceAndTarget:
+    """
+    The script generation rules: a natural-delivery target rather than a hard
+    model ceiling, no padding to reach it, a customer's voice rather than the
+    founder's, and a rewrite-to-fit before the video model is called.
+    """
+
+    def test_the_spoken_pace_is_150_characters_over_10_seconds(self):
+        import ai_service
+        assert ai_service.SPOKEN_CHARS_PER_SECOND == 15
+        assert ai_service.spoken_budget(10) == 150
+
+    def test_the_prompts_write_from_the_customer_perspective(self):
+        src = (BACKEND_DIR / "ai_service.py").read_text(encoding="utf-8")
+        assert "CUSTOMER PERSPECTIVE" in src
+        assert "satisfied customer" in src
+        assert "never the app's founder, owner, developer or marketer" in src
+
+    def test_the_budget_is_a_natural_delivery_target_not_a_hard_ceiling(self):
+        src = (BACKEND_DIR / "ai_service.py").read_text(encoding="utf-8")
+        assert "natural delivery, not an arbitrary maximum" in src
+        assert "NEVER pad with filler words" in src
+
+    def test_an_over_length_script_is_rewritten_before_generation(self):
+        src = (BACKEND_DIR / "ai_service.py").read_text(encoding="utf-8")
+        assert "condense_script_to_target" in src
+        assert "condensed before" in src
+
+
 class TestStrategyBudget:
     def test_strategy_uses_a_budget_that_fits_its_schema(self):
         """

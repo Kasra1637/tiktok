@@ -2310,6 +2310,8 @@ async def generate_creative_plan(
         "then a MIDDLE that develops it — and stops at the moment the viewer would reach "
         "for the app. The product demo and the call to action are recorded and added by "
         "the founder separately, so you never plan either. "
+        "Write every spoken line in the voice of a satisfied customer sharing their own "
+        "experience, never as the app's founder, owner or marketer. "
         "Describe viewers by functional need, never by sensitive traits or diagnoses. "
         "Respond with STRICT JSON only, no markdown fences."
     )
@@ -2326,6 +2328,11 @@ async def generate_creative_plan(
         "and middle rooted in the angle while advancing the goal through that same lens. "
         "If they seem in tension, reconcile the goal through the angle rather than swapping "
         "audiences or turning the generated clip into a feature list.\n"
+        "CUSTOMER PERSPECTIVE: write every spoken line as a satisfied CUSTOMER describing their "
+        "own experience using this app — their situation, what they felt, and the value they get. "
+        "The speaker is a real user, never the app's founder, owner, developer or marketer. Never "
+        "imply the speaker built, owns or is promoting the app; no insider or first-person-plural "
+        "product voice (we, our app), and no framing in which the speaker is selling it.\n"
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
         f'  "hook_line": "the single spoken/typed hook line, {hook_min_words}-12 words (about {hook_seconds}s of speech — long enough to fill the hook beat, never a short fragment)",\n'
@@ -2359,13 +2366,15 @@ async def generate_creative_plan(
         # under budget leaves dead air the video has to stretch across the full
         # duration, which reads as slow delivery.
         f"- SPOKEN BUDGET: the hook line is spoken over the first {hook_seconds}s and the rest of "
-        f"the script over the {middle_seconds}s middle. At natural spoken pace that is at most "
-        f"{hook_budget} characters for the hook line and {middle_budget} characters for the rest of "
-        "the script, counted after the hook line is removed. These ceilings are still enforced: "
-        "anything past either ceiling is not spoken in the video and the render is refused "
-        "until it is cut. Aim to land CLOSE TO each ceiling, not well under it — use the full "
-        "middle budget and end on the payoff sentence as the last thing said inside it. A script "
-        "far under the budget leaves dead air the video has to stretch across the full duration.\n"
+        f"the script over the {middle_seconds}s middle. At a natural spoken pace that is a TARGET of "
+        f"about {hook_budget} characters for the hook line and about {middle_budget} characters for "
+        "the rest of the script, counted after the hook line is removed. This is the length for "
+        "natural delivery, not an arbitrary maximum: reach it with dialogue that is naturally that "
+        "long. NEVER pad with filler words, extra spaces or stray punctuation to hit it. Aim to land "
+        "CLOSE TO each target — use the full middle target and end on the payoff sentence as the last "
+        "thing said inside it. Text past either target is not spoken in the video and the render is "
+        "refused until it is cut, and a script far under the target leaves dead air the video has to "
+        "stretch across the full duration.\n"
         "- NEVER write a product demonstration into either beat. Do not film the app in use, "
         "do not show a screen, and do not narrate what the app does while something unrelated "
         "happens on camera. Showing the working product is the founder's recording, attached "
@@ -2413,6 +2422,20 @@ async def generate_creative_plan(
 
     result["hook_line"] = (result.get("hook_line") or "").strip()[:200]
     result["script"] = (result.get("script") or "").strip()[:6000]
+    # Pre-generation validation. Measure the script against the middle's natural
+    # target NOW, before it is stored or rendered, and rewrite it concisely when
+    # it is over — preserving meaning and customer voice — rather than letting
+    # the render gate refuse the whole video for input the model overshot.
+    _middle_seconds = max(1, int(duration_seconds or 0) - int(hook_seconds or 0))
+    _condensed, _dropped = condense_script_to_target(
+        result["script"], result["hook_line"], spoken_budget(_middle_seconds)
+    )
+    if _dropped:
+        result["script"] = _condensed
+        logger.info(
+            "Plan script was %s characters over the %ss spoken target; condensed before "
+            "generation", _dropped, _middle_seconds,
+        )
     for key in (
         "visual_direction", "demo_brief", "voice_direction", "sound_direction",
     ):
@@ -2721,17 +2744,25 @@ def _normalize_sections(raw) -> list:
 # the on-camera action, the scene and the performance, which is why this runs
 # after the model call rather than instead of it.
 
-# Spoken pace used only to size approved words to a section. Brisk delivery
-# runs about 200 words per minute, roughly 3.3 words a second, or about
-# 20 characters a second counting spaces. The earlier 15 chars/sec sized for
-# a conversational 150 words per minute, which left TikTok-length pieces with
-# little room for the payoff sentence; the still-earlier 22 allowed roughly
-# 220 words per minute, which a viewer hears as hurried delivery.
-SPOKEN_CHARS_PER_SECOND = 20
+# Spoken pace used only to size approved words to a section. 150 characters
+# over a 10-second extension is the TARGET for natural delivery — a relaxed,
+# conversational read of about 15 characters a second. The earlier 20 chars/sec
+# packed roughly 200 characters into 10 seconds, the fastest end of natural
+# speech, which reads as hurried in an extension that has to flow into the
+# surrounding footage; 15 chars/sec is the measured middle of the range.
+SPOKEN_CHARS_PER_SECOND = 15
 
 
 def spoken_budget(seconds) -> int:
-    """Characters of speech that fit a section of `seconds`."""
+    """
+    The character TARGET for natural delivery in a section of `seconds`.
+
+    This is the length for a natural read, not a hard technical ceiling the
+    video model imposes: 10 seconds is about 150 characters at conversational
+    pace. It is the same number the prompt asks the model to aim for and the
+    render gate measures against, so the words the founder approves are the
+    words that fit.
+    """
     try:
         secs = float(seconds or 0)
     except (TypeError, ValueError):
@@ -2759,6 +2790,83 @@ def trim_to_sentence(text: str, limit: int):
         space = window.rfind(" ")
         kept = (window[:space] if space > 0 else window).strip()
     return kept, len(text) - len(kept)
+
+
+def condense_script_to_target(script: str, hook_line: str, limit: int):
+    """
+    Rewrite a script that is too long for natural delivery down to its target.
+
+    The prompt asks the model for a script sized to the piece, but the model
+    does not always comply — and the render gate then refuses the whole video
+    for input the model overshot. So the over-length answer is condensed here,
+    BEFORE it is stored or sent anywhere: at a sentence boundary where one
+    exists, keeping whole sentences in order, preserving the meaning and the
+    customer's voice. Nothing is invented, reworded or padded; the opening
+    hook sentence is never dropped (it is bound back from `hook_line`), and
+    the payoff — the last sentence — is dropped only when nothing else can go.
+
+    Returns (text, dropped_chars); dropped_chars is 0 when the script already
+    fits. The arithmetic is `trim_to_sentence`, the same rule the render gate
+    uses, so a script this returns is one the gate accepts.
+    """
+    text = str(script or "").strip()
+    if not text or limit <= 0 or len(text) <= limit:
+        return text, 0
+
+    sentences = _split_sentences(text)
+    if len(sentences) <= 1:
+        return trim_to_sentence(text, limit)
+
+    hook_norm = _normalize_spoken(hook_line)
+    # The opening sentence is the hook line when the script opens with it; it
+    # is restored from `hook_line` downstream, so cutting it would silence the
+    # opening rather than shorten the middle. Never drop it.
+    protect_first = bool(hook_norm) and _normalize_spoken(sentences[0]) == hook_norm
+
+    kept = [sentences[0]] if protect_first else []
+    kept_len = len(sentences[0]) if protect_first else 0
+    for index, sentence in enumerate(sentences):
+        if protect_first and index == 0:
+            continue
+        addition = len(sentence) + (1 if kept else 0)
+        if kept_len + addition > limit:
+            break
+        kept.append(sentence)
+        kept_len += addition
+    if not kept:
+        return trim_to_sentence(text, limit)
+    condensed = " ".join(kept).strip()
+    if len(condensed) >= len(text):
+        return text, 0
+    return condensed, len(text) - len(condensed)
+
+
+def _split_sentences(text: str) -> list:
+    """
+    Split `text` into sentences, keeping each terminator.
+
+    A terminator ends a sentence only when whitespace (or the end) follows, so
+    an abbreviation such as "Dr. Smith" is not split, and each returned piece
+    is stripped so rejoining with single spaces is stable.
+    """
+    stripped = str(text or "").strip()
+    if not stripped:
+        return []
+    sentences = []
+    start = 0
+    for index, ch in enumerate(stripped):
+        if ch not in ".!?":
+            continue
+        following = stripped[index + 1: index + 2]
+        if following == "" or following in " \n\t":
+            piece = stripped[start: index + 1].strip()
+            if piece:
+                sentences.append(piece)
+            start = index + 1
+    tail = stripped[start:].strip()
+    if tail:
+        sentences.append(tail)
+    return sentences
 
 
 def _normalize_spoken(text: str) -> str:
@@ -3205,7 +3313,9 @@ async def generate_video_strategy(
         "sexuality, political leaning). For health-adjacent apps, describe the product's "
         "functionality, never a condition the viewer may have. Use ONLY facts supplied "
         "below; never invent a feature, price, rating, review, download count or "
-        "testimonial. Respond with STRICT JSON only, no markdown fences."
+        "testimonial. Write every spoken line in the voice of a satisfied customer sharing their "
+        "own experience, never as the app's founder, owner or marketer. "
+        "Respond with STRICT JSON only, no markdown fences."
     )
 
     prompt = (
@@ -3277,12 +3387,14 @@ async def generate_video_strategy(
         f"Segment 1 is the middle and runs {plan_seconds} seconds to the end. Never return a third "
         "section.\n"
         + f"- SPOKEN BUDGET: the hook section speaks for {hook_seconds}s and the middle for "
-        f"{plan_seconds}s — at most {_strategy_hook_budget} characters of hook dialogue and "
-        f"{_strategy_middle_budget} characters of middle script. These ceilings are still enforced "
-        "downstream: anything past them is cut and the render is refused until it fits. Aim to "
-        "land CLOSE TO each ceiling, not well under it — use the full middle budget and end on "
-        "the payoff beat as the last thing said inside it. A script far under the budget leaves "
-        "dead air the video has to stretch across the full duration.\n"
+        f"{plan_seconds}s — a TARGET of about {_strategy_hook_budget} characters of hook dialogue "
+        f"and about {_strategy_middle_budget} characters of middle script for natural delivery. "
+        "This is the length for a natural read, not an arbitrary maximum: reach it with dialogue "
+        "that is naturally that long. NEVER pad with filler words, extra spaces or stray "
+        "punctuation to hit it. Aim to land CLOSE TO each target — use the full middle target and "
+        "end on the payoff beat as the last thing said inside it. Text past either target is cut "
+        "and the render is refused until it fits, and a script far under the target leaves dead "
+        "air the video has to stretch across the full duration.\n"
         "- The middle develops the hook — the situation, the pain, the reaction, the action, the "
         "transition — and its job is to end at the moment the viewer would reach for the app. It "
         "does NOT satisfy them, and it does not continue past that point.\n"
@@ -3431,10 +3543,12 @@ async def generate_video_strategy(
         "- Never promise a guaranteed outcome, never invent a testimonial, a rating or a "
         "review, and never state a price, plan name or trial term — the App Profile carries "
         "none, so nothing could verify it.\n"
-        "- Never speak in the presenter's first person about using this app (I use this, I "
-        "have used this for years, as a nurse I rely on this). The presenter is a stand-in "
-        "and nothing is known about their real relationship to the product, so any personal "
-        "claim would be invented.\n"
+        "- Write every spoken line from the perspective of a satisfied customer sharing their "
+        "own experience: their situation, how it felt, and the value they get from using the app. "
+        "The speaker is a real user, never the app's founder, owner, developer or marketer — never "
+        "imply they built, own or promote it, and never use an insider or first-person-plural "
+        "product voice (we, our app). Keep the experience honest and generic: no invented personal "
+        "specifics such as years of use, a profession, a diagnosis, or a hard result.\n"
         "- Use only approved claims. Never use anything in never_use.\n"
         # Length discipline. This object is large, and an over-long value here
         # is what pushes the reply past the completion budget and gets it cut
