@@ -503,7 +503,10 @@ const handleGenerate = async () => {
           never an invented price. The includes/excludes line states that the
           render produces Hook + Story only, not the founder's separately
           filmed demo, closing CTA, or on-screen text. Read-only: it changes
-          nothing about confirmation, idempotency, or the safety gates. */}
+          nothing about confirmation, idempotency, or the safety gates. The
+          "nothing is published for you" note is NOT here: that is the page-level
+          line's job (CreateVideo's create-no-autopost-note), and three copies of
+          it on one screen made none of them the answer. */}
       <div
         className="space-y-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 p-3"
         data-testid="render-summary"
@@ -541,7 +544,7 @@ const handleGenerate = async () => {
         <p className="text-xs text-muted-foreground" data-testid="render-summary-scope">
           Produces Hook + Story only: the hook and the middle, ending where viewers
           reach for their phones. Does not include your filmed product demo, closing
-          CTA, or on-screen text. Nothing is published for you.
+          CTA, or on-screen text.
         </p>
       </div>
 
@@ -670,10 +673,14 @@ const handleGenerate = async () => {
                   close are both outside it. */}
               <div className="space-y-1 rounded-xl border border-[color:var(--hairline)] p-3">
                 <span className="eyebrow block">What you have, and what is left</span>
+                {/* "No text appears on screen — nothing is published for you"
+                    is gone: the pre-render summary above already says the piece
+                    carries no on-screen text, and the page-level note is the
+                    one place that says nothing posts itself. This block's job is
+                    the next step, and that is what it keeps. */}
                 <p className="text-xs text-muted-foreground">
                   This file is the hook and the middle, ending where viewers reach for their
-                  phones. Attach your own demo next, then add your own call to action. No text
-                  appears on screen — nothing is published for you.
+                  phones. Attach your own demo next, then add your own call to action.
                 </p>
               </div>
 
