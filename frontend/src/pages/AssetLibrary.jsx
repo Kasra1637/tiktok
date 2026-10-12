@@ -608,7 +608,7 @@ export default function AssetLibrary({
     const { approved, unapproved } = partitionProfiles(profiles);
     const waiting = unapproved.length > 0;
     return (
-      <PageFrame className="space-y-6">
+      <PageFrame width={embedded ? "default" : "narrow"} className="space-y-6">
         {!embedded && (
           <PageHeader
             data-testid="asset-library-header"
@@ -673,7 +673,7 @@ export default function AssetLibrary({
   }
 
   return (
-    <PageFrame className="space-y-6">
+    <PageFrame width={embedded ? "default" : "narrow"} className="space-y-6">
       {/* Only the standalone route owns a title. Embedded, the wizard step
           header above already says this. */}
       {!embedded && (

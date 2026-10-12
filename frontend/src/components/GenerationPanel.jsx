@@ -6,6 +6,7 @@ import { StatusBadge } from "./StatusBadge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage, mediaUrl, downloadMediaUrl } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
+import { CONTROL_CLASS } from "./formControls";
 import {
   exceedsSinglePass, readPieceSeconds, singlePassCeiling,
 } from "../lib/videoLength";
@@ -454,7 +455,7 @@ const handleGenerate = async () => {
               }
             }}
             disabled={inFlight}
-            className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
+            className={CONTROL_CLASS}
           >
             {models.models.map((m) => (
               <option key={m.key} value={m.key}>
@@ -481,7 +482,7 @@ const handleGenerate = async () => {
                   }
                 }}
                 disabled={inFlight}
-                className="w-full rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
+                className={CONTROL_CLASS}
               >
                 <option value="">{capability?.resolution || ""} (default)</option>
                 {(capability.supported_resolutions || [])

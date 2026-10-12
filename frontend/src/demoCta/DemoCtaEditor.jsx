@@ -30,6 +30,7 @@ import { Switch } from "../components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
 import { useReducedMotion } from "framer-motion";
 import { SectionCard, GroupLabel } from "../components/SectionCard";
+import { CONTROL_CLASS } from "../components/formControls";
 import { Chip } from "../components/Chip";
 import { api, getErrorMessage } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
@@ -131,9 +132,6 @@ const VIDEO_FIT_HINTS = {
   contain: "Shows the whole clip and pads the difference.",
   fill: "Stretches the clip to the screen. No bars, but the shape can distort.",
 };
-
-const CONTROL_CLASS =
-  "h-10 w-full appearance-none rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 text-sm text-foreground shadow-[var(--shadow-xs)] transition-colors outline-none hover:border-[color:var(--hairline-strong)] focus-visible:border-[color:var(--indigo-35)] focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-15)] disabled:cursor-not-allowed disabled:opacity-50";
 
 const INPUT_CLASS =
   "h-10 w-full rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3.5 py-1 text-sm shadow-[var(--shadow-xs)] transition-colors placeholder:text-muted-foreground hover:border-[color:var(--hairline-strong)] focus-visible:border-[color:var(--indigo-35)] focus-visible:bg-secondary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-15)]";
@@ -1624,7 +1622,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             Show opening hook text
           </label>
           <p className="text-xs text-muted-foreground">This is an on-screen text overlay; it does not change the clip&apos;s spoken script.</p>
-          <label className="space-y-1.5">
+          <label className="space-y-2">
             <span className="text-xs text-muted-foreground">Text to show at the opening</span>
             <textarea
               data-testid="hook-text-input"
@@ -1648,7 +1646,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             Show closing call-to-action card
           </label>
           <p className="text-xs text-muted-foreground">Adds an on-screen card to the end of this clip. Write a clear next step, such as downloading your app or visiting your link.</p>
-          <label className="space-y-1.5">
+          <label className="space-y-2">
             <span className="text-xs text-muted-foreground">Call-to-action text</span>
             <input
               data-testid="cta-headline-input"
@@ -1658,7 +1656,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               className={INPUT_CLASS}
             />
           </label>
-          <label className="space-y-1.5">
+          <label className="space-y-2">
             <span className="text-xs text-muted-foreground">Social handle (optional)</span>
             <input
               data-testid="cta-handle-input"
@@ -1711,7 +1709,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               role="radiogroup"
               aria-label="Platform preset"
               data-testid="platform-preset-group"
-              className="space-y-1.5"
+              className="space-y-2"
             >
               {PRESETS.map((p) => (
                 <button
@@ -1788,7 +1786,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 ["Width", screenW, setScreenW, "width"],
                 ["Height", screenH, setScreenH, "height"],
               ].map(([label, val, setter, key]) => (
-                <div key={key} className="space-y-1.5">
+                <div key={key} className="space-y-2">
                   <div className="flex items-baseline justify-between gap-2">
                     <FieldLabel>{label}</FieldLabel>
                     <span className="font-mono text-xs tabular-nums text-foreground">{(val * 100).toFixed(1)}</span>
@@ -2099,7 +2097,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                       <span>{sortedKeyframes.length} locked {sortedKeyframes.length === 1 ? "segment" : "segments"}</span>
                       <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
                     </summary>
-                    <div className="space-y-1.5 pb-1 pt-2">
+                    <div className="space-y-2 pb-1 pt-2">
                     {sortedKeyframes[0].time > 0.01 && (
                       <div className="flex items-center gap-2 rounded-lg border border-[color:var(--hairline)] bg-secondary/40 px-3 py-2">
                         <span className="font-mono text-xs text-muted-foreground">0:00.0 → {formatTime(sortedKeyframes[0].time)} • default (1.00x)</span>

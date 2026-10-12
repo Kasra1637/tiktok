@@ -198,7 +198,7 @@ function RecommendationCard({ r, selected, onSelect }) {
         </p>
       )}
       {reasons.length > 0 && (
-        <div className="mt-2 space-y-1.5">
+        <div className="mt-2 space-y-2">
           <p className="eyebrow">Why it fits</p>
           {/* The verdict: the strongest match, in body weight with the same
               tick the step pills use for "positive", so it reads as the reason
@@ -1989,7 +1989,7 @@ setObjective("");
             </div>
 
             {/* The goal step is intentionally downstream of the angle. */}
-            <div className="inset-panel space-y-1.5" data-testid="create-what-you-get">
+            <div className="inset-panel space-y-2" data-testid="create-what-you-get">
               <span className="text-sm font-medium">What you get</span>
               <p className="text-sm">
                 One {pieceSeconds}s Hook + Story clip: a {pieceSplit.hookSeconds}s hook, then a {pieceSplit.middleSeconds}s story.
@@ -2035,7 +2035,7 @@ setObjective("");
               />
             )}
 
-            <div className="inset-panel space-y-1.5">
+            <div className="inset-panel space-y-2">
               <label htmlFor="tone" className="text-sm font-medium">Tone (optional)</label>
               <Input
                 id="tone"
@@ -2562,7 +2562,7 @@ if (step === 3) {
                 </p>
               </div>
             )}
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <label className="text-sm font-medium">Hook line</label>
               <p className="text-xs text-muted-foreground">The opening line spoken in your generated Hook + Story clip.</p>
               <Input
@@ -2570,7 +2570,7 @@ if (step === 3) {
                 onChange={(e) => setEdits({ ...edits, hook_line: e.target.value })}
               />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <label className="text-sm font-medium">Script</label>
               <p className="text-xs text-muted-foreground">The spoken story after the hook. The generated clip does not include your filmed product demo or closing CTA.</p>
               <Textarea
@@ -2600,7 +2600,7 @@ if (step === 3) {
                 render validates — rather than a second arithmetic in the
                 browser that could disagree with what the render does. */}
             {project?.spoken_check && (
-              <div className="inset-panel space-y-1.5" data-testid="spoken-counts">
+              <div className="inset-panel space-y-2" data-testid="spoken-counts">
                 <span className="eyebrow block">How the two lines measure up</span>
                 {[
                   { key: "hook", label: "Hook line" },
@@ -2631,7 +2631,7 @@ if (step === 3) {
               </div>
             )}
             {project?.strategy?.hook_line && typeof project?.spoken_middle === "string" && project.spoken_middle && (
-              <div className="inset-panel space-y-1.5" data-testid="spoken-partition">
+              <div className="inset-panel space-y-2" data-testid="spoken-partition">
                 <span className="eyebrow block">What the middle will say</span>
                 <p className="text-sm">{sentenceCase(project.spoken_middle)}</p>
                 {/* What is not spoken is counted by the server, not sliced out
@@ -2665,7 +2665,7 @@ if (step === 3) {
                 the founder should record, and it is deliberately never passed to
                 the render, so correcting it here cannot smuggle a feature
                 instruction back into the video. */}
-            <div className="inset-panel space-y-1.5">
+            <div className="inset-panel space-y-2">
               <label htmlFor="review-demo-brief" className="text-sm font-medium">
                 What you record for the demo
               </label>
@@ -2681,7 +2681,7 @@ if (step === 3) {
               </p>
             </div>
             <span className="eyebrow block">Visual and audio direction</span>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <label className="text-sm font-medium">Visual direction</label>
               <p className="text-xs text-muted-foreground">Describe the generated scene and look. This is guidance for the rendered Hook + Story, not footage of your app demo.</p>
               <Textarea
@@ -2706,7 +2706,7 @@ if (step === 3) {
                   <span className="eyebrow block">Shot timeline</span>
                   <Badge variant="outline" className="text-xs">read-only</Badge>
                 </summary>
-                <div className="mt-2 space-y-1.5 text-sm">
+                <div className="mt-2 space-y-2 text-sm">
                   {editValue("beat_timeline", []).map((b, i) => (
                     <div key={i} className="flex gap-2">
                       <Badge variant="secondary" className="shrink-0 text-xs">
@@ -2731,7 +2731,7 @@ if (step === 3) {
                 were clamped to that number, so the only way to a different
                 length is a different template and a regenerated plan. */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <span className="text-sm font-medium">Length of the generated piece</span>
                 <p className="rounded-lg border border-[color:var(--hairline)] px-3 py-2 text-sm">
                   {pieceSeconds} seconds
@@ -2742,7 +2742,7 @@ if (step === 3) {
                     : "Set by the hook template you pick."}
                 </p>
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <label htmlFor="review-tone" className="text-sm font-medium">Tone</label>
                 <Input
                   id="review-tone"
@@ -2753,7 +2753,7 @@ if (step === 3) {
               </div>
             </div>
 
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <label className="text-sm font-medium">Voice direction</label>
               <Textarea
                 value={editValue("voice_direction", "")}
