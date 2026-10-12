@@ -28,38 +28,41 @@ generated video's CTA was unclear asked about something that was never in it.
 from collections import Counter
 
 # What happened.
-# thumb_up / thumb_down are explicit founder verdicts from the thumbs-only AI
-# loop (Audience & goal, Template & photo, Review, Hook + Story). They carry
-# no signal or reason: the `step` column says where the verdict was given and
-# `detail` optionally names the item version (e.g. plan v3). Existing
-# aggregates ignore them; summarize_thumbs() reads them per step.
+# thumb_up / thumb_down are founder verdicts on ONE component (goal, template,
+# plan or script), named in the `step` column. The finished video is never
+# rated: each component's verdicts feed only the AI stage that produces it.
 EVENTS = (
     "template_rejected",
     "script_edited",
     "video_regenerated",
-    "generation_rejected",
-    "video_approved",
     "video_downloaded",
-    "marked_successful",
-    "marked_unsuccessful",
     "thumb_up",
     "thumb_down",
 )
 
-# CreateVideo steps that accept a thumbs verdict. Stored lowercase in the
-# `step` column so counts group cleanly regardless of UI labels.
-THUMB_STEPS = (
-    "audience_goal",
-    "template_photo",
-    "review",
-    "hook_story",
-)
+COMPONENTS = ("goal", "template", "plan", "script")
+
+COMPONENT_LABELS = {
+    "goal": "content goal",
+    "template": "hook template",
+    "plan": "script plan",
+    "script": "spoken script",
+}
+
+# Rows recorded before component voting named the wizard step instead.
+_LEGACY_STEPS = {
+    "audience_goal": "goal",
+    "template_photo": "template",
+    "review": "plan",
+    "hook_story": "script",
+}
 
 
-def normalize_step(step: str) -> str:
-    """Validate a thumbs step. Returns '' when unrecognised."""
+def normalize_component(step: str) -> str:
+    """The component a thumbs verdict belongs to, or '' when unrecognised."""
     s = (step or "").strip().lower().replace("-", "_").replace(" ", "_")
-    return s if s in THUMB_STEPS else ""
+    s = _LEGACY_STEPS.get(s, s)
+    return s if s in COMPONENTS else ""
 
 # Factual triggers, captured automatically. Each maps to the event it explains.
 SIGNALS = {
@@ -67,8 +70,6 @@ SIGNALS = {
     "script_edited_heavy": "script_edited",
     "script_edited_light": "script_edited",
     "regenerated": "video_regenerated",
-    "rejected": "generation_rejected",
-    "approved": "video_approved",
     "downloaded": "video_downloaded",
 }
 
@@ -122,40 +123,13 @@ REASONS = {
         "app_feature_inaccurate",
         "visual_style_wrong",
     ),
-    "generation_rejected": (
-        "hook_too_weak",
-        "ui_distorted",
-        "character_inconsistent",
-        "app_feature_inaccurate",
-        "visual_style_wrong",
-        "audio_unsuitable",
-    ),
-    "video_approved": (
-        "worked_well",
-        "hook_strong",
-        "clear_cia",
-    ),
     "video_downloaded": (
         "ready_to_post",
     ),
-    "marked_successful": (
-        "good_performance",
-    ),
-    "marked_unsuccessful": (
-        "poor_performance",
-        "hook_too_weak",
-    ),
 }
 
-# Human-readable labels for the UI. Keeping them here means the wording lives
-# beside the codes it describes.
-#
-# "clear_cia" keeps its original misspelling on purpose: it is a code already
-# stored against real approval events, and renaming the key would orphan that
-# history and print the raw code in the breakdown. Only the label
-# changed — it used to read "Clear CTA", which described a closing beat this
-# product does not generate. "Ended cleanly" is what the founder is actually
-# reporting on: the generated middle stopping where the demo takes over.
+# Human-readable labels for the UI. Labels for retired video-level reasons
+# stay so older stored rows still print readably in the breakdown.
 REASON_LABELS = {
     "hook_too_weak": "Hook too weak",
     "template_inappropriate": "Template inappropriate",
@@ -222,27 +196,27 @@ def allowed_reasons(event: str) -> list:
     ]
 
 
-# History verdicts that attribute to the angle and objective behind a video.
-#
-# The rows these aggregate are pre-joined server-side (feedback event ->
-# generation -> project -> angle kind + objective), because neither the event
-# nor the generation names an angle on its own. Kinds and objectives are
-# fixed vocabularies, so the counts survive an angle regeneration that
-# replaces every angle row id — per-id attribution would be wiped by the
-# very refresh it is meant to improve.
-ANGLE_POSITIVE_EVENTS = ("marked_successful", "video_approved")
-ANGLE_NEGATIVE_EVENTS = ("marked_unsuccessful", "generation_rejected")
+# Goal verdicts attribute to the angle kind and objective that were picked.
+# Rows are pre-joined server-side (feedback -> project -> angle kind +
+# objective). Kinds and objectives are fixed vocabularies, so the counts
+# survive an angle regeneration that replaces every angle row id.
+def _goal_detail(detail: str) -> dict:
+    """Parse 'objective=..;kind=..' written on a goal thumb at vote time."""
+    parsed = {}
+    for part in (detail or "").split(";"):
+        key, _, value = part.partition("=")
+        if key.strip() in ("objective", "kind") and value.strip():
+            parsed[key.strip()] = value.strip()
+    return parsed
 
 
 def summarize_angle_feedback(rows) -> dict:
     """
-    History verdicts grouped by the angle kind and objective behind each video.
+    Goal thumbs grouped by the angle kind and objective they judged.
 
-    `rows` are pre-joined dicts carrying `kind`, `objective`, and `event`.
-    Only the verdict events above are counted; anything else (a download, a
-    thumb on another step) is ignored rather than lumped into a bucket.
-    A row naming no kind and no objective says nothing attributable and is
-    skipped for the same reason.
+    `rows` are pre-joined dicts carrying `kind`, `objective`, `event`, `step`.
+    Only thumbs on the goal component count; verdicts on a template, plan or
+    script say nothing about the goal and are ignored.
     """
     kinds: dict = {}
     objectives: dict = {}
@@ -250,15 +224,20 @@ def summarize_angle_feedback(rows) -> dict:
     for row in rows or []:
         if not isinstance(row, dict):
             continue
+        if normalize_component(row.get("step") or "") != "goal":
+            continue
         event = row.get("event") or ""
-        if event in ANGLE_POSITIVE_EVENTS:
+        if event == "thumb_up":
             verdict = "wins"
-        elif event in ANGLE_NEGATIVE_EVENTS:
+        elif event == "thumb_down":
             verdict = "flops"
         else:
             continue
-        kind = (row.get("kind") or "").strip()
-        objective = (row.get("objective") or "").strip()
+        # What was on screen when the founder voted beats the project's
+        # current values, which change if they switch goal afterwards.
+        voted = _goal_detail(row.get("detail") or "")
+        kind = (voted.get("kind") or row.get("kind") or "").strip()
+        objective = (voted.get("objective") or row.get("objective") or "").strip()
         if not kind and not objective:
             continue
         total += 1
@@ -305,7 +284,7 @@ def build_angle_feedback_section(summary: dict) -> str:
         )
 
     lines = [
-        "PAST VERDICTS from the founder's own History verdicts "
+        "PAST VERDICTS from the founder's thumbs on previously picked goals "
         f"({summary.get('total', 0)} attributed verdict(s)). Weak evidence, not proof: "
         "lean toward what won and away from what flopped, but do not exclude "
         "a kind or objective on one verdict alone.",
@@ -331,7 +310,7 @@ def catalog() -> dict:
             {"key": signal, "event": event}
             for signal, event in SIGNALS.items()
         ],
-        "thumb_steps": list(THUMB_STEPS),
+        "components": list(COMPONENTS),
         "heavy_edit": {
             "ratio": HEAVY_EDIT_RATIO,
             "min_chars": HEAVY_EDIT_MIN_CHARS,
@@ -339,33 +318,58 @@ def catalog() -> dict:
     }
 
 
-def summarize_thumbs(events) -> dict:
+def summarize_component_feedback(events) -> dict:
     """
-    Per-step thumbs verdicts for the AI refinement loop.
-
-    Only thumb_up / thumb_down rows are counted, grouped by their step. Rows
-    naming an unknown step are ignored rather than lumped into a bucket,
-    so a typo cannot inflate another step's down count.
+    Thumbs per component. Each bucket counts only rows naming that component,
+    so a verdict on one component can never move another's counts.
     """
-    per_step = {step: {"up": 0, "down": 0} for step in THUMB_STEPS}
+    per = {c: {"up": 0, "down": 0} for c in COMPONENTS}
     for row in events or []:
         if not isinstance(row, dict):
             continue
         event = row.get("event") or ""
         if event not in ("thumb_up", "thumb_down"):
             continue
-        step = normalize_step(row.get("step") or "")
-        if not step:
+        component = normalize_component(row.get("step") or "")
+        if not component:
             continue
-        per_step[step]["up" if event == "thumb_up" else "down"] += 1
+        per[component]["up" if event == "thumb_up" else "down"] += 1
     return {
-        step: {
-            "up": counts["up"],
-            "down": counts["down"],
-            "total": counts["up"] + counts["down"],
-        }
-        for step, counts in per_step.items()
+        c: {"up": n["up"], "down": n["down"], "total": n["up"] + n["down"]}
+        for c, n in per.items()
     }
+
+
+def build_component_feedback_section(summary: dict, component: str) -> str:
+    """Prompt context for ONE component's verdicts; '' for an unknown one."""
+    component = normalize_component(component)
+    if not component:
+        return ""
+    label = COMPONENT_LABELS[component]
+    counts = (summary or {}).get(component) or {}
+    up = int(counts.get("up") or 0)
+    down = int(counts.get("down") or 0)
+    if not up and not down:
+        return (
+            f"FOUNDER VERDICTS on the {label}: none recorded for this app yet. "
+            "Work from the verified facts."
+        )
+    if down > up:
+        steer = (
+            f"Most past {label}s were rejected: take a noticeably different, "
+            "sharper approach from the customer's point of view."
+        )
+    elif up > down:
+        steer = (
+            f"Past {label}s mostly landed: keep the same customer-first "
+            "quality bar and do not drift toward generic copy."
+        )
+    else:
+        steer = "Verdicts are mixed: weak evidence, do not over-correct."
+    return (
+        f"FOUNDER VERDICTS on the {label} for this app: {up} thumbs up, "
+        f"{down} thumbs down. {steer} These verdicts are about the {label} only."
+    )
 
 
 # Transparent feedback weights. These are deliberately small and capped: past
@@ -374,10 +378,8 @@ def summarize_thumbs(events) -> dict:
 FEEDBACK_WEIGHTS = {
     "explicit_template_rejection": -2.0,
     "automatic_template_change": -1.0,
-    "generation_rejection": -1.0,
-    "marked_unsuccessful": -1.5,
-    "video_approved": 1.0,
-    "marked_successful": 2.0,
+    "template_thumb_down": -1.5,
+    "template_thumb_up": 1.0,
 }
 FEEDBACK_CAPS = {
     "rejection": -6.0,
@@ -433,17 +435,11 @@ def summarize_profile_feedback(events, template_id: str = "") -> dict:
         "total": 0,
         "template_rejections": 0,
         "generation_rejections": 0,
-        "approvals": 0,
-        "successful_marks": 0,
-        "unsuccessful_marks": 0,
         "heavy_script_edits": 0,
         "top_reasons": [],
         "selected_template": {
             "template_id": template_id or "",
             "rejections": 0,
-            "approvals": 0,
-            "successful_marks": 0,
-            "unsuccessful_marks": 0,
             "top_reasons": [],
         },
     }
@@ -453,37 +449,26 @@ def summarize_profile_feedback(events, template_id: str = "") -> dict:
         if not isinstance(row, dict):
             continue
         event = row.get("event") or ""
+        # Component verdicts and retired video-level verdicts travel only
+        # through their own stage, never this shared aggregate.
+        if event not in EVENTS or event in ("thumb_up", "thumb_down"):
+            continue
         reason = row.get("reason") or ""
         row_template_id = str(row.get("template_id") or "")
         is_selected = bool(template_id) and row_template_id == template_id
         summary["total"] += 1
         if event == "template_rejected":
             summary["template_rejections"] += 1
-        elif event in ("generation_rejected", "video_regenerated"):
-            # A regenerate is weaker evidence than an explicit rejection, but
-            # it is still rework attached to whatever was just rendered.
+        elif event == "video_regenerated":
             summary["generation_rejections"] += 1
-        elif event == "video_approved":
-            summary["approvals"] += 1
-        elif event == "marked_successful":
-            summary["successful_marks"] += 1
-        elif event == "marked_unsuccessful":
-            summary["unsuccessful_marks"] += 1
         elif row.get("signal") == "script_edited_heavy":
             summary["heavy_script_edits"] += 1
         if reason:
             reason_counts[reason] = reason_counts.get(reason, 0) + 1
             if is_selected:
                 selected_reason_counts[reason] = selected_reason_counts.get(reason, 0) + 1
-        if is_selected:
-            if event == "template_rejected":
-                summary["selected_template"]["rejections"] += 1
-            elif event in ("video_approved", "marked_successful"):
-                summary["selected_template"]["approvals"] += 1
-                if event == "marked_successful":
-                    summary["selected_template"]["successful_marks"] += 1
-            elif event in ("generation_rejected", "marked_unsuccessful"):
-                summary["selected_template"]["unsuccessful_marks"] += 1
+        if is_selected and event == "template_rejected":
+            summary["selected_template"]["rejections"] += 1
     summary["top_reasons"] = [
         {"reason": reason, "count": count}
         for reason, count in sorted(
@@ -511,9 +496,8 @@ def template_feedback_adjustment(events, template_id: str) -> dict:
         "template_id": template_id or "",
         "explicit_rejections": 0,
         "automatic_changes": 0,
-        "approvals": 0,
-        "successful_marks": 0,
-        "unsuccessful_marks": 0,
+        "thumb_ups": 0,
+        "thumb_downs": 0,
         "top_reasons": [],
     }
     rejection_delta = 0.0
@@ -534,17 +518,18 @@ def template_feedback_adjustment(events, template_id: str) -> dict:
         elif event == "template_rejected":
             facts["automatic_changes"] += 1
             rejection_delta += FEEDBACK_WEIGHTS["automatic_template_change"]
-        elif event in ("generation_rejected", "marked_unsuccessful"):
-            facts["unsuccessful_marks"] += 1 if event == "marked_unsuccessful" else 0
-            rejection_delta += FEEDBACK_WEIGHTS[
-                "marked_unsuccessful" if event == "marked_unsuccessful" else "generation_rejection"
-            ]
-        elif event == "video_approved":
-            facts["approvals"] += 1
-            approval_delta += FEEDBACK_WEIGHTS["video_approved"]
-        elif event == "marked_successful":
-            facts["successful_marks"] += 1
-            approval_delta += FEEDBACK_WEIGHTS["marked_successful"]
+        elif event in ("thumb_up", "thumb_down"):
+            # Only a verdict on the template itself moves its score.
+            if normalize_component(row.get("step") or "") != "template":
+                continue
+            if event == "thumb_up":
+                facts["thumb_ups"] += 1
+                approval_delta += FEEDBACK_WEIGHTS["template_thumb_up"]
+            else:
+                facts["thumb_downs"] += 1
+                rejection_delta += FEEDBACK_WEIGHTS["template_thumb_down"]
+        else:
+            continue
         if reason:
             for entry in facts["top_reasons"]:
                 if entry["reason"] == reason:
@@ -572,10 +557,7 @@ def build_profile_feedback_section(summary: dict) -> str:
     lines = [
         f"Recorded feedback events: {summary.get('total', 0)}.",
         f"Template rejections: {summary.get('template_rejections', 0)}.",
-        f"Generation rejections or regenerations: {summary.get('generation_rejections', 0)}.",
-        f"Approvals: {summary.get('approvals', 0)}.",
-        f"Videos marked successful: {summary.get('successful_marks', 0)}.",
-        f"Videos marked unsuccessful: {summary.get('unsuccessful_marks', 0)}.",
+        f"Video regenerations: {summary.get('generation_rejections', 0)}.",
         f"Heavy script edits: {summary.get('heavy_script_edits', 0)}.",
     ]
     top_reasons = summary.get("top_reasons") or []
@@ -591,10 +573,7 @@ def build_profile_feedback_section(summary: dict) -> str:
     if selected.get("template_id"):
         lines.append(
             "Selected template history: "
-            f"{selected.get('rejections', 0)} rejections, "
-            f"{selected.get('approvals', 0)} approvals, "
-            f"{selected.get('successful_marks', 0)} successful marks, "
-            f"{selected.get('unsuccessful_marks', 0)} unsuccessful marks."
+            f"{selected.get('rejections', 0)} rejections."
         )
         selected_reasons = selected.get("top_reasons") or []
         if selected_reasons:

@@ -3373,11 +3373,14 @@ async def _ensure_objective_templates(
         "SELECT * FROM content_angles WHERE brand_profile_id = ? AND user_id = ?",
         (profile_id, user_id),
     )
+    template_feedback = await _component_feedback_for_profile(
+        profile_id, user_id, "template")
     try:
         drafts = await _log_model_call(
             "brand_templates", "text", TEXT_MODEL,
             lambda: generate_brand_templates(
-                profile, angles, objective=want_objective),
+                profile, angles, objective=want_objective,
+                component_feedback=template_feedback),
             user_id,
             brand_profile_id=profile_id,
         )
@@ -3509,29 +3512,38 @@ def _approval_gaps(profile: dict, pending: Optional[dict] = None) -> list:
 
 async def _angle_feedback_for_profile(brand_profile_id: str, user_id: str) -> dict:
     """
-    History verdicts attributed to the angle kind and objective behind each video.
+    Goal thumbs attributed to the angle kind and objective the founder picked.
 
-    A verdict names a generation (or a project, for step verdicts), never an
-    angle — so the attribution walks generation -> project -> angle kind +
-    objective. Kinds and objectives are fixed vocabularies, which is what makes
-    the counts survive an angle regeneration that replaces every angle row id.
-    Only verdict events are read; downloads, edits, and other triggers are not
-    judgments about what worked and cannot steer generation.
+    A goal verdict names its project, so attribution walks project -> angle
+    kind + objective. Verdicts on templates, plans and scripts are filtered
+    out by the summarizer and never steer goal generation.
     """
     rows = await _fetch_all(
-        """SELECT ca.kind AS kind, sp.objective AS objective, f.event AS event
+        """SELECT ca.kind AS kind, sp.objective AS objective, f.event AS event,
+                  f.step AS step, f.detail AS detail
            FROM feedback_events f
-           LEFT JOIN generations g ON g.id = f.generation_id
-           JOIN studio_projects sp
-             ON sp.id = COALESCE(g.studio_project_id, f.studio_project_id)
+           LEFT JOIN studio_projects sp ON sp.id = f.studio_project_id
            LEFT JOIN content_angles ca ON ca.id = sp.content_angle_id
            WHERE f.brand_profile_id = ? AND f.user_id = ?
-             AND f.event IN ('marked_successful', 'video_approved',
-                             'marked_unsuccessful', 'generation_rejected')
+             AND f.event IN ('thumb_up', 'thumb_down')
            ORDER BY f.created_at DESC LIMIT 200""",
         (brand_profile_id, user_id),
     )
     return feedback_mod.summarize_angle_feedback(rows)
+
+
+async def _component_feedback_for_profile(
+    brand_profile_id: str, user_id: str, component: str
+) -> dict:
+    """One component's thumbs for this app, as {component: {up, down, total}}."""
+    rows = await _fetch_all(
+        "SELECT event, step FROM feedback_events"
+        " WHERE brand_profile_id = ? AND user_id = ?"
+        " AND event IN ('thumb_up', 'thumb_down')"
+        " ORDER BY created_at DESC LIMIT 200",
+        (brand_profile_id, user_id),
+    )
+    return {component: feedback_mod.summarize_component_feedback(rows)[component]}
 
 
 async def _auto_generate_content_angles(profile: dict, user_id: str) -> None:
@@ -4576,11 +4588,15 @@ def _score_template_for_angle(
                 0,
                 f"Rejected or replaced {rejections} time(s) for this app.",
             )
-        if feedback["approvals"] or feedback["successful_marks"]:
-            approvals = feedback["approvals"] + feedback["successful_marks"]
+        if feedback["thumb_downs"]:
+            limitations.insert(
+                0,
+                f"Rated a poor template {feedback['thumb_downs']} time(s) for this app.",
+            )
+        if feedback["thumb_ups"]:
             reasons.insert(
                 0,
-                f"Approved or marked successful {approvals} time(s) for this app.",
+                f"Rated a good template {feedback['thumb_ups']} time(s) for this app.",
             )
 
     # The 0–10 bound lives here, not in the caller: this is the single
@@ -4653,7 +4669,7 @@ async def recommend_templates(
     # Past behavior informs the order, but it is bounded and explainable: the
     # exact adjustment and its factual basis travel with each recommendation.
     feedback_events = await _fetch_all(
-        "SELECT event, signal, reason, template_id FROM feedback_events "
+        "SELECT event, signal, reason, template_id, step FROM feedback_events "
         "WHERE brand_profile_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 200",
         (profile_id, user_id),
     )
@@ -5319,6 +5335,8 @@ async def generate_plan(
         ),
         template.get("id") or "",
     )
+    plan_feedback = await _component_feedback_for_profile(
+        row.get("brand_profile_id"), user_id, "plan")
     try:
         plan = await _log_model_call(
             "creative_plan", "text", TEXT_MODEL,
@@ -5330,6 +5348,7 @@ async def generate_plan(
                 duration_seconds=duration,
                 tone=tone,
                 profile_feedback=profile_feedback,
+                component_feedback=plan_feedback,
             ),
             user_id,
             brand_profile_id=row.get("brand_profile_id"),
@@ -7807,6 +7826,8 @@ async def generate_project_strategy(
             "sound_direction": row.get("sound_direction") or "",
             "beat_timeline": row.get("beat_timeline") or [],
         }
+    script_feedback = await _component_feedback_for_profile(
+        row.get("brand_profile_id"), user_id, "script")
 
     try:
         strategy = await _log_model_call(
@@ -7821,6 +7842,7 @@ async def generate_project_strategy(
                 tone=tone,
                 brand_voice=profile.get("tone_voice") or "",
                 profile_feedback=profile_feedback,
+                component_feedback=script_feedback,
                 plan=approved_plan,
             ),
             user_id,
@@ -8897,16 +8919,17 @@ async def record_feedback(payload: FeedbackRequest, user_id: str = Depends(get_c
             detail=f"Reason '{payload.reason}' is not valid for {event}. "
                    f"Allowed: {', '.join(allowed) or 'none'}.",
         )
-    # Thumbs verdicts are standalone judgments: they need a valid step, and
-    # they must not carry a signal or reason, so a thumb can never be
-    # miscounted as an automatic trigger or a stated cause.
+    # Thumbs verdicts judge one component (goal, template, plan, script) and
+    # carry no signal or reason, so a thumb can never be miscounted as an
+    # automatic trigger or a stated cause.
     is_thumb = event in ("thumb_up", "thumb_down")
-    step = feedback_mod.normalize_step(payload.step)
+    step = feedback_mod.normalize_component(payload.step)
     if is_thumb:
         if not step:
             raise HTTPException(
                 status_code=400,
-                detail=f"Thumbs feedback needs a valid step. Known: {', '.join(feedback_mod.THUMB_STEPS)}.",
+                detail="Thumbs feedback needs a valid component. "
+                       f"Known: {', '.join(feedback_mod.COMPONENTS)}.",
             )
         if signal or reason:
             raise HTTPException(
@@ -8958,7 +8981,7 @@ async def list_feedback(
     return {
         "feedback": rows,
         "summary": feedback_mod.summarize(rows),
-        "thumbs": feedback_mod.summarize_thumbs(rows),
+        "components": feedback_mod.summarize_component_feedback(rows),
     }
 
 

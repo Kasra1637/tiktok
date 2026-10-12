@@ -2058,3 +2058,128 @@ class TestSpokenCounts:
         )
         assert check["story"]["restates_hook"] is True
         assert check["story"]["coherent"] is False
+
+
+class TestComponentFeedbackRouting:
+    """
+    Each component's thumbs reach ONLY the AI stage that produces it: template
+    verdicts the template drafter, plan verdicts the plan writer, script
+    verdicts the script writer. A verdict on one never moves another.
+    """
+
+    class _Stop(Exception):
+        pass
+
+    def _rate(self, api, profile, project, votes):
+        from models import FeedbackRequest
+        for component, event, times in votes:
+            for _ in range(times):
+                _run(api.record_feedback(FeedbackRequest(
+                    event=event, step=component,
+                    brand_profile_id=profile["id"],
+                    studio_project_id=project["id"]), ANON))
+
+    def _setup(self, api, name):
+        profile = _approved_profile(api, name)
+        project = _a_project(api, profile, _a_template(api))
+        self._rate(api, profile, project, [
+            ("goal", "thumb_up", 1),
+            ("template", "thumb_down", 2),
+            ("plan", "thumb_up", 3),
+            ("script", "thumb_down", 4),
+        ])
+        return profile, project
+
+    def test_plan_stage_receives_only_plan_verdicts(self, api, monkeypatch):
+        from models import GeneratePlanRequest
+        profile, project = self._setup(api, "Route Plan")
+        seen = {}
+
+        async def fake_plan(**kwargs):
+            seen.update(kwargs)
+            return dict(FAKE_PLAN)
+        monkeypatch.setattr(api, "generate_creative_plan", fake_plan)
+        _run(api.generate_plan(project_id=project["id"],
+                               payload=GeneratePlanRequest(), user_id=ANON))
+        assert seen["component_feedback"] == {"plan": {"up": 3, "down": 0, "total": 3}}
+
+    def test_script_stage_receives_only_script_verdicts(self, api, monkeypatch):
+        from models import GenerateStrategyRequest
+        profile, project = self._setup(api, "Route Script")
+        seen = {}
+
+        async def fake_strategy(**kwargs):
+            seen.update(kwargs)
+            raise self._Stop()
+        monkeypatch.setattr(api, "generate_video_strategy", fake_strategy)
+        with pytest.raises(Exception):
+            _run(api.generate_project_strategy(
+                project_id=project["id"], payload=GenerateStrategyRequest(), user_id=ANON))
+        assert seen["component_feedback"] == {"script": {"up": 0, "down": 4, "total": 4}}
+
+    def test_template_stage_receives_only_template_verdicts(self, api, monkeypatch):
+        profile, _ = self._setup(api, "Route Template")
+        seen = {}
+
+        async def fake_templates(profile, angles=None, count=10, objective="",
+                                 component_feedback=None):
+            seen["component_feedback"] = component_feedback
+            return []
+        monkeypatch.setattr(api, "generate_brand_templates", fake_templates)
+        _run(api._ensure_objective_templates(profile, "address_user_problem", ANON))
+        assert seen["component_feedback"] == {"template": {"up": 0, "down": 2, "total": 2}}
+
+    def test_goal_stage_counts_only_goal_verdicts(self, api):
+        profile, _ = self._setup(api, "Route Goal")
+        summary = _run(api._angle_feedback_for_profile(profile["id"], ANON))
+        assert summary["total"] == 1
+        assert summary["objectives"] == [
+            {"name": "demonstrate_feature", "wins": 1, "flops": 0}]
+
+    def test_stage_prompts_carry_their_own_verdicts(self, monkeypatch):
+        import ai_service
+        captured = {}
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured[context] = prompt
+            raise self._Stop()
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        profile = {"brand_name": "Taskly", "core_features": ["Task timer"]}
+        template = {"name": "Stop Doing This", "category": "pain-point-question"}
+        with pytest.raises(Exception):
+            _run(ai_service.generate_creative_plan(
+                profile=profile, template=template,
+                component_feedback={"plan": {"up": 0, "down": 3, "total": 3}}))
+        with pytest.raises(Exception):
+            _run(ai_service.generate_video_strategy(
+                profile=profile, template=template,
+                component_feedback={"script": {"up": 5, "down": 0, "total": 5}}))
+        with pytest.raises(Exception):
+            _run(ai_service.generate_brand_templates(
+                profile, [], objective="address_user_problem",
+                component_feedback={"template": {"up": 1, "down": 1, "total": 2}}))
+        prompts = list(captured.values())
+        plan = next(p for p in prompts if "on the script plan" in p)
+        script = next(p for p in prompts if "on the spoken script" in p)
+        tmpl = next(p for p in prompts if "on the hook template" in p)
+        assert "0 thumbs up, 3 thumbs down" in plan
+        assert "5 thumbs up, 0 thumbs down" in script
+        assert "1 thumbs up, 1 thumbs down" in tmpl
+        assert "VERDICTS on the spoken script" not in plan
+        assert "VERDICTS on the hook template" not in script
+        assert "VERDICTS on the script plan" not in tmpl
+
+    def test_goal_verdict_sticks_to_the_goal_that_was_rated(self, api):
+        """Switching goal after voting must not move the vote to the new goal."""
+        from models import FeedbackRequest
+        profile = _approved_profile(api, "Route Goal Detail")
+        project = _a_project(api, profile, _a_template(api))
+        _run(api.record_feedback(FeedbackRequest(
+            event="thumb_down", step="goal", brand_profile_id=profile["id"],
+            studio_project_id=project["id"],
+            detail="objective=create_curiosity;kind=founder_story"), ANON))
+        summary = _run(api._angle_feedback_for_profile(profile["id"], ANON))
+        assert summary["objectives"] == [
+            {"name": "create_curiosity", "wins": 0, "flops": 1}]
+        assert summary["kinds"] == [
+            {"name": "founder_story", "wins": 0, "flops": 1}]

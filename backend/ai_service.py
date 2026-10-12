@@ -1814,7 +1814,7 @@ async def generate_content_angles(profile: dict, max_angles: int = 8,
         profile: an App Profile row (brand_profiles) with fields already
             parsed into Python values by row_to_dict.
         max_angles: hard cap on returned angles.
-        angle_feedback: History verdicts attributed to angle kinds and
+        angle_feedback: Goal thumbs attributed to angle kinds and
             objectives (feedback.summarize_angle_feedback). Counts only;
             rendered into the prompt, or a stated none-yet when empty.
     """
@@ -1885,7 +1885,7 @@ async def generate_content_angles(profile: dict, max_angles: int = 8,
         "kinds — do not return eight variations of the same angle. Return ONLY valid JSON."
     )
 
-    # History verdicts, when any exist. Counts and fixed kind/objective names
+    # Goal thumbs, when any exist. Counts and fixed kind/objective names
     # only — the same rule as every other prompt layer. Rendered always, so
     # an empty record reads as "no evidence yet" rather than as silence the
     # model could fill with an invented best performer.
@@ -2010,9 +2010,19 @@ def normalize_brand_template(raw: dict) -> Optional[dict]:
     }
 
 
+def _component_feedback_block(component_feedback: Optional[dict], component: str) -> str:
+    """This stage's own thumbs as a prompt block; other components are never read."""
+    if not component_feedback or component not in component_feedback:
+        return ""
+    section = feedback.build_component_feedback_section(
+        {component: component_feedback[component]}, component)
+    return f"\n\n{section}\n\n" if section else ""
+
+
 async def generate_brand_templates(
     profile: dict, angles: Optional[list] = None, count: int = BRAND_TEMPLATE_COUNT,
     objective: str = "",
+    component_feedback: Optional[dict] = None,
 ) -> list:
     """
     Draft tailored hook structures for one approved App Profile AND one
@@ -2096,6 +2106,7 @@ async def generate_brand_templates(
         f"CONTENT ANGLES:\n{json.dumps(angle_briefs, indent=2)}\n\n"
         f"Categories (use only these): {categories}\n\n"
         f"{brief_line}"
+        f"{_component_feedback_block(component_feedback, 'template')}"
         "A generated video is exactly TWO sections and nothing else: a HOOK in the first "
         "4 seconds, then a MIDDLE that develops it. The middle develops the situation, the "
         "friction or the reaction, and ends at the moment the viewer would reach for the app. "
@@ -2194,6 +2205,7 @@ async def generate_creative_plan(
     tone: str = "",
     brand_voice: str = "",
     profile_feedback: Optional[dict] = None,
+    component_feedback: Optional[dict] = None,
 ) -> dict:
     """
     Generate an editable creative plan from an approved App Profile + template.
@@ -2309,6 +2321,7 @@ async def generate_creative_plan(
             "\n\nPROFILE FEEDBACK:\n"
             f"{feedback.build_profile_feedback_section(profile_feedback)}\n"
         )
+    feedback_context += _component_feedback_block(component_feedback, "plan")
 
     system_message = (
         "You are a short-form video creative director for mobile app promotions. "
@@ -3391,6 +3404,7 @@ async def generate_video_strategy(
     tone: str = "",
     brand_voice: str = "",
     profile_feedback: Optional[dict] = None,
+    component_feedback: Optional[dict] = None,
     plan: Optional[dict] = None,
 ) -> dict:
     """
@@ -3583,6 +3597,7 @@ async def generate_video_strategy(
             "\n\nPAST FEEDBACK FOR THIS APP (counts and fixed reason codes only):\n"
             f"{feedback.build_profile_feedback_section(profile_feedback)}\n"
         )
+    feedback_context += _component_feedback_block(component_feedback, "script")
 
     # The one route by which real performance data reaches generation, and
     # deliberately anonymous: bands and a sample size, no source video, creator,

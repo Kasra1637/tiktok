@@ -251,14 +251,7 @@ export const TOURS = {
         title: "Play, download, or reuse a render",
         optional: true,
         body:
-          "A completed row offers its video, status, model, download, and actions to duplicate or open it in Demo + CTA. Your verdicts below are what teach the studio: they steer future audience angles, template suggestions, and script plans for this app.",
-      },
-      {
-        target: '[data-testid="history-verdict"]',
-        title: "Say what worked",
-        optional: true,
-        body:
-          "Answer how each finished video turned out — Looks good or Not good. One tap each, no diagnosis needed. Wins lean future angles, templates, and plans toward what worked here; flops steer them away. A verdict with no numbers still counts.",
+          "A completed row offers its video, status, model, download, and actions to duplicate or open it in Demo + CTA. Finished videos are not rated here: the thumbs you give goals, templates, plans, and scripts while creating are what teach the studio.",
       },
       {
         target: '[data-testid="generation-details-button"]',

@@ -12,7 +12,7 @@ import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } fro
 import { FactChip, FactList } from "../components/FactChip";
 import { recordSignal } from "../lib/feedback";
 import { sentenceCase } from "../lib/copyCase";
-import { Factory as HistoryIcon, Loader as Loader2, TriangleAlert as AlertTriangle, Download, Trash as Trash2, RotateCcw, GitBranch, RefreshCw, ChevronRight, Film, Check, ThumbsDown, Info, Copy, X, Smartphone, CircleHelp, Wrench } from "lucide-react";
+import { Factory as HistoryIcon, Loader as Loader2, TriangleAlert as AlertTriangle, Download, Trash as Trash2, RotateCcw, GitBranch, RefreshCw, ChevronRight, Film, Info, Copy, X, Smartphone, Wrench } from "lucide-react";
 
 function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -164,10 +164,6 @@ function GenerationRow({ row, onChanged }) {
   const [varKind, setVarKind] = useState("hook_line");
   const [varValue, setVarValue] = useState("");
   const [children, setChildren] = useState([]);
-  // The founder's verdict on a finished video, or "" if they have not said.
-  // Local only: the outcome is a judgment about this render, and reloading the
-  // page should not invite them to answer twice.
-  const [verdict, setVerdict] = useState("");
   const [showDetails, setShowDetails] = useState(false);
   // Set when the clip cannot be played inline, so the row can say so instead of
   // leaving a player that looks loaded and does nothing.
@@ -216,19 +212,6 @@ function GenerationRow({ row, onChanged }) {
     studio_project_id: row.studio_project_id,
     generation_id: row.id,
     template_id: row.template_id,
-  };
-
-  // Two buttons rather than a reason picker. The spec wants approval and
-  // rejection captured; asking the founder to also diagnose the cause at this
-  // moment would cost more attention than the answer is worth, so only the
-  // factual trigger is recorded and any reason stays optional.
-  const judge = (next) => {
-    setVerdict(next);
-    recordSignal(
-      next === "approved" ? "video_approved" : "generation_rejected",
-      next,
-      signalRefs,
-    );
   };
 
   useEffect(() => {
@@ -585,44 +568,7 @@ function GenerationRow({ row, onChanged }) {
             </div>
           )}
 
-          {/* The verdict is a judgement about the video, which is a different
-              kind of action from moving a file or deleting a row. It used to be
-              a text fragment sitting inline between two buttons, so it read as
-              a label for whatever came next rather than a question. In its own
-              group with a heading, it asks to be answered — which is the point
-              of asking. Verdicts are quick signals only: Looks good / Not good
-              records a trigger for the template loop, and nothing here takes
-              typed-in numbers anymore. */}
-          {row.status === "completed" && (
-            <div className="space-y-2 pt-1" data-testid="history-verdict">
-              <span className="eyebrow flex items-center gap-1.5">
-                <CircleHelp className="h-3 w-3 shrink-0" aria-hidden="true" />
-                How did this turn out?
-              </span>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-pressed={verdict === "approved"}
-                  onClick={() => judge("approved")}
-                  className={verdict === "approved" ? "text-success" : undefined}
-                >
-                  <Check className="h-3.5 w-3.5" /> Looks good
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-pressed={verdict === "rejected"}
-                  onClick={() => judge("rejected")}
-                  className={verdict === "rejected" ? "text-destructive" : undefined}
-                >
-                  <ThumbsDown className="h-3.5 w-3.5" /> Not good
-                </Button>
-              </div>
-            </div>
-          )}
-          {/* Navigation actions, in the same bordered-group language as the verdict
-              above, instead of a full-width bar below the card. The bar
+          {/* Navigation actions, in a bordered group instead of a full-width bar below the card. The bar
               stretched short cards and left the right column half empty beside
               a tall 9:16 player; the group fills that space with the actions
               that belong to the render.

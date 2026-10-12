@@ -352,7 +352,7 @@ class TestAngleFeedbackPromptWiring:
         captured = self._capture(monkeypatch)
         summary = feedback_mod.summarize_angle_feedback([
             {"kind": "problem_solution", "objective": "demonstrate_feature",
-             "event": "marked_successful"},
+             "event": "thumb_up", "step": "goal"},
         ])
         _run(ai_service.generate_content_angles(
             {"brand_name": "Taskly"}, angle_feedback=summary))
@@ -814,7 +814,6 @@ class TestStrategyBudget:
             total_duration=30, tone="calm", brand_voice="plain, tired, warm",
             profile_feedback={
                 "total": 200, "template_rejections": 9, "generation_rejections": 12,
-                "approvals": 6, "successful_marks": 4, "unsuccessful_marks": 3,
                 "heavy_script_edits": 2,
                 "top_reasons": [{"reason": "hook_too_generic", "count": 7}],
                 "selected_template": {},

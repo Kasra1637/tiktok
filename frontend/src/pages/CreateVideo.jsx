@@ -12,6 +12,7 @@ import SafetyPanel from "../components/SafetyPanel";
 import HookContinuityPanel from "../components/HookContinuityPanel";
 import GenerationPanel from "../components/GenerationPanel";
 import { ThumbPair } from "../components/ThumbPair";
+import { ComponentThumbs } from "../components/ComponentThumbs";
 import AssetLibrary from "./AssetLibrary";
 import { api, getErrorMessage } from "../lib/api";
 import { recordSignal, recordThumb, classifyScriptEdit } from "../lib/feedback";
@@ -1428,7 +1429,7 @@ setObjective("");
   const handleReviewThumb = async (next) => {
     setReviewThumb(next);
     if (next === 0 || !project?.id) return;
-    recordThumb("review", next, {
+    recordThumb("plan", next, {
       brand_profile_id: profileId,
       studio_project_id: project.id,
       template_id: project.template_id,
@@ -1880,6 +1881,21 @@ setObjective("");
             />
             </div>
 
+            {angle && objective && (
+              <ComponentThumbs
+                component="goal"
+                question="Is this the right goal for your customers?"
+                hint="Rates the goal only. It shapes future goal suggestions for this app."
+                resetKey={`${angleId}:${objective}`}
+                refs={{
+                  brand_profile_id: profileId,
+                  studio_project_id: project?.id,
+                  detail: `objective=${objective};kind=${angle.kind || ""}`,
+                }}
+                testId="goal-feedback"
+              />
+            )}
+
             <div className="surface space-y-1.5 rounded-2xl">
               <label htmlFor="tone" className="text-sm font-medium">Tone (optional)</label>
               <Input
@@ -2023,6 +2039,21 @@ setObjective("");
               </div>
             )}
 
+            {effectiveTemplateId && (
+              <ComponentThumbs
+                component="template"
+                question="Is this template a good fit for your customers?"
+                hint="Rates the template only. It reorders and reshapes future template suggestions."
+                resetKey={effectiveTemplateId}
+                refs={{
+                  brand_profile_id: profileId,
+                  studio_project_id: project?.id,
+                  template_id: effectiveTemplateId,
+                }}
+                testId="template-feedback"
+              />
+            )}
+
             {/* The photo upload lives here now rather than on its own step. It
                 was the only thing on that step, so a founder picked a template,
                 left, uploaded, and came back — and the template step already
@@ -2127,6 +2158,21 @@ setObjective("");
                       project={project}
                       onProjectChange={setProject}
                     />
+                    {project?.strategy && (
+                      <ComponentThumbs
+                        component="script"
+                        question="Does this script speak to your customers?"
+                        hint="Rates the generated script only. It guides future scripts for this app."
+                        resetKey={`${project.id}:${project.strategy_version || 0}`}
+                        refs={{
+                          brand_profile_id: profileId,
+                          studio_project_id: project.id,
+                          template_id: project.template_id,
+                          detail: `strategy v${Number(project.strategy_version) || 0}`,
+                        }}
+                        testId="script-feedback"
+                      />
+                    )}
                     {/* The one and only render. It used to sit on the review
                         step, where it let a render run on text the founder had
                         not read yet, and it sat BELOW the segmented chain, which

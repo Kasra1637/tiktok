@@ -551,10 +551,10 @@ class TestContentAngles:
         project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
             brand_profile_id=profile["id"], content_angle_id=winner["id"]), user_id=ANON))
         _run(api._execute(
-            "INSERT INTO feedback_events (id, brand_profile_id, studio_project_id, event, created_at, user_id)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO feedback_events (id, brand_profile_id, studio_project_id, event, created_at, user_id, step)"
+            " VALUES (?, ?, ?, ?, ?, ?, 'goal')",
             (str(_uuid.uuid4()), profile["id"], project["id"],
-             "video_approved", "2026-01-01T00:00:00", ANON)))
+             "thumb_up", "2026-01-01T00:00:00", ANON)))
         listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
         assert [a["id"] for a in listed["angles"]] == [quiet["id"], winner["id"]]
         by_id = {a["id"]: a for a in listed["angles"]}
@@ -579,10 +579,10 @@ class TestContentAngles:
         project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
             brand_profile_id=p1["id"], content_angle_id=a1["id"]), user_id=ANON))
         _run(api._execute(
-            "INSERT INTO feedback_events (id, brand_profile_id, studio_project_id, event, created_at, user_id)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO feedback_events (id, brand_profile_id, studio_project_id, event, created_at, user_id, step)"
+            " VALUES (?, ?, ?, ?, ?, ?, 'goal')",
             (str(_uuid.uuid4()), p1["id"], project["id"],
-             "video_approved", "2026-01-01T00:00:00", ANON)))
+             "thumb_up", "2026-01-01T00:00:00", ANON)))
         assert _run(api.list_content_angles(profile_id=p1["id"], user_id=ANON))["angles"][0]["evidence"] == {"wins": 1, "flops": 0}
         assert _run(api.list_content_angles(profile_id=p2["id"], user_id=ANON))["angles"][0]["evidence"] == {"wins": 0, "flops": 0}
 
@@ -615,12 +615,12 @@ class TestContentAngles:
             brand_profile_id=profile["id"], content_angle_id=a1["id"],
             objective="address_user_problem"), user_id=ANON))
 
-        # One video_approved verdict for the shared objective "address_user_problem"
+        # One goal thumbs-up for the shared objective "address_user_problem"
         _run(api._execute(
-            "INSERT INTO feedback_events (id, brand_profile_id, studio_project_id, event, created_at, user_id)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO feedback_events (id, brand_profile_id, studio_project_id, event, created_at, user_id, step)"
+            " VALUES (?, ?, ?, ?, ?, ?, 'goal')",
             (str(_uuid.uuid4()), profile["id"], project["id"],
-             "video_approved", "2026-01-01T00:00:00", ANON)))
+             "thumb_up", "2026-01-01T00:00:00", ANON)))
 
         listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
         assert listed["objective_evidence"] == {"address_user_problem": {"wins": 1, "flops": 0}}
@@ -657,10 +657,10 @@ class TestContentAngles:
             brand_profile_id=profile["id"], content_angle_id=a1["id"],
             objective="address_user_problem"), user_id=ANON))
         _run(api._execute(
-            "INSERT INTO feedback_events (id, brand_profile_id, studio_project_id, event, created_at, user_id)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO feedback_events (id, brand_profile_id, studio_project_id, event, created_at, user_id, step)"
+            " VALUES (?, ?, ?, ?, ?, ?, 'goal')",
             (str(_uuid.uuid4()), profile["id"], p1["id"],
-             "video_approved", "2026-01-01T00:00:00", ANON)))
+             "thumb_up", "2026-01-01T00:00:00", ANON)))
 
         # Angle 2: objective B
         a2 = _run(api.create_manual_content_angle(
@@ -672,10 +672,10 @@ class TestContentAngles:
             brand_profile_id=profile["id"], content_angle_id=a2["id"],
             objective="demonstrate_feature"), user_id=ANON))
         _run(api._execute(
-            "INSERT INTO feedback_events (id, brand_profile_id, studio_project_id, event, created_at, user_id)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO feedback_events (id, brand_profile_id, studio_project_id, event, created_at, user_id, step)"
+            " VALUES (?, ?, ?, ?, ?, ?, 'goal')",
             (str(_uuid.uuid4()), profile["id"], p2["id"],
-             "marked_unsuccessful", "2026-01-02T00:00:00", ANON)))
+             "thumb_down", "2026-01-02T00:00:00", ANON)))
 
         listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
         obj_map = listed["objective_evidence"]
@@ -996,13 +996,14 @@ class TestFeedbackInfluence:
         target = baseline["recommendations"][0]
         return baseline, target["template"]["id"], target["score"]
 
-    def _record(self, api, profile, template_id, event, reason="", signal=""):
+    def _record(self, api, profile, template_id, event, reason="", signal="", step=""):
         from models import FeedbackRequest
         return _run(api.record_feedback(
             FeedbackRequest(
                 event=event,
                 reason=reason,
                 signal=signal,
+                step=step,
                 brand_profile_id=profile["id"],
                 template_id=template_id,
             ),
@@ -1037,13 +1038,31 @@ class TestFeedbackInfluence:
         assert updated["score"] == pytest.approx(before - 1.0)
         assert updated["feedback"]["automatic_changes"] == 1
 
-    def test_success_marks_raise_score_and_name_it(self, api):
+    def test_a_template_thumb_up_raises_score_and_names_it(self, api):
         profile = _approve_profile(api, name="Feedback Success")
         _, template_id, before = self._target(api, profile)
-        self._record(api, profile, template_id, "marked_successful", reason="good_performance")
+        self._record(api, profile, template_id, "thumb_up", step="template")
         updated = self._after(api, profile, template_id)
-        assert updated["score"] == pytest.approx(before + 2.0)
-        assert updated["why_it_fits"][0] == "Approved or marked successful 1 time(s) for this app."
+        assert updated["score"] == pytest.approx(min(10.0, before + 1.0))
+        assert updated["why_it_fits"][0] == "Rated a good template 1 time(s) for this app."
+
+    def test_a_template_thumb_down_lowers_score_and_names_it(self, api):
+        profile = _approve_profile(api, name="Feedback Thumb Down")
+        _, template_id, before = self._target(api, profile)
+        self._record(api, profile, template_id, "thumb_down", step="template")
+        updated = self._after(api, profile, template_id)
+        assert updated["score"] == pytest.approx(max(0.0, before - 1.5))
+        assert updated["limitations"][0] == "Rated a poor template 1 time(s) for this app."
+
+    def test_a_verdict_on_another_component_cannot_move_a_template_score(self, api):
+        profile = _approve_profile(api, name="Feedback Isolation")
+        _, template_id, before = self._target(api, profile)
+        for component in ("goal", "plan", "script"):
+            self._record(api, profile, template_id, "thumb_down", step=component)
+        updated = self._after(api, profile, template_id)
+        assert updated["score"] == pytest.approx(before)
+        assert updated["feedback"]["thumb_downs"] == 0
+        assert updated["feedback"]["delta"] == 0
 
     def test_feedback_is_capped_and_template_scoped(self, api):
         import feedback as feedback_mod
@@ -1084,34 +1103,40 @@ class TestFeedbackInfluence:
                 "template_id": "template-one",
             },
             {
-                "event": "marked_successful",
-                "signal": "",
-                "reason": "good_performance",
+                "event": "thumb_down",
+                "step": "plan",
                 "template_id": "template-one",
             },
         ], "template-one")
         section = feedback_mod.build_profile_feedback_section(summary)
         assert "Template rejections: 1." in section
         assert "hook too weak (1)" in section
-        assert "good performance (1)" in section
         assert "regenerated" not in section
+        # Component verdicts travel only through their own stage.
+        assert summary["total"] == 2
+        assert "thumb" not in section.lower()
 
 
-class TestAngleFeedback:
+class TestGoalFeedback:
     def test_verdicts_group_by_kind_and_objective(self):
         import feedback as feedback_mod
         summary = feedback_mod.summarize_angle_feedback([
             {"kind": "problem_solution", "objective": "demonstrate_feature",
-             "event": "marked_successful"},
+             "event": "thumb_up", "step": "goal"},
             {"kind": "problem_solution", "objective": "demonstrate_feature",
-             "event": "video_approved"},
+             "event": "thumb_up", "step": "goal"},
             {"kind": "founder_story", "objective": "demonstrate_feature",
-             "event": "generation_rejected"},
+             "event": "thumb_down", "step": "goal"},
             # Not a verdict: never steers generation.
             {"kind": "problem_solution", "objective": "demonstrate_feature",
              "event": "video_downloaded"},
+            # A verdict on another component says nothing about the goal.
+            {"kind": "problem_solution", "objective": "demonstrate_feature",
+             "event": "thumb_down", "step": "script"},
+            {"kind": "problem_solution", "objective": "demonstrate_feature",
+             "event": "thumb_down", "step": "template"},
             # Attributable to nothing: skipped, not lumped.
-            {"kind": "", "objective": "", "event": "marked_successful"},
+            {"kind": "", "objective": "", "event": "thumb_up", "step": "goal"},
         ])
         assert summary["total"] == 3
         assert {"name": "problem_solution", "wins": 2, "flops": 0} in summary["kinds"]
@@ -1129,9 +1154,9 @@ class TestAngleFeedback:
         section = feedback_mod.build_angle_feedback_section(
             feedback_mod.summarize_angle_feedback([
                 {"kind": "problem_solution", "objective": "",
-                 "event": "marked_successful"},
+                 "event": "thumb_up", "step": "goal"},
                 {"kind": "founder_story", "objective": "",
-                 "event": "marked_unsuccessful"},
+                 "event": "thumb_down", "step": "goal"},
             ]))
         assert "problem_solution (1 win(s), 0 flop(s))" in section
         assert "founder_story (0 win(s), 1 flop(s))" in section
@@ -1189,7 +1214,7 @@ class TestCrossUserIsolation:
 
 def _brand_fake(names=("ZZZ Brand Hook One", "ZZZ Brand Hook Two")):
     """Stub generate_brand_templates: valid drafts, no network."""
-    async def fake(profile, angles=None, count=10, objective=""):
+    async def fake(profile, angles=None, count=10, objective="", component_feedback=None):
         return [
             {
                 "name": name,

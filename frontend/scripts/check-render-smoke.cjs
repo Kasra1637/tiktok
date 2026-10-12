@@ -715,8 +715,14 @@ function load(relPath) {
       // recordThumb must mirror the real module: CreateVideo's review loop
       // calls it unguarded, so a stub without it turns every thumbs tap into
       // a TypeError and no check could ever exercise the loop.
-      return { recordSignal: () => {}, recordThumb: () => {}, classifyScriptEdit: () => ({
-        kind: "other" }) };
+      return {
+        recordSignal: () => {},
+        recordThumb: async (step, verdict, refs) => {
+          (global.__SMOKE_THUMBS = global.__SMOKE_THUMBS || []).push({ step, verdict, refs });
+          return true;
+        },
+        classifyScriptEdit: () => ({ kind: "other" }),
+      };
     }
     // The webpack alias in craco.config.js: "@" is src/.
     if (spec.startsWith("@/")) return load(spec.slice(2));
@@ -2858,6 +2864,41 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           }
         } finally {
           global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
+  // Each component's rating is filed under its own component, so it can only
+  // teach the AI step that produces it.
+  await check("plan and template thumbs are recorded under their own component", async (ctx) => {
+    await withApi(
+      { generatePlan: async () => PROJECT_WITH_STRATEGY },
+      async () => {
+        global.__SMOKE_PARAMS = "?project=p1";
+        global.__SMOKE_THUMBS = [];
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Review");
+          const up = ctx.container.querySelector('[data-testid="review-thumb-up"]');
+          await clickEl(ctx, up, "Review has no thumbs-up control");
+          await openStep(ctx, "Template & photo");
+          const tUp = ctx.container.querySelector('[data-testid="template-feedback-thumb-down"]');
+          await clickEl(ctx, tUp, "Template step has no template rating");
+          await act(async () => {});
+          const steps = global.__SMOKE_THUMBS.map((t) => `${t.step}:${t.verdict}`);
+          if (!steps.includes("plan:1")) {
+            throw new Error(`plan thumbs-up not filed under plan: ${steps.join(", ")}`);
+          }
+          if (!steps.includes("template:-1")) {
+            throw new Error(`template thumbs-down not filed under template: ${steps.join(", ")}`);
+          }
+          const tpl = global.__SMOKE_THUMBS.find((t) => t.step === "template");
+          if (!tpl.refs.template_id) throw new Error("template rating does not name the template");
+          expectText(ctx, "future suggestions for this app will learn", "template rating gives no confirmation");
+        } finally {
+          global.__SMOKE_PARAMS = "";
+          global.__SMOKE_THUMBS = [];
         }
       }
     );
@@ -6208,6 +6249,32 @@ async function runDemoCtaChecks() {
           }
           if (!text.includes("1.8s")) {
             throw new Error("the hook duration value is missing from the label row");
+          }
+        }
+      );
+    }
+  );
+
+  await check(
+    "History no longer asks for a verdict on a finished video",
+    async (ctx) => {
+      const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+      await withApi(
+        {
+          getGenerationHistory: async () => ({
+            generations: [{ ...COMPLETED, brand_name: "Test App", duration: 10 }],
+          }),
+          getAppProfiles: async () => ({ profiles: [PROFILE] }),
+          getVariationKinds: async () => ({ variations: [] }),
+        },
+        async () => {
+          await mount(GenerationHistory, { onChanged: () => {} })(ctx);
+          if (ctx.container.querySelector('[data-testid="history-verdict"]')) {
+            throw new Error("History still shows the per-video verdict controls");
+          }
+          const text = ctx.container.textContent || "";
+          if (text.includes("How did this turn out?") || text.includes("Looks good")) {
+            throw new Error("History still asks the founder to rate the finished video");
           }
         }
       );
