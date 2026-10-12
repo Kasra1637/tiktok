@@ -229,7 +229,7 @@ export function StatementCard({ title, rows, spanFull }) {
       {rows.filter(Boolean).length > 0 && (
         <>
           <div aria-hidden="true" className="h-px bg-[color:var(--hairline)]" />
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {rows.filter(Boolean).map((row, i) => (
               <p key={i} className="text-xs leading-[18px] text-muted-foreground">
                 {sentenceCase(row)}

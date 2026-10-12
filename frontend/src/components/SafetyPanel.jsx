@@ -54,7 +54,7 @@ export function SafetyPanel({ report, summary }) {
           <span className="eyebrow flex items-center gap-1.5 text-destructive">
             <Ban className="h-3 w-3" /> Never use — found in this script
           </span>
-          <ul className="mt-2 space-y-1.5 text-sm">
+          <ul className="mt-2 space-y-2 text-sm">
             {blocking.map((b, i) => (
               <li key={i}>
                 <span className="font-medium">&ldquo;{b.claim}&rdquo;</span>
@@ -68,7 +68,7 @@ export function SafetyPanel({ report, summary }) {
       {warnings.length > 0 && (
         <div className="inset-panel inset-panel-strong">
           <span className="eyebrow">Risk warnings</span>
-          <ul className="mt-2 space-y-1.5 text-sm">
+          <ul className="mt-2 space-y-2 text-sm">
             {warnings.map((w, i) => (
               <li key={i} className="flex flex-wrap items-baseline gap-x-2">
                 <span className="font-medium">&ldquo;{w.claim}&rdquo;</span>
