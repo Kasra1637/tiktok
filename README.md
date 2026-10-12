@@ -133,7 +133,7 @@ pixel-exact and cannot drift.
 `brand_profiles` (App Profiles, extended from the old `brand_profiles`) ·
 `content_angles` · `hook_templates` (extended) · `template_favorites` ·
 `studio_projects` · `generations` · `assets` · `overlay_compositions` ·
-`performance_entries` · `feedback_events` · `research_runs`
+`feedback_events` · `research_runs`
 
 `studio_projects` is deliberately separate from `generations`: the founder
 iterates on a script on text alone, and only a marked-ready project renders.

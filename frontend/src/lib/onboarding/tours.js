@@ -267,13 +267,6 @@ export const TOURS = {
         body:
           "Open Details to see the generation prompt and the claim-check report saved with this render. Use them to understand what the system generated; review claims before you publish.",
       },
-      {
-        target: '[data-testid="record-results-button"]',
-        title: "Record results after posting",
-        optional: true,
-        body:
-          "Enter views and other metrics yourself after you post, plus a Worked or Did not work verdict. Numbers are never pulled from a platform or verified. Logged views power the per-template learning that the next strategy reads; the verdict joins the same loop as the quick Looks good above.",
-      },
     ],
   },
 
@@ -287,19 +280,6 @@ export const TOURS = {
         title: "Pick the app you are reading",
         body:
           "Results are per App Profile, because which opening works depends on the app. Switch apps here to read another one's numbers.",
-      },
-      {
-        target: '[data-testid="analytics-ledger"]',
-        title: "Every video you logged",
-        body:
-          "One row per finished video, with the views, likes, comments, shares and saves you entered and the verdict you gave it. A finished video with nothing logged gets a short nudge row instead — it is the one the app is learning nothing from.",
-      },
-      {
-        target: '[data-testid="what-works"]',
-        title: "What this app has learned",
-        optional: true,
-        body:
-          "The same numbers, rolled up per template: which openings carried the most views, and which carried the least. This is the only part of a profile that improves with use — the next strategy reads it.",
       },
     ],
   },

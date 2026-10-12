@@ -102,28 +102,3 @@ export async function recordThumb(step, verdict, refs = {}) {
     return false;
   }
 }
-
-/**
- * Record an explicit judgment the founder actually stated.
- *
- * Used only where the founder picks a verdict rather than the software
- * observing one — recording results as "Worked" or "Did not work". Everywhere
- * else the trigger is the honest signal and the reason stays empty.
- *
- * @returns {Promise<boolean>} whether it was recorded.
- */
-export async function recordReason(event, reason, refs = {}) {
-  try {
-    await api.recordFeedback({
-      event,
-      reason,
-      brand_profile_id: refs.brand_profile_id || "",
-      studio_project_id: refs.studio_project_id || "",
-      generation_id: refs.generation_id || "",
-      template_id: refs.template_id || "",
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}

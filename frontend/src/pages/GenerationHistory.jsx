@@ -10,9 +10,9 @@ import PageFrame from "../components/PageFrame";
 import EmptyState from "../components/EmptyState";
 import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } from "../lib/api";
 import { FactChip, FactList } from "../components/FactChip";
-import { recordSignal, recordReason } from "../lib/feedback";
+import { recordSignal } from "../lib/feedback";
 import { sentenceCase } from "../lib/copyCase";
-import { Factory as HistoryIcon, Loader as Loader2, TriangleAlert as AlertTriangle, Download, Trash as Trash2, RotateCcw, GitBranch, RefreshCw, ChevronRight, Film, TrendingUp, Check, ThumbsDown, Info, Copy, X, Smartphone, CircleHelp, Wrench } from "lucide-react";
+import { Factory as HistoryIcon, Loader as Loader2, TriangleAlert as AlertTriangle, Download, Trash as Trash2, RotateCcw, GitBranch, RefreshCw, ChevronRight, Film, Check, ThumbsDown, Info, Copy, X, Smartphone, CircleHelp, Wrench } from "lucide-react";
 
 function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -28,124 +28,6 @@ function StatusBadge({ status }) {
   };
   const [label, variant] = map[status] || [humanize(status), "secondary"];
   return <Badge variant={variant} className="text-xs">{label}</Badge>;
-}
-
-/**
- * `openInitially` is how the post-download nudge reaches this form.
- *
- * The nudge in RecordResultsNudge links to /history?generation=<id>, and the
- * founder is standing there holding the view count they just saw on TikTok.
- * Making them then find the right row and find the right button out of eight
- * identical ghost buttons is where the learning loop actually dies, so the
- * query param opens the form on arrival. It is a starting position, not a
- * lock: the founder can still cancel it, and the form stays closable.
- */
-function PerformanceForm({ generation, onSaved, openInitially = false }) {
-  const [open, setOpen] = useState(openInitially);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-  const [form, setForm] = useState({
-    views: "", likes: "", comments: "", shares: "", saves: "",
-    notes: "", outcome: "",
-  });
-
-  const save = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const payload = {
-        views: form.views === "" ? undefined : Number(form.views),
-        likes: form.likes === "" ? undefined : Number(form.likes),
-        comments: form.comments === "" ? undefined : Number(form.comments),
-        shares: form.shares === "" ? undefined : Number(form.shares),
-        saves: form.saves === "" ? undefined : Number(form.saves),
-        notes: form.notes || undefined,
-        outcome: form.outcome || undefined,
-      };
-      await api.recordPerformance(generation.id, payload);
-      // A recorded verdict is the one place the founder states a judgment
-      // outright, so it feeds the loop directly rather than as a bare trigger.
-      if (form.outcome === "successful" || form.outcome === "unsuccessful") {
-        await recordReason(
-          form.outcome === "successful" ? "marked_successful" : "marked_unsuccessful",
-          form.outcome === "successful" ? "good_performance" : "poor_performance",
-          {
-            brand_profile_id: generation.brand_profile_id,
-            studio_project_id: generation.studio_project_id,
-            generation_id: generation.id,
-            template_id: generation.template_id,
-          },
-        );
-      }
-      setOpen(false);
-      onSaved?.();
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (!open) {
-    return (
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => setOpen(true)}
-        data-testid="record-results-button"
-      >
-        <TrendingUp className="h-3.5 w-3.5" /> Record results
-      </Button>
-    );
-  }
-
-  return (
-    <div
-      className="space-y-2 rounded-xl border border-[color:var(--hairline)] p-3"
-      data-testid="record-results-form"
-    >
-      <span className="eyebrow block">Manually entered &mdash; not platform-verified</span>
-      {error && <p className="text-xs text-destructive">{error}</p>}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-        {["views", "likes", "comments", "shares", "saves"].map((k) => (
-          <label key={k} className="space-y-1">
-            <span className="text-[11px] text-muted-foreground">{humanize(k)}</span>
-            <Input
-              type="number"
-              min="0"
-              value={form[k]}
-              onChange={(e) => setForm({ ...form, [k]: e.target.value })}
-              aria-label={humanize(k)}
-            />
-          </label>
-        ))}
-      </div>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <select
-          value={form.outcome}
-          onChange={(e) => setForm({ ...form, outcome: e.target.value })}
-          aria-label="Outcome"
-          className="rounded-lg border border-[color:var(--hairline)] bg-transparent px-3 py-2 text-sm"
-        >
-          <option value="">No verdict</option>
-          <option value="successful">Worked</option>
-          <option value="unsuccessful">Did not work</option>
-        </select>
-        <Input
-          value={form.notes}
-          onChange={(e) => setForm({ ...form, notes: e.target.value })}
-          placeholder="Notes, e.g. Posted 3pm"
-          aria-label="Notes"
-        />
-      </div>
-      <div className="flex gap-2">
-        <Button size="sm" variant="brand" onClick={save} disabled={busy}>
-          {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Save
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-      </div>
-    </div>
-  );
 }
 
 function DetailRow({ label, children }) {
@@ -273,7 +155,7 @@ function GenerationDetails({ generationId, onClose }) {
  * card is a `SectionCard` like every other content card in the app — see those
  * two for why the vocabulary is shared rather than restated per page.
  */
-function GenerationRow({ row, onChanged, focusGenerationId }) {
+function GenerationRow({ row, onChanged }) {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -703,27 +585,14 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
             </div>
           )}
 
-          {row.performance && (
-            <p className="text-xs text-muted-foreground">
-              Manually logged: {row.performance.views ?? 0} views
-              {row.performance.likes != null && `, ${row.performance.likes} likes`}
-              {row.performance.outcome && ` — ${row.performance.outcome}`}
-            </p>
-          )}
-
           {/* The verdict is a judgement about the video, which is a different
               kind of action from moving a file or deleting a row. It used to be
               a text fragment sitting inline between two buttons, so it read as
               a label for whatever came next rather than a question. In its own
               group with a heading, it asks to be answered — which is the point
-              of asking.
-
-              Two bordered boxes stacked here competed with the clip for
-              attention: the card is about the video, and these are a footer.
-              Both are now borderless, so the preview is the only boxed thing on
-              the row, and the groups read as quiet text under it. The headings
-              stay, because they are what makes the verdict a question and the
-              navigation a list rather than a pile of buttons. */}
+              of asking. Verdicts are quick signals only: Looks good / Not good
+              records a trigger for the template loop, and nothing here takes
+              typed-in numbers anymore. */}
           {row.status === "completed" && (
             <div className="space-y-2 pt-1" data-testid="history-verdict">
               <span className="eyebrow flex items-center gap-1.5">
@@ -749,11 +618,6 @@ function GenerationRow({ row, onChanged, focusGenerationId }) {
                 >
                   <ThumbsDown className="h-3.5 w-3.5" /> Not good
                 </Button>
-                <PerformanceForm
-                  generation={row}
-                  onSaved={onChanged}
-                  openInitially={row.id === focusGenerationId}
-                />
               </div>
             </div>
           )}
@@ -884,15 +748,6 @@ export default function GenerationHistory() {
   const [error, setError] = useState(null);
   const [profileFilter, setProfileFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  // Where the post-download nudge sends the founder. They arrive holding the
-  // view count they just saw, so the matching row's results form starts open
-  // rather than making them find one row out of a list and then pick the right
-  // button out of eight identical ones. Read once on mount: a later filter
-  // change should not re-open a form someone already dismissed.
-  const [focusGenerationId] = useState(() => {
-    const raw = new URLSearchParams(window.location.search).get("generation") || "";
-    return raw.trim();
-  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -926,7 +781,7 @@ export default function GenerationHistory() {
       <PageHeader
         icon={HistoryIcon}
         title="Generation History"
-        description="Review renders and exports, download your clips, and log the results you posted for each video."
+        description="Review renders and exports, and download your clips."
       />
 
       {error && (
@@ -992,7 +847,7 @@ export default function GenerationHistory() {
         <EmptyState
           icon={Film}
           title="Nothing generated yet"
-          description="Create Video saves generated Hook + Story clips here. Exports from Demo + CTA and manually recorded performance results appear alongside them."
+          description="Create Video saves generated Hook + Story clips here."
           action={
             <Button variant="brand" asChild>
               <Link to="/create">
@@ -1008,7 +863,6 @@ export default function GenerationHistory() {
               key={row.id}
               row={row}
               onChanged={load}
-              focusGenerationId={focusGenerationId}
             />
           ))}
         </div>

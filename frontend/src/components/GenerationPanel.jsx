@@ -5,7 +5,6 @@ import { Badge } from "./ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage, mediaUrl, downloadMediaUrl } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
-import { RecordResultsNudge } from "./RecordResultsNudge";
 import {
   exceedsSinglePass, readPieceSeconds, singlePassCeiling,
 } from "../lib/videoLength";
@@ -712,10 +711,6 @@ const handleGenerate = async () => {
                   </Button>
                 </div>
               </div>
-              <RecordResultsNudge
-                generationId={generation?.id}
-                recorded={Boolean(generation?.performance)}
-              />
             </>
           )}
 

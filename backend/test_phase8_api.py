@@ -144,7 +144,7 @@ class TestDeleteAppProfile:
         assert err.value.status_code == 404
 
         for table in ("content_angles", "studio_projects", "generations",
-                      "assets", "performance_entries",
+                      "assets",
                       "feedback_events", "asset_events"):
             rows = _run(api._fetch_all(
                 f"SELECT id FROM {table} WHERE brand_profile_id = ?",

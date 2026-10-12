@@ -1230,10 +1230,19 @@ export default function CreateVideo() {
       setPlanFailed(true);
       return;
     }
+    // Single flight. Concurrent triggers — a double-tapped Regenerate, the
+    // auto effect racing a manual retry — must not stack minute-long model
+    // calls: each holds `busy`, so stacked flights read as a frozen page
+    // with every control disabled. A call already in flight owns the
+    // outcome; the extra tap is dropped. The buttons it could come from are
+    // `busy`-disabled anyway, so this only ever bites on same-tick races.
+    if (planInFlightRef.current) return;
+    planInFlightRef.current = true;
     const ready = await createProject();
     if (!ready) {
       // createProject already reported the error above. Record the outcome
       // so Review offers the retry instead of the generating spinner.
+      planInFlightRef.current = false;
       setPlanFailed(true);
       return;
     }
@@ -1303,6 +1312,7 @@ export default function CreateVideo() {
       setError(getErrorMessage(err));
       setPlanFailed(true);
     } finally {
+      planInFlightRef.current = false;
       setBusy(false);
     }
   };
@@ -1396,6 +1406,9 @@ export default function CreateVideo() {
       setError(
         "Three fresh plans written for this version already — edit the script by hand or pick another template before refining again."
       );
+      // No refinement happened, so the thumb must not stay pressed: left
+      // active it claims a fourth plan is coming that the cap forbids.
+      setReviewThumb(0);
       return;
     }
     reviewRefinesRef.current[versionKey] = used + 1;
@@ -1480,6 +1493,11 @@ export default function CreateVideo() {
   // the dep array reads them during render, so this cannot live above their
   // declarations the way the other effects do.
   const planAutoAttempted = useRef("");
+  // Single-flight latch for plan generation, owned by handleGeneratePlan.
+  // `busy` state cannot do this job: two taps in the same tick both read the
+  // still-false state, so both would start a model call. A ref flips
+  // synchronously, collapsing the race before the first await.
+  const planInFlightRef = useRef(false);
   useEffect(() => {
     // The plan needs a profile, a template and a goal. The character photo is
     // required to RENDER, not to write the plan, so it does not gate this.

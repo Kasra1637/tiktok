@@ -53,7 +53,7 @@ from models import (
     CreateStudioProjectRequest, UpdateStudioProjectRequest, GeneratePlanRequest,
     ObjectiveTemplatesRequest,
     StudioGenerationRequest,     UpdateAssetRequest, AttachAssetRequest,
-    CreateVariationRequest, PerformanceEntryRequest,
+    CreateVariationRequest,
     FeedbackRequest,
     GenerateStrategyRequest,
     APP_PROFILE_LIST_FIELDS,
@@ -837,28 +837,10 @@ async def init_db():
             -- captions were composited onto Hook + Story clips. The table is
             -- intentionally NOT created for fresh databases; rows left behind
             -- on older ones are inert and read by nothing.)
-            -- Manually entered performance for a downloaded video.
-            -- Named 'performance' to make the provenance obvious: these are
-            -- operator-supplied numbers, never verified against TikTok. The
-            -- app never connects to a platform or asks for credentials.
-            CREATE TABLE IF NOT EXISTS performance_entries (
-                id TEXT PRIMARY KEY,
-                generation_id TEXT,
-                brand_profile_id TEXT,
-                views INTEGER,
-                likes INTEGER,
-                comments INTEGER,
-                shares INTEGER,
-                saves INTEGER,
-                outcome TEXT,
-                notes TEXT,
-                source TEXT DEFAULT 'manual',
-                created_at TEXT,
-                updated_at TEXT,
-                user_id TEXT DEFAULT 'anonymous'
-            );
-            CREATE INDEX IF NOT EXISTS idx_performance_generation
-                ON performance_entries (generation_id);
+            -- (Retired: performance_entries held hand-typed views/likes/etc.
+            -- per generation while manual result logging existed. The table is
+            -- intentionally NOT created for fresh databases; rows left behind
+            -- on older ones are inert and read by nothing.)
 
             -- Structured feedback, captured at the moment something happened so
             -- it can steer later recommendations and prompts for that app.
@@ -1128,7 +1110,7 @@ async def init_db():
             "videos", "analyses", "customizations", "video_jobs",
             "brand_profiles", "hook_templates",
             "studio_projects", "content_angles", "generations",
-            "assets", "performance_entries",
+            "assets",
             "feedback_events",
         ]
         for table in user_id_tables:
@@ -3338,44 +3320,6 @@ async def get_app_profile(profile_id: str, user_id: str = Depends(get_current_us
     return profile
 
 
-@api_router.get("/app-profiles/{profile_id}/what-works")
-async def get_profile_what_works(profile_id: str, user_id: str = Depends(get_current_user_id)):
-    """
-    Which of this app's own templates actually carried views, and which did not.
-
-    Read-only and aggregate. The App Profile is scraped once and then goes
-    stale, so this is the only field on it that improves with use: after ten
-    posts the founder's own numbers say which openings work here, and the next
-    strategy prompt reads them.
-
-    No video text, caption, or source URL is returned or read. Only per-template
-    counts, and only from manual entries -- so a future automated import cannot
-    quietly become an input to generation.
-    """
-    profile = await _fetch_one(
-        "SELECT id FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
-    )
-    if not profile:
-        raise HTTPException(status_code=404, detail="App Profile not found")
-    summary = feedback_mod.summarize_proved_hooks(
-        await _fetch_all(
-            "SELECT g.template_id AS template_id, e.views AS views, e.likes AS likes, "
-            "e.comments AS comments, e.shares AS shares, e.saves AS saves, e.source AS source "
-            "FROM performance_entries e "
-            "LEFT JOIN generations g ON g.id = e.generation_id "
-            "WHERE e.brand_profile_id = ? AND e.user_id = ? "
-            "ORDER BY e.created_at DESC LIMIT 500",
-            (profile_id, user_id),
-        )
-    )
-    return {
-        "has_signal": summary["has_signal"],
-        "videos": summary["videos"],
-        "top": summary["top"],
-        "bottom": summary["bottom"],
-    }
-
-
 @api_router.patch("/app-profiles/{profile_id}")
 async def update_app_profile(
     profile_id: str, payload: BrandProfileUpdateRequest, user_id: str = Depends(get_current_user_id)
@@ -3965,7 +3909,7 @@ async def delete_app_profile(profile_id: str, user_id: str = Depends(get_current
     Delete an App Profile and everything scoped to it.
 
     Cascades to the profile's content angles, studio projects, generations,
-    assets, performance entries, feedback events, and
+    assets, feedback events, and
     asset event logs. The model_requests ledger is deliberately kept: it is
     the audit trail of which provider calls ran, and its orphaned rows are
     harmless.
@@ -4009,7 +3953,6 @@ async def delete_app_profile(profile_id: str, user_id: str = Depends(get_current
         "studio_projects",
         "generations",
         "assets",
-        "performance_entries",
         "feedback_events",
         "asset_events",
     ):
@@ -7735,24 +7678,6 @@ async def generate_project_strategy(
         template.get("id") or "",
     )
 
-    # What this app's own finished videos actually did. The one signal in the
-    # system that improves with use: everything else on the profile is scraped
-    # once and then goes stale, so the model has no way to learn which openings
-    # worked here. Aggregate per-template counts only, and manual entries only --
-    # no video text, caption or source URL, and a future automated import cannot
-    # quietly feed itself into generation.
-    proved_hooks = feedback_mod.summarize_proved_hooks(
-        await _fetch_all(
-            "SELECT g.template_id AS template_id, e.views AS views, e.likes AS likes, "
-            "e.comments AS comments, e.shares AS shares, e.saves AS saves, e.source AS source "
-            "FROM performance_entries e "
-            "LEFT JOIN generations g ON g.id = e.generation_id "
-            "WHERE e.brand_profile_id = ? AND e.user_id = ? "
-            "ORDER BY e.created_at DESC LIMIT 500",
-            (row.get("brand_profile_id"), user_id),
-        )
-    )
-
     # The founder-approved creative plan, when one exists. The plan is written
     # and reviewed before the first render, so the strategy has to produce
     # THAT video. Without this the founder approved a script and then got a
@@ -7790,7 +7715,6 @@ async def generate_project_strategy(
                 brand_voice=profile.get("tone_voice") or "",
                 profile_feedback=profile_feedback,
                 plan=approved_plan,
-                proved_hooks=proved_hooks,
             ),
             user_id,
             brand_profile_id=row.get("brand_profile_id"),
@@ -8774,12 +8698,6 @@ async def generation_history(
         entry["playback_url"] = _playback_url(row)
         entry["poster_url"] = _poster_url(row)
         entry["composition"] = None
-        performance = await _fetch_all(
-            "SELECT views, likes, comments, shares, saves, outcome, notes, created_at "
-            "FROM performance_entries WHERE generation_id = ? ORDER BY created_at DESC LIMIT 1",
-            (entry["id"],),
-        )
-        entry["performance"] = performance[0] if performance else None
         out.append(entry)
     return {"generations": out}
 
@@ -8799,9 +8717,6 @@ async def delete_generation(generation_id: str, user_id: str = Depends(get_curre
     if not row:
         raise HTTPException(status_code=404, detail="Generation not found")
 
-    await _execute(
-        "DELETE FROM performance_entries WHERE generation_id = ?", (generation_id,)
-    )
     await _execute("DELETE FROM video_assets WHERE job_id = ?", (generation_id,))
     await _execute("DELETE FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id))
     try:
@@ -8821,71 +8736,6 @@ async def delete_generation(generation_id: str, user_id: str = Depends(get_curre
             logger.warning(f"Could not remove {local}: {e}")
     logger.info(f"Deleted generation {generation_id}")
     return {"deleted": generation_id}
-
-
-@api_router.get("/generations/{generation_id}/performance")
-async def get_performance(generation_id: str, user_id: str = Depends(get_current_user_id)):
-    row = await _fetch_one(
-        "SELECT id FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Generation not found")
-    entries = await _fetch_all(
-        "SELECT * FROM performance_entries WHERE generation_id = ? ORDER BY created_at DESC",
-        (generation_id,),
-    )
-    return {"performance": entries, "source": "manual", "verified": False}
-
-
-@api_router.post("/generations/{generation_id}/performance", status_code=201)
-async def record_performance(
-    generation_id: str, payload: PerformanceEntryRequest, user_id: str = Depends(get_current_user_id)
-):
-    """
-    Record performance a founder entered by hand after posting.
-
-    The response and every stored row are explicitly marked manual and
-    unverified. The app never asks for TikTok credentials and never reads a
-    platform account, so nothing here can be presented as platform-verified.
-    """
-    row = await _fetch_one(
-        "SELECT id, brand_profile_id FROM generations WHERE id = ? AND user_id = ?",
-        (generation_id, user_id),
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Generation not found")
-
-    def clean(value):
-        if value is None:
-            return None
-        try:
-            number = int(value)
-        except (TypeError, ValueError):
-            return None
-        return max(0, number)
-
-    outcome = (payload.outcome or "").strip().lower()
-    if outcome not in ("successful", "unsuccessful", ""):
-        raise HTTPException(
-            status_code=400, detail="Outcome must be 'successful' or 'unsuccessful'."
-        )
-
-    entry_id = str(uuid.uuid4())
-    now = now_iso()
-    await _execute(
-        """INSERT INTO performance_entries
-           (id, generation_id, brand_profile_id, views, likes, comments, shares,
-            saves, outcome, notes, source, created_at, updated_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?, ?)""",
-        (entry_id, generation_id, row.get("brand_profile_id"),
-         clean(payload.views), clean(payload.likes), clean(payload.comments),
-         clean(payload.shares), clean(payload.saves), outcome or None,
-         (payload.notes or "")[:1000], now, now, user_id),
-    )
-    created = await _fetch_one("SELECT * FROM performance_entries WHERE id = ?", (entry_id,))
-    created["source"] = "manual"
-    created["verified"] = False
-    return created
 
 
 # ---------------------------------------------------------------------------

@@ -2966,7 +2966,6 @@ async def generate_video_strategy(
     brand_voice: str = "",
     profile_feedback: Optional[dict] = None,
     plan: Optional[dict] = None,
-    proved_hooks: Optional[dict] = None,
 ) -> dict:
     """
     Turn an App Profile into a video strategy specific to THIS app.
@@ -3172,16 +3171,6 @@ async def generate_video_strategy(
             f"{evidence_sentence}\n"
         )
 
-    # Always emitted, even when empty. build_proved_hooks_section returns an
-    # explicit no-signal sentence for a new app, and that sentence is the
-    # instruction that matters: rely on the verified facts, assume nothing is
-    # proven. Omitting the block instead would leave the model with no signal
-    # and no acknowledgement of its absence.
-    proved_context = (
-        "\n\n"
-        f"{feedback.build_proved_hooks_section(proved_hooks or {})}\n"
-    )
-
     system_message = (
         "You are the creative director for a short-form video campaign promoting one "
         "specific mobile app. You produce an app-specific video strategy: the hook "
@@ -3207,8 +3196,7 @@ async def generate_video_strategy(
         "not a new audience or feature list.\n"
         f"{approved_plan_context}"
         f"{feedback_context}"
-        f"{trend_context}"
-        f"{proved_context}\n"
+        f"{trend_context}\n"
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
         '  "strategy_summary": "2-3 sentences on the strategy for THIS app and why it fits THIS audience",\n'

@@ -486,21 +486,14 @@ class TestHistory:
         assert row["composition"] is None
 
     def test_delete_removes_generation_and_dependents(self, api):
-        from models import PerformanceEntryRequest
         profile = _profile(api, "Hist Delete")
         gen, _, _ = _generation(api, profile, "Hist Delete")
-        _run(api.record_performance(
-            gen["id"], PerformanceEntryRequest(views=100, outcome="successful"), ANON))
-        assert _run(api._fetch_all(
-            "SELECT id FROM performance_entries WHERE generation_id = ?", (gen["id"],)))
 
         _run(api.delete_generation(gen["id"], ANON))
 
         with pytest.raises(HTTPException):
             _run(api.get_generation(gen["id"], ANON))
         # Dependents are cleaned up rather than left orphaned.
-        assert _run(api._fetch_all(
-            "SELECT id FROM performance_entries WHERE generation_id = ?", (gen["id"],))) == []
         assert _run(api._fetch_all(
             "SELECT job_id FROM video_assets WHERE job_id = ?", (gen["id"],))) == []
 
@@ -520,67 +513,19 @@ class TestHistory:
         assert archived["video_url"] == gen["video_url"]
 
 
-class TestManualPerformance:
-    def test_recorded_entry_is_labelled_manual_and_unverified(self, api):
-        from models import PerformanceEntryRequest
-        profile = _profile(api, "Perf Manual")
-        gen, _, _ = _generation(api, profile, "Perf Manual")
-        created = _run(api.record_performance(
-            gen["id"],
-            PerformanceEntryRequest(
-                views=12000, likes=800, comments=40, shares=90, saves=250,
-                notes="Posted 3pm", outcome="successful"),
-            ANON))
-        assert created["source"] == "manual"
-        assert created["verified"] is False
-        assert created["views"] == 12000
+class TestManualPerformanceRemoved:
+    """
+    Manual result logging is gone: the History form, the record endpoints
+    and the table went with it. These pin the removal so a reintroduction
+    has to be deliberate rather than a merge artifact.
+    """
 
-    def test_outcome_must_be_recognised(self, api):
-        from models import PerformanceEntryRequest
-        profile = _profile(api, "Perf Outcome")
-        gen, _, _ = _generation(api, profile, "Perf Outcome")
-        with pytest.raises(HTTPException) as err:
-            _run(api.record_performance(
-                gen["id"], PerformanceEntryRequest(outcome="viral"), ANON))
-        assert err.value.status_code == 400
+    def test_performance_endpoints_are_gone(self, api):
+        assert not hasattr(api, "record_performance")
+        assert not hasattr(api, "get_performance")
 
-    def test_negative_counts_are_clamped_to_zero(self, api):
-        from models import PerformanceEntryRequest
-        profile = _profile(api, "Perf Neg")
-        gen, _, _ = _generation(api, profile, "Perf Neg")
-        created = _run(api.record_performance(
-            gen["id"], PerformanceEntryRequest(views=-5, likes=-1), ANON))
-        assert created["views"] == 0
-        assert created["likes"] == 0
-
-    def test_all_fields_are_optional(self, api):
-        from models import PerformanceEntryRequest
-        profile = _profile(api, "Perf Empty")
-        gen, _, _ = _generation(api, profile, "Perf Empty")
-        created = _run(api.record_performance(gen["id"], PerformanceEntryRequest(), ANON))
-        assert created["views"] is None
-
-    def test_entries_accumulate(self, api):
-        from models import PerformanceEntryRequest
-        profile = _profile(api, "Perf Acc")
-        gen, _, _ = _generation(api, profile, "Perf Acc")
-        _run(api.record_performance(gen["id"], PerformanceEntryRequest(views=100), ANON))
-        _run(api.record_performance(gen["id"], PerformanceEntryRequest(views=250), ANON))
-        entries = _run(api.get_performance(gen["id"], ANON))["performance"]
-        assert len(entries) == 2
-
-    def test_listing_states_nothing_is_verified(self, api):
-        profile = _profile(api, "Perf Verified")
-        gen, _, _ = _generation(api, profile, "Perf Verified")
-        result = _run(api.get_performance(gen["id"], ANON))
-        assert result["source"] == "manual"
-        assert result["verified"] is False
-
-    def test_another_user_cannot_record(self, api):
-        from models import PerformanceEntryRequest
-        profile = _profile(api, "Perf User")
-        gen, _, _ = _generation(api, profile, "Perf User")
-        with pytest.raises(HTTPException) as err:
-            _run(api.record_performance(
-                gen["id"], PerformanceEntryRequest(views=1), OTHER_USER))
-        assert err.value.status_code == 404
+    def test_performance_table_is_not_created(self, api):
+        tables = _run(api._fetch_all(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+            " AND name = 'performance_entries'"))
+        assert tables == []

@@ -638,7 +638,11 @@ function load(relPath) {
       };
     }
     if (spec.endsWith("lib/feedback")) {
-      return { recordSignal: () => {}, classifyScriptEdit: () => ({ kind: "other" }) };
+      // recordThumb must mirror the real module: CreateVideo's review loop
+      // calls it unguarded, so a stub without it turns every thumbs tap into
+      // a TypeError and no check could ever exercise the loop.
+      return { recordSignal: () => {}, recordThumb: () => {}, classifyScriptEdit: () => ({
+        kind: "other" }) };
     }
     // The webpack alias in craco.config.js: "@" is src/.
     if (spec.startsWith("@/")) return load(spec.slice(2));
@@ -2636,6 +2640,98 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
+  // Plan generation is single-flight: a double-tapped Regenerate (both taps
+  // read the still-false `busy` in the same tick) must not stack two
+  // minute-long model calls, each holding `busy` while every control sits
+  // disabled — stacked flights read as a frozen page.
+  await check("a double-tapped Regenerate starts one plan generation, not two", async (ctx) => {
+    let releasePlan;
+    let planCalls = 0;
+    await withApi(
+      {
+        generatePlan: async () => {
+          planCalls += 1;
+          await new Promise((resolve) => { releasePlan = resolve; });
+          return PROJECT_WITH_STRATEGY;
+        },
+      },
+      async () => {
+        global.__SMOKE_PARAMS = "?project=p1";
+        // jsdom's confirm exists but answers undefined, which the
+        // Regenerate guard reads as "founder said no". Answer yes, the way
+        // a founder accepting the replace-plan prompt would.
+        const originalConfirm = dom.window.confirm;
+        dom.window.confirm = () => true;
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Review");
+          const btn = buttonByText(ctx, /Regenerate plan/);
+          await act(async () => {
+            btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+            btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {});
+          if (planCalls !== 1) {
+            throw new Error(`double tap started ${planCalls} plan generations`);
+          }
+          await act(async () => { releasePlan(); });
+          await act(async () => {});
+          await act(async () => {});
+          if (planCalls !== 1) {
+            throw new Error(`settling started a second generation: ${planCalls}`);
+          }
+          // Busy cleared: the step is interactive again rather than latched.
+          if (buttonByText(ctx, /Regenerate plan/).disabled) {
+            throw new Error("busy never cleared after the generation settled");
+          }
+        } finally {
+          dom.window.confirm = originalConfirm;
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
+  // The refinement cap is a terminus, not a pause: the fourth thumbs-down
+  // states the cap instead of generating, and the thumb must not stay
+  // pressed as if a plan were coming.
+  await check("the fourth thumbs-down states the cap instead of generating", async (ctx) => {
+    let planCalls = 0;
+    await withApi(
+      {
+        generatePlan: async () => {
+          planCalls += 1;
+          return PROJECT_WITH_STRATEGY;
+        },
+      },
+      async () => {
+        global.__SMOKE_PARAMS = "?project=p1";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Review");
+          const down = () => ctx.container.querySelector('[data-testid="review-thumb-down"]');
+          if (!down()) throw new Error("Review has no thumbs-down control");
+          for (let i = 0; i < 3; i++) {
+            await clickEl(ctx, down(), `thumbs-down tap ${i + 1} missing`);
+          }
+          if (planCalls !== 3) {
+            throw new Error(`expected 3 refinements, saw ${planCalls}`);
+          }
+          await clickEl(ctx, down(), "fourth thumbs-down missing");
+          expectText(ctx, "Three fresh plans", "the refinement cap is not stated");
+          if (down().getAttribute("aria-pressed") === "true") {
+            throw new Error("the capped thumbs-down stays pressed as if a plan were coming");
+          }
+          if (planCalls !== 3) {
+            throw new Error("the capped tap generated a fourth plan");
+          }
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
   // The whole-wizard version of the above. A length control on one step is
   // enough to re-break the plan's beat timeline, and "which step owns the
   // number" was a question the old suite answered by pinning it to a step id
@@ -4053,206 +4149,52 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
 async function runAnalyticsChecks() {
   const PROFILE = { id: "p1", brand_name: "Threadly", status: "approved" };
 
-  const RECORDED = {
-    id: "gen-logged",
-    brand_profile_id: "p1",
-    status: "completed",
-    hook_line: "The list that replaced eleven lists",
-    template_id: "confession-open",
-    objective: "address_user_problem",
-    audience: "busy professionals 25-40",
-    created_at: "2026-09-01T10:00:00Z",
-    completed_at: "2026-09-01T10:05:00Z",
-    performance: {
-      views: 12400,
-      likes: 900,
-      comments: 40,
-      shares: 25,
-      saves: 310,
-      outcome: "successful",
-      notes: "Posted 3pm",
+  const SIGNALS = {
+    feedback: [],
+    summary: {
+      total: 4,
+      top_signals: [{ signal: "template_changed", count: 3 }],
+      top_reasons: [],
     },
   };
 
-  // Same objective as RECORDED, so mounts of all three make one comparable
-  // bucket. Views chosen so the median is unambiguous: 2400.
-  const RECORDED2 = {
-    ...RECORDED,
-    id: "gen-logged-2",
-    hook_line: "Second opening, same goal",
-    created_at: "2026-09-10T10:00:00Z",
-    performance: { ...RECORDED.performance, views: 2400, saves: 60, shares: 5, outcome: "successful", notes: "" },
-  };
-
-  const RECORDED3 = {
-    ...RECORDED,
-    id: "gen-logged-3",
-    hook_line: "Third opening, same goal",
-    created_at: "2026-09-20T10:00:00Z",
-    performance: { ...RECORDED.performance, views: 900, saves: 9, shares: 1, outcome: "unsuccessful", notes: "" },
-  };
-
-  // A lone bucket: one logged video in its objective. It must be listed and
-  // must never be ranked, because one video is not a comparison.
-  const SOLO = {
-    ...RECORDED,
-    id: "gen-solo",
-    hook_line: "The only educate-viewers video",
-    objective: "educate_viewers",
-    template_id: "feature-list",
-    created_at: "2026-09-15T10:00:00Z",
-    performance: { ...RECORDED.performance, views: 210, saves: 1, shares: 0, outcome: "unsuccessful", notes: "" },
-  };
-
-  // Logged, but with no view count. The rates over it must be dashes, never
-  // NaN, Infinity, or a confident-looking 0%.
-  const ZERO = {
-    ...RECORDED,
-    id: "gen-zero",
-    hook_line: "Logged without views",
-    created_at: "2026-09-25T10:00:00Z",
-    performance: { views: 0, likes: 0, comments: 0, shares: 0, saves: 3, outcome: "", notes: "" },
-  };
-
-  const NUDGE = {
-    id: "gen-bare",
-    brand_profile_id: "p1",
-    status: "completed",
-    hook_line: "A hook nobody logged",
-    template_id: "feature-list",
-    created_at: "2026-09-04T10:00:00Z",
-    completed_at: "2026-09-04T10:05:00Z",
-    performance: null,
-  };
-
-  const NUDGE_NEWER = {
-    ...NUDGE,
-    id: "gen-bare-newer",
-    hook_line: "A newer hook nobody logged",
-    created_at: "2026-10-01T10:00:00Z",
-    completed_at: "2026-10-01T10:05:00Z",
-  };
-
-  const FAILED = {
-    id: "gen-failed",
-    brand_profile_id: "p1",
-    status: "failed",
-    hook_line: "Never rendered",
-    created_at: "2026-09-02T10:00:00Z",
-    performance: null,
-  };
-
-  const WORKS = {
-    has_signal: true,
-    videos: 3,
-    top: [{ template_id: "confession-open", videos: 2, views: 12400, save_rate: 0.025, share_rate: 0.002 }],
-    bottom: [{ template_id: "feature-list", videos: 1, views: 210, save_rate: 0.004, share_rate: 0.001 }],
-  };
-
-  const stub = (generations, extra = {}) => ({
+  const stub = (extra = {}) => ({
     getAppProfiles: async () => ({ profiles: [PROFILE] }),
-    getProfileWhatWorks: async () => WORKS,
-    getGenerationHistory: async () => ({ generations }),
-    getTemplateFacets: async () => ({
-      objectives: ["address_user_problem", "educate_viewers"],
-      objective_outcomes: {
-        address_user_problem: "Gets them naming the problem out loud",
-      },
-    }),
-    getFeedback: async () => ({
-      feedback: [],
-      summary: {
-        total: 4,
-        by_event: { marked_successful: 1 },
-        top_signals: [{ signal: "template_changed", count: 3 }],
-        top_reasons: [{ reason: "poor_performance", count: 1 }],
-        explained: 1,
-      },
-    }),
+    getFeedback: async () => SIGNALS,
     ...extra,
   });
 
-  async function mountAnalytics(ctx, generations, extra) {
+  async function mountAnalytics(ctx, extra) {
     const Analytics = load("pages/Analytics.jsx").default;
-    await withApi(stub(generations, extra), async () => {
+    await withApi(stub(extra), async () => {
       await mount(Analytics, {})(ctx);
     });
   }
 
-  await check("Analytics mounts and shows the ledger for the selected app", async (ctx) => {
-    await mountAnalytics(ctx, [RECORDED, NUDGE, FAILED]);
+  await check("Analytics mounts and shows the header for the selected app", async (ctx) => {
+    await mountAnalytics(ctx);
     expectText(ctx, "Analytics", "the page has no title");
-    if (!ctx.container.querySelector('[data-testid="analytics-ledger"]')) {
-      throw new Error("the results ledger is not on the page");
-    }
-    // The failed render is filtered out: there is no clip to record results
-    // against, so listing it would invite numbers for a video that was never
-    // produced.
-    expectAbsent(ctx, "Never rendered", "a failed render must not appear in the ledger");
-    expectText(ctx, "12,400", "the recorded view count is not shown");
-  });
-
-  await check(
-    "a completed video with nothing logged becomes a nudge, not a missing row",
-    async (ctx) => {
-      await mountAnalytics(ctx, [RECORDED, NUDGE]);
-      const nudge = ctx.container.querySelector('[data-testid="analytics-nudge-gen-bare"]');
-      if (!nudge) {
-        throw new Error(
-          "a finished video with no numbers is absent. Dropping it silently makes " +
-            "the ledger look like everything got logged."
-        );
-      }
-      expectText(ctx, "nothing logged yet", "the nudge does not say what is missing");
-      // The link has to be the one History reads to open the record form,
-      // otherwise the founder lands on the row with the form closed.
-      const link = nudge.querySelector("a");
-      const href = link ? link.getAttribute("href") || "" : "";
-      if (!href.includes("/history") || !href.includes("generation=gen-bare")) {
-        throw new Error(
-          `the nudge does not deep-link to this video's record form: ${href}`
-        );
-      }
-    }
-  );
-
-  await check("a recorded row links back to its own History row", async (ctx) => {
-    await mountAnalytics(ctx, [RECORDED]);
-    const row = ctx.container.querySelector('[data-testid="analytics-row-gen-logged"]');
-    if (!row) throw new Error("the recorded row is missing");
-    const href =
-      [...row.querySelectorAll("a")]
-        .map((a) => a.getAttribute("href") || "")
-        .find((h) => h.includes("generation=")) || "";
-    if (!href.includes("gen-logged")) {
-      throw new Error(`the row does not link to its own generation: ${href}`);
+    if (!ctx.container.querySelector('[data-testid="analytics-header"]')) {
+      throw new Error("the analytics header is not on the page");
     }
   });
 
-  await check("What Has Worked Here shows both ends, including the bottom", async (ctx) => {
-    await mountAnalytics(ctx, [RECORDED]);
-    const card = ctx.container.querySelector('[data-testid="what-works"]');
-    if (!card) throw new Error("the What Has Worked Here card is not on the page");
-    expectText(ctx, "Carried the most views", "the top of the table is missing");
-    // The bottom was fetched by the API and displayed nowhere for as long as the
-    // card lived on the App Profile page. Knowing what carried views is half the
-    // evidence; the other half is knowing what did not.
-    expectText(ctx, "Carried the least", "the bottom of the table is still displayed nowhere");
-    expectText(ctx, "feature-list", "the weakest template is not named");
+  await check("automatic signals render as counts, never as judgments", async (ctx) => {
+    await mountAnalytics(ctx);
+    const card = ctx.container.querySelector('[data-testid="analytics-signals"]');
+    if (!card) throw new Error("the signals card is not on the page");
+    expectText(ctx, "Template Changed", "a captured signal is not shown");
+    expectText(ctx, "3", "the signal count is not shown");
   });
 
-  await check("the page says its numbers are manual and unverified", async (ctx) => {
-    await mountAnalytics(ctx, [RECORDED]);
-    expectText(ctx, "no platform data is scraped", "the page does not disclaim scraping");
-    expectText(ctx, "never presented as verified", "the page does not disclaim verification");
-    // The loop-closure line is the reason the page exists; without it the ledger
-    // reads as a report rather than as an input to the next render.
-    expectText(ctx, "feed your", "the loop-closure line is missing");
-  });
-
-  await check("an app with no finished videos says so instead of showing an empty table", async (ctx) => {
-    await mountAnalytics(ctx, []);
-    expectText(ctx, "No finished videos", "an empty ledger is not explained");
+  await check("no signals yet says so instead of showing an empty card", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getFeedback: async () => ({ feedback: [], summary: { total: 0, top_signals: [] } }),
+    });
+    if (ctx.container.querySelector('[data-testid="analytics-signals"]')) {
+      throw new Error("an empty signals card renders with nothing to count");
+    }
+    expectText(ctx, "Nothing captured yet", "an empty Analytics page is not explained");
   });
 
   await check("no app at all points at the profile editor", async (ctx) => {
@@ -4260,9 +4202,6 @@ async function runAnalyticsChecks() {
     await withApi(
       {
         getAppProfiles: async () => ({ profiles: [] }),
-        getProfileWhatWorks: async () => null,
-        getGenerationHistory: async () => ({ generations: [] }),
-        getTemplateFacets: async () => ({ objective_outcomes: {} }),
         getFeedback: async () => null,
       },
       async () => {
@@ -4272,153 +4211,6 @@ async function runAnalyticsChecks() {
     expectText(ctx, "Create an App Profile", "a founder with no app is told nothing");
     if (!ctx.container.querySelector('a[href="/brand"]')) {
       throw new Error("there is no way forward from an empty Analytics page");
-    }
-  });
-
-  // --- The decision layer: rates, template tags, nudge order, trend, the
-  // guarded breakdowns, and the copy that leaves the browser. ---
-
-  await check("a row shows save and share rates, and a zero-view row shows dashes", async (ctx) => {
-    // RECORDED: 310 saves / 12400 views = 2.5%, 25 shares = 0.2%. The ZERO
-    // row has counts but no denominator, so its rates must be dashes: NaN,
-    // Infinity, or a confident 0% would each turn "no data" into a verdict.
-    await mountAnalytics(ctx, [RECORDED, ZERO]);
-    const row = ctx.container.querySelector('[data-testid="analytics-row-gen-logged"]');
-    if (!row) throw new Error("the recorded row is missing");
-    const text = row.textContent || "";
-    if (!text.includes("save rate 2.5%")) {
-      throw new Error(`the save rate is not shown as 2.5%: ${text.slice(0, 200)}`);
-    }
-    if (!text.includes("share rate 0.2%")) {
-      throw new Error(`the share rate is not shown as 0.2%: ${text.slice(0, 200)}`);
-    }
-    const zero = ctx.container.querySelector('[data-testid="analytics-row-gen-zero"]');
-    if (!zero) throw new Error("the zero-view row is missing");
-    const zeroText = zero.textContent || "";
-    if (!zeroText.includes("save rate —")) {
-      throw new Error("a rate over nothing is not a dash");
-    }
-    for (const bad of ["NaN", "Infinity", "save rate 0.0%", "save rate 0%"]) {
-      if (zeroText.includes(bad)) {
-        throw new Error(`a rate over nothing rendered as a number: ${bad}`);
-      }
-    }
-  });
-
-  await check("a row names its template, connecting it to the ranking", async (ctx) => {
-    await mountAnalytics(ctx, [RECORDED]);
-    const row = ctx.container.querySelector('[data-testid="analytics-row-gen-logged"]');
-    if (!row) throw new Error("the recorded row is missing");
-    if (!(row.textContent || "").includes("template confession-open")) {
-      throw new Error(
-        "the row does not name its template, so it cannot be connected to the " +
-          "top/bottom ranking that names the same template"
-      );
-    }
-  });
-
-  await check("nudge rows run oldest first and say how long each waited", async (ctx) => {
-    // Mounted newest-first on purpose: the page must reorder them itself.
-    await mountAnalytics(ctx, [NUDGE_NEWER, NUDGE]);
-    const html = ctx.container.innerHTML;
-    const oldAt = html.indexOf("analytics-nudge-gen-bare\"");
-    const newAt = html.indexOf("analytics-nudge-gen-bare-newer");
-    if (oldAt === -1 || newAt === -1) throw new Error("a nudge row is missing");
-    if (!(oldAt < newAt)) {
-      throw new Error("nudge rows are not oldest-first: the longest-waiting clip is buried");
-    }
-    const old = ctx.container.querySelector('[data-testid="analytics-nudge-gen-bare"]');
-    if (!((old.textContent || "").includes("finished"))) {
-      throw new Error("the oldest nudge does not say how long it has waited");
-    }
-  });
-
-  await check("the trend shows logged views over time as dots on a line", async (ctx) => {
-    await mountAnalytics(ctx, [RECORDED, RECORDED2]);
-    const card = ctx.container.querySelector('[data-testid="analytics-trend"]');
-    if (!card) throw new Error("the views-over-time card is not on the page");
-    const dots = card.querySelectorAll("circle");
-    if (dots.length !== 2) {
-      throw new Error(`expected one dot per logged video (2), found ${dots.length}`);
-    }
-    // The written equivalent is the part a screen reader gets, so it is
-    // asserted, not the shape.
-    expectText(ctx, "2 logged videos", "the trend does not state its own sample size");
-  });
-
-  await check("a lone objective bucket is listed and explicitly unranked", async (ctx) => {
-    // Two buckets, one video each. Nothing here may be compared, because one
-    // video is not a comparison — ranking them would be the confident lie.
-    await mountAnalytics(ctx, [RECORDED, SOLO]);
-    const card = ctx.container.querySelector('[data-testid="analytics-by-objective"]');
-    if (!card) throw new Error("the objective breakdown is not on the page");
-    const text = card.textContent || "";
-    if (!text.includes("not enough logged videos to compare")) {
-      throw new Error("a single-video bucket is not marked as unrankable");
-    }
-    if (text.includes("leads")) {
-      throw new Error("a lead was named with no comparable bucket in the card");
-    }
-  });
-
-  await check("three logged videos make a bucket comparable and name the lead", async (ctx) => {
-    // 12400 / 2400 / 900 -> median 2400 -> "2.4k". The lead line must name its
-    // own n, and the card must stay inside description, never promise.
-    await mountAnalytics(ctx, [RECORDED, RECORDED2, RECORDED3]);
-    const card = ctx.container.querySelector('[data-testid="analytics-by-objective"]');
-    if (!card) throw new Error("the objective breakdown is not on the page");
-    const text = card.textContent || "";
-    for (const needle of ["leads", "2.4k", "3 logged"]) {
-      if (!text.includes(needle)) {
-        throw new Error(`the comparable bucket does not read as one: missing ${needle}`);
-      }
-    }
-    if (!text.includes("Gets them naming the problem out loud")) {
-      throw new Error("the facets outcome copy is not shown under its objective");
-    }
-    expectAbsent(ctx, "guarantee", "the breakdown promises what the outcome copy forbids");
-  });
-
-  await check("the audience breakdown reads raw labels, never code-shaped ones", async (ctx) => {
-    await mountAnalytics(ctx, [RECORDED]);
-    const card = ctx.container.querySelector('[data-testid="analytics-by-audience"]');
-    if (!card) throw new Error("the audience breakdown is not on the page");
-    // "busy professionals 25-40" is a label, not a code: humanizing it would
-    // title-case a sentence the founder wrote.
-    expectText(ctx, "busy professionals 25-40", "the audience label was reshaped");
-  });
-
-  await check("the header offers a copy of the summary", async (ctx) => {
-    await mountAnalytics(ctx, [RECORDED]);
-    if (!ctx.container.querySelector('[data-testid="analytics-copy-summary"]')) {
-      throw new Error("there is no way to take the learning out of the browser");
-    }
-  });
-
-  await check("the copied text carries the verdicts, the templates and the loop line", async () => {
-    // Asserted against the builder directly: mocking the clipboard would test
-    // jsdom, not the product. What matters is that the text leaving the page
-    // contains the three things the page exists for.
-    const { buildAnalyticsSummaryText } = load("pages/Analytics.jsx");
-    const text = buildAnalyticsSummaryText({
-      profileName: "Threadly",
-      generatedAt: "Oct 11, 2026",
-      recorded: [RECORDED],
-      tallies: { successful: 1, unsuccessful: 0, undecided: 0 },
-      whatWorks: WORKS,
-      objectiveOutcomes: null,
-      signals: [{ signal: "template_changed", count: 3 }],
-    });
-    for (const needle of [
-      "Threadly",
-      "confession-open",
-      "1 worked",
-      "Template Changed",
-      "feed your",
-    ]) {
-      if (!text.includes(needle)) {
-        throw new Error(`the copied summary drops ${JSON.stringify(needle)}`);
-      }
     }
   });
 }
@@ -4653,7 +4445,7 @@ async function runIconChecks() {
  * tests for the cascade, the 404 and the in-flight 409.
  *
  * Type-to-confirm rather than window.confirm because the blast radius is the
- * profile's finished videos and recorded results, not one regenerable row.
+ * profile's finished videos, not one regenerable row.
 A single * window.confirm on this would be the loosest destructive gate in the app, and
  * the page's own content-angle delete already sets that bar low enough.
  */
@@ -4676,7 +4468,6 @@ async function runDeleteDialogChecks() {
     getContentAngles: async () => ({ angles: [{ id: "a1", label: "Confession" }] }),
     generateContentAngles: async () => ({ angles: [{ id: "a1", label: "Confession" }] }),
     getStudioProjects: async () => ({ projects: [{ id: "s1", name: "Draft one" }] }),
-    getProfileWhatWorks: async () => ({ videos: 3, top: [] }),
     getTemplateRecommendations: async () => ({ recommendations: [] }),
     ...extra,
   });
@@ -4814,19 +4605,12 @@ async function runDeleteDialogChecks() {
   // root with the same component does not remount it, so a looped check would
   // carry the previous case's state into the next and read a stale dialog.
   const copyCases = [
-    { drafts: 0, angles: 0, videos: 0, want: "every uploaded photo" },
-    { drafts: 1, angles: 0, videos: 0, want: "1 video draft and every uploaded photo" },
+    { drafts: 0, angles: 0, want: "every uploaded photo" },
+    { drafts: 1, angles: 0, want: "1 video draft and every uploaded photo" },
     {
       drafts: 3,
       angles: 2,
-      videos: 0,
       want: "3 video drafts, 2 content angles and every uploaded photo",
-    },
-    {
-      drafts: 3,
-      angles: 0,
-      videos: 3,
-      want: "3 video drafts, history from 3 recorded videos and every uploaded photo",
     },
   ];
 
@@ -4838,7 +4622,7 @@ async function runDeleteDialogChecks() {
     // ternaries through the JSX and read "everything built on it: every
     // uploaded photo" for a profile with three drafts on it.
     await check(
-      `the delete warning names what is lost (${c.drafts} drafts, ${c.angles} angles, ${c.videos} recorded)`,
+      `the delete warning names what is lost (${c.drafts} drafts, ${c.angles} angles)`,
       async (ctx) => {
         await withApi(
           stubProfileApi({
@@ -4848,7 +4632,8 @@ async function runDeleteDialogChecks() {
             getContentAngles: async () => ({
               angles: Array.from({ length: c.angles }, (_, i) => ({ id: `a${i}` })),
             }),
-            getProfileWhatWorks: async () => ({ videos: c.videos, top: [] }),
+            // No recorded-videos count anymore: manual result logging is gone,
+            // so the warning names drafts, angles and photos only.
           }),
           async () => {
             await mountProfileDetail()(ctx);

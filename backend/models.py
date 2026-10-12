@@ -452,23 +452,6 @@ class CreateVariationRequest(BaseModel):
     note: Optional[str] = ""
 
 
-class PerformanceEntryRequest(BaseModel):
-    """
-    Manually entered performance for a downloaded video.
-
-    Every field is optional and explicitly operator-supplied. Nothing here is
-    verified against TikTok, and the app never asks for account credentials
-    or connects to a platform to read it.
-    """
-    views: Optional[int] = None
-    likes: Optional[int] = None
-    comments: Optional[int] = None
-    shares: Optional[int] = None
-    saves: Optional[int] = None
-    notes: Optional[str] = ""
-    outcome: Optional[str] = None  # successful | unsuccessful | ""
-
-
 class FeedbackRequest(BaseModel):
     """
     Structured feedback captured at the moment something happened.

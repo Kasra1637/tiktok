@@ -91,7 +91,7 @@ const GROUP_IDS = ["essentials", "problems", "messaging", "context", "audience"]
  * no way to tell a profile they forgot about from one that made six videos, and
  * the videos are the part they cannot get back.
  */
-function destroyedBy(drafts, angles, whatWorks) {
+function destroyedBy(drafts, angles) {
   const items = [];
   const videos = drafts.length;
   if (videos > 0) {
@@ -99,12 +99,6 @@ function destroyedBy(drafts, angles, whatWorks) {
   }
   if (angles.length > 0) {
     items.push(`${angles.length} content angle${angles.length === 1 ? "" : "s"}`);
-  }
-  const recorded = whatWorks?.videos || 0;
-  if (recorded > 0) {
-    items.push(
-      `history from ${recorded} recorded video${recorded === 1 ? "" : "s"}`
-    );
   }
   items.push("every uploaded photo");
   return items;
@@ -120,7 +114,6 @@ export default function AppProfileDetail() {
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [drafts, setDrafts] = useState([]);
-  const [whatWorks, setWhatWorks] = useState(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [typedName, setTypedName] = useState("");
   const [deleteError, setDeleteError] = useState(null);
@@ -156,21 +149,17 @@ export default function AppProfileDetail() {
 
   const load = useCallback(async () => {
     try {
-      const [p, a, d, w] = await Promise.all([
+      const [p, a, d] = await Promise.all([
         api.getAppProfile(profileId),
         api.getContentAngles(profileId).catch(() => ({ angles: [] })),
         // A profile is reusable for as many videos as you want, so the page
         // shows the drafts already built on it. Scoped by brand_profile_id, and
         // the backend filters on the caller's user_id too.
         api.getStudioProjects({ brand_profile_id: profileId }).catch(() => ({ projects: [] })),
-        // Aggregate only, and manual entries only. A missing signal is the
-        // expected case for a new profile, so it is not an error.
-        api.getProfileWhatWorks(profileId).catch(() => null),
       ]);
       setProfile(p);
       setAngles(a.angles || []);
       setDrafts(d.projects || []);
-      setWhatWorks(w);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -541,9 +530,9 @@ return (
           )}
         </SectionGroup>
         )}
-        {/* What Has Worked Here and the supporting row are gone: recorded
-            results belong on Analytics. The whatWorks fetch stays — the
-            delete dialog counts recorded videos from it. */}
+        {/* The delete dialog counts drafts, angles and photos from the data
+            above; recorded-results history lived here once and is gone with
+            the manual-results loop. */}
         {hasAudience && (
         <SectionGroup id="audience" label="Audience & guardrails" summary={audienceSummary} open={openGroup === "audience"} onToggle={toggleGroup}>
           <ClaimPanel profile={profile || {}} />
@@ -567,7 +556,7 @@ return (
             <DialogDescription>
               This cannot be undone. It removes {deletableName} and
               everything built on it:{" "}
-              {formatList(destroyedBy(drafts, angles, whatWorks))}. Your
+              {formatList(destroyedBy(drafts, angles))}. Your
               provider call log is kept.
             </DialogDescription>
           </DialogHeader>

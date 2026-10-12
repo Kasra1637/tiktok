@@ -778,13 +778,6 @@ class TestStrategyBudget:
                 "top_reasons": [{"reason": "hook_too_generic", "count": 7}],
                 "selected_template": {},
             },
-            proved_hooks={
-                "has_signal": True, "videos": 12,
-                "top": [{"template_id": "Stop Doing This", "videos": 5,
-                         "views": 4000, "save_rate": 0.08, "share_rate": 0.02}],
-                "bottom": [{"template_id": "Three Mistakes", "videos": 2,
-                            "views": 200, "save_rate": 0.01, "share_rate": 0.0}],
-            },
             plan={
                 "hook_line": "h", "cta": "c", "feature_emphasis": "f",
                 "visual_direction": "v", "voice_direction": "vd",
@@ -798,7 +791,7 @@ class TestStrategyBudget:
 
         prompt = captured["prompt"]
         # Measured worst case, with every list at its cap, six viewer objections,
-        # six outcome statements and the anonymous trend aggregate: 21,614 chars.
+        # six outcome statements and the anonymous trend aggregate: 21,065 chars.
         # The ceiling sits just above at 22,500.
         #
         # The number has moved four times now -- 13,692 before the objections,
@@ -816,12 +809,15 @@ class TestStrategyBudget:
         # no longer described reality. What moved it now is deliberate and
         # measured -- 174 chars for the capitalization rule, which is the only
         # thing standing between a lowercase opening sentence and the card it
-        # renders on. Measured first, raised second.
+        # renders on. Measured first, raised second. The move after that is
+        # deliberate too -- removing the PAST PERFORMANCE block with the
+        # manual-results loop (549 chars), since no hand-typed numbers feed
+        # generation anymore.
         CEILING = 22_500
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling (measured "
-            f"worst case 21,614). Every field added here is a value the model must "
+            f"worst case 21,065). Every field added here is a value the model must "
             f"write back, and a truncated strategy is a 502 the founder cannot fix."
         )
 

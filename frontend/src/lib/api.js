@@ -175,10 +175,6 @@ export const api = {
   researchAppProfile: (payload) => client.post("/app-profiles/research", payload).then((r) => r.data),
   getAppProfiles: () => client.get("/app-profiles").then((r) => r.data),
   getAppProfile: (id) => client.get(`/app-profiles/${id}`).then((r) => r.data),
-  // Per-template view aggregates from the founder's own manual numbers. Read
-  // only, no video text or source URL, and manual entries only.
-  getProfileWhatWorks: (id) =>
-    client.get(`/app-profiles/${id}/what-works`).then((r) => r.data),
   deleteAppProfile: (id) => client.delete(`/app-profiles/${id}`).then((r) => r.data),
   updateAppProfile: (id, payload) => client.patch(`/app-profiles/${id}`, payload).then((r) => r.data),
   approveAppProfile: (id, applyPending = true) =>
@@ -310,13 +306,10 @@ export const api = {
     return client.post(path, form).then((r) => r.data);
   },
 
-  // History + manual performance
+  // History
   getGenerationHistory: (params = {}) =>
     client.get("/history/generations", { params }).then((r) => r.data),
   deleteGeneration: (id) => client.delete(`/generations/${id}`).then((r) => r.data),
-  getPerformance: (id) => client.get(`/generations/${id}/performance`).then((r) => r.data),
-  recordPerformance: (id, payload) =>
-    client.post(`/generations/${id}/performance`, payload).then((r) => r.data),
 
   // Feedback
   getFeedbackCatalog: () => client.get("/feedback/catalog").then((r) => r.data),
