@@ -3452,6 +3452,81 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
+  // Founder verdicts reach the picker as counts, never as a rating. The tally
+  // is keyed by angle KIND (verdicts attribute through the fixed vocabulary),
+  // and an angle with no verdicts shows no chip at all — a new app's rows
+  // look exactly as they always did.
+  await check("angle rows show founder verdict counts, and stay silent without evidence", async (ctx) => {
+    const PROVEN = { ...ANGLE, id: "a9", label: "Proven opener", evidence: { wins: 3, flops: 1 } };
+    const FRESH = { ...ANGLE, id: "a10", label: "Fresh opener" };
+    await withApi({ getContentAngles: async () => ({ angles: [PROVEN, FRESH] }) }, async () => {
+      global.__SMOKE_PARAMS = "";
+      try {
+        await mount(CreateVideo, {})(ctx);
+        await openStep(ctx, "Audience & goal");
+        const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
+        const chip = step.querySelector('[data-testid="angle-evidence-a9"]');
+        if (!chip) throw new Error("the angle with verdicts shows no evidence chip");
+        if (!chip.textContent.includes("3 wins") || !chip.textContent.includes("1 flop")) {
+          throw new Error(`the chip does not read as counts: ${chip.textContent}`);
+        }
+        if (chip.textContent.includes("%")) {
+          throw new Error("the chip presents a rate instead of counts");
+        }
+        if (step.querySelector('[data-testid="angle-evidence-a10"]')) {
+          throw new Error("an angle with no verdicts shows an evidence chip");
+        }
+      } finally {
+        global.__SMOKE_PARAMS = "";
+      }
+    });
+  });
+
+  // The goal cards annotate with the picked angle kind's counts; the six stay
+  // in fetched order. Evidence must never become a second ranking.
+  await check("goal cards carry the angle kind's counts without reordering", async (ctx) => {
+    const PROVEN = { ...ANGLE, evidence: { wins: 2, flops: 1 } };
+    await withApi({ getContentAngles: async () => ({ angles: [PROVEN, ANGLE_B] }) }, async () => {
+      global.__SMOKE_PARAMS = "";
+      try {
+        await mount(CreateVideo, {})(ctx);
+        await openStep(ctx, "Audience & goal");
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+        const line = ctx.container.querySelector('[data-testid="goal-angle-evidence-address_user_problem"]');
+        if (!line) throw new Error("the goal card shows no angle-kind count");
+        if (!line.textContent.includes("2 wins") || !line.textContent.includes("1 flop")) {
+          throw new Error(`the goal line does not read as counts: ${line.textContent}`);
+        }
+        const order = [...ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]')]
+          .map((el) => el.getAttribute("data-testid").replace("recommended-goal-", ""));
+        const expected = ANGLE_GOALS.problem_solution;
+        if (order.join("|") !== expected.join("|")) {
+          throw new Error(`goal order moved: ${order.join(", ")}`);
+        }
+      } finally {
+        global.__SMOKE_PARAMS = "";
+      }
+    });
+  });
+
+  await check("formatVerdicts prints counts and stays silent on empty evidence", async () => {
+    const { formatVerdicts } = load("lib/angleSubtitle.js");
+    const cases = [
+      [{ wins: 3, flops: 1 }, "3 wins · 1 flop"],
+      [{ wins: 1, flops: 0 }, "1 win"],
+      [{ wins: 0, flops: 1 }, "1 flop"],
+      [{ wins: 0, flops: 0 }, ""],
+      [undefined, ""],
+      [null, ""],
+    ];
+    for (const [input, want] of cases) {
+      const got = formatVerdicts(input);
+      if (got !== want) {
+        throw new Error(`formatVerdicts(${JSON.stringify(input)}) is ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);
+      }
+    }
+  });
+
   await check("a suggested goal reaches template ranking and project writes", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     const rankings = [];

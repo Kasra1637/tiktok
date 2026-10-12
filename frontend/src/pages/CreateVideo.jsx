@@ -28,7 +28,7 @@ import {
   blockingRequirements,
 } from "../lib/templateRequirements";
 import { sentenceCase } from "../lib/copyCase";
-import { angleSubtitle, angleDetails } from "../lib/angleSubtitle";
+import { angleSubtitle, angleDetails, formatVerdicts } from "../lib/angleSubtitle";
 import {
   readPieceSeconds,
   sectionSplit,
@@ -616,6 +616,17 @@ function AngleGoalPicker({
                   className="mt-0.5 block text-xs leading-relaxed text-muted-foreground"
                 >
                   {sentenceCase(fitReasons[goal])}
+                </span>
+              )}
+              {/* Founder verdicts for the selected angle's KIND, carried on the
+                  angle row too. Shown only as counts so one verdict never reads
+                  as a verdict on the goal itself; the six stay in fetched order. */}
+              {formatVerdicts(angle?.evidence) && (
+                <span
+                  data-testid={`goal-angle-evidence-${goal}`}
+                  className="mt-0.5 block text-xs leading-relaxed text-muted-foreground"
+                >
+                  {formatVerdicts(angle.evidence)} at this angle kind
                 </span>
               )}
               {index === 0 && <span className="sr-only">Best fit suggestion. </span>}
@@ -1771,6 +1782,18 @@ export default function CreateVideo() {
                           <Badge variant="secondary" className="shrink-0 text-[11px]">
                             {humanize(a.kind)}
                           </Badge>
+                          {/* Founder verdicts for this angle KIND, not a rating.
+                              formatVerdicts returns "" below one verdict, so a
+                              new app's rows look exactly as they always did. */}
+                          {formatVerdicts(a.evidence) && (
+                            <span
+                              data-testid={`angle-evidence-${a.id}`}
+                              title="Founder verdicts on videos built from this kind of angle"
+                              className="shrink-0 text-[11px] text-muted-foreground"
+                            >
+                              {formatVerdicts(a.evidence)}
+                            </span>
+                          )}
                           {picked && <Check className="h-4 w-4 shrink-0 text-[color:var(--brand-indigo)]" />}
                           <ChevronDown
                             className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${

@@ -3854,8 +3854,15 @@ CONTENT_ANGLE_TEXT_FIELDS = (
 )
 
 
-def _serialize_angle_row(row: dict) -> dict:
-    """Shape a content_angles row for the API (kind is already normalized)."""
+def _serialize_angle_row(row: dict, evidence: Optional[dict] = None) -> dict:
+    """Shape a content_angles row for the API (kind is already normalized).
+
+    `evidence` is this kind's own verdict tally from
+    `_angle_feedback_for_profile`. Counts only — never a rate or a score:
+    a percentage over one verdict would present a coin flip as a measurement.
+    Keyed by KIND, not by angle id, so the counts survive an angle
+    regeneration that replaces every row id.
+    """
     return {
         "id": row.get("id"),
         "brand_profile_id": row.get("brand_profile_id"),
@@ -3869,11 +3876,21 @@ def _serialize_angle_row(row: dict) -> dict:
         "claims_to_respect": row.get("claims_to_respect") or [],
         "rank": row.get("rank") or 0,
         "created_at": row.get("created_at"),
+        "evidence": evidence or {"wins": 0, "flops": 0},
     }
 
 
 @api_router.get("/app-profiles/{profile_id}/content-angles")
 async def list_content_angles(profile_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    This app's angles, each carrying its kind's own verdict tally.
+
+    The tally is the same aggregate the generation prompt already reads
+    (`_angle_feedback_for_profile`), so the founder picks from angles scored
+    by their own history rather than by model confidence alone. It is counts,
+    never a rate: one win is one verdict, and the UI says so. Ordering is
+    still the generation rank — the counts annotate, they do not reorder.
+    """
     profile = await _fetch_one(
         "SELECT id, status FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
     )
@@ -3900,7 +3917,21 @@ async def list_content_angles(profile_id: str, user_id: str = Depends(get_curren
             "ORDER BY rank ASC, created_at ASC",
             (profile_id, user_id),
         )
-    return {"angles": [_serialize_angle_row(r) for r in rows]}
+    # One summary for the whole profile, indexed by kind and shared by every
+    # angle of that kind -- two angles of the same kind carry the same counts,
+    # which is honest (the attribution is per kind) and is never presented as
+    # belonging to one specific angle.
+    verdicts = await _angle_feedback_for_profile(profile_id, user_id)
+    by_kind = {
+        str(entry.get("name") or ""): {"wins": int(entry.get("wins") or 0), "flops": int(entry.get("flops") or 0)}
+        for entry in (verdicts.get("kinds") or [])
+    }
+    return {
+        "angles": [
+            _serialize_angle_row(r, by_kind.get(str(r.get("kind") or "")))
+            for r in rows
+        ]
+    }
 
 
 @api_router.delete("/app-profiles/{profile_id}")

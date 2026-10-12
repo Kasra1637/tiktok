@@ -11,6 +11,13 @@
  * gets a line and an angle with none of them simply has no subtitle — which is
  * what keeps a list of angles comparable at a glance. `angleDetails` then
  * shows a picked angle's own fields, unsummarized.
+ *
+ * `formatVerdicts` is the third job: the verdict tally the server attaches per
+ * angle KIND. It is counts, never a rate or a score. One win is one verdict,
+ * and presenting it as a percentage would dress a coin flip as a measurement —
+ * the same rule that keeps `summarize_angle_feedback` a count list for the
+ * generation prompt. Empty string when there is no evidence, so a new app's
+ * picker looks exactly as it did before any of this existed.
  */
 import { sentenceCaseTrimmed } from "./copyCase";
 
@@ -79,4 +86,25 @@ export function angleDetails(angle) {
     .filter(Boolean);
   if (claims.length) rows.push({ label: "Bounded by", value: claims.join("; ") });
   return rows;
+}
+
+/**
+ * "3 wins · 1 flop" for an angle's own tally, or "" when there is none.
+ *
+ * Counts only, and deliberately not a percentage or a score: the tally is
+ * keyed by angle KIND (verdicts attribute through the fixed vocabulary, so it
+ * survives an angle regeneration), and with one or two verdicts behind it any
+ * rate would read as precision the founder's own history does not have.
+ *
+ * Both halves are named only when non-zero, so "3 wins" is not padded into
+ * "3 wins · 0 flops" — an empty half is not information.
+ */
+export function formatVerdicts(evidence) {
+  const wins = Math.max(0, Number(evidence?.wins) || 0);
+  const flops = Math.max(0, Number(evidence?.flops) || 0);
+  if (!wins && !flops) return "";
+  const parts = [];
+  if (wins) parts.push(`${wins} win${wins === 1 ? "" : "s"}`);
+  if (flops) parts.push(`${flops} flop${flops === 1 ? "" : "s"}`);
+  return parts.join(" · ");
 }

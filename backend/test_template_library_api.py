@@ -527,6 +527,65 @@ class TestContentAngles:
             assert gate == 502, f"expected a model error, got {gate}"
         assert gate in ("passed", 502)
 
+    def test_listed_angles_carry_their_kinds_verdict_tally(self, api):
+        """
+        The picker shows founder verdicts per angle kind, from the same
+        aggregate the generation prompt already reads. Counts only, and the
+        tally annotates: ordering still comes from generation rank even when
+        the later-ranked angle is the one with the win.
+        """
+        import uuid as _uuid
+        from models import CreateContentAngleRequest, CreateStudioProjectRequest
+        profile = _make_profile(api, ANON, name="Evidence App")
+        _run(api.approve_app_profile(profile_id=profile["id"], payload={}, user_id=ANON))
+        quiet = _run(api.create_manual_content_angle(
+            profile_id=profile["id"],
+            payload=CreateContentAngleRequest(
+                kind="founder_story", label="Quiet", target_audience="a", user_problem="p"),
+            user_id=ANON))
+        winner = _run(api.create_manual_content_angle(
+            profile_id=profile["id"],
+            payload=CreateContentAngleRequest(
+                kind="problem_solution", label="Winner", target_audience="a", user_problem="p"),
+            user_id=ANON))
+        project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
+            brand_profile_id=profile["id"], content_angle_id=winner["id"]), user_id=ANON))
+        _run(api._execute(
+            "INSERT INTO feedback_events (id, brand_profile_id, studio_project_id, event, created_at, user_id)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (str(_uuid.uuid4()), profile["id"], project["id"],
+             "video_approved", "2026-01-01T00:00:00", ANON)))
+        listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
+        assert [a["id"] for a in listed["angles"]] == [quiet["id"], winner["id"]]
+        by_id = {a["id"]: a for a in listed["angles"]}
+        assert by_id[winner["id"]]["evidence"] == {"wins": 1, "flops": 0}
+        assert by_id[quiet["id"]]["evidence"] == {"wins": 0, "flops": 0}
+
+    def test_evidence_is_zeroed_without_verdicts_and_never_crosses_profiles(self, api):
+        import uuid as _uuid
+        from models import CreateContentAngleRequest, CreateStudioProjectRequest
+        p1 = _make_profile(api, ANON, name="Evidence One")
+        p2 = _make_profile(api, ANON, name="Evidence Two")
+        _run(api.approve_app_profile(profile_id=p1["id"], payload={}, user_id=ANON))
+        for profile in (p1, p2):
+            _run(api.create_manual_content_angle(
+                profile_id=profile["id"],
+                payload=CreateContentAngleRequest(
+                    kind="problem_solution", label="L", target_audience="a", user_problem="p"),
+                user_id=ANON))
+        # A verdict for p1's angle must not leak into p2's same-kind angle:
+        # the summary is scoped by brand_profile_id, like the prompt feed.
+        a1 = _run(api.list_content_angles(profile_id=p1["id"], user_id=ANON))["angles"][0]
+        project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
+            brand_profile_id=p1["id"], content_angle_id=a1["id"]), user_id=ANON))
+        _run(api._execute(
+            "INSERT INTO feedback_events (id, brand_profile_id, studio_project_id, event, created_at, user_id)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (str(_uuid.uuid4()), p1["id"], project["id"],
+             "video_approved", "2026-01-01T00:00:00", ANON)))
+        assert _run(api.list_content_angles(profile_id=p1["id"], user_id=ANON))["angles"][0]["evidence"] == {"wins": 1, "flops": 0}
+        assert _run(api.list_content_angles(profile_id=p2["id"], user_id=ANON))["angles"][0]["evidence"] == {"wins": 0, "flops": 0}
+
 
 CANNED_ANGLES = [
     {
