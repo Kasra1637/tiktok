@@ -146,6 +146,8 @@ card is `.inset-panel`.
 | Page | `PageHeader` | 40px `IconTile size="page"` | page title |
 | Section card | `SectionCard` | 32px `IconTile size="section"` | `h2`, 16px semibold |
 | Group inside a card | `GroupLabel` + hairline divider, never a nested box | 12px, only on collapsible groups or cards with 3+ groups | `.eyebrow` (all caps) |
+| Aside inside a card | `.inset-panel` (12px radius, 16px gutter) | none | 14px medium, or an `.eyebrow` |
+| Row inside a card | `.row-pad` (16px gutter, 12px block) + hairline | none | 14px medium label |
 | Field / detail row | label + control | none | 14px medium label |
 
 Spacing, in these steps and no others:
