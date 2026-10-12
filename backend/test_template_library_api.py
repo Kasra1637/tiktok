@@ -1450,6 +1450,36 @@ class TestRegenerateContentAngles:
                 profile_id=str(uuid.uuid4()), user_id=ANON))
         assert err.value.status_code == 404
 
+    def test_regenerate_counts_projects_on_replaced_angles(self, api, monkeypatch):
+        """projects_affected reports how many drafts were built on angles the
+        regen replaces (backend comes back an informed number, not silence)."""
+        from models import CreateStudioProjectRequest
+        profile = _make_profile(api, ANON, name="Regen Affected")
+        _run(api.approve_app_profile(profile_id=profile["id"], payload={}, user_id=ANON))
+        _canned_log(api, monkeypatch, CANNED_ANGLES)
+        # First gen creates the derived angle this test points projects at.
+        first = _run(api.generate_profile_content_angles(
+            profile_id=profile["id"], user_id=ANON))
+        target = first["angles"][0]
+        # Two drafts on the derived angle, plus one with no angle: only the
+        # first two count. A draft owned by another user pointing at the same
+        # id string is impossible through the API (drafts require an approved
+        # profile the owner can see), so ownership is enforced by the query,
+        # not re-proven here.
+        for angle_ref in (target["id"], target["id"], ""):
+            _run(api.create_studio_project(
+                payload=CreateStudioProjectRequest(
+                    brand_profile_id=profile["id"], content_angle_id=angle_ref),
+                user_id=ANON))
+
+        out = _run(api.regenerate_content_angles(profile_id=profile["id"], user_id=ANON))
+        # Exactly the two drafts on derived angles of THIS profile, not the
+        # no-angle draft.
+        assert out["projects_affected"] == 2
+        out2 = _run(api.regenerate_content_angles(profile_id=profile["id"], user_id=ANON))
+        # Second regen: the new generated angles have no projects on them.
+        assert out2["projects_affected"] == 0
+
 
 class TestGoalSuggestionsCycle:
     """The Shuffle button: same six goals, deterministic next order, no model

@@ -598,7 +598,7 @@ function AngleGoalPicker({
               className="gap-1.5 shrink-0"
               onClick={onRegenerate}
               disabled={regenerating}
-              title="Show a different ordering of these six suggestions. Your selection is kept."
+              title="Same six suggestions, a different ranking. Shuffling never changes the six goals — regenerate angles for genuinely new direction. Your selection is kept."
               data-testid="regenerate-goals-button"
             >
               {regenerating ? (
@@ -1083,8 +1083,24 @@ export default function CreateVideo() {
   // angles server-side: what the founder wrote on the profile page survives
   // this call. (The bare generate endpoint replaces the whole set and stays
   // empty-list-only — that distinction is why these are two buttons.)
+  //
+  // But generated angles that have a project built on them are deleted and
+  // rewritten fresh: the draft survives, the story it was planned around does
+  // not. A confirm at the click — the same pattern as plan regen — names that
+  // before it happens instead of two screens later.
   const handleRegenerateAngles = useCallback(async () => {
     if (!profileId) return;
+    const selectedHasProject = Boolean(project && project.content_angle_id && project.content_angle_id === angleId);
+    if (selectedHasProject) {
+      const ok =
+        typeof window === "undefined" || typeof window.confirm !== "function"
+          ? false
+          : window.confirm(
+              "A draft on this step is built around the angle you picked. Regenerating replaces that " +
+                "angle's text with new material and the draft loses its story. Continue?"
+            );
+      if (!ok) return;
+    }
     setGeneratingAngles(true);
     setAngleError(null);
     try {
@@ -1098,7 +1114,7 @@ export default function CreateVideo() {
     } finally {
       setGeneratingAngles(false);
     }
-  }, [profileId]);
+  }, [profileId, angleId, project]);
 
   // Cycle the selected angle's six goal suggestions. Free (no model call),
   // and the server persists the variant, so re-reading the list brings back

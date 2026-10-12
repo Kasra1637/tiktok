@@ -4242,6 +4242,18 @@ async def regenerate_content_angles(profile_id: str, user_id: str = Depends(get_
         (profile_id, user_id),
     )
 
+    # Projects referencing the derived angles about to be removed keep their
+    # row (LEFT JOIN degrades to a null angle later) but lose the story they
+    # were built around. Counting them BEFORE the delete turns that quiet
+    # break into a number the founder can be told about.
+    affected = await _fetch_one(
+        "SELECT COUNT(*) AS n FROM studio_projects WHERE brand_profile_id = ? AND user_id = ? "
+        "AND content_angle_id IN (SELECT id FROM content_angles WHERE brand_profile_id = ? "
+        "AND (origin IS NULL OR origin != 'manual'))",
+        (profile_id, user_id, profile_id),
+    )
+    projects_affected = int((affected or {}).get("n") or 0)
+
     # The guarded delete: only derived rows are replaced. A manual row can
     # still be removed through the ordinary DELETE endpoint, by its founder.
     await _execute(
@@ -4277,7 +4289,7 @@ async def regenerate_content_angles(profile_id: str, user_id: str = Depends(get_
         "Regenerated %d content angle(s) (kept %d manual) for profile %s",
         len(saved), len(manual_rows), profile_id,
     )
-    return {"angles": saved, "manual_kept": len(manual_rows)}
+    return {"angles": saved, "manual_kept": len(manual_rows), "projects_affected": projects_affected}
 
 
 @api_router.post("/app-profiles/{profile_id}/content-angles/{angle_id}/regenerate-goals")
