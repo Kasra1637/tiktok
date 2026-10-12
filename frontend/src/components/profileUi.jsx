@@ -182,7 +182,7 @@ export function SectionGroup({ id, label, summary, open, onToggle, children }) {
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-medium leading-[22px]">{label}</span>
           {summary ? (
-            <span className="mt-0.5 block truncate text-xs leading-[18px] text-muted-foreground">
+            <span className="mt-1 block truncate text-xs leading-[18px] text-muted-foreground">
               {summary}
             </span>
           ) : null}

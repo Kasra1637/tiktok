@@ -646,7 +646,7 @@ function AngleGoalPicker({
               {fitReasons?.[goal] && (
                 <span
                   data-testid={`goal-fit-${goal}`}
-                  className="mt-0.5 block text-xs leading-relaxed text-muted-foreground"
+                  className="mt-1 block text-xs leading-relaxed text-muted-foreground"
                 >
                   {sentenceCase(fitReasons[goal])}
                 </span>
@@ -657,7 +657,7 @@ function AngleGoalPicker({
               {formatVerdicts(angle?.evidence) && (
                 <span
                   data-testid={`goal-angle-evidence-${goal}`}
-                  className="mt-0.5 block text-xs leading-relaxed text-muted-foreground"
+                  className="mt-1 block text-xs leading-relaxed text-muted-foreground"
                 >
                   {formatVerdicts(angle.evidence)} at this angle kind
                 </span>
@@ -668,7 +668,7 @@ function AngleGoalPicker({
               {formatVerdicts(objectiveEvidence?.[goal]) && (
                 <span
                   data-testid={`goal-objective-evidence-${goal}`}
-                  className="mt-0.5 block text-xs leading-relaxed text-muted-foreground"
+                  className="mt-1 block text-xs leading-relaxed text-muted-foreground"
                 >
                   {formatVerdicts(objectiveEvidence[goal])} for this goal
                 </span>
@@ -1770,7 +1770,7 @@ setObjective("");
                     <span className="font-display text-sm font-semibold">{p.brand_name}</span>
                     {profileId === p.id && <Check className="h-4 w-4 text-[color:var(--brand-indigo)]" />}
                   </div>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     {p.app_category || p.niche || "Category not set"}
                   </p>
                 </button>
@@ -1791,12 +1791,12 @@ setObjective("");
                       <summary className="cursor-pointer text-xs text-muted-foreground">
                         Show all {unapproved.length} apps
                       </summary>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         {unapproved.map(profileLabel).join(", ")}
                       </p>
                     </details>
                   ) : (
-                    <p className="mt-0.5 text-xs text-muted-foreground">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {unapproved.map(profileLabel).join(", ")}
                     </p>
                   )}
@@ -1938,7 +1938,7 @@ setObjective("");
                               {sentenceCase(a.label)}
                             </span>
                             {!picked && angleSubtitle(a) && (
-                              <span className="mt-0.5 block text-xs leading-[18px] text-muted-foreground">
+                              <span className="mt-1 block text-xs leading-[18px] text-muted-foreground">
                                 {angleSubtitle(a)}
                               </span>
                             )}
@@ -1974,7 +1974,7 @@ setObjective("");
                             {details.map((row) => (
                               <div key={row.label} className="min-w-0">
                                 <dt className="eyebrow">{row.label}</dt>
-                                <dd className="mt-0.5 text-sm leading-[22px] text-foreground/90">
+                                <dd className="mt-1 text-sm leading-[22px] text-foreground/90">
                                   {row.value}
                                 </dd>
                               </div>
