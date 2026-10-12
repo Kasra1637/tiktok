@@ -819,6 +819,12 @@ export default function CreateVideo() {
   // Cycling goal suggestions on the selected angle. Persists server-side per
   // angle, so the re-read of the angles list is the new state.
   const [cyclingGoals, setCyclingGoals] = useState(false);
+  const [angleRegenNotice, setAngleRegenNotice] = useState(null);
+  // What a completed angle regen cost: how many of the profile's drafts were
+  // built on angles it replaced. Shown as a one-line notice after the fact —
+  // the pre-click confirm only covers the selected angle, so this is how a
+  // draft on a DIFFERENT angle learns it lost its story. Count of 0 shows
+  // nothing: a clean regen is not news.
   const [facets, setFacets] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
   const [recError, setRecError] = useState(null);
@@ -1103,9 +1109,16 @@ export default function CreateVideo() {
     }
     setGeneratingAngles(true);
     setAngleError(null);
+    setAngleRegenNotice(null);
     try {
       const data = await api.regenerateContentAngles(profileId);
       adoptAngles(data);
+      const affected = Number(data?.projects_affected) || 0;
+      if (affected > 0) {
+        setAngleRegenNotice(
+          `Regenerated. ${affected} ${affected === 1 ? "draft was" : "drafts were"} built on the replaced angles and lost their story — reopen ${affected === 1 ? "it" : "them"} to re-plan.`
+        );
+      }
       if (!data.angles?.length) {
         setAngleError("The model returned no usable angles. Try again.");
       }
@@ -1880,6 +1893,12 @@ setObjective("");
                       {generatingAngles ? "Regenerating…" : "Regenerate angles"}
                     </Button>
                   </div>
+                  {angleRegenNotice && (
+                    <Alert data-testid="angle-regen-notice">
+                      <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
+                      <AlertDescription>{angleRegenNotice}</AlertDescription>
+                    </Alert>
+                  )}
                   {angles.map((a) => {
                     const picked = angleId === a.id;
                     const details = picked ? angleDetails(a) : [];
