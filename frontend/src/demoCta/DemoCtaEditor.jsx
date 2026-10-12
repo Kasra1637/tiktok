@@ -142,10 +142,12 @@ const TEXTAREA_CLASS =
 /**
  * One collapsible control group.
  *
- * `.surface` is un-layered CSS with its own 24px padding, so the padding here
- * has to be important to win — without `!p-0` every group carried 24px of dead
- * space around a 32px header, which is most of what made the old panel feel
- * bloated. Content padding is 16px to match the rest of the app's card rhythm.
+ * The card is `flush`: `.surface` is un-layered CSS with its own 24px padding,
+ * and every group carrying it put 24px of dead space around a 32px header,
+ * which is most of what made the old panel feel bloated. `.surface-flush`
+ * zeroes the gutter in the stylesheet, where it beats the utility layer, so
+ * this component no longer reaches for `!p-0`. Content padding is 16px, the
+ * shared row rhythm.
  *
  * `open`/`onToggle` are lifted so the parent can persist which groups are open.
  */

@@ -500,7 +500,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
               collapsed runs of continuation beats into ranges and closed by
               saying the hook and the call to action were the two that carried the
               video — a description of a chain with a fixed number of beats to
-              segments, none of which exists now. */}          <div className="space-y-1.5">
+              segments, none of which exists now. */}          <div className="space-y-2">
             <span className="eyebrow">The two sections</span>
             <ol className="space-y-3 text-sm">
               {sections.map((section) => (

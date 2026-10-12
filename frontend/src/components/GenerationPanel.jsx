@@ -433,7 +433,7 @@ const handleGenerate = async () => {
       )}
 
       {models && (
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           <label htmlFor="gen-model" className="text-sm font-medium">Model</label>
           <select
             id="gen-model"
@@ -464,7 +464,7 @@ const handleGenerate = async () => {
             ))}
           </select>
           {(capability?.supported_resolutions || []).length > 0 && (
-            <div className="space-y-1.5 pt-1">
+            <div className="space-y-2 pt-1">
               <label htmlFor="gen-resolution" className="text-sm font-medium">Resolution</label>
               <select
                 id="gen-resolution"
