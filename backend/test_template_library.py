@@ -444,6 +444,53 @@ class TestRecommendationScorer:
         assert result["score"] > 0
         assert isinstance(result["reasons"], list)
 
+    def test_perfect_match_clamps_at_ten(self):
+        """
+        The founder-facing scale is 0–10: a template matching every signal
+        sums to 13.5 raw, and the template step shows "Fit X/10", so the
+        scorer clamps rather than leaking the raw sum (which once rendered
+        as Fit 11). The clamp keeps every reason — only the number is
+        bounded, never the evidence.
+        """
+        angle = {"kind": "feature_demonstration", "target_audience": "Busy students",
+                 "app_feature": "timer", "claims_to_respect": []}
+        template = self._template(
+            brand_profile_id="p1",
+            objective="demonstrate_feature",
+            app_categories=["Productivity"],
+            audiences=["targeted_audience", "evaluating_viewers"],
+            name="Beat procrastination on camera",
+            middle_structure="Win back your time in one take.",
+        )
+        profile = self._profile(id="p1", brand_name="Taskly",
+                                target_audience="Busy students",
+                                problems_solved=["I keep procrastinating and losing track of time"])
+        result = _score_template_for_angle(template, profile, angle, "demonstrate_feature")
+        assert result["score"] == 10.0
+        assert len(result["reasons"]) == 7
+
+    def test_heavy_rejections_floor_at_zero(self):
+        """
+        The same 0–10 scale from below: feedback can push the raw sum
+        negative, and a negative fit would read as a bug, so it floors at 0.
+        """
+        template = self._template(name="Unrelated", category="story",
+                                  app_categories=[], audiences=[],
+                                  content_slots={}, middle_structure="",
+                                  required_assets=[])
+        profile = self._profile(app_category="", target_audience="")
+        events = [
+            {"template_id": "t1", "event": "template_rejected",
+             "reason": "hook_too_weak", "signal": ""}
+            for _ in range(4)
+        ]
+        result = _score_template_for_angle(
+            dict(template, id="t1"), profile,
+            {"kind": "", "target_audience": "", "app_feature": "", "claims_to_respect": []},
+            "", events,
+        )
+        assert result["score"] == 0.0
+
     def test_always_returns_why_and_limitations_lists(self):
         for kind in tl.CONTENT_ANGLE_KINDS:
             angle = {"kind": kind, "target_audience": "a", "app_feature": "f",

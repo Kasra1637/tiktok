@@ -164,15 +164,17 @@ function RecommendationCard({ r, selected, onSelect }) {
             {r.suggested_duration}s
           </Badge>
           {Number.isFinite(score) && (
-            // The sort key. Not a percentage or a rating: a weighted sum of
-            // matched factors, comparable only between these cards.
+            // The sort key on a 0–10 scale: a weighted sum of matched
+            // factors, clamped server-side, comparable only between these
+            // cards. The "/10" marks the scale so a fit never reads as
+            // open-ended.
             <Badge
               variant="outline"
               className="text-[11px]"
               data-testid="template-fit-score"
-              title="Fit score — a weighted sum of the factors this template matched. Only comparable against the other templates below."
+              title="Fit score — a weighted sum of the factors this template matched, on a 0–10 scale. Only comparable against the other templates below."
             >
-              Fit {score}
+              Fit {score}/10
             </Badge>
           )}
           <Badge variant="secondary" className="text-[11px]">

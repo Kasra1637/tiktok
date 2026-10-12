@@ -796,6 +796,15 @@ class TestRecommendations:
         scores = [r["score"] for r in result["recommendations"]]
         assert scores == sorted(scores, reverse=True)
 
+    def test_scores_stay_within_zero_to_ten(self, api):
+        # The template step shows "Fit X/10", so no recommendation may
+        # leave the scale in either direction.
+        profile = _approve_profile(api, name="Reco Bounds")
+        result = _run(api.recommend_templates(profile_id=profile["id"], limit=30, user_id=ANON))
+        assert result["recommendations"], "expected seeded templates to recommend"
+        for r in result["recommendations"]:
+            assert 0.0 <= r["score"] <= 10.0
+
     def test_limit_respected(self, api):
         profile = _approve_profile(api, name="Reco App 6")
         result = _run(api.recommend_templates(profile_id=profile["id"], limit=3, user_id=ANON))
@@ -857,7 +866,10 @@ class TestFeedbackInfluence:
         self._record(api, profile, template_id, "template_rejected", reason="hook_too_weak")
         self._record(api, profile, template_id, "template_rejected", reason="hook_too_weak")
         updated = self._after(api, profile, template_id)
-        assert updated["score"] == pytest.approx(before - 4.0)
+        # Scores live on the founder-facing 0–10 scale, so a penalty that
+        # would push the raw sum below zero floors at 0 rather than going
+        # negative; the delta itself is still exact in feedback.
+        assert updated["score"] == pytest.approx(max(0.0, before - 4.0))
         assert updated["limitations"][0] == "Rejected or replaced 2 time(s) for this app."
         assert updated["feedback"]["explicit_rejections"] == 2
         assert updated["feedback"]["delta"] == pytest.approx(-4.0)

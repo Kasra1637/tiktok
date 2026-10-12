@@ -4370,7 +4370,11 @@ def _score_template_for_angle(
     founder sees WHY a template was picked, and a recommendation can be
     re-derived and audited. Scoring is a weighted sum of explicit signals;
     reasons are ranked by weight so the first one shown is the strongest
-    factor.
+    factor. The founder-facing scale is 0–10 (the template step shows
+    "Fit X/10"), so the sum is clamped into that range at the single return
+    below — after feedback, which would otherwise push strong matches above
+    10 or heavily rejected ones below 0. Clamping is monotonic, so the
+    ranking the sort uses is unchanged.
 
     URL-analysis factors are real inputs, with the angle taking precedence
     and the profile as fallback: app category, target audience (normalized
@@ -4590,6 +4594,10 @@ def _score_template_for_angle(
                 f"Approved or marked successful {approvals} time(s) for this app.",
             )
 
+    # The 0–10 bound lives here, not in the caller: this is the single
+    # return every recommendation flows through, so no consumer can ever
+    # show a fit outside the scale the template step advertises.
+    score = max(0.0, min(10.0, score))
     return {
         "score": round(score, 2),
         "reasons": reasons,
