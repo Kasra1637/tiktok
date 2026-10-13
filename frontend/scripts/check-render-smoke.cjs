@@ -4749,6 +4749,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   await runDeleteDialogChecks();
 
   console.log("");
+  console.log("Checking the App Profile research actions...");
+  await runProfileResearchActionsChecks();
+
+  console.log("");
   console.log("Checking the sidebar navigation model...");
   await runSidebarNavChecks();
 
@@ -5419,8 +5423,132 @@ async function runDeleteDialogChecks() {
 }
 
 /**
- * App Profile: the sticky review bar only exists once research produced a draft.
+ * App Profile detail: the two research actions beside the delete control.
  *
+ * Refresh-from-sources stages a proposal and owes re-approval (unlike
+ * Refresh research & angles, which applies immediately), so the pending
+ * proposal must surface a review path on this page — otherwise the button
+ * silently does nothing visible. Research-into-a-new-draft forks from the
+ * stored store listing and lands in the editor, which owns drafts; without
+ * a listing on file the button must not render at all.
+ */
+async function runProfileResearchActionsChecks() {
+  const RESEARCHED = {
+    id: "p1",
+    brand_name: "Threadly",
+    brand_description: "One list, not eleven.",
+    status: "approved",
+    last_research_at: "2026-09-01T10:00:00Z",
+    appstore_url: "https://apps.apple.com/threadly",
+  };
+
+  const stubDetailApi = (extra = {}) => ({
+    getAppProfile: async () => RESEARCHED,
+    getContentAngles: async () => ({ angles: [] }),
+    getStudioProjects: async () => ({ projects: [] }),
+    getTemplateRecommendations: async () => ({ recommendations: [] }),
+    ...extra,
+  });
+
+  await check("refresh from sources stages a pending proposal", async (ctx) => {
+    let called = null;
+    const pending = { ...RESEARCHED, pending_research: { brand_description: "New words" } };
+    await withApi(
+      stubDetailApi({
+        refreshAppProfile: async (id) => {
+          called = id;
+          return pending;
+        },
+      }),
+      async () => {
+        await mountProfileDetail()(ctx);
+        const btn = ctx.container.querySelector('[data-testid="refresh-sources-button"]');
+        if (!btn) throw new Error("no refresh-from-sources button beside the delete control");
+        await clickEl(ctx, btn, "no refresh-from-sources button");
+        await act(async () => {});
+        if (called !== "p1") {
+          throw new Error(`refreshAppProfile was called with ${JSON.stringify(called)}`);
+        }
+        if (!ctx.container.querySelector('[data-testid="pending-proposal-alert"]')) {
+          throw new Error("no pending-proposal alert after refresh");
+        }
+        if (!ctx.container.querySelector('[data-testid="approve-pending-button"]')) {
+          throw new Error("the pending proposal offers no review path");
+        }
+      }
+    );
+  });
+
+  await check("approving the pending proposal applies it", async (ctx) => {
+    let called = null;
+    await withApi(
+      stubDetailApi({
+        getAppProfile: async () => ({ ...RESEARCHED, pending_research: { brand_description: "New words" } }),
+        approveAppProfile: async (id, applyPending) => {
+          called = [id, applyPending];
+          return RESEARCHED;
+        },
+      }),
+      async () => {
+        await mountProfileDetail()(ctx);
+        await clickEl(
+          ctx,
+          ctx.container.querySelector('[data-testid="approve-pending-button"]'),
+          "no review path on the pending proposal"
+        );
+        await act(async () => {});
+        if (!called || called[0] !== "p1" || called[1] !== true) {
+          throw new Error(`approveAppProfile was called with ${JSON.stringify(called)}`);
+        }
+        if (ctx.container.querySelector('[data-testid="pending-proposal-alert"]')) {
+          throw new Error("the pending alert survives its own approval");
+        }
+      }
+    );
+  });
+
+  await check("research into a new draft forks from the store listing", async (ctx) => {
+    let payload = null;
+    global.__SMOKE_NAVIGATIONS = [];
+    await withApi(
+      stubDetailApi({
+        researchAppProfile: async (p) => {
+          payload = p;
+          return { id: "p9", brand_name: "Threadly", status: "draft" };
+        },
+      }),
+      async () => {
+        await mountProfileDetail()(ctx);
+        await clickEl(
+          ctx,
+          ctx.container.querySelector('[data-testid="research-new-draft-button"]'),
+          "no research-into-new-draft button"
+        );
+        await act(async () => {});
+        if (!payload || payload.appstore_url !== "https://apps.apple.com/threadly") {
+          throw new Error(`researchAppProfile was called with ${JSON.stringify(payload)}`);
+        }
+        const went = global.__SMOKE_NAVIGATIONS || [];
+        if (!went.includes("/brand")) {
+          throw new Error(`expected to land on /brand, navigated to ${JSON.stringify(went)}`);
+        }
+      }
+    );
+  });
+
+  await check("research into a new draft stays hidden without a store listing", async (ctx) => {
+    const { appstore_url, ...bare } = RESEARCHED;
+    void appstore_url;
+    await withApi(stubDetailApi({ getAppProfile: async () => bare }), async () => {
+      await mountProfileDetail()(ctx);
+      if (ctx.container.querySelector('[data-testid="research-new-draft-button"]')) {
+        throw new Error("the fork button shows with no store listing to research");
+      }
+    });
+  });
+}
+
+/**
  * "Save App Profile" and "Review complete" are review affordances over a
  * machine-written draft. Before research runs there is nothing to review, so the
  * bar is withheld. But the bar was also the only save on the page, so gating it

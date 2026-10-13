@@ -18,6 +18,7 @@ import PageFrame from "../components/PageFrame";
 import { sentenceCase } from "../lib/copyCase";
 import { ProfileCard, ProfileField, InfoChipList, InfoListBlock, CardGrid, StatementCard, SectionGroup } from "../components/profileUi";
 import { api, getErrorMessage } from "../lib/api";
+import { rememberCurrentAppId } from "../lib/currentApp";
 import {
   Briefcase, Loader2, AlertTriangle, ArrowLeft,
   Lightbulb, Trash2, RefreshCw, ClipboardCheck,
@@ -112,6 +113,13 @@ export default function AppProfileDetail() {
   const [angles, setAngles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [regeneratingEverything, setRegeneratingEverything] = useState(false);
+  // Re-research into a pending proposal (approval owed) and research-into-
+  // a-new-draft: the BrandSetup sticky bar and research form own these for
+  // the editor, and this page mirrors them next to the delete control so a
+  // founder reading the approved profile never has to leave it to act.
+  const [refreshing, setRefreshing] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [researchingNew, setResearchingNew] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [drafts, setDrafts] = useState([]);
@@ -198,6 +206,71 @@ export default function AppProfileDetail() {
     }
   };
 
+  // Refresh from sources: re-read the store listings into a pending
+  // proposal. The approved profile is unchanged until the proposal is
+  // approved — the opposite of Refresh research & angles above, which
+  // applies immediately. Only for researched profiles: a hand-typed one
+  // has no sources to re-read, and a draft has no approval to owe.
+  const handleRefreshFromSources = async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      const saved = await api.refreshAppProfile(profileId);
+      setProfile(saved);
+      setNotice("Re-research complete — review the proposal below, then approve to apply it.");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Approve the pending proposal in place: the proposal belongs to this
+  // approved page, so the founder reviews it where the diff will land
+  // rather than being sent to the editor for one click.
+  const handleApprovePending = async () => {
+    setApproving(true);
+    setError(null);
+    try {
+      const saved = await api.approveAppProfile(profileId, true);
+      setProfile(saved);
+      const a = await api.getContentAngles(profileId).catch(() => ({ angles: [] }));
+      setAngles(a.angles || []);
+      setNotice("Proposal applied — profile and angles are current.");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  // Research into a new draft: re-run research for this app's store URLs
+  // as a separate draft profile. The current profile is untouched, and the
+  // editor opens on the new draft (it is the most recently created row, so
+  // getActiveBrand returns it). Needs a store listing on file — research
+  // with no URL is the toast BrandSetup shows, so the button stays disabled
+  // with that reason instead.
+  const handleResearchNewDraft = async () => {
+    const appstoreUrl = (profile?.appstore_url || "").trim();
+    const playUrl = (profile?.play_url || "").trim();
+    if (!appstoreUrl && !playUrl) return;
+    setResearchingNew(true);
+    setError(null);
+    try {
+      const created = await api.researchAppProfile({
+        ...(appstoreUrl ? { appstore_url: appstoreUrl } : {}),
+        ...(playUrl ? { play_url: playUrl } : {}),
+      });
+      if (created?.id) rememberCurrentAppId(created.id);
+      toast.success("New research draft ready — review it, then approve it.");
+      navigate("/brand");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setResearchingNew(false);
+    }
+  };
+
   // What the founder has to type to arm the delete. Falls back to the same
   // "Untitled app" the header shows, because brand_name is optional on a
   // researched draft — and without the fallback an unnamed profile would match
@@ -254,6 +327,14 @@ export default function AppProfileDetail() {
   }
 
   const approved = profile?.status === "approved";
+  // Researched means re-researchable: last_research_at is written only by
+  // the research INSERT and the refresh UPDATE, never by analyze-url or a
+  // hand-typed create.
+  const researched = Boolean(profile?.last_research_at);
+  const hasStoreUrl = Boolean(
+    (profile?.appstore_url || "").trim() || (profile?.play_url || "").trim()
+  );
+  const pendingProposal = profile?.pending_research;
 
   // Section visibility is computed up front so an empty research field leaves
   // no hollow bordered card behind: InfoChipList and ProfileField render null
@@ -346,6 +427,40 @@ return (
                 Refresh research & angles
               </Button>
             )}
+            {/* Refresh from sources stages a proposal and owes re-approval;
+                Refresh research & angles above applies immediately instead.
+                The two share a row because both re-read the listings, and the
+                labels say which one waits for the founder. */}
+            {approved && researched && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleRefreshFromSources}
+                disabled={refreshing}
+                title="Re-read the store listings into a proposal. Your approved profile is unchanged until you approve it."
+                data-testid="refresh-sources-button"
+              >
+                {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                {refreshing ? "Re-researching..." : "Refresh from sources (needs re-approval)"}
+              </Button>
+            )}
+            {/* A second research pass as its own draft, beside the delete
+                control: forking never touches this profile, which is why it
+                sits with the destructive action rather than the safe ones.
+                Brand indigo, not red — red is delete's alone. */}
+            {hasStoreUrl && (
+              <Button
+                variant="brand"
+                size="sm"
+                onClick={handleResearchNewDraft}
+                disabled={researchingNew}
+                title="Research this app's store listing again as a separate draft. This profile is untouched; the editor opens on the new draft."
+                data-testid="research-new-draft-button"
+              >
+                {researchingNew ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                {researchingNew ? "Researching..." : "Research into a new draft"}
+              </Button>
+            )}
             {/* Deletes the profile and everything scoped to it: content angles,
                 studio projects, generations, assets and their recorded
                 results. The endpoint and the api client both already existed
@@ -379,6 +494,31 @@ return (
         <Alert>
           <Lightbulb className="h-4 w-4 text-[color:var(--brand-indigo)]" />
           <AlertDescription>{notice}</AlertDescription>
+        </Alert>
+      )}
+      {/* A refreshed proposal waits: the approved profile is unchanged
+          until the founder applies it. Same contract as the editor's
+          pending-refresh alert, reviewed here where the diff will land. */}
+      {pendingProposal && (
+        <Alert data-testid="pending-proposal-alert">
+          <RefreshCw className="h-4 w-4 text-[color:var(--brand-indigo)]" />
+          <AlertTitle>A refreshed proposal is waiting</AlertTitle>
+          <AlertDescription className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+            <span className="text-muted-foreground">
+              Re-research found updates. Your approved profile is unchanged — approving applies the proposal.
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="shrink-0"
+              onClick={handleApprovePending}
+              disabled={approving}
+              data-testid="approve-pending-button"
+            >
+              {approving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BadgeCheck className="h-3.5 w-3.5" />}
+              {approving ? "Approving..." : "Review & approve"}
+            </Button>
+          </AlertDescription>
         </Alert>
       )}
 
