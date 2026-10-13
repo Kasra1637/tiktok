@@ -218,8 +218,10 @@ reserved for `.eyebrow` group labels, never section or page titles.
     App Profile, Profile Detail. The App Profile family moved here so moving
     between Create Video and the profile pages never re-solves the centering
     math sideways.
-  - `narrow` — 1150px, centred. Reading-heavy prose where a card at 1400px
-    stretches a sentence across a line the eye cannot sweep: Asset Library.
+  - `narrow` — 1150px, centred. Reserved for reading-heavy prose where a card
+    at 1400px stretches a sentence across a line the eye cannot sweep. No
+    current page uses it: the Asset Library grid went full frame so the
+    standalone page matches its embedded instance in Create Video.
 
   **The width must not change between two pages a reader moves between**, so a
   page belongs to a family rather than to itself: Brand Setup links to Profile
