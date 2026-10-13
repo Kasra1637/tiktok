@@ -373,6 +373,14 @@ const handleGenerate = async () => {
   const tooLong = exceedsSinglePass(pieceSeconds, capability);
 
   return (
+    /* This panel is an aside inside the step card, so it is the LAST border in
+       the stack: everything grouped under it is separated by a hairline, not by
+       another bordered box. The pre-render summary, "what you have", and the
+       Product Demo call-out were each an inset or an indigo box inside the
+       inset — three boxes in a box, each with its own 12px gutter and radius,
+       which is what made this panel read as a stack of frames rather than one
+       panel. They are divider-separated groups now, the level
+       design_guidelines.md §4 calls "group inside a card". */
     <div className="inset-panel space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="flex items-center gap-2 font-display text-sm font-semibold">
@@ -509,7 +517,7 @@ const handleGenerate = async () => {
           line's job (CreateVideo's create-no-autopost-note), and three copies of
           it on one screen made none of them the answer. */}
       <div
-        className="inset-panel space-y-1"
+        className="space-y-1 border-t border-[color:var(--hairline)] pt-3"
         data-testid="render-summary"
       >
         <span className="eyebrow block">Before you render</span>
@@ -672,7 +680,7 @@ const handleGenerate = async () => {
                   look finished. It is not: the middle deliberately ends where
                   the presenter would reach for their phone, so the demo and the
                   close are both outside it. */}
-              <div className="inset-panel space-y-1">
+              <div className="space-y-1 border-t border-[color:var(--hairline)] pt-3">
                 <span className="eyebrow block">What you have, and what is left</span>
                 {/* "No text appears on screen — nothing is published for you"
                     is gone: the pre-render summary above already says the piece
@@ -691,8 +699,13 @@ const handleGenerate = async () => {
                   answers a question the copy above already raises — "attach your
                   own demo next" — by opening the native editor for this exact
                   render, in this app, rather than leaving the founder to find
-                  it elsewhere. */}
-              <div className="space-y-2 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-3">
+                  it elsewhere.
+
+                  It used to be an indigo box, which made a fourth frame inside
+                  the panel and put the emphasis on the container rather than on
+                  the thing to press. The eyebrow and the coral button carry it
+                  now. */}
+              <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
                 <span className="eyebrow flex items-center gap-1.5">
                   <Smartphone className="h-3 w-3 shrink-0" aria-hidden="true" /> Product Demo + CTA
                 </span>
