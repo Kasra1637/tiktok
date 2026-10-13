@@ -41,7 +41,7 @@ jobs:
           gcloud builds submit \
             --project=ookforge-prod \
             --config=cloudbuild.yaml \
-            --service-account=hookforge-build@ookforge-prod.iam.gserviceaccount.com \
+            --service-account=projects/ookforge-prod/serviceAccounts/hookforge-build@ookforge-prod.iam.gserviceaccount.com \
             --substitutions=COMMIT_SHA=${{ github.sha }} \
             --timeout=1800s \
             .
