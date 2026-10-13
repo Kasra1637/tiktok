@@ -29,6 +29,7 @@ from template_library import (
     normalize_angle_kind,
     normalize_category,
     normalize_objective,
+    OBJECTIVE_OUTCOMES,
     clamp_duration,
 )
 import feedback
@@ -2196,6 +2197,42 @@ REQUIRED_PLAN_KEYS = {
 PLAN_SECTION_LABELS = ("hook", "middle")
 
 
+def _angle_goal_block(angle: Optional[dict], objective: str) -> str:
+    """
+    The audience, problem and goal rule shared by the plan and the strategy.
+
+    The hook and the script are the only words a viewer hears, so each must be
+    built from the selected angle (whose problem, for whom) and the selected
+    goal (what those words have to do). Both prompts state it as the same hard
+    constraint, so neither can drift back to a soft "reconcile" note.
+    """
+    a = angle or {}
+
+    def _text(key: str) -> str:
+        return str(a.get(key) or "").strip()
+
+    audience = _text("target_audience") or "the viewer described in VERIFIED APP FACTS"
+    lines = [
+        "ANGLE + GOAL RULE (hard constraints for the hook_line and every spoken line):",
+        f"- WHO: say it to this viewer only: {audience}.",
+    ]
+    if _text("user_problem"):
+        lines.append(f"- PROBLEM: the hook names this exact problem in the viewer's words: {_text('user_problem')}. The script develops and resolves it.")
+    if _text("hook_promise"):
+        lines.append(f"- PROMISE: the hook opens on this promise: {_text('hook_promise')}.")
+    if _text("app_feature"):
+        lines.append(f"- SOLUTION: the middle resolves the problem through {_text('app_feature')}, as a change in the viewer's life, never a feature list.")
+    if _text("desired_emotion"):
+        lines.append(f"- FEELING: the viewer should feel {_text('desired_emotion')}.")
+    goal = normalize_objective(objective)
+    job = OBJECTIVE_OUTCOMES.get(goal, "")
+    if goal and job:
+        lines.append(f"- GOAL: '{goal}' means: {job}. The hook and script do that job for this viewer. The founder's later demo/CTA is not spoken here: NEVER include a product demonstration or a call to action.")
+    lines.append("- TEMPLATE: the template sets the hook's SHAPE only; fill it with this angle's problem and facts, never its example wording.")
+    lines.append("- CONFLICT: if the goal and angle clash, keep this viewer and problem; the goal shapes how the script moves them forward.")
+    return "\n".join(lines) + "\n"
+
+
 async def generate_creative_plan(
     profile: dict,
     template: dict,
@@ -2323,6 +2360,7 @@ async def generate_creative_plan(
         )
     feedback_context += _component_feedback_block(component_feedback, "plan")
 
+    angle_goal_block = _angle_goal_block(angle, objective)
     system_message = (
         "You are a short-form video creative director for mobile app promotions. "
         "You write concrete, filmable plans grounded ONLY in verified product facts. "
@@ -2342,12 +2380,7 @@ async def generate_creative_plan(
         f"CREATIVE BRIEF:\n{json.dumps(brief, indent=2)}\n\n"
         f"CLAIM RULES:\n{json.dumps(claims, indent=2)}\n"
         f"{feedback_context}\n"
-        "ANGLE + GOAL RULE: the selected audience angle defines whose problem this video "
-        "speaks to and the hook's framing; the video goal defines what the full campaign "
-        "including the founder's later demo/CTA should accomplish. Keep the generated hook "
-        "and middle rooted in the angle while advancing the goal through that same lens. "
-        "If they seem in tension, reconcile the goal through the angle rather than swapping "
-        "audiences or turning the generated clip into a feature list.\n"
+        f"{angle_goal_block}\n"
         "CUSTOMER PERSPECTIVE: write every spoken line as a satisfied CUSTOMER describing their "
         "own experience using this app — their situation, what they felt, and the value they get. "
         "The speaker is a real user, never the app's founder, owner, developer or marketer. Never "
@@ -2355,7 +2388,7 @@ async def generate_creative_plan(
         "product voice (we, our app), and no framing in which the speaker is selling it.\n"
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
-        f'  "hook_line": "the single spoken/typed hook line, {hook_min_words}-12 words (about {hook_seconds}s of speech — long enough to fill the hook beat, never a short fragment)",\n'
+        f'  "hook_line": "the single spoken/typed hook line, said to this viewer about this problem, {hook_min_words}-12 words (about {hook_seconds}s of speech — long enough to fill the hook beat, never a short fragment)",\n'
         '  "script": "the full spoken script for BOTH sections, plain text, no stage directions",\n'
         '  "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "what happens and what is said"}, {"start": 3, "end": 10, "label": "middle", "text": "what happens and what is said"}],\n'
         '  "visual_direction": "what the camera shows across both sections, as one paragraph",\n'
@@ -3615,6 +3648,7 @@ async def generate_video_strategy(
             f"{evidence_sentence}\n"
         )
 
+    angle_goal_block = _angle_goal_block(angle, objective)
     system_message = (
         "You are the creative director for a short-form video campaign promoting one "
         "specific mobile app. You produce an app-specific video strategy: the hook "
@@ -3637,9 +3671,7 @@ async def generate_video_strategy(
         f"HOOK MECHANISM (the selected template must be honoured, not replaced):\n{json.dumps(mechanism, indent=2)}\n\n"
         f"CREATIVE BRIEF:\n{json.dumps(brief, indent=2)}\n\n"
         f"CLAIM RULES:\n{json.dumps(claim_rules, indent=2)}\n"
-        "ANGLE + GOAL RULE: keep the angle's viewer, problem and hook framing; "
-        "advance the goal through that lens, including the founder's later demo/CTA, "
-        "not a new audience or feature list.\n"
+        f"{angle_goal_block}\n"
         f"{approved_plan_context}"
         f"{feedback_context}"
         f"{trend_context}\n"
@@ -3649,7 +3681,7 @@ async def generate_video_strategy(
         '  "audience_problem": "the concrete problem this viewer actually has, in their words",\n'
         '  "emotional_triggers": ["2-4 emotions this video should trigger, each tied to this app\'s use case"],\n'
         '  "hook_concept": "what the first seconds DO, visually and dramatically — not a slogan",\n'
-        f'  "hook_line": "the single spoken hook line, {_strategy_hook_min_words}-12 words (about {hook_seconds}s of speech — long enough to fill the hook beat, never a short fragment)",\n'
+        f'  "hook_line": "the single spoken hook line, said to this viewer about this problem, {_strategy_hook_min_words}-12 words (about {hook_seconds}s of speech — long enough to fill the hook beat, never a short fragment)",\n'
         '  "hook_promise": "what the hook promises the viewer in the next few seconds",\n'
         '  "hook_action": "the opening physical performance: ordered, timed beats across face, gaze, head, shoulders, hands and props, already moving in frame one",\n'
         '  "hook_dialogue": "the exact words spoken in the hook, or the delivery direction if none",\n'
