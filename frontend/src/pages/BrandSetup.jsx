@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { rememberCurrentAppId } from "../lib/currentApp";
 import { cn } from "../lib/utils";
@@ -9,7 +9,7 @@ import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import PageHeader from "../components/PageHeader";
 import { IconTile } from "../components/IconTile";
-import { GroupLabel } from "../components/SectionCard";
+import { SectionGroup } from "../components/profileUi";
 import { AppPicker } from "../components/AppPicker";
 import { Skeleton } from "../components/ui/skeleton";
 import PageFrame, { PAGE_WIDTH_CLASS } from "../components/PageFrame";
@@ -176,17 +176,25 @@ function Field({ label, hint, children }) {
   );
 }
 
-/* A group inside the App Profile Details card: uppercase label with a 12px
-   icon, divided from the previous group by a hairline rather than boxed. */
-function FormSection({ title, icon, children }) {
-  return (
-    <section className="space-y-4 border-t border-[color:var(--hairline)] pt-6 first:border-t-0 first:pt-0">
-      <GroupLabel as="h3" icon={icon}>{title}</GroupLabel>
-      <div className="space-y-4">
-        {children}
-      </div>
-    </section>
-  );
+/* Every collapsible bar in the App Profile Details card. Same ids, order and
+   single-open behaviour as the App Profile page's SectionGroups, so the two
+   pages read as one surface. Summaries are derived from the live form below. */
+const GROUP_IDS = ["basics", "does", "direction", "audience", "claims"];
+
+/**
+ * Map a save/approve failure to the group holding the offending field, so
+ * the error opens its section instead of hiding inside a collapsed one.
+ * Returns null when the message names nothing mappable — guessing wrong is
+ * worse than leaving the founder's place.
+ */
+function groupForSaveError(message) {
+  const text = (message || "").toLowerCase();
+  if (/claim/.test(text)) return "claims";
+  if (/audience|segment|differentiation|ideal customer/.test(text)) return "audience";
+  if (/featur|outcome|statement|problems solved|use case|\buse it for\b/.test(text)) return "does";
+  if (/proof|objection|must not show|usage moment|direction|scene/.test(text)) return "direction";
+  if (/name|description|categor|niche|platform|tone/.test(text)) return "basics";
+  return null;
 }
 
 export default function BrandSetup() {
@@ -206,6 +214,35 @@ export default function BrandSetup() {
   const [saving, setSaving] = useState(false);
   const [approving, setApproving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // Accordion-exclusive groups, mirroring the App Profile page: at most one
+  // bar open, Basics open by default, persisted per profile so an editing
+  // position survives reloads and profile switches.
+  const brandId = brand?.id;
+  const [openGroup, setOpenGroup] = useState("basics");
+  useEffect(() => {
+    if (!brandId) return;
+    try {
+      const raw = localStorage.getItem(`brand-groups:${brandId}`);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (typeof parsed === "string") {
+        if (GROUP_IDS.includes(parsed)) setOpenGroup(parsed);
+      } else if (parsed && typeof parsed === "object") {
+        setOpenGroup(GROUP_IDS.find((id) => parsed[id]) || null);
+      }
+    } catch {
+      // A stale or foreign value leaves everything collapsed.
+    }
+  }, [brandId]);
+  const toggleGroup = useCallback((id, open) => {
+    const next = open ? id : null;
+    setOpenGroup(next);
+    try {
+      if (brandId) localStorage.setItem(`brand-groups:${brandId}`, JSON.stringify(next));
+    } catch {
+      // Private-mode writes fail silently; the toggle still works in memory.
+    }
+  }, [brandId]);
   // The details card only exists once research has produced a profile, so the
   // scroll target below is a ref rather than a query: it is either mounted or
   // it is not, and nothing else on the page answers to this name.
@@ -296,6 +333,9 @@ export default function BrandSetup() {
     // A brand with no name is useless to every downstream generator, so this is
     // the one field we insist on. Everything else can be filled in later.
     if (!form.brand_name.trim()) {
+      // The name lives in Basics — open it so the empty field is visible
+      // rather than the error pointing at a closed section.
+      toggleGroup("basics", true);
       toast.error("Please enter a brand name before saving.");
       return;
     }
@@ -338,6 +378,8 @@ export default function BrandSetup() {
       refreshProfilesList();
       toast.success("App Profile saved!");
     } catch (err) {
+      const group = groupForSaveError(getErrorMessage(err));
+      if (group) toggleGroup(group, true);
       toast.error(getErrorMessage(err));
     } finally {
       setSaving(false);
@@ -353,6 +395,10 @@ export default function BrandSetup() {
       refreshProfilesList();
       toast.success("App Profile approved — ready for video generation.");
     } catch (err) {
+      // Approval gaps name profile fields (description, features, outcomes),
+      // so the same mapping opens the section holding the gap.
+      const group = groupForSaveError(getErrorMessage(err));
+      if (group) toggleGroup(group, true);
       toast.error(getErrorMessage(err));
     } finally {
       setApproving(false);
@@ -394,6 +440,27 @@ export default function BrandSetup() {
   const sourcesFailed = researchSources
     .filter((s) => s && !s.ok && s.label)
     .map((s) => s.label);
+
+  /* One-line summaries for the collapsible bars, read from the live form so
+     a collapsed section still says what it holds. */
+  const basicsSummary = [form.brand_name.trim(), form.app_category.trim()]
+    .filter(Boolean).join(" · ") || "Name, category, platforms";
+  const featureCount = textToProducts(form.core_features).length;
+  const statementCount = textToOutcomes(form.outcome_statements).length;
+  const doesSummary = (featureCount || statementCount)
+    ? `${featureCount} feature${featureCount === 1 ? "" : "s"} · ${statementCount} pitch statement${statementCount === 1 ? "" : "s"}`
+    : "Features, use cases, pitch";
+  const momentCount = textToProducts(form.usage_moments).length;
+  const directionSummary = form.proof_moment.trim()
+    || (momentCount ? `${momentCount} usage moment${momentCount === 1 ? "" : "s"}` : "")
+    || "Scenes, proof, objections";
+  const audienceSummary = form.target_audience.trim() || "Who it's for";
+  const approvedCount = textToProducts(form.claims_approved).length;
+  const reviewCount = textToProducts(form.claims_review).length;
+  const bannedCount = textToProducts(form.claims_banned).length;
+  const claimsSummary = (approvedCount || reviewCount || bannedCount)
+    ? `${approvedCount} approved · ${reviewCount} to review · ${bannedCount} never`
+    : "No guardrails set";
 
   return (
     <PageFrame width="narrow" className="space-y-6">
@@ -558,9 +625,10 @@ export default function BrandSetup() {
           </div>
         ) : (
           <>
-            <div className="space-y-6">
+            <div className="space-y-2">
               {/* ── Basics ── */}
-              <FormSection title="Basics" icon={Package}>
+              <SectionGroup id="basics" label="Basics" icon={Package} summary={basicsSummary} open={openGroup === "basics"} onToggle={toggleGroup}>
+              <div className="space-y-4">
                 <Field label="App name">
                   <Input
                     value={form.brand_name}
@@ -617,10 +685,12 @@ export default function BrandSetup() {
                     />
                   </Field>
                 </div>
-              </FormSection>
+              </div>
+              </SectionGroup>
 
               {/* ── What the app does ── */}
-              <FormSection title="What the app does" icon={Layers}>
+              <SectionGroup id="does" label="What the app does" icon={Layers} summary={doesSummary} open={openGroup === "does"} onToggle={toggleGroup}>
+              <div className="space-y-4">
                 <Field label="Core features" hint="Comma-separated — only features the app really has.">
                   <Input
                     value={form.core_features}
@@ -679,10 +749,12 @@ export default function BrandSetup() {
                     data-testid="app-outcome-statements-field"
                   />
                 </Field>
-              </FormSection>
+              </div>
+              </SectionGroup>
 
               {/* ── Video direction ── */}
-              <FormSection title="Video direction" icon={Compass}>
+              <SectionGroup id="direction" label="Video direction" icon={Compass} summary={directionSummary} open={openGroup === "direction"} onToggle={toggleGroup}>
+              <div className="space-y-4">
                 {/* These two exist because the strategy asks for a scene and a
                     demonstration, and no profile field supplied either. The model
                     was inventing a kitchen at 7am for every app and then being
@@ -753,10 +825,12 @@ export default function BrandSetup() {
                     data-testid="app-viewer-objections-field"
                   />
                 </Field>
-              </FormSection>
+              </div>
+              </SectionGroup>
 
               {/* ── Audience ── */}
-              <FormSection title="Audience" icon={Users}>
+              <SectionGroup id="audience" label="Audience" icon={Users} summary={audienceSummary} open={openGroup === "audience"} onToggle={toggleGroup}>
+              <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                   <Field label="Target audience">
                     <Input
@@ -797,10 +871,12 @@ export default function BrandSetup() {
                     data-testid="brand-differentiation-field"
                   />
                 </Field>
-              </FormSection>
+              </div>
+              </SectionGroup>
 
               {/* ── Claim guardrails ── */}
-              <FormSection title="Claim guardrails" icon={ShieldAlert}>
+              <SectionGroup id="claims" label="Claim guardrails" icon={ShieldAlert} summary={claimsSummary} open={openGroup === "claims"} onToggle={toggleGroup}>
+              <div className="space-y-4">
                 <Field label="Approved claims" hint="Comma-separated — factual claims safe for promos.">
                   <Input
                     value={form.claims_approved}
@@ -827,7 +903,8 @@ export default function BrandSetup() {
                     data-testid="app-claims-banned-field"
                   />
                 </Field>
-              </FormSection>
+              </div>
+              </SectionGroup>
             </div>
 
             {/* The manual path's own Save. Rendered only when research has not
