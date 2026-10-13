@@ -6175,7 +6175,10 @@ async def _submit_generation(
     # Each provider has its own prompt ceiling. Hailuo's was measured live at
     # 7,000; others are lower, and sending them a Hailuo-sized prompt 400s
     # after the founder has asked for it. The builder scales every field
-    # budget to fit rather than cutting the finished tail.
+    # budget to fit rather than cutting the finished tail. On heygen-video-1
+    # the spoken script is additionally sacred: its 4,090 ceiling tripped the
+    # withdrawal on ordinary strategies, so only the direction and template
+    # wording is trimmed there, never the founder's own words.
     prompt_budget = video_providers.capability(model_key).get("prompt_char_limit")
     if strategy:
         prompt = generation_planning.build_segment_prompt(
@@ -6186,6 +6189,7 @@ async def _submit_generation(
             assets=project.get("assets") or [],
             plan=render_plan,
             prompt_budget=prompt_budget,
+            script_sacred=(model_key == "heygen-video-1"),
         )
     else:
         prompt = generation_planning.build_single_pass_prompt(

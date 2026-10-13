@@ -1265,6 +1265,76 @@ class TestModelSelectionAtTheApiBoundary:
         assert "character prompt" in detail
         assert "nothing has been charged" in detail
 
+    def test_heygen_trims_direction_and_keeps_the_script(self, api, monkeypatch):
+        """
+        heygen-video-1's 4,090 ceiling against a strategy whose full-size
+        prompt exceeds it: the submit must go through (no 409), the prompt
+        must fit, and the founder's spoken words must arrive verbatim while
+        the direction tail is gone. The regression: the retry withdrew
+        protection and trimmed the script to fit.
+
+        The plan words are short enough to survive repair untouched, so no
+        rebinding fires and the strategy's own section scripts are what the
+        builder receives — exactly the words asserted below.
+        """
+        calls = _mock_submit(api, monkeypatch)
+        from models import StudioGenerationRequest
+        project, _, _ = _ready_project(api, "HeyGen Sacred Script", duration=12)
+        hook_line = "You do not have a writing problem."
+        hook_script = (
+            "You do not have a writing problem, you have eleven apps, "
+            "and none of them tells you what matters today."
+        )
+        middle_script = (
+            "Now there is just the one list, already sorted, waiting for you."
+        )
+        assert len(hook_line) <= 200
+        assert len(hook_script) <= 160
+        assert len(middle_script) <= 160
+        big = "D" * 900
+        import generation_planning as gp
+        strategy = dict(FAKE_STRATEGY)
+        strategy.update({
+            "hook_line": hook_line,
+            "hook_concept": big,
+            "hook_action": big,
+            "strategy_summary": big,
+            "audience_problem": big,
+            "primary_feature": big,
+            "desired_outcome": big,
+            "mechanism_beat": big,
+            "payoff_beat": big,
+            "differentiation_beat": big,
+            "emotional_triggers": [big] * 5,
+            "messaging_pillars": [big] * 5,
+            "scene": {k: big for k, _ in gp._SECTION_LABELS["scene"]},
+            "performance": {k: big for k, _ in gp._SECTION_LABELS["performance"]},
+            "segments": [
+                {"role": "hook", "goal": big, "script": hook_script,
+                 "action": big},
+                {"role": "middle", "goal": big, "script": middle_script,
+                 "action": big},
+            ],
+        })
+        _run(api._execute(
+            "UPDATE studio_projects SET hook_line = ?, script = ?, strategy = ?"
+            " WHERE id = ?",
+            (hook_line, middle_script, json.dumps(strategy), project["id"])))
+        _run(api.submit_project_generation(
+            project_id=project["id"],
+            payload=StudioGenerationRequest(model="heygen-video-1"),
+            user_id=ANON))
+        assert len(calls) == 1
+        prompt = calls[0]["prompt"]
+        assert len(prompt) <= 4090, (
+            f"heygen prompt is {len(prompt)} chars, over its 4,090 ceiling — "
+            f"this 409s after the founder asked for it."
+        )
+        assert hook_line in prompt, "the hook line lost its tail"
+        assert hook_script in prompt, "the hook script lost its tail"
+        assert middle_script in prompt, "the middle script lost its tail"
+        assert big not in prompt, "direction wording survived whole"
+
 
 # A genuinely playable clip for the download path to accept.
 #

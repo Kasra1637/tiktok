@@ -1278,7 +1278,7 @@ class TestPerProviderPromptBudget:
 
         Scaling the variable budget alone could not fix this: the fixed
         instructions do not scale, and measured with no app data at all they are
-        2,047 characters — over half of a 4,096 ceiling. Every provider has to
+        2,047 characters — over half of a 4,090 ceiling. Every provider has to
         fit its real data now, not just the small-strategy case.
         """
         kwargs = self._verbose_kwargs()
@@ -1494,7 +1494,7 @@ class TestPerProviderPromptBudget:
         Protection has to be best-effort. Holding the script, brief and locked
         scene at full length costs about 1,000 characters, and a saturated
         strategy can spend more than that on those three alone — which produced a
-        4,879 prompt against a 4,096 ceiling and made the model unusable for the
+        4,879 prompt against a 4,090 ceiling and made the model unusable for the
         most detailed founders. The retry has to converge regardless.
         """
         kwargs = self._verbose_kwargs()
@@ -1513,6 +1513,145 @@ class TestPerProviderPromptBudget:
         prompt = gp.build_segment_prompt(**kwargs, prompt_budget=self._TIGHTEST)
         assert "Vertical 9:16 throughout" in prompt
         assert prompt.rstrip().endswith("under the same light.")
+
+
+class TestHeygenScriptSacred:
+    """
+    heygen-video-1's 4,090 ceiling tripped the protection withdrawal on
+    ordinary strategies: the first assembly came out over budget holding the
+    script at full length, protection was withdrawn, and the retry trimmed the
+    founder's own words to fit. Sacred keeps the hook line and the two section
+    scripts whole on every attempt and takes the whole cut out of the
+    direction and template wording instead.
+    """
+
+    _HEYGEN = 4090
+
+    def test_heygen_ceiling_is_4090(self):
+        assert vp.capability("heygen-video-1")["prompt_char_limit"] == self._HEYGEN
+
+    def _strained_kwargs(self):
+        """
+        Direction and template wording saturated past the ceiling, with spoken
+        lines that fit their budgets — so any trimming the builder does is a
+        choice about WHAT to trim, not whether the script fits.
+        """
+        hook_line = "You are not lazy, you are just carrying eleven apps at once."
+        hook_script = (
+            "You are not lazy, you are just carrying eleven apps at once, "
+            "and none of them tells you what matters today."
+        )
+        middle_script = (
+            "Now there is just the one list, already sorted, waiting for you."
+        )
+        assert len(hook_line) <= 200
+        assert len(hook_script) <= 160
+        assert len(middle_script) <= 160
+        big = "D" * 900
+        kwargs = {
+            "strategy": {
+                "hook_line": hook_line,
+                "hook_concept": big,
+                "hook_action": big,
+                "hook_dialogue": big,
+                "hook_promise": big,
+                "strategy_summary": big,
+                "audience_problem": big,
+                "primary_feature": big,
+                "desired_outcome": big,
+                "mechanism_beat": big,
+                "payoff_beat": big,
+                "differentiation_beat": big,
+                "emotional_triggers": [big] * 5,
+                "messaging_pillars": [big] * 5,
+                "scene": {k: big for k, _ in gp._SECTION_LABELS["scene"]},
+                "performance": {k: big for k, _ in gp._SECTION_LABELS["performance"]},
+                "segments": [
+                    {"role": "hook", "goal": big, "script": hook_script,
+                     "action": big},
+                    {"role": "middle", "goal": big, "script": middle_script,
+                     "action": big},
+                ],
+            },
+            "profile": {"brand_name": "Test"},
+            "template": {
+                "opening_structure": big, "middle_structure": big,
+                "visual_style": big, "camera_pacing": big,
+            },
+            "duration": 12,
+            "assets": {},
+            "plan": {"hook_seconds": 3},
+        }
+        return kwargs, hook_line, hook_script, middle_script, big
+
+    def test_the_fixture_actually_strains_the_ceiling(self):
+        """
+        Guard the guard: if the unbudgeted assembly fits 4,090, the tests below
+        pass without trimming anything.
+        """
+        kwargs, _, _, _, _ = self._strained_kwargs()
+        full = len(gp.build_segment_prompt(**kwargs))
+        assert full > self._HEYGEN, (
+            f"fixture assembles to {full} chars, inside the heygen ceiling — "
+            f"nothing below exercises the trim."
+        )
+
+    def test_sacred_keeps_the_script_whole_and_trims_direction(self):
+        kwargs, hook_line, hook_script, middle_script, big = self._strained_kwargs()
+        prompt = gp.build_segment_prompt(
+            **kwargs, prompt_budget=self._HEYGEN, script_sacred=True)
+        assert len(prompt) <= self._HEYGEN
+        assert hook_line in prompt, "the hook line lost its tail"
+        assert hook_script in prompt, "the hook script lost its tail"
+        assert middle_script in prompt, "the middle script lost its tail"
+        # The direction absorbed the cut instead: nothing close to the full
+        # 900-character wording survives anywhere in the prompt.
+        assert big not in prompt, "direction wording survived whole"
+        # And the trim stayed structural: the identity close at the very end
+        # is the worst part of the prompt to lose.
+        assert "Vertical 9:16 throughout" in prompt
+
+    def test_without_sacred_the_same_script_is_trimmed(self):
+        """
+        The control: identical input without the flag takes the old path — the
+        first assembly comes out over budget, protection is withdrawn, and the
+        retry scales the script down with everything else. If this ever passes
+        its script assertion, the withdrawal no longer triggers here and the
+        fixture above stops testing sacred.
+        """
+        kwargs, _, hook_script, _, _ = self._strained_kwargs()
+        prompt = gp.build_segment_prompt(**kwargs, prompt_budget=self._HEYGEN)
+        assert len(prompt) <= self._HEYGEN
+        assert hook_script not in prompt, (
+            "the script survived without sacred — the withdrawal this guards "
+            "against no longer triggers on this fixture"
+        )
+
+    def test_a_saturated_strategy_still_fits_with_the_script_held(self):
+        """
+        The worst case: every field saturated, scripts at 900 characters each.
+        Sacred holds the script budgets (200/160/160) rather than the whole
+        unbounded text, so the prompt still converges — heygen stays usable
+        for the most detailed founders instead of 409ing.
+        """
+        kwargs = TestPerProviderPromptBudget()._verbose_kwargs()
+        prompt = gp.build_segment_prompt(
+            **kwargs, prompt_budget=self._HEYGEN, script_sacred=True)
+        assert len(prompt) <= self._HEYGEN
+        assert "H" * 200 in prompt
+        assert "P" * 160 in prompt
+
+    def test_the_sacred_flag_does_not_leak_between_calls(self):
+        """
+        Same reason as the scale and the protect flag: a leak would hold the
+        script at full length on the NEXT render's tighter retry, silently
+        unbalancing a budget another provider asked for.
+        """
+        kwargs, _, _, _, _ = self._strained_kwargs()
+        assert gp._PROMPT_SCRIPT_SACRED.get() is False
+        gp.build_segment_prompt(
+            **kwargs, prompt_budget=self._HEYGEN, script_sacred=True)
+        assert gp._PROMPT_SCRIPT_SACRED.get() is False
 
 
 class TestBoundForSubmit:
@@ -1687,13 +1826,13 @@ class TestOpeningPatternInterrupt:
 
     def test_the_opening_detail_survives_condensing(self):
         """
-        Protected means protected. Grok's 4,096 ceiling is the tight one, and
+        Protected means protected. HeyGen's 4,090 ceiling is the tight one, and
         losing the physical score there would put the opening back to a talking
         head on the provider most likely to need the help.
         """
-        tight = self._prompt(4096)
+        tight = self._prompt(4090)
         assert self.ACTION in tight
-        assert len(tight) <= 4096
+        assert len(tight) <= 4090
 
     def test_the_opening_and_the_middle_share_one_situation(self):
         """

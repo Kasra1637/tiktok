@@ -107,10 +107,10 @@ _CAPABILITY_NOTES = {
         # model it stays unset.
         "supports_first_frame": True,
         "supports_last_frame": False,
-        # No documented prompt ceiling for this model; the lowest figure in
-        # the catalog (Grok's 4,096) until the first live render settles it
-        # from the submit log.
-        "prompt_char_limit": 4096,
+        # Founder-specified ceiling of 4,090 characters: over it, only the
+        # app's own direction and template wording is trimmed, never the
+        # spoken script (see script_sacred in generation_planning).
+        "prompt_char_limit": 4090,
         "notes": (
             "Business-video renderer with synthesized audio in one call at "
             "768p, 5-15s — the only entry besides Hailuo 3 with real audio, "
@@ -153,10 +153,10 @@ _FALLBACK_NOTES = {
     "supports_first_frame": True,
     "supports_last_frame": False,
     # Unknown provider, so assume the most conservative ceiling any of ours
-    # needs — Grok's 4,096, the lowest in the catalog. An unrecognised key
-    # resolving to a real render is worse than it looking conservative in the
-    # capability record.
-    "prompt_char_limit": 4096,
+    # needs — heygen-video-1's 4,090, the lowest in the catalog. An
+    # unrecognised key resolving to a real render is worse than it looking
+    # conservative in the capability record.
+    "prompt_char_limit": 4090,
     "notes": "Unrecognised provider; conservative limits applied.",
 }
 

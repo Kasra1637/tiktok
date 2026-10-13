@@ -81,11 +81,19 @@ MAX_FIT_ATTEMPTS = 6
 # Protection has to be best-effort rather than absolute. Holding the script,
 # the brief and the locked scene at full length is worth ~1,000 characters, and
 # a saturated strategy can spend more than that on those three alone — so a
-# provider with a 4,096 ceiling would be handed a 4,879 prompt and refused by the
+# provider with a 4,090 ceiling would be handed a 4,879 prompt and refused by the
 # guard. Insisting on protection is how the model becomes unusable for exactly
 # the founders who gave it the most to work with. One attempt tries the good
 # version; if it does not fit, the next rebuilds without protection.
+#
+# The spoken script is the exception, and only on heygen-video-1 (see
+# script_sacred in build_segment_prompt): its hook line and section scripts
+# hold their full budgets on every attempt while the direction and template
+# wording absorbs the whole squeeze. Those words are the founder's approved
+# words, already sized upstream to fit their budgets — trimming them to fit a
+# ceiling produces a different video, not a shorter prompt.
 _PROMPT_PROTECT: ContextVar = ContextVar("hookforge_prompt_protect", default=True)
+_PROMPT_SCRIPT_SACRED: ContextVar = ContextVar("hookforge_prompt_script_sacred", default=False)
 
 # The floor _budget_scale already clamps to. Repeated here because the retry
 # loop has to recognise when it has run out of room to squeeze.
@@ -207,7 +215,7 @@ def _clean_boundary(head: str) -> str:
     return head.rstrip()
 
 
-def _clip(text, limit: int, protect: bool = False) -> str:
+def _clip(text, limit: int, protect: bool = False, sacred: bool = False) -> str:
     """
     Clip one variable prompt value to a fixed budget, stripped.
 
@@ -217,12 +225,23 @@ def _clip(text, limit: int, protect: bool = False) -> str:
     the squeeze instead. Losing the tail of a product brief is survivable;
     losing half of what the founder is going to say is not.
 
+    `sacred` is stronger than `protect` and marks only the spoken script (the
+    hook line and the two section scripts). Where protection is withdrawn if
+    the first assembly does not fit, sacred holds the full budget on every
+    attempt — but only when the caller asked for it via script_sacred (today:
+    heygen-video-1 only). Anything over the full budget is still trimmed to a
+    clean boundary, so a pathological script cannot blow the ceiling alone;
+    the guarantee is that fitting the ceiling never costs the script a
+    character, only the direction and template wording.
+
     Only engaged when condensing. At a normal ceiling the scale is 1.0 and
     every value is already whole, so this changes nothing for Hailuo.
     """
     s = str(text or "").strip()
     scale = _PROMPT_SCALE.get()
-    if protect and _PROMPT_CONDENSED.get() and scale < 1.0 and _PROMPT_PROTECT.get():
+    if sacred and _PROMPT_CONDENSED.get() and _PROMPT_SCRIPT_SACRED.get():
+        effective = int(limit)
+    elif protect and _PROMPT_CONDENSED.get() and scale < 1.0 and _PROMPT_PROTECT.get():
         effective = int(limit)
     else:
         effective = max(1, int(limit * scale))
@@ -839,6 +858,7 @@ def build_segment_prompt(
     assets: Optional[list] = None,
     plan: Optional[dict] = None,
     prompt_budget: Optional[int] = None,
+    script_sacred: bool = False,
 ) -> str:
     """
     Build the prompt for the whole generated piece: a hook and a middle.
@@ -879,6 +899,13 @@ def build_segment_prompt(
             boundary rather than mid-word. If the result is still over budget
             it is rebuilt with a smaller scale, so a very full strategy thins
             out instead of being refused.
+
+        script_sacred: when True, the spoken script — the hook line and the two
+            section scripts — holds its full budgets on EVERY attempt, and only
+            the direction and template wording is trimmed to fit. Protection
+            above is withdrawn after the first attempt; sacred never is. The
+            server sets this for heygen-video-1, whose 4,090 ceiling tripped the
+            withdrawal on ordinary strategies and ate the founder's own words.
     """
     scale = 1.0
     condensed = False
@@ -925,9 +952,11 @@ def build_segment_prompt(
         token = _PROMPT_SCALE.set(scale)
         token2 = _PROMPT_CONDENSED.set(condensed)
         token3 = _PROMPT_PROTECT.set(attempt == 0)
+        token4 = _PROMPT_SCRIPT_SACRED.set(bool(script_sacred))
         try:
             prompt = _assemble_prompt(strategy, profile, template, duration, assets, plan)
         finally:
+            _PROMPT_SCRIPT_SACRED.reset(token4)
             _PROMPT_PROTECT.reset(token3)
             _PROMPT_CONDENSED.reset(token2)
             _PROMPT_SCALE.reset(token)
@@ -1025,7 +1054,7 @@ def _assemble_prompt(
     # fact about the video.
     sections.append(_CONDENSED_OPENING if condensed else _OPENING_INTERRUPT)
 
-    hook_line = _clip(strategy.get("hook_line"), 200, protect=True)
+    hook_line = _clip(strategy.get("hook_line"), 200, protect=True, sacred=True)
     hook_concept = _clip(strategy.get("hook_concept"), 120, protect=True)
     hook_action = _clip(strategy.get("hook_action"), 280, protect=True)
     hook_dialogue = _clip(strategy.get("hook_dialogue"), 75)
@@ -1084,7 +1113,7 @@ def _assemble_prompt(
     ):
         section = sections_by_role.get(role) or {}
         goal = _clip(section.get("goal"), goal_budget, protect=True)
-        script = _clip(section.get("script"), 160, protect=True)
+        script = _clip(section.get("script"), 160, protect=True, sacred=True)
         action = _clip(section.get("action"), action_budget, protect=True)
         block = [f"{label} — {budget}s, and its job is to {purpose}:"]
         if goal:
@@ -1151,7 +1180,7 @@ def _assemble_prompt(
         # (its identity rides as a reference image), but Hailuo 3 Max still
         # pins one — and even a *reference* image biases the room a model
         # invents — so the sentence stays on every render with a person.
-        # One tight sentence: heygen's 4096 ceiling is the catalog's lowest,
+        # One tight sentence: heygen's 4,090 ceiling is the catalog's lowest,
         # and the anchor above already carries the rationale.
         sections.append(
             "Open in the locked scene, never the photo's room: the photo "
