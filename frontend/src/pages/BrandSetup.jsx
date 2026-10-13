@@ -8,13 +8,13 @@ import { Textarea } from "../components/ui/textarea";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import PageHeader from "../components/PageHeader";
-import { IconTile } from "../components/IconTile";
+import { GroupLabel } from "../components/SectionCard";
 import { SectionGroup } from "../components/profileUi";
 import { AppPicker } from "../components/AppPicker";
 import { Skeleton } from "../components/ui/skeleton";
 import PageFrame, { PAGE_WIDTH_CLASS } from "../components/PageFrame";
 import { api, getErrorMessage } from "../lib/api";
-import { Sparkles, Briefcase, Loader as Loader2, Save, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ArrowRight, Smartphone, RefreshCw, BadgeCheck, SlidersHorizontal, Package, Layers, Compass, Users, ShieldAlert } from "lucide-react";
+import { Sparkles, Briefcase, Loader as Loader2, Save, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ArrowRight, Smartphone, RefreshCw, BadgeCheck, Package, Layers, Compass, Users, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 
 const EMPTY_FORM = {
@@ -165,11 +165,13 @@ function profileToForm(data) {
   };
 }
 
-/** Labelled form field wrapper — keeps every input in this page aligned. */
+/* Labelled form field wrapper. The label is the shared GroupLabel eyebrow —
+   the same 12/600 uppercase muted label the angles page uses for its own
+   fields — so a form row reads like a detail row. Hint stays 12/18 muted. */
 function Field({ label, hint, children }) {
   return (
     <div className="space-y-2">
-      <label className="block text-sm font-medium">{label}</label>
+      <GroupLabel as="label">{label}</GroupLabel>
       {children}
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
@@ -494,6 +496,11 @@ export default function BrandSetup() {
                 live. With the list gone this is the one way in, so those
                 features stay reachable instead of becoming URL-only. */}
             {brand?.id && (
+              <Badge variant="secondary" className="shrink-0 px-3 py-1" title={researchedProfile ? "Built by store research; your edits apply on top" : "Typed by hand, never researched"}>
+                {researchedProfile ? "Researched + edits" : "Manually entered"}
+              </Badge>
+            )}
+            {brand?.id && (
               <Button variant="secondary" size="sm" asChild>
                 <Link to={`/app-profiles/${brand.id}`}>Content angles</Link>
               </Button>
@@ -504,23 +511,15 @@ export default function BrandSetup() {
 
       {/* ---------- App research (store listings) ----------
           Profiles are created from App Store and Google Play URLs only. The
-          details card below renders once research returns a profile. */}
-      <div className="border-gradient relative rounded-2xl p-[1px]">
-        <div className="surface-solid relative overflow-hidden rounded-2xl">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background: "radial-gradient(500px circle at 0% 0%, rgba(99,102,241,0.10), transparent 60%)",
-            }}
-          />
-          <form onSubmit={handleResearchApp} className="relative space-y-4" data-testid="app-research-card">
-            <div className="flex items-start gap-3">
-              <IconTile icon={Smartphone} size="section" />
-              <div className="min-w-0">
-                <h2 className="font-display text-base font-semibold leading-8">Research a mobile app</h2>
-              </div>
-            </div>
+          details card below renders once research returns a profile.
+
+          The card is the angles page's own card: one background, 1px hairline,
+          radius 16, row-pad rhythm, GroupLabel eyebrow with glyph — no
+          gradient frame, no glow, no display heading. The testid stays on the
+          form itself, because the suite submits through it. */}
+      <section className="surface surface-flush row-pad flex min-w-0 flex-col gap-2 rounded-2xl" aria-label="Research a mobile app">
+          <form onSubmit={handleResearchApp} className="flex min-w-0 flex-col gap-2" data-testid="app-research-card">
+            <GroupLabel as="h2" icon={Smartphone}>Research a mobile app</GroupLabel>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Input
                 value={appstoreUrl}
@@ -559,8 +558,7 @@ export default function BrandSetup() {
               {researching ? "Researching..." : brand?.id ? "Research into a new draft" : "Research app"}
             </Button>
           </form>
-        </div>
-      </div>
+      </section>
 
       {brand?.id && pendingProposal && (
         <Alert data-testid="pending-refresh-alert">
@@ -604,21 +602,17 @@ export default function BrandSetup() {
           Rendered only once a profile exists — research creates it, and the
           research handler scrolls it into view at that point. Before that
           there is no draft to correct, so the page is just the research card.
-          (A legacy hand-typed profile picked from storage still opens here.) */}
-      {brand?.id && (
-      <div ref={manualCardRef} className="surface space-y-4 rounded-2xl" data-testid="brand-manual-card">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 items-start gap-3">
-            <IconTile icon={SlidersHorizontal} size="section" />
-            <h2 className="font-display text-base font-semibold leading-8">App Profile Details</h2>
-          </div>
-          <Badge variant="secondary" className="shrink-0 text-xs">
-            {researchedProfile ? "Researched + edits" : "Manually entered"}
-          </Badge>
-        </div>
+          (A legacy hand-typed profile picked from storage still opens here.)
 
+          No outer box and no card header of its own: like the angles page,
+          the groups are bare siblings under the page header in a space-y-2
+          stack. The provenance badge moved up into the PageHeader actions.
+          The "App Profile Details" display heading went with the box — the
+          PageHeader title already says it. */}
+      {brand?.id && (
+      <div ref={manualCardRef} className="min-w-0 space-y-2" data-testid="brand-manual-card">
         {loadingActive ? (
-          <div className="space-y-4" aria-label="Loading your app profile">
+          <div className="surface surface-flush row-pad space-y-2 rounded-2xl" aria-label="Loading your app profile">
             <Skeleton className="h-10 w-full rounded-xl" />
             <Skeleton className="h-24 w-full rounded-xl" />
             <Skeleton className="h-10 w-2/3 rounded-xl" />
@@ -628,7 +622,7 @@ export default function BrandSetup() {
             <div className="space-y-2">
               {/* ── Basics ── */}
               <SectionGroup id="basics" label="Basics" icon={Package} summary={basicsSummary} open={openGroup === "basics"} onToggle={toggleGroup}>
-              <div className="space-y-4">
+              <div className="space-y-2">
                 <Field label="App name">
                   <Input
                     value={form.brand_name}
@@ -648,7 +642,7 @@ export default function BrandSetup() {
                   />
                 </Field>
 
-                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <Field label="App category">
                     <Input
                       value={form.app_category}
@@ -667,7 +661,7 @@ export default function BrandSetup() {
                   </Field>
                 </div>
 
-                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <Field label="Platforms" hint="Comma-separated.">
                     <Input
                       value={form.platforms}
@@ -690,7 +684,7 @@ export default function BrandSetup() {
 
               {/* ── What the app does ── */}
               <SectionGroup id="does" label="What the app does" icon={Layers} summary={doesSummary} open={openGroup === "does"} onToggle={toggleGroup}>
-              <div className="space-y-4">
+              <div className="space-y-2">
                 <Field label="Core features" hint="Comma-separated — only features the app really has.">
                   <Input
                     value={form.core_features}
@@ -754,7 +748,7 @@ export default function BrandSetup() {
 
               {/* ── Video direction ── */}
               <SectionGroup id="direction" label="Video direction" icon={Compass} summary={directionSummary} open={openGroup === "direction"} onToggle={toggleGroup}>
-              <div className="space-y-4">
+              <div className="space-y-2">
                 {/* These two exist because the strategy asks for a scene and a
                     demonstration, and no profile field supplied either. The model
                     was inventing a kitchen at 7am for every app and then being
@@ -830,8 +824,8 @@ export default function BrandSetup() {
 
               {/* ── Audience ── */}
               <SectionGroup id="audience" label="Audience" icon={Users} summary={audienceSummary} open={openGroup === "audience"} onToggle={toggleGroup}>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+              <div className="space-y-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <Field label="Target audience">
                     <Input
                       value={form.target_audience}
@@ -876,7 +870,7 @@ export default function BrandSetup() {
 
               {/* ── Claim guardrails ── */}
               <SectionGroup id="claims" label="Claim guardrails" icon={ShieldAlert} summary={claimsSummary} open={openGroup === "claims"} onToggle={toggleGroup}>
-              <div className="space-y-4">
+              <div className="space-y-2">
                 <Field label="Approved claims" hint="Comma-separated — factual claims safe for promos.">
                   <Input
                     value={form.claims_approved}
