@@ -1451,6 +1451,93 @@ class TestOutcomeStatementsSurviveASave:
         assert profile["outcome_statements"][0]["from_feature"] == "Task timer"
 
 
+class TestGeneratedPlanEditorialFlow:
+    def test_real_generator_rewrites_fragments_before_review_and_binding(self, api, monkeypatch):
+        import ai_service
+        from fastapi.testclient import TestClient
+        from auth import get_current_user_id
+        from models import UpdateStudioProjectRequest
+        from test_ai_json_calls import TestGeneratedStoryRepair, _completion, _patch_client
+
+        profile = _approved_profile(api, "Editorial Review")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        _run(api.update_studio_project(
+            project["id"], UpdateStudioProjectRequest(hook_seconds=3), ANON,
+        ))
+        bad = TestGeneratedStoryRepair._plan(
+            "Unable to find words for feelings in the moment; hear suggested emotion words.",
+            "suggested emotion words. I felt understood.",
+        )
+        good = TestGeneratedStoryRepair._plan(
+            "I couldn't name what I was feeling.",
+            "The suggestions helped me find the words. I understood myself better after writing the entry.",
+        )
+        rec = _patch_client(monkeypatch, [
+            _completion(json.dumps(bad)), _completion(json.dumps(good)),
+        ])
+        monkeypatch.setattr(api, "generate_creative_plan", ai_service.generate_creative_plan)
+        monkeypatch.setitem(api.app.dependency_overrides, get_current_user_id, lambda: ANON)
+        client = TestClient(api.app)
+        response = client.post(f"/api/studio/projects/{project['id']}/plan", json={})
+        assert response.status_code == 200, response.text
+        result = response.json()
+        reloaded = client.get(f"/api/studio/projects/{project['id']}").json()
+        for actual in (result, reloaded):
+            assert actual["hook_line"] == good["hook_line"]
+            assert actual["script"] == good["script"]
+            assert actual["plan_trim"] == {}
+            assert actual["spoken_overflow"] == {}
+        bound, overflow = ai_service.bind_spoken_words(
+            {"segments": [{"role": "hook"}, {"role": "middle"}]},
+            result, result["hook_seconds"], result["duration_seconds"],
+        )
+        assert bound["segments"][0]["script"] == good["hook_line"]
+        assert bound["segments"][1]["script"] == good["script"]
+        assert overflow == {}
+        assert len(rec.payloads) == 2
+
+    def test_generation_uses_project_hook_length_not_template_length(self, api, monkeypatch):
+        from models import GeneratePlanRequest, UpdateStudioProjectRequest
+        profile = _approved_profile(api, "Editorial Seconds")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        chosen = 4 if int(template.get("hook_seconds") or 3) != 4 else 3
+        _run(api.update_studio_project(
+            project["id"], UpdateStudioProjectRequest(hook_seconds=chosen), ANON,
+        ))
+        seen = {}
+
+        async def generate(**kwargs):
+            seen.update(kwargs)
+            return dict(FAKE_PLAN)
+
+        monkeypatch.setattr(api, "generate_creative_plan", generate)
+        _run(api.generate_plan(project["id"], GeneratePlanRequest(), ANON))
+        assert seen["template"]["hook_seconds"] == chosen
+        assert _a_template(api)["hook_seconds"] == template["hook_seconds"]
+
+    def test_failed_editorial_retries_preserve_the_previous_plan(self, api, monkeypatch):
+        import ai_service
+        from models import GeneratePlanRequest
+        from test_ai_json_calls import TestGeneratedStoryRepair, _completion, _patch_client
+        profile = _approved_profile(api, "Editorial Failure")
+        project = _a_project(api, profile, _a_template(api))
+        _patch_plan(monkeypatch, api, FAKE_PLAN)
+        before = _run(api.generate_plan(project["id"], GeneratePlanRequest(), ANON))
+        bad = TestGeneratedStoryRepair._plan("Unable to find words; hear.", "emotion words.")
+        rec = _patch_client(monkeypatch, [_completion(json.dumps(bad))])
+        monkeypatch.setattr(api, "generate_creative_plan", ai_service.generate_creative_plan)
+        with pytest.raises(HTTPException) as err:
+            _run(api.generate_plan(project["id"], GeneratePlanRequest(), ANON))
+        assert err.value.status_code == 502
+        assert "no incomplete draft was saved" in str(err.value.detail)
+        after = _run(api.get_studio_project(project["id"], ANON))
+        for key in ("hook_line", "script", "script_version", "beat_timeline"):
+            assert after[key] == before[key]
+        assert len(rec.payloads) == 3
+
+
 class TestPlanPromptSeedsVoiceDefault:
     """The plan's voice_direction is what the founder reads, edits and trusts."""
 
@@ -1470,7 +1557,8 @@ class TestPlanPromptSeedsVoiceDefault:
 
             def json(self_inner):
                 return {"choices": [{"message": {"content": json.dumps({
-                    "hook_line": "h", "script": "s", "beat_timeline": [],
+                    "hook_line": "I couldn't get started.",
+                    "script": "One prompt helped me start writing.", "beat_timeline": [],
                     "visual_direction": "v",
                     "demo_brief": "Record yourself tapping the timer once.",
                     "overlays": [], "voice_direction": "vd",
@@ -1538,7 +1626,8 @@ class TestSpokenBudgetReachesThePlanPrompt:
 
             def json(self):
                 return {"choices": [{"message": {"content": json.dumps({
-                    "hook_line": "h", "script": "s", "beat_timeline": [],
+                    "hook_line": "I couldn't get started.",
+                    "script": "One prompt helped me start writing.", "beat_timeline": [],
                     "visual_direction": "v",
                     "demo_brief": "Record yourself tapping the timer once.",
                     "overlays": [], "voice_direction": "vd",

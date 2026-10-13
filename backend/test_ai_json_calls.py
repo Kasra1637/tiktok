@@ -303,7 +303,7 @@ class TestGpt5MiniRequestShape:
             "desired_emotion": "e", "claims_to_respect": [],
         }
         plan = {
-            "hook_line": "h", "script": "s",
+            "hook_line": "I couldn't get started.", "script": "One prompt helped me start writing.",
             "beat_timeline": [
                 {"start": 0, "end": 3, "label": "hook", "text": "t"},
                 {"start": 3, "end": 20, "label": "middle", "text": "t"},
@@ -1118,18 +1118,144 @@ def _run(coro):
     return asyncio.run(coro)
 
 
+class TestGeneratedStoryRepair:
+    @staticmethod
+    def _plan(hook, script):
+        return {
+            "hook_line": hook, "script": script,
+            "beat_timeline": [
+                {"start": 0, "end": 3, "label": "hook", "text": hook},
+                {"start": 3, "end": 15, "label": "middle", "text": script},
+            ],
+            "visual_direction": "A person reflecting at their desk.",
+            "demo_brief": "Record the emotion suggestions.",
+            "voice_direction": "Conversational.", "sound_direction": "Voice only.",
+            "claims_used": [],
+        }
+
+    def test_overlong_hook_is_rewritten_not_split_into_fragments(self, monkeypatch):
+        import ai_service
+        bad = self._plan(
+            "Unable to find words for feelings in the moment; hear suggested emotion words.",
+            "It suggested emotion words and Body sensation mapping. Find words for feelings "
+            "you couldn’t name before and leave an entry feeling more understood.",
+        )
+        good = self._plan(
+            "I couldn't find words for what I felt.",
+            "The suggestions helped me name the feeling. I left the entry understanding myself better.",
+        )
+        rec = _patch_client(monkeypatch, [
+            _completion(json.dumps(bad)), _completion(json.dumps(good)),
+        ])
+        result = _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal", "core_features": ["Emotion suggestions"]},
+            template={"name": "T", "hook_seconds": 3}, duration_seconds=15,
+        ))
+        assert result["hook_line"] == good["hook_line"]
+        assert result["script"] == good["script"]
+        assert len(rec.payloads) == 2
+        correction = rec.payloads[1]["messages"][1]["content"]
+        assert bad["hook_line"] in correction
+        assert "Rewrite" in correction
+        assert "60" in correction and "180" in correction
+
+    def test_already_short_fragments_are_rewritten_together(self, monkeypatch):
+        import ai_service
+        bad = self._plan(
+            "End-of-day thoughts go uncaptured because typing feels like.",
+            "a chore—one spoken minute. I felt understood.",
+        )
+        good = self._plan(
+            "Typing my thoughts felt like a chore.",
+            "I spoke instead. The reflection helped me understand what was on my mind.",
+        )
+        rec = _patch_client(monkeypatch, [
+            _completion(json.dumps(bad)), _completion(json.dumps(good)),
+        ])
+        result = _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"}, template={"hook_seconds": 3},
+            duration_seconds=15,
+        ))
+        assert result["hook_line"] == good["hook_line"]
+        assert result["script"] == good["script"]
+        assert len(rec.payloads) == 2
+
+    def test_oversized_middle_is_rewritten_without_losing_its_resolution(self, monkeypatch):
+        import ai_service
+        bad = self._plan(
+            "I couldn't name what I was feeling.",
+            "I tried describing the day in detail, but I kept circling around the same "
+            "thoughts without getting anywhere. " * 4 + "The suggestions helped me find the words.",
+        )
+        good = self._plan(
+            bad["hook_line"],
+            "The suggestions helped me find the words. I understood the feeling instead of circling around it.",
+        )
+        rec = _patch_client(monkeypatch, [
+            _completion(json.dumps(bad)), _completion(json.dumps(good)),
+        ])
+        result = _run(ai_service.generate_creative_plan(
+            profile={}, template={"hook_seconds": 3}, duration_seconds=15,
+        ))
+        assert result["hook_line"] == good["hook_line"]
+        assert result["script"] == good["script"]
+        assert len(rec.payloads) == 2
+
+    def test_grammatical_preposition_endings_do_not_trigger_retries(self, monkeypatch):
+        import ai_service
+        good = self._plan(
+            "I used to feel like that.",
+            "Now I know what that feeling was like. Writing is something I look forward to.",
+        )
+        rec = _patch_client(monkeypatch, [_completion(json.dumps(good))])
+        result = _run(ai_service.generate_creative_plan(
+            profile={}, template={"hook_seconds": 3}, duration_seconds=15,
+        ))
+        assert result["hook_line"] == good["hook_line"]
+        assert result["script"] == good["script"]
+        assert len(rec.payloads) == 1
+
+    def test_repeated_bad_drafts_fail_without_returning_chopped_copy(self, monkeypatch):
+        import ai_service
+        bad = self._plan("Unable to find words; hear.", "suggested emotion words.")
+        rec = _patch_client(monkeypatch, [_completion(json.dumps(bad))])
+        with pytest.raises(RuntimeError, match="complete.*spoken"):
+            _run(ai_service.generate_creative_plan(
+                profile={}, template={"hook_seconds": 3}, duration_seconds=15,
+            ))
+        assert len(rec.payloads) == 3, "editorial retries must be bounded"
+
+    def test_clean_connected_draft_is_unchanged_without_extra_call(self, monkeypatch):
+        import ai_service
+        good = self._plan(
+            "I couldn't name what I was feeling.",
+            "The suggestions helped me find the words. I understood myself better after writing the entry.",
+        )
+        rec = _patch_client(monkeypatch, [_completion(json.dumps(good))])
+        result = _run(ai_service.generate_creative_plan(
+            profile={}, template={"hook_seconds": 3}, duration_seconds=15,
+        ))
+        assert result["hook_line"] == good["hook_line"]
+        assert result["script"] == good["script"]
+        assert len(rec.payloads) == 1
+        prompt = rec.payloads[0]["messages"][1]["content"]
+        assert "MIDDLE ONLY" in prompt
+        assert "full spoken script for BOTH" not in prompt
+        assert "SELF-REVIEW" in prompt
+
+
 class TestCompleteSentences:
     """
     Production failure, 2026-10-13: a stored plan reached Review with hook_line
     "End-of-day thoughts go uncaptured because typing feels like." and its
     script opening "a chore—..." — a fragment that satisfied the word-count
     floor ("never a short fragment") while ending on a preposition. The prompt
-    never required complete sentences, and the 200/6000-character clamps were
-    hard slices that could cut mid-word. The prompt now demands sentences and
-    both clamps snap to one.
+    never required complete sentences. Even the later sentence-aware clamp
+    still split a long first sentence at a word and added punctuation. Bad
+    generated dialogue must be rewritten, not passed through either clamp.
     """
 
-    def _generate(self, monkeypatch, hook, script):
+    def _generate(self, monkeypatch, hook, script, corrected=None):
         import ai_service
         captured = {}
         plan = {
@@ -1143,9 +1269,12 @@ class TestCompleteSentences:
             "claims_used": [],
         }
 
+        calls = []
+
         async def fake_chat_json(system_message, prompt, context, **kwargs):
             captured["prompt"] = prompt
-            return dict(plan)
+            calls.append(prompt)
+            return {**plan, **(corrected or {})} if len(calls) > 1 else dict(plan)
 
         monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
         out = _run(ai_service.generate_creative_plan(
@@ -1158,25 +1287,30 @@ class TestCompleteSentences:
         assert "conjunction, preposition or article" in prompt
         assert "no semicolon joining a statement to a command" in prompt
 
-    def test_an_overlong_hook_is_cut_at_a_sentence_not_mid_word(self, monkeypatch):
+    def test_an_overlong_hook_is_rewritten_as_a_complete_sentence(self, monkeypatch):
         hook = "First complete opener here. " + "filler words " * 60
-        out, _ = self._generate(monkeypatch, hook, "A full script here.")
-        assert out["hook_line"] == "First complete opener here."
-        assert len(out["hook_line"]) <= 200
+        out, prompt = self._generate(
+            monkeypatch, hook, "A full script here.",
+            corrected={"hook_line": "I finally found the words."},
+        )
+        assert out["hook_line"] == "I finally found the words."
+        assert "EDITORIAL CORRECTION" in prompt
 
-    def test_a_hook_without_any_terminator_falls_back_to_a_word(self, monkeypatch):
+    def test_a_hook_without_any_terminator_is_not_returned_as_a_fragment(self, monkeypatch):
         hook = ("word " * 60).strip()
-        out, _ = self._generate(monkeypatch, hook, "A full script here.")
-        assert len(out["hook_line"]) <= 200
-        assert out["hook_line"].endswith("word")
-        assert " " not in out["hook_line"][-1:]
+        with pytest.raises(RuntimeError, match="complete.*spoken"):
+            self._generate(monkeypatch, hook, "A full script here.")
 
-    def test_an_overlong_script_is_cut_at_a_sentence(self, monkeypatch):
+    def test_an_overlong_script_is_rewritten_not_sliced(self, monkeypatch):
         script = "Opening sentence here. " + "filler words " * 900
         assert len(script) > 6000
-        out, _ = self._generate(monkeypatch, "A full hook line here.", script)
-        assert len(out["script"]) <= 6000
-        assert out["script"][-1] in ".!?"
+        replacement = "The suggestions helped me name it. I understood my feelings better."
+        out, prompt = self._generate(
+            monkeypatch, "A full hook line here.", script,
+            corrected={"script": replacement},
+        )
+        assert out["script"] == replacement
+        assert "EDITORIAL CORRECTION" in prompt
 
     def test_a_strategy_hook_snaps_to_a_sentence(self):
         import ai_service

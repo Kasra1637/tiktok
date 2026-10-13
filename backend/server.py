@@ -5554,7 +5554,10 @@ async def generate_plan(
             "creative_plan", "text", TEXT_MODEL,
             lambda: generate_creative_plan(
                 profile=profile,
-                template=template,
+                # Draft to the SAME opening length used by storage and render.
+                # A project override used to reach only the arrival clamp, so
+                # a 4s draft could be cut again to a 3s sentence fragment.
+                template={**template, "hook_seconds": int(row.get("hook_seconds") or 3)},
                 angle=angle,
                 objective=objective,
                 duration_seconds=duration,
@@ -5571,14 +5574,11 @@ async def generate_plan(
         logger.error(f"Creative plan generation failed for project {project_id}: {e}")
         raise HTTPException(status_code=502, detail=f"AI plan generation failed. Please try again. ({str(e)[:150]})")
 
-    # Size the model's script to the piece before anything reads it. The prompt
-    # states this budget (ai_service.generate_creative_plan), but a prompt asks
-    # and nothing checked the answer: an over-length plan was stored whole, the
-    # founder read it on Review with nothing wrong on screen, and the first
-    # sign of it was the render gate refusing with a "trim your script" message
-    # naming a fix the studio did not offer. The clamp is the fix at its cause,
-    # and it runs here — before claim safety and before the write — so the
-    # words stored, checked and rendered are one set of words.
+    # The real plan generator now validates and editorially rewrites oversized
+    # drafts before returning them, using this project's exact hook length.
+    # Such drafts pass this legacy partition unchanged: it remains for old
+    # whole-piece callers that include a duplicate hook at the script's head.
+    # Claim safety and storage must see the same accepted spoken words.
     #
     # hook_seconds and total_seconds are passed exactly as _require_spoken_words_fit
     # passes them. A clamp that assumed a different section split would produce

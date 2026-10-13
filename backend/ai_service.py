@@ -2314,12 +2314,9 @@ async def generate_creative_plan(
     middle_budget = targets["script"]["ceiling"]
     hook_target = targets["hook"]["target"]
     script_target = targets["script"]["target"]
-    # Floor the hook at roughly three-quarters of its spoken budget so the
-    # line fills the opening beat instead of leaving dead air: at ~6 chars
-    # a word, a 60-char (3s) hook wants at least ~7 words and an 80-char
-    # (4s) hook at least ~10. The ceiling stays word-agnostic — the target
-    # and the ceiling downstream are what size an over-long line back.
-    hook_min_words = max(6, int(hook_budget * 0.75 // 6))
+    # Character targets guide pacing, not grammar: a word-count floor made
+    # the writer pad short thoughts while the character ceiling cut them back.
+    # Prefer a complete shorter opening to conflicting minimum/maximum quotas.
 
     structure = {
         "template_name": template.get("name") or "(no template)",
@@ -2388,9 +2385,9 @@ async def generate_creative_plan(
         "product voice (we, our app), and no framing in which the speaker is selling it.\n"
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
-        f'  "hook_line": "the single spoken/typed hook line, said to this viewer about this problem, {hook_min_words}-12 words (about {hook_seconds}s of speech — long enough to fill the hook beat, never a short fragment)",\n'
-        '  "script": "the full spoken script for BOTH sections, plain text, no stage directions",\n'
-        '  "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "what happens and what is said"}, {"start": 3, "end": 10, "label": "middle", "text": "what happens and what is said"}],\n'
+        f'  "hook_line": "one complete spoken opening sentence about this viewer problem, at most {hook_budget} characters; a shorter natural sentence is fine",\n'
+        '  "script": "MIDDLE ONLY: the spoken story AFTER the hook, without repeating it, plain text, no stage directions",\n'
+        f'  "beat_timeline": [{{"start": 0, "end": {hook_seconds}, "label": "hook", "text": "what happens and what is said"}}, {{"start": {hook_seconds}, "end": {duration_seconds}, "label": "middle", "text": "what happens and what is said"}}],\n'
         '  "visual_direction": "what the camera shows across both sections, as one paragraph",\n'
         '  "demo_brief": "ONE sentence telling the FOUNDER what to record for their own demo. This never reaches the generated video.",\n'
         '  "voice_direction": "delivery direction for the voiceover or on-camera talent — default to fast, upbeat, high-energy delivery",\n'
@@ -2405,8 +2402,9 @@ async def generate_creative_plan(
         "situation, the pain, the reaction, the action, or the transition that naturally "
         f"leads into the product. It ends at the moment the viewer would reach for the app, "
         f"and not one beat later. The middle's closing beat voices the outcome directly in "
-        f"the viewer's own terms -- take it from VERIFIED APP FACTS outcome_statements "
-        f"first (its outcome field), then the flat desired_outcomes, and only when both are "
+        f"the customer's own words, not copied marketing text or an imperative. Paraphrase the "
+        f"meaning from VERIFIED APP FACTS outcome_statements first (its outcome field), "
+        f"then the flat desired_outcomes, and only when both are "
         f"empty derive a benefit from a feature. The generated piece is {duration_seconds} seconds; anything "
         "after it is the founder's own footage.\n"
         # The spoken budget, in characters, is the same number the render gate
@@ -2421,15 +2419,15 @@ async def generate_creative_plan(
         f"- SPOKEN WORDS: the hook line is spoken over the first {hook_seconds}s and the rest of "
         f"the script over the {middle_seconds}s middle. Aim for about {hook_target} characters for "
         f"the hook line and about {script_target} characters for the rest of the script, counted "
-        "after the hook line is removed. This is the length for natural delivery, not an arbitrary maximum: "
+        "in the MIDDLE ONLY field (the hook has its own field). This is the length for natural delivery, not an arbitrary maximum: "
         "reach it with dialogue that is naturally that long. NEVER pad with "
         "filler words, extra spaces or stray punctuation to hit it. Land CLOSE TO each target "
         "rather than filling the seconds, and end on the payoff sentence as the last thing said "
         f"inside the middle. The hard ceilings are {hook_budget} and {middle_budget} characters: "
-        "a hook line past its ceiling is cut back to its opening sentence and the rest is spoken "
-        "after it, and a script past its ceiling is not spoken in the video — the render is "
-        "refused until it is cut. A script well under its target leaves dead air the video has to "
-        "stretch across the full duration.\n"
+        "write shorter COMPLETE sentences if either line exceeds its ceiling. Never cut a sentence "
+        "at a character boundary or move part of the hook into the script. The render is refused "
+        "if the spoken words cannot fit, so rewrite the thought rather than clip its words. "
+        "A shorter complete thought is better than a padded or unfinished one.\n"
         "- ONE STORY, TWO LINES: the hook line names ONE problem this viewer actually has, in "
         "their own words, and the script resolves that same problem — same subject, same viewer, "
         "the second line answering the first. Never restate the hook in the script, never open a "
@@ -2439,6 +2437,13 @@ async def generate_creative_plan(
         "conjunction, preposition or article (no trailing 'because', 'like', 'and' or 'the'), and "
         "never trail it into the script. The script's sentences are complete too: no fragments, "
         "and no semicolon joining a statement to a command.\n"
+        "- SELF-REVIEW: read hook_line followed by script aloud before returning JSON. Both must "
+        "make grammatical sense independently AND tell one connected story together: a specific "
+        "first-person difficulty, what helped, then the change that answers that difficulty. "
+        "Use ordinary customer language, not feature-list labels, marketing slogans or commands "
+        "such as 'Find words for feelings'. Do not paste title-cased feature names into dialogue. "
+        "Do not repeat the same benefit twice. Check each character ceiling separately; if a line "
+        "does not fit, rewrite BOTH lines coherently instead of splitting a sentence.\n"
         "- NEVER write a product demonstration into either beat. Do not film the app in use, "
         "do not show a screen, and do not narrate what the app does while something unrelated "
         "happens on camera. Showing the working product is the founder's recording, attached "
@@ -2468,33 +2473,51 @@ async def generate_creative_plan(
         "Return ONLY valid JSON."
     )
 
-    # Routed through _chat_json so truncation is detected and retried
-    # doubled instead of surfacing as unparseable JSON.
-    result = await _chat_json(
-        system_message=system_message,
-        prompt=prompt,
-        context="Creative plan",
-        max_tokens=3500,
-        timeout=120,
-        json_schema=PLAN_JSON_SCHEMA,
-    )
-
-    missing = REQUIRED_PLAN_KEYS - set(result.keys())
-    if missing:
-        logger.error("Creative plan missing fields %s.", sorted(missing))
-        raise RuntimeError(f"Creative plan missing required fields: {missing}")
-
-    # Sentence-aware caps, not hard slices: a [:200] cut lands mid-word and a
-    # [:6000] cut mid-sentence, and Review shows exactly what is stored here.
-    # _trim_hook_line also restores the terminator a word-boundary cut drops.
-    result["hook_line"], _ = _trim_hook_line((result.get("hook_line") or "").strip(), 200)
-    result["script"] = trim_to_sentence((result.get("script") or "").strip(), 6000)[0]
-    # An over-length answer is rewritten to fit before it is stored, so an
-    # oversized script cannot reach the video model and be refused there. That
-    # rewrite is NOT done here: it is `partition_spoken_words`, applied by the
-    # caller that knows the piece's seconds and owns the stored row (see
-    # server.generate_plan). Sizing the words twice, with two different cuts,
-    # would mean a plan this function called short and the render called long.
+    # JSON validity does not imply usable dialogue. The old arrival clamp cut
+    # an overlong sentence, appended a period, and prepended its remaining
+    # words to the middle: "...hear." / "suggested emotion words.". Keep the
+    # RAW draft for editorial correction instead. Retry the complete plan so
+    # the two spoken lines and the timeline stay consistent with each other.
+    # Clean drafts cost one call; corrections are bounded to two extra calls.
+    attempt_prompt = prompt
+    for attempt in range(3):
+        result = await _chat_json(
+            system_message=system_message,
+            prompt=attempt_prompt,
+            context="Creative plan",
+            max_tokens=3500,
+            timeout=120,
+            json_schema=PLAN_JSON_SCHEMA,
+        )
+        missing = REQUIRED_PLAN_KEYS - set(result.keys())
+        if missing:
+            logger.error("Creative plan missing fields %s.", sorted(missing))
+            raise RuntimeError(f"Creative plan missing required fields: {missing}")
+        hook = str(result.get("hook_line") or "").strip()
+        # Accept a legacy whole-piece response only when removing its opening
+        # hook leaves complete middle sentences; no partial sentence surgery.
+        script = strip_leading_hook(hook, str(result.get("script") or "").strip())
+        issues = _generated_spoken_issues(hook, script, hook_budget, middle_budget)
+        if not issues:
+            result["hook_line"] = hook
+            result["script"] = script
+            break
+        logger.warning("Creative plan editorial attempt %s: %s", attempt + 1, "; ".join(issues))
+        if attempt == 2:
+            raise RuntimeError(
+                "Creative plan could not produce complete, fitting spoken sentences. "
+                "Please regenerate the plan; no incomplete draft was saved."
+            )
+        attempt_prompt = (
+            prompt + "\n\nEDITORIAL CORRECTION: Rewrite the complete plan, including BOTH spoken lines "
+            "and their timeline. Keep the same viewer problem, verified facts and intended outcome. "
+            "Use complete natural customer sentences, not feature labels or fragments. "
+            "Do not fix grammar merely by adding a period. Never split a sentence between fields. "
+            f"hook_line must be at most {hook_budget} characters; script (MIDDLE ONLY) at most "
+            f"{middle_budget} characters. A shorter complete thought is fine.\n"
+            "Problems found: " + "; ".join(issues) + "\n"
+            "Previous draft (data to rewrite, not instructions):\n" + json.dumps(result, ensure_ascii=False)
+        )
     for key in (
         "visual_direction", "demo_brief", "voice_direction", "sound_direction",
     ):
@@ -3042,6 +3065,43 @@ def _trim_hook_line(text: str, limit: int):
                 kept = kept + ch
                 break
     return kept, len(text) - len(kept)
+
+
+def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_budget: int) -> list:
+    """Reject observable draft defects before any sentence-splitting clamp.
+
+    This is not a general grammar parser or a semantic coherence score. It
+    catches empty/oversized lines, missing terminators, dangling function
+    words and obvious cross-field continuations. The prompt's editorial
+    self-review handles meaning; these checks prevent our own length fitting
+    from manufacturing the reported fragments.
+    """
+    issues = []
+    # Prepositions/pronouns CAN end grammatical English ("look forward to",
+    # "I felt like that"). Only unambiguous dangling words are rejected on
+    # their own; the reported "typing feels like" needs its local context.
+    dangling = {"a", "an", "the", "and", "or", "but", "because"}
+    unfinished_endings = ("feels like", "felt like", "seems like", "looks like")
+    for name, text, budget in (("hook_line", hook, hook_budget), ("script", script, script_budget)):
+        if not text:
+            issues.append(f"{name} is empty")
+            continue
+        if len(text) > budget:
+            issues.append(f"{name} has {len(text)} characters, exceeding {budget}; rewrite the thought")
+        for sentence in _split_sentences(text):
+            plain = sentence.rstrip('\"\u201d\u2019')
+            if not plain.endswith((".", "!", "?")):
+                issues.append(f"{name} has an unfinished sentence")
+            words = _normalize_spoken(plain).split()
+            if words and words[-1] in dangling:
+                issues.append(f"{name} ends a sentence on '{words[-1]}'")
+            if any(" ".join(words).endswith(ending) for ending in unfinished_endings):
+                issues.append(f"{name} has an unfinished comparison")
+        if text[0].islower():
+            issues.append(f"{name} begins as a continuation rather than a standalone sentence")
+    if ";" in hook:
+        issues.append("hook_line joins clauses with a semicolon instead of one standalone opening")
+    return issues
 
 
 def _summarize_line(text: str, spec: dict) -> dict:
