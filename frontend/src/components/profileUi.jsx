@@ -23,7 +23,11 @@ import { GroupLabel } from "./SectionCard";
  * - body 14/22, meta 12/18, chips 12/18 at the Badge shape the kind tag uses
  * - item gap 8 (gap-2 / space-y-2) and card padding px-4 py-3 — the angle
  *   row's rhythm, not a roomier one of our own
- * - card radius 16 (rounded-2xl); nested sub-cards are the shared
+ * - cards are the angle row's own frame — rounded-xl, hairline border,
+ *   bg-card/70 — and sit inside one `.inset-panel` well per group, the way
+ *   the six angle rows sit inside the age picker well on Create Video.
+ *   Group edge to card text therefore stacks 16/24 + 16 + 16, exactly where
+ *   a step card's row text sits. Nested sub-cards stay the shared
  *   `.inset-panel` (12px radius, 16px gutter) rather than a local copy of it
  * - one background + 1px hairline border everywhere, and no rule under a
  *   heading — the angle rows have none
@@ -47,7 +51,7 @@ export function ProfileCard({ eyebrow, eyebrowClassName, icon, tone = "default",
   return (
     <section
       className={cn(
-        "flex h-full flex-col gap-2 rounded-2xl border border-[color:var(--hairline)] bg-card/70 px-4 py-3",
+        "flex h-full flex-col gap-2 rounded-xl border border-[color:var(--hairline)] bg-card/70 px-4 py-3",
         profileToneClass[tone],
         className
       )}
@@ -161,10 +165,11 @@ export function InfoListBlock({ label, items, tone = "default" }) {
  * The bar chrome is the Content Angles row's, because this page is read
  * against that list: px-4 py-3, a 16px glyph, an uppercase tracked muted title
  * with the count summary beneath it in the row's 12/18 meta token, chevron
- * right, indigo hover. Opening reveals the angle panel's content chrome — a
- * hairline under the bar, then px-4 py-3 with 16px between cards. The summary
- * indents to the title, so the bar reads as one column of text with its glyph
- * in the margin rather than two left edges.
+ * right, indigo hover. Opening reveals the angle picker's layering, not just
+ * its chrome: a hairline under the bar, then the cards grouped inside one
+ * `.inset-panel` well with 16px between them — the same well the six angle
+ * rows sit in. The summary indents to the title, so the bar reads as one
+ * column of text with its glyph in the margin rather than two left edges.
  *
  * Gutters step to 24px from 768px up, the way `.surface` padding does: the
  * group is a flush card with no padding of its own, so without this its text
@@ -215,7 +220,13 @@ export function SectionGroup({ id, label, summary, icon: Icon, open, onToggle, c
         style={{ gridTemplateRows: open ? "1fr" : "0fr", opacity: open ? 1 : 0 }}
       >
         <div className="min-h-0 overflow-hidden">
-          <div className="space-y-4 border-t border-[color:var(--hairline)] px-4 py-3 md:px-6">{children}</div>
+          <div className="border-t border-[color:var(--hairline)] px-4 py-3 md:px-6">
+            {/* One darker well per group, mirroring the Audience & goal step:
+                label, controls and rows read as one organized unit instead of
+                cards scattered on the group surface. 16px between cards; a
+                single child (one card, one field stack) is unaffected. */}
+            <div className="inset-panel space-y-4">{children}</div>
+          </div>
         </div>
       </div>
     </section>
