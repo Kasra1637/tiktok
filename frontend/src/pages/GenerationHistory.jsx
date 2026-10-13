@@ -10,15 +10,14 @@ import PageFrame from "../components/PageFrame";
 import EmptyState from "../components/EmptyState";
 import { StatusBadge } from "../components/StatusBadge";
 import { AppPicker, PILL_SELECT_CLASS } from "../components/AppPicker";
-import { GroupLabel } from "../components/SectionCard";
-import { IconTile } from "../components/IconTile";
+import { GroupLabel, SectionHeading } from "../components/SectionCard";
 import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } from "../lib/api";
 import { FactChip, FactList } from "../components/FactChip";
 import { recordSignal } from "../lib/feedback";
 import { CONTROL_CLASS } from "../components/formControls";
 import { sentenceCase } from "../lib/copyCase";
-import { History as HistoryIcon, Loader as Loader2, TriangleAlert as AlertTriangle, Download, Trash as Trash2, RotateCcw, GitBranch, RefreshCw, ChevronRight, Film, Info, Copy, X, Smartphone } from "lucide-react";
+import { History as HistoryIcon, Loader as Loader2, TriangleAlert as AlertTriangle, Download, Trash as Trash2, RotateCcw, GitBranch, RefreshCw, ChevronRight, Film, Info, Copy, X, Smartphone, Target, Briefcase, Clapperboard } from "lucide-react";
 
 function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -67,10 +66,7 @@ function GenerationDetails({ generationId, onClose }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <IconTile icon={Film} size="section" />
-            <h2 className="font-display text-base font-semibold leading-8">Generation details</h2>
-          </div>
+          <SectionHeading icon={Film}>Generation details</SectionHeading>
           <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close details">
             <X className="h-3.5 w-3.5" />
           </Button>
@@ -336,22 +332,10 @@ function GenerationRow({ row, siblings = [], onChanged }) {
   };
 
   return (
-    <div id={`generation-${row.id}`} className="surface scroll-mt-6 rounded-2xl">
-      {/* One grid for the whole row, and the clip gets a rail of its own.
-
-          It used to sit in a 240px column with roughly 800px of empty card to
-          its right, because everything else in the row was full-width text on
-          the way to an action bar at the bottom. Putting the player in a rail
-          and giving the right column the content it was missing removes the
-          void by using it, rather than by stretching the player to fill it —
-          a 9:16 clip wide enough to span 1150px would be two thousand pixels
-          tall.
-
-          The grid exists for a finished render: a clip, or the card that says
-          why there is no playable clip. A failed render has neither, and
-          forcing its error message into a 240px rail would make the two states
-          look like different components. */}
-      <div className={`grid gap-4 ${showRail ? "sm:grid-cols-[minmax(0,240px)_minmax(0,1fr)]" : ""}`}>
+    <article id={`generation-${row.id}`} className="surface-compact min-w-0 scroll-mt-6 space-y-4" data-testid="history-card">
+      {/* Compact rail beside actual render context. The outer responsive grid
+          gives each card a useful reading width instead of a full-page void. */}
+      <div className={`history-row-layout ${showRail ? "has-preview" : ""}`}>
         {showRail && (
           <div className="space-y-2">
             {downloadUrl && !previewBroken ? (
@@ -380,12 +364,8 @@ function GenerationRow({ row, siblings = [], onChanged }) {
                   setPreviewBroken(true);
                   setCheckingRecovery(false);
                 }}
-                className="mx-auto max-h-[300px] w-full rounded-lg border border-[color:var(--hairline)] object-contain sm:max-h-[340px]"
-                // Capped, not cropped: a 9:16 clip in an uncapped full-width box
-                // runs ~430px tall and stretches the whole card, leaving the
-                // right column mostly empty. object-contain letterboxes it on
-                // the dark background instead, which also tames the player on
-                // mobile where the rail spans the full width.
+                className="history-preview rounded-lg border border-[color:var(--hairline)]"
+                // Contain the complete frame, never crop the creator's footage.
               />
             ) : (
               /* Says what is actually true instead of leaving a dead control.
@@ -498,13 +478,13 @@ function GenerationRow({ row, siblings = [], onChanged }) {
           </div>
         )}
 
-        <div className="min-w-0 space-y-4">
+        <div className="min-w-0 space-y-3">
           {/* Identity, then what it says. The model/duration badges that
               used to sit opposite the app name are gone from here — they are
               facts about the render, not about which video this is, and they
               join the strip below. */}
           <div className="flex flex-wrap items-center gap-2">
-            <GroupLabel>{row.brand_name || "Unassigned app"}</GroupLabel>
+            <GroupLabel icon={Briefcase}>{row.brand_name || "Unassigned app"}</GroupLabel>
             <StatusBadge status={row.status} />
             {row.parent_generation_id && (
               <Badge variant="outline" className="gap-1 text-xs">
@@ -519,7 +499,7 @@ function GenerationRow({ row, siblings = [], onChanged }) {
           </div>
 
           {row.hook_line && (
-            <p className="text-sm leading-snug text-muted-foreground">
+            <p className="break-words text-sm leading-relaxed text-foreground/90">
               &ldquo;{sentenceCase(row.hook_line)}&rdquo;
             </p>
           )}
@@ -541,6 +521,23 @@ function GenerationRow({ row, siblings = [], onChanged }) {
             <FactChip>script v{row.script_version}</FactChip>
             <FactChip>{new Date(row.created_at).toLocaleString()}</FactChip>
           </FactList>
+
+          {(row.audience || row.demo_brief) && (
+            <div className="space-y-3" data-testid="history-context">
+              {row.audience && (
+                <div className="space-y-1">
+                  <GroupLabel icon={Target}>Audience</GroupLabel>
+                  <p className="break-words text-sm leading-relaxed text-muted-foreground">{row.audience}</p>
+                </div>
+              )}
+              {row.demo_brief && (
+                <div className="space-y-1">
+                  <GroupLabel icon={Smartphone}>Your demo brief</GroupLabel>
+                  <p className="break-words text-sm leading-relaxed text-muted-foreground">{row.demo_brief}</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {error && <p className="text-xs text-destructive">{error}</p>}
 
@@ -571,7 +568,7 @@ function GenerationRow({ row, siblings = [], onChanged }) {
               status filter still offers "archived", so a row archived before
               this change remains findable — just not archivable again. */}
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-4">
-            <GroupLabel>Work with this render</GroupLabel>
+            <GroupLabel icon={Clapperboard}>Work with this render</GroupLabel>
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="ghost" size="sm" onClick={loadChildren}>
                 <GitBranch className="h-3.5 w-3.5" /> Variations
@@ -612,7 +609,7 @@ function GenerationRow({ row, siblings = [], onChanged }) {
 
       {siblings.length > 0 && (
         <div className="space-y-2 border-t border-[color:var(--hairline)] pt-4">
-          <GroupLabel>More from this app</GroupLabel>
+          <GroupLabel icon={Film}>More from this app</GroupLabel>
           <ul className="space-y-2">
             {siblings.map((s) => (
               <li key={s.id}>
@@ -693,7 +690,7 @@ function GenerationRow({ row, siblings = [], onChanged }) {
           </p>
         </div>
       )}
-    </div>
+    </article>
   );
 }
 
@@ -707,6 +704,7 @@ export default function GenerationHistory() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await api.getGenerationHistory({
         brand_profile_id: profileFilter || undefined,
@@ -803,9 +801,9 @@ export default function GenerationHistory() {
           }
         />
       ) : (
-        <div className="space-y-4" data-testid="history-list">
+        <div className="history-grid" data-testid="history-list">
           {rows.length > 1 && (
-            <p className="text-xs text-muted-foreground">
+            <p className="col-span-full text-xs text-muted-foreground">
               {rows.length} results · {completed} completed · {failed} failed
             </p>
           )}
@@ -815,7 +813,7 @@ export default function GenerationHistory() {
               row={row}
               siblings={rows
                 .filter((r) => r.id !== row.id && r.brand_profile_id && r.brand_profile_id === row.brand_profile_id)
-                .slice(0, 4)}
+                .slice(0, 2)}
               onChanged={load}
             />
           ))}

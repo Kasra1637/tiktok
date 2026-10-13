@@ -144,20 +144,21 @@ card is `.inset-panel`.
 | Level | Built with | Icon | Heading |
 |---|---|---|---|
 | Page | `PageHeader` | 40px `IconTile size="page"` | page title |
-| Section card | `SectionCard` | 32px `IconTile size="section"` | `h2`, 16px semibold |
-| Wizard step | `StepShell` ≡ `SectionCard` | 32px `IconTile size="section"` | `h2`, 16px semibold + muted description |
+| Section card | `SectionCard` + `SectionHeading` | 16px outline glyph, no tile | `h2`, 14px/600 uppercase, tracked 0.08em, muted |
+| Wizard step | `StepShell` + `SectionHeading` | 16px outline glyph, no tile | same section heading + muted description |
 | Group inside a card | `GroupLabel` + hairline divider, never a nested box | 16px glyph on the bar, 12px on the card's own `.eyebrow` | `.eyebrow` (all caps) |
 | Aside inside a card | `.inset-panel` (12px radius, 16px gutter) | none | 14px medium, or an `.eyebrow` |
 | Disclosure row | `.row-pad` inside one `.surface surface-flush` card, hairline between rows | none, or 16px on an accordion bar | 14px medium label, or uppercase tracked on the bar |
 | Pickable option | its own frame — `rounded-xl border bg-card/70`, bar is `px-4 py-3`, `space-y-2` between them | 16px, its own | `text-sm` uppercase tracked, muted |
 | Field / detail row | label + control | none | 14px medium label |
 
-Three ladders, because three jobs. **Sections are read** — they orient and teach,
-so they take the big 32px tile and a description line. **Options are scanned** —
-they offer a choice, so the title is already uppercase and tracked and the row
-carries a chevron. The audience angle picker (`CreateVideo`, step 1) is the
-reference for options; the 5-phase `StepShell` is the reference for sections.
-Forcing one onto the other either cramps a section or bloats a list.
+**App Profile is the reference for workspace section headings.** Every section
+uses `SectionHeading`: body family, 14px/600, 22px line-height, all caps,
+0.08em tracking and full muted color, beside a 16px unboxed outline glyph.
+`GroupLabel` is the smaller 12px counterpart with a 12px glyph. Sections can
+carry normal-case descriptions; controls and body copy never become all caps.
+Page titles retain their display hierarchy and page-sized icon tile. Options
+retain their chevrons and click-target frames.
 
 **The frame is what tells the two apart, and it is deliberate.** A row you
 *pick* is an object, so it gets its own border and radius — that frame is the
@@ -199,11 +200,22 @@ to clear the border. `mt-0.5` is reserved for optical alignment of a small icon
 beside text. Loading states
 use `Skeleton` blocks shaped like the content, not a spinner line. App
 switchers use `AppPicker`; generation status uses `StatusBadge`. All caps is
-reserved for `.eyebrow` group labels, never section or page titles.
+used on `.eyebrow` group labels and `.section-heading` workspace sections;
+page titles, descriptions and user content retain normal case.
 
 ---
 
 ## 5. Layout
+
+### History density
+
+History uses a two-column card grid from 1200px viewport width, one column
+below it, with 16px gutters and top-aligned cards (no equal-height stretching).
+Each card has a 152px preview rail and a 270px contained video from 480px up;
+phones stack a 220px preview above the context. Audience and demo brief use
+existing API fields to fill the context column with useful information rather
+than filler. File controls remain under the preview; work actions stay beside
+it. Related-render links are capped at two per card.
 
 - **Shell:** `AppShell` — fixed collapsible left sidebar (264px / 76px collapsed,
   persisted to `localStorage`) plus a mobile-only sticky top bar with a drawer.

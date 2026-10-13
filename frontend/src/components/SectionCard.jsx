@@ -1,11 +1,20 @@
 import { cn } from "../lib/utils";
-import { IconTile } from "./IconTile";
+/** Profile-style section title: one muted outline glyph, tracked caps, no tile. */
+export function SectionHeading({ icon: Icon, as: Tag = "h2", className, children, ...rest }) {
+  return (
+    <Tag className={cn("section-heading", className)} {...rest}>
+      {Icon && <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />}
+      <span className="min-w-0">{children}</span>
+    </Tag>
+  );
+}
 
 /**
  * The page's container levels, shared by every sidebar page:
  *
- * - Section card (this): a main block of the page. 32px icon tile + 16px
- *   heading, optional one-line description. Padding lives in `.surface`.
+ * - Section card (this): a main block of the page. Profile-style 16px outline
+ *   glyph + 14px muted uppercase heading, optional description. Padding lives
+ *   in `.surface`.
  * - Group (`GroupLabel`): an uppercase `.eyebrow` label inside a card, divided
  *   from its neighbours by a hairline rather than a nested box.
  * - Inset box (`.inset-panel`): a small bordered aside inside a card.
@@ -43,12 +52,9 @@ export function SectionCard({
       {(title || actions) && (
         <div className="flex flex-wrap items-start justify-between gap-4">
           {title && (
-            <div className="flex min-w-0 items-start gap-3">
-              {icon && <IconTile icon={icon} size="section" />}
-              <div className="min-w-0">
-                <Heading className="font-display text-base font-semibold leading-8">{title}</Heading>
-                {description && <p className="text-sm text-muted-foreground">{description}</p>}
-              </div>
+            <div className="min-w-0 space-y-1">
+              <SectionHeading as={Heading} icon={icon}>{title}</SectionHeading>
+              {description && <p className="text-sm text-muted-foreground">{description}</p>}
             </div>
           )}
           {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
@@ -63,7 +69,7 @@ export function SectionCard({
 export function GroupLabel({ icon: Icon, as: Tag = "span", className, children, ...rest }) {
   return (
     <Tag className={cn("eyebrow flex items-center gap-2", className)} {...rest}>
-      {Icon && <Icon className="h-3 w-3 shrink-0" />}
+      {Icon && <Icon aria-hidden="true" className="h-3 w-3 shrink-0" />}
       {children}
     </Tag>
   );

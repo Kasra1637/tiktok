@@ -5069,6 +5069,18 @@ async function runIconChecks() {
     }
   });
 
+  await check("section cards share the profile's unboxed muted heading", async (ctx) => {
+    const { SectionCard } = load("components/SectionCard.jsx");
+    const { Layers } = require("lucide-react");
+    await mount(SectionCard, { title: "What the app does", icon: Layers, description: "Verified facts." })(ctx);
+    const heading = ctx.container.querySelector("h2.section-heading");
+    if (!heading || !heading.querySelector("svg.h-4")) throw new Error("section lacks the shared heading and 16px outline icon");
+    if (heading.querySelector(".border") || ctx.container.querySelector('[class*="bg-[color:var(--indigo-8)]"]')) {
+      throw new Error("a colored icon tile returned to a section heading");
+    }
+    if (!ctx.text().includes("Verified facts.")) throw new Error("section description disappeared");
+  });
+
   await check("an eyebrow icon is always 12px", async () => {
     // The one size for a glyph beside a label. A 16px glyph next to an 11px
     // uppercase label is heavier than the label it introduces.
@@ -5420,12 +5432,14 @@ async function runDeleteDialogChecks() {
         const group = ctx.container.querySelector('[data-testid="group-essentials"]');
         if (!group) throw new Error("the essentials group did not render");
         const bar = group.querySelector("button");
-        const barTitle = [...bar.querySelectorAll("span")].find((s) => /uppercase/.test(s.className || ""));
-        if (!barTitle) throw new Error("the group bar has no uppercase title span");
-        if (!/tracking-/.test(barTitle.className)) {
-          throw new Error(`the group bar title is off the uppercase tracked token: ${barTitle.className}`);
+        const barTitle = bar.querySelector(".section-heading");
+        if (!barTitle) throw new Error("the group bar has no shared section heading");
+        const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+        const headingRule = css.match(/\.section-heading\s*\{([^}]+)\}/)?.[1] || "";
+        for (const token of ["text-transform: uppercase", "letter-spacing: 0.08em", "color: hsl(var(--muted-foreground))", "font-size: 0.875rem"]) {
+          if (!headingRule.includes(token)) throw new Error(`section heading lost ${token}`);
         }
-        const barIcon = barTitle.previousElementSibling;
+        const barIcon = barTitle.querySelector("svg");
         if (!barIcon || barIcon.tagName !== "svg") {
           throw new Error("the group bar does not open with its section icon");
         }
@@ -6709,6 +6723,28 @@ async function runDemoCtaChecks() {
       );
     }
   );
+
+  await check("History fills compact cards with existing context and preserves actions", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    await withApi({
+      getGenerationHistory: async () => ({ generations: [
+        { ...COMPLETED, id: "dense-1", brand_name: "Journal", audience: "People reflecting after work", demo_brief: "Record the emotion suggestions." },
+        { ...COMPLETED, id: "dense-2", brand_name: "Journal", hook_line: "A second render." },
+      ] }),
+      getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      getVariationKinds: async () => ({ variations: [] }),
+    }, async () => {
+      await mount(GenerationHistory)(ctx);
+      const grid = ctx.container.querySelector('[data-testid="history-list"].history-grid');
+      if (!grid || grid.querySelectorAll('[data-testid="history-card"]').length !== 2) throw new Error("history cards are not in the responsive grid");
+      const first = grid.querySelector('[data-testid="history-card"]');
+      if (!first.querySelector("video.history-preview")) throw new Error("compact preview missing");
+      if (!first.querySelector('[data-testid="history-context"]')?.textContent.includes("Record the emotion suggestions.")) throw new Error("useful demo context missing");
+      for (const label of ["Download", "Delete", "Details", "Duplicate", "Variations", "Demo + CTA"]) {
+        if (!first.textContent.includes(label)) throw new Error(`History lost ${label}`);
+      }
+    });
+  });
 
   await check(
     "History no longer asks for a verdict on a finished video",

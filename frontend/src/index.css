@@ -486,6 +486,60 @@ body {
     color: hsl(var(--muted-foreground));
 }
 
+/* App Profile's section bar language, shared by every workspace page.
+   Body family rather than the display face; page titles keep their hierarchy. */
+.section-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+    font-family: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.375rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+}
+
+/* Two useful-width cards instead of a single 1,200px row with a small player
+   stranded at one end. Stack until both columns have enough reading room. */
+.history-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 1rem;
+}
+.history-row-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 1rem;
+}
+.history-preview {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    height: 220px;
+    margin-inline: auto;
+    object-fit: contain;
+    background: #000;
+}
+@media (min-width: 480px) {
+    .history-row-layout.has-preview {
+        grid-template-columns: 152px minmax(0, 1fr);
+    }
+    .history-preview {
+        width: 100%;
+        height: 270px;
+    }
+}
+@media (min-width: 1200px) {
+    .history-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
 /* ---------- Brand accents ---------- */
 .glow-indigo {
     box-shadow: var(--glow-indigo);

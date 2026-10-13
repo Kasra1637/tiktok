@@ -66,7 +66,7 @@ export function SafetyPanel({ report, summary }) {
 
       {warnings.length > 0 && (
         <div className="inset-panel inset-panel-strong">
-          <span className="eyebrow">Risk warnings</span>
+          <GroupLabel icon={ShieldAlert}>Risk warnings</GroupLabel>
           <ul className="mt-2 space-y-2 text-sm">
             {warnings.map((w, i) => (
               <li key={i} className="flex flex-wrap items-baseline gap-x-2">
@@ -83,7 +83,7 @@ export function SafetyPanel({ report, summary }) {
 
       {undeclared.length > 0 && (
         <div className="inset-panel inset-panel-strong">
-          <span className="eyebrow">Declared but not in the script</span>
+          <GroupLabel icon={HelpCircle}>Declared but not in the script</GroupLabel>
           <p className="mt-1 text-xs text-muted-foreground">
             The generator reported using these, but they do not appear in the text.
           </p>
@@ -97,7 +97,7 @@ export function SafetyPanel({ report, summary }) {
 
       {unverified.length > 0 && (
         <div className="inset-panel inset-panel-strong">
-          <span className="eyebrow">Needs verification</span>
+          <GroupLabel icon={ShieldCheck}>Needs verification</GroupLabel>
           <ul className="mt-2 space-y-1 text-sm">
             {unverified.map((u, i) => (
               <li key={i}>{u.claim}</li>

@@ -261,10 +261,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
   return (
     <div className="inset-panel space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 font-display text-sm font-semibold">
-          <Sparkles className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-          The strategy behind the piece
-        </span>
+        <GroupLabel icon={Sparkles}>The strategy behind the piece</GroupLabel>
         {strategy && (
           <Badge variant="outline" className="text-xs">strategy v{project.strategy_version}</Badge>
         )}
@@ -391,7 +388,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
            SHAPE of what comes back is, and that is what was missing. */
         <div className="space-y-3 rounded-xl border border-dashed border-[color:var(--hairline)] p-3">
           <div className="space-y-1">
-            <span className="eyebrow">What you get</span>
+            <GroupLabel icon={Sparkles}>What you get</GroupLabel>
             <ol className="space-y-2 text-sm">
               {["hook", "middle"].map((role) => (
                 <li key={role} className="space-y-1">
@@ -409,7 +406,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
             </ol>
           </div>
           <div className="space-y-1">
-            <span className="eyebrow">The scene</span>
+            <GroupLabel icon={MapPin}>The scene</GroupLabel>
           <p className="text-xs text-muted-foreground">
             One scene and delivery style for both the hook and story, guided by your Review choices. This is generated footage, not a recording of your app.
           </p>
@@ -424,7 +421,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
       {hasStrategy && (
         <div className="space-y-3 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-3">
           <div className="space-y-1">
-            <span className="eyebrow">Hook concept</span>
+            <GroupLabel icon={Sparkles}>Hook concept</GroupLabel>
             <p className="text-sm">{sentenceCase(strategy.hook_concept)}</p>
             {/* The hook line itself is NOT printed here. It is the same string as
                 the Review step's "Hook line", verbatim, because the strategy
@@ -439,7 +436,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
             </p>
           </div>
           <div className="space-y-1">
-            <span className="eyebrow">Why this works for this app</span>
+            <GroupLabel icon={Target}>Why this works for this app</GroupLabel>
             <p className="text-sm">{sentenceCase(strategy.strategy_summary)}</p>
           </div>
           {/* The three outcome fields, shown because they already govern the
@@ -500,7 +497,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
               saying the hook and the call to action were the two that carried the
               video — a description of a chain with a fixed number of beats to
               segments, none of which exists now. */}          <div className="space-y-2">
-            <span className="eyebrow">The two sections</span>
+            <GroupLabel icon={Info}>The two sections</GroupLabel>
             <ol className="space-y-3 text-sm">
               {sections.map((section) => (
                 <SectionRow key={section.role} section={section} />

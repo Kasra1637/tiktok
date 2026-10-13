@@ -384,10 +384,7 @@ const handleGenerate = async () => {
        design_guidelines.md §4 calls "group inside a card". */
     <div className="inset-panel space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 font-display text-sm font-semibold">
-          <Clapperboard className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-          Render your Hook + Story
-        </span>
+        <GroupLabel icon={Clapperboard}>Render your Hook + Story</GroupLabel>
         {generation && <StatusBadge status={generation.status} />}
       </div>
 
@@ -521,7 +518,7 @@ const handleGenerate = async () => {
         className="space-y-1 border-t border-[color:var(--hairline)] pt-3"
         data-testid="render-summary"
       >
-        <span className="eyebrow block">Before you render</span>
+        <GroupLabel icon={Info}>Before you render</GroupLabel>
         <p className="text-xs text-muted-foreground" data-testid="render-summary-model">
           Model: {models ? (capability?.name || selectedModel || models.default || "unknown") : "loading…"}
         </p>
@@ -682,7 +679,7 @@ const handleGenerate = async () => {
                   the presenter would reach for their phone, so the demo and the
                   close are both outside it. */}
               <div className="space-y-1 border-t border-[color:var(--hairline)] pt-3">
-                <span className="eyebrow block">What you have, and what is left</span>
+                <GroupLabel icon={Clapperboard}>What you have, and what is left</GroupLabel>
                 {/* "No text appears on screen — nothing is published for you"
                     is gone: the pre-render summary above already says the piece
                     carries no on-screen text, and the page-level note is the

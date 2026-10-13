@@ -1,7 +1,7 @@
 import { ChevronDown } from "lucide-react";
 import { cn } from "../lib/utils";
 import { sentenceCase } from "../lib/copyCase";
-import { GroupLabel } from "./SectionCard";
+import { GroupLabel, SectionHeading } from "./SectionCard";
 
 /**
  * Shared profile card system — the App Profile page's card language, on the
@@ -195,12 +195,7 @@ export function SectionGroup({ id, label, summary, icon: Icon, open, onToggle, c
         className="flex w-full min-w-0 items-center justify-between gap-2 px-4 py-3 text-left transition duration-150 hover:bg-[color:var(--indigo-6)] md:px-6"
       >
         <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-3">
-            {Icon ? (
-              <Icon aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
-            ) : null}
-            <span className="truncate text-sm font-semibold uppercase leading-[22px] tracking-[0.08em] text-muted-foreground">{label}</span>
-          </span>
+          <SectionHeading as="span" icon={Icon}>{label}</SectionHeading>
           {summary ? (
             <span className="mt-1 block truncate pl-7 text-xs leading-[18px] text-muted-foreground">
               {summary}

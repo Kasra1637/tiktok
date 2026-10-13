@@ -6,8 +6,7 @@ import { Badge } from "../components/ui/badge";
 import { Alert, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import PageFrame from "../components/PageFrame";
-import SectionCard, { GroupLabel } from "../components/SectionCard";
-import { IconTile } from "../components/IconTile";
+import SectionCard, { GroupLabel, SectionHeading } from "../components/SectionCard";
 import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, mediaUrl, durableMediaUrl } from "../lib/api";
 import { sentenceCase } from "../lib/copyCase";
@@ -83,12 +82,9 @@ function SourcePicker() {
 
   return (
     <section className="space-y-4">
-      <div className="flex items-start gap-3">
-        <IconTile icon={Film} size="section" />
-        <div>
-          <h2 className="font-display text-base font-semibold leading-8">Start from a finished render</h2>
-          <p className="text-sm text-muted-foreground">Or pick one of your Hook + Story renders instead of uploading a clip.</p>
-        </div>
+      <div className="space-y-1">
+        <SectionHeading icon={Film}>Start from a finished render</SectionHeading>
+        <p className="text-sm text-muted-foreground">Or pick one of your Hook + Story renders instead of uploading a clip.</p>
       </div>
       <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
         {rows.map((row) => (

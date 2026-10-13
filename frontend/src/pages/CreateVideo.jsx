@@ -8,8 +8,7 @@ import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import PageFrame from "../components/PageFrame";
 import EmptyState from "../components/EmptyState";
-import { IconTile } from "../components/IconTile";
-import { GroupLabel } from "../components/SectionCard";
+import { GroupLabel, SectionHeading } from "../components/SectionCard";
 import { Skeleton } from "../components/ui/skeleton";
 import SafetyPanel from "../components/SafetyPanel";
 import HookContinuityPanel from "../components/HookContinuityPanel";
@@ -41,7 +40,7 @@ import {
 } from "../lib/videoLength";
 // FileText was the "Creative plan" step's icon. That step held nothing but a
 // button and is now the top of Review, so the icon went with it.
-import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, LayoutTemplate, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, Star, ChevronDown } from "lucide-react";
+import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, LayoutTemplate, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, Star, ChevronDown, FileText, AudioLines, ListChecks, ShieldCheck, Ruler } from "lucide-react";
 // toast left with AttachedPhoto, the only place on this page that raised one.
 // Detaching now happens inside the photo section, which reports its own
 // outcome.
@@ -587,7 +586,7 @@ function AngleGoalPicker({
     <section className="space-y-2" aria-labelledby="video-goal-label" data-testid="angle-goal-picker">
       <div className="space-y-1">
         <div className="flex items-start justify-between gap-2">
-          <GroupLabel as="h3" id="video-goal-label">
+          <GroupLabel as="h3" icon={Target} id="video-goal-label">
             Video goal <span className="text-muted-foreground">(required)</span>
           </GroupLabel>
           {onRegenerate && featured.length > 0 && (
@@ -689,12 +688,9 @@ function StepShell({ icon: Icon, title, description, children }) {
   return (
     <div className="space-y-4">
       {Icon && (
-        <div className="flex items-start gap-3">
-          <IconTile icon={Icon} size="section" />
-          <div>
-            {title && <h2 className="font-display text-base font-semibold leading-8">{title}</h2>}
-            {description && <p className="text-sm text-muted-foreground">{description}</p>}
-          </div>
+        <div className="space-y-1">
+          {title && <SectionHeading icon={Icon}>{title}</SectionHeading>}
+          {description && <p className="text-sm text-muted-foreground">{description}</p>}
         </div>
       )}
       {children}
@@ -1877,7 +1873,7 @@ setObjective("");
                 bordered card so the picker, the goal list, and the tone field
                 read as separate organized units. */}
             <div className="inset-panel space-y-2">
-              <GroupLabel as="label">
+              <GroupLabel as="label" icon={Target}>
                 Audience angle{" "}
                 <span className="text-muted-foreground">(required)</span>
               </GroupLabel>
@@ -2241,7 +2237,7 @@ setObjective("");
                 the time anyone reaches this there is almost always something to
                 attach to. */}
             <div id="template-photo" className="space-y-3 border-t border-[color:var(--hairline)] pt-4">
-              <span className="eyebrow block">Presenter photo</span>
+              <GroupLabel icon={ImageIcon}>Presenter photo</GroupLabel>
               <p className="text-sm text-muted-foreground">
                 Upload a clear photo of the person you want on camera. It guides the generated presenter; the scene is created from your App Profile.
               </p>
@@ -2559,7 +2555,7 @@ if (step === 3) {
                 Thumbs up moves to Hook + Story. Thumbs down writes a fresh plan (claim-checked, up to three per version). Editing by hand still works.
               </p>
             </div>
-            <span className="eyebrow block">Script</span>
+            <GroupLabel icon={FileText}>Script</GroupLabel>
             {/* What the chosen template is aiming to leave them with, above the
                 hook and script it was picked to carry. The plan step showed the
                 words and nothing about their intent, so a founder reading a
@@ -2571,7 +2567,7 @@ if (step === 3) {
                 generated before outcomes existed. */}
             {typeof template?.outcome === "string" && template.outcome.trim() && (
               <div className="inset-panel">
-                <span className="eyebrow block">What this is aiming to leave them with</span>
+                <GroupLabel icon={Target}>What this is aiming to leave them with</GroupLabel>
                 <p className="mt-1 text-sm">{sentenceCase(template.outcome.trim())}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   The outcome this template is built for, in the viewer&apos;s terms. The script
@@ -2636,7 +2632,7 @@ if (step === 3) {
                 browser that could disagree with what the render does. */}
             {project?.spoken_check && (
               <div className="inset-panel space-y-2" data-testid="spoken-counts">
-                <span className="eyebrow block">How the two lines measure up</span>
+                <GroupLabel icon={Ruler}>How the two lines measure up</GroupLabel>
                 {[
                   { key: "hook", label: "Hook line" },
                   { key: "script", label: "Script" },
@@ -2667,7 +2663,7 @@ if (step === 3) {
             )}
             {project?.strategy?.hook_line && typeof project?.spoken_middle === "string" && project.spoken_middle && (
               <div className="inset-panel space-y-2" data-testid="spoken-partition">
-                <span className="eyebrow block">What the middle will say</span>
+                <GroupLabel icon={FileText}>What the middle will say</GroupLabel>
                 <p className="text-sm">{sentenceCase(project.spoken_middle)}</p>
                 {/* What is not spoken is counted by the server, not sliced out
                     of the script here. The kept words are no longer always a
@@ -2715,7 +2711,7 @@ if (step === 3) {
                 A note to you, not the model — never reaches the render.
               </p>
             </div>
-            <span className="eyebrow block">Visual and audio direction</span>
+            <GroupLabel icon={AudioLines}>Visual and audio direction</GroupLabel>
             <div className="space-y-2">
               <label className="text-sm font-medium">Visual direction</label>
               <p className="text-xs text-muted-foreground">Describe the generated scene and look. This is guidance for the rendered Hook + Story, not footage of your app demo.</p>
@@ -2738,7 +2734,7 @@ if (step === 3) {
                 data-testid="shot-timeline"
               >
                 <summary className="flex cursor-pointer flex-wrap items-center gap-2">
-                  <span className="eyebrow block">Shot timeline</span>
+                  <GroupLabel icon={ListChecks}>Shot timeline</GroupLabel>
                   <Badge variant="outline" className="text-xs">read-only</Badge>
                 </summary>
                 <div className="mt-2 space-y-2 text-sm">
@@ -2797,7 +2793,7 @@ if (step === 3) {
               />
             </div>
 
-            <span className="eyebrow block">Checks</span>
+            <GroupLabel icon={ShieldCheck}>Checks</GroupLabel>
             <SafetyPanel
               report={project.safety_report}
               summary={project.safety_summary}
