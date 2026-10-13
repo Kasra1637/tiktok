@@ -1,0 +1,46 @@
+# Auto-deploy: every push to main builds the Docker image (frontend bundle
+# + backend via the root Dockerfile / cloudbuild.yaml) and deploys it to the
+# hookforge Cloud Run service. This is the machinery behind "push ends live":
+# without it, main moves and live users stay on the previous revision.
+#
+# Auth is the hookforge-build service account via the GCP_SA_KEY repo secret
+# (a JSON key minted for deploys; that account holds exactly artifactregistry
+# writer, logging writer, run developer, secret accessor, builds editor, and
+# self actAs so it can submit and run its own builds). To rotate the key:
+# `gcloud iam service-accounts keys create/delete` + `gh secret set`.
+#
+# Serialized, never cancelled: two rapid pushes deploy in order, so live can
+# never move backward to the older commit's image.
+name: deploy
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build, push and deploy
+        run: |-
+          gcloud builds submit \
+            --project=ookforge-prod \
+            --config=cloudbuild.yaml \
+            --service-account=hookforge-build@ookforge-prod.iam.gserviceaccount.com \
+            --timeout=1800s \
+            .
