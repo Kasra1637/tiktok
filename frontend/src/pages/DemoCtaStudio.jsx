@@ -6,7 +6,7 @@ import { Badge } from "../components/ui/badge";
 import { Alert, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import PageFrame from "../components/PageFrame";
-import SectionCard from "../components/SectionCard";
+import SectionCard, { GroupLabel } from "../components/SectionCard";
 import { IconTile } from "../components/IconTile";
 import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, mediaUrl, durableMediaUrl } from "../lib/api";
@@ -94,9 +94,7 @@ function SourcePicker() {
         {rows.map((row) => (
           <SectionCard key={row.id} compact className="flex h-full flex-col">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-display text-sm font-semibold">
-                {row.brand_name || "Unassigned app"}
-              </span>
+              <GroupLabel>{row.brand_name || "Unassigned app"}</GroupLabel>
               {typeof row.duration === "number" && (
                 <Badge variant="secondary" className="font-mono text-xs tabular-nums">
                   {row.duration}s

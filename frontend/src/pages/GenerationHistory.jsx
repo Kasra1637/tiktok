@@ -11,6 +11,7 @@ import EmptyState from "../components/EmptyState";
 import { StatusBadge } from "../components/StatusBadge";
 import { AppPicker, PILL_SELECT_CLASS } from "../components/AppPicker";
 import { GroupLabel } from "../components/SectionCard";
+import { IconTile } from "../components/IconTile";
 import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } from "../lib/api";
 import { FactChip, FactList } from "../components/FactChip";
@@ -28,7 +29,7 @@ function DetailRow({ label, children }) {
   return (
     <div className="space-y-1">
       <span className="eyebrow block">{label}</span>
-      <div className="text-sm">{children}</div>
+      <div className="text-sm leading-[22px] text-foreground/90">{children}</div>
     </div>
   );
 }
@@ -66,7 +67,10 @@ function GenerationDetails({ generationId, onClose }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">
-          <h2 className="font-display text-base font-semibold leading-8">Generation details</h2>
+          <div className="flex items-start gap-3">
+            <IconTile icon={Film} size="section" />
+            <h2 className="font-display text-base font-semibold leading-8">Generation details</h2>
+          </div>
           <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close details">
             <X className="h-3.5 w-3.5" />
           </Button>
@@ -145,7 +149,7 @@ function GenerationDetails({ generationId, onClose }) {
  * card is a `SectionCard` like every other content card in the app — see those
  * two for why the vocabulary is shared rather than restated per page.
  */
-function GenerationRow({ row, onChanged }) {
+function GenerationRow({ row, siblings = [], onChanged }) {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -332,7 +336,7 @@ function GenerationRow({ row, onChanged }) {
   };
 
   return (
-    <div className="surface rounded-2xl">
+    <div id={`generation-${row.id}`} className="surface scroll-mt-6 rounded-2xl">
       {/* One grid for the whole row, and the clip gets a rail of its own.
 
           It used to sit in a 240px column with roughly 800px of empty card to
@@ -500,9 +504,7 @@ function GenerationRow({ row, onChanged }) {
               facts about the render, not about which video this is, and they
               join the strip below. */}
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-display text-sm font-semibold">
-              {row.brand_name || "Unassigned app"}
-            </span>
+            <GroupLabel>{row.brand_name || "Unassigned app"}</GroupLabel>
             <StatusBadge status={row.status} />
             {row.parent_generation_id && (
               <Badge variant="outline" className="gap-1 text-xs">
@@ -607,6 +609,27 @@ function GenerationRow({ row, onChanged }) {
           </div>
         </div>
       </div>
+
+      {siblings.length > 0 && (
+        <div className="space-y-2 border-t border-[color:var(--hairline)] pt-4">
+          <GroupLabel>More from this app</GroupLabel>
+          <ul className="space-y-2">
+            {siblings.map((s) => (
+              <li key={s.id}>
+                <a
+                  href={`#generation-${s.id}`}
+                  className="flex items-center gap-3 rounded-xl border border-[color:var(--hairline)] bg-card/70 px-4 py-3 text-left transition-colors hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)]"
+                >
+                  <span className="min-w-0 flex-1 truncate text-sm text-foreground/90">
+                    {s.hook_line ? sentenceCase(s.hook_line) : humanize(s.status)}
+                  </span>
+                  <StatusBadge status={s.status} />
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {showDetails && (
         <GenerationDetails generationId={row.id} onClose={() => setShowDetails(false)} />
@@ -790,6 +813,9 @@ export default function GenerationHistory() {
             <GenerationRow
               key={row.id}
               row={row}
+              siblings={rows
+                .filter((r) => r.id !== row.id && r.brand_profile_id && r.brand_profile_id === row.brand_profile_id)
+                .slice(0, 4)}
               onChanged={load}
             />
           ))}
