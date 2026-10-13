@@ -4,14 +4,10 @@
 # pushes it to Artifact Registry, then deploys that exact image to the
 # hookforge Cloud Run service.
 #
-# NOTE (2026-10-13): there is currently NO push trigger connected, so pushes
-# do NOT auto-deploy — every deploy to date has been a manual submit, which
-# is why main commits have appeared "not live" whenever no build followed
-# the push. Until a GitHub push trigger (^main$, this file as build config)
-# is connected in the Cloud Build console (needs the GitHub App OAuth flow,
-# not doable headlessly), every main commit must be followed by a manual
-# `gcloud builds submit --config=cloudbuild.yaml` or live users stay on the
-# previous revision.
+# NOTE: pushes reach this file through .github/workflows/deploy.yml (push to
+# main -> `gcloud builds submit` as the hookforge-build service account).
+# There is no Cloud Build GitHub trigger connected (needs the console OAuth
+# flow), so do not expect console-listed triggers — Actions is the trigger.
 #
 # The Clerk publishable key is a BUILD-time input, not a runtime one: CRA inlines
 # process.env.REACT_APP_* into the bundle when it compiles, so the key has to be
