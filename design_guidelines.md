@@ -148,16 +148,27 @@ card is `.inset-panel`.
 | Wizard step | `StepShell` ≡ `SectionCard` | 32px `IconTile size="section"` | `h2`, 16px semibold + muted description |
 | Group inside a card | `GroupLabel` + hairline divider, never a nested box | 16px glyph on the bar, 12px on the card's own `.eyebrow` | `.eyebrow` (all caps) |
 | Aside inside a card | `.inset-panel` (12px radius, 16px gutter) | none | 14px medium, or an `.eyebrow` |
-| Row inside a card | `.row-pad` (16px gutter, 12px block) + hairline | none | 14px medium label |
-| Selectable option row | option bar — 16px icon + uppercase tracked title + chevron, `px-4 py-3`, `space-y-2` between rows | 16px, its own | uppercase, 12px tracked |
+| Disclosure row | `.row-pad` inside one `.surface surface-flush` card, hairline between rows | none, or 16px on an accordion bar | 14px medium label, or uppercase tracked on the bar |
+| Pickable option | its own frame — `rounded-xl border bg-card/70`, bar is `px-4 py-3`, `space-y-2` between them | 16px, its own | `text-sm` uppercase tracked, muted |
 | Field / detail row | label + control | none | 14px medium label |
 
-Two ladders, because two jobs. **Sections are read** — they orient and teach, so
-they take the big 32px tile and a description line. **Option rows are scanned** —
-they offer a choice, so they take the compact 16px bar with the title already
-uppercase and a chevron. The audience angle picker (`CreateVideo`, step 1) is the
-reference for option rows; the 5-phase `StepShell` is the reference for sections.
+Three ladders, because three jobs. **Sections are read** — they orient and teach,
+so they take the big 32px tile and a description line. **Options are scanned** —
+they offer a choice, so the title is already uppercase and tracked and the row
+carries a chevron. The audience angle picker (`CreateVideo`, step 1) is the
+reference for options; the 5-phase `StepShell` is the reference for sections.
 Forcing one onto the other either cramps a section or bloats a list.
+
+**The frame is what tells the two apart, and it is deliberate.** A row you
+*pick* is an object, so it gets its own border and radius — that frame is the
+click target and it is what an in-place expansion opens inside. A row you
+*open* is part of a card, so it stays inside one `.surface` and is separated
+from its neighbours by a hairline. That is why the angle list draws a box per
+angle and `SectionGroup` (App Profile) does not: same bar chrome on both sides
+(`px-4 py-3`, 16px glyph, uppercase tracked muted title, chevron, indigo hover —
+`SectionGroup`'s own comment says it borrows the angle row's chrome), different
+container. `RecommendationCard`'s 2-up grid is the same rule as the angle list:
+picked things are objects, so they are framed.
 
 A group's glyph is not decoration: on the App Profile detail page every
 `ProfileCard` and `SectionGroup` carries one, and `runIconChecks` fails the page
