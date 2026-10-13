@@ -3802,6 +3802,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           const first = orderOf();
           if (first.length !== 6) throw new Error(`expected six goal cards, saw ${first.length}`);
           if (first.join("|") !== SIX.join("|")) throw new Error(`initial goal order moved: ${first.join(", ")}`);
+          // The picker heading is a GroupLabel now; its id must still land
+          // on the h3 or aria-labelledby points nowhere.
+          const goalLabel = ctx.container.querySelector("#video-goal-label");
+          if (!goalLabel || goalLabel.tagName !== "H3") {
+            throw new Error("the video goal heading lost its labelledby id");
+          }
           const seen = [first.join("|")];
           for (let press = 0; press < 3; press += 1) {
             await clickEl(ctx, ctx.container.querySelector('[data-testid="regenerate-goals-button"]'), "no shuffle button");
@@ -4936,6 +4942,44 @@ async function runIconChecks() {
     }
     if (bad.length) {
       throw new Error(`eyebrow icons off the 12px token:\n        ${bad.join("\n        ")}`);
+    }
+  });
+
+  await check("icon-bearing group labels use GroupLabel", async () => {
+    // A label with a glyph beside it is GroupLabel (eyebrow + 12px icon),
+    // not a hand-built flex row: the hand pattern drifts in gap and icon
+    // size, and the drift is what made identical labels disagree. Plain
+    // icon-less `.eyebrow` spans are fine — the token is already shared —
+    // and SectionCard.jsx defines the primitive itself.
+    const hand = [];
+    for (const abs of iconFiles) {
+      if (abs.endsWith("SectionCard.jsx")) continue;
+      const src = fs.readFileSync(abs, "utf8");
+      for (const m of src.matchAll(/className="eyebrow flex[^"]*"/g)) {
+        hand.push(`${path.relative(SRC, abs)}: ${m[0]}`);
+      }
+    }
+    if (hand.length) {
+      throw new Error(`hand-built icon labels (use GroupLabel):\n        ${hand.join("\n        ")}`);
+    }
+  });
+
+  await check("no small section headings outside the profile system", async () => {
+    // Card and section titles are the display token (font-display 16
+    // semibold); a 14px medium h2/h3 is a fourth title dialect. The one
+    // exception is profileUi.jsx's ProfileCard, whose sentence-case
+    // glyph-less heading is settled: it reads side by side with angle
+    // rows that carry neither.
+    const small = [];
+    for (const abs of iconFiles) {
+      if (abs.endsWith("profileUi.jsx")) continue;
+      const src = fs.readFileSync(abs, "utf8");
+      for (const m of src.matchAll(/<h[23]\b[^>]*text-sm font-medium/g)) {
+        small.push(`${path.relative(SRC, abs)}: ${m[0].slice(0, 60)}`);
+      }
+    }
+    if (small.length) {
+      throw new Error(`small h2/h3 section headings:\n        ${small.join("\n        ")}`);
     }
   });
 }

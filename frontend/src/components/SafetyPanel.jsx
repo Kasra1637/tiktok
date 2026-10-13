@@ -2,6 +2,7 @@ import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { Badge } from "./ui/badge";
 import { ShieldCheck, ShieldAlert, Ban, Circle as HelpCircle, Sparkles } from "lucide-react";
 import { sentenceCase } from "../lib/copyCase";
+import { GroupLabel } from "./SectionCard";
 
 /**
  * Reviewer-facing claim-safety report.
@@ -51,9 +52,7 @@ export function SafetyPanel({ report, summary }) {
 
       {blocking.length > 0 && (
         <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4">
-          <span className="eyebrow flex items-center gap-1.5 text-destructive">
-            <Ban className="h-3 w-3" /> Never use — found in this script
-          </span>
+          <GroupLabel icon={Ban} className="text-destructive">Never use — found in this script</GroupLabel>
           <ul className="mt-2 space-y-2 text-sm">
             {blocking.map((b, i) => (
               <li key={i}>
@@ -108,9 +107,7 @@ export function SafetyPanel({ report, summary }) {
       )}
 
       <div className="inset-panel">
-        <span className="eyebrow flex items-center gap-1.5">
-          <Sparkles className="h-3 w-3" /> Verified claims used ({used.length})
-        </span>
+        <GroupLabel icon={Sparkles}>Verified claims used ({used.length})</GroupLabel>
         {used.length ? (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {used.map((c, i) => (

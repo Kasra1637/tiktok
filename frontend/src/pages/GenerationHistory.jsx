@@ -66,7 +66,7 @@ function GenerationDetails({ generationId, onClose }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">
-          <h2 className="font-display text-base font-semibold">Generation details</h2>
+          <h2 className="font-display text-base font-semibold leading-8">Generation details</h2>
           <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close details">
             <X className="h-3.5 w-3.5" />
           </Button>

@@ -9,6 +9,7 @@ import PageHeader from "../components/PageHeader";
 import PageFrame from "../components/PageFrame";
 import EmptyState from "../components/EmptyState";
 import { IconTile } from "../components/IconTile";
+import { GroupLabel } from "../components/SectionCard";
 import { Skeleton } from "../components/ui/skeleton";
 import SafetyPanel from "../components/SafetyPanel";
 import HookContinuityPanel from "../components/HookContinuityPanel";
@@ -589,9 +590,9 @@ function AngleGoalPicker({
     <section className="space-y-2" aria-labelledby="video-goal-label" data-testid="angle-goal-picker">
       <div className="space-y-1">
         <div className="flex items-start justify-between gap-2">
-          <h3 id="video-goal-label" className="text-sm font-medium">
+          <GroupLabel as="h3" id="video-goal-label">
             Video goal <span className="text-muted-foreground">(required)</span>
-          </h3>
+          </GroupLabel>
           {onRegenerate && featured.length > 0 && (
             <Button
               variant="ghost"
@@ -2003,7 +2004,7 @@ setObjective("");
 
             {/* The goal step is intentionally downstream of the angle. */}
             <div className="inset-panel space-y-2" data-testid="create-what-you-get">
-              <span className="text-sm font-medium">What you get</span>
+              <GroupLabel>What you get</GroupLabel>
               <p className="text-sm">
                 One {pieceSeconds}s Hook + Story clip: a {pieceSplit.hookSeconds}s hook, then a {pieceSplit.middleSeconds}s story.
               </p>

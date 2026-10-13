@@ -14,6 +14,7 @@ import {
   Loader2, Clapperboard, AlertTriangle, Download, RotateCcw,
   Play, Info, Clock, Smartphone,
 } from "lucide-react";
+import { GroupLabel } from "./SectionCard";
 
 /**
  * The render. One request, one job, one file.
@@ -706,9 +707,7 @@ const handleGenerate = async () => {
                   the thing to press. The eyebrow and the coral button carry it
                   now. */}
               <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-                <span className="eyebrow flex items-center gap-1.5">
-                  <Smartphone className="h-3 w-3 shrink-0" aria-hidden="true" /> Product Demo + CTA
-                </span>
+                <GroupLabel icon={Smartphone}>Product Demo + CTA</GroupLabel>
                 <p className="text-xs text-muted-foreground">
                   Use this video as is, or open it in Demo + CTA to add your demo in a phone
                   mockup and your call to action. Exports save beside the original in History.

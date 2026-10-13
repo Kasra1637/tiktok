@@ -208,14 +208,29 @@ const QUESTIONS = [
 function SectionHeading({ eyebrow, title, lede, id }) {
   return (
     <div className="mx-auto mb-12 max-w-2xl scroll-mt-24 text-center" id={id}>
-      {eyebrow && (
-        <span className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-[color:var(--hairline)] bg-[color:var(--indigo-6)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-[color:var(--brand-indigo)]">
-          {eyebrow}
-        </span>
-      )}
+      {eyebrow && <EyebrowPill className="mb-3">{eyebrow}</EyebrowPill>}
       <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">{title}</h2>
       {lede && <p className="mt-3.5 text-base leading-relaxed text-muted-foreground sm:text-lg">{lede}</p>}
     </div>
+  );
+}
+
+/**
+ * The one uppercase pill on the marketing page: 12px semibold, tracked,
+ * brand-indigo on indigo. `strong` is the same pill at one step deeper
+ * border and fill, for text sitting on glass rather than on the page.
+ */
+function EyebrowPill({ strong = false, className, children }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-[color:var(--brand-indigo)] ${
+        strong
+          ? "border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)]"
+          : "border-[color:var(--hairline)] bg-[color:var(--indigo-6)]"
+      }${className ? ` ${className}` : ""}`}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -519,9 +534,9 @@ export default function Landing() {
           <div className="surface-glass relative overflow-hidden rounded-3xl px-6 py-12 text-center sm:px-12 sm:py-16">
             <div className="spotlight-indigo absolute inset-0" aria-hidden="true" />
             <div className="relative">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-[color:var(--brand-indigo)]">
+              <EyebrowPill strong>
                 <Zap className="h-3 w-3" /> Ready when you are
-              </span>
+              </EyebrowPill>
               <h2 className="font-display mt-5 text-3xl font-bold tracking-tight sm:text-4xl">
                 Make your next app story.
               </h2>

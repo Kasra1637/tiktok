@@ -60,9 +60,9 @@ export function SectionCard({
 }
 
 /** Uppercase label for a group inside a card. Icons only on groups people scan between. */
-export function GroupLabel({ icon: Icon, as: Tag = "span", className, children }) {
+export function GroupLabel({ icon: Icon, as: Tag = "span", className, children, ...rest }) {
   return (
-    <Tag className={cn("eyebrow flex items-center gap-2", className)}>
+    <Tag className={cn("eyebrow flex items-center gap-2", className)} {...rest}>
       {Icon && <Icon className="h-3 w-3 shrink-0" />}
       {children}
     </Tag>

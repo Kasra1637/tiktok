@@ -1,6 +1,7 @@
 import { ChevronDown } from "lucide-react";
 import { cn } from "../lib/utils";
 import { sentenceCase } from "../lib/copyCase";
+import { GroupLabel } from "./SectionCard";
 
 /**
  * Shared profile card system — the App Profile page's card language, on the
@@ -11,8 +12,8 @@ import { sentenceCase } from "../lib/copyCase";
  * Tokens (no one-off pixels), all taken from the Content Angles block:
  * - headings 14/500 sentence case (the angle row's title token) — never
  *   uppercase, never tracked, and no glyph beside them; the angle rows carry none
- * - field labels are the shared `.eyebrow` (12/600 uppercase muted) — the same
- *   label the angle detail panel uses for its own fields
+ * - field labels are the shared `GroupLabel` (12/600 uppercase muted
+ *   `.eyebrow`) — the same label the angle detail panel uses for its own fields
  * - body 14/22, meta 12/18, chips 12/18 at the Badge shape the kind tag uses
  * - item gap 8 (gap-2 / space-y-2) and card padding px-4 py-3 — the angle
  *   row's rhythm, not a roomier one of our own
@@ -65,7 +66,7 @@ export function ProfileField({ label, value }) {
   if (!value) return null;
   return (
     <div className="min-w-0">
-      {label ? <h4 className="eyebrow">{label}</h4> : null}
+      {label ? <GroupLabel as="h4">{label}</GroupLabel> : null}
       <p
         className={cn(
           "whitespace-pre-wrap text-sm leading-[22px] text-foreground/90",
@@ -101,9 +102,7 @@ export function InfoChipList({ label, items, tone = "default", labelClassName })
           on this page and on the App Profile page is `.eyebrow`, and one
           label at a different size is what made the two pages disagree. */}
       {label ? (
-        <span className={cn("eyebrow block", labelClassName)}>
-          {label}
-        </span>
+        <GroupLabel className={labelClassName}>{label}</GroupLabel>
       ) : null}
       <ul className={cn("flex flex-wrap gap-3", label ? "mt-2" : "mt-0")}>
         {items.map((item, i) => (
@@ -133,9 +132,7 @@ export function InfoListBlock({ label, items, tone = "default" }) {
         : "border-[color:var(--hairline)] bg-secondary/20";
   return (
     <div className={cn("rounded-xl border p-4", toneClass)}>
-      <span className="eyebrow">
-        {label}
-      </span>
+      <GroupLabel>{label}</GroupLabel>
       <ul className="mt-2 space-y-2 text-sm leading-[22px] text-foreground/90">
         {items.map((item, i) => (
           <li key={i} className="flex gap-3">

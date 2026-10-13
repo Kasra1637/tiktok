@@ -8,6 +8,7 @@ import { sentenceCase } from "../lib/copyCase";
 import {
   Loader2, AlertTriangle, Info, MapPin, ShieldQuestion, Sparkles, Target,
 } from "lucide-react";
+import { GroupLabel } from "./SectionCard";
 
 /**
  * The strategy review: what the render will be, before anything is rendered.
@@ -92,9 +93,7 @@ function StrategyBlock({ title, icon: Icon, rows, description }) {
   return (
     <div className="space-y-2">
       <div className="space-y-0.5">
-        <span className="eyebrow flex items-center gap-1.5">
-          <Icon className="h-3 w-3" /> {title}
-        </span>
+        <GroupLabel icon={Icon}>{title}</GroupLabel>
         {description && (
           <p className="text-xs text-muted-foreground">{description}</p>
         )}
