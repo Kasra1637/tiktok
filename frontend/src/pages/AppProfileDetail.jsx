@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
+import { Skeleton } from "../components/ui/skeleton";
 import PageHeader from "../components/PageHeader";
 import PageFrame from "../components/PageFrame";
 import { sentenceCase } from "../lib/copyCase";
@@ -309,20 +310,36 @@ export default function AppProfileDetail() {
   };
 
   if (loading) {
+    // Same frame as the loaded page and Create Video's own loading state:
+    // skeleton blocks shaped like the header and the group cards, so nothing
+    // reflows when the profile arrives. Never a bare spinner line.
     return (
-      <p className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading profile...
-      </p>
+      <PageFrame className="space-y-6">
+        <div className="flex items-start gap-3" aria-label="Loading profile" data-testid="profile-loading">
+          <Skeleton className="h-10 w-10 shrink-0 rounded-xl" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-3 w-full" />
+          </div>
+        </div>
+        <div className="space-y-4">
+          <Skeleton className="h-14 w-full rounded-2xl" />
+          <Skeleton className="h-40 w-full rounded-2xl" />
+          <Skeleton className="h-40 w-full rounded-2xl" />
+        </div>
+      </PageFrame>
     );
   }
 
   if (error && !profile) {
     return (
-      <Alert variant="destructive">
-        <AlertTriangle className="h-4 w-4" />
-        <AlertTitle>Could not load this profile</AlertTitle>
-        <AlertDescription>{error}</AlertDescription>
-      </Alert>
+      <PageFrame className="space-y-6">
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Could not load this profile</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      </PageFrame>
     );
   }
 
@@ -386,7 +403,7 @@ export default function AppProfileDetail() {
   ]);
 
 return (
-    <PageFrame width="narrow" className="space-y-6">
+    <PageFrame className="space-y-6">
       <Button variant="ghost" size="sm" asChild className="-ml-2">
         {/* Was "All profiles" -> /app-profiles. There is no list page any
             more, and the editor is where an app is created, approved and
@@ -542,7 +559,7 @@ return (
           no gap above. Accordion-exclusive with persisted single-open state;
           Essentials open by default, the rest collapsed; no bulk
           expand/collapse. */}
-      <div className="min-w-0 space-y-2">
+      <div className="min-w-0 space-y-4">
         {hasEssentials && (
         <SectionGroup id="essentials" label="Essentials" icon={Layers} summary={essentialsSummary} open={openGroup === "essentials"} onToggle={toggleGroup}>
         {basics.some(Boolean) ? (

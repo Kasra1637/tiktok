@@ -214,10 +214,12 @@ reserved for `.eyebrow` group labels, never section or page titles.
   inside the sidebar opens with `PageFrame`, which decides only what sits inside
   that frame. Two tokens, and only two:
   - `default` — the whole frame. Studio and editor pages, which spend their room
-    on grids, players and lists: Create Video, Demo + CTA, History, Analytics.
-  - `narrow` — 1150px, centred. The App Profile family, where a full-width form
-    field or a prose card is a line the eye cannot sweep: App Profile, Profile
-    Detail, Asset Library.
+    on grids, players and lists: Create Video, Demo + CTA, History, Analytics,
+    App Profile, Profile Detail. The App Profile family moved here so moving
+    between Create Video and the profile pages never re-solves the centering
+    math sideways.
+  - `narrow` — 1150px, centred. Reading-heavy prose where a card at 1400px
+    stretches a sentence across a line the eye cannot sweep: Asset Library.
 
   **The width must not change between two pages a reader moves between**, so a
   page belongs to a family rather than to itself: Brand Setup links to Profile

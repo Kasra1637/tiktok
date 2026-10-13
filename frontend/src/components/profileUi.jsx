@@ -208,7 +208,7 @@ export function SectionGroup({ id, label, summary, icon: Icon, open, onToggle, c
         style={{ gridTemplateRows: open ? "1fr" : "0fr", opacity: open ? 1 : 0 }}
       >
         <div className="min-h-0 overflow-hidden">
-          <div className="row-pad space-y-2 border-t border-[color:var(--hairline)]">{children}</div>
+          <div className="row-pad space-y-4 border-t border-[color:var(--hairline)]">{children}</div>
         </div>
       </div>
     </section>

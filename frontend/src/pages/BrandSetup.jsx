@@ -8,7 +8,7 @@ import { Textarea } from "../components/ui/textarea";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import PageHeader from "../components/PageHeader";
-import { GroupLabel } from "../components/SectionCard";
+import { SectionCard, GroupLabel } from "../components/SectionCard";
 import { SectionGroup } from "../components/profileUi";
 import { AppPicker } from "../components/AppPicker";
 import { Skeleton } from "../components/ui/skeleton";
@@ -465,7 +465,7 @@ export default function BrandSetup() {
     : "No guardrails set";
 
   return (
-    <PageFrame width="narrow" className="space-y-6">
+    <PageFrame className="space-y-6">
       <PageHeader
         icon={Briefcase}
         title="App Profile"
@@ -513,13 +513,16 @@ export default function BrandSetup() {
           Profiles are created from App Store and Google Play URLs only. The
           details card below renders once research returns a profile.
 
-          The card is the angles page's own card: one background, 1px hairline,
-          radius 16, row-pad rhythm, GroupLabel eyebrow with glyph — no
-          gradient frame, no glow, no display heading. The testid stays on the
-          form itself, because the suite submits through it. */}
-      <section className="surface surface-flush row-pad flex min-w-0 flex-col gap-2 rounded-2xl" aria-label="Research a mobile app">
-          <form onSubmit={handleResearchApp} className="flex min-w-0 flex-col gap-2" data-testid="app-research-card">
-            <GroupLabel as="h2" icon={Smartphone}>Research a mobile app</GroupLabel>
+          A SectionCard like every Create Video step: 32px tile + 16px
+          heading + one-line description, surface padding from `.surface`.
+          The testid stays on the form itself, because the suite submits
+          through it. */}
+      <SectionCard
+        title="Research a mobile app"
+        icon={Smartphone}
+        description="App Store and Google Play URLs only — the draft appears below for review."
+      >
+          <form onSubmit={handleResearchApp} className="flex min-w-0 flex-col gap-2" data-testid="app-research-card" aria-label="Research a mobile app">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Input
                 value={appstoreUrl}
@@ -558,7 +561,7 @@ export default function BrandSetup() {
               {researching ? "Researching..." : brand?.id ? "Research into a new draft" : "Research app"}
             </Button>
           </form>
-      </section>
+      </SectionCard>
 
       {brand?.id && pendingProposal && (
         <Alert data-testid="pending-refresh-alert">
@@ -610,7 +613,7 @@ export default function BrandSetup() {
           The "App Profile Details" display heading went with the box — the
           PageHeader title already says it. */}
       {brand?.id && (
-      <div ref={manualCardRef} className="min-w-0 space-y-2" data-testid="brand-manual-card">
+      <div ref={manualCardRef} className="min-w-0 space-y-4" data-testid="brand-manual-card">
         {loadingActive ? (
           <div className="surface surface-flush row-pad space-y-2 rounded-2xl" aria-label="Loading your app profile">
             <Skeleton className="h-10 w-full rounded-xl" />
@@ -619,7 +622,7 @@ export default function BrandSetup() {
           </div>
         ) : (
           <>
-            <div className="space-y-2">
+            <div className="space-y-4">
               {/* ── Basics ── */}
               <SectionGroup id="basics" label="Basics" icon={Package} summary={basicsSummary} open={openGroup === "basics"} onToggle={toggleGroup}>
               <div className="space-y-2">
@@ -958,7 +961,7 @@ export default function BrandSetup() {
           was meant to remove. */}
       {researchedProfile && (
         <div className="sticky bottom-0 z-10 border-t border-[color:var(--hairline)] bg-background/80 py-4 backdrop-blur-sm">
-          <div className={cn(PAGE_WIDTH_CLASS.narrow, "flex items-center gap-3")}>
+          <div className={cn(PAGE_WIDTH_CLASS.default, "flex items-center gap-3")}>
             <Button
               onClick={handleSave}
               disabled={saving}
