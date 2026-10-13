@@ -18,7 +18,6 @@ import { ThumbPair } from "../components/ThumbPair";
 import { ComponentThumbs } from "../components/ComponentThumbs";
 import AssetLibrary from "./AssetLibrary";
 import { api, getErrorMessage } from "../lib/api";
-import { angleKindIcon } from "../lib/angleKindIcons";
 import { recordSignal, recordThumb, classifyScriptEdit } from "../lib/feedback";
 import {
   partitionProfiles,
@@ -1924,7 +1923,6 @@ setObjective("");
                   {angles.map((a) => {
                     const picked = angleId === a.id;
                     const details = picked ? angleDetails(a) : [];
-                    const KindIcon = angleKindIcon(a.kind);
                     return (
                       <div
                         key={a.id}
@@ -1945,13 +1943,19 @@ setObjective("");
                             picked ? "bg-[color:var(--indigo-6)]" : ""
                           }`}
                         >
-                          {KindIcon && (
-                            <KindIcon
-                              aria-hidden="true"
-                              data-testid={`angle-kind-icon-${a.kind}`}
-                              className="h-4 w-4 shrink-0 text-muted-foreground"
-                            />
-                          )}
+                          {/* One check per row, always: muted until picked,
+                              indigo once open. The per-kind glyphs are gone —
+                              twelve icons made the list something you decode
+                              rather than scan. The picked row's old right-side
+                              check is folded into this one, so a picked row
+                              never shows two checks. */}
+                          <Check
+                            aria-hidden="true"
+                            data-testid="angle-row-check"
+                            className={`h-4 w-4 shrink-0 ${
+                              picked ? "text-[color:var(--brand-indigo)]" : "text-muted-foreground"
+                            }`}
+                          />
                           {/* One line per angle: its kind's glyph, then the
                               uppercase tracked title, and nothing else. The
                               subtitle, the kind badge and the verdict tally came
@@ -1963,7 +1967,6 @@ setObjective("");
                           <span className="min-w-0 flex-1 truncate text-sm font-semibold uppercase leading-[22px] tracking-[0.08em] text-muted-foreground">
                             {sentenceCase(a.label)}
                           </span>
-                          {picked && <Check className="h-4 w-4 shrink-0 text-[color:var(--brand-indigo)]" />}
                           <ChevronDown
                             className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
                               picked ? "rotate-180" : ""

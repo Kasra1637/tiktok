@@ -3667,8 +3667,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           if (row.querySelector('[data-testid^="angle-evidence-"]')) {
             throw new Error(`the verdict chip came back onto angle ${id}`);
           }
-          if (!row.querySelector('[data-testid^="angle-kind-icon-"]')) {
-            throw new Error(`angle ${id} lost its kind icon`);
+          if (!row.querySelector('[data-testid="angle-row-check"]')) {
+            throw new Error(`angle ${id} lost its check mark`);
           }
         }
       } finally {
@@ -3677,9 +3677,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
-  // Every angle row opens with its kind's glyph at the bar's 16px icon
-  // size — the icon is part of the row contract, not decoration.
-  await check("angle rows carry their kind icon", async (ctx) => {
+  // Every angle row opens with the same check mark at the bar's 16px icon
+  // size — muted until picked, indigo once open. One glyph for every row:
+  // twelve kind icons made the list something you decode rather than scan.
+  await check("angle rows carry the check mark", async (ctx) => {
     await withApi({ getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B] }) }, async () => {
       global.__SMOKE_PARAMS = "";
       try {
@@ -3688,18 +3689,23 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         const rows = [...ctx.container.querySelectorAll('[data-testid^="angle-option-"]')];
         if (rows.length !== 2) throw new Error(`expected two angle rows, saw ${rows.length}`);
         for (const row of rows) {
-          const icon = row.querySelector('[data-testid^="angle-kind-icon-"]');
-          if (!icon) throw new Error("an angle row shows no kind icon");
-          if (icon.tagName !== "svg") throw new Error("the kind icon is not an svg glyph");
+          const icon = row.querySelector('[data-testid="angle-row-check"]');
+          if (!icon) throw new Error("an angle row shows no check mark");
+          if (icon.tagName !== "svg") throw new Error("the check mark is not an svg glyph");
           const cls = icon.getAttribute("class") || "";
           if (!/\bh-4\b/.test(cls) || !/\bw-4\b/.test(cls)) {
-            throw new Error(`the kind icon is off the 16px token: ${cls}`);
+            throw new Error(`the check mark is off the 16px token: ${cls}`);
           }
+          if (/brand-indigo/.test(cls)) throw new Error("an unpicked row shows the picked check");
         }
-        const kinds = [...ctx.container.querySelectorAll('[data-testid^="angle-kind-icon-"]')]
-          .map((el) => el.getAttribute("data-testid").replace("angle-kind-icon-", ""));
-        if (kinds.join("|") !== "problem_solution|feature_demonstration") {
-          throw new Error(`kind icons mismatch the row kinds: ${kinds.join(", ")}`);
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+        const picked = ctx.container.querySelector('[data-testid="angle-option-a1"] [data-testid="angle-row-check"]');
+        const other = ctx.container.querySelector('[data-testid="angle-option-a2"] [data-testid="angle-row-check"]');
+        if (!picked || !/brand-indigo/.test(picked.getAttribute("class") || "")) {
+          throw new Error("the picked row's check did not turn indigo");
+        }
+        if (!other || /brand-indigo/.test(other.getAttribute("class") || "")) {
+          throw new Error("the unpicked row's check is not muted");
         }
       } finally {
         global.__SMOKE_PARAMS = "";
@@ -3935,9 +3941,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           }
           const goals = [...ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]')];
           if (goals.length !== 6) throw new Error(`expected six goal cards after regen, saw ${goals.length}`);
-          const glyphs = [...ctx.container.querySelectorAll('[data-testid^="angle-kind-icon-"]')];
+          const glyphs = [...ctx.container.querySelectorAll('[data-testid="angle-row-check"]')];
           if (glyphs.length !== 6) {
-            throw new Error(`the six fresh rows lost their kind icons: saw ${glyphs.length}`);
+            throw new Error(`the six fresh rows lost their check marks: saw ${glyphs.length}`);
           }
         } finally {
           global.__SMOKE_PARAMS = "";
