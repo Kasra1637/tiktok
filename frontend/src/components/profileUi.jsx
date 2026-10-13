@@ -41,10 +41,13 @@ export const profileToneClass = {
 };
 
 export function ProfileCard({ eyebrow, eyebrowClassName, icon, tone = "default", testid, className, children }) {
+  // Fixed 16px gutter (not the shared row-pad): the group content already
+  // brings 16/24, so card text lands at 32/40 from the group edge — exactly
+  // where text inside a Create Video step card's inset-panel sits.
   return (
     <section
       className={cn(
-        "row-pad flex h-full flex-col gap-2 rounded-2xl border border-[color:var(--hairline)] bg-card/70",
+        "flex h-full flex-col gap-2 rounded-2xl border border-[color:var(--hairline)] bg-card/70 px-4 py-3",
         profileToneClass[tone],
         className
       )}
@@ -159,9 +162,13 @@ export function InfoListBlock({ label, items, tone = "default" }) {
  * against that list: px-4 py-3, a 16px glyph, an uppercase tracked muted title
  * with the count summary beneath it in the row's 12/18 meta token, chevron
  * right, indigo hover. Opening reveals the angle panel's content chrome — a
- * hairline under the bar, then px-4 py-3 with 8px between cards. The summary
+ * hairline under the bar, then px-4 py-3 with 16px between cards. The summary
  * indents to the title, so the bar reads as one column of text with its glyph
  * in the margin rather than two left edges.
+ *
+ * Gutters step to 24px from 768px up, the way `.surface` padding does: the
+ * group is a flush card with no padding of its own, so without this its text
+ * would sit 8px shallower than a Create Video step card's on desktop.
  *
  * Native button = clickable + keyboard accessible with aria-expanded.
  * Grid-rows animation (200ms) opens without layout jump; the overflow-hidden
@@ -180,7 +187,7 @@ export function SectionGroup({ id, label, summary, icon: Icon, open, onToggle, c
         aria-expanded={open}
         aria-controls={contentId}
         onClick={() => onToggle(id, !open)}
-        className="row-pad flex w-full min-w-0 items-center justify-between gap-2 text-left transition duration-150 hover:bg-[color:var(--indigo-6)]"
+        className="flex w-full min-w-0 items-center justify-between gap-2 px-4 py-3 text-left transition duration-150 hover:bg-[color:var(--indigo-6)] md:px-6"
       >
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-3">
@@ -208,7 +215,7 @@ export function SectionGroup({ id, label, summary, icon: Icon, open, onToggle, c
         style={{ gridTemplateRows: open ? "1fr" : "0fr", opacity: open ? 1 : 0 }}
       >
         <div className="min-h-0 overflow-hidden">
-          <div className="row-pad space-y-4 border-t border-[color:var(--hairline)]">{children}</div>
+          <div className="space-y-4 border-t border-[color:var(--hairline)] px-4 py-3 md:px-6">{children}</div>
         </div>
       </div>
     </section>

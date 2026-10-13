@@ -615,7 +615,7 @@ export default function BrandSetup() {
       {brand?.id && (
       <div ref={manualCardRef} className="min-w-0 space-y-4" data-testid="brand-manual-card">
         {loadingActive ? (
-          <div className="surface surface-flush row-pad space-y-2 rounded-2xl" aria-label="Loading your app profile">
+          <div className="surface surface-flush space-y-2 rounded-2xl px-4 py-3 md:px-6" aria-label="Loading your app profile">
             <Skeleton className="h-10 w-full rounded-xl" />
             <Skeleton className="h-24 w-full rounded-xl" />
             <Skeleton className="h-10 w-2/3 rounded-xl" />
