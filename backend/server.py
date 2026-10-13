@@ -5003,8 +5003,17 @@ def _two_section_repairs(row: dict) -> dict:
     return repairs
 
 
-def _public_project(row: dict) -> dict:
-    """Serialize a studio project with its structured fields parsed."""
+def _public_project(row: dict, brand_name: str = "") -> dict:
+    """Serialize a studio project with its structured fields parsed.
+
+    `brand_name` is the app's own name, when the caller already has the profile.
+    It is the one thing the spoken lines can be checked against that is not
+    knowable from the project row, so `_public_project` accepts it rather than
+    reading the profile again: the check below reports whether the customer's
+    own line names the product. Callers without a profile in hand leave it
+    empty and the flag is simply not set — the row never carried a name, and
+    adding one column to pin it was not worth a migration.
+    """
     out = dict(row)
     out["beat_timeline"] = out.get("beat_timeline") or []
     out["overlays"] = out.get("overlays") or []
@@ -5084,6 +5093,12 @@ def _public_project(row: dict) -> dict:
         out.get("script"),
         out.get("hook_seconds") or 3,
         out.get("duration_seconds") or 0,
+        # Whether the customer's own line names the product is measurable, and
+        # it is the one promotion the prompt cannot reliably police: it depends
+        # on the app's name, which the project row does not carry -- so it is
+        # passed in by the callers that already fetched the profile, and is
+        # absent everywhere it is not knowable.
+        app_name=brand_name,
     )
     # What the arrival clamp cut from this plan, and the budget it cut against.
     # Reported from the stored count rather than recomputed from the script,
@@ -5267,7 +5282,8 @@ async def create_studio_project(
     )
     logger.info(f"Created studio project {project_id} for profile {profile['id']}")
     return _public_project(
-        await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,))
+        await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,)),
+        brand_name=(profile.get("brand_name") or "").strip(),
     )
 
 
@@ -5562,6 +5578,13 @@ async def generate_plan(
                 objective=objective,
                 duration_seconds=duration,
                 tone=tone,
+                # The founder's own words for this render. A regeneration
+                # ignored all three and could answer a different audience with a
+                # different look than the one on the project, which is the plan
+                # overwriting their decisions instead of drafting the script.
+                audience=(payload.audience or row.get("audience") or "").strip(),
+                visual_direction=(row.get("visual_direction") or "").strip(),
+                brand_voice=(profile.get("tone_voice") or "").strip(),
                 profile_feedback=profile_feedback,
                 component_feedback=plan_feedback,
             ),
@@ -5644,7 +5667,8 @@ async def generate_plan(
         f"Generated plan for project {project_id} (script v{int(row.get('script_version') or 0) + 1}) — {summary}"
     )
     return _public_project(
-        await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,))
+        await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,)),
+        brand_name=(profile.get("brand_name") or "").strip(),
     )
 
 
@@ -5736,7 +5760,8 @@ async def mark_project_ready(project_id: str, user_id: str = Depends(get_current
         (json.dumps(report), claim_safety.summarize(report), now_iso(), project_id, user_id),
     )
     return _public_project(
-        await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,))
+        await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,)),
+        brand_name=(profile.get("brand_name") or "").strip(),
     )
 
 

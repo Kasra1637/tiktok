@@ -844,33 +844,32 @@ class TestStrategyBudget:
 
         prompt = captured["prompt"]
         # Measured worst case, with every list at its cap, six viewer objections,
-        # six outcome statements and the anonymous trend aggregate: 21,065 chars.
-        # The ceiling sits just above at 22,500.
+        # six outcome statements and the anonymous trend aggregate.
         #
-        # The number has moved four times now -- 13,692 before the objections,
+        # The number has moved five times now -- 13,692 before the objections,
         # 15,226 after, 20,675 after the outcome layer (linked statements in
-        # every prompt plus the pitch rules that consume them) -- and it moved
-        # *because* the fixture was corrected, not because the ceiling was
-        # raised. Two earlier versions of this test used a round number picked
-        # without measuring and let a real inflation through, so the figure
-        # quoted in the failure message is the one to trust.
+        # every prompt plus the pitch rules that consume them), then the true
+        # 22,499 at HEAD -- and four of those moved *because* the fixture was
+        # corrected, not because the ceiling was raised. Two earlier versions of
+        # this test used a round number picked without measuring and let a real
+        # inflation through, so the figure quoted in the failure message is the
+        # one to trust.
         #
-        # Two things worth recording about the most recent move, because the one
-        # before it is the lesson. The 20,675 above had gone stale without anyone
-        # noticing: HEAD measured 21,440, which left 60 chars of headroom, so an
-        # unmeasured growth of 765 had already slipped past a quoted figure that
-        # no longer described reality. What moved it now is deliberate and
-        # measured -- 174 chars for the capitalization rule, which is the only
-        # thing standing between a lowercase opening sentence and the card it
-        # renders on. Measured first, raised second. The move after that is
-        # deliberate too -- removing the PAST PERFORMANCE block with the
-        # manual-results loop (549 chars), since no hand-typed numbers feed
-        # generation anymore.
-        CEILING = 22_500
+        # This move is a raise, and it is deliberate and measured. HEAD measured
+        # 22,499 against a 22,500 ceiling -- 1 character of headroom, so a quoted
+        # 21,065 nobody had re-measured. Every spoken line now has to be held to
+        # the same craft rules in BOTH prompts, and the strategy writes its own
+        # hook_line and section scripts whenever it has no approved plan to bind
+        # to. Withholding them there would leave exactly the draft this change
+        # exists to fix. The block is 1,077 characters, so the ceiling moves by
+        # a measured 2,000 to 24,500: ~250 tokens of prompt against the 8,192
+        # output budget the schema already needs headroom in, which is the trade
+        # this makes and the reason it is affordable.
+        CEILING = 24_500
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
-            f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling (measured "
-            f"worst case 21,065). Every field added here is a value the model must "
+            f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling. "
+            f"Every field added here is a value the model must "
             f"write back, and a truncated strategy is a 502 the founder cannot fix."
         )
 
@@ -1242,6 +1241,214 @@ class TestGeneratedStoryRepair:
         assert "MIDDLE ONLY" in prompt
         assert "full spoken script for BOTH" not in prompt
         assert "SELF-REVIEW" in prompt
+
+
+class TestSpokenLineCraft:
+    """
+    The two spoken lines are held to the same craft rules in BOTH prompts: the
+    plan and the strategy. The strategy matters as much as the plan because it
+    writes its own hook_line and section scripts whenever it has no approved
+    plan to bind to — which is the draft that reaches a founder unrevised.
+
+    The prompt is only half of it. The other half is that a draft which breaks
+    these rules is rewritten rather than accepted, and that a genuinely good
+    draft is not: a check that fires on a real customer line turns one bad plan
+    into no plan at all, because the retry raises after its third attempt.
+    """
+
+    SRC = (BACKEND_DIR / "ai_service.py").read_text(encoding="utf-8")
+
+    def test_the_rules_reach_both_prompts(self, monkeypatch):
+        import ai_service
+        prompts = []
+
+        async def capture(system_message, prompt, context, **kwargs):
+            prompts.append(prompt)
+            return {
+                "hook_line": "I could never name what I felt.",
+                "script": "One sentence each night helped me understand the pattern.",
+                "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
+                "visual_direction": "v", "demo_brief": "d",
+                "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", capture)
+        _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"}, template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15,
+        ))
+
+        for prompt in prompts:
+            assert "SPOKEN LINE CRAFT" in prompt
+            assert "OUTCOMES, NOT FEATURES" in prompt
+            assert "NO PROMOTION" in prompt
+
+    def test_a_promotional_draft_is_rewritten(self, monkeypatch):
+        """A draft that asks for the download is promotion, not a customer."""
+        import ai_service
+        bad = {
+            "hook_line": "Download the app and start feeling better.",
+            "script": "Install the app. It helps you name the feeling.",
+            "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
+            "visual_direction": "v", "demo_brief": "d",
+            "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
+        }
+        good = dict(bad, hook_line="I could never name what I felt.",
+                    script="One sentence each night helped me understand the pattern.")
+        rec = _patch_client(monkeypatch, [
+            _completion(json.dumps(bad)), _completion(json.dumps(good)),
+        ])
+        result = _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"}, template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15,
+        ))
+        assert "download" not in result["script"].lower()
+        assert len(rec.payloads) == 2
+        assert "download" in rec.payloads[1]["messages"][1]["content"]
+
+    def test_an_ai_sounding_draft_is_rewritten(self, monkeypatch):
+        """The generic openers a customer never says out loud."""
+        import ai_service
+        bad = {
+            "hook_line": "In today's fast-paced world, feelings get lost.",
+            "script": "Imagine a world where you can name them all. It helps.",
+            "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
+            "visual_direction": "v", "demo_brief": "d",
+            "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
+        }
+        good = dict(bad, hook_line="I could never name what I felt.",
+                    script="One sentence each night helped me understand the pattern.")
+        rec = _patch_client(monkeypatch, [
+            _completion(json.dumps(bad)), _completion(json.dumps(good)),
+        ])
+        _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"}, template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15,
+        ))
+        assert len(rec.payloads) == 2
+
+    def test_a_genuine_customer_draft_is_not_rewritten(self, monkeypatch):
+        """The false-positive guard: these are real lines, so one call only.
+
+        Each of them trips an ordinary substring test — "look forward to"
+        ends on a preposition, "I used to feel like that" is a comparison, and
+        "download" would match a naive keyword scan if any of this fixture were
+        about installing something. A check that rejects them is worse than no
+        check, so they are the fixture.
+        """
+        import ai_service
+        good = {
+            "hook_line": "I used to feel like that.",
+            "script": (
+                "Now I know what that feeling was like. Writing is something I "
+                "look forward to, and I finally understand where it came from."
+            ),
+            "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
+            "visual_direction": "v", "demo_brief": "d",
+            "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
+        }
+        rec = _patch_client(monkeypatch, [_completion(json.dumps(good))])
+        result = _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"}, template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15,
+        ))
+        assert result["hook_line"] == good["hook_line"]
+        assert result["script"] == good["script"]
+        assert len(rec.payloads) == 1
+
+    def test_the_character_limits_are_untouched(self):
+        """Rule one of the brief, pinned as a number rather than a promise.
+
+        The craft rules steer wording; the budgets are what the render enforces,
+        so a change here would change what fits even though nothing else moved.
+        """
+        import ai_service
+        assert ai_service.SPOKEN_CHARS_PER_SECOND == 15
+        assert ai_service.HOOK_CHARS_PER_SECOND == 20
+        assert ai_service.spoken_budget(10) == 150
+        assert ai_service.hook_ceiling(3) == 60
+        assert ai_service.hook_ceiling(5) == 100
+        assert ai_service.HOOK_TARGET_CHARS == 70
+        assert ai_service.SCRIPT_TARGET_CHARS == 150
+
+    def test_naming_the_app_is_reported_not_refused(self):
+        """The founder sees the flag; the plan is not destroyed for it.
+
+        A veto would take a whole plan down the moment an app was named after a
+        common noun ("Journal", "Notes"), and a customer's line that mentions
+        the product is one sentence the founder can rewrite themselves.
+        """
+        import ai_service
+        check = ai_service.check_spoken_story(
+            "Journal every night.", "It helps me name the feeling.", 3, 15,
+            app_name="Journal",
+        )
+        assert check["story"]["names_the_app"] is True
+        clean = ai_service.check_spoken_story(
+            "I could never name what I felt.",
+            "One sentence each night helped me understand the pattern.",
+            3, 15, app_name="Journal",
+        )
+        assert clean["story"]["names_the_app"] is False
+        # And the flag is opt-in: without a name there is nothing to match.
+        assert "names_the_app" not in ai_service.check_spoken_story("Hi.", "There.", 3, 15)
+
+    def test_the_founder_settings_reach_the_prompt(self, monkeypatch):
+        """Rule two: a regeneration drafts for what is already selected.
+
+        The audience and the look were chosen on the project; a regeneration
+        that ignored both answered a different brief than the one selected.
+        """
+        import ai_service
+        captured = {}
+
+        async def capture(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return {
+                "hook_line": "I could never name what I felt.",
+                "script": "One sentence each night helped me understand the pattern.",
+                "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
+                "visual_direction": "v", "demo_brief": "d",
+                "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", capture)
+        _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal", "target_audience": "shift workers",
+                     "tone_voice": "plain and tired"},
+            template={"name": "T", "hook_seconds": 3},
+            angle={"target_audience": "the angle's audience", "user_problem": "p"},
+            duration_seconds=15,
+            audience="nurses on a night shift",
+            visual_direction="A kitchen at 2am, warm lamp light.",
+        ))
+        prompt = captured["prompt"]
+        # The founder's audience beats the angle's.
+        assert "nurses on a night shift" in prompt
+        assert "the angle's audience" not in prompt
+        # The founder's look is one the returned visual_direction must describe.
+        assert "A kitchen at 2am, warm lamp light." in prompt
+        assert "describes it" in prompt
+        # And the profile's own voice reached the prompt.
+        assert "plain and tired" in prompt
+
+    def test_the_project_serializer_carries_the_app_name_for_the_check(self):
+        """The flag is only real if the name actually reaches the check.
+
+        `studio_projects` has no brand_name column, so the serializer takes it
+        from the caller. Without this the flag is silently absent on every
+        response — a test on the pure function alone would not notice.
+        """
+        import server
+        out = server._public_project(
+            {"hook_line": "Journal every night.", "script": "It helps me name the feeling."},
+            brand_name="Journal",
+        )
+        assert out["spoken_check"]["story"]["names_the_app"] is True
+        bare = server._public_project(
+            {"hook_line": "Journal every night.", "script": "It helps me name the feeling."}
+        )
+        assert "names_the_app" not in bare["spoken_check"]["story"]
 
 
 class TestCompleteSentences:

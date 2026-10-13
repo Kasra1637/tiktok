@@ -2197,7 +2197,88 @@ REQUIRED_PLAN_KEYS = {
 PLAN_SECTION_LABELS = ("hook", "middle")
 
 
-def _angle_goal_block(angle: Optional[dict], objective: str) -> str:
+# Phrases that make a spoken line a promotion, a hype reel or an AI draft rather
+# than a person talking. Matched as whole phrases against normalized text, so
+# "I couldn't get started" and "I look forward to writing" never trip them.
+#
+# Deliberately narrow. A check that fires on a genuine customer line is worse
+# than no check: the retry below raises after its third attempt, so a false
+# positive turns a good plan into "could not produce complete spoken
+# sentences" and the founder gets no plan at all. So only phrases that are
+# unarguably promotion, unarguably exaggerated, or unarguably machine-written
+# belong here; judgement calls stay in the prompt's own rules.
+_PROMOTION_MARKERS = (
+    "you won t believe", "you wont believe", "mind blown", "mind blowing",
+    "this changed everything", "changed my life", "life changing",
+    "shocking", "shockingly", "game changer",
+    "no one talks about", "nobody talks about", "little did i know",
+    "guaranteed", "miracle", "cured", "cure for",
+    "download", "install it", "install the app", "sign up", "try it free",
+    "try the app", "get the app", "our app", "our product", "we built",
+    "as the founder", "as the developer", "link in bio", "follow for more",
+    "hit the follow", "smash that", "comment below", "tag a friend",
+)
+_AI_FLUFF_MARKERS = (
+    "in today s fast paced world", "fast paced world", "digital age",
+    "ever evolving", "ever changing", "let s dive in", "lets dive in",
+    "dive into", "diving into", "unlock the power", "unleash the",
+    "supercharge", "to the next level", "imagine a world where",
+    "the best part", "look no further", "here s the thing",
+)
+
+
+def _spoken_marker_hit(text: str, markers: tuple) -> str:
+    """The first phrase from `markers` that appears in `text`, else "".
+
+    Normalized the same way the other spoken checks normalize: lowercased with
+    punctuation gone, so "It's a GAME-CHANGER!" and "game changer" match.
+    """
+    normalized = _normalize_spoken(text)
+    for marker in markers:
+        if marker in normalized:
+            return marker
+    return ""
+
+
+def _spoken_line_rules_block() -> str:
+    """
+    How a real customer talks, for both spoken lines in every prompt.
+
+    The plan and the strategy each already had fragments of this scattered
+    through their own rule lists — customer voice in the plan, a pattern
+    interrupt in the strategy — and neither prompt said the rest. Now one block
+    states the whole craft for both, so the two cannot drift apart and the
+    strategy's own words are held to the plan's rules when it writes without an
+    approved plan to bind to.
+
+    Kept to five lines on purpose: the strategy prompt already carries its own
+    demo/CTA bans and its own one-story rule, so this complements them rather
+    than repeating them, and a strategy prompt over its token ceiling truncates
+    into a 502 the founder cannot fix.
+    """
+    return (
+        "SPOKEN LINE CRAFT (both spoken lines, every draft):\n"
+        "- HOOK: open on a relatable question, a curiosity gap, or a frustration "
+        "this viewer recognises, in first person. Plain power words are fine "
+        "(never, still, every time). No clickbait, hype or exaggeration.\n"
+        "- EXTENSION: the script continues the hook — it answers, finishes or "
+        "develops it. One person, one story, one thought: no new problem, no "
+        "second hook, no hook said again.\n"
+        "- OUTCOMES, NOT FEATURES: say what the speaker noticed, discovered, "
+        "understood or ended up doing. Describe the change in their life, never "
+        "a feature or a screen.\n"
+        "- CONVERSATIONAL: words you would actually say out loud, in short spoken "
+        "sentences. No corporate language, jargon or filler, and none of the "
+        "AI-sounding openers: 'in today's fast-paced world', 'imagine a world "
+        "where', 'the best part?', 'take it to the next level'.\n"
+        "- NO PROMOTION: never name the app, the brand or the founder, never say "
+        "'we' or 'our app', and never ask for anything — no download, install, "
+        "sign-up, follow or 'try it'. A customer telling what happened is the "
+        "whole piece.\n"
+    )
+
+
+def _angle_goal_block(angle: Optional[dict], objective: str, audience: str = "") -> str:
     """
     The audience, problem and goal rule shared by the plan and the strategy.
 
@@ -2205,13 +2286,19 @@ def _angle_goal_block(angle: Optional[dict], objective: str) -> str:
     built from the selected angle (whose problem, for whom) and the selected
     goal (what those words have to do). Both prompts state it as the same hard
     constraint, so neither can drift back to a soft "reconcile" note.
+
+    `audience` is the founder's own words for this render, when they have written
+    them, and they outrank the angle's: the alternative is one prompt naming two
+    different viewers, where the WHO line sends the hook at the angle's audience
+    and the brief sends it at theirs. With no override the angle's audience wins,
+    which is the behaviour the angle's own selection implies.
     """
     a = angle or {}
 
     def _text(key: str) -> str:
         return str(a.get(key) or "").strip()
 
-    audience = _text("target_audience") or "the viewer described in VERIFIED APP FACTS"
+    audience = str(audience or "").strip() or _text("target_audience") or "the viewer described in VERIFIED APP FACTS"
     lines = [
         "ANGLE + GOAL RULE (hard constraints for the hook_line and every spoken line):",
         f"- WHO: say it to this viewer only: {audience}.",
@@ -2241,6 +2328,8 @@ async def generate_creative_plan(
     duration_seconds: int = 20,
     tone: str = "",
     brand_voice: str = "",
+    audience: str = "",
+    visual_direction: str = "",
     profile_feedback: Optional[dict] = None,
     component_feedback: Optional[dict] = None,
 ) -> dict:
@@ -2255,6 +2344,14 @@ async def generate_creative_plan(
     would reach for the app. There is no demonstration beat and no closing beat.
     The demo is recorded by the founder and attached afterwards; the call to
     action is added in their own editor.
+
+    `audience` and `visual_direction` are the founder's own words, already on
+    the project they are regenerating from. A regeneration used to ignore both
+    and could come back with a different audience or a different look than the
+    one they had chosen, which is the plan overwriting a decision rather than
+    drafting the words. Both are passed through: a stated audience beats the
+    angle's, and a stated visual direction is one the returned visual_direction
+    must describe rather than replace.
 
     The prompt directs the model to render the full scene itself — environment,
     setting, props and on-screen context invented concretely from the verified
@@ -2332,7 +2429,14 @@ async def generate_creative_plan(
 
     brief = {
         "objective": objective or "(unstated)",
-        "audience": (angle or {}).get("target_audience") or profile.get("target_audience") or "(unstated)",
+        # The founder's own audience wins: it is the one they typed on the
+        # project, so it is the decision this regeneration is meant to serve.
+        "audience": (
+            (audience or "").strip()
+            or (angle or {}).get("target_audience")
+            or profile.get("target_audience")
+            or "(unstated)"
+        ),
         "content_angle": (angle or {}).get("kind") or "(none)",
         "angle_label": (angle or {}).get("label") or "",
         "angle_user_problem": (angle or {}).get("user_problem") or "",
@@ -2342,6 +2446,10 @@ async def generate_creative_plan(
         "duration_seconds": duration_seconds,
         "tone": tone or "(unstated)",
     }
+    if (visual_direction or "").strip():
+        # Their look, not the model's: the returned visual_direction describes
+        # this instead of inventing a competing one.
+        brief["visual_direction"] = (visual_direction or "").strip()
 
     claims = {
         "approved": _list("claims_approved"),
@@ -2357,7 +2465,10 @@ async def generate_creative_plan(
         )
     feedback_context += _component_feedback_block(component_feedback, "plan")
 
-    angle_goal_block = _angle_goal_block(angle, objective)
+    # The founder's audience, when they wrote one, is the WHO line's audience
+    # too -- not just the brief's. One prompt naming two viewers is a model
+    # free to pick either.
+    angle_goal_block = _angle_goal_block(angle, objective, audience)
     system_message = (
         "You are a short-form video creative director for mobile app promotions. "
         "You write concrete, filmable plans grounded ONLY in verified product facts. "
@@ -2383,6 +2494,7 @@ async def generate_creative_plan(
         "The speaker is a real user, never the app's founder, owner, developer or marketer. Never "
         "imply the speaker built, owns or is promoting the app; no insider or first-person-plural "
         "product voice (we, our app), and no framing in which the speaker is selling it.\n"
+        f"{_spoken_line_rules_block()}\n"
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
         f'  "hook_line": "one complete spoken opening sentence about this viewer problem, at most {hook_budget} characters; a shorter natural sentence is fine",\n'
@@ -2454,6 +2566,10 @@ async def generate_creative_plan(
         "an instruction to the founder about what to record themselves. Keep it to one "
         "sentence, and never write it as dialogue or as something the presenter says.\n"
         "- Fill every content_slot in the template with a concrete value for THIS app.\n"
+        "- If the brief states a visual_direction, that look is the founder's own: "
+        "return a visual_direction that describes it and nothing that contradicts it, and "
+        "keep both spoken lines inside a setting that look fits. Do not replace it with a "
+        "look of your own.\n"
         "- CRITICAL: nothing is composited over the footage and no text appears "
         "on screen at all — no captions, no titles, no labels. Describe the full scene — "
         "environment, setting, props and any on-screen "
@@ -2512,6 +2628,8 @@ async def generate_creative_plan(
             prompt + "\n\nEDITORIAL CORRECTION: Rewrite the complete plan, including BOTH spoken lines "
             "and their timeline. Keep the same viewer problem, verified facts and intended outcome. "
             "Use complete natural customer sentences, not feature labels or fragments. "
+            "Write it the way a real person talks: no promotion, no hype, no AI-sounding "
+            "openers, and never the app's name. "
             "Do not fix grammar merely by adding a period. Never split a sentence between fields. "
             f"hook_line must be at most {hook_budget} characters; script (MIDDLE ONLY) at most "
             f"{middle_budget} characters. A shorter complete thought is fine.\n"
@@ -3075,6 +3193,13 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
     words and obvious cross-field continuations. The prompt's editorial
     self-review handles meaning; these checks prevent our own length fitting
     from manufacturing the reported fragments.
+
+    Two more families are rejected because they are observable rather than
+    matters of taste, and because the prompt's rules state each as an absolute:
+    promotion/marketing wording (a download request, the founder's own voice,
+    the app named) and machine-sounding filler openers. Both are matched as
+    whole phrases on normalized text, so a genuine customer line never trips
+    them — see _PROMOTION_MARKERS for why that constraint is the whole design.
     """
     issues = []
     # Prepositions/pronouns CAN end grammatical English ("look forward to",
@@ -3088,6 +3213,12 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
             continue
         if len(text) > budget:
             issues.append(f"{name} has {len(text)} characters, exceeding {budget}; rewrite the thought")
+        hit = _spoken_marker_hit(text, _PROMOTION_MARKERS)
+        if hit:
+            issues.append(f"{name} reads as promotion or hype, not a customer: '{hit}'")
+        hit = _spoken_marker_hit(text, _AI_FLUFF_MARKERS)
+        if hit:
+            issues.append(f"{name} uses a generic AI-sounding phrase: '{hit}'")
         for sentence in _split_sentences(text):
             plain = sentence.rstrip('\"\u201d\u2019')
             if not plain.endswith((".", "!", "?")):
@@ -3142,7 +3273,7 @@ def _closes_the_problem(text: str) -> bool:
     return any(f" {marker} " in padded for marker in _RESOLUTION_MARKERS)
 
 
-def check_spoken_story(hook_line, script, hook_seconds=3, total_seconds=12) -> dict:
+def check_spoken_story(hook_line, script, hook_seconds=3, total_seconds=12, app_name="") -> dict:
     """
     Both spoken lines measured, and read as ONE story.
 
@@ -3156,6 +3287,13 @@ def check_spoken_story(hook_line, script, hook_seconds=3, total_seconds=12) -> d
     an under-target line is a choice, so the story verdict is reported to the
     founder rather than acted on. Pure, so the Review step and the render path
     measure the same words the same way.
+
+    `app_name` adds the one check that cannot live in the prompt: whether the
+    customer's own line names the product they are talking about, which is
+    promotion however the sentence is worded. Reported, never acted on — a veto
+    would take a whole plan down the moment an app was named after a common
+    noun ("Journal", "Notes"), and the founder can see the flag and fix the
+    line themselves.
     """
     targets = spoken_targets(hook_seconds, total_seconds)
     hook = str(hook_line or "").strip()
@@ -3167,6 +3305,17 @@ def check_spoken_story(hook_line, script, hook_seconds=3, total_seconds=12) -> d
         # hook at its head is the hook being said twice rather than a middle.
         "restates_hook": bool(hook and body) and strip_leading_hook(hook, body) != body,
     }
+    # Only a name long enough to be a real product name, and never the short
+    # generic one that would match ordinary speech.
+    named = str(app_name or "").strip()
+    if len(named) >= 5:
+        needle = _normalize_spoken(named)
+        spoken = f" {_normalize_spoken(hook)} {_normalize_spoken(body)} "
+        story["names_the_app"] = bool(needle) and f" {needle} " in spoken
+        story["generic_phrasing"] = bool(
+            _spoken_marker_hit(hook, _AI_FLUFF_MARKERS)
+            or _spoken_marker_hit(body, _AI_FLUFF_MARKERS)
+        )
     story["coherent"] = bool(
         story["problem_in_hook"] and story["resolution_in_script"] and not story["restates_hook"]
     )
@@ -3749,6 +3898,7 @@ async def generate_video_strategy(
         f"{approved_plan_context}"
         f"{feedback_context}"
         f"{trend_context}\n"
+        f"{_spoken_line_rules_block()}\n"
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
         '  "strategy_summary": "2-3 sentences on the strategy for THIS app and why it fits THIS audience",\n'
