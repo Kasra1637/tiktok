@@ -613,7 +613,7 @@ function GenerationRow({ row, onChanged }) {
       )}
 
       {showVariations && (
-        <div className="mt-4 space-y-4 border-t border-[color:var(--hairline)] pt-4">
+        <div className="space-y-4 border-t border-[color:var(--hairline)] pt-4">
           {children.length > 0 && (
             <div className="space-y-2">
               {children.map((c) => (

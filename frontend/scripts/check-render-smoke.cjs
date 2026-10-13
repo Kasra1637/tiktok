@@ -5125,6 +5125,40 @@ async function runIconChecks() {
       throw new Error(`small h2/h3 section headings:\n        ${small.join("\n        ")}`);
     }
   });
+
+  await check("no block doubles its parent's spacing with mt-*", async () => {
+    // A block that opens with `border-t` gets its gutter from `pt-4` — the
+    // padding below its own rule. An `mt-*` next to that rule is a second gap
+    // on top of whatever the parent already contributes, and because a
+    // `space-y-*` parent reserves its gap by DOM position, the doubling only
+    // shows up when a sibling is closed — the state nobody screenshots.
+    // Generation History's variations block shipped `mt-4 space-y-4 border-t`
+    // inside a `space-y-4` parent: 32px where 16px was designed.
+    //
+    // `mt-*` + `border-t` on one element is the whole signature, which is what
+    // makes this checkable without parsing parents. A bare `mt-2` on a label is
+    // the documented optical case and stays allowed.
+    //
+    // Landing and Legal keep their own systems by decision — marketing scale
+    // and document type respectively — so the sweep skips them.
+    const bad = [];
+    const skip = new Set(["Landing.jsx"]);
+    for (const entry of fs.readdirSync(path.join(SRC, "pages"))) {
+      if (!entry.endsWith(".jsx") || skip.has(entry)) continue;
+      const abs = path.join(SRC, "pages", entry);
+      const src = fs.readFileSync(abs, "utf8");
+      for (const m of src.matchAll(/className="([^"]*\bborder-t\b[^"]*)"/g)) {
+        const cls = m[1];
+        if (!/\bmt-\d/.test(cls)) continue;
+        bad.push(`${path.relative(SRC, abs)}: ${cls.replace(/\s+/g, " ").slice(0, 80)}`);
+      }
+    }
+    if (bad.length) {
+      throw new Error(
+        `border-t blocks spaced with mt-* instead of pt-*:\n        ${bad.join("\n        ")}`
+      );
+    }
+  });
 }
 
 /**

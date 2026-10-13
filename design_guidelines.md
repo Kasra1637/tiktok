@@ -145,10 +145,27 @@ card is `.inset-panel`.
 |---|---|---|---|
 | Page | `PageHeader` | 40px `IconTile size="page"` | page title |
 | Section card | `SectionCard` | 32px `IconTile size="section"` | `h2`, 16px semibold |
-| Group inside a card | `GroupLabel` + hairline divider, never a nested box | 12px, only on collapsible groups or cards with 3+ groups | `.eyebrow` (all caps) |
+| Wizard step | `StepShell` ≡ `SectionCard` | 32px `IconTile size="section"` | `h2`, 16px semibold + muted description |
+| Group inside a card | `GroupLabel` + hairline divider, never a nested box | 16px glyph on the bar, 12px on the card's own `.eyebrow` | `.eyebrow` (all caps) |
 | Aside inside a card | `.inset-panel` (12px radius, 16px gutter) | none | 14px medium, or an `.eyebrow` |
 | Row inside a card | `.row-pad` (16px gutter, 12px block) + hairline | none | 14px medium label |
+| Selectable option row | option bar — 16px icon + uppercase tracked title + chevron, `px-4 py-3`, `space-y-2` between rows | 16px, its own | uppercase, 12px tracked |
 | Field / detail row | label + control | none | 14px medium label |
+
+Two ladders, because two jobs. **Sections are read** — they orient and teach, so
+they take the big 32px tile and a description line. **Option rows are scanned** —
+they offer a choice, so they take the compact 16px bar with the title already
+uppercase and a chevron. The audience angle picker (`CreateVideo`, step 1) is the
+reference for option rows; the 5-phase `StepShell` is the reference for sections.
+Forcing one onto the other either cramps a section or bloats a list.
+
+A group's glyph is not decoration: on the App Profile detail page every
+`ProfileCard` and `SectionGroup` carries one, and `runIconChecks` fails the page
+if any opens text-only (it also pins the page's 10+ cards and exactly 5 groups).
+Bars use `h-4 w-4` (16px); the card's own `.eyebrow` uses `h-3 w-3` (12px).
+Step pills (`text-xs`, `rounded-full`) encode state in the ring and a tick glyph
+— never in position, which is the only thing a reader has while a step is
+unreachable.
 
 Spacing, in these steps and no others:
 
@@ -162,8 +179,13 @@ Spacing, in these steps and no others:
 | 4px | `space-y-1` / `mt-1` | a label to its value; text under a title inside a card |
 
 `mt-*` is for a pair only (a title and the line under it) — never for block
-spacing, which is `space-y-*` on the parent. `mt-0.5` is reserved for optical
-alignment of a small icon beside text. Loading states
+spacing, which is `space-y-*` on the parent. An `mt-*` beside a `space-y-*`
+parent is not redundant, it is **32px where 16px was designed**: `space-y-*`
+keys off DOM position, so it still reserves the gap for a sibling that renders
+nothing (`{cond && ...}`), and the `mt-*` adds a second one. A block that opens
+with `border-t` takes `pt-4` for the gutter below its own rule — never `mt-4`
+to clear the border. `mt-0.5` is reserved for optical alignment of a small icon
+beside text. Loading states
 use `Skeleton` blocks shaped like the content, not a spinner line. App
 switchers use `AppPicker`; generation status uses `StatusBadge`. All caps is
 reserved for `.eyebrow` group labels, never section or page titles.
