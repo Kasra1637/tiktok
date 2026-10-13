@@ -2,9 +2,16 @@
 #
 # Builds the root Dockerfile (frontend CRA build + Python runtime in one image),
 # pushes it to Artifact Registry, then deploys that exact image to the
-# hookforge Cloud Run service. Every push to main therefore ends live: no
-# manual deploy step exists anywhere else, so nothing here may be removed
-# without replacing it.
+# hookforge Cloud Run service.
+#
+# NOTE (2026-10-13): there is currently NO push trigger connected, so pushes
+# do NOT auto-deploy — every deploy to date has been a manual submit, which
+# is why main commits have appeared "not live" whenever no build followed
+# the push. Until a GitHub push trigger (^main$, this file as build config)
+# is connected in the Cloud Build console (needs the GitHub App OAuth flow,
+# not doable headlessly), every main commit must be followed by a manual
+# `gcloud builds submit --config=cloudbuild.yaml` or live users stay on the
+# previous revision.
 #
 # The Clerk publishable key is a BUILD-time input, not a runtime one: CRA inlines
 # process.env.REACT_APP_* into the bundle when it compiles, so the key has to be
