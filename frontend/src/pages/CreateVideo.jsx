@@ -539,7 +539,6 @@ function AngleGoalPicker({
   recommendations,
   outcomes,
   fitReasons,
-  onChooseAngle,
   availableAngles = [],
   onSelectAngle,
   objectiveEvidence = {},
@@ -564,17 +563,6 @@ function AngleGoalPicker({
   if (!angle) {
     return (
       <div className="space-y-2" data-testid="goal-waits-for-angle">
-        <Alert>
-          <Target className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-          <AlertDescription>
-            Choose an audience angle first to see six goals recommended for it.
-            {onChooseAngle && availableAngles.length === 0 && (
-              <Button variant="secondary" size="sm" className="ml-2" onClick={onChooseAngle}>
-                Choose an angle
-              </Button>
-            )}
-          </AlertDescription>
-        </Alert>
         {availableAngles.length > 0 && (
           <div className="space-y-2" role="group" aria-label="Choose an audience angle">
             {availableAngles.map((option) => (
