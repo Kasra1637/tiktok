@@ -55,17 +55,10 @@ export const TOURS = {
           "An audience angle is required — it is the story your strategy and render hang on. Six goal suggestions come with it: tap Shuffle to reorder the same six for free, or Regenerate angles for brand-new material (drafts built on an angle are warned about and reported). Then pick your goal and go.",
       },
       {
-        target: '[data-testid="create-what-you-get"]',
-        title: "Know what this creates",
-        optional: true,
-        body:
-          "One short Hook + Story clip, exactly as long as its template says. Your filmed demo and closing CTA are your footage: separate, and you add them after.",
-      },
-      {
         target: '[data-testid="step-pill-template"]',
         title: "Choose a format and presenter",
         body:
-          "Tailored to your app and goal — every suggestion carries a fit score, its reasons, and its caveats. The top pick starts selected; swap if it isn't you. Add the presenter photo right below: template and photo live on the same step.",
+          "Tailored to your app and goal — every suggestion carries a fit score, its reasons, and its caveats. The template also sets the clip's length, so swapping it changes how long the piece runs. Add the presenter photo right below: template and photo live on the same step.",
       },
       {
         target: '[data-testid="step-pill-review"]',
@@ -77,7 +70,7 @@ export const TOURS = {
         target: '[data-testid="step-pill-hook"]',
         title: "Render Hook + Story",
         body:
-          "The app-specific strategy is built here and shown before you spend anything. Read it, then render the clip from your approved plan and presenter photo. No demo, no CTA, no on-screen text — this is the hook and the story only.",
+          "The app-specific strategy is built here and shown before you spend anything. Read it, then render the clip from your approved plan and presenter photo. One short clip, exactly as long as its template says. No demo, no CTA, no on-screen text — this is the hook and the story only.",
       },
       {
         target: '[data-testid="create-no-autopost-note"]',

@@ -33,7 +33,7 @@ import {
   blockingRequirements,
 } from "../lib/templateRequirements";
 import { sentenceCase } from "../lib/copyCase";
-import { angleSubtitle, angleDetails, formatVerdicts } from "../lib/angleSubtitle";
+import { angleDetails, formatVerdicts } from "../lib/angleSubtitle";
 import {
   readPieceSeconds,
   sectionSplit,
@@ -1604,15 +1604,11 @@ setObjective("");
   // length is what the project will be seeded from, so showing it predicts the
   // same value rather than offering a second one.
   //
-  // The hook is a boundary inside the piece, not a separate clip: it is where
-  // the middle begins, clamped to 2-4s because a hook that needs longer to land
-  // is not a hook. The middle gets whatever is left, which is why the two
-  // numbers below always add up to the piece.
+  // The hook/middle breakdown is not shown here any more. It lived in a "What
+  // you get" card on this step, which was a block of prose between the two
+  // choices the step is actually for; the same numbers are on Review, where the
+  // length is a read-only field, and the picked angle's own panel.
   const pieceSeconds = readPieceSeconds(project, template);
-  const hookBoundary = clampHookSeconds(
-    project?.hook_seconds || template?.hook_seconds || DEFAULT_HOOK_SECONDS
-  );
-  const pieceSplit = sectionSplit(pieceSeconds, hookBoundary);
 
   const editValue = (key, fallback) =>
     edits[key] !== undefined ? edits[key] : project?.[key] ?? fallback;
@@ -1891,8 +1887,8 @@ setObjective("");
                   </Button>
                 </div>
               ) : (
-                /* Selection opens the angle. The list is scanned by subtitle —
-                   the one field that says most about this kind of angle — and
+                /* Selection opens the angle. A closed row is its kind's glyph
+                   and its uppercase title: the list is scanned by name, and
                    the picked row then shows what the strategy is written from:
                    audience, problem, promise, feature, the emotion it aims at,
                    and any claim bounding it. Only the picked row opens, because
@@ -1956,35 +1952,17 @@ setObjective("");
                               className="h-4 w-4 shrink-0 text-muted-foreground"
                             />
                           )}
-                          <span className="min-w-0 flex-1">
-                            {/* Uppercase tracked title in muted: the bar chrome
-                                from the settings accordion. CSS transform only —
-                                the stored label, textContent, and every assertion
-                                on it stay exactly as sentenceCase wrote them. */}
-                            <span className="block text-sm font-semibold uppercase leading-[22px] tracking-[0.08em] text-muted-foreground">
-                              {sentenceCase(a.label)}
-                            </span>
-                            {!picked && angleSubtitle(a) && (
-                              <span className="mt-1 block text-xs leading-[18px] text-muted-foreground">
-                                {angleSubtitle(a)}
-                              </span>
-                            )}
+                          {/* One line per angle: its kind's glyph, then the
+                              uppercase tracked title, and nothing else. The
+                              subtitle, the kind badge and the verdict tally came
+                              off the row — three pieces of meta around a 14px
+                              title made the list something you read rather than
+                              scan. Nothing is lost: the picked row still opens
+                              onto every field the strategy is written from, so
+                              the detail sits one click deeper, not gone. */}
+                          <span className="min-w-0 flex-1 truncate text-sm font-semibold uppercase leading-[22px] tracking-[0.08em] text-muted-foreground">
+                            {sentenceCase(a.label)}
                           </span>
-                          <Badge variant="secondary" className="shrink-0 text-xs">
-                            {humanize(a.kind)}
-                          </Badge>
-                          {/* Founder verdicts for this angle KIND, not a rating.
-                              formatVerdicts returns "" below one verdict, so a
-                              new app's rows look exactly as they always did. */}
-                          {formatVerdicts(a.evidence) && (
-                            <span
-                              data-testid={`angle-evidence-${a.id}`}
-                              title="Founder verdicts on videos built from this kind of angle"
-                              className="shrink-0 text-xs text-muted-foreground"
-                            >
-                              {formatVerdicts(a.evidence)}
-                            </span>
-                          )}
                           {picked && <Check className="h-4 w-4 shrink-0 text-[color:var(--brand-indigo)]" />}
                           <ChevronDown
                             className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
@@ -2016,21 +1994,6 @@ setObjective("");
             </div>
 
             {/* The goal step is intentionally downstream of the angle. */}
-            <div className="inset-panel space-y-2" data-testid="create-what-you-get">
-              <GroupLabel>What you get</GroupLabel>
-              <p className="text-sm">
-                One {pieceSeconds}s Hook + Story clip: a {pieceSplit.hookSeconds}s hook, then a {pieceSplit.middleSeconds}s story.
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {template
-                  ? `Length is set by ${template.name}. Choose a different template to change it.`
-                  : "Choose a template to see the clip length."}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                To complete the promo, record the demo yourself and add it after this clip with your own call to action. Neither is generated in this clip.
-              </p>
-            </div>
-
             <div className="inset-panel">
 <AngleGoalPicker
               angle={angle}

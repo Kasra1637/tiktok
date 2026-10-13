@@ -1,6 +1,6 @@
 /**
- * How an angle reads in the picker: one scannable line closed, its full set of
- * fields open.
+ * How an angle reads in the picker: its kind's glyph and its uppercase title
+ * closed, its full set of fields open.
  *
  * An angle carries several text fields (target_audience, user_problem,
  * hook_promise, app_feature, desired_emotion), and the field that says the
@@ -8,9 +8,14 @@
  * summarized by the feature it shows, a before/after by the promise, a
  * problem/solution by the problem. `angleSubtitle` picks the kind's most
  * relevant field and falls back through the others, so a sparse angle still
- * gets a line and an angle with none of them simply has no subtitle — which is
- * what keeps a list of angles comparable at a glance. `angleDetails` then
- * shows a picked angle's own fields, unsummarized.
+ * gets a line. `angleDetails` shows a picked angle's own fields, unsummarized.
+ *
+ * The collapsed row renders only the glyph and the title: a subtitle line
+ * under a 14px title, with a kind badge and a verdict tally beside it, was
+ * three pieces of meta around the one thing being chosen. `angleSubtitle` is
+ * kept for a surface that wants one line per angle without the picker's box —
+ * nothing in the app calls it today, and `angleDetails` is what serves the
+ * reason for it.
  *
  * `formatVerdicts` is the third job: the verdict tally the server attaches per
  * angle KIND. It is counts, never a rate or a score. One win is one verdict,

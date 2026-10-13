@@ -10,10 +10,14 @@ import { GroupLabel } from "./SectionCard";
  * and a piece of chrome look like is decided here to match that list.
  *
  * Tokens (no one-off pixels), all taken from the Content Angles block:
- * - headings are the shared `GroupLabel` (12/600 uppercase muted `.eyebrow`,
- *   no glyph beside them) and group bars carry the same uppercase tracked
- *   muted title as the angle rows — the two screens are read side by side,
- *   so a heading here looks like a heading there
+ * - headings are the shared `GroupLabel` (12/600 uppercase muted `.eyebrow`)
+ *   and group bars carry the same uppercase tracked muted title as the angle
+ *   rows — the two screens are read side by side, so a heading here looks like
+ *   a heading there
+ * - every heading opens with its own glyph on the left, the way Demo + CTA's
+ *   group headers do: 12px beside a 12px `.eyebrow`, 16px beside a 14px caps
+ *   bar title, matching the angle rows' kind icons. Each icon names a
+ *   different subject, so the page can be skimmed by shape before it is read
  * - field labels are the shared `GroupLabel` (12/600 uppercase muted
  *   `.eyebrow`) — the same label the angle detail panel uses for its own fields
  * - body 14/22, meta 12/18, chips 12/18 at the Badge shape the kind tag uses
@@ -36,7 +40,7 @@ export const profileToneClass = {
   enforced: "border-[color:var(--hairline-strong)] bg-secondary/30",
 };
 
-export function ProfileCard({ eyebrow, eyebrowClassName, tone = "default", testid, className, children }) {
+export function ProfileCard({ eyebrow, eyebrowClassName, icon, tone = "default", testid, className, children }) {
   return (
     <section
       className={cn(
@@ -47,7 +51,7 @@ export function ProfileCard({ eyebrow, eyebrowClassName, tone = "default", testi
       {...(testid ? { "data-testid": testid } : {})}
     >
       {eyebrow && (
-        <GroupLabel as="h3" className={eyebrowClassName}>
+        <GroupLabel as="h3" icon={icon} className={eyebrowClassName}>
           {sentenceCase(eyebrow)}
         </GroupLabel>
       )}
@@ -152,18 +156,18 @@ export function InfoListBlock({ label, items, tone = "default" }) {
  * stay equal.
  *
  * The bar chrome is the Content Angles row's, because this page is read
- * against that list: px-4 py-3, an uppercase tracked muted title with the count
- * summary beneath it in the row's 12/18 meta token, chevron right, indigo
- * hover. Opening reveals the angle panel's content chrome — a hairline under
- * the bar, then px-4 py-3 with 8px between cards. Titles carry no glyph: the
- * angle rows pair theirs with a kind icon, and a second icon here would
- * double every heading on the page.
+ * against that list: px-4 py-3, a 16px glyph, an uppercase tracked muted title
+ * with the count summary beneath it in the row's 12/18 meta token, chevron
+ * right, indigo hover. Opening reveals the angle panel's content chrome — a
+ * hairline under the bar, then px-4 py-3 with 8px between cards. The summary
+ * indents to the title, so the bar reads as one column of text with its glyph
+ * in the margin rather than two left edges.
  *
  * Native button = clickable + keyboard accessible with aria-expanded.
  * Grid-rows animation (200ms) opens without layout jump; the overflow-hidden
  * lives on the animation wrapper, never on a card.
  */
-export function SectionGroup({ id, label, summary, open, onToggle, children }) {
+export function SectionGroup({ id, label, summary, icon: Icon, open, onToggle, children }) {
   const contentId = `profile-group-${id}`;
   return (
     <section
@@ -179,9 +183,14 @@ export function SectionGroup({ id, label, summary, open, onToggle, children }) {
         className="row-pad flex w-full min-w-0 items-center justify-between gap-2 text-left transition duration-150 hover:bg-[color:var(--indigo-6)]"
       >
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold uppercase leading-[22px] tracking-[0.08em] text-muted-foreground">{label}</span>
+          <span className="flex items-center gap-3">
+            {Icon ? (
+              <Icon aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
+            ) : null}
+            <span className="truncate text-sm font-semibold uppercase leading-[22px] tracking-[0.08em] text-muted-foreground">{label}</span>
+          </span>
           {summary ? (
-            <span className="mt-1 block truncate text-xs leading-[18px] text-muted-foreground">
+            <span className="mt-1 block truncate pl-7 text-xs leading-[18px] text-muted-foreground">
               {summary}
             </span>
           ) : null}

@@ -39,6 +39,7 @@ const { JSDOM } = require("jsdom");
 
 const SRC = path.resolve(__dirname, "..", "src");
 
+
 /**
  * Find JSX text nodes that contain comment syntax, across every source file.
  *
@@ -901,8 +902,6 @@ const STEP_LABELS = [
   "Hook + Story",
 ];
 
-// The one length every step must be able to state without a control anywhere.
-const PIECE_SECONDS = String(TEMPLATE.default_duration);
 
 const stepSource = fs.readFileSync(path.join(SRC, "pages", "CreateVideo.jsx"), "utf8");
 
@@ -2951,49 +2950,61 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // says has to be the template's, because that is what the project is seeded
   // from â€” a number that disagreed with the template would be a second, hidden
   // length.
-  await check("the Audience step states the template's length, read-only", async (ctx) => {
-    global.__SMOKE_PARAMS = "";
+  // The statement moved rather than went. The Audience step used to carry an
+  // uneditable "What you get" card repeating the piece length and the demo/close
+  // caveat, which was a block of prose between that step's two real choices.
+  // Review is where the length is read now — beside the shot timeline written to
+  // it — and the studio's own footer note carries the demo/close caveat at every
+  // step. So this asserts each property on the surface that kept it, plus the
+  // Audience step not growing a second copy of the length back.
+  await check("the Review step states the piece's length, read-only", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await mount(CreateVideo, {})(ctx);
+      await openStep(ctx, "Review");
+      const text = ctx.text();
+      if (!text.includes("Length of the generated piece")) {
+        throw new Error(
+          `the Review step does not state the piece length; it rendered: ${JSON.stringify(
+            text.slice(0, 400)
+          )}`
+        );
+      }
+      // The number it states is the draft's own: the length its beat timeline
+      // was written to and the length the render is asked for. A number that
+      // disagreed with the draft would be a second, hidden length.
+      if (!text.includes(`${PROJECT_WITH_STRATEGY.duration_seconds} seconds`)) {
+        const at = text.indexOf("Length of the generated piece");
+        throw new Error(
+          `the Review step does not name the draft's own length ` +
+            `(${PROJECT_WITH_STRATEGY.duration_seconds}s); it rendered: ` +
+            JSON.stringify(text.slice(at, at + 120))
+        );
+      }
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+
+    // The template fallback for a draft that declares no length of its own is
+    // asserted directly against readPieceSeconds in check-frontend-logic.cjs.
     await mount(CreateVideo, {})(ctx);
-    const pill = stepPill(ctx, "Audience & goal");
-    await act(async () => {
-      pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-    });
-    await act(async () => {});
-    const text = ctx.text();
-    if (!text.includes(`One ${PIECE_SECONDS}s Hook + Story clip`)) {
-      throw new Error(
-        `the Audience step does not state the piece length; it rendered: ${JSON.stringify(
-          text.slice(0, 400)
-        )}`
-      );
-    }
-    // The two sections, with the remainder spelled out. A hook boundary that did
-    // not add up to the piece would be a plan that does not add up either.
-    if (!new RegExp(`a 3s hook,\\s*then a 12s story`).test(text)) {
-      throw new Error("the Audience step does not split the piece into its two sections");
-    }
-    // The empty state has no selected template, so its copy explains how the
-    // user will learn the length rather than naming a particular template.
-    const audience = ctx.container.querySelector('[data-testid="audience-goal-step"]');
-    if (!audience?.textContent.includes("Choose a template to see the clip length")) {
-      throw new Error("the Audience step does not explain that template choice sets the clip length");
+    await openStep(ctx, "Audience & goal");
+    if (ctx.container.querySelector('[data-testid="create-what-you-get"]')) {
+      throw new Error("the Audience step's length card is back, stating the length a second time");
     }
   });
 
-  await check("the Audience step says the demo and the close are the founder's own", async (ctx) => {
+  await check("the studio says the demo and the close are the founder's own", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await mount(CreateVideo, {})(ctx);
-    const pill = stepPill(ctx, "Audience & goal");
-    await act(async () => {
-      pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-    });
-    await act(async () => {});
-    const text = ctx.text();
-    if (!text.includes("record the demo yourself")) {
-      throw new Error("the Audience step does not tell the founder the demo is theirs to record");
+    const note = ctx.container.querySelector('[data-testid="create-no-autopost-note"]');
+    if (!note) throw new Error("the studio no longer carries its no-autopost note");
+    const text = note.textContent;
+    if (!text.includes("Record and assemble your product demo and closing CTA separately")) {
+      throw new Error("the studio does not tell the founder the demo and the close are theirs to record");
     }
-    if (!text.includes("your own call to action")) {
-      throw new Error("the Audience step does not tell the founder the close is theirs to add");
+    if (!text.includes("Nothing is published for you")) {
+      throw new Error("the studio does not tell the founder publishing is their own move");
     }
   });
 
@@ -3568,9 +3579,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       if (step.querySelector('[data-testid^="angle-details-"]')) {
         throw new Error("an angle shows its fields before it is picked");
       }
-      // Closed rows keep the subtitle, so the list can still be compared.
-      if (!step.textContent.includes("Plans get made after the day is over")) {
-        throw new Error("the closed angle row lost its one-line summary");
+      // A closed row is its title only. The subtitle came off the bar, so the
+      // field that used to summarize it must not be on screen before the pick
+      // — the open panel is what shows it now.
+      if (step.textContent.includes("Plans get made after the day is over")) {
+        throw new Error("a closed angle row still prints its subtitle");
       }
 
       await clickEl(ctx, step.querySelector('[data-testid="angle-option-a3"]'), "no angle row to pick");
@@ -3608,29 +3621,55 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
-  // Founder verdicts reach the picker as counts, never as a rating. The tally
-  // is keyed by angle KIND (verdicts attribute through the fixed vocabulary),
-  // and an angle with no verdicts shows no chip at all — a new app's rows
-  // look exactly as they always did.
-  await check("angle rows show founder verdict counts, and stay silent without evidence", async (ctx) => {
+  // A row is its kind's glyph and its uppercase title, and nothing else. The
+  // subtitle, the kind badge and the founder verdict tally all came off the
+  // bar: three pieces of meta around a 14px title made a list you scan into a
+  // paragraph you read, and the picked row still opens onto every field. Pinned
+  // on the rendered row, so any of the three drifting back is caught here.
+  await check("angle rows show only their kind icon and caps title", async (ctx) => {
     const PROVEN = { ...ANGLE, id: "a9", label: "Proven opener", evidence: { wins: 3, flops: 1 } };
-    const FRESH = { ...ANGLE, id: "a10", label: "Fresh opener" };
-    await withApi({ getContentAngles: async () => ({ angles: [PROVEN, FRESH] }) }, async () => {
+    // Every row, not the first: the rule is the list's, and a row that kept
+    // its old chrome would be the one a single-row fixture never looked at.
+    const ROWS = [
+      ["a9", "Proven opener", ["Nothing gets finished", "wins", "flop"]],
+      ["a2", "One-tap timer", ["Starting takes too many steps", "Feature demonstration"]],
+    ];
+    await withApi({ getContentAngles: async () => ({ angles: [PROVEN, ANGLE_B] }) }, async () => {
       global.__SMOKE_PARAMS = "";
       try {
         await mount(CreateVideo, {})(ctx);
         await openStep(ctx, "Audience & goal");
         const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
-        const chip = step.querySelector('[data-testid="angle-evidence-a9"]');
-        if (!chip) throw new Error("the angle with verdicts shows no evidence chip");
-        if (!chip.textContent.includes("3 wins") || !chip.textContent.includes("1 flop")) {
-          throw new Error(`the chip does not read as counts: ${chip.textContent}`);
+        const rendered = [...step.querySelectorAll('[data-testid^="angle-option-"]')];
+        if (rendered.length !== ROWS.length) {
+          throw new Error(`expected ${ROWS.length} angle rows, saw ${rendered.length}`);
         }
-        if (chip.textContent.includes("%")) {
-          throw new Error("the chip presents a rate instead of counts");
-        }
-        if (step.querySelector('[data-testid="angle-evidence-a10"]')) {
-          throw new Error("an angle with no verdicts shows an evidence chip");
+        for (const [id, label, extras] of ROWS) {
+          const row = step.querySelector(`[data-testid="angle-option-${id}"]`);
+          if (!row) throw new Error(`no row for angle ${id}`);
+          const spans = [...row.querySelectorAll("span")];
+          if (spans.length !== 1) {
+            throw new Error(`angle ${id} renders ${spans.length} text spans, expected its title alone`);
+          }
+          const title = spans[0];
+          if (!/uppercase/.test(title.className) || !/tracking-/.test(title.className)) {
+            throw new Error(`angle ${id}'s title is off the uppercase tracked token: ${title.className}`);
+          }
+          if (title.textContent.trim() !== label) {
+            throw new Error(`angle ${id} shows more than its label: ${JSON.stringify(title.textContent)}`);
+          }
+          const text = row.textContent;
+          for (const extra of extras) {
+            if (text.includes(extra)) {
+              throw new Error(`angle ${id} still shows ${JSON.stringify(extra)}: ${text}`);
+            }
+          }
+          if (row.querySelector('[data-testid^="angle-evidence-"]')) {
+            throw new Error(`the verdict chip came back onto angle ${id}`);
+          }
+          if (!row.querySelector('[data-testid^="angle-kind-icon-"]')) {
+            throw new Error(`angle ${id} lost its kind icon`);
+          }
         }
       } finally {
         global.__SMOKE_PARAMS = "";
@@ -3860,7 +3899,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // Regenerate angles replaces the list with six fresh serialized rows and
   // keeps the goal step populated: the old pick's id is gone, so the wizard
   // parks on the strongest new angle instead of collapsing to the wait
-  // state, and verdict chips ride along on the fresh rows.
+  // state, and every fresh row still opens with its kind's glyph.
   await check("regenerate angles shows six fresh options and keeps goals", async (ctx) => {
     const FRESH = [0, 1, 2, 3, 4, 5].map((i) => ({
       id: `n${i}`,
@@ -3896,8 +3935,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           }
           const goals = [...ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]')];
           if (goals.length !== 6) throw new Error(`expected six goal cards after regen, saw ${goals.length}`);
-          const chips = [...ctx.container.querySelectorAll('[data-testid^="angle-evidence-"]')];
-          if (chips.length === 0) throw new Error("fresh rows carry no verdict chips");
+          const glyphs = [...ctx.container.querySelectorAll('[data-testid^="angle-kind-icon-"]')];
+          if (glyphs.length !== 6) {
+            throw new Error(`the six fresh rows lost their kind icons: saw ${glyphs.length}`);
+          }
         } finally {
           global.__SMOKE_PARAMS = "";
         }
@@ -4933,24 +4974,31 @@ async function runIconChecks() {
     }
   });
 
-  await check("content cards and group bars wear no heading glyph", async () => {
-    // Profile Detail was restyled onto the Content Angles tokens, and the
-    // angle rows carry no glyph beside a heading — not even the brand-indigo
-    // one every profile card and group bar used to open with. (AlertTriangle
-    // was always the worst case of the old pattern: the glyph every
-    // destructive Alert wears, on a research card.) A card that still passes
-    // `icon=` is off the unified design, so the prop itself is what fails.
+  await check("every profile card and group bar opens with its own icon", async () => {
+    // Profile Detail headings are read the way Demo + CTA's panel headers are:
+    // an uppercase title with a glyph on its left. The page has exactly five
+    // groups, each one's icon names a different subject, and a heading left
+    // bare is the row that breaks the skim.
+    //
+    // Source-level on purpose: which glyph belongs to which section is a
+    // judgement call, but *that* every heading carries one is the invariant.
     const abs = path.join(SRC, "pages", "AppProfileDetail.jsx");
     const src = fs.readFileSync(abs, "utf8");
-    const bad = [
-      ...src.matchAll(/<ProfileCard[^>]*icon=\{(\w+)\}/g),
-      ...src.matchAll(/<SectionGroup[^>]*icon=\{(\w+)\}/g),
-    ].map((m) => m[1]);
-    if (bad.length) {
-      throw new Error(
-        `ProfileCard/SectionGroup still carry heading glyphs: ${bad.join(", ")}. ` +
-          "The unified design is sentence-case headings with no icon."
-      );
+    const bare = [];
+    const seen = [];
+    for (const m of src.matchAll(/<(ProfileCard|SectionGroup)\b[^>]*>/g)) {
+      seen.push(m[1]);
+      if (!/icon=\{/.test(m[0])) bare.push(m[0].replace(/\s+/g, " ").slice(0, 70));
+    }
+    if (bare.length) {
+      throw new Error(`profile headings without an icon:\n        ${bare.join("\n        ")}`);
+    }
+    const groups = seen.filter((name) => name === "SectionGroup").length;
+    if (groups !== 5) {
+      throw new Error(`expected the page's five section groups, saw ${groups}`);
+    }
+    if (seen.filter((name) => name === "ProfileCard").length < 10) {
+      throw new Error("too few profile cards to be the whole page");
     }
   });
 
@@ -5251,9 +5299,10 @@ async function runDeleteDialogChecks() {
   });
 
   // The restyle onto the Content Angles tokens, pinned on the rendered
-  // output rather than the source: 14/500 sentence-case headings with no
-  // uppercase and no glyph, chips at the 12px Badge shape, and the angle
-  // panel's hairline content chrome under an open group bar.
+  // output rather than the source: uppercase tracked headings that open with
+  // their own glyph on the left (16px on a bar, 12px on a card eyebrow),
+  // chips at the 12px Badge shape, and the angle panel's hairline content
+  // chrome under an open group bar.
   await check("Profile Detail headings use the Content Angles tokens", async (ctx) => {
     const RICH = {
       ...PROFILE,
@@ -5270,18 +5319,27 @@ async function runDeleteDialogChecks() {
         const group = ctx.container.querySelector('[data-testid="group-essentials"]');
         if (!group) throw new Error("the essentials group did not render");
         const bar = group.querySelector("button");
-        const barTitle = bar && bar.querySelector("span span");
-        if (!barTitle) throw new Error("the group bar has no title span");
-        if (!/uppercase/.test(barTitle.className) || !/tracking-/.test(barTitle.className)) {
+        const barTitle = [...bar.querySelectorAll("span")].find((s) => /uppercase/.test(s.className || ""));
+        if (!barTitle) throw new Error("the group bar has no uppercase title span");
+        if (!/tracking-/.test(barTitle.className)) {
           throw new Error(`the group bar title is off the uppercase tracked token: ${barTitle.className}`);
         }
-        if (barTitle.querySelector("svg")) {
-          throw new Error("the group bar title still carries a glyph");
+        const barIcon = barTitle.previousElementSibling;
+        if (!barIcon || barIcon.tagName !== "svg") {
+          throw new Error("the group bar does not open with its section icon");
+        }
+        if (!/\bh-4\b/.test(barIcon.getAttribute("class") || "")) {
+          throw new Error(`the group bar icon is off the 16px token: ${barIcon.getAttribute("class")}`);
         }
         const cardTitle = group.querySelector('[data-testid="profile-facts"] h3');
         if (!cardTitle) throw new Error("the product-facts card has no heading");
         if (!/\beyebrow\b/.test(cardTitle.className)) {
           throw new Error(`the card heading is not the shared GroupLabel: ${cardTitle.className}`);
+        }
+        const cardIcon = cardTitle.querySelector("svg");
+        if (!cardIcon) throw new Error("the product-facts card heading carries no icon");
+        if (!/\bh-3\b/.test(cardIcon.getAttribute("class") || "")) {
+          throw new Error(`the card heading icon is off the 12px token: ${cardIcon.getAttribute("class")}`);
         }
         const chip = group.querySelector("li");
         if (!chip) throw new Error("the core-features chips did not render");
