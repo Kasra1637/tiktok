@@ -2434,6 +2434,11 @@ async def generate_creative_plan(
         "their own words, and the script resolves that same problem — same subject, same viewer, "
         "the second line answering the first. Never restate the hook in the script, never open a "
         "second problem, and never leave the hook's problem unanswered.\n"
+        "- COMPLETE SENTENCES: every spoken line is complete grammatical sentences, each ending "
+        "in . ! or ?. The hook_line must stand alone as one complete sentence — never end it on a "
+        "conjunction, preposition or article (no trailing 'because', 'like', 'and' or 'the'), and "
+        "never trail it into the script. The script's sentences are complete too: no fragments, "
+        "and no semicolon joining a statement to a command.\n"
         "- NEVER write a product demonstration into either beat. Do not film the app in use, "
         "do not show a screen, and do not narrate what the app does while something unrelated "
         "happens on camera. Showing the working product is the founder's recording, attached "
@@ -2479,8 +2484,11 @@ async def generate_creative_plan(
         logger.error("Creative plan missing fields %s.", sorted(missing))
         raise RuntimeError(f"Creative plan missing required fields: {missing}")
 
-    result["hook_line"] = (result.get("hook_line") or "").strip()[:200]
-    result["script"] = (result.get("script") or "").strip()[:6000]
+    # Sentence-aware caps, not hard slices: a [:200] cut lands mid-word and a
+    # [:6000] cut mid-sentence, and Review shows exactly what is stored here.
+    # _trim_hook_line also restores the terminator a word-boundary cut drops.
+    result["hook_line"], _ = _trim_hook_line((result.get("hook_line") or "").strip(), 200)
+    result["script"] = trim_to_sentence((result.get("script") or "").strip(), 6000)[0]
     # An over-length answer is rewritten to fit before it is stored, so an
     # oversized script cannot reach the video model and be refused there. That
     # rewrite is NOT done here: it is `partition_spoken_words`, applied by the
@@ -2737,6 +2745,12 @@ def normalize_strategy(raw: dict) -> dict:
 
     # An old strategy may still carry a contract; it is dropped rather than
     # trusted, because a seam contract describes a chain that no longer exists.
+    # The hook line is spoken, so its cap snaps to a sentence like the plan's.
+    # It must trim the RAW line: _clean_strategy_text above already hard-sliced
+    # it to 200 characters, and snapping the slice would keep a mid-word cut.
+    result["hook_line"], _ = _trim_hook_line(
+        str((raw or {}).get("hook_line") or "").strip(),
+        _STRATEGY_TEXT_LIMITS["hook_line"])
     result["segments"] = _normalize_sections(raw.get("segments"))
     return result
 

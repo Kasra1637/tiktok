@@ -1116,3 +1116,71 @@ class TestPlanIsForcedToTwoSections:
 
 def _run(coro):
     return asyncio.run(coro)
+
+
+class TestCompleteSentences:
+    """
+    Production failure, 2026-10-13: a stored plan reached Review with hook_line
+    "End-of-day thoughts go uncaptured because typing feels like." and its
+    script opening "a chore—..." — a fragment that satisfied the word-count
+    floor ("never a short fragment") while ending on a preposition. The prompt
+    never required complete sentences, and the 200/6000-character clamps were
+    hard slices that could cut mid-word. The prompt now demands sentences and
+    both clamps snap to one.
+    """
+
+    def _generate(self, monkeypatch, hook, script):
+        import ai_service
+        captured = {}
+        plan = {
+            "hook_line": hook, "script": script,
+            "beat_timeline": [
+                {"start": 0, "end": 3, "label": "hook", "text": "t"},
+                {"start": 3, "end": 20, "label": "middle", "text": "t"},
+            ],
+            "visual_direction": "v", "demo_brief": "d",
+            "voice_direction": "vd", "sound_direction": "sd",
+            "claims_used": [],
+        }
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return dict(plan)
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        out = _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "B"}, template={"name": "T"}))
+        return out, captured["prompt"]
+
+    def test_the_prompt_demands_complete_sentences(self, monkeypatch):
+        _, prompt = self._generate(monkeypatch, "A full hook line here.", "A full script here.")
+        assert "COMPLETE SENTENCES" in prompt
+        assert "conjunction, preposition or article" in prompt
+        assert "no semicolon joining a statement to a command" in prompt
+
+    def test_an_overlong_hook_is_cut_at_a_sentence_not_mid_word(self, monkeypatch):
+        hook = "First complete opener here. " + "filler words " * 60
+        out, _ = self._generate(monkeypatch, hook, "A full script here.")
+        assert out["hook_line"] == "First complete opener here."
+        assert len(out["hook_line"]) <= 200
+
+    def test_a_hook_without_any_terminator_falls_back_to_a_word(self, monkeypatch):
+        hook = ("word " * 60).strip()
+        out, _ = self._generate(monkeypatch, hook, "A full script here.")
+        assert len(out["hook_line"]) <= 200
+        assert out["hook_line"].endswith("word")
+        assert " " not in out["hook_line"][-1:]
+
+    def test_an_overlong_script_is_cut_at_a_sentence(self, monkeypatch):
+        script = "Opening sentence here. " + "filler words " * 900
+        assert len(script) > 6000
+        out, _ = self._generate(monkeypatch, "A full hook line here.", script)
+        assert len(out["script"]) <= 6000
+        assert out["script"][-1] in ".!?"
+
+    def test_a_strategy_hook_snaps_to_a_sentence(self):
+        import ai_service
+        hook = "First complete opener here. " + "filler words " * 60
+        out = ai_service.normalize_strategy({"hook_line": hook})
+        assert out["hook_line"] == "First complete opener here."
+        assert len(out["hook_line"]) <= 200
