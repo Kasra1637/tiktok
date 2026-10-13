@@ -26,6 +26,29 @@
  */
 import { sentenceCaseTrimmed } from "./copyCase";
 
+/**
+ * Drop one trailing full stop from generated angle copy.
+ *
+ * The model writes sentences, so angle fields arrive ending with "." — but
+ * the picker renders them as standalone lines, where a terminal period reads
+ * as clutter rather than grammar. Fixed here at render time, the same last
+ * mile as sentenceCase: every stored row is fixed with no migration.
+ *
+ * Only a single full stop goes, and only when it is really terminal
+ * punctuation: an ellipsis ("..") is emphasis, not grammar, and a tail like
+ * "e.g." or "U.S." is an abbreviation whose dot is part of the word.
+ */
+const ABBREV_TAIL = /\b[a-z](?:\.[a-z])+\.?$/i;
+
+export function stripTrailingPeriod(value) {
+  const text = String(value || "");
+  if (!/\.\s*$/.test(text)) return text;
+  const trimmed = text.trimEnd();
+  if (/\.\.$/.test(trimmed)) return text;
+  if (ABBREV_TAIL.test(trimmed)) return text;
+  return trimmed.slice(0, -1);
+}
+
 const PREFERRED_FIELD = {
   problem_solution: "user_problem",
   before_after: "hook_promise",
@@ -60,7 +83,7 @@ export function angleSubtitle(angle) {
   const order = preferred ? [preferred, ...FALLBACK_FIELDS] : FALLBACK_FIELDS;
   for (const field of order) {
     const value = String(angle[field] || "").trim();
-    if (value) return sentenceCaseTrimmed(value);
+    if (value) return stripTrailingPeriod(sentenceCaseTrimmed(value));
   }
   return "";
 }
@@ -83,11 +106,11 @@ export function angleDetails(angle) {
   if (!angle) return [];
   const rows = [];
   for (const [label, field] of DETAIL_FIELDS) {
-    const value = sentenceCaseTrimmed(String(angle[field] || ""));
+    const value = stripTrailingPeriod(sentenceCaseTrimmed(String(angle[field] || "")));
     if (value) rows.push({ label, value });
   }
   const claims = (Array.isArray(angle.claims_to_respect) ? angle.claims_to_respect : [])
-    .map((claim) => sentenceCaseTrimmed(String(claim || "")))
+    .map((claim) => stripTrailingPeriod(sentenceCaseTrimmed(String(claim || ""))))
     .filter(Boolean);
   if (claims.length) rows.push({ label: "Bounded by", value: claims.join("; ") });
   return rows;

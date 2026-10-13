@@ -3058,6 +3058,33 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
+  // The server generates the six on approval, so without a gate the founder
+  // lands on a finished list they never asked for. First view per app shows
+  // one CTA; the click reveals the list. A fresh profile id keeps this free
+  // of whatever other checks persisted, so the gate is asserted, not the
+  // order they ran in.
+  await check("pre-generated angles wait behind one reveal click", async (ctx) => {
+    const FRESH = { ...PROFILE, id: "b9", brand_name: "Freshly" };
+    await withApi({
+      getAppProfiles: async () => ({ profiles: [FRESH] }),
+      getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B] }),
+    }, async () => {
+      global.__SMOKE_PARAMS = "";
+      await mount(CreateVideo, {})(ctx);
+      await openStep(ctx, "Audience & goal");
+      const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
+      if (step.querySelector('[data-testid^="angle-option-"]')) {
+        throw new Error("the pre-generated six show before the founder clicks anything");
+      }
+      const reveal = step.querySelector('[data-testid="reveal-angles-button"]');
+      if (!reveal) throw new Error("first view offers no reveal CTA for the six");
+      await clickEl(ctx, reveal);
+      if (!step.querySelector('[data-testid="angle-option-a1"]')) {
+        throw new Error("the reveal click did not show the six angles");
+      }
+    });
+  });
+
   await check("a failed angle generation is named and stays retryable", async (ctx) => {
     await withApi({
       getContentAngles: async () => ({ angles: [] }),
@@ -3754,6 +3781,36 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       const got = formatVerdicts(input);
       if (got !== want) {
         throw new Error(`formatVerdicts(${JSON.stringify(input)}) is ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);
+      }
+    }
+  });
+
+  // Generated angle copy arrives as sentences (trailing full stop included)
+  // but renders as standalone lines, where the period is clutter. Stripped at
+  // render, with an ellipsis and an abbreviation tail left alone.
+  await check("angle copy carries no trailing period", async () => {
+    const { angleSubtitle, angleDetails, stripTrailingPeriod } = load("lib/angleSubtitle.js");
+    const cases = [
+      ["Nothing gets finished.", "Nothing gets finished"],
+      ["No dot here", "No dot here"],
+      ["Wait...", "Wait..."],
+      ["Such as e.g.", "Such as e.g."],
+      ["", ""],
+    ];
+    for (const [input, want] of cases) {
+      const got = stripTrailingPeriod(input);
+      if (got !== want) {
+        throw new Error(`stripTrailingPeriod(${JSON.stringify(input)}) is ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);
+      }
+    }
+    const sub = angleSubtitle({ kind: "problem_solution", user_problem: "Nothing gets finished." });
+    if (sub !== "Nothing gets finished") {
+      throw new Error(`angle subtitle kept its period: ${JSON.stringify(sub)}`);
+    }
+    const rows = angleDetails({ target_audience: "busy professionals.", user_problem: "Nothing gets finished." });
+    for (const row of rows) {
+      if (/\.$/.test(row.value)) {
+        throw new Error(`angle detail kept its period: ${JSON.stringify(row)}`);
       }
     }
   });
@@ -6992,6 +7049,10 @@ async function openStep(ctx, label) {
  */
 async function openTemplateStep(ctx) {
   await openStep(ctx, "Audience & goal");
+  // The pre-generated six wait behind one click: reveal them the way a
+  // founder does before picking.
+  const reveal = ctx.container.querySelector('[data-testid="reveal-angles-button"]');
+  if (reveal) await clickEl(ctx, reveal);
   const angleButton = [...ctx.container.querySelectorAll('[data-testid="audience-goal-step"] button')]
     .find((button) => button.textContent.includes(ANGLE.label));
   if (!angleButton) throw new Error("the audience step has no selectable audience angle");
