@@ -1480,6 +1480,41 @@ class TestRegenerateContentAngles:
         # Second regen: the new generated angles have no projects on them.
         assert out2["projects_affected"] == 0
 
+    def test_regenerate_response_matches_list_shape(self, api, monkeypatch):
+        """The wizard adopts the regen response into the same state the list
+        feeds: serialized rows (goal suggestions, evidence, origin) plus the
+        objective map. The old raw model echo dropped all three until the
+        next reload, so verdict chips vanished and goals fell back to the
+        static order right after regenerating."""
+        profile = _make_profile(api, ANON, name="Regen Shape")
+        _run(api.approve_app_profile(profile_id=profile["id"], payload={}, user_id=ANON))
+        _canned_log(api, monkeypatch, CANNED_ANGLES)
+        out = _run(api.regenerate_content_angles(profile_id=profile["id"], user_id=ANON))
+        assert out["manual_kept"] == 0
+        assert out["objective_evidence"] == {}
+        assert len(out["angles"]) == len(CANNED_ANGLES)
+        row = out["angles"][0]
+        assert row["origin"] == "generated"
+        assert row["goal_variant"] == 0
+        assert row["evidence"] == {"wins": 0, "flops": 0}
+        assert len(row["goal_suggestions"]) == 6
+        listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
+        assert listed["angles"] == out["angles"]
+
+    def test_generate_response_matches_list_shape(self, api, monkeypatch):
+        """Same serialized-shape guarantee for the bare generate endpoint,
+        which the wizard's empty-state button adopts the same way."""
+        profile = _make_profile(api, ANON, name="Generate Shape")
+        _run(api.approve_app_profile(profile_id=profile["id"], payload={}, user_id=ANON))
+        _canned_log(api, monkeypatch, CANNED_ANGLES)
+        out = _run(api.generate_profile_content_angles(profile_id=profile["id"], user_id=ANON))
+        assert "objective_evidence" in out
+        row = out["angles"][0]
+        assert row["origin"] == "generated"
+        assert len(row["goal_suggestions"]) == 6
+        listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
+        assert listed["angles"] == out["angles"]
+
 
 class TestGoalSuggestionsCycle:
     """The Shuffle button: same six goals, deterministic next order, no model
@@ -1510,9 +1545,19 @@ class TestGoalSuggestionsCycle:
             row = next(a for a in listed["angles"] if a["id"] == angle["id"])
             assert row["goal_suggestions"] == list(out["suggestions"])
             assert row["goal_variant"] == out["goal_variant"]
-        # The cycle repeats: picks 5 and 6 repeat picks 1 and 2.
-        assert seen[4] == seen[0]
-        assert seen[5] == seen[1]
+        # The cycle repeats every three shuffles and never revisits the
+        # curated order: picks 4, 5, 6 repeat picks 1, 2, 3.
+        assert seen[3] == seen[0]
+        assert seen[4] == seen[1]
+        assert seen[5] == seen[2]
+        # Every press shows an order different from the one on screen (the
+        # founder-visible requirement): consecutive picks always differ, and
+        # no shuffled pick equals the curated starting order.
+        for i in range(5):
+            assert seen[i] != seen[i + 1]
+        for s in seen:
+            assert list(s) != list(static)
+            assert len(s) == 6
 
     def test_shuffle_starts_from_variant_one_not_zero(self, api):
         """Shuffle means shuffle: the first press leaves the curated order,

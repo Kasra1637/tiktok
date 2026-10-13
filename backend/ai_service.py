@@ -1791,7 +1791,7 @@ def _normalize_outcome_statements(result: dict) -> None:
     result["outcome_statements"] = kept
 
 
-async def generate_content_angles(profile: dict, max_angles: int = 8,
+async def generate_content_angles(profile: dict, max_angles: int = 6,
                                   angle_feedback: Optional[dict] = None) -> list:
     """
     Generate content angles for an approved App Profile.
@@ -1863,7 +1863,7 @@ async def generate_content_angles(profile: dict, max_angles: int = 8,
     prompt = (
         f"VERIFIED APP PROFILE:\n{json.dumps(context, indent=2)}\n\n"
         f"Choose from these angle kinds: {kinds}\n\n"
-        f"Propose up to {max_angles} DISTINCT content angles, ordered strongest first. "
+        f"Propose exactly {max_angles} DISTINCT content angles, ordered strongest first. "
         "Return ONLY a JSON array where each element is:\n"
         "{\n"
         '  "kind": "one of the kinds listed above",\n'
@@ -1881,8 +1881,8 @@ async def generate_content_angles(profile: dict, max_angles: int = 8,
         "If an angle would require a "
         "claim from claims_needing_review, list that claim in claims_to_respect. Never "
         "promise guaranteed outcomes, invent testimonials or reviews, state any price or "
-        "trial term, or imply a feature the profile does not list. Vary the "
-        "kinds — do not return eight variations of the same angle. Return ONLY valid JSON."
+         "trial term, or imply a feature the profile does not list. Vary the "
+         "kinds — do not return six variations of the same angle. Return ONLY valid JSON."
     )
 
     # Goal thumbs, when any exist. Counts and fixed kind/objective names

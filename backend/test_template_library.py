@@ -249,6 +249,42 @@ class TestVocabularies:
         assert tl.normalize_angle_kind("") == "problem_solution"
 
 
+class TestGoalSuggestionVariants:
+    """The Shuffle button's contract, without a database: every angle kind
+    offers exactly six suggestions, and variants 1..3 are three distinct
+    non-starting orders, so every press shows a fresh list."""
+
+    def test_every_kind_recommends_exactly_six_goals(self):
+        assert len(tl.ANGLE_GOAL_RECOMMENDATIONS) == 12
+        for kind, goals in tl.ANGLE_GOAL_RECOMMENDATIONS.items():
+            assert len(goals) == 6, f"{kind}: {goals!r}"
+            assert len(set(goals)) == 6, f"{kind} repeats a goal: {goals!r}"
+
+    def test_shuffled_variants_are_distinct_for_every_kind(self):
+        # Regression: the old stride (variant*5 mod 6 with an `or 1`
+        # fallback) collided for every one-underscore kind, so the second
+        # and third presses showed the identical order.
+        for kind in tl.ANGLE_GOAL_RECOMMENDATIONS:
+            start = tl.goal_suggestions_for_kind(kind, 0)
+            orders = [tl.goal_suggestions_for_kind(kind, v) for v in (1, 2, 3)]
+            for order in orders:
+                assert len(order) == 6
+                assert sorted(order) == sorted(start)
+                assert order != start, f"{kind}: a shuffled order equals the curated one"
+            assert len({tuple(o) for o in orders}) == 3, f"{kind}: two presses share an order"
+
+    def test_cycle_never_returns_to_the_curated_order(self):
+        # Regression: the old cycle landed on a fourth value that collapsed
+        # back to variant 0, so every fourth press snapped the list back to
+        # the exact order the founder started from.
+        assert tl.next_goal_suggestion_variant(None) == 1
+        assert tl.next_goal_suggestion_variant(0) == 1
+        assert tl.next_goal_suggestion_variant(1) == 2
+        assert tl.next_goal_suggestion_variant(2) == 3
+        assert tl.next_goal_suggestion_variant(3) == 1
+        assert tl.next_goal_suggestion_variant("garbage") == 1
+
+
 class TestClampDuration:
     """
     Duration clamping is the guard against silently requesting more than a

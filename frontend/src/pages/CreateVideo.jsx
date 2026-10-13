@@ -1074,7 +1074,13 @@ export default function CreateVideo() {
     setAngleError(null);
     try {
       const data = await api.generateContentAngles(profileId);
-      adoptAngles(data);
+      const fresh = adoptAngles(data) || [];
+      // The fresh set has new row ids, so a previous pick would dangle and
+      // the goal picker would collapse to its wait state. Park the founder
+      // on the strongest new angle; an empty set clears the pick.
+      if (!fresh.some((a) => a && a.id === angleId)) {
+        setAngleId(fresh.length > 0 ? fresh[0].id : "");
+      }
       if (!data.angles?.length) {
         setAngleError("The model returned no usable angles. Try again.");
       }
@@ -1083,7 +1089,7 @@ export default function CreateVideo() {
     } finally {
       setGeneratingAngles(false);
     }
-  }, [profileId]);
+  }, [profileId, angleId]);
 
   // Regenerating the audience angles without leaving the wizard. Offered on
   // a populated list too, because the regenerate endpoint keeps hand-written
@@ -1113,7 +1119,14 @@ export default function CreateVideo() {
     setAngleRegenNotice(null);
     try {
       const data = await api.regenerateContentAngles(profileId);
-      adoptAngles(data);
+      const fresh = adoptAngles(data) || [];
+      // Replacement rows carry new ids: a pick aimed at the old set would
+      // dangle and the goal picker would collapse to its wait state just
+      // when fresh options arrived. A surviving row (a kept manual angle)
+      // keeps the founder's pick; otherwise park on the strongest new one.
+      if (!fresh.some((a) => a && a.id === angleId)) {
+        setAngleId(fresh.length > 0 ? fresh[0].id : "");
+      }
       const affected = Number(data?.projects_affected) || 0;
       if (affected > 0) {
         setAngleRegenNotice(

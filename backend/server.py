@@ -3923,6 +3923,41 @@ def _serialize_angle_row(row: dict, evidence: Optional[dict] = None) -> dict:
     }
 
 
+async def _serialize_profile_angles(profile_id: str, user_id: str) -> dict:
+    """Re-read this profile's angles and shape the audience-step payload.
+
+    The same shape as GET /content-angles: serialized rows (kind evidence
+    plus each row's goal suggestions in its saved variant order) and the
+    profile-wide objective_evidence map. POST generate/regenerate return
+    this instead of the raw model rows, so the wizard never adopts a row
+    shape the list endpoint would not serve — the old raw return dropped
+    goal_suggestions (the goal picker silently fell back to the static
+    order), evidence (verdict chips vanished), and objective_evidence
+    (goal chips vanished) until the next reload.
+    """
+    rows = await _fetch_all(
+        "SELECT * FROM content_angles WHERE brand_profile_id = ? AND user_id = ? "
+        "ORDER BY rank ASC, created_at ASC",
+        (profile_id, user_id),
+    )
+    verdicts = await _angle_feedback_for_profile(profile_id, user_id)
+    by_kind = {
+        str(entry.get("name") or ""): {"wins": int(entry.get("wins") or 0), "flops": int(entry.get("flops") or 0)}
+        for entry in (verdicts.get("kinds") or [])
+    }
+    objective_evidence = {
+        str(entry.get("name") or ""): {"wins": int(entry.get("wins") or 0), "flops": int(entry.get("flops") or 0)}
+        for entry in (verdicts.get("objectives") or [])
+    }
+    return {
+        "angles": [
+            _serialize_angle_row(r, by_kind.get(str(r.get("kind") or "")))
+            for r in rows
+        ],
+        "objective_evidence": objective_evidence,
+    }
+
+
 @api_router.get("/app-profiles/{profile_id}/content-angles")
 async def list_content_angles(profile_id: str, user_id: str = Depends(get_current_user_id)):
     """
@@ -3970,26 +4005,10 @@ async def list_content_angles(profile_id: str, user_id: str = Depends(get_curren
     # One summary for the whole profile, indexed by kind and shared by every
     # angle of that kind -- two angles of the same kind carry the same counts,
     # which is honest (the attribution is per kind) and is never presented as
-    # belonging to one specific angle.
-    verdicts = await _angle_feedback_for_profile(profile_id, user_id)
-    by_kind = {
-        str(entry.get("name") or ""): {"wins": int(entry.get("wins") or 0), "flops": int(entry.get("flops") or 0)}
-        for entry in (verdicts.get("kinds") or [])
-    }
-    # Same summary, other axis: keyed by objective name, which is the fixed
-    # vocabulary the goal picker presents. Scoped by brand_profile_id exactly
-    # like the kind axis, so nothing leaks between apps.
-    objective_evidence = {
-        str(entry.get("name") or ""): {"wins": int(entry.get("wins") or 0), "flops": int(entry.get("flops") or 0)}
-        for entry in (verdicts.get("objectives") or [])
-    }
-    return {
-        "angles": [
-            _serialize_angle_row(r, by_kind.get(str(r.get("kind") or "")))
-            for r in rows
-        ],
-        "objective_evidence": objective_evidence,
-    }
+    # belonging to one specific angle. Serialized through the shared helper
+    # so the list and the generate/regenerate responses can never drift
+    # apart in shape again.
+    return await _serialize_profile_angles(profile_id, user_id)
 
 
 @api_router.delete("/app-profiles/{profile_id}")
@@ -4098,7 +4117,6 @@ async def generate_profile_content_angles(profile_id: str, user_id: str = Depend
 
     await _execute("DELETE FROM content_angles WHERE brand_profile_id = ?", (profile_id,))
     now = now_iso()
-    saved = []
     for rank, angle in enumerate(angles):
         angle_id = str(uuid.uuid4())
         await _execute(
@@ -4112,9 +4130,13 @@ async def generate_profile_content_angles(profile_id: str, user_id: str = Depend
              angle["app_feature"], angle["desired_emotion"],
              json.dumps(angle["claims_to_respect"]), rank, now, user_id),
         )
-        saved.append({**angle, "id": angle_id, "rank": rank})
-    logger.info(f"Generated %d content angle(s) for profile {profile_id}", len(saved))
-    return {"angles": saved}
+    # Re-read, never echo the model rows: the wizard adopts this response
+    # into the same state the list endpoint feeds, so it must carry the
+    # serialized shape (goal suggestions, evidence, origin) or the goal
+    # picker and verdict chips degrade until the next reload.
+    payload = await _serialize_profile_angles(profile_id, user_id)
+    logger.info(f"Generated %d content angle(s) for profile {profile_id}", len(payload["angles"]))
+    return payload
 
 
 @api_router.post("/app-profiles/{profile_id}/content-angles/manual", status_code=201)
@@ -4261,7 +4283,6 @@ async def regenerate_content_angles(profile_id: str, user_id: str = Depends(get_
         (profile_id,),
     )
     now = now_iso()
-    saved = []
     for rank, angle in enumerate(angles):
         angle_id = str(uuid.uuid4())
         await _execute(
@@ -4275,21 +4296,25 @@ async def regenerate_content_angles(profile_id: str, user_id: str = Depends(get_
              angle["app_feature"], angle["desired_emotion"],
              json.dumps(angle["claims_to_respect"]), rank, now, user_id),
         )
-        saved.append({**angle, "id": angle_id, "rank": rank})
     # Manual rows move to the back of the generated set's rank range -- the
     # same back-of-list position the manual endpoint gives a newly hand-written
     # angle -- so the fresh AI set presents first.
-    base_rank = len(saved)
     for offset, row in enumerate(manual_rows):
         await _execute(
             "UPDATE content_angles SET rank = ? WHERE id = ? AND brand_profile_id = ? AND user_id = ?",
-            (base_rank + offset, row.get("id"), profile_id, user_id),
+            (len(angles) + offset, row.get("id"), profile_id, user_id),
         )
     logger.info(
         "Regenerated %d content angle(s) (kept %d manual) for profile %s",
-        len(saved), len(manual_rows), profile_id,
+        len(angles), len(manual_rows), profile_id,
     )
-    return {"angles": saved, "manual_kept": len(manual_rows), "projects_affected": projects_affected}
+    # Re-read, never echo the model rows: same serialized shape as the list
+    # (goal suggestions, evidence, origin), or the wizard's goal picker and
+    # verdict chips degrade until the next reload. Manual rows ride along in
+    # rank order, which is also what keeps a hand-picked manual selection
+    # alive across the replacement.
+    payload = await _serialize_profile_angles(profile_id, user_id)
+    return {**payload, "manual_kept": len(manual_rows), "projects_affected": projects_affected}
 
 
 @api_router.post("/app-profiles/{profile_id}/content-angles/{angle_id}/regenerate-goals")

@@ -176,7 +176,18 @@ select option:checked {
     * {
         @apply border-border;
     }
-    body {
+/* The vertical scrollbar's gutter is reserved on every page, whether the
+ * content overflows or not. Without this, any navigation between two views
+ * of different heights (the five Create Video steps, a filtered list, an
+ * accordion opening) adds or removes ~15px of scrollbar and the whole
+ * centred frame jumps sideways — the reader has to re-find what they were
+ * looking at. `stable` reserves the space always; it paints nothing when
+ * there is nothing to scroll, so the design is untouched. */
+html {
+    scrollbar-gutter: stable;
+}
+
+body {
         @apply bg-background text-foreground;
     }
 

@@ -373,6 +373,19 @@ class TestAngleFeedbackPromptWiring:
         _run(ai_service.generate_content_angles({"brand_name": "Taskly"}))
         assert "PAST VERDICTS" not in captured["prompt"]
 
+    def test_generation_caps_at_six_angles(self, monkeypatch):
+        """The audience step shows exactly six suggestions: the prompt asks
+        for exactly six and the cap holds even when the model overshoots."""
+        import ai_service
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            assert "exactly 6" in prompt
+            return [dict(self.ANGLE) for _ in range(9)]
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        out = _run(ai_service.generate_content_angles({"brand_name": "Taskly"}))
+        assert len(out) == 6
+
 
 class TestAngleGoalPromptWiring:
     @pytest.mark.parametrize("flow", ["plan", "strategy"])

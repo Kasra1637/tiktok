@@ -251,9 +251,13 @@ def angle_goal_fit_reason(kind: Optional[str], goal: Optional[str]) -> str:
     return ANGLE_GOAL_FIT_REASONS.get((kind or "").strip(), {}).get((goal or "").strip(), "")
 
 
-# How many variants of the six-suggestion set one angle can cycle through.
-# A shuffle of six goals has 720 orders; four variants stay far enough apart
-# to feel like a fresh take while keeping the whole cycle small and testable.
+# How many orderings of the six-suggestion set one angle can cycle through:
+# the curated ranking plus three shuffled ones. A shuffle of six goals has
+# 720 orders; three shuffled orders stay far enough apart to feel like a
+# fresh take while keeping the whole cycle small and testable. The count is
+# 4 (not 3) because variant 0 is the curated order the cycle starts from but
+# never returns to — every press after the first must show an order different
+# from the one on screen.
 GOAL_SUGGESTION_VARIANTS = 4
 
 
@@ -284,18 +288,29 @@ def goal_suggestions_for_kind(kind: Optional[str], variant: int = 0) -> list:
     # runs and trivially testable. The step depends only on the kind's name
     # and the variant, so the same angle kind always produces the SAME order
     # for a given variant, and no process-salted hash() can creep in.
-    step = ((k.count("_") + variant * 5 + 2) % 6) or 1
+    # Steps live in 1..5 and are pairwise distinct across variants 1..3 for
+    # every kind (stride 2 is coprime to 5): no shuffled order ever equals
+    # the curated one (a step-6 rotation would be the identity), and no two
+    # presses in a row ever show the same order. The old stride (5 mod 6
+    # with an `or 1` fallback) collided for every one-underscore kind, so
+    # the second and third presses showed the identical order.
+    step = ((k.count("_") + variant * 2 + 1) % 5) + 1
     return list(goals[step:]) + list(goals[:step])
 
 
 def next_goal_suggestion_variant(variant, count: int = GOAL_SUGGESTION_VARIANTS) -> int:
-    """Cycle: -1/None/0 -> 1 -> 2 -> ... -> last -> 1 (variant 0 is the initial
-    curated set, so regeneration only ever moves forward through variants)."""
+    """Cycle: -1/None/0 -> 1 -> 2 -> 3 -> 1 -> ... Variant 0 is the initial
+    curated set, so after the first shuffle the cycle never returns to it:
+    every press shows an order different from the one on screen. (The old
+    `(current % count) + 1` landed on a fourth value that collapsed back to
+    variant 0, so every fourth press snapped the list back to the exact
+    order the founder started from.)"""
     try:
         current = int(variant) if variant is not None else 0
     except (TypeError, ValueError):
         current = 0
-    return (current % count) + 1
+    slots = max(int(count) - 1, 1)
+    return (current % slots) + 1
 
 # Content angles, per the product spec. Angles are app-specific and get
 # generated per App Profile; this list is the controlled set of kinds.

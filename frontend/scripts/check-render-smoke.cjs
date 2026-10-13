@@ -3764,6 +3764,122 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
+  // Shuffle advances the six goal suggestions on every press and always
+  // shows six. The stub mirrors the server contract: the variant persists
+  // server-side and the list re-read drives the display (the POST return is
+  // ignored by the client, so a stub that only answers the POST proves
+  // nothing — the GET must reflect the new order).
+  await check("shuffle advances the six goal suggestions on every press", async (ctx) => {
+    const SIX = ANGLE_GOALS.problem_solution;
+    const rotate = (list, step) => [...list.slice(step), ...list.slice(0, step)];
+    let variant = 0;
+    const SHUFFLED = {
+      ...ANGLE,
+      goal_variant: 0,
+      goal_suggestions: [...SIX],
+      evidence: { wins: 0, flops: 0 },
+    };
+    const orderOf = () => [...ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]')]
+      .map((el) => el.getAttribute("data-testid").replace("recommended-goal-", ""));
+    apiCalls.length = 0;
+    await withApi(
+      {
+        getContentAngles: async () => ({
+          angles: [{ ...SHUFFLED, goal_variant: variant, goal_suggestions: rotate(SIX, variant) }],
+          objective_evidence: {},
+        }),
+        regenerateContentAngleGoals: async () => {
+          variant = variant >= 3 ? 1 : variant + 1;
+          return { goal_variant: variant, suggestions: rotate(SIX, variant) };
+        },
+      },
+      async () => {
+        global.__SMOKE_PARAMS = "";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Audience & goal");
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+          const first = orderOf();
+          if (first.length !== 6) throw new Error(`expected six goal cards, saw ${first.length}`);
+          if (first.join("|") !== SIX.join("|")) throw new Error(`initial goal order moved: ${first.join(", ")}`);
+          const seen = [first.join("|")];
+          for (let press = 0; press < 3; press += 1) {
+            await clickEl(ctx, ctx.container.querySelector('[data-testid="regenerate-goals-button"]'), "no shuffle button");
+            await new Promise((r) => setTimeout(r, 150));
+            const order = orderOf();
+            if (order.length !== 6) throw new Error(`press ${press + 1}: expected six goal cards, saw ${order.length}`);
+            if (seen.includes(order.join("|"))) throw new Error(`press ${press + 1}: goal order repeats an earlier one`);
+            seen.push(order.join("|"));
+          }
+          if (!apiCalls.includes("regenerateContentAngleGoals")) {
+            throw new Error("shuffle never called the server variant endpoint");
+          }
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
+  // Regenerate angles replaces the list with six fresh serialized rows and
+  // keeps the goal step populated: the old pick's id is gone, so the wizard
+  // parks on the strongest new angle instead of collapsing to the wait
+  // state, and verdict chips ride along on the fresh rows.
+  await check("regenerate angles shows six fresh options and keeps goals", async (ctx) => {
+    const FRESH = [0, 1, 2, 3, 4, 5].map((i) => ({
+      id: `n${i}`,
+      kind: "problem_solution",
+      label: `Fresh angle ${i}`,
+      target_audience: "busy professionals",
+      user_problem: "Nothing gets finished.",
+      goal_variant: 0,
+      origin: "generated",
+      goal_suggestions: [...ANGLE_GOALS.problem_solution],
+      evidence: { wins: 2, flops: 1 },
+    }));
+    await withApi(
+      {
+        getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B], objective_evidence: {} }),
+        regenerateContentAngles: async () => ({ angles: FRESH, objective_evidence: {} }),
+      },
+      async () => {
+        global.__SMOKE_PARAMS = "";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Audience & goal");
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="regenerate-angles-button"]'), "no regenerate button");
+          await new Promise((r) => setTimeout(r, 150));
+          const rows = [...ctx.container.querySelectorAll('[data-testid^="angle-option-"]')];
+          if (rows.length !== 6) throw new Error(`expected six fresh angles, saw ${rows.length}`);
+          if (ctx.container.querySelector('[data-testid="angle-option-a1"]')) {
+            throw new Error("the replaced angle row is still rendered");
+          }
+          if (!rows[0].textContent.includes("Fresh angle")) {
+            throw new Error("the angle list did not refresh with new options");
+          }
+          const goals = [...ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]')];
+          if (goals.length !== 6) throw new Error(`expected six goal cards after regen, saw ${goals.length}`);
+          const chips = [...ctx.container.querySelectorAll('[data-testid^="angle-evidence-"]')];
+          if (chips.length === 0) throw new Error("fresh rows carry no verdict chips");
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
+  // The vertical scrollbar's gutter stays reserved, so switching between
+  // steps of different heights never shifts the centred frame sideways.
+  // jsdom does no layout, so this guards the rule in source: deleting the
+  // declaration is exactly how the shift comes back.
+  await check("the page reserves the scrollbar gutter across steps", async () => {
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    if (!/html\s*\{[^}]*scrollbar-gutter\s*:\s*stable/.test(css)) {
+      throw new Error("index.css does not reserve the scrollbar gutter on html");
+    }
+  });
+
   // formatVerdicts prints counts and stays silent on empty evidence
   await check("formatVerdicts prints counts and stays silent on empty evidence", async (ctx) => {
     global.__SMOKE_PARAMS = "";
