@@ -776,7 +776,7 @@ function nextStepMessage(stepStates, step, angleId) {
   // was unreachable. Comparing only the steps before it makes the message
   // reachable, and says it at the point where it is true.
   if (stepStates.slice(0, step).every((s) => s.state === "done")) {
-    return "Everything before this is ready. Review the app-specific strategy here, then render your Hook + Story.";
+    return "";
   }
   const first = stepStates.findIndex((s) => s.state !== "done");
   if (first > step) {
