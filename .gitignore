@@ -80,6 +80,13 @@ backend/storage/templates/
 # Poster thumbnails (generated at runtime per deployment, heal on demand)
 backend/storage/posters/
 
+# Uploaded user photos and generated clip files, written at runtime per
+# deployment. Test runs leave real binaries here, so they stay untracked.
+backend/storage/assets/
+
+# Manual DB backups taken before a migration
+backend/storage/*.stale-*
+
 # Archive files and large assets
 **/*.zip
 **/*.tar.gz
