@@ -91,6 +91,15 @@ const STEPS = [
   { key: "hook", label: "Hook + Story", icon: Sparkles },
 ];
 
+/* The single instruction for the angle picker, shared by the empty state
+   (click generates the six) and the reveal state (click shows the six).
+   One line on purpose: three stacked explanations said the same thing in
+   different words, and the step stalled on reading instead of moving. The
+   verb is deliberately neutral — "get" covers generating fresh angles and
+   revealing pre-generated ones, so the line never disagrees with its button. */
+const ANGLES_CTA_COPY =
+  "Click below to get your six audience angles, then pick one to move forward — the strategy and the render follow your pick.";
+
 function formatTemplateUse(n) {
   if (!n) return "Never used";
   return n === 1 ? "Used once" : `Used ${n} times`;
@@ -1884,18 +1893,11 @@ setObjective("");
                 Audience angle{" "}
                 <span className="text-muted-foreground">(required)</span>
               </GroupLabel>
-              <p className="text-xs text-muted-foreground" data-testid={!angle ? "angle-required-hint" : undefined}>
-                Pick the audience problem this video is built around. The strategy and the render follow it.
-              </p>
               {angles.length === 0 ? (
                 <div className="space-y-2">
-                  <Alert>
-                    <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-                    <AlertDescription>
-                      This profile has no audience angles yet. Generate them here —
-                      the strategy and the render need one to build on.
-                    </AlertDescription>
-                  </Alert>
+                  <p className="text-xs text-muted-foreground" data-testid="angles-cta-copy">
+                    {ANGLES_CTA_COPY}
+                  </p>
                   {angleError && (
                     <Alert variant="destructive">
                       <AlertDescription>{angleError}</AlertDescription>
@@ -1923,8 +1925,8 @@ setObjective("");
                    so they wait behind one click. The click reveals and
                    persists per app; regenerating stays on the list itself. */
                 <div className="space-y-2" data-testid="angles-reveal">
-                  <p className="text-xs text-muted-foreground">
-                    Your first six audience angles are ready. Take a look and pick the problem this video is built around.
+                  <p className="text-xs text-muted-foreground" data-testid="angles-cta-copy">
+                    {ANGLES_CTA_COPY}
                   </p>
                   <Button
                     variant="secondary"
