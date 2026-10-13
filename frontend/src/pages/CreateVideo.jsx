@@ -18,6 +18,7 @@ import { ThumbPair } from "../components/ThumbPair";
 import { ComponentThumbs } from "../components/ComponentThumbs";
 import AssetLibrary from "./AssetLibrary";
 import { api, getErrorMessage } from "../lib/api";
+import { angleKindIcon } from "../lib/angleKindIcons";
 import { recordSignal, recordThumb, classifyScriptEdit } from "../lib/feedback";
 import {
   partitionProfiles,
@@ -1852,10 +1853,10 @@ setObjective("");
                 bordered card so the picker, the goal list, and the tone field
                 read as separate organized units. */}
             <div className="inset-panel space-y-2">
-              <label className="text-sm font-medium">
+              <GroupLabel as="label">
                 Audience angle{" "}
-                <span className="font-normal text-muted-foreground">(required)</span>
-              </label>
+                <span className="text-muted-foreground">(required)</span>
+              </GroupLabel>
               <p className="text-xs text-muted-foreground" data-testid={!angle ? "angle-required-hint" : undefined}>
                 Pick the audience problem this video is built around. The strategy and the render follow it.
               </p>
@@ -1927,10 +1928,11 @@ setObjective("");
                   {angles.map((a) => {
                     const picked = angleId === a.id;
                     const details = picked ? angleDetails(a) : [];
+                    const KindIcon = angleKindIcon(a.kind);
                     return (
                       <div
                         key={a.id}
-                        className={`overflow-hidden rounded-2xl border bg-card/70 ${
+                        className={`overflow-hidden rounded-xl border bg-card/70 ${
                           picked
                             ? "border-[color:var(--indigo-35)]"
                             : "border-[color:var(--hairline)]"
@@ -1947,8 +1949,19 @@ setObjective("");
                             picked ? "bg-[color:var(--indigo-6)]" : ""
                           }`}
                         >
+                          {KindIcon && (
+                            <KindIcon
+                              aria-hidden="true"
+                              data-testid={`angle-kind-icon-${a.kind}`}
+                              className="h-4 w-4 shrink-0 text-muted-foreground"
+                            />
+                          )}
                           <span className="min-w-0 flex-1">
-                            <span className="block text-sm font-medium leading-[22px]">
+                            {/* Uppercase tracked title in muted: the bar chrome
+                                from the settings accordion. CSS transform only —
+                                the stored label, textContent, and every assertion
+                                on it stay exactly as sentenceCase wrote them. */}
+                            <span className="block text-sm font-semibold uppercase leading-[22px] tracking-[0.08em] text-muted-foreground">
                               {sentenceCase(a.label)}
                             </span>
                             {!picked && angleSubtitle(a) && (

@@ -3638,6 +3638,36 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
+  // Every angle row opens with its kind's glyph at the bar's 16px icon
+  // size — the icon is part of the row contract, not decoration.
+  await check("angle rows carry their kind icon", async (ctx) => {
+    await withApi({ getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B] }) }, async () => {
+      global.__SMOKE_PARAMS = "";
+      try {
+        await mount(CreateVideo, {})(ctx);
+        await openStep(ctx, "Audience & goal");
+        const rows = [...ctx.container.querySelectorAll('[data-testid^="angle-option-"]')];
+        if (rows.length !== 2) throw new Error(`expected two angle rows, saw ${rows.length}`);
+        for (const row of rows) {
+          const icon = row.querySelector('[data-testid^="angle-kind-icon-"]');
+          if (!icon) throw new Error("an angle row shows no kind icon");
+          if (icon.tagName !== "svg") throw new Error("the kind icon is not an svg glyph");
+          const cls = icon.getAttribute("class") || "";
+          if (!/\bh-4\b/.test(cls) || !/\bw-4\b/.test(cls)) {
+            throw new Error(`the kind icon is off the 16px token: ${cls}`);
+          }
+        }
+        const kinds = [...ctx.container.querySelectorAll('[data-testid^="angle-kind-icon-"]')]
+          .map((el) => el.getAttribute("data-testid").replace("angle-kind-icon-", ""));
+        if (kinds.join("|") !== "problem_solution|feature_demonstration") {
+          throw new Error(`kind icons mismatch the row kinds: ${kinds.join(", ")}`);
+        }
+      } finally {
+        global.__SMOKE_PARAMS = "";
+      }
+    });
+  });
+
   // The goal cards annotate with the picked angle kind's counts; the six stay
   // in fetched order. Evidence must never become a second ranking.
   await check("goal cards carry the angle kind's counts without reordering", async (ctx) => {
@@ -4964,15 +4994,13 @@ async function runIconChecks() {
     }
   });
 
-  await check("no small section headings outside the profile system", async () => {
+  await check("no small section headings", async () => {
     // Card and section titles are the display token (font-display 16
-    // semibold); a 14px medium h2/h3 is a fourth title dialect. The one
-    // exception is profileUi.jsx's ProfileCard, whose sentence-case
-    // glyph-less heading is settled: it reads side by side with angle
-    // rows that carry neither.
+    // semibold) or the uppercase GroupLabel; a 14px medium h2/h3 is a
+    // fourth title dialect. ProfileCard's old sentence-case h3 was the
+    // last one and is now a GroupLabel, so there is no exception left.
     const small = [];
     for (const abs of iconFiles) {
-      if (abs.endsWith("profileUi.jsx")) continue;
       const src = fs.readFileSync(abs, "utf8");
       for (const m of src.matchAll(/<h[23]\b[^>]*text-sm font-medium/g)) {
         small.push(`${path.relative(SRC, abs)}: ${m[0].slice(0, 60)}`);
@@ -5244,16 +5272,16 @@ async function runDeleteDialogChecks() {
         const bar = group.querySelector("button");
         const barTitle = bar && bar.querySelector("span span");
         if (!barTitle) throw new Error("the group bar has no title span");
-        if (!/font-medium/.test(barTitle.className) || /uppercase/.test(barTitle.className)) {
-          throw new Error(`the group bar title is off the 14/500 sentence-case token: ${barTitle.className}`);
+        if (!/uppercase/.test(barTitle.className) || !/tracking-/.test(barTitle.className)) {
+          throw new Error(`the group bar title is off the uppercase tracked token: ${barTitle.className}`);
         }
         if (barTitle.querySelector("svg")) {
           throw new Error("the group bar title still carries a glyph");
         }
         const cardTitle = group.querySelector('[data-testid="profile-facts"] h3');
         if (!cardTitle) throw new Error("the product-facts card has no heading");
-        if (!/font-medium/.test(cardTitle.className) || /\beyebrow\b/.test(cardTitle.className)) {
-          throw new Error(`the card heading is still the old uppercase eyebrow: ${cardTitle.className}`);
+        if (!/\beyebrow\b/.test(cardTitle.className)) {
+          throw new Error(`the card heading is not the shared GroupLabel: ${cardTitle.className}`);
         }
         const chip = group.querySelector("li");
         if (!chip) throw new Error("the core-features chips did not render");

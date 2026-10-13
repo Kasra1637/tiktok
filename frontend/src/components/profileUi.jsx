@@ -10,8 +10,10 @@ import { GroupLabel } from "./SectionCard";
  * and a piece of chrome look like is decided here to match that list.
  *
  * Tokens (no one-off pixels), all taken from the Content Angles block:
- * - headings 14/500 sentence case (the angle row's title token) — never
- *   uppercase, never tracked, and no glyph beside them; the angle rows carry none
+ * - headings are the shared `GroupLabel` (12/600 uppercase muted `.eyebrow`,
+ *   no glyph beside them) and group bars carry the same uppercase tracked
+ *   muted title as the angle rows — the two screens are read side by side,
+ *   so a heading here looks like a heading there
  * - field labels are the shared `GroupLabel` (12/600 uppercase muted
  *   `.eyebrow`) — the same label the angle detail panel uses for its own fields
  * - body 14/22, meta 12/18, chips 12/18 at the Badge shape the kind tag uses
@@ -45,9 +47,9 @@ export function ProfileCard({ eyebrow, eyebrowClassName, tone = "default", testi
       {...(testid ? { "data-testid": testid } : {})}
     >
       {eyebrow && (
-        <h3 className={cn("text-sm font-medium leading-[22px]", eyebrowClassName)}>
+        <GroupLabel as="h3" className={eyebrowClassName}>
           {sentenceCase(eyebrow)}
-        </h3>
+        </GroupLabel>
       )}
       {children}
     </section>
@@ -150,12 +152,12 @@ export function InfoListBlock({ label, items, tone = "default" }) {
  * stay equal.
  *
  * The bar chrome is the Content Angles row's, because this page is read
- * against that list: px-4 py-3, a 14/500 sentence-case title with the count
+ * against that list: px-4 py-3, an uppercase tracked muted title with the count
  * summary beneath it in the row's 12/18 meta token, chevron right, indigo
  * hover. Opening reveals the angle panel's content chrome — a hairline under
- * the bar, then px-4 py-3 with 8px between cards. The old 14px uppercase
- * tracked heading and its brand-indigo glyph are gone with the restyle: the
- * angle rows carry neither.
+ * the bar, then px-4 py-3 with 8px between cards. Titles carry no glyph: the
+ * angle rows pair theirs with a kind icon, and a second icon here would
+ * double every heading on the page.
  *
  * Native button = clickable + keyboard accessible with aria-expanded.
  * Grid-rows animation (200ms) opens without layout jump; the overflow-hidden
@@ -177,7 +179,7 @@ export function SectionGroup({ id, label, summary, open, onToggle, children }) {
         className="row-pad flex w-full min-w-0 items-center justify-between gap-2 text-left transition duration-150 hover:bg-[color:var(--indigo-6)]"
       >
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-medium leading-[22px]">{label}</span>
+          <span className="block text-sm font-semibold uppercase leading-[22px] tracking-[0.08em] text-muted-foreground">{label}</span>
           {summary ? (
             <span className="mt-1 block truncate text-xs leading-[18px] text-muted-foreground">
               {summary}
