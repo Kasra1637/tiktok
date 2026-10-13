@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { rememberCurrentAppId } from "../lib/currentApp";
-import { cn } from "../lib/utils";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
@@ -12,7 +11,7 @@ import { SectionCard, GroupLabel } from "../components/SectionCard";
 import { SectionGroup } from "../components/profileUi";
 import { AppPicker } from "../components/AppPicker";
 import { Skeleton } from "../components/ui/skeleton";
-import PageFrame, { PAGE_WIDTH_CLASS } from "../components/PageFrame";
+import PageFrame from "../components/PageFrame";
 import { api, getErrorMessage } from "../lib/api";
 import { Sparkles, Briefcase, Loader as Loader2, Save, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ArrowRight, Smartphone, RefreshCw, BadgeCheck, Package, Layers, Compass, Users, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
@@ -550,16 +549,64 @@ export default function BrandSetup() {
               className="min-h-[60px]"
               data-testid="app-notes-input"
             />
-            <Button
-              type="submit"
-              disabled={researching}
-              variant="brand"
-              className="w-full sm:w-auto"
-              data-testid="research-app-button"
-            >
-              {researching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              {researching ? "Researching..." : brand?.id ? "Research into a new draft" : "Research app"}
-            </Button>
+            {/* Save and Approve sit in this row, beside Research — the sticky
+                bottom bar is gone, so review actions live where the draft is
+                made rather than pinned to the viewport. Gated exactly as the
+                bar was: only a researched profile has review affordances, so
+                a hand-typed profile keeps its single manual Save further down
+                and a profile-less page offers research alone. type="button"
+                on each: inside this form an untyped button submits research. */}
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+              <Button
+                type="submit"
+                disabled={researching}
+                variant="brand"
+                className="w-full sm:w-auto"
+                data-testid="research-app-button"
+              >
+                {researching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {researching ? "Researching..." : brand?.id ? "Research into a new draft" : "Research app"}
+              </Button>
+              {researchedProfile && (
+                <Button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving}
+                  variant="accent"
+                  className="w-full sm:w-auto"
+                  data-testid="save-brand-button"
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {saving ? "Saving..." : "Save App Profile"}
+                </Button>
+              )}
+              {researchedProfile && status !== "approved" && (
+                <Button
+                  type="button"
+                  onClick={() => handleApprove(true)}
+                  disabled={approving}
+                  variant="brand"
+                  className="w-full sm:w-auto"
+                  data-testid="approve-profile-button"
+                >
+                  {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
+                  {approving ? "Approving..." : "Review complete — approve profile"}
+                </Button>
+              )}
+              {researchedProfile && status === "approved" && (
+                <Button
+                  type="button"
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  variant="secondary"
+                  className="w-full sm:w-auto"
+                  data-testid="refresh-profile-button"
+                >
+                  {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  {refreshing ? "Re-researching..." : "Refresh from sources (needs re-approval)"}
+                </Button>
+              )}
+            </div>
           </form>
       </SectionCard>
 
@@ -905,10 +952,10 @@ export default function BrandSetup() {
             </div>
 
             {/* The manual path's own Save. Rendered only when research has not
-                run, because the sticky bar owns saving for a researched profile
-                and two Saves would leave the founder choosing between them for
-                no reason. Without this the gate would silently remove the only
-                way to store a hand-typed profile. */}
+                run, because the research row above owns saving for a researched
+                profile and two Saves would leave the founder choosing between
+                them for no reason. Without this the gate would silently remove
+                the only way to store a hand-typed profile. */}
             {!researchedProfile && (
               <Button
                 onClick={handleSave}
@@ -949,55 +996,6 @@ export default function BrandSetup() {
       </div>
       )}
 
-      {/* ---------- Sticky action bar ----------
-          Only for a profile research generated. "Save" and "Review complete"
-          are review affordances over a machine-written draft, so before
-          research runs there is nothing to review and the bar would be two
-          buttons over an empty form.
-
-          A hand-typed profile therefore has no sticky bar, which would leave it
-          unsaveable — so the manual card carries its own Save below. The two
-          never show at once: two Saves on one page is the ambiguity this gate
-          was meant to remove. */}
-      {researchedProfile && (
-        <div className="sticky bottom-0 z-10 border-t border-[color:var(--hairline)] bg-background/80 py-4 backdrop-blur-sm">
-          <div className={cn(PAGE_WIDTH_CLASS.default, "flex items-center gap-3")}>
-            <Button
-              onClick={handleSave}
-              disabled={saving}
-              variant="accent"
-              data-testid="save-brand-button"
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {saving ? "Saving..." : "Save App Profile"}
-            </Button>
-
-            {status !== "approved" && (
-              <Button
-                onClick={() => handleApprove(true)}
-                disabled={approving}
-                variant="brand"
-                data-testid="approve-profile-button"
-              >
-                {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
-                {approving ? "Approving..." : "Review complete — approve profile"}
-              </Button>
-            )}
-
-            {status === "approved" && (
-              <Button
-                onClick={handleRefresh}
-                disabled={refreshing}
-                variant="secondary"
-                data-testid="refresh-profile-button"
-              >
-                {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                {refreshing ? "Re-researching..." : "Refresh from sources (needs re-approval)"}
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
     </PageFrame>
   );
 }

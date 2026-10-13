@@ -502,6 +502,22 @@ body {
     color: hsl(var(--muted-foreground));
 }
 
+/* Clickable chrome is never editable: clicking a nav label, page title,
+   section heading, group label or button must not drop a blinking text
+   caret or start a selection there. Real copy — hook lines, scripts,
+   profile facts, inputs — stays selectable so founders can copy it. */
+nav,
+nav a,
+button,
+h1,
+.section-heading,
+.eyebrow,
+[data-testid="app-sidebar"],
+[data-testid="mobile-sidebar"] {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
 /* Two useful-width cards instead of a single 1,200px row with a small player
    stranded at one end. Stack until both columns have enough reading room. */
 .history-grid {

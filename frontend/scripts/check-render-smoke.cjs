@@ -4765,7 +4765,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   await runAnalyticsChecks();
 
   console.log("");
-  console.log("Checking the App Profile sticky review bar...");
+  console.log("Checking the App Profile review actions...");
   await runBrandSetupChecks();
 
   console.log("");
@@ -5079,6 +5079,34 @@ async function runIconChecks() {
       throw new Error("a colored icon tile returned to a section heading");
     }
     if (!ctx.text().includes("Verified facts.")) throw new Error("section description disappeared");
+  });
+
+  await check("app chrome never takes a text caret", async () => {
+    // Clicking a sidebar label dropped a blinking caret as if the label were
+    // editable: nothing on this page opts chrome out of selection, so Chrome
+    // renders a caret for the collapsed click selection. jsdom never paints a
+    // caret, so this pins the mechanism the way the heading-token check does:
+    // the stylesheet rule and the pill components that carry it.
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    const rule = css.match(/\/\*[\s\S]*?never editable[\s\S]*?\*\/\s*([^{]+)\{([^}]+)\}/);
+    if (!rule) throw new Error("the non-editable-chrome rule is gone from index.css");
+    for (const selector of ["nav", "button", "h1", ".section-heading", ".eyebrow"]) {
+      if (!rule[1].includes(selector)) {
+        throw new Error(`chrome rule no longer covers ${selector}: clicks there caret again`);
+      }
+    }
+    for (const token of ["user-select: none", "-webkit-user-select: none"]) {
+      if (!rule[2].includes(token)) throw new Error(`chrome rule lost ${token}`);
+    }
+    for (const [file, name] of [
+      ["components/ui/badge.jsx", "Badge"],
+      ["components/FactChip.jsx", "FactChip"],
+    ]) {
+      const src = fs.readFileSync(path.join(SRC, file), "utf8");
+      if (!src.includes("select-none")) {
+        throw new Error(`${name} lost select-none: clicking a pill carets again`);
+      }
+    }
   });
 
   await check("an eyebrow icon is always 12px", async () => {
@@ -5598,16 +5626,19 @@ async function runProfileResearchActionsChecks() {
 
 /**
  * "Save App Profile" and "Review complete" are review affordances over a
- * machine-written draft. Before research runs there is nothing to review, so the
- * bar is withheld. But the bar was also the only save on the page, so gating it
- * alone would quietly remove the ability to store a hand-typed profile -- the one
+ * machine-written draft, sitting in the research row beside Research. Before
+ * research runs there is nothing to review, so the row buttons are withheld.
+ * But the row save was also the only save on the page, so gating it alone
+ * would quietly remove the ability to store a hand-typed profile -- the one
  * failure mode here is a form you can fill and never save, which no other gate
  * would catch.
  *
  * The signal under test is `last_research_at`, which the server writes on exactly
  * the research and refresh paths and on neither analyze-url nor a manual create.
- * Both halves are asserted: the bar appears for a researched profile, and a
- * hand-typed one keeps a save.
+ * Both halves are asserted: the row actions appear for a researched profile,
+ * and a hand-typed one keeps a save. Nothing on this page sticks to the
+ * viewport: the old sticky bottom bar was removed, so these also pin that no
+ * `.sticky` element remains here.
  *
  * Profiles are created from store listings only: the details card renders
  * once research returns a profile, never before. So these also pin the two
@@ -5649,17 +5680,30 @@ async function runBrandSetupChecks() {
   }
 
   await check(
-    "the sticky review bar appears once research has generated the profile",
+    "save and approve sit in the research row once research has generated the profile",
     async (ctx) => {
       await mountWith(ctx, researched);
-      if (!ctx.container.querySelector('[data-testid="save-brand-button"]')) {
+      const save = ctx.container.querySelector('[data-testid="save-brand-button"]');
+      if (!save) {
         throw new Error(
-          "the sticky bar is missing for a researched profile. The founder has a " +
+          "the research row has no Save for a researched profile. The founder has a " +
             "generated draft to review and no way to save or approve it."
         );
       }
       if (!ctx.container.querySelector('[data-testid="approve-profile-button"]')) {
-        throw new Error("a researched draft cannot be approved from the sticky bar");
+        throw new Error("a researched draft cannot be approved from the research row");
+      }
+      // Same row as Research, not pinned to the viewport: the row div holds
+      // the research submit beside the review actions, and nothing here sticks.
+      const row = save.closest("div");
+      if (!row || !row.querySelector('[data-testid="research-app-button"]')) {
+        throw new Error("Save is not in the same row as the Research button");
+      }
+      if (ctx.container.querySelector(".sticky")) {
+        throw new Error(
+          "a sticky element remains on the profile editor: review actions live " +
+            "in the research row now, nothing should pin to the viewport"
+        );
       }
       // Exactly one Save on the page. Two would leave the founder choosing
       // between them for no reason, which is the ambiguity the gate removed.
@@ -5675,12 +5719,12 @@ async function runBrandSetupChecks() {
   );
 
   await check(
-    "a hand-typed profile keeps a Save even though it gets no sticky review bar",
+    "a hand-typed profile keeps a Save even though it gets no research-row actions",
     async (ctx) => {
       await mountWith(ctx, handTyped);
       if (ctx.container.querySelector('[data-testid="save-brand-button"]')) {
         throw new Error(
-          "the sticky review bar is showing for a profile research never ran. " +
+          "research-row review actions are showing for a profile research never ran. " +
             "There is no generated draft to review."
         );
       }
@@ -5689,8 +5733,8 @@ async function runBrandSetupChecks() {
       );
       if (!manualSave) {
         throw new Error(
-          "a hand-typed profile has no Save at all. The sticky bar was the only " +
-            "save on this page, so the form can now be filled and never stored."
+          "a hand-typed profile has no Save at all. The research row was the only " +
+            "other save on this page, so the form can now be filled and never stored."
         );
       }
     }
@@ -5771,7 +5815,7 @@ async function runBrandSetupChecks() {
             );
           }
           if (!ctx.container.querySelector('[data-testid="save-brand-button"]')) {
-            throw new Error("the revealed draft has no sticky save to store corrections with");
+            throw new Error("the revealed draft has no research-row save to store corrections with");
           }
         }
       );

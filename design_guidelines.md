@@ -238,9 +238,8 @@ it. Related-render links are capped at two per card.
   **The width must not change between two pages a reader moves between**, so a
   page belongs to a family rather than to itself: Brand Setup links to Profile
   Detail, and Profile Detail is where an app's photos live. `PAGE_WIDTH_CLASS`
-  is exported so a second container that has to line up with the first — Brand
-  Setup's sticky action bar — reuses the exact class string instead of
-  re-typing a pixel value that can drift. A page embedded in another page
+  is exported so a second container that has to line up with the first reuses
+  the exact class string instead of re-typing a pixel value that can drift. A page embedded in another page
   (Asset Library inside Create Video's template step) passes `default`: it is
   inside a card, not a frame.
 

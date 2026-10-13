@@ -28,8 +28,8 @@ import { cn } from "../lib/utils";
  * deliberately not touched here: this component decides what sits inside it.
  *
  * `PAGE_WIDTH_CLASS` is exported so a page with a second container that must
- * line up with the first — Brand Setup's sticky action bar — reuses the exact
- * same class string instead of re-typing a pixel value that can drift.
+ * line up with the first reuses the exact same class string instead of
+ * re-typing a pixel value that can drift.
  */
 export const PAGE_WIDTH_CLASS = {
   default: "w-full",
