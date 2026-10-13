@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle,
-  ArrowUp,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -1409,18 +1408,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     <TooltipProvider delayDuration={200}>
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] xl:grid-cols-[minmax(0,1fr)_740px]">
       <div className="relative min-w-0">
-        {/* Back to top. Deliberately outside the scrolling panel and to its
-            left, so it can never sit over the sticky preview. */}
-        <button
-          type="button"
-          onClick={() => settingsRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
-          aria-label="Back to top of settings"
-          title="Back to top"
-          className="absolute -left-1 top-0 z-20 hidden h-9 w-9 -translate-x-full items-center justify-center rounded-full border border-[color:var(--hairline)] bg-card text-muted-foreground transition duration-150 hover:border-[color:var(--brand-indigo)] hover:text-foreground hover:bg-[color:var(--indigo-8)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-indigo)]/40 lg:flex"
-        >
-          <ArrowUp className="h-4 w-4" />
-        </button>
-
         {/* Own scroll container, own slim scrollbar, and enough right padding that a
             6px bar never sits over a card edge. */}
         <div
