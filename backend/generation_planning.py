@@ -99,6 +99,16 @@ _PROMPT_SCRIPT_SACRED: ContextVar = ContextVar("hookforge_prompt_script_sacred",
 # loop has to recognise when it has run out of room to squeeze.
 MIN_SCALE = 0.10
 
+# The floor of the LAST fit attempt, below MIN_SCALE.
+#
+# MIN_SCALE is a readability floor — it keeps a squeezed prompt from reading as
+# one-character stubs — and the fit loop will not go under it. This one is only
+# reached when the loop has already bottomed out and the prompt is still over its
+# ceiling, so the choice there is a terse brief or a refused render. A field
+# reduced to a single character still reads as a field, and the fixed
+# instructions and the founder's spoken words are untouched either way.
+FINAL_SCALE = 0.02
+
 # Whether to use the condensed fixed instructions, set the same way as the
 # scale and for the same reason: it has to reach the assembler without threading
 # a parameter through every helper.
@@ -143,6 +153,32 @@ CONDENSE_BELOW = 4500
 # budget.
 FULL_PROMPT_FLOOR = 3176
 CONDENSED_PROMPT_FLOOR = 1952
+
+# The same measurement for the OTHER builder, taken at the same duration (10s)
+# so the two are comparable, and identical at 8s and 15s: this builder's fixed
+# text has no duration-dependent beat layout, so 2,170 holds across the supported
+# set. A test rebuilds and pins it for the same reason the two above are pinned.
+#
+# This builder used to take no budget at all, so nothing in it could fit a tight
+# provider and a prompt that did not fit could only be refused. That is not how
+# the founder hit the ceiling — the submit path refuses a strategy-less project
+# before it builds a prompt, so this path is not the one that failed — but it is
+# the same ceiling one path had no answer for, and it now scales like its
+# sibling rather than relying on the guard.
+SINGLE_PASS_PROMPT_FLOOR = 2170
+
+# The app's own name, in the prompt, clipped.
+#
+# Every other value that reaches a prompt goes through _clip and therefore
+# scales with the ceiling. The brand name did not, and it appears three times in
+# the strategy prompt, so it was the one value that could push a prompt past a
+# ceiling no squeezing could pull back: the profile normalizer caps how many
+# items a list has and never how long a string is, so a long pasted name arrives
+# whole, and past roughly 630 characters the fit loop bottoms out with the
+# prompt still over HeyGen's 4,090 — which the submit guard reports as the
+# script being too long, on the one provider whose ceiling is tight enough for
+# the name to matter. Sixty characters is far longer than any real app name.
+APP_NAME_PROMPT_CHARS = 60
 
 # What the variables are given at the default ceiling, derived rather than
 # measured: the default ceiling is a TOTAL, and the floor is part of it.
@@ -409,6 +445,84 @@ def build_single_pass_prompt(
     duration: int = 20,
     segment: str = "full",
     is_extension: bool = False,
+    prompt_budget: Optional[int] = None,
+    script_sacred: bool = False,
+) -> str:
+    """
+    Build the render prompt for a project that has no video strategy yet.
+
+    Same contract as `build_segment_prompt`, and now the same mechanism: the
+    ceiling comes in, the fixed floor is subtracted before the variables get
+    anything, and the scale is corrected from the measured length until the
+    prompt fits.
+
+    It accepted no budget before, which made it the one prompt in the codebase
+    with no way to fit a tight ceiling — nothing in it could be squeezed and a
+    prompt that did not fit could only be refused. The submit path refuses a
+    strategy-less project before it builds any prompt, so this is not the path
+    behind the 4,152-character HeyGen refusal; it is the same ceiling with no
+    answer for it, and it now scales like its sibling instead of depending on
+    the guard.
+
+    `script_sacred` carries the same meaning as in `build_segment_prompt`: the
+    founder's spoken words hold their full budget and the direction absorbs the
+    squeeze, so fitting a tight ceiling never costs the script a character.
+    """
+    if prompt_budget is None:
+        prompt_budget = RENDER_PROMPT_LIMIT
+    try:
+        budget = float(prompt_budget)
+    except (TypeError, ValueError):
+        budget = 0.0
+    # A caller bug, not a tight budget: falling back to the measured default
+    # keeps the prompt whole, exactly as the segment builder does.
+    if budget <= 0:
+        budget = float(RENDER_PROMPT_LIMIT)
+
+    condensed = budget < CONDENSE_BELOW
+    # The same arithmetic as _budget_scale, against this builder's own floor.
+    scale = max(
+        MIN_SCALE,
+        min(1.0, (budget - SINGLE_PASS_PROMPT_FLOOR) / float(NATURAL_VARIABLE_SPACE)),
+    )
+
+    prompt = ""
+    for attempt in range(MAX_FIT_ATTEMPTS):
+        t_scale = _PROMPT_SCALE.set(scale)
+        t_condensed = _PROMPT_CONDENSED.set(condensed)
+        t_protect = _PROMPT_PROTECT.set(attempt == 0)
+        t_sacred = _PROMPT_SCRIPT_SACRED.set(bool(script_sacred))
+        try:
+            prompt = _assemble_single_pass_prompt(
+                plan, profile, template, duration, segment, is_extension,
+            )
+        finally:
+            _PROMPT_SCRIPT_SACRED.reset(t_sacred)
+            _PROMPT_PROTECT.reset(t_protect)
+            _PROMPT_CONDENSED.reset(t_condensed)
+            _PROMPT_SCALE.reset(t_scale)
+        if len(prompt) <= budget:
+            return prompt
+        if scale <= MIN_SCALE:
+            break
+        # Correct from the measured overshoot, dividing the variable text by the
+        # variable room: the fixed instructions are most of what is left on a
+        # tight provider and they do not scale at all.
+        variable = max(1, len(prompt) - SINGLE_PASS_PROMPT_FLOOR)
+        room = budget - SINGLE_PASS_PROMPT_FLOOR
+        if room <= 0:
+            break
+        scale = max(MIN_SCALE, scale * room / variable * 0.99)
+    return prompt
+
+
+def _assemble_single_pass_prompt(
+    plan: dict,
+    profile: dict,
+    template: Optional[dict] = None,
+    duration: int = 20,
+    segment: str = "full",
+    is_extension: bool = False,
 ) -> str:
     """
     Build the prompt for ONE coherent generation covering the whole video.
@@ -424,7 +538,7 @@ def build_single_pass_prompt(
         is_extension: True when continuing a longer video. The prompt then
             asks the model to continue seamlessly rather than open cold.
     """
-    app_name = (profile or {}).get("brand_name") or "the app"
+    app_name = _clip((profile or {}).get("brand_name"), APP_NAME_PROMPT_CHARS) or "the app"
     hook = _clip(plan.get("hook_line"), 150)
     script = _clip(plan.get("script"), 400)
     visual = _clip(plan.get("visual_direction"), 120)
@@ -982,6 +1096,41 @@ def build_segment_prompt(
         if room <= 0:
             break
         scale = max(MIN_SCALE, scale * room / variable * 0.99)
+
+    # Still over after the correction loop. That means the scale bottomed out at
+    # MIN_SCALE with the prompt above the ceiling, and until now the only
+    # remaining outcome was the submit guard refusing the render — the founder
+    # reading that their script was too long when it was the description around
+    # it that would not fit. That is the shape of the report this closes: a
+    # project refused only by the tightest provider, with a prompt over its
+    # ceiling by a little.
+    #
+    # MIN_SCALE is a readability floor, not a physical limit: it exists so a
+    # prompt never reads as one-character stubs, not because a field cannot carry
+    # less. So one final pass is allowed below it, sized from the measured
+    # overshoot rather than guessed. The fixed instructions and the founder's
+    # spoken words still do not move — they are what remains once everything else
+    # has given way — so a terse brief that fits beats a refusal, and a provider
+    # ceiling becomes a guarantee rather than a hope that every value reaching
+    # the prompt happens to be clipped.
+    if budget and len(prompt) > budget:
+        fixed = CONDENSED_PROMPT_FLOOR if condensed else FULL_PROMPT_FLOOR
+        variable = max(1, len(prompt) - fixed)
+        room = budget - fixed
+        if room > 0:
+            final_scale = max(FINAL_SCALE, min(MIN_SCALE, room / variable * 0.95))
+            token = _PROMPT_SCALE.set(final_scale)
+            token2 = _PROMPT_CONDENSED.set(condensed)
+            token3 = _PROMPT_PROTECT.set(False)
+            token4 = _PROMPT_SCRIPT_SACRED.set(bool(script_sacred))
+            try:
+                prompt = _assemble_prompt(
+                    strategy, profile, template, duration, assets, plan)
+            finally:
+                _PROMPT_SCRIPT_SACRED.reset(token4)
+                _PROMPT_PROTECT.reset(token3)
+                _PROMPT_CONDENSED.reset(token2)
+                _PROMPT_SCALE.reset(token)
     return prompt
 
 
@@ -1009,7 +1158,7 @@ def _assemble_prompt(
     strategy = strategy or {}
     tpl = template or {}
     plan = plan or {}
-    app_name = (profile or {}).get("brand_name") or "the app"
+    app_name = _clip((profile or {}).get("brand_name"), APP_NAME_PROMPT_CHARS) or "the app"
     seconds = max(1, int(duration or 0))
 
     sections = []

@@ -6217,6 +6217,12 @@ async def _submit_generation(
             script_sacred=(model_key == "heygen-video-1"),
         )
     else:
+        # The no-strategy fallback, and it now takes the same ceiling and the
+        # same sacred-script rule as the strategy path. It used to take neither,
+        # so nothing in it could fit a tight provider. Unreachable today —
+        # _require_current_strategy refuses a strategy-less project first — and
+        # wired the same way regardless, so the two builders cannot disagree
+        # about a ceiling if that ordering ever changes.
         prompt = generation_planning.build_single_pass_prompt(
             plan=render_plan,
             profile=profile,
@@ -6224,6 +6230,8 @@ async def _submit_generation(
             duration=seconds,
             segment=segment_role,
             is_extension=is_extension,
+            prompt_budget=prompt_budget,
+            script_sacred=(model_key == "heygen-video-1"),
         )
 
     # The fixed instructions in a prompt do not scale with the budget, only the

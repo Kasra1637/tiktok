@@ -1335,6 +1335,50 @@ class TestModelSelectionAtTheApiBoundary:
         assert middle_script in prompt, "the middle script lost its tail"
         assert big not in prompt, "direction wording survived whole"
 
+    def test_heygen_renders_a_long_app_name_on_a_full_strategy(self, api, monkeypatch):
+        """
+        The reported failure: "This script and photo produce a 4,152-character
+        prompt, over the 4,090 HeyGen Video accepts", while every other model
+        rendered the same project fine.
+
+        Two things had to be true at once for that, which is why it looked like
+        the script. Only the tightest ceiling failed, because the wider ones had
+        room to absorb it; and the app's name was the one value in the prompt
+        that never scaled, appearing three times, so no amount of squeezing the
+        rest could pull it back inside. Past roughly 600 characters the fit loop
+        bottomed out and the submit guard refused the render — blaming the script
+        for a prompt that was mostly the app's name.
+
+        The profile normalizer caps how many items a list has and never how long
+        a string is, so a pasted app title reaches the builder whole.
+        """
+        calls = _mock_submit(api, monkeypatch)
+        from models import StudioGenerationRequest
+        import generation_planning as gp
+        project, _, _ = _ready_project(api, "HeyGen Long Name", duration=12)
+        _run(api._execute(
+            "UPDATE brand_profiles SET brand_name = ? WHERE id = ?",
+            ("N" * 1200, project["brand_profile_id"])))
+
+        asyncio.run(api.submit_project_generation(
+            project_id=project["id"],
+            payload=StudioGenerationRequest(model="heygen-video-1"),
+            user_id=ANON,
+        ))
+        assert len(calls) == 1, "the render was refused instead of submitted"
+        prompt = calls[0]["prompt"]
+        assert len(prompt) <= 4090, (
+            f"heygen prompt is {len(prompt)} chars, over its 4,090 ceiling — "
+            f"this 409s after the founder asked for it."
+        )
+        # The name is bounded, not dropped: the model still knows what it is
+        # filming, which is the whole reason it is in the prompt. How much
+        # survives depends on where the value can be cut cleanly — an unbroken
+        # run of characters has no word or line boundary, so the clip stops
+        # earlier than the character budget suggests.
+        assert "N" in prompt
+        assert prompt.count("N") < gp.APP_NAME_PROMPT_CHARS
+
 
 # A genuinely playable clip for the download path to accept.
 #

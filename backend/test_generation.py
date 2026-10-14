@@ -1306,6 +1306,134 @@ class TestPerProviderPromptBudget:
         assert len(condensed) == gp.CONDENSED_PROMPT_FLOOR
         assert gp.CONDENSED_PROMPT_FLOOR < gp.FULL_PROMPT_FLOOR
 
+    def test_every_ceiling_in_the_catalog_is_reachable(self):
+        """
+        The prompt cannot shrink below the fixed instructions, the founder's
+        spoken words, and one character per remaining field. That total — about
+        2,960 characters for a saturated strategy — is the floor no ceiling can
+        ask under, so a provider whose ceiling fell below it could never render
+        at all, and the founder would get a 409 on every project with no way to
+        tell which of their words was too many.
+
+        HeyGen's 4,090 is the tightest ceiling in the catalog and clears it by
+        about 1,100, which is the margin the last fix bought.
+        """
+        kwargs = self._verbose_kwargs()
+        tightest = min(
+            vp.capability(k)["prompt_char_limit"] for k in vp.STUDIO_ELIGIBLE
+        )
+        prompt = gp.build_segment_prompt(
+            **kwargs, prompt_budget=2000, script_sacred=True)
+        assert len(prompt) > 2000, (
+            "a saturated prompt fit under 2,000 characters, so the irreducible "
+            "floor has moved and this margin no longer means anything"
+        )
+        assert tightest >= len(prompt) + 500, (
+            f"the tightest ceiling ({tightest}) is within 500 chars of this "
+            f"builder's {len(prompt)}-character floor; a saturated strategy "
+            f"would be refused on that provider"
+        )
+
+    def test_the_fallback_prompt_floor_still_matches_its_constant(self):
+        """The other builder's floor is load-bearing for the same reason.
+
+        The strategy builder's floor is pinned above; this is the no-strategy
+        path's, and it now divides a scale the same way. A stale value here
+        means a scale that is slightly too generous, which is invisible until a
+        prompt lands over a ceiling again.
+        """
+        measured = len(gp._assemble_single_pass_prompt({}, {}, {}, 10, "full", False))
+        assert measured == gp.SINGLE_PASS_PROMPT_FLOOR
+
+    def test_the_app_name_cannot_blow_a_ceiling_on_its_own(self):
+        """
+        Every value in a prompt scales with the ceiling except the app's name.
+
+        It was the one value that never went through `_clip`, and it appears
+        three times in the strategy prompt and once in the fallback one, so it
+        was the single input that could push a prompt past a ceiling no amount
+        of squeezing could pull back: at 1,200 characters the fallback prompt
+        measured 4,453 against HeyGen's 4,090, and the submit guard could only
+        refuse it.
+
+        The profile normalizer caps how many items a list has and never how long
+        a string is, so a long pasted name reaches the builder whole — which is
+        why this is a prompt-side guarantee and not a data-side one.
+        """
+        long_name = "N" * 1200
+        for name in ("heygen-video-1", "minimax-h3"):
+            limit = vp.capability(name)["prompt_char_limit"]
+            saturated = dict(self._verbose_kwargs())
+            saturated["profile"] = {**saturated["profile"], "brand_name": long_name}
+            strategy_prompt = gp.build_segment_prompt(
+                **saturated, prompt_budget=limit,
+                script_sacred=(name == "heygen-video-1"),
+            )
+            assert len(strategy_prompt) <= limit, (
+                f"{name}: a long app name produced {len(strategy_prompt)} chars, over "
+                f"its {limit} ceiling"
+            )
+            fallback = gp.build_single_pass_prompt(
+                plan={k: "D" * 400 for k in (
+                    "hook_line", "script", "visual_direction", "voice_direction", "tone")},
+                profile={"brand_name": long_name},
+                template={"name": "T", "opening_structure": "D" * 80,
+                          "middle_structure": "D" * 80, "hook_seconds": 3,
+                          "visual_style": "D" * 80, "camera_pacing": "D" * 80},
+                duration=15, prompt_budget=limit,
+                script_sacred=(name == "heygen-video-1"),
+            )
+            assert len(fallback) <= limit, (
+                f"{name}: the no-strategy prompt is {len(fallback)} chars, over its "
+                f"{limit} ceiling — the path that had no budget at all"
+            )
+
+    def test_the_fallback_prompt_takes_a_ceiling_and_keeps_the_script(self):
+        """
+        The regression: HeyGen refused a project with no strategy, while every
+        other model rendered the same project.
+
+        This path is the fallback used when a project has no video strategy yet.
+        It accepted no budget, so nothing in it could fit a tight ceiling and the
+        submit guard's 409 was the only available outcome — a founder reading
+        that the script was too long, when the script was the same one the other
+        providers had just rendered. It now takes the ceiling and the same
+        sacred-script rule, and the founder's words survive the squeeze whole.
+        """
+        hook = "You do not have a writing problem."
+        script = "You have eleven apps and none of them says what matters today."
+        limit = vp.capability("heygen-video-1")["prompt_char_limit"]
+        prompt = gp.build_single_pass_prompt(
+            plan={"hook_line": hook, "script": script,
+                  "visual_direction": "D" * 120, "voice_direction": "D" * 120,
+                  "tone": "D" * 120},
+            profile={"brand_name": "ShiftLog"},
+            template={"name": "Stop Doing This", "opening_structure": "D" * 80,
+                      "middle_structure": "D" * 80, "hook_seconds": 3,
+                      "visual_style": "D" * 80, "camera_pacing": "D" * 80},
+            duration=15, prompt_budget=limit, script_sacred=True,
+        )
+        assert len(prompt) <= limit
+        assert hook in prompt, "the founder's hook line lost its tail"
+        assert script in prompt, "the founder's script lost its tail"
+
+    def test_the_fallback_prompt_does_not_squeeze_at_a_normal_ceiling(self):
+        """
+        Fitting a tight ceiling is not a licence to shorten every render.
+        Without a budget the fallback is whole, and it must stay whole at the
+        default ceiling — the scale is clamped at 1.0 there, so nothing is cut.
+        """
+        whole = gp.build_single_pass_prompt(
+            plan={"hook_line": "A" * 150, "script": "B" * 400,
+                  "visual_direction": "C" * 120, "voice_direction": "D" * 120,
+                  "tone": "E" * 120},
+            profile={"brand_name": "ShiftLog"},
+            template={"name": "T", "hook_seconds": 3},
+            duration=15,
+        )
+        assert "A" * 150 in whole
+        assert "B" * 400 in whole
+
     def test_the_variable_budget_excludes_the_fixed_floor(self):
         """
         A ceiling is a TOTAL, so the floor comes out of it before the variables
