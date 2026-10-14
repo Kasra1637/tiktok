@@ -145,6 +145,10 @@ function AssetRow({
   // so on the row that matters this button was a second route to something the
   // app had already done — and a permanently disabled control invites the
   // question of what went wrong.
+  //
+  // Template rows are curated structures, not proven performers: this photo is
+  // the presenter on camera, and the trim/close/CTA are recorded and assembled
+  // as a separate Demo + CTA clip. Nothing is published here.
   const slotHeldByAnother = attachDisabled && !busy && asset.kind === "character_reference";
   return (
     <div className="inset-panel space-y-2">
