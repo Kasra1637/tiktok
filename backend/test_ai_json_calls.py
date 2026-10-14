@@ -209,16 +209,37 @@ class TestChatJson:
         assert "content_filter" in str(err.value)
 
 
+class TestModelConfiguration:
+    """
+    The chat slugs are env-overridable so a model swap is a config change, the
+    same way VIDEO_MODEL_DEFAULT already works for the video provider.
+    """
+
+    def test_a_missing_or_blank_var_falls_back_to_the_shipped_default(self, monkeypatch):
+        import ai_service
+        monkeypatch.delenv("AI_TEXT_MODEL", raising=False)
+        assert ai_service._model_from_env("AI_TEXT_MODEL", "fallback/model") == "fallback/model"
+        monkeypatch.setenv("AI_TEXT_MODEL", "   ")
+        assert ai_service._model_from_env("AI_TEXT_MODEL", "fallback/model") == "fallback/model"
+
+    def test_a_set_var_wins_over_the_default(self, monkeypatch):
+        import ai_service
+        monkeypatch.setenv("AI_VISION_MODEL", "vendor/other-model")
+        assert ai_service._model_from_env("AI_VISION_MODEL", "fallback/model") == "vendor/other-model"
+
+
 class TestChatModelRequestShape:
     """
     Claude Haiku 5.5 replaces GPT-5 Mini on every chat flow. The consequences
     that travel with the family are pinned here rather than re-discovered as
     production 400s:
 
-    - temperature IS accepted (Anthropic's range is 0-1) and is now sent, so
-      the field must be present and inside that range;
-    - max_tokens stays (OpenRouter maps it), and thinking tokens come out of
-      the same budget, which the truncation retry already covers.
+    - temperature is NOT sent. Claude accepts it on Anthropic's own API, but it
+      runs adaptive thinking by default and that combination is unverified, so
+      the guard in _temperature_param omits the field until a live call
+      (verify_chat_model.py) proves it is accepted;
+    - max_tokens stays (OpenRouter maps it), and thinking tokens are billed
+      against the same budget, which the truncation retry already covers.
     """
 
     def test_chat_models_point_at_haiku_5_5(self):
@@ -226,13 +247,12 @@ class TestChatModelRequestShape:
         assert ai_service.TEXT_MODEL == "anthropic/claude-haiku-5.5"
         assert ai_service.VISION_MODEL == "anthropic/claude-haiku-5.5"
 
-    def test_temperature_is_sent_within_anthropics_range(self, monkeypatch):
+    def test_temperature_is_not_sent(self, monkeypatch):
         import ai_service
         rec = _patch_client(monkeypatch, [_completion('{"a": 1}')])
         assert _run(ai_service._chat_json("sys", "prompt", "Ctx", temperature=0.4)) == {"a": 1}
         assert rec.payloads[0]["model"] == "anthropic/claude-haiku-5.5"
-        assert rec.payloads[0]["temperature"] == 0.4
-        assert 0 <= rec.payloads[0]["temperature"] <= 1
+        assert "temperature" not in rec.payloads[0]
 
     def test_no_response_format_without_a_schema(self, monkeypatch):
         import ai_service
@@ -288,8 +308,7 @@ class TestChatModelRequestShape:
     def test_direct_flows_send_response_format(self, monkeypatch):
         """
         The flows that post httpx directly (not through _chat_json) must
-        still carry the envelope: app research, angles, plan. All three now
-        send temperature too, since Claude Haiku 5.5 accepts it.
+        still carry the envelope: app research, angles, plan.
         """
         import ai_service
 
@@ -326,7 +345,7 @@ class TestChatModelRequestShape:
         assert len(rec.payloads) == 3
         for payload in rec.payloads:
             assert payload["response_format"]["type"] == "json_schema"
-            assert 0 <= payload["temperature"] <= 1
+            assert "temperature" not in payload
 
 
 class TestAngleFeedbackPromptWiring:
