@@ -145,8 +145,8 @@ const TEXTAREA_CLASS =
  * and every group carrying it put 24px of dead space around a 32px header,
  * which is most of what made the old panel feel bloated. `.surface-flush`
  * zeroes the gutter in the stylesheet, where it beats the utility layer, so
- * this component no longer reaches for `!p-0`. Content padding is 16px, the
- * shared row rhythm.
+ * this component no longer reaches for `!p-0`. Content padding is 20px with
+ * 20px stacks, the shared card rhythm.
  *
  * `open`/`onToggle` are lifted so the parent can persist which groups are open.
  */
@@ -164,7 +164,7 @@ function EditorSection({ title, icon, open, onToggle, testId, children }) {
           className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`}
         />
       </button>
-      {open && <div className="space-y-4 px-4 pb-4">{children}</div>}
+      {open && <div className="space-y-5 px-5 pb-5">{children}</div>}
     </SectionCard>
   );
 }

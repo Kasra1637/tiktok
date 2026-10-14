@@ -332,7 +332,7 @@ function GenerationRow({ row, siblings = [], onChanged }) {
   };
 
   return (
-    <article id={`generation-${row.id}`} className="surface-compact min-w-0 scroll-mt-6 space-y-4" data-testid="history-card">
+    <article id={`generation-${row.id}`} className="surface min-w-0 scroll-mt-6 space-y-5" data-testid="history-card">
       {/* Compact rail beside actual render context. The outer responsive grid
           gives each card a useful reading width instead of a full-page void. */}
       <div className={`history-row-layout ${showRail ? "has-preview" : ""}`}>

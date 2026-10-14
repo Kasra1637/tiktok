@@ -172,9 +172,10 @@ export function InfoListBlock({ label, items, tone = "default" }) {
  * rows sit in. The summary indents to the title, so the bar reads as one
  * column of text with its glyph in the margin rather than two left edges.
  *
- * Gutters step to 24px from 768px up; the
- * group is a flush card with no padding of its own, so without this its text
- * would sit shallower than a Create Video step card's on desktop.
+ * Gutters are the card rhythm itself (20px, 28px from 768px up — the same
+ * p-5 md:p-7 a `.surface` card carries): the group is a flush card with no
+ * padding of its own, so without this its text would sit shallower than a
+ * Create Video step card's on desktop.
  *
  * Native button = clickable + keyboard accessible with aria-expanded.
  * Grid-rows animation (200ms) opens without layout jump; the overflow-hidden
@@ -193,7 +194,7 @@ export function SectionGroup({ id, label, summary, icon: Icon, open, onToggle, c
         aria-expanded={open}
         aria-controls={contentId}
         onClick={() => onToggle(id, !open)}
-        className="flex w-full min-w-0 items-center justify-between gap-2 px-4 py-3 text-left transition duration-150 hover:bg-[color:var(--indigo-6)] md:px-6"
+        className="flex w-full min-w-0 items-center justify-between gap-2 row-pad text-left transition duration-150 hover:bg-[color:var(--indigo-6)] md:px-6"
       >
         <span className="min-w-0 flex-1">
           <SectionHeading as="span" icon={Icon}>{label}</SectionHeading>
@@ -216,12 +217,12 @@ export function SectionGroup({ id, label, summary, icon: Icon, open, onToggle, c
         style={{ gridTemplateRows: open ? "1fr" : "0fr", opacity: open ? 1 : 0 }}
       >
         <div className="min-h-0 overflow-hidden">
-          <div className="border-t border-[color:var(--hairline)] px-4 py-3 md:px-6">
+          <div className="border-t border-[color:var(--hairline)] p-5 md:p-7">
             {/* One darker well per group, mirroring the Audience & goal step:
                 label, controls and rows read as one organized unit instead of
                 cards scattered on the group surface. 16px between cards; a
                 single child (one card, one field stack) is unaffected. */}
-            <div className="inset-panel space-y-4">{children}</div>
+            <div className="inset-panel space-y-5">{children}</div>
           </div>
         </div>
       </div>
