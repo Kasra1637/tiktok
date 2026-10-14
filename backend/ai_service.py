@@ -40,17 +40,25 @@ OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 logger = logging.getLogger(__name__)
 
 # Models
-VISION_MODEL = "openai/gpt-5-mini"
-TEXT_MODEL = "openai/gpt-5-mini"
-# Both chat models are GPT-5 Mini: the successor to gpt-4o-mini/o4-mini,
-# multimodal (text+image in) with structured-output support. Two consequences
-# of the family travel with it everywhere below:
-# - temperature other than the default 1 is a 400 ("Only the default (1)
-#   value is supported"), so _temperature_param omits the field for it;
-# - max_tokens is accepted via OpenRouter (it maps to the provider field),
-#   and reasoning tokens come out of the same budget, so small budgets can
+VISION_MODEL = "anthropic/claude-haiku-5.5"
+TEXT_MODEL = "anthropic/claude-haiku-5.5"
+# Both chat models are Claude Haiku 5.5: Anthropic's small, fast, cost-sensitive
+# tier, multimodal (text+image in) with structured-output support. It replaces
+# GPT-5 Mini, which it beats on every axis this service cares about — cheaper
+# ($0.10/$0.50 vs $0.25/$2.00 per 1M), a larger context (1M vs 400K) and a much
+# higher intelligence index (~43 vs ~17). Three consequences travel with it
+# everywhere below:
+# - temperature IS accepted (Anthropic's range is 0-1), so _temperature_param
+#   now sends it; every call site here uses 0.3-0.5, comfortably inside that
+#   range. This restores the determinism control GPT-5 Mini could not offer.
+# - max_tokens is accepted via OpenRouter (it maps to the provider field), and
+#   thinking tokens come out of the same budget, so small budgets can still
 #   return empty content with finish_reason=length — which _chat_json already
 #   treats as truncation and retries with a doubled budget.
+# - structured outputs (strict json_schema) are routed per provider on
+#   OpenRouter and Anthropic is a supported provider; the local parse-and-retry
+#   in _chat_json stays as defense-in-depth for endpoints that treat the schema
+#   as a hint rather than a guarantee.
 # Image generation model for opening scene stills. Uses a dedicated image model
 # rather than a video model, since the opening frame is a single still image.
 
@@ -288,7 +296,10 @@ def _headers():
 # GPT-5 and the o-series only accept temperature=1: any other value is a 400
 # ("Unsupported value: 'temperature' ... Only the default (1) value is
 # supported"). The studio therefore sends the field only to models that take
-# it, so a model switch cannot silently turn every call into a refusal.
+# it, so a model switch cannot silently turn every call into a refusal. The
+# current chat model (Claude Haiku 5.5) is deliberately NOT in this list:
+# Anthropic accepts temperature across 0-1 and every call site stays inside
+# that range, so the field IS sent to it.
 _NO_TEMPERATURE_MODEL_PREFIXES = ("gpt-5", "o1", "o3", "o4")
 
 
@@ -739,9 +750,9 @@ async def _chat_json(
     Only after the retries are exhausted does it raise.
 
     `temperature` is accepted but only sent to models that take it (GPT-5
-    Mini does not); `json_schema`, when given, is sent as OpenRouter
-    structured output (strict JSON Schema) while the parse-and-retry below
-    stays as defense-in-depth for provider errors, refusals and truncation.
+    Mini did not; Claude Haiku 5.5 does); `json_schema`, when given, is sent as
+    OpenRouter structured output (strict JSON Schema) while the parse-and-retry
+    below stays as defense-in-depth for provider errors, refusals and truncation.
     """
     last_error = None
 
@@ -4199,7 +4210,7 @@ async def generate_video_strategy(
     # on paper can be exhausted before the closing brace is written. 8192
     # stays the floor: it fits this schema and sits inside the provider
     # output ceiling of the models this service can be pointed at
-    # (openai/gpt-5-mini allows 128,000 output tokens).
+    # (Claude Haiku 5.5's output ceiling is far above the 8192 used here).
     raw = await _chat_json(
         system_message=system_message,
         prompt=prompt,
