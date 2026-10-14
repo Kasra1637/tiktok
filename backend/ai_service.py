@@ -2595,13 +2595,18 @@ async def generate_creative_plan(
     # RAW draft for editorial correction instead. Retry the complete plan so
     # the two spoken lines and the timeline stay consistent with each other.
     # Clean drafts cost one call; corrections are bounded to two extra calls.
+    # Routed through _chat_json with headroom: 3500 tokens proved too small
+    # in production (2026-10-13) once GPT-5 Mini's reasoning tokens and the
+    # full strict schema share the budget — the reply truncated mid-object on
+    # BOTH attempts (3500, then 7000) and surfaced as a plan failure. 8000
+    # starts with room, and the retry doubles to 16000.
     attempt_prompt = prompt
     for attempt in range(3):
         result = await _chat_json(
             system_message=system_message,
             prompt=attempt_prompt,
             context="Creative plan",
-            max_tokens=3500,
+            max_tokens=8000,
             timeout=120,
             json_schema=PLAN_JSON_SCHEMA,
         )

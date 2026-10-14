@@ -516,6 +516,59 @@ class TestScriptVoiceAndTarget:
         assert "repair_spoken_story(" in server_src
 
 
+class TestCreativePlanBudget:
+    """
+    Production failure, 2026-10-13: the creative plan at max_tokens=3500
+    truncated mid-object under GPT-5 Mini (reasoning tokens share the
+    budget) on both the first attempt and the doubled retry, surfacing as
+    "AI plan generation failed ... cut off after 7000 tokens". Same fix as
+    the research and strategy budgets before it: start with headroom.
+    """
+
+    def test_plan_uses_a_budget_that_fits_its_schema(self):
+        """Guard the number itself, scoped to this caller."""
+        import re
+        src = (BACKEND_DIR / "ai_service.py").read_text(encoding="utf-8")
+        match = re.search(
+            r"async def generate_creative_plan\(.*?max_tokens=(\d+)", src, re.S)
+        assert match, "generate_creative_plan should route through _chat_json"
+        assert int(match.group(1)) >= 8000, (
+            f"plan max_tokens is {match.group(1)}; the schema needs headroom "
+            f"for thinking tokens on top of its paragraph values"
+        )
+
+    def test_truncated_plan_recovers_on_the_doubled_retry(self, monkeypatch):
+        """The user-visible failure becomes a result: one retry is enough."""
+        import ai_service
+        plan = {
+            "hook_line": "I couldn't name what I was feeling.",
+            "script": ("The suggestions helped me find the words. "
+                       "I understood myself better after writing the entry."),
+            "beat_timeline": [
+                {"start": 0, "end": 3, "label": "hook",
+                 "text": "I couldn't name what I was feeling."},
+                {"start": 3, "end": 15, "label": "middle", "text": "script"},
+            ],
+            "visual_direction": "A person reflecting at their desk.",
+            "demo_brief": "Record the emotion suggestions.",
+            "voice_direction": "Conversational.",
+            "sound_direction": "Voice only.",
+            "claims_used": [],
+        }
+        half = '{"hook_line": "I couldn\'t name what I was feeling.', \
+            '"script": "The sugg'
+        rec = _patch_client(monkeypatch, [
+            _completion(half, finish_reason="length"),
+            _completion(json.dumps(plan)),
+        ])
+        result = _run(ai_service.generate_creative_plan(
+            profile={}, template={"hook_seconds": 3}, duration_seconds=15,
+        ))
+        assert result["hook_line"] == plan["hook_line"]
+        assert result["script"] == plan["script"]
+        assert [p["max_tokens"] for p in rec.payloads] == [8000, 16000]
+
+
 class TestStrategyBudget:
     def test_strategy_uses_a_budget_that_fits_its_schema(self):
         """
