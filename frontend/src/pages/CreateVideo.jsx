@@ -2053,10 +2053,9 @@ setObjective("");
             {!objective && (
               <EmptyState
                 icon={Target}
-                title="Choose what this video is for before picking a template."
-                description="Required before templates can be ranked."
+                title="Choose what this video is for — templates are ranked for it."
                 action={
-                  <Button variant="secondary" size="sm" onClick={() => setStep(1)}>
+                  <Button variant="brand" onClick={() => setStep(1)}>
                     <Target className="h-3.5 w-3.5" /> Set the goal
                   </Button>
                 }
@@ -2193,7 +2192,7 @@ setObjective("");
               </p>
               {!templateId ? (
                 <p className="text-sm text-muted-foreground">
-                  Choose a template above to attach a presenter photo to this draft.
+                  Pick a template above first — your photo attaches to this draft.
                 </p>
               ) : !project ? (
                 <>
