@@ -32,6 +32,18 @@ class TestCanvasRescale:
         assert "scale=1080:1920" in graph
         assert "pad=1080:1920" in graph
 
+    def test_upscale_command_uses_lanczos(self):
+        """
+        Pinned: most studio renders arrive below the canvas and are scaled up
+        (Grok at 720p, H3 Max and HeyGen at 768p), and a bilinear up-scale is
+        visibly mushier than lanczos. A silent regression to the default scaler
+        is invisible in the output metadata -- the frame size is identical -- so
+        it has to be asserted here.
+        """
+        argv = overlays.build_upscale_command(Path("in.mp4"), Path("out.mp4"))
+        graph = argv[argv.index("-filter_complex") + 1]
+        assert "flags=lanczos" in graph
+
     def test_upscale_command_chains_scale_into_pad(self):
         """
         Pad must read scale's output, not the raw input, or the chain silently
