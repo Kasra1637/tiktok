@@ -248,7 +248,7 @@ export function StatementCard({ title, rows, spanFull }) {
         spanFull && "md:col-span-2"
       )}
     >
-      <p className="text-sm font-medium leading-[22px]">{sentenceCase(title)}</p>
+      <p className="text-sm font-semibold leading-[22px]">{sentenceCase(title)}</p>
       {rows.filter(Boolean).length > 0 && (
         <>
           <div aria-hidden="true" className="h-px bg-[color:var(--hairline)]" />

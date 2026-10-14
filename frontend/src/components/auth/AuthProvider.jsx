@@ -47,8 +47,8 @@ const clerkAppearance = {
 
     // Social / OAuth buttons
     socialButtonsBlockButton:
-      "!rounded-xl !border-[hsl(228,12%,17%)] !bg-[hsl(228,12%,16%)] hover:!bg-[hsl(228,12%,20%)] transition-colors font-medium",
-    socialButtonsBlockButtonText: "font-medium !text-[hsl(220,20%,93%)]",
+      "!rounded-xl !border-[hsl(228,12%,17%)] !bg-[hsl(228,12%,16%)] hover:!bg-[hsl(228,12%,20%)] transition-colors font-semibold",
+    socialButtonsBlockButtonText: "font-semibold !text-[hsl(220,20%,93%)]",
 
     // Primary action button
     formButtonPrimary:
@@ -57,11 +57,11 @@ const clerkAppearance = {
     // Input fields
     formFieldInput:
       "!rounded-xl !border-[hsl(228,12%,17%)] !bg-[hsl(228,12%,14%)] focus:!border-[rgba(129,140,248,0.35)] transition-colors !text-[hsl(220,20%,93%)]",
-    formFieldLabel: "font-medium text-sm !text-[hsl(220,20%,85%)]",
+    formFieldLabel: "font-semibold text-sm !text-[hsl(220,20%,85%)]",
 
     // Footer links
     footerActionLink:
-      "!text-[#818CF8] hover:!text-[#6366F1] font-medium",
+      "!text-[#818CF8] hover:!text-[#6366F1] font-semibold",
 
     // Divider
     dividerLine: "!bg-[hsl(228,12%,17%)]",

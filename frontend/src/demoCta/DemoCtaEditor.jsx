@@ -1502,7 +1502,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   onClick={() => setViewMode(id)}
                   aria-pressed={viewMode === id}
                   data-testid={`view-mode-${id}`}
-                  className={`h-8 rounded-lg text-xs font-medium transition duration-150 ${
+                  className={`h-8 rounded-lg text-xs font-semibold transition duration-150 ${
                     viewMode === id
                       ? "bg-[color:var(--brand-indigo)]/15 text-foreground shadow-[var(--shadow-xs)]"
                       : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
@@ -2041,7 +2041,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                     <span className="font-mono text-xs">+1s</span>
                   </TransportButton>
                   <div className="flex items-baseline gap-1.5 px-1">
-                    <span className="font-mono text-sm font-medium tabular-nums tracking-tight">
+                    <span className="font-mono text-sm font-semibold tabular-nums tracking-tight">
                       {formatTime(currentTime)}
                     </span>
                     <span className="font-mono text-xs text-muted-foreground">/</span>

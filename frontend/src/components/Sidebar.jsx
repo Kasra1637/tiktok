@@ -122,7 +122,7 @@ function NavItem({ item, collapsed, active, onNavigate, testId }) {
       />
       {!collapsed && (
         <span className="flex min-w-0 flex-col">
-          <span className={`truncate text-sm leading-tight ${active ? "font-semibold" : "font-medium"}`}>
+          <span className={`truncate text-sm leading-tight ${active ? "font-semibold" : "font-normal"}`}>
             {item.label}
           </span>
           {/* Full --muted-foreground, no opacity modifier: at 12px the /70
@@ -194,7 +194,7 @@ function SidebarFooter({ collapsed }) {
             appearance={{ elements: { avatarBox: "h-8 w-8 rounded-lg" } }}
           />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-medium leading-tight">Your Account</p>
+            <p className="truncate text-xs font-semibold leading-tight">Your Account</p>
             <p className="text-xs text-muted-foreground">Manage profile</p>
           </div>
         </div>
@@ -205,7 +205,7 @@ function SidebarFooter({ collapsed }) {
         <button
           type="button"
           onClick={replayCurrentPageTour}
-          className="flex w-full items-center gap-2 rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3.5 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:border-[color:var(--indigo-35)] hover:text-[color:var(--brand-indigo)]"
+          className="flex w-full items-center gap-2 rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3.5 py-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:border-[color:var(--indigo-35)] hover:text-[color:var(--brand-indigo)]"
         >
           <HelpCircle className="h-3.5 w-3.5" />
           <span>Show me around</span>
@@ -245,7 +245,7 @@ export function Sidebar({ collapsed, onToggleCollapsed }) {
         >
           <LogoMark />
           {!collapsed && (
-            <span className="font-display truncate text-[17px] font-bold tracking-tight">HookForge</span>
+            <span className="font-display truncate text-sm font-semibold tracking-tight">HookForge</span>
           )}
         </Link>
         {!collapsed && (
@@ -324,7 +324,7 @@ export function MobileSidebar({ open, onClose }) {
             data-testid="mobile-logo-home-link"
           >
             <LogoMark />
-            <span className="font-display truncate text-[17px] font-bold tracking-tight">HookForge</span>
+            <span className="font-display truncate text-sm font-semibold tracking-tight">HookForge</span>
           </Link>
           <button
             type="button"

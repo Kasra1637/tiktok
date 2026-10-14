@@ -24,7 +24,7 @@ export function HookBreakdown({ analysis }) {
           />
           <div className="relative space-y-2">
             <SectionHeading as="h3" icon={Lightbulb}>Hook summary</SectionHeading>
-            <p className="text-base leading-relaxed">{analysis.hook_summary}</p>
+            <p className="text-sm leading-relaxed">{analysis.hook_summary}</p>
           </div>
         </div>
       </div>

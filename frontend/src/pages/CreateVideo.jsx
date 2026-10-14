@@ -170,7 +170,7 @@ function RecommendationCard({ r, selected, onSelect }) {
       }`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm font-medium">{r.template.name}</span>
+        <span className="text-sm font-semibold">{r.template.name}</span>
         <span className="flex flex-wrap items-center gap-2">
           <Badge variant="outline" className="text-xs">
             {r.suggested_duration}s
@@ -290,7 +290,7 @@ function TemplateShape({ template }) {
   return (
     <div className="mt-2 space-y-1">
       <p className="text-xs">
-        <span className="font-medium">{total}s piece</span>: a {split.hookSeconds}s hook, then a{" "}
+        <span className="font-semibold">{total}s piece</span>: a {split.hookSeconds}s hook, then a{" "}
         {split.middleSeconds}s middle.
       </p>
       {middle && <p className="text-xs text-muted-foreground">{sentenceCase(middle)}</p>}
@@ -312,7 +312,7 @@ function MissingRequirements({ identity, onGoToTemplatePhoto }) {
 
   return (
     <div className="inset-panel space-y-2">
-      <p className="text-sm font-medium">
+      <p className="text-sm font-semibold">
         This template needs a character reference before it can generate
       </p>
       <p className="text-xs text-muted-foreground">
@@ -604,7 +604,7 @@ function AngleGoalPicker({
                   : "border-[color:var(--hairline)]"
               }`}
             >
-              <span className="flex items-center justify-between gap-2 text-sm font-medium">
+              <span className="flex items-center justify-between gap-2 text-sm font-semibold">
                 {humanize(goal)}
                 {selected && <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-[color:var(--brand-indigo)]" />}
               </span>
@@ -1790,7 +1790,7 @@ setObjective("");
               <div className="flex items-start gap-2">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">
+                  <p className="text-sm font-semibold">
                     {describeUnapprovedCount(unapproved.length)}
                   </p>
                   {unapproved.length > 3 ? (
@@ -2038,7 +2038,7 @@ setObjective("");
       return (
         <StepShell
           icon={LayoutTemplate}
-          title="Choose a template and add your photo"
+          title="Choose a template & add your photo"
           description="Compare goal-matched suggestions by fit reasons and caveats. Keep the preselected suggestion or choose another."
         >
           <div className="space-y-4">
@@ -2120,7 +2120,7 @@ setObjective("");
             {template && (
               <div className="inset-panel text-sm">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium">{template.name}</span>
+                  <span className="font-semibold">{template.name}</span>
                   <Badge variant="secondary" className="text-xs">
                     {humanize(template.category)}
                   </Badge>
@@ -2381,7 +2381,7 @@ if (step === 3) {
           <div className="inset-panel space-y-3">
             <div className="flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-sm font-medium">
+              <span className="text-sm font-semibold">
                 {loading && !busy ? "Loading your draft…" : "Generating your plan…"}
               </span>
             </div>
@@ -2545,7 +2545,7 @@ if (step === 3) {
               </div>
             )}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Hook line</label>
+              <label className="text-sm font-semibold">Hook line</label>
               <p className="text-xs text-muted-foreground">The opening line spoken in your generated Hook + Story clip.</p>
               <Input
                 value={editValue("hook_line", "")}
@@ -2553,7 +2553,7 @@ if (step === 3) {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Script</label>
+              <label className="text-sm font-semibold">Script</label>
               <p className="text-xs text-muted-foreground">The spoken story after the hook. The generated clip does not include your filmed product demo or closing CTA.</p>
               <Textarea
                 value={editValue("script", "")}
@@ -2595,7 +2595,7 @@ if (step === 3) {
                   const overCeiling = line.verdict === "over_ceiling";
                   return (
                     <p key={key} className="text-xs text-muted-foreground">
-                      <span className="font-medium">{label}: </span>
+                      <span className="font-semibold">{label}: </span>
                       {chars} characters{target ? `, aiming for about ${target}` : ""}
                       {overCeiling
                         ? ` — past the ${ceiling} characters these seconds can speak, so it is cut back before the render.`
@@ -2648,7 +2648,7 @@ if (step === 3) {
                 the render, so correcting it here cannot smuggle a feature
                 instruction back into the video. */}
             <div className="inset-panel space-y-2">
-              <label htmlFor="review-demo-brief" className="text-sm font-medium">
+              <label htmlFor="review-demo-brief" className="text-sm font-semibold">
                 What you record for the demo
               </label>
               <Textarea
@@ -2662,9 +2662,9 @@ if (step === 3) {
                 A note to you, not the model — never reaches the render.
               </p>
             </div>
-            <GroupLabel icon={AudioLines}>Visual and audio direction</GroupLabel>
+            <GroupLabel icon={AudioLines}>Visual &amp; audio direction</GroupLabel>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Visual direction</label>
+              <label className="text-sm font-semibold">Visual direction</label>
               <p className="text-xs text-muted-foreground">Describe the generated scene and look. This is guidance for the rendered Hook + Story, not footage of your app demo.</p>
               <Textarea
                 value={editValue("visual_direction", "")}
@@ -2714,7 +2714,7 @@ if (step === 3) {
                 length is a different template and a regenerated plan. */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <span className="text-sm font-medium">Length of the generated piece</span>
+                <span className="text-sm font-semibold">Length of the generated piece</span>
                 <p className="rounded-lg border border-[color:var(--hairline)] px-3 py-2 text-sm">
                   {pieceSeconds} seconds
                 </p>
@@ -2725,7 +2725,7 @@ if (step === 3) {
                 </p>
               </div>
               <div className="space-y-2">
-                <label htmlFor="review-tone" className="text-sm font-medium">Tone</label>
+                <label htmlFor="review-tone" className="text-sm font-semibold">Tone</label>
                 <Input
                   id="review-tone"
                   value={editValue("tone", "")}
@@ -2736,7 +2736,7 @@ if (step === 3) {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Voice direction</label>
+              <label className="text-sm font-semibold">Voice direction</label>
               <Textarea
                 value={editValue("voice_direction", "")}
                 onChange={(e) => setEdits({ ...edits, voice_direction: e.target.value })}
@@ -2861,7 +2861,7 @@ if (step === 3) {
               title={STEP_STATE_COPY[s.state]}
               data-state={s.state}
               data-testid={`step-pill-${s.step.key}`}
-              className={`inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
                 active
                   ? "border-[color:var(--indigo-35)] bg-primary/15 text-[color:var(--brand-indigo)]"
                   : s.state === "done"

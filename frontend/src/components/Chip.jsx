@@ -25,7 +25,7 @@ export function Chip({
   ariaLabel,
 }) {
   const sizing =
-    size === "md" ? "px-3.5 py-1.5 text-[13px] gap-1.5" : "px-2.5 py-1 text-xs gap-1";
+    size === "md" ? "px-3.5 py-1.5 text-sm gap-1.5" : "px-2.5 py-1 text-xs gap-1";
 
   const activeTone =
     tone === "coral"
@@ -41,7 +41,7 @@ export function Chip({
       aria-label={ariaLabel}
       title={title}
       data-testid={testId}
-      className={`inline-flex shrink-0 items-center rounded-full border font-medium transition-[background-color,border-color,color,box-shadow] duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${sizing} ${
+      className={`inline-flex shrink-0 items-center rounded-full border font-semibold transition-[background-color,border-color,color,box-shadow] duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${sizing} ${
         active
           ? activeTone
           : "border-[color:var(--hairline)] bg-secondary/40 text-muted-foreground hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] hover:text-foreground"

@@ -425,7 +425,7 @@ return (
                 instead of squeezing. Create Video starts from the sidebar —
                 this header only manages the profile. */}
             {approved ? (
-              <Badge className="border-green-500/25 bg-green-500/10 px-3 py-1 font-medium text-green-300 transition-none">Approved</Badge>
+              <Badge className="border-green-500/25 bg-green-500/10 px-3 py-1 font-semibold text-green-300 transition-none">Approved</Badge>
             ) : (
               <Badge variant="secondary" className="px-3 py-1 transition-none">Draft — needs review</Badge>
             )}
@@ -542,7 +542,7 @@ return (
       {!approved && (
         <Alert>
           <ClipboardCheck className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-          <AlertTitle>Review and approve before generating</AlertTitle>
+          <AlertTitle>Review &amp; approve before generating</AlertTitle>
           <AlertDescription className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
             <span className="text-muted-foreground">
               Content angles and template recommendations need an approved, verified profile.
@@ -723,7 +723,7 @@ return (
             </DialogDescription>
           </DialogHeader>
 
-          <label className="block text-sm font-medium" htmlFor="delete-confirm-name">
+          <label className="block text-sm font-semibold" htmlFor="delete-confirm-name">
             Type <span className="font-semibold">{deletableName}</span> to confirm
           </label>
           <Input

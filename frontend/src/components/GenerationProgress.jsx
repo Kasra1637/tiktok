@@ -71,7 +71,7 @@ export function GenerationProgress({ stages, active }) {
               </div>
               <span
                 className={`pb-2 text-sm leading-5 ${
-                  current ? "font-medium text-foreground" : done ? "text-foreground/80" : "text-muted-foreground"
+                  current ? "font-semibold text-foreground" : done ? "text-foreground/80" : "text-muted-foreground"
                 }`}
               >
                 {stage}

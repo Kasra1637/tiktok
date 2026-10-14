@@ -5162,7 +5162,7 @@ async function runIconChecks() {
   });
 
   await check("no small section headings", async () => {
-    // Card and section titles are the display token (font-display 16
+    // Card and section titles are the display token (font-display 14
     // semibold) or the uppercase GroupLabel; a 14px medium h2/h3 is a
     // fourth title dialect. ProfileCard's old sentence-case h3 was the
     // last one and is now a GroupLabel, so there is no exception left.
@@ -5175,6 +5175,60 @@ async function runIconChecks() {
     }
     if (small.length) {
       throw new Error(`small h2/h3 section headings:\n        ${small.join("\n        ")}`);
+    }
+  });
+
+  await check("workspace enforces 3 sizes x 2 weights", async () => {
+    // Workspace pages and shared components use only text-xs / text-sm / text-2xl
+    // and font-normal / font-semibold (Landing and LegalPage retain their own
+    // marketing and document type scales).
+    const bad = [];
+    function collectSrc(dir, out = []) {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, entry.name);
+        if (entry.isDirectory()) collectSrc(p, out);
+        else if (/\.(js|jsx|css)$/.test(entry.name)) out.push(p);
+      }
+      return out;
+    }
+    for (const abs of collectSrc(SRC)) {
+      if (abs.endsWith("Landing.jsx") || abs.endsWith("LegalPage.jsx")) continue;
+      const src = fs.readFileSync(abs, "utf8");
+      for (const m of src.matchAll(
+        /\b(?:md:|sm:|lg:)?text-(?:base|lg|xl|3xl|4xl|5xl|\[[^\]]+\])\b|\bfont-(?:light|medium|bold|extrabold)\b/g
+      )) {
+        bad.push(`${path.relative(SRC, abs)}: ${m[0]}`);
+      }
+    }
+    if (bad.length) {
+      throw new Error(
+        `off-scale font size or weight in workspace:\n        ${bad.join("\n        ")}`
+      );
+    }
+  });
+
+  await check("buttons share the studio specular bevel, sweep, and icon micro-animation", async () => {
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    for (const token of [
+      ".btn-studio",
+      ".btn-bevel-brand",
+      ".btn-bevel-accent",
+      ".btn-bevel-neutral",
+      ".btn-studio:hover:not(:disabled) svg:not(.animate-spin)",
+    ]) {
+      if (!css.includes(token)) {
+        throw new Error(`index.css is missing studio button rule: ${token}`);
+      }
+    }
+    const buttonSrc = fs.readFileSync(path.join(SRC, "components", "ui", "button.jsx"), "utf8");
+    for (const cls of ["btn-studio", "btn-bevel-brand", "btn-bevel-accent", "btn-bevel-neutral"]) {
+      if (!buttonSrc.includes(cls)) {
+        throw new Error(`button.jsx is missing studio button class: ${cls}`);
+      }
+    }
+    const landingSrc = fs.readFileSync(path.join(SRC, "pages", "Landing.jsx"), "utf8");
+    if (landingSrc.includes("bg-[color:var(--brand-coral)]")) {
+      throw new Error("Landing.jsx still hand-rolls coral CTA styles instead of variant=\"brand\"");
     }
   });
 

@@ -22,7 +22,7 @@ export function PageHeader({ icon, eyebrow, title, description, actions, align =
           {icon && <IconTile icon={icon} size="page" />}
           <div className="min-w-0">
             {eyebrow && <span className="eyebrow block">{eyebrow}</span>}
-            <h1 className="font-display truncate text-2xl font-bold tracking-tight md:text-[28px]">
+            <h1 className="font-display truncate text-2xl font-semibold tracking-tight">
               {title}
             </h1>
           </div>

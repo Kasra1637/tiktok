@@ -101,7 +101,7 @@ function StrategyBlock({ title, icon: Icon, rows, description }) {
       <dl className="space-y-2">
         {filled.map(([label, value]) => (
           <div key={label}>
-            <dt className="text-xs font-medium text-muted-foreground">
+            <dt className="text-xs font-semibold text-muted-foreground">
               {strategyLabel(label)}
             </dt>
             <dd className="mt-0.5 text-sm leading-snug">{sentenceCase(String(value))}</dd>
@@ -131,7 +131,7 @@ function SectionRow({ section }) {
   return (
     <li className="space-y-1">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-medium capitalize">{section.role}</span>
+        <span className="font-semibold capitalize">{section.role}</span>
         <Badge variant="outline" className="text-xs">{section.seconds}s</Badge>
       </div>
       <p className="text-xs text-muted-foreground">{SECTION_COPY[section.role]}</p>
@@ -148,7 +148,7 @@ function SectionRow({ section }) {
           read like a draft: it is what will be sent, not what was approved. */}
       {typeof section.script === "string" && section.script.trim() && (
         <p className="text-sm" data-testid={`section-spoken-${section.role}`}>
-          <span className="font-medium">What is said here: </span>
+          <span className="font-semibold">What is said here: </span>
           {sentenceCase(section.script.trim())}
         </p>
       )}
@@ -393,7 +393,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
               {["hook", "middle"].map((role) => (
                 <li key={role} className="space-y-1">
                   <span className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium capitalize">{role}</span>
+                    <span className="font-semibold capitalize">{role}</span>
                     <span className="text-xs text-muted-foreground">{SECTION_COPY[role]}</span>
                   </span>
                   <p className="text-xs text-muted-foreground">

@@ -89,15 +89,17 @@ headline treatments.
 
 Display text carries tight tracking (`-0.02em`, `-0.03em` on `h1`/`.font-display`).
 
-### Type scale and the 12px floor
+### Type scale: 3 Sizes × 2 Weights (12px floor)
 
 **Minimum type size is 12px (`text-xs`). No exceptions.** The audience is
 mobile-heavy and `--muted-foreground` is already a mid-contrast gray; below 12px
 it stops clearing WCAG AA.
 
-- Use Tailwind's named steps: `text-xs` (12) → `text-sm` (14) → `text-base` (16) → `text-lg` …
-- Arbitrary values (`text-[13px]`, `text-[17px]`, `text-[28px]`) are tolerated
-  only for display/heading sizes, never to go below 12px.
+The workspace shell uses **3 font sizes** and **2 font weights** only (marketing `Landing` and `LegalPage` retain their own editorial scales):
+
+- **3 sizes:** `text-xs` (12px — `.eyebrow`, badges, chips, metadata, hints), `text-sm` (14px — body copy, inputs, buttons, `.section-heading`, card titles, dialog titles, `EmptyState` heading, sidebar wordmark), and `text-2xl` (24px — `PageHeader` `h1` and auth wordmark). Do not introduce `text-base`, `text-lg`, `text-xl`, or arbitrary pixel sizes (`text-[13px]`, `text-[17px]`, `text-[28px]`) in workspace pages or components.
+- **2 weights:** `font-normal` (400 — reading copy, inputs, inactive nav items) and `font-semibold` (600 — headings, labels, buttons, chips, badges, active nav items, and `PageHeader` `h1`). Do not use `font-medium` (500) or `font-bold` (700) in workspace pages or components.
+- **Ampersands in headings & labels:** Workspace headings, titles, labels, and button copy use `&` instead of `and` (e.g., `Visual & audio direction`, `Choose a template & add your photo`, `What you have & what is left`).
 - `.eyebrow` — uppercase tracked-out label, `0.75rem`/600. Don't override its size.
 - **Do not stack an opacity modifier on small muted text.** `text-muted-foreground/70`
   at 12px falls below AA on `--background`. Use the full token.
@@ -147,10 +149,10 @@ card is `.inset-panel`.
 | Section card | `SectionCard` + `SectionHeading` | 16px outline glyph, no tile | `h2`, 14px/600 uppercase, tracked 0.08em, muted |
 | Wizard step | `StepShell` + `SectionHeading` | 16px outline glyph, no tile | same section heading + muted description |
 | Group inside a card | `GroupLabel` + hairline divider, never a nested box | 16px glyph on the bar, 12px on the card's own `.eyebrow` | `.eyebrow` (all caps) |
-| Aside inside a card | `.inset-panel` (12px radius, 16px gutter) | none | 14px medium, or an `.eyebrow` |
-| Disclosure row | `.row-pad` inside one `.surface surface-flush` card, hairline between rows | none, or 16px on an accordion bar | 14px medium label, or uppercase tracked on the bar |
+| Aside inside a card | `.inset-panel` (12px radius, 16px gutter) | none | 14px semibold, or an `.eyebrow` |
+| Disclosure row | `.row-pad` inside one `.surface surface-flush` card, hairline between rows | none, or 16px on an accordion bar | 14px semibold label, or uppercase tracked on the bar |
 | Pickable option | its own frame — `rounded-xl border bg-card/70`, bar is `px-4 py-3`, `space-y-2` between them | 16px, its own | `text-sm` uppercase tracked, muted |
-| Field / detail row | label + control | none | 14px medium label |
+| Field / detail row | label + control | none | 14px semibold label |
 
 **App Profile is the reference for workspace section headings.** Every section
 uses `SectionHeading`: body family, 14px/600, 22px line-height, all caps,
@@ -271,12 +273,19 @@ check whether a shared primitive already exists:
 
 ### Button variants
 
+All `<Button>` variants in `components/ui/button.jsx` share the `.btn-studio` system in `index.css` (including the marketing `Landing` page — never hand-roll coral/indigo background overrides at call sites):
+
 | Variant | Appearance | Use |
 |---|---|---|
-| `brand` | Coral + `--glow-coral` | **The** primary action on a screen |
-| `accent` | Indigo + `--glow-indigo` | Secondary brand action |
-| `outline` / `secondary` | Hairline border | Neutral actions |
-| `ghost` / `link` | No fill | Back links, tertiary |
+| `brand` | Coral bevel (`.btn-bevel-brand`) + 1px top specular rim + `--glow-coral` | **The** primary action on a screen |
+| `accent` / `default` | Indigo bevel (`.btn-bevel-accent`) + 1px top specular rim + `--glow-indigo` | Secondary brand action |
+| `outline` / `secondary` | Hairline border + `.btn-bevel-neutral` top rim | Neutral actions |
+| `ghost` / `link` | No fill, no sweep (`after:hidden`) | Back links, tertiary |
+
+**Hover & press micro-interaction (`.btn-studio`):**
+- Hover lifts `-1.5px`, sweeps a 105° specular sheen (`::after`) across the button in `620ms`, brightens the top bevel rim, and nudges/scales embedded `<svg>` icons (`translateX(1.5px) scale(1.08)`, excluding `.animate-spin`).
+- Active press snaps to `translateY(0) scale(0.98)`.
+- Disabled and `prefers-reduced-motion` states suppress the lift, sheen sweep, and icon motion.
 
 ### Badge variants
 

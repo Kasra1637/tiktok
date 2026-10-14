@@ -56,7 +56,7 @@ export const TOURS = {
       },
       {
         target: '[data-testid="step-pill-template"]',
-        title: "Choose a format and presenter",
+        title: "Choose a format & presenter",
         body:
           "Tailored to your app and goal — every suggestion carries a fit score, its reasons, and its caveats. The template also sets the clip's length, so swapping it changes how long the piece runs. Add the presenter photo right below: template and photo live on the same step.",
       },

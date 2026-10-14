@@ -90,7 +90,7 @@ export function AppShell({ children }) {
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] text-white">
               <Sparkles className="h-3.5 w-3.5" />
             </span>
-            <span className="font-display text-sm font-bold tracking-tight">HookForge</span>
+            <span className="font-display text-sm font-semibold tracking-tight">HookForge</span>
           </span>
         </div>
 

@@ -265,9 +265,9 @@ export default function Landing() {
           <div className="ml-3 flex shrink-0 items-center gap-2 lg:ml-5">
             <UnauthedOnly>
               <SignInTrigger>
-                <button className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-[color:var(--indigo-6)] hover:text-foreground">
+                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
                   Sign In
-                </button>
+                </Button>
               </SignInTrigger>
             </UnauthedOnly>
             <AuthedOnly>
@@ -307,27 +307,29 @@ export default function Landing() {
             <UnauthedOnly>
               <SignUpTrigger>
                 <Button
+                  variant="brand"
                   size="lg"
-                  className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-black shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
+                  className="w-full gap-2.5 px-9 sm:w-auto"
                 >
-                  <Sparkles className="h-5 w-5" /> Create your first video
+                  <Sparkles className="h-4 w-4" /> Create your first video
                 </Button>
               </SignUpTrigger>
             </UnauthedOnly>
             <AuthedOnly>
               <Button
                 asChild
+                variant="brand"
                 size="lg"
-                className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-black shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
+                className="w-full gap-2.5 px-9 sm:w-auto"
               >
-                <Link to="/create"><Sparkles className="h-5 w-5" /> Create Video</Link>
+                <Link to="/create"><Sparkles className="h-4 w-4" /> Create Video</Link>
               </Button>
             </AuthedOnly>
             <Button
               size="lg"
               variant="outline"
               asChild
-              className="w-full rounded-xl border-[color:var(--hairline-strong)] bg-[color:var(--indigo-4)] px-8 py-6 text-base font-semibold hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] sm:w-auto"
+              className="w-full px-8 sm:w-auto"
             >
               <a href="#how-it-works">See how it works</a>
             </Button>
@@ -548,29 +550,31 @@ export default function Landing() {
                 <UnauthedOnly>
                   <SignUpTrigger>
                     <Button
+                      variant="brand"
                       size="lg"
-                      className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-black shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
+                      className="w-full gap-2.5 px-9 sm:w-auto"
                     >
-                      <Sparkles className="h-5 w-5" /> Create your first video
+                      <Sparkles className="h-4 w-4" /> Create your first video
                     </Button>
                   </SignUpTrigger>
                 </UnauthedOnly>
                 <AuthedOnly>
                   <Button
                     asChild
+                    variant="brand"
                     size="lg"
-                    className="w-full gap-2.5 rounded-xl bg-[color:var(--brand-coral)] px-9 py-6 text-base font-semibold text-black shadow-[var(--glow-coral)] hover:bg-[#e0264c] sm:w-auto"
+                    className="w-full gap-2.5 px-9 sm:w-auto"
                   >
-                    <Link to="/create"><Sparkles className="h-5 w-5" /> Create Video</Link>
+                    <Link to="/create"><Sparkles className="h-4 w-4" /> Create Video</Link>
                   </Button>
                 </AuthedOnly>
                 <Button
                   asChild
                   size="lg"
                   variant="outline"
-                  className="w-full gap-2.5 rounded-xl border-[color:var(--hairline-strong)] bg-[color:var(--indigo-4)] px-8 py-6 text-base font-semibold hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] sm:w-auto"
+                  className="w-full gap-2.5 px-8 sm:w-auto"
                 >
-                  <Link to="/demo-cta"><Film className="h-5 w-5" /> Style your own footage</Link>
+                  <Link to="/demo-cta"><Film className="h-4 w-4" /> Style your own footage</Link>
                 </Button>
               </div>
             </div>

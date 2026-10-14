@@ -440,7 +440,7 @@ const handleGenerate = async () => {
 
       {models && (
         <div className="space-y-2">
-          <label htmlFor="gen-model" className="text-sm font-medium">Model</label>
+          <label htmlFor="gen-model" className="text-sm font-semibold">Model</label>
           <select
             id="gen-model"
             value={selectedModel}
@@ -471,7 +471,7 @@ const handleGenerate = async () => {
           </select>
           {(capability?.supported_resolutions || []).length > 0 && (
             <div className="space-y-2 pt-1">
-              <label htmlFor="gen-resolution" className="text-sm font-medium">Resolution</label>
+              <label htmlFor="gen-resolution" className="text-sm font-semibold">Resolution</label>
               <select
                 id="gen-resolution"
                 value={selectedResolution}
@@ -679,7 +679,7 @@ const handleGenerate = async () => {
                   the presenter would reach for their phone, so the demo and the
                   close are both outside it. */}
               <div className="space-y-1 border-t border-[color:var(--hairline)] pt-3">
-                <GroupLabel icon={Clapperboard}>What you have, and what is left</GroupLabel>
+                <GroupLabel icon={Clapperboard}>What you have &amp; what is left</GroupLabel>
                 {/* "No text appears on screen — nothing is published for you"
                     is gone: the pre-render summary above already says the piece
                     carries no on-screen text, and the page-level note is the
