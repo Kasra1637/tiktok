@@ -11,13 +11,13 @@ swap cannot be settled by a mocked test, and this script settles both:
      endpoint, so this proves the endpoint the studio actually reaches accepts
      the envelope and returns JSON that satisfies a strict schema.
 
-  2. The temperature question. The studio SENDS a temperature to Claude (0.4 by
-     default), because Haiku 5.5 runs adaptive thinking by default and whether a
-     non-default temperature is accepted alongside that is undocumented. A
-     refusal is survivable — _post_chat drops the field and retries the request
-     — but that retry costs a wasted round trip on every call, so it is worth
-     knowing which world we are in. This probe sends a temperature and reports
-     whether the provider takes it, with the exact follow-up for either answer.
+  2. The temperature question. Whether an endpoint accepts a temperature is now
+     read from OpenRouter's own per-endpoint declaration (see
+     ai_service.refresh_temperature_support), so the app no longer guesses from
+     the model family. This probe is the independent cross-check on that
+     declaration: it sends a temperature and reports whether the provider
+     actually takes it, so a listing that under- or over-reports the field is
+     visible rather than silently trusted.
 
 Two cheap text calls by default, plus one vision call with --photo. The key is
 read from the environment only, never printed, never stored.
@@ -139,6 +139,11 @@ def main() -> int:
     import ai_service
 
     model = args.model or ai_service.TEXT_MODEL
+    # What the app currently believes, read from the same listing it reads at
+    # boot — the probe below is only interesting next to this.
+    _guard(_run, ai_service.refresh_temperature_support([model]))
+    declared = ai_service.temperature_support(model)
+
     results = [
         _guard(_run, _structured_output(ai_service)),
         _guard(_run, _temperature_probe(ai_service, model, args.temperature)),
@@ -155,15 +160,24 @@ def main() -> int:
 
     temp = next((r for r in results if r["check"].startswith("temperature")), None)
     print("\n---------------- next step ----------------", flush=True)
-    if temp and temp["passed"]:
-        print("temperature WAS accepted. The retry is no longer needed: remove", flush=True)
-        print('"claude" from _TEMPERATURE_FALLBACK_PREFIXES in ai_service.py so', flush=True)
-        print("the field is simply sent.", flush=True)
+    if declared is None:
+        verdict = "UNKNOWN (lookup failed; the offline fallback applies)"
+    elif declared:
+        verdict = "SUPPORTED"
+    else:
+        verdict = "NOT supported"
+    print(f"declared by the listing: temperature {verdict}", flush=True)
+
+    if temp and declared is not None and temp["passed"] != declared:
+        print("\nMISMATCH: the listing and the provider disagree. The app follows", flush=True)
+        print("the listing, so this is the case worth reporting upstream — it is", flush=True)
+        print("how a field ends up sent to a provider that refuses it, or withheld", flush=True)
+        print("from one that would have taken it.", flush=True)
+    elif temp and temp["passed"]:
+        print("\nAgreed: temperature is accepted, and the app sends it.", flush=True)
     elif temp:
-        print("temperature was REFUSED. _post_chat is handling it — the field is", flush=True)
-        print('dropped and the call retried. Keep "claude" in', flush=True)
-        print("_TEMPERATURE_FALLBACK_PREFIXES. To avoid the wasted first request,", flush=True)
-        print('also add "claude" to _TEMPERATURE_OMITTED_PREFIXES.', flush=True)
+        print("\nAgreed: temperature is refused, and the app omits it. The retry in", flush=True)
+        print("_post_chat remains the net for any model the listing gets wrong.", flush=True)
 
     # The temperature verdict is informational either way; only the checks the
     # studio depends on decide the exit code.
