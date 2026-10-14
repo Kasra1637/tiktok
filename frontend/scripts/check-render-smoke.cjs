@@ -5207,17 +5207,24 @@ async function runIconChecks() {
     }
   });
 
-  await check("buttons share the studio specular bevel, sweep, and icon micro-animation", async () => {
+  await check("buttons share the studio specular bevel and soft sweep with static text and icons", async () => {
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
     for (const token of [
       ".btn-studio",
       ".btn-bevel-brand",
       ".btn-bevel-accent",
       ".btn-bevel-neutral",
-      ".btn-studio:hover:not(:disabled) svg:not(.animate-spin)",
     ]) {
       if (!css.includes(token)) {
         throw new Error(`index.css is missing studio button rule: ${token}`);
+      }
+    }
+    for (const forbidden of [
+      ".btn-studio:hover:not(:disabled) svg",
+      ".pill-studio:hover:not(:disabled) svg",
+    ]) {
+      if (css.includes(forbidden)) {
+        throw new Error(`index.css still animates button icons or text: ${forbidden}`);
       }
     }
     const buttonSrc = fs.readFileSync(path.join(SRC, "components", "ui", "button.jsx"), "utf8");
@@ -5226,9 +5233,16 @@ async function runIconChecks() {
         throw new Error(`button.jsx is missing studio button class: ${cls}`);
       }
     }
+    if (buttonSrc.includes("hover:-translate-y-[1.5px]") || buttonSrc.includes("active:scale-")) {
+      throw new Error("button.jsx still uses the sharp hover lift or press scale instead of the softer hover");
+    }
     const landingSrc = fs.readFileSync(path.join(SRC, "pages", "Landing.jsx"), "utf8");
     if (landingSrc.includes("bg-[color:var(--brand-coral)]")) {
       throw new Error("Landing.jsx still hand-rolls coral CTA styles instead of variant=\"brand\"");
+    }
+    const tourSrc = fs.readFileSync(path.join(SRC, "components", "onboarding", "TourOverlay.jsx"), "utf8");
+    if (tourSrc.includes('bg-[color:var(--brand-indigo)] hover:bg-[color:var(--brand-indigo-dark)] text-white')) {
+      throw new Error("TourOverlay still hand-rolls an indigo button instead of variant=\"accent\"");
     }
   });
 

@@ -304,8 +304,9 @@ export default function TourOverlay() {
               )}
               <Button
                 size="sm"
+                variant="accent"
                 onClick={next}
-                className="h-7 px-2.5 gap-1 text-xs bg-[color:var(--brand-indigo)] hover:bg-[color:var(--brand-indigo-dark)] text-white"
+                className="h-7 px-2.5 gap-1 text-xs"
                 data-testid="onboarding-tour-next-button"
               >
                 {isLast ? "Done" : "Next"} {!isLast && <ChevronRight className="h-3 w-3" />}

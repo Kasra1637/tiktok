@@ -285,10 +285,13 @@ All `<Button>` variants in `components/ui/button.jsx` share the `.btn-studio` sy
 | `outline` / `secondary` | Hairline border + `.btn-bevel-neutral` top rim | Neutral actions |
 | `ghost` / `link` | No fill, no sweep (`after:hidden`) | Back links, tertiary |
 
-**Hover & press micro-interaction (`.btn-studio`):**
-- Hover lifts `-1.5px`, sweeps a 105° specular sheen (`::after`) across the button in `620ms`, brightens the top bevel rim, and nudges/scales embedded `<svg>` icons (`translateX(1.5px) scale(1.08)`, excluding `.animate-spin`).
-- Active press snaps to `translateY(0) scale(0.98)`.
-- Disabled and `prefers-reduced-motion` states suppress the lift, sheen sweep, and icon motion.
+**Signal Coral primary rule:** `brand` (`#FE2C55`, white text) is the single primary CTA color — one per screen for the commit action (Generate, Research, Approve, Create draft, Save edits, Export, Landing hero/final CTA). `accent` (indigo) is the secondary brand action (tour Next, Save App Profile, paired secondary); `outline` / `secondary` cover navigation and retries; `ghost` / `link` cover tertiary and destructive-adjacent actions. Never hand-roll `bg-[color:var(--brand-coral)]` or `bg-[color:var(--brand-indigo)]` on a clickable button — use the variant.
+
+**Hover & press micro-interaction (`.btn-studio`, softer):**
+- Hover lifts `-1px` over `300ms ease-out`, drifts a soft 105° sheen (`::after`, 40% width, 0.10 alpha) across the button in `850ms`, and brightens the top bevel rim with a shadow tighten.
+- Text and icons never animate: no `svg`/text transforms anywhere in `.btn-studio` or `.pill-studio`.
+- Active press settles to `translateY(0)` with no scale snap.
+- Disabled and `prefers-reduced-motion` states suppress the lift and sheen sweep.
 
 ### Badge variants
 

@@ -5,7 +5,7 @@ import { cva } from "class-variance-authority";
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "btn-studio inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-[background-color,border-color,color,box-shadow,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:-translate-y-[1.5px] active:translate-y-0 active:scale-[0.98] motion-reduce:hover:-translate-y-0 motion-reduce:active:scale-100",
+  "btn-studio inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-[background-color,border-color,color,box-shadow,transform] duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:-translate-y-[1px] active:translate-y-0 motion-reduce:hover:-translate-y-0",
   {
     variants: {
       variant: {
@@ -17,11 +17,12 @@ const buttonVariants = cva(
           "btn-bevel-neutral border border-[color:var(--hairline-strong)] bg-secondary/30 text-foreground hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] hover:text-foreground",
         secondary:
           "btn-bevel-neutral border border-[color:var(--hairline)] bg-secondary/70 text-secondary-foreground hover:border-[color:var(--indigo-35)] hover:bg-secondary hover:text-foreground",
-        ghost: "hover:bg-[color:var(--indigo-8)] hover:text-foreground hover:-translate-y-0 active:scale-100 after:hidden",
-        link: "text-[color:var(--brand-indigo)] underline-offset-4 hover:underline hover:-translate-y-0 active:scale-100 after:hidden",
-        /* Brand variants — the primary CTA (coral) and the secondary brand
-           action (indigo). Specular top bevel + diagonal hover sheen + icon
-           micro-nudge are shared across all studio pages and Landing. */
+        ghost: "hover:bg-[color:var(--indigo-8)] hover:text-foreground hover:-translate-y-0 after:hidden",
+        link: "text-[color:var(--brand-indigo)] underline-offset-4 hover:underline hover:-translate-y-0 after:hidden",
+        /* Brand variants — Signal Coral is the single primary CTA color;
+           indigo accent is the secondary brand action. Soft top bevel +
+           gentle hover sheen are shared across all studio pages and Landing.
+           Text and icons never animate. */
         brand:
           "btn-bevel-brand border border-white/15 bg-[color:var(--brand-coral)] font-semibold text-white hover:border-white/25",
         accent:
