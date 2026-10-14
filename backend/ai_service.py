@@ -40,25 +40,43 @@ OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 logger = logging.getLogger(__name__)
 
 # Models
-VISION_MODEL = "anthropic/claude-haiku-5.5"
-TEXT_MODEL = "anthropic/claude-haiku-5.5"
-# Both chat models are Claude Haiku 5.5: Anthropic's small, fast, cost-sensitive
-# tier, multimodal (text+image in) with structured-output support. It replaces
-# GPT-5 Mini, which it beats on every axis this service cares about — cheaper
-# ($0.10/$0.50 vs $0.25/$2.00 per 1M), a larger context (1M vs 400K) and a much
-# higher intelligence index (~43 vs ~17). Three consequences travel with it
-# everywhere below:
-# - temperature IS accepted (Anthropic's range is 0-1), so _temperature_param
-#   now sends it; every call site here uses 0.3-0.5, comfortably inside that
-#   range. This restores the determinism control GPT-5 Mini could not offer.
+#
+# Both chat models default to Claude Haiku 5.5: Anthropic's small, fast,
+# cost-sensitive tier, multimodal (text+image in) with structured-output
+# support. It replaces GPT-5 Mini, which it beats on every axis this service
+# cares about — cheaper ($0.10/$0.50 vs $0.25/$2.00 per 1M), a larger context
+# (1M vs 400K) and a much higher intelligence index (~43 vs ~17).
+#
+# Both slugs are overridable from the environment so a model swap is a config
+# change rather than a code change, the same way the video provider already
+# works (see video_providers.default_model_key). An override is taken as given:
+# the request shape is guarded by _temperature_param below, not by validating
+# the slug here.
+#
+# Consequences that travel with the shipped default everywhere below:
+# - temperature is NOT sent to it. Claude accepts temperature on Anthropic's
+#   own API, but this model runs adaptive thinking by default and whether a
+#   non-default temperature is accepted alongside that is UNVERIFIED, so it
+#   stays behind the guard in _temperature_param until a live call proves it.
 # - max_tokens is accepted via OpenRouter (it maps to the provider field), and
-#   thinking tokens come out of the same budget, so small budgets can still
+#   thinking tokens are billed against the same budget, so small budgets can
 #   return empty content with finish_reason=length — which _chat_json already
 #   treats as truncation and retries with a doubled budget.
-# - structured outputs (strict json_schema) are routed per provider on
-#   OpenRouter and Anthropic is a supported provider; the local parse-and-retry
-#   in _chat_json stays as defense-in-depth for endpoints that treat the schema
-#   as a hint rather than a guarantee.
+# - structured outputs (strict json_schema) are supported on Anthropic (Haiku
+#   4.5 and 5.5) and are compatible with thinking; the local parse-and-retry in
+#   _chat_json stays as defense-in-depth for endpoints that treat the schema as
+#   a hint rather than a guarantee.
+DEFAULT_TEXT_MODEL = "anthropic/claude-haiku-5.5"
+DEFAULT_VISION_MODEL = "anthropic/claude-haiku-5.5"
+
+
+def _model_from_env(var: str, default: str) -> str:
+    """Model slug from the environment, falling back to the shipped default."""
+    return (os.environ.get(var) or "").strip() or default
+
+
+TEXT_MODEL = _model_from_env("AI_TEXT_MODEL", DEFAULT_TEXT_MODEL)
+VISION_MODEL = _model_from_env("AI_VISION_MODEL", DEFAULT_VISION_MODEL)
 # Image generation model for opening scene stills. Uses a dedicated image model
 # rather than a video model, since the opening frame is a single still image.
 
@@ -293,20 +311,26 @@ def _headers():
     }
 
 
-# GPT-5 and the o-series only accept temperature=1: any other value is a 400
-# ("Unsupported value: 'temperature' ... Only the default (1) value is
-# supported"). The studio therefore sends the field only to models that take
-# it, so a model switch cannot silently turn every call into a refusal. The
-# current chat model (Claude Haiku 5.5) is deliberately NOT in this list:
-# Anthropic accepts temperature across 0-1 and every call site stays inside
-# that range, so the field IS sent to it.
-_NO_TEMPERATURE_MODEL_PREFIXES = ("gpt-5", "o1", "o3", "o4")
+# Model families that must NOT be sent a temperature. Two different reasons,
+# one rule — never send a field that can turn every call into a refusal:
+#
+# 1. The family REJECTS it. GPT-5 and the o-series 400 on any value but 1
+#    ("Unsupported value: 'temperature' ... Only the default (1) value is
+#    supported").
+# 2. Sending it is UNVERIFIED. Claude Haiku 5.5 accepts temperature on
+#    Anthropic's own API, but it runs adaptive thinking by default and the
+#    interaction between a non-default temperature and default-on thinking is
+#    not documented anywhere we could check. Omitting the field costs only
+#    sampling determinism; sending a rejected one costs the whole call.
+#    verify_chat_model.py probes exactly this — promote "claude" out of this set
+#    only on a live call that proves the combination is accepted.
+_TEMPERATURE_OMITTED_PREFIXES = ("gpt-5", "o1", "o3", "o4", "claude")
 
 
 def _temperature_param(model: str, temperature: float) -> dict:
     """{"temperature": t} for models that accept it, else {} (never raises)."""
     name = (model or "").strip().lower().split("/")[-1]
-    if name.startswith(_NO_TEMPERATURE_MODEL_PREFIXES):
+    if name.startswith(_TEMPERATURE_OMITTED_PREFIXES):
         return {}
     return {"temperature": temperature}
 
@@ -1034,7 +1058,7 @@ async def analyze_hook(frame_paths: list, session_id: str, music_context: dict =
             {"role": "system", "content": system_message},
             {"role": "user", "content": content},
         ],
-        "temperature": 0.3,
+        **_temperature_param(VISION_MODEL, 0.3),
         "max_tokens": 3000,
     }
 
@@ -1157,7 +1181,7 @@ async def generate_video_prompt(analysis: dict, brand_context: dict, target_dura
             {"role": "system", "content": system_message},
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0.5,
+        **_temperature_param(TEXT_MODEL, 0.5),
         "max_tokens": 3000,
     }
 
@@ -1229,7 +1253,7 @@ async def analyze_image_for_hook(image_path: Path, session_id: str) -> dict:
             {"role": "system", "content": system_message},
             {"role": "user", "content": content},
         ],
-        "temperature": 0.4,
+        **_temperature_param(VISION_MODEL, 0.4),
         "max_tokens": 1500,
     }
 
@@ -4406,7 +4430,7 @@ async def generate_remix_script(analysis: dict, brand_profile: dict, target_dura
             {"role": "system", "content": system_message},
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0.5,
+        **_temperature_param(TEXT_MODEL, 0.5),
         "max_tokens": 3000,
     }
 

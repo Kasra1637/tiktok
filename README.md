@@ -73,6 +73,8 @@ All optional except `OPENROUTER_API_KEY` if you want AI features. Copy
 | `CORS_ORIGINS` | Allowed browser origins, comma-separated. Defaults to `*` |
 | `VIDEO_MODEL_DEFAULT` | Swap video provider without a code change |
 | `VIDEO_MODEL_ALLOWLIST` | Restrict which providers may be used at all |
+| `AI_TEXT_MODEL` | Chat model for research, angles, plans, scripts. Default `anthropic/claude-haiku-5.5` |
+| `AI_VISION_MODEL` | Vision model for hook-frame analysis. Default `anthropic/claude-haiku-5.5` |
 
 ---
 
@@ -147,7 +149,17 @@ cd backend
 python -m pytest -q
 ```
 
-**639 passing, 0 failing** (`cd backend`, `python -m pytest -q`).
+**1140 passing, 0 failing** (`cd backend`, `python -m pytest -q`). ffmpeg must
+be on `PATH`: the tests that exercise the canvas fit, the camera cut and real
+MP4 handling do real encodes, and without it they fail rather than skip.
+
+A mocked suite cannot prove a provider ACCEPTS what we send it. After any model
+swap, run the live check with a real key:
+
+```bash
+export OPENROUTER_API_KEY="<key never committed anywhere>"
+python backend/verify_chat_model.py --photo ./face.png
+```
 
 Overlay tests render real MP4s with ffmpeg and assert on output, because the
 worst bugs in that path (an orphaned filter chain, a 600-second output) exited
