@@ -149,9 +149,9 @@ cd backend
 python -m pytest -q
 ```
 
-**1140 passing, 0 failing** (`cd backend`, `python -m pytest -q`). ffmpeg must
-be on `PATH`: the tests that exercise the canvas fit, the camera cut and real
-MP4 handling do real encodes, and without it they fail rather than skip.
+The full suite passes (`cd backend`, `python -m pytest -q`). ffmpeg must be on
+`PATH`: the tests that exercise the canvas fit, the camera cut and real MP4
+handling do real encodes, and without it they fail rather than skip.
 
 A mocked suite cannot prove a provider ACCEPTS what we send it. After any model
 swap, run the live check with a real key:
