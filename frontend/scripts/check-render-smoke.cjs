@@ -3059,11 +3059,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   });
 
   // The server generates the six on approval, so without a gate the founder
-  // lands on a finished list they never asked for. First view per app shows
-  // one CTA; the click reveals the list. A fresh profile id keeps this free
-  // of whatever other checks persisted, so the gate is asserted, not the
-  // order they ran in.
-  await check("pre-generated angles wait behind one reveal click", async (ctx) => {
+  // lands on a finished list plus Regenerate they never asked for. Landing
+  // shows one Generate CTA instead; the click reveals the pre-generated set
+  // for free (no endpoint call, no spend). Regenerate appears only beside
+  // the visible list. A fresh profile id keeps this free of whatever other
+  // checks persisted, so the gate is asserted, not the order they ran in.
+  await check("landing on angles shows Generate, not the list or Regenerate", async (ctx) => {
     const FRESH = { ...PROFILE, id: "b9", brand_name: "Freshly" };
     await withApi({
       getAppProfiles: async () => ({ profiles: [FRESH] }),
@@ -3076,11 +3077,24 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       if (step.querySelector('[data-testid^="angle-option-"]')) {
         throw new Error("the pre-generated six show before the founder clicks anything");
       }
-      const reveal = step.querySelector('[data-testid="reveal-angles-button"]');
-      if (!reveal) throw new Error("first view offers no reveal CTA for the six");
-      await clickEl(ctx, reveal);
+      if (step.querySelector('[data-testid="regenerate-angles-button"]')) {
+        throw new Error("Regenerate shows before there is a visible generation");
+      }
+      const cta = step.querySelector('[data-testid="generate-angles-button"]');
+      if (!cta) throw new Error("first view offers no Generate CTA for the six");
+      if (!/Generate angles/.test(cta.textContent || "")) {
+        throw new Error(`the CTA does not read as Generate angles: ${JSON.stringify(cta.textContent)}`);
+      }
+      apiCalls.length = 0;
+      await clickEl(ctx, cta);
+      if (apiCalls.includes("generateContentAngles")) {
+        throw new Error("revealing pre-generated angles called the generate endpoint");
+      }
       if (!step.querySelector('[data-testid="angle-option-a1"]')) {
-        throw new Error("the reveal click did not show the six angles");
+        throw new Error("the Generate click did not show the six angles");
+      }
+      if (!step.querySelector('[data-testid="regenerate-angles-button"]')) {
+        throw new Error("Regenerate is missing beside the visible generation");
       }
     });
   });
@@ -3528,6 +3542,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     global.__SMOKE_PARAMS = "";
     await mount(CreateVideo, {})(ctx);
     await openStep(ctx, "Audience & goal");
+    await passAngleGate(ctx);
     const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
     const angleButtons = [...step.querySelectorAll("button")]
       .filter((button) => button.textContent.includes(ANGLE.label));
@@ -3554,6 +3569,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     global.__SMOKE_PARAMS = "";
     await mount(CreateVideo, {})(ctx);
     await openStep(ctx, "Audience & goal");
+    await passAngleGate(ctx);
     const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
     const buttons = [...step.querySelectorAll("button")];
     await clickEl(ctx, buttons.find((button) => button.textContent.includes(ANGLE.label)));
@@ -3601,7 +3617,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     await withApi({ getContentAngles: async () => ({ angles: [FULL_ANGLE, ANGLE] }) }, async () => {
       global.__SMOKE_PARAMS = "";
       await mount(CreateVideo, {})(ctx);
-      await openStep(ctx, "Audience & goal");
+        await openStep(ctx, "Audience & goal");
+        await passAngleGate(ctx);
       const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
       if (step.querySelector('[data-testid^="angle-details-"]')) {
         throw new Error("an angle shows its fields before it is picked");
@@ -3666,6 +3683,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       try {
         await mount(CreateVideo, {})(ctx);
         await openStep(ctx, "Audience & goal");
+        await passAngleGate(ctx);
         const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
         const rendered = [...step.querySelectorAll('[data-testid^="angle-option-"]')];
         if (rendered.length !== ROWS.length) {
@@ -3713,6 +3731,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       try {
         await mount(CreateVideo, {})(ctx);
         await openStep(ctx, "Audience & goal");
+        await passAngleGate(ctx);
         const rows = [...ctx.container.querySelectorAll('[data-testid^="angle-option-"]')];
         if (rows.length !== 2) throw new Error(`expected two angle rows, saw ${rows.length}`);
         for (const row of rows) {
@@ -3749,6 +3768,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       try {
         await mount(CreateVideo, {})(ctx);
         await openStep(ctx, "Audience & goal");
+        await passAngleGate(ctx);
         await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
         const line = ctx.container.querySelector('[data-testid="goal-angle-evidence-address_user_problem"]');
         if (!line) throw new Error("the goal card shows no angle-kind count");
@@ -3833,6 +3853,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         try {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Audience & goal");
+          await passAngleGate(ctx);
           await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
           const objLine = ctx.container.querySelector('[data-testid="goal-objective-evidence-address_user_problem"]');
           if (!objLine) throw new Error("the goal card shows no objective-level count");
@@ -3869,6 +3890,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         try {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Audience & goal");
+          await passAngleGate(ctx);
           // Wait for facet recommendations to load - need to flush effects and wait for async
           await act(async () => {});
           await act(async () => {});
@@ -3930,6 +3952,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         try {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Audience & goal");
+          await passAngleGate(ctx);
           await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
           const first = orderOf();
           if (first.length !== 6) throw new Error(`expected six goal cards, saw ${first.length}`);
@@ -3985,6 +4008,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         try {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Audience & goal");
+          await passAngleGate(ctx);
           await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
           await clickEl(ctx, ctx.container.querySelector('[data-testid="regenerate-angles-button"]'), "no regenerate button");
           await new Promise((r) => setTimeout(r, 150));
@@ -4223,6 +4247,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       async () => {
         await mount(CreateVideo, {})(ctx);
         await openStep(ctx, "Audience & goal");
+        await passAngleGate(ctx);
         await clickEl(ctx, [...ctx.container.querySelectorAll("button")].find((button) => button.textContent.includes(ANGLE.label)));
         await clickEl(ctx, ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]'));
         const pill = stepPill(ctx, "Template & photo");
@@ -4247,9 +4272,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         },
       },
       async () => {
-        await mount(CreateVideo, {})(ctx);
-        await openStep(ctx, "Audience & goal");
-        await clickEl(ctx, [...ctx.container.querySelectorAll("button")].find((button) => button.textContent.includes(ANGLE.label)));
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Audience & goal");
+          await passAngleGate(ctx);
+          await clickEl(ctx, [...ctx.container.querySelectorAll("button")].find((button) => button.textContent.includes(ANGLE.label)));
         await clickEl(ctx, ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]'));
         const pill = stepPill(ctx, "Template & photo");
         await act(async () => {
@@ -7283,6 +7309,20 @@ async function openStep(ctx, label) {
 }
 
 /**
+ * Pass the angle gate the way a founder does.
+ *
+ * Landing on Audience & goal shows one Generate CTA, never the list. Clicking
+ * it reveals a pre-generated set for free (no endpoint call) or generates
+ * fresh when there is none. Tests that assert on rows call this first; tests
+ * that assert on the gate itself do not.
+ */
+async function passAngleGate(ctx) {
+  const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
+  const cta = step && step.querySelector('[data-testid="generate-angles-button"]');
+  if (cta) await clickEl(ctx, cta);
+}
+
+/**
  * Reach the template step the way the workflow now requires.
  *
  * The video goal is required, and the template step refuses to show a ranked
@@ -7291,10 +7331,9 @@ async function openStep(ctx, label) {
  */
 async function openTemplateStep(ctx) {
   await openStep(ctx, "Audience & goal");
-  // The pre-generated six wait behind one click: reveal them the way a
-  // founder does before picking.
-  const reveal = ctx.container.querySelector('[data-testid="reveal-angles-button"]');
-  if (reveal) await clickEl(ctx, reveal);
+  // The pre-generated six wait behind the Generate CTA: pass it the way a
+  // founder does (free reveal, no endpoint call) before picking.
+  await passAngleGate(ctx);
   const angleButton = [...ctx.container.querySelectorAll('[data-testid="audience-goal-step"] button')]
     .find((button) => button.textContent.includes(ANGLE.label));
   if (!angleButton) throw new Error("the audience step has no selectable audience angle");

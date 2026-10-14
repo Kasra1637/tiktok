@@ -784,21 +784,16 @@ export default function CreateVideo() {
   // was a round trip the flow never offered a way back from.
   const [generatingAngles, setGeneratingAngles] = useState(false);
   const [angleError, setAngleError] = useState(null);
-  // Click-to-view gate for the pre-generated six. The server generates angles
-  // on approval, so without this the founder lands on a finished list they
-  // never asked for. First view per app shows a CTA instead; the click
-  // reveals the list and persists, so returning founders go straight to it.
-  // A pick bypasses the gate entirely — a draft or deep link that already
-  // names an angle has been viewed by definition.
+  // Click-to-view gate for angles. Landing on this step always starts gated:
+  // one "Generate angles" CTA, never a finished list — and "Regenerate" only
+  // ever appears beside a visible list, i.e. when there is a current
+  // generation to be unhappy with. The reveal is session-local on purpose:
+  // persisting it put returning founders straight onto selections they didn't
+  // ask to see. A pick bypasses the gate entirely — a draft or deep link
+  // that already names an angle has been viewed by definition.
   const [anglesRevealed, setAnglesRevealed] = useState(false);
-  const revealAngles = useCallback((pid) => {
+  const revealAngles = useCallback(() => {
     setAnglesRevealed(true);
-    if (!pid) return;
-    try {
-      localStorage.setItem(`angles-revealed:${pid}`, "1");
-    } catch {
-      // Private-mode writes fail silently; the reveal still works in memory.
-    }
   }, []);
   // Cycling goal suggestions on the selected angle. Persists server-side per
   // angle, so the re-read of the angles list is the new state.
@@ -849,15 +844,10 @@ export default function CreateVideo() {
   const reviewRefinesRef = useRef({});
 
   const profileId = project?.brand_profile_id || selectedProfileId;
-  // A new app starts gated; an app whose six were already revealed reopens
-  // revealed. Runs on profile switch, not just mount, so each app gates once.
+  // Every app lands gated: switching apps re-arms the CTA so a revealed set
+  // for one app never leaks into another app's first view.
   useEffect(() => {
-    if (!profileId) return;
-    try {
-      setAnglesRevealed(localStorage.getItem(`angles-revealed:${profileId}`) === "1");
-    } catch {
-      setAnglesRevealed(false);
-    }
+    setAnglesRevealed(false);
   }, [profileId]);
   const angle = angles.find((a) => a.id === angleId) || null;
   // The list reads revealed when the gate was clicked, or whenever a pick
@@ -1059,21 +1049,30 @@ export default function CreateVideo() {
     }
   }, [profileId, objective, angleId, loadRecommendations]);
 
-  // Generating this profile's audience angles without leaving the wizard.
+  // The step's single CTA: "Generate angles", shown on landing instead of any
+  // list. The click reveals a pre-generated set for free when one exists
+  // (generated on approval — no endpoint call, no spend, no pick change), and
+  // generates fresh only when there is nothing to show. Either way the list
+  // — and with it "Regenerate" — appears only after this click, so
+  // regenerating is always aimed at a current generation.
   //
-  // Offered only when there are none, because the endpoint replaces the whole
-  // set: a button on a populated list could silently discard angles the
-  // founder wrote by hand on the profile page.
+  // Offered through this one button because the bare generate endpoint
+  // replaces the whole set: a generate affordance on a populated list could
+  // silently discard angles the founder wrote by hand on the profile page.
   const handleGenerateAngles = useCallback(async () => {
-    if (!profileId) return;
+    if (!profileId || generatingAngles) return;
+    if (angles.length > 0) {
+      revealAngles();
+      return;
+    }
     setGeneratingAngles(true);
     setAngleError(null);
     try {
       const data = await api.generateContentAngles(profileId);
       const fresh = adoptAngles(data) || [];
       // Generated in-session at the founder's own click: there is nothing to
-      // gate, so the fresh six render immediately (and persist revealed).
-      revealAngles(profileId);
+      // gate, so the fresh six render immediately.
+      revealAngles();
       // The fresh set has new row ids, so a previous pick would dangle and
       // the goal picker would collapse to its wait state. Park the founder
       // on the strongest new angle; an empty set clears the pick.
@@ -1088,7 +1087,7 @@ export default function CreateVideo() {
     } finally {
       setGeneratingAngles(false);
     }
-  }, [profileId, angleId, revealAngles]);
+  }, [profileId, angleId, generatingAngles, angles.length, revealAngles]);
 
   // Regenerating the audience angles without leaving the wizard. Offered on
   // a populated list too, because the regenerate endpoint keeps hand-written
@@ -1850,7 +1849,13 @@ setObjective("");
                 Audience angle{" "}
                 <span className="text-muted-foreground">(required)</span>
               </GroupLabel>
-              {angles.length === 0 ? (
+              {!showAngles || angles.length === 0 ? (
+                /* Landing always starts here: one "Generate angles" CTA, never
+                   a finished list and never "Regenerate". The click reveals a
+                   pre-generated set for free or generates fresh when there is
+                   none; the list below — Regenerate with it — appears only
+                   after that click, beside a current generation. A picked
+                   angle bypasses this entirely via showAngles. */
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground" data-testid="angles-cta-copy">
                     {ANGLES_CTA_COPY}
@@ -1873,27 +1878,7 @@ setObjective("");
                     ) : (
                       <Sparkles className="h-3.5 w-3.5" />
                     )}
-                    {generatingAngles ? "Generating…" : "Generate audience angles"}
-                  </Button>
-                </div>
-              ) : !showAngles ? (
-                /* First view of a pre-generated six: a CTA, not the list. The
-                   angles were generated on approval without being asked for,
-                   so they wait behind one click. The click reveals and
-                   persists per app; regenerating stays on the list itself. */
-                <div className="space-y-2" data-testid="angles-reveal">
-                  <p className="text-xs text-muted-foreground" data-testid="angles-cta-copy">
-                    {ANGLES_CTA_COPY}
-                  </p>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="gap-1.5"
-                    onClick={() => revealAngles(profileId)}
-                    data-testid="reveal-angles-button"
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    Show my six angles
+                    {generatingAngles ? "Generating…" : "Generate angles"}
                   </Button>
                 </div>
               ) : (
