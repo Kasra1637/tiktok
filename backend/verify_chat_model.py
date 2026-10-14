@@ -11,13 +11,13 @@ swap cannot be settled by a mocked test, and this script settles both:
      endpoint, so this proves the endpoint the studio actually reaches accepts
      the envelope and returns JSON that satisfies a strict schema.
 
-  2. The temperature question. ai_service._temperature_param deliberately OMITS
-     temperature for Claude, because this model runs adaptive thinking by
-     default and whether a non-default temperature is accepted alongside that is
-     undocumented. This probe sends one WITH temperature and reports whether the
-     provider takes it. If it does, "claude" can be promoted out of
-     _TEMPERATURE_OMITTED_PREFIXES and the studio regains the determinism
-     control; if it does not, the guard is already right and stays.
+  2. The temperature question. The studio SENDS a temperature to Claude (0.4 by
+     default), because Haiku 5.5 runs adaptive thinking by default and whether a
+     non-default temperature is accepted alongside that is undocumented. A
+     refusal is survivable — _post_chat drops the field and retries the request
+     — but that retry costs a wasted round trip on every call, so it is worth
+     knowing which world we are in. This probe sends a temperature and reports
+     whether the provider takes it, with the exact follow-up for either answer.
 
 Two cheap text calls by default, plus one vision call with --photo. The key is
 read from the environment only, never printed, never stored.
@@ -156,12 +156,14 @@ def main() -> int:
     temp = next((r for r in results if r["check"].startswith("temperature")), None)
     print("\n---------------- next step ----------------", flush=True)
     if temp and temp["passed"]:
-        print('temperature WAS accepted. Promote "claude" out of', flush=True)
-        print("_TEMPERATURE_OMITTED_PREFIXES in ai_service.py, and flip the", flush=True)
-        print("temperature assertions in test_ai_json_calls.py back to sent.", flush=True)
+        print("temperature WAS accepted. The retry is no longer needed: remove", flush=True)
+        print('"claude" from _TEMPERATURE_FALLBACK_PREFIXES in ai_service.py so', flush=True)
+        print("the field is simply sent.", flush=True)
     elif temp:
-        print('temperature was REFUSED. The guard is correct — leave "claude" in', flush=True)
-        print("_TEMPERATURE_OMITTED_PREFIXES. The studio renders fine without it.", flush=True)
+        print("temperature was REFUSED. _post_chat is handling it — the field is", flush=True)
+        print('dropped and the call retried. Keep "claude" in', flush=True)
+        print("_TEMPERATURE_FALLBACK_PREFIXES. To avoid the wasted first request,", flush=True)
+        print('also add "claude" to _TEMPERATURE_OMITTED_PREFIXES.', flush=True)
 
     # The temperature verdict is informational either way; only the checks the
     # studio depends on decide the exit code.

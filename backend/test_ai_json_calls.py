@@ -234,10 +234,10 @@ class TestChatModelRequestShape:
     that travel with the family are pinned here rather than re-discovered as
     production 400s:
 
-    - temperature is NOT sent. Claude accepts it on Anthropic's own API, but it
-      runs adaptive thinking by default and that combination is unverified, so
-      the guard in _temperature_param omits the field until a live call
-      (verify_chat_model.py) proves it is accepted;
+    - temperature IS sent, 0.4 by default. Claude accepts it on Anthropic's own
+      API, but it runs adaptive thinking by default and that combination is
+      undocumented, so the field is also armed for a safe retry without it — see
+      _TEMPERATURE_FALLBACK_PREFIXES and the fallback tests below;
     - max_tokens stays (OpenRouter maps it), and thinking tokens are billed
       against the same budget, which the truncation retry already covers.
     """
@@ -247,12 +247,51 @@ class TestChatModelRequestShape:
         assert ai_service.TEXT_MODEL == "anthropic/claude-haiku-5.5"
         assert ai_service.VISION_MODEL == "anthropic/claude-haiku-5.5"
 
-    def test_temperature_is_not_sent(self, monkeypatch):
+    def test_temperature_defaults_to_the_configured_value(self, monkeypatch):
         import ai_service
         rec = _patch_client(monkeypatch, [_completion('{"a": 1}')])
-        assert _run(ai_service._chat_json("sys", "prompt", "Ctx", temperature=0.4)) == {"a": 1}
+        assert _run(ai_service._chat_json("sys", "prompt", "Ctx")) == {"a": 1}
+        assert ai_service.CHAT_TEMPERATURE == 0.4
         assert rec.payloads[0]["model"] == "anthropic/claude-haiku-5.5"
-        assert "temperature" not in rec.payloads[0]
+        assert rec.payloads[0]["temperature"] == 0.4
+
+    def test_an_explicit_temperature_reaches_the_model(self, monkeypatch):
+        import ai_service
+        rec = _patch_client(monkeypatch, [_completion('{"a": 1}')])
+        assert _run(ai_service._chat_json("sys", "prompt", "Ctx", temperature=0.5)) == {"a": 1}
+        assert rec.payloads[0]["temperature"] == 0.5
+
+    def test_the_gpt5_family_is_still_never_sent_a_temperature(self):
+        import ai_service
+        assert ai_service._temperature_param("openai/gpt-5-mini", 0.4) == {}
+        assert ai_service._temperature_param("o3-mini", 0.4) == {}
+        assert ai_service._temperature_param(
+            "anthropic/claude-haiku-5.5", 0.4) == {"temperature": 0.4}
+
+    def test_a_refused_temperature_is_retried_without_it(self, monkeypatch):
+        """
+        The safety net behind _TEMPERATURE_FALLBACK_PREFIXES. If the provider
+        refuses the field, the identical request goes again without it, so an
+        unverified temperature costs the field and never the call.
+        """
+        import ai_service
+        refusal = _Response(
+            {"error": {"message": "Unsupported value: temperature"}}, status=400)
+        rec = _patch_client(monkeypatch, [refusal, _completion('{"a": 1}')])
+        assert _run(ai_service._chat_json("sys", "prompt", "Ctx", temperature=0.4)) == {"a": 1}
+        assert len(rec.payloads) == 2
+        assert rec.payloads[0]["temperature"] == 0.4
+        assert "temperature" not in rec.payloads[1]
+        assert rec.payloads[1]["model"] == rec.payloads[0]["model"]
+
+    def test_an_unrelated_400_is_not_retried(self, monkeypatch):
+        """Only a refusal that NAMES temperature is worth a second request."""
+        import ai_service
+        refusal = _Response({"error": {"message": "bad request"}}, status=400)
+        rec = _patch_client(monkeypatch, [refusal])
+        with pytest.raises(RuntimeError):
+            _run(ai_service._chat_json("sys", "prompt", "Ctx", temperature=0.4, attempts=1))
+        assert len(rec.payloads) == 1
 
     def test_no_response_format_without_a_schema(self, monkeypatch):
         import ai_service
@@ -308,7 +347,8 @@ class TestChatModelRequestShape:
     def test_direct_flows_send_response_format(self, monkeypatch):
         """
         The flows that post httpx directly (not through _chat_json) must
-        still carry the envelope: app research, angles, plan.
+        still carry the envelope: app research, angles, plan. Each also carries
+        a temperature now that Claude Haiku 5.5 accepts one.
         """
         import ai_service
 
@@ -345,7 +385,7 @@ class TestChatModelRequestShape:
         assert len(rec.payloads) == 3
         for payload in rec.payloads:
             assert payload["response_format"]["type"] == "json_schema"
-            assert "temperature" not in payload
+            assert 0 <= payload["temperature"] <= 1
 
 
 class TestAngleFeedbackPromptWiring:
