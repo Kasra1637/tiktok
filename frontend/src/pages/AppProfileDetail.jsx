@@ -419,7 +419,7 @@ return (
         title={profile?.brand_name || "Untitled app"}
         description={profile?.brand_description ? sentenceCase(profile.brand_description) : undefined}
         actions={
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-3">
             {/* Brand hierarchy, left to right: semantic status badge, secondary
                 edits, destructive icon. Wraps under the title on narrow screens
                 instead of squeezing. Create Video starts from the sidebar —

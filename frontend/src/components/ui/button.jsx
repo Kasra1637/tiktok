@@ -29,10 +29,10 @@ const buttonVariants = cva(
           "btn-bevel-accent border border-white/15 bg-[color:var(--brand-indigo)] font-semibold text-white hover:border-white/25",
       },
       size: {
-        default: "h-10 px-4 py-2",
-        sm: "h-8 rounded-lg px-3 text-xs",
-        lg: "h-12 rounded-xl px-8 text-sm",
-        icon: "h-10 w-10",
+        default: "h-11 px-5 py-2.5",
+        sm: "h-9 rounded-lg px-4 py-1.5 text-xs",
+        lg: "h-[52px] rounded-xl px-10 py-3 text-sm",
+        icon: "h-11 w-11",
       },
     },
     defaultVariants: {

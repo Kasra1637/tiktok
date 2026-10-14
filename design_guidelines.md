@@ -287,6 +287,8 @@ All `<Button>` variants in `components/ui/button.jsx` share the `.btn-studio` sy
 
 **Signal Coral primary rule:** `brand` (`#FE2C55`, white text) is the single primary CTA color — one per screen for the commit action (Generate, Research, Approve, Create draft, Save edits, Export, Landing hero/final CTA). `accent` (indigo) is the secondary brand action (tour Next, Save App Profile, paired secondary); `outline` / `secondary` cover navigation and retries; `ghost` / `link` cover tertiary and destructive-adjacent actions. Never hand-roll `bg-[color:var(--brand-coral)]` or `bg-[color:var(--brand-indigo)]` on a clickable button — use the variant.
 
+**Sizes (roomy inner spacing):** `default` `h-11 px-5 py-2.5`, `sm` `h-9 px-4 py-1.5`, `lg` `h-[52px] px-10 py-3`, `icon` `h-11 w-11`. Header action rows wrap with `gap-x-3 gap-y-3` so wrapped rows clear by 12px top-to-bottom.
+
 **Hover & press micro-interaction (`.btn-studio`, softer):**
 - Hover lifts `-1px` over `300ms ease-out`, drifts a soft 105° sheen (`::after`, 40% width, 0.10 alpha) across the button in `850ms`, and brightens the top bevel rim with a shadow tighten.
 - Text and icons never animate: no `svg`/text transforms anywhere in `.btn-studio` or `.pill-studio`.

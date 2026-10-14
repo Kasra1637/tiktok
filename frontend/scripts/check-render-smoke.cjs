@@ -6977,6 +6977,43 @@ async function runDemoCtaChecks() {
       );
     }
   );
+  await check(
+    "History offers Delete on a failed clip",
+    async (ctx) => {
+      const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+      let deleted = null;
+      await withApi(
+        {
+          getGenerationHistory: async () => ({
+            generations: [{ ...COMPLETED, id: "gen-failed", status: "failed", video_url: null, error: "boom" }],
+          }),
+          getAppProfiles: async () => ({ profiles: [PROFILE] }),
+          deleteGeneration: async (id) => { deleted = id; return { deleted: id }; },
+        },
+        async () => {
+          await mount(GenerationHistory, { onChanged: () => {} })(ctx);
+          // Failed rows never grow the preview rail that holds the rail
+          // Delete beside Download, so without its own control a failed
+          // render is stuck in history forever.
+          const del = [...ctx.container.querySelectorAll("button")].find(
+            (b) => (b.textContent || "").trim() === "Delete"
+          );
+          if (!del) {
+            throw new Error(
+              "no Delete on a failed render: the rail Delete never mounts " +
+                "without a preview rail, so the row cannot be removed"
+            );
+          }
+          await act(async () => {
+            del.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          if (deleted !== "gen-failed") {
+            throw new Error("the failed-row Delete does not reach the delete endpoint");
+          }
+        }
+      );
+    }
+  );
 await check(
     "History plays the durable copy the API signed, not a stripped path",
     async (ctx) => {

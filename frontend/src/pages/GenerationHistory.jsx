@@ -554,6 +554,23 @@ function GenerationRow({ row, siblings = [], onChanged }) {
                   <RotateCcw className="h-3.5 w-3.5" /> Retry
                 </Button>
               )}
+              {/* Failed rows never grow the preview rail that holds the
+                  rail Delete beside Download, so without this control a
+                  failed render is stuck in history forever. Same endpoint
+                  as the rail Delete; ghost + tinted icon reads destructive
+                  at a glance without a second confirmation for a row that
+                  was never usable. */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="px-2 text-muted-foreground hover:text-destructive"
+                disabled={busy}
+                onClick={() => act(() => api.deleteGeneration(row.id))}
+                data-testid={`delete-failed-${row.id}`}
+                title="Remove this failed render from history"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Delete
+              </Button>
             </div>
           )}
 
