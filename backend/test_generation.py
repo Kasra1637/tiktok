@@ -1782,6 +1782,163 @@ class TestHeygenScriptSacred:
         assert gp._PROMPT_SCRIPT_SACRED.get() is False
 
 
+class TestTheReferenceCarriesNoScene:
+    """
+    The identity reference used to carry the room.
+
+    A render came back with the uploaded photograph's background, environment,
+    clothing and lighting in it, while a portion of the clip was on the planned
+    scene. The split is the diagnosis: the prompt wins where the photograph is
+    the only signal, and the photograph wins wherever it is still a
+    photograph. The person-anchor prompt had said all along that the image is
+    authority on the person and "not the place" — and that sentence changes
+    nothing, because it is text about pixels rather than an edit to them.
+
+    The crop bounded the person and left the surroundings in: 60% of the face
+    width down each side, 100% above it, 40% below the chin. So the room, its
+    light and the founder's own garment all still reached the model. These pin
+    the part that is fixed by the image rather than by the prompt: the person's
+    head stays exact, and the scene does not survive.
+    """
+
+    def _portrait(self):
+        """A synthetic portrait: a head against a hard-edged room, in a garment.
+
+        The background is a high-contrast checkerboard rather than a soft
+        gradient on purpose. A gradient is already defocus-proof, so it would
+        pass a blur that leaves a real photograph's structure readable.
+        """
+        import numpy as np
+        from PIL import Image
+        width, height = 600, 800
+        img = Image.new("RGB", (width, height), (20, 90, 160))
+        px = np.array(img)
+        yy, xx = np.mgrid[0:height, 0:width]
+        px[(((xx // 40) + (yy // 40)) % 2).astype(bool)] = (30, 160, 90)
+        fx, fy, fw, fh = 200, 220, 200, 240
+        px[fy:fy + fh, fx:fx + fw] = (222, 176, 140)          # skin
+        px[fy - 70:fy + 20, fx - 20:fx + fw + 20] = (40, 28, 22)  # hair
+        px[fy + fh:fy + fh + 150, fx - 40:fx + fw + 40] = (200, 30, 30)  # garment
+        return Image.fromarray(px), (fx, fy, fw, fh, 0.99)
+
+    def _detail(self, arr, region):
+        import numpy as np
+        y0, x0, h, w = region
+        return float(np.asarray(arr, dtype=np.float32)[y0:y0 + h, x0:x0 + w].std())
+
+    def test_the_person_is_untouched_and_the_scene_is_not(self):
+        import numpy as np
+        import face_crop
+        img, bbox = self._portrait()
+        out = face_crop.defocus_outside_person(img, bbox)
+        before = np.asarray(img, dtype=np.float32)
+        after = np.asarray(out, dtype=np.float32)
+        fx, fy, fw, fh = 200, 220, 200, 240
+
+        # Identity is not negotiable: the head is returned bit for bit, because
+        # a softer reference would trade a scene leak for a worse likeness and
+        # that is a strictly worse outcome. Measured well inside the person
+        # mask — the feathered edge is supposed to change, and comparing a
+        # rectangle corner that overhangs the ellipse would only measure that.
+        head = (fy - 40, fx + 40, fh + 60, fw - 80)
+        y0, x0, h, w = head
+        assert np.array_equal(after[y0:y0 + h, x0:x0 + w], before[y0:y0 + h, x0:x0 + w]), (
+            "the face and hair were altered; the reference must be the person "
+            "exactly, only the surroundings may change"
+        )
+
+        # The room and the garment lose their structure. Measured as detail
+        # (local standard deviation), because a blurred room is still a room
+        # if its edges are readable.
+        for name, region in (
+            ("background", (20, 20, 120, 120)),
+            ("garment", (fy + fh + 100, fx + 80, 40, 40)),
+        ):
+            before_detail = self._detail(before, region)
+            after_detail = self._detail(after, region)
+            assert after_detail < before_detail * 0.6, (
+                f"the {name} kept its detail after defocus "
+                f"({before_detail:.1f} -> {after_detail:.1f}); a softened room is "
+                f"still a room a model can copy"
+            )
+
+    def test_the_size_and_the_format_are_preserved(self):
+        """The submit path re-reads this file and encodes it directly."""
+        import face_crop
+        img, bbox = self._portrait()
+        out = face_crop.defocus_outside_person(img, bbox)
+        assert out.size == img.size
+        assert out.mode == "RGB"
+
+    def test_a_degenerate_image_is_returned_untouched(self):
+        """Never fail a render over a preprocessing step."""
+        import face_crop
+        from PIL import Image
+        tiny = Image.new("RGB", (4, 4), (10, 20, 30))
+        assert face_crop.defocus_outside_person(tiny, (1, 1, 2, 2, 0.9)).size == (4, 4)
+
+    def test_a_failure_inside_the_defocus_returns_the_original(self, monkeypatch):
+        """A blur that raises must not take the render with it."""
+        import face_crop
+        from PIL import Image
+        img, bbox = self._portrait()
+
+        def boom(self, radius):
+            raise RuntimeError("filter unavailable")
+        monkeypatch.setattr(Image.Image, "filter", boom, raising=False)
+        assert face_crop.defocus_outside_person(img, bbox) is img
+
+    def test_the_headshot_path_defocuses_instead_of_returning_the_upload(self, monkeypatch):
+        """
+        A close-up selfie against a busy wall is the same leak as a full shot.
+
+        The face-dominates branch existed to skip a pointless crop, and it
+        returned the upload untouched — so the tightest, most background-heavy
+        kind of photo was the one that never got any processing at all. It
+        keeps skipping the crop and now still defocuses.
+
+        What is asserted is that the upload is processed at all, not that the
+        corners vanish. A frame whose face is nearly half the image is mostly
+        person, so the head mask legitimately covers most of it and there is
+        little background left to take; the strong background measurements
+        belong to the full-body portrait above, where there is a real room.
+        """
+        import numpy as np
+        import face_crop
+        from PIL import Image
+        from pathlib import Path
+        import tempfile
+
+        img, _ = self._portrait()
+        img = img.resize((300, 300))
+        bbox = (60, 60, 190, 220, 0.99)
+        assert (bbox[2] * bbox[3]) / (img.size[0] * img.size[1]) * 100 > 40
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "headshot.png"
+            img.save(path)
+            monkeypatch.setattr(face_crop, "_detect_face", lambda a: bbox)
+            out_path = face_crop.crop_face_from_path(path)
+            assert out_path != path, "the upload was returned untouched"
+            result = np.asarray(Image.open(out_path).convert("RGB"), dtype=np.float32)
+        assert not np.array_equal(result, np.asarray(img, dtype=np.float32)), (
+            "the headshot branch returned the upload unprocessed; a close-up "
+            "against a busy wall keeps its background the same way a full shot does"
+        )
+
+    def test_no_face_still_returns_the_upload_unchanged(self, monkeypatch):
+        """Graceful degradation is unchanged: nothing to anchor a mask to."""
+        import face_crop
+        from pathlib import Path
+        import tempfile
+        img, _ = self._portrait()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "no-face.png"
+            img.save(path)
+            monkeypatch.setattr(face_crop, "_detect_face", lambda a: None)
+            assert face_crop.crop_face_from_path(path) == path
+
+
 class TestBoundForSubmit:
     """
     The identity reference is embedded as a base64 data URI inside a JSON body,

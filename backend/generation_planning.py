@@ -745,8 +745,11 @@ def person_anchor_notes(assets: list) -> str:
     - It used to let the image speak for the place as well as the person.
       First-frame models open ON the attached photo, so the opening was the
       uploaded room and the prompted scene only arrived mid-clip. The image
-      is now authority on the person only; the opening-scene section in the
-      assemblers commands the locked scene from frame one.
+      is now authority on the person only, and the surroundings are defocused
+      out of the reference itself (face_crop.defocus_outside_person) — text
+      saying "not the place" never removed the place from the pixels. With the
+      garment blurred too, the claim below is limited to what the reference
+      actually shows: face, hair and skin, not build.
     """
     if not assets:
         return ""
@@ -758,7 +761,7 @@ def person_anchor_notes(assets: list) -> str:
         label = _clip(asset.get("name") or asset.get("label") or "the attached character reference", 60)
         return (
             "The person on camera is the person in the attached character reference "
-            f"image ({label}). Copy that person exactly: same face, skin, age and build, "
+            f"image ({label}). Copy that person exactly: same face, skin and age, "
             "and the same hair — same hairline, colour, length, texture and parting. "
             "Their appearance is fixed by that photograph: do not add, lengthen, restyle "
             "or recolour their hair, and do not add or remove anything absent from the "

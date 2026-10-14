@@ -2,9 +2,16 @@
 Face detection + cropping utility.
 
 Uses OpenCV's FaceDetectorYN (YuNet model) to detect the primary face in an
-image and crop it with appropriate padding so that ONLY the facial identity
-(face + hair/forehead/chin context) is sent to the face-swap model — regardless
-of how much body is visible in the original upload.
+image, crop it with appropriate padding, and defocus everything that is not the
+person so that the ONLY thing this file hands a video model is facial identity
+— face, hair and skin — and not the room the photograph was taken in.
+
+Both halves are needed. The crop alone is not enough: it bounds the person but
+keeps the room down each side, the light above the hair and the garment below
+the neck, and an image-conditioned model copies what it can see. Renders came
+back with the uploaded kitchen in them. So the surroundings are blurred and
+partly desaturated as well, which costs nothing in likeness (the head is
+returned untouched) and removes the copyable scene.
 
 Graceful fallback: if no face is detected, returns the original image unchanged
 so the pipeline doesn't break.
@@ -15,7 +22,7 @@ from typing import Optional
 
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +33,53 @@ _MODEL_PATH = Path(__file__).parent / "models" / "face_detection_yunet_2023mar_i
 _MIN_CONFIDENCE = 0.5
 
 # Padding ratios relative to the detected face bounding box dimensions.
-# These ensure we capture the full head (face + hair + ears + chin/neck)
-# for the AI to understand the person's complete identity including hair style,
-# while excluding torso/arms/clothing.
+# These capture the full head (face + hair + ears + chin/neck) so the identity
+# survives, and they deliberately keep most of the garment OUT: 40% of the face
+# height below the chin is neck and the top of the shoulders, so anything past
+# it is clothing, which the scene chooses and locks. The room is still inside
+# this box — that is what defocus_outside_person is for.
 _PAD_HORIZONTAL = 0.6    # 60% of face width on each side (captures ears + hair width)
 _PAD_TOP = 1.0           # 100% above face (captures full hair/top of head)
 _PAD_BOTTOM = 0.4        # 40% below face (chin + neck for skin tone reference)
+
+# How hard the reference is defocused outside the person, and over how much of
+# the frame that is applied.
+#
+# The crop above bounds the person; it never REMOVES what surrounds them. At
+# those pads a portrait keeps the room down both sides, above the hair, and the
+# neck and top of the garment below the chin — so the uploaded room, its light
+# and the founder's own clothes all still reach the model as pixels. The
+# person-anchor prompt says that image is authority on the person and "not the
+# place", but a text instruction does not remove pixels: an image-conditioned
+# video model copies what it can see, and it sees a kitchen. That is why renders
+# come back partly on the planned scene and partly in the uploaded room — the
+# prompt wins where it is the only signal, and the photograph wins where it is
+# still a photograph.
+#
+# So the image is made to match the claim. Everything outside the head and
+# hair is blurred past recognition and partly desaturated, which leaves nothing
+# for the model to copy: no wall, no window, no colour temperature, no garment.
+# A blur rather than a cut or a matte, because a hard-edged silhouette reads as
+# a composite and some models reproduce the edge as an object.
+#
+# The radius scales with the crop so it is severe at any upload size, and the
+# shoulder band is excluded for the same reason the crop is: wardrobe is chosen
+# by the scene and locked there, and a sharp garment in the reference fights
+# that lock instead of supporting it.
+_DEFOUS_RADIUS_RATIO = 0.09
+_DEFOUS_DESATURATE = 0.55
+# The person's own region, as multiples of the face box. Hair sits above the
+# detected face, so the head ellipse reaches well past it; the mask stops at the
+# base of the neck because everything below is the garment.
+_PERSON_TOP_FACTOR = 0.95
+_PERSON_SIDE_FACTOR = 0.85
+_PERSON_BOTTOM_FACTOR = 0.30
+# The blur is feathered in over this fraction of the person's own radius, so the
+# boundary never reads as a cut line. Kept small on purpose: the feather is
+# measured against the same normalised distance as the head, so a large value
+# does not soften the edge — it inflates the whole person region, and at 0.55
+# the "person" grew to cover most of the frame and left the garment sharp.
+_MASK_FEATHER = 0.25
 
 
 def _detect_face(img_rgb: np.ndarray) -> tuple:
@@ -89,6 +137,112 @@ def _crop_face_region(img: Image.Image, bbox: tuple) -> Image.Image:
     crop_y2 = min(img_h, y + h_face + pad_bottom)
 
     return img.crop((crop_x1, crop_y1, crop_x2, crop_y2))
+
+
+def _bbox_in(bbox: tuple) -> tuple:
+    """
+    The same face box, expressed in a cropped frame's coordinates.
+
+    `_crop_face_region` is called with the box on the original, and the result
+    is a different image, so the box has to move with it. Recomputing it by
+    re-detecting would be a second model call for a number the caller already
+    has, and the padding rules here are the same ones the crop used, so the
+    origin is recovered from the same arithmetic instead.
+    """
+    x, y, w_face, h_face, confidence = bbox
+    pad_x = int(w_face * _PAD_HORIZONTAL)
+    pad_top = int(h_face * _PAD_TOP)
+    crop_x1 = max(0, x - pad_x)
+    crop_y1 = max(0, y - pad_top)
+    return (
+        x - crop_x1,
+        y - crop_y1,
+        w_face,
+        h_face,
+        confidence,
+    )
+
+
+def _person_mask(size: tuple, bbox: tuple) -> "np.ndarray":
+    """
+    A float mask, 1.0 over the person and 0.0 everywhere else.
+
+    Built from the detected face box rather than a segmentation model, because
+    this only has to separate a head from a room, and the face is already the
+    one thing the pipeline can find reliably. The ellipse is sized generously
+    around the head because hair is identity — under-sizing it would blur away
+    the hairstyle the anchor tells the model to copy exactly, which would trade a
+    scene leak for a worse likeness.
+
+    Feathered rather than hard: a crisp boundary is read as a pasted edge, and
+    some models render that edge as a real object in frame.
+    """
+    width, height = size
+    x, y, w_face, h_face, _ = bbox
+    cx = x + w_face / 2.0
+    # The vertical extent is stated against the face box rather than as a
+    # radius, so "how much below the chin stays sharp" is a readable number:
+    # the neck is identity, the garment is not.
+    top = y - h_face * _PERSON_TOP_FACTOR
+    bottom = y + h_face * (1.0 + _PERSON_BOTTOM_FACTOR)
+    cy = (top + bottom) / 2.0
+    ry = max((bottom - top) / 2.0, 1.0)
+    rx = max(w_face * _PERSON_SIDE_FACTOR, 1.0)
+
+    yy, xx = np.ogrid[0:height, 0:width]
+    dist = np.sqrt(((xx - cx) / rx) ** 2 + ((yy - cy) / ry) ** 2)
+    edge = 1.0 + _MASK_FEATHER
+    mask = np.clip((edge - dist) / max(_MASK_FEATHER, 1e-6), 0.0, 1.0)
+    # Smoothstep for a gentler shoulder on the falloff than a linear ramp.
+    return mask * mask * (3.0 - 2.0 * mask)
+
+
+def defocus_outside_person(img: Image.Image, bbox: tuple) -> Image.Image:
+    """
+    Blur and partly desaturate everything that is not the person's head.
+
+    The identity reference's job is the face, the hair and the skin. The room
+    behind it and the garment below it are not identity, and every render that
+    leaked an uploaded kitchen leaked it through here: the crop bounds the person
+    but never removes the surroundings, so the model is handed a photograph and
+    asked in text to use only the face. It uses the face AND the room, because
+    pixels outrank instructions.
+
+    The subject stays fully sharp — the mask is 1.0 across the head — so this
+    costs nothing in likeness. It only removes the copyable scene, which is the
+    part the strategy's locked scene was supposed to own.
+
+    Graceful by construction: any failure returns the image untouched, so a
+    render is never lost to a preprocessing step.
+    """
+    try:
+        width, height = img.size
+        if width < 16 or height < 16:
+            return img
+        radius = max(2.0, min(width, height) * _DEFOUS_RADIUS_RATIO)
+        # Twice, and only to the background. One pass leaves coarse structure
+        # behind — a high-contrast wall still reads as a wall after a single
+        # blur — and the point of this step is that there is nothing left to
+        # copy, not merely that it is softer.
+        blurred = img.filter(ImageFilter.GaussianBlur(radius=radius))
+        blurred = blurred.filter(ImageFilter.GaussianBlur(radius=radius))
+        mask = _person_mask(img.size, bbox)[:, :, None]
+        # Desaturate only what is being blurred, so the person keeps full
+        # colour and the background loses the colour cues that read as "this
+        # room's lighting".
+        grey = Image.blend(
+            blurred.convert("RGB"), blurred.convert("L").convert("RGB"),
+            _DEFOUS_DESATURATE,
+        )
+        grey_np = np.asarray(grey, dtype=np.float32)
+        base = np.asarray(img.convert("RGB"), dtype=np.float32)
+        # Lerp the person out of the defocused background and the background out
+        # of the person, in one pass.
+        merged = base * mask + grey_np * (1.0 - mask)
+        return Image.fromarray(np.clip(merged, 0, 255).astype(np.uint8))
+    except Exception as e:  # never fail a render over preprocessing
+        logger.warning(f"Background defocus failed ({e}) — using the image as-is.")
+        return img
 
 
 def count_faces_in_image(img_rgb: np.ndarray) -> Optional[int]:
@@ -232,10 +386,29 @@ def crop_face_from_path(image_path: Path) -> Path:
                 f"Face already dominates image ({face_area_pct:.1f}% > 40%) — "
                 f"skipping crop, using original."
             )
-            return image_path
+            # Still defocused. Skipping the crop is about framing, not about
+            # what the reference is allowed to contain: a tight selfie against a
+            # busy wall is the same leak as a full-body shot in a kitchen, and
+            # returning it untouched was how a close-up kept its own background.
+            cleaned = defocus_outside_person(img, bbox)
+            stem = image_path.stem
+            suffix = image_path.suffix or ".png"
+            cleaned_path = image_path.parent / f"{stem}_face{suffix}"
+            cleaned.save(cleaned_path, quality=95)
+            logger.info(
+                f"Background defocused on a headshot: {img_w}x{img_h} -> "
+                f"{cleaned.size[0]}x{cleaned.size[1]} (saved to {cleaned_path.name})"
+            )
+            return cleaned_path
 
         # Crop the face region
         cropped = _crop_face_region(img, bbox)
+
+        # Then take the room out of what is left. Order matters: the crop
+        # decides how much of the frame the person occupies, so the mask and the
+        # blur radius are computed against the cropped frame rather than the
+        # upload.
+        cropped = defocus_outside_person(cropped, _bbox_in(bbox))
 
         # Save cropped version alongside original
         stem = image_path.stem
