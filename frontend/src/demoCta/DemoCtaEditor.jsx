@@ -141,7 +141,7 @@ const TEXTAREA_CLASS =
 /**
  * One collapsible control group.
  *
- * The card is `flush`: `.surface` is un-layered CSS with its own 24px padding,
+ * The card is `flush`: `.surface` is un-layered CSS with its own 28px padding,
  * and every group carrying it put 24px of dead space around a 32px header,
  * which is most of what made the old panel feel bloated. `.surface-flush`
  * zeroes the gutter in the stylesheet, where it beats the utility layer, so

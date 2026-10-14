@@ -131,8 +131,8 @@ Radii: cards `rounded-2xl` (16px), asides and rows `rounded-xl` (12px), pills
 forgotten utility produced a square card.
 
 Card padding is unified in `index.css`: `.surface` / `.surface-solid` are
-`16px` on phones and `24px` from 768px up; `.surface-compact` (cards that are
-items in a grid) stays `16px`; `.surface-flush` is `0` for a card whose first
+`20px` on phones and `28px` from 768px up; `.surface-compact` (cards that are
+items in a grid) stays `16px`; `.inset-panel` is `20px`; `.surface-flush` is `0` for a card whose first
 child is a full-bleed row. Do not add `p-*` to card JSX.
 
 **Never nest `.surface` inside `.surface`.** A card inside an identical card
@@ -184,7 +184,8 @@ Spacing, in these steps and no others:
 | Gap | Token | Job |
 |---|---|---|
 | 24px | `space-y-6` / `gap-6` | between page sections — every sidebar page's `PageFrame` |
-| 16px | `space-y-4` / `gap-4` | between cards in a list; between blocks inside a card |
+| 20px | `space-y-5` | between blocks inside a card (`SectionCard`, `StepShell`) |
+| 16px | `space-y-4` / `gap-4` | between cards in a list; flush accordion bodies |
 | 12px | `space-y-3` / `gap-3` | between related blocks that are not one stack |
 | 8px | `space-y-2` / `gap-2` | items in a list; a label to its control; a field's own stack (label, hint, control) |
 | 6px | `gap-1.5` | inline clusters only — a glyph beside its label, two controls in a row |

@@ -43,7 +43,7 @@ export function SectionCard({
     <div
       className={cn(
         compact ? "surface-compact" : "surface",
-        flush ? "surface-flush space-y-0" : "space-y-4",
+        flush ? "surface-flush space-y-0" : "space-y-5",
         "rounded-2xl",
         className
       )}

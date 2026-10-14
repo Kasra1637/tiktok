@@ -659,7 +659,7 @@ function AngleGoalPicker({
 
 function StepShell({ icon: Icon, title, description, children }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {Icon && (
         <div className="space-y-1">
           {title && <SectionHeading icon={Icon}>{title}</SectionHeading>}

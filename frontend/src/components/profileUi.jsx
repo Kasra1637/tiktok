@@ -171,9 +171,9 @@ export function InfoListBlock({ label, items, tone = "default" }) {
  * rows sit in. The summary indents to the title, so the bar reads as one
  * column of text with its glyph in the margin rather than two left edges.
  *
- * Gutters step to 24px from 768px up, the way `.surface` padding does: the
+ * Gutters step to 24px from 768px up; the
  * group is a flush card with no padding of its own, so without this its text
- * would sit 8px shallower than a Create Video step card's on desktop.
+ * would sit shallower than a Create Video step card's on desktop.
  *
  * Native button = clickable + keyboard accessible with aria-expanded.
  * Grid-rows animation (200ms) opens without layout jump; the overflow-hidden

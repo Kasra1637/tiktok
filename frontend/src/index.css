@@ -242,14 +242,21 @@ body {
 /* ---------- Surfaces ----------
    A card's padding AND radius live HERE, not in JSX utilities.
    Outer section widths (`max-w-6xl`, AppShell `max-w-[1400px]`) are untouched —
-   16px on phones, 24px from tablet up. `.surface` is un-layered CSS so it beats
+   20px on phones, 28px from tablet up (compact grid tiles stay 16px).
+   `.surface` is un-layered CSS so it beats
    any leftover Tailwind `p-*` on the same element; remove `p-*` from card JSX.
 
    The radius is owned here for the same reason: it was re-typed as
    `rounded-2xl` at every call site, so a forgotten utility produced a square
    card. The one card radius is 16px; the nested aside is 12px (`.inset-panel`). */
 .surface,
-.surface-solid,
+.surface-solid {
+    border: 1px solid var(--hairline);
+    border-radius: 1rem;
+    box-shadow: var(--shadow-md), inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+    padding: 20px;
+}
+/* Compact grid tiles stay dense so lists still scan. */
 .surface-compact {
     border: 1px solid var(--hairline);
     border-radius: 1rem;
@@ -266,17 +273,17 @@ body {
 @media (min-width: 768px) {
     .surface,
     .surface-solid {
-        padding: 24px;
+        padding: 28px;
     }
 }
 
 /* A small bordered aside inside a card (ratings, warnings, pre-render notes).
-   Never a full card nested inside a card. */
+   Never a full card nested inside a card. 20px gutter, same step as cards. */
 .inset-panel {
     border: 1px solid var(--hairline);
     border-radius: 0.75rem;
     background-color: hsl(var(--secondary) / 0.3);
-    padding: 16px;
+    padding: 20px;
 }
 
 /* The same aside, one step louder: a stronger hairline and a slightly heavier
