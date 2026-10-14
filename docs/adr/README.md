@@ -1,0 +1,25 @@
+# Architecture Decision Records
+
+One file per significant decision: **context → decision → consequences**, plus
+the alternatives we rejected and why. Git records *what* changed; these record
+*why*, in one browsable list.
+
+## Rules
+
+- Numbered `NNNN-<slug>.md`, sequential, never renumbered.
+- A new decision that overturns an old one gets a new file; the old file stays,
+  with `Status` flipped to `superseded by NNNN`. History is append-only.
+- A commit that picks between real alternatives adds or supersedes an ADR in
+  the same commit.
+- Each record cites a verifiable anchor (commit hash or `file:line`). If the
+  anchor doesn't resolve, the record is stale — fix or supersede it.
+
+## Index
+
+| # | Decision | Status |
+|---|----------|--------|
+| [0001](0001-grok-submit-failures-are-loud.md) | Provider 400s fail loudly with the provider's quoted words; no silent fallback | accepted |
+| [0002](0002-h3max-identity-via-first-frame.md) | H3 Max identity rides as the opening frame, not `input_references` | accepted |
+| [0003](0003-temperature-from-endpoint-declaration.md) | Temperature support is read from the endpoint declaration, not a model list | accepted |
+| [0004](0004-single-pass-generation-only.md) | Generation is single-pass only; durations clamp, never chain | accepted |
+| [0005](0005-per-provider-prompt-ceilings.md) | Each provider gets its own prompt ceiling; the spoken script is sacred on tight ones | accepted |
