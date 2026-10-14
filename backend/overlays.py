@@ -59,13 +59,19 @@ def canvas_fit_chain(source_label: str, out_label: str) -> list:
     and unconnected, so pad re-reads the raw input and everything downstream is
     silently orphaned — ffmpeg still exits 0 and writes a file.
 
-    Note this is a plain bilinear scale: it meets the platform's pixel
-    dimensions without adding detail. It is not super-resolution, and nothing
-    here should be described to a founder as sharpening their video.
+    Lanczos, not bilinear. Most studio renders arrive BELOW this canvas (Grok
+    at 720p, H3 Max and HeyGen at 768p) and are therefore scaled up, and
+    bilinear is visibly mushier there. Lanczos resolves those edges materially
+    better for a cost that is lost next to the x264 encode that follows, and it
+    also cleans the down-scale direction when a 2K render is brought down to the
+    canvas.
+
+    It still adds no detail: it resamples, it does not super-resolve, and
+    nothing here should be described to a founder as sharpening their video.
     """
     return [
         f"[{source_label}]scale={CANVAS_WIDTH}:{CANVAS_HEIGHT}:"
-        f"force_original_aspect_ratio=decrease[scaled_{out_label}]",
+        f"force_original_aspect_ratio=decrease:flags=lanczos[scaled_{out_label}]",
         f"[scaled_{out_label}]pad={CANVAS_WIDTH}:{CANVAS_HEIGHT}:"
         f"(ow-iw)/2:(oh-ih)/2:color=black[{out_label}]",
     ]

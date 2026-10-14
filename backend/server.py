@@ -7561,7 +7561,7 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
             # it is what an extension would bridge from, and what the preview
             # and the plain download then serve.
             #
-            # Soft by design. A plain bilinear scale adds no detail, so failing
+            # Soft by design. The scale resamples and adds no detail, so failing
             # here costs resolution and nothing else, and the un-rescaled clip
             # is still a watchable video.
             rescaled, rescale_warnings = await overlays.rescale_to_canvas(local_path)
