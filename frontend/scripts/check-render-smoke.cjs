@@ -1856,7 +1856,7 @@ async function main() {
     await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
       mount(CreateVideo, {})(ctx)
     );
-    // The step no longer renders a title; the empty state is the primary content
+    // The shell carries the step title; the empty state stays the primary content
     expectText(ctx, "No approved App Profile", "step 0 did not render its empty state");
   });
 
@@ -1878,6 +1878,37 @@ async function main() {
       if (!ctx.text().trim()) throw new Error("the page rendered nothing");
     });
   }
+
+  // Sequential arrows beside free-jump pills: Continue walks one phase
+  // forward and Back walks one back, and neither is offered where it cannot
+  // go. Skipping phases stays the pills' job alone.
+  await check("wizard arrows walk the steps in order", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
+      mount(CreateVideo, {})(ctx)
+    );
+    const back = () => ctx.container.querySelector('[data-testid="wizard-back-button"]');
+    const next = () => ctx.container.querySelector('[data-testid="wizard-continue-button"]');
+    if (!back() || back().disabled !== true) throw new Error("Back is not disabled on the first step");
+    if (!next()) throw new Error("Continue is missing on the first step");
+    if (next().getAttribute("aria-label") !== "Continue to Audience & goal") {
+      throw new Error(`Continue does not name its destination: ${next().getAttribute("aria-label")}`);
+    }
+    await clickEl(ctx, next(), "Continue to the angle step");
+    if (!ctx.container.querySelector('[data-testid="audience-goal-step"]')) {
+      throw new Error("Continue did not move to the Audience & goal step");
+    }
+    if (back().disabled !== false) throw new Error("Back is still disabled after moving forward");
+    await clickEl(ctx, back(), "Back to the profile step");
+    if (ctx.container.querySelector('[data-testid="audience-goal-step"]')) {
+      throw new Error("Back did not return to the profile step");
+    }
+    // Last step: there is nowhere to continue to.
+    await openStep(ctx, "Hook + Story");
+    if (ctx.container.querySelector('[data-testid="wizard-continue-button"]')) {
+      throw new Error("Continue is offered on the last step");
+    }
+  });
 
   // Nothing that calls the model may render before the plan has been read. This
   // the reorder's whole point, and it is invisible to a type-check: the render

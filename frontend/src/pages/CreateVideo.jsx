@@ -40,7 +40,7 @@ import {
 } from "../lib/videoLength";
 // FileText was the "Creative plan" step's icon. That step held nothing but a
 // button and is now the top of Review, so the icon went with it.
-import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, LayoutTemplate, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, FileText, AudioLines, ListChecks, ShieldCheck, Ruler } from "lucide-react";
+import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, LayoutTemplate, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, Ruler } from "lucide-react";
 // toast left with AttachedPhoto, the only place on this page that raised one.
 // Detaching now happens inside the photo section, which reports its own
 // outcome.
@@ -1739,6 +1739,26 @@ setObjective("");
   });
   const nextUp = nextStepMessage(stepStates, step, angleId);
 
+  /* What a satisfied pill names beside its tick. Derived like the states, so
+     a changed pick renames its pill on the next render instead of going
+     stale. Only done pills carry one: anything earlier has nothing picked
+     yet, and the render step never completes. */
+  function pillValue(key) {
+    if (key === "profile") {
+      return profiles.find((p) => p.id === profileId)?.brand_name || null;
+    }
+    if (key === "angle") {
+      return angles.find((a) => a.id === angleId)?.label || objective || null;
+    }
+    if (key === "template") {
+      return template?.name || null;
+    }
+    if (key === "review") {
+      return project?.script_version ? `Plan v${project.script_version}` : null;
+    }
+    return null;
+  }
+
   const stepContent = renderStep();
 
   function renderStep() {
@@ -1747,7 +1767,14 @@ setObjective("");
       // never become permissive while still claiming it excludes the rest.
       const { approved, unapproved } = partitionProfiles(profiles);
       return (
-        <StepShell>
+        /* Titled like every other step. Title only, no description: the
+           rail's own sentence names the one thing to do here, and a second
+           sentence restating it is the duplication step 3's title-only shell
+           already avoids. */
+        <StepShell
+          icon={Briefcase}
+          title="App Profile"
+        >
           {approved.length === 0 ? (
             <EmptyState
               icon={Briefcase}
@@ -1760,7 +1787,11 @@ setObjective("");
               }
             />
           ) : (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),20rem))]">
+              {/* Auto-fit with a capped column: one app sits in a single tidy
+                  card instead of stretching full width, and more apps flow
+                  into further columns as the frame allows — no breakpoint to
+                  update when the second or fifth app arrives. */}
               {approved.map((p) => (
                 <button
                   key={p.id}
@@ -2847,6 +2878,9 @@ if (step === 3) {
         {stepStates.map((s, i) => {
           const active = i === step;
           const Icon = s.state === "done" ? Check : s.step.icon;
+          // Resolved once per pill: the tick, the label, and the suffix below
+          // must all agree on the same pick.
+          const value = s.state === "done" ? pillValue(s.step.key) : null;
           return (
             <button
               key={s.step.key}
@@ -2855,7 +2889,9 @@ if (step === 3) {
               aria-current={active ? "step" : undefined}
               // Announced rather than shown only: the tick is a shape-only cue, and
               // this is the one place the founder looks to answer "what is left".
-              aria-label={`${s.step.label}: ${STEP_STATE_COPY[s.state]}`}
+              aria-label={value
+                ? `${s.step.label}: ${value}, done`
+                : `${s.step.label}: ${STEP_STATE_COPY[s.state]}`}
               title={STEP_STATE_COPY[s.state]}
               data-state={s.state}
               data-testid={`step-pill-${s.step.key}`}
@@ -2880,6 +2916,18 @@ if (step === 3) {
                 <Icon className="h-3 w-3" />
               )}
               {s.step.label}
+              {value && (
+                // The pick beside the tick, truncated: an angle label can be
+                // a sentence, and the row wraps rather than scrolling. The
+                // full text lives in the title and the aria-label above.
+                <span
+                  aria-hidden="true"
+                  title={value}
+                  className="max-w-40 truncate font-normal opacity-70"
+                >
+                  : {value}
+                </span>
+              )}
             </button>
           );
         })}
@@ -2917,11 +2965,40 @@ if (step === 3) {
           <div className="w-full">{stepContent}</div>
         </div>
 
-      {/* Back and Next used to live here and were pure duplication: every step
-          pill above is already a button, and clicking one leaves any step, so
-          the `step === 0 && !profileId` guard they carried was bypassable
-          anyway. The one thing the pills cannot do is leave the studio, so the
-          exit stays — on the last step only, which is where it already was. */}
+      {/* Sequential arrows beside free-jump pills. Back and Next lived here
+          before and were removed as pure duplication — but they duplicated
+          the jump, while these walk: the arrows move one phase at a time for
+          a founder going through in order, the pills land a returning founder
+          directly. Different jobs, so both stay. No guards, like the pills:
+          these only move. */}
+      <div className="flex items-center justify-between gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setStep(Math.max(0, step - 1))}
+          disabled={step === 0}
+          aria-label={step === 0 ? "Back (already on the first step)" : `Back to ${STEPS[step - 1].label}`}
+          data-testid="wizard-back-button"
+          className="gap-1.5"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" /> Back
+        </Button>
+        {step < STEPS.length - 1 && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setStep(step + 1)}
+            aria-label={`Continue to ${STEPS[step + 1].label}`}
+            data-testid="wizard-continue-button"
+            className="gap-1.5"
+          >
+            Continue <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+
+      {/* The one thing the pills cannot do is leave the studio, so the exit
+          stays — on the last step only, which is where it already was. */}
       {step === STEPS.length - 1 && project && (
         <div className="flex items-center justify-end">
           <Button variant="ghost" onClick={() => navigate("/app-profiles")}>
