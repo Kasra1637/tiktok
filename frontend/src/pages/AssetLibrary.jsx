@@ -172,7 +172,9 @@ function AssetRow({
                 Faces detected: {asset.face_count} — may be flagged
               </Badge>
             )}
-            {attachable && attached && (
+            {/* The embedded row states it beside Remove instead, so the
+                same attached photo never claims it twice. */}
+            {attachable && attached && !embedded && (
               <Badge variant="outline" className="text-xs">
                 <Check className="mr-1 h-3 w-3" /> Attached
               </Badge>
@@ -218,16 +220,24 @@ function AssetRow({
               from the video. It used to be a second card further down the step
               with its own Remove, which meant the photo the founder was looking
               at and the control that changed it were never in the same place. */}
+          {/* The attached state reads beside Remove, not up in the title:
+              a green branded check to the left of the control that undoes it,
+              so the photo that is on the video says so where it is removed. */}
           {embedded && attached && onDetach && (
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={busy}
-              onClick={() => onDetach(asset)}
-              title="Stops using this photo for the video you are building"
-            >
-              <X className="h-3.5 w-3.5" /> Remove
-            </Button>
+            <>
+              <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-muted-foreground">
+                <Check className="h-3.5 w-3.5 text-green-500" aria-hidden="true" /> Attached
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() => onDetach(asset)}
+                title="Stops using this photo for the video you are building"
+              >
+                <X className="h-3.5 w-3.5" /> Remove
+              </Button>
+            </>
           )}
           {/* Archive and Delete are held at the right edge with a gap before
               them, so they cannot be reached by muscle memory on the way to
