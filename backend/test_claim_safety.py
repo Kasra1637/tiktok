@@ -162,6 +162,44 @@ class TestRiskPatterns:
             "describes the viewer" in w["reason"] for w in report["risk_warnings"]
         )
 
+    @pytest.mark.parametrize("text", [
+        "I use this every morning.",
+        "I have used it for years.",
+        "I am using it daily.",
+        "I swear this works.",
+        "As a nurse, I see this daily.",
+        "My patients say it helps.",
+    ])
+    def test_a_claimed_history_with_the_app_warns(self, text):
+        """The presenter is an AI stand-in: nothing on file can substantiate
+        a personal history with the product, so the claim is warned."""
+        report = cs.build_safety_report(plan(script=text), PROFILE)
+        reasons = " ".join(w["reason"] for w in report["risk_warnings"])
+        assert "cannot substantiate" in reasons, text
+
+    @pytest.mark.parametrize("text", [
+        # A past habit is not a usage claim — and half of all natural
+        # first-person hooks are built on it ("I used to dread mornings"), so
+        # flagging it meant the generator's own customer voice arrived warned.
+        "I used to dread mornings.",
+        "I used to feel like that.",
+        # Accustomed, not a claim.
+        "I am used to waking early.",
+        # Ordinary first-person problem and outcome language.
+        "I could never name what I felt.",
+        "I finally understood the pattern.",
+    ])
+    def test_a_past_habit_or_plain_first_person_does_not_warn(self, text):
+        report = cs.build_safety_report(plan(script=text), PROFILE)
+        reasons = " ".join(w["reason"] for w in report["risk_warnings"])
+        assert "cannot substantiate" not in reasons, text
+
+    def test_first_person_is_a_warning_never_a_block(self):
+        """The founder keeps editorial control: this panel advises, it does not
+        refuse. Only banned claims and spoken feature inventories block."""
+        report = cs.build_safety_report(plan(script="I use this every morning."), PROFILE)
+        assert report["passed"] is True
+
 class TestFeatureFraming:
     def test_spoken_inventory_blocks(self):
         """A feature list in the spoken words is a hard failure, not a warning.

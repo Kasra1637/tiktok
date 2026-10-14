@@ -33,6 +33,7 @@ from template_library import (
     clamp_duration,
 )
 import feedback
+from claim_safety import FIRST_PERSON_PATTERNS
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
@@ -2484,9 +2485,10 @@ def _spoken_line_rules_block() -> str:
         "AI-sounding openers: 'in today's fast-paced world', 'imagine a world "
         "where', 'the best part?', 'take it to the next level'.\n"
         "- NO PROMOTION: never name the app, the brand or the founder, never say "
-        "'we' or 'our app', and never ask for anything — no download, install, "
-        "sign-up, follow or 'try it'. A customer telling what happened is the "
-        "whole piece.\n"
+        "'we' or 'our app', never claim a personal history with it (no 'I use', "
+        "'I have been using', 'my patients'), and never ask for anything — no "
+        "download, install, sign-up, follow or 'try it'. A customer telling "
+        "what happened is the whole piece.\n"
     )
 
 
@@ -2846,7 +2848,7 @@ async def generate_creative_plan(
             "and their timeline. Keep the same viewer problem, verified facts and intended outcome. "
             "Use complete natural customer sentences, not feature labels or fragments. "
             "Write it the way a real person talks: no promotion, no hype, no AI-sounding "
-            "openers, and never the app's name. "
+            "openers, never the app's name, and no claimed history with the app. "
             "Do not fix grammar merely by adding a period. Never split a sentence between fields. "
             f"hook_line must be at most {hook_budget} characters; script (MIDDLE ONLY) at most "
             f"{middle_budget} characters. A shorter complete thought is fine.\n"
@@ -3436,6 +3438,21 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
         hit = _spoken_marker_hit(text, _AI_FLUFF_MARKERS)
         if hit:
             issues.append(f"{name} uses a generic AI-sounding phrase: '{hit}'")
+        # The generator obeying its own safety layer: claim_safety warns when a
+        # spoken line claims a personal history with the app ("I use", "my
+        # patients"), so a draft that does it is rewritten here instead of
+        # accepted and then warned about. The patterns are shared, not copied,
+        # so the two cannot disagree about what counts — including the "I used
+        # to <verb>" exclusion, which is a past habit rather than a usage claim
+        # and must keep passing untouched.
+        for pattern in FIRST_PERSON_PATTERNS:
+            match = re.search(pattern, _normalize_spoken(text))
+            if match:
+                issues.append(
+                    f"{name} claims a personal history with the app "
+                    f"('{match.group(0).strip()}'), which no record can substantiate"
+                )
+                break
         for sentence in _split_sentences(text):
             plain = sentence.rstrip('\"\u201d\u2019')
             if not plain.endswith((".", "!", "?")):

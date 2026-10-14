@@ -68,8 +68,17 @@ TESTIMONIAL_PATTERNS = [
 # this too", which is the right trade: an invented testimonial is far worse than
 # a missing one.
 FIRST_PERSON_PATTERNS = [
-    r"\bi (?:have |'ve )?(?:been )?use[sd]?\b",
-    r"\bi (?:use|used|rely on|rely on it|depend on)\b",
+    # "I use / I have used / I am using [it]" — a claimed history with the
+    # product, which no record can substantiate (see the note above).
+    #
+    # "I used to <verb>" is deliberately NOT matched: a past habit is not a
+    # usage claim, and half of all natural first-person hooks are built on it
+    # ("I used to dread mornings"). Before this exclusion the rule fired on the
+    # very lines the plan generator is told to write, so every honest customer
+    # voice arrived with a warning attached. Same for "be used to" ("I am used
+    # to waking early" is accustomed, not a claim).
+    r"\bi (?:have |ve |am )?(?:been )?us(?:e[sd]?|ing)\b(?! to\b)",
+    r"\bi (?:rely on(?: it)?|depend on)\b",
     r"\bi (?:swear|promise|guarantee)\b",
     r"\bas an? \w+,? i\b",
     r"\bmy (?:patients|clients|customers|students|team) (?:say|told me|use)\b",

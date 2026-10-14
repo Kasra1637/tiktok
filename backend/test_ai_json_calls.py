@@ -1579,6 +1579,61 @@ class TestSpokenLineCraft:
         assert result["script"] == good["script"]
         assert len(rec.payloads) == 1
 
+    def test_a_claimed_history_with_the_app_is_rewritten(self, monkeypatch):
+        """The generator obeying its own safety layer.
+
+        claim_safety warns when a spoken line claims a personal history with
+        the app, so a draft that does it is rewritten here instead of accepted
+        and then warned about. The shared patterns are what keep the two from
+        disagreeing about what counts.
+        """
+        import ai_service
+        bad = {
+            "hook_line": "I use this every single morning.",
+            "script": "I have been using it for months now. It helps me a lot.",
+            "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
+            "visual_direction": "v", "demo_brief": "d",
+            "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
+        }
+        good = dict(bad, hook_line="I could never name what I felt.",
+                    script="One sentence each night helped me understand the pattern.")
+        rec = _patch_client(monkeypatch, [
+            _completion(json.dumps(bad)), _completion(json.dumps(good)),
+        ])
+        result = _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"}, template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15,
+        ))
+        assert result["hook_line"] == good["hook_line"]
+        assert len(rec.payloads) == 2
+        correction = rec.payloads[1]["messages"][1]["content"]
+        assert "personal history" in correction
+
+    def test_a_past_habit_is_not_rewritten(self, monkeypatch):
+        """'I used to <verb>' is a past habit, not a usage claim.
+
+        The exclusion lives in the shared patterns, so this guards both sides
+        at once: the safety layer must not warn it, and the generator must not
+        rewrite it.
+        """
+        import ai_service
+        import claim_safety
+        good = {
+            "hook_line": "I used to dread mornings.",
+            "script": "One sentence each night helped me understand the pattern.",
+            "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
+            "visual_direction": "v", "demo_brief": "d",
+            "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
+        }
+        assert claim_safety.find_risk_patterns(good["hook_line"]) == []
+        rec = _patch_client(monkeypatch, [_completion(json.dumps(good))])
+        result = _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"}, template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15,
+        ))
+        assert result["hook_line"] == good["hook_line"]
+        assert len(rec.payloads) == 1
+
     def test_the_character_limits_are_untouched(self):
         """Rule one of the brief, pinned as a number rather than a promise.
 
