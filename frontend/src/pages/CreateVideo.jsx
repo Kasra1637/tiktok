@@ -760,9 +760,9 @@ function nextStepMessage(stepStates, step, angleId) {
         ? "Next: choose a video goal for this audience angle. Six suggested goals are ranked for its problem and promise."
         : "Next: pick an audience angle first. Then choose from six goal suggestions tailored to it.";
     }
-    if (current.step.key === "template" && !stepStates[2].state.startsWith("d")) {
-      return "Next: pick a template and add your photo. Both are needed before anything can be generated.";
-    }
+    // The template step shows no next-up line: the step card itself is titled
+    // "Choose a template and add your photo", so a sentence repeating it
+    // under the pills said the same thing twice.
   }
   if (step === 0) return "Choose an approved App Profile to start. Your free script plan appears in Review; Hook + Story renders in the final step.";
   // "Everything is ready" has to be measured against the steps that CAN be
@@ -1870,7 +1870,7 @@ setObjective("");
                 The angle is required: the strategy and the render are built
                 around it, so a video without one is the generic framing this
                 step exists to prevent. Each block on this step is its own
-                bordered card so the picker, the goal list, and the tone field
+                bordered card so the picker and the goal list
                 read as separate organized units. */}
             <div className="inset-panel space-y-2">
               <GroupLabel as="label" icon={Target}>
@@ -2065,19 +2065,6 @@ setObjective("");
                 testId="goal-feedback"
               />
             )}
-
-            <div className="inset-panel space-y-2">
-              <label htmlFor="tone" className="text-sm font-medium">Tone (optional)</label>
-              <Input
-                id="tone"
-                value={tone}
-                onChange={(e) => setTone(e.target.value)}
-                placeholder="For example: calm and direct"
-              />
-              <p className="text-xs text-muted-foreground">
-                Optional. Guides the script&apos;s voice, not the facts about your app.
-              </p>
-            </div>
           </div>
         </StepShell>
       );
@@ -2955,7 +2942,7 @@ if (step === 3) {
 
 <div className="surface rounded-2xl">
           {/* The step card is the ONLY card on a step. Its blocks — the angle
-              picker, "What you get", the goal list, the tone field — were
+              picker, "What you get", and the goal list — were
               `.surface` too, so a card sat inside an identical card: same fill,
               same border, same 24px gutter, 48px of inset before any text and a
               third 24px inside. They are `.inset-panel` asides now (12px
