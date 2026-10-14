@@ -5606,12 +5606,18 @@ async function runDeleteDialogChecks() {
 /**
  * App Profile detail: the two research actions beside the delete control.
  *
+ * Both sit behind one Research menu: three sentences of button text made the
+ * header read as a paragraph, and each re-run carries a consequence ("needs
+ * re-approval", "creates separate draft") that belongs beside the item rather
+ * than inside a label. The header keeps a single control for all of them, so
+ * these checks open the menu before touching an item.
+ *
  * Refresh-from-sources stages a proposal and owes re-approval (unlike
  * Refresh research & angles, which applies immediately), so the pending
- * proposal must surface a review path on this page — otherwise the button
+ * proposal must surface a review path on this page — otherwise the item
  * silently does nothing visible. Research-into-a-new-draft forks from the
  * stored store listing and lands in the editor, which owns drafts; without
- * a listing on file the button must not render at all.
+ * a listing on file that item must not render at all.
  */
 async function runProfileResearchActionsChecks() {
   const RESEARCHED = {
@@ -5643,9 +5649,10 @@ async function runProfileResearchActionsChecks() {
       }),
       async () => {
         await mountProfileDetail()(ctx);
-        const btn = ctx.container.querySelector('[data-testid="refresh-sources-button"]');
-        if (!btn) throw new Error("no refresh-from-sources button beside the delete control");
-        await clickEl(ctx, btn, "no refresh-from-sources button");
+        // Opened through the trigger, not force-mounted: the item has to be
+        // reachable the way a founder reaches it for this to prove anything.
+        const btn = await openMenu(ctx, "research-menu-button", "refresh-sources-button");
+        await clickEl(ctx, btn, "the research menu offers no refresh-from-sources item");
         await act(async () => {});
         if (called !== "p1") {
           throw new Error(`refreshAppProfile was called with ${JSON.stringify(called)}`);
@@ -5702,8 +5709,8 @@ async function runProfileResearchActionsChecks() {
         await mountProfileDetail()(ctx);
         await clickEl(
           ctx,
-          ctx.container.querySelector('[data-testid="research-new-draft-button"]'),
-          "no research-into-new-draft button"
+          await openMenu(ctx, "research-menu-button", "research-new-draft-button"),
+          "the research menu offers no research-into-new-draft item"
         );
         await act(async () => {});
         if (!payload || payload.appstore_url !== "https://apps.apple.com/threadly") {
@@ -5722,21 +5729,31 @@ async function runProfileResearchActionsChecks() {
     void appstore_url;
     await withApi(stubDetailApi({ getAppProfile: async () => bare }), async () => {
       await mountProfileDetail()(ctx);
-      if (ctx.container.querySelector('[data-testid="research-new-draft-button"]')) {
-        throw new Error("the fork button shows with no store listing to research");
+      // The menu has to open for its silence to mean anything: an unopened
+      // menu has no items either, which is not the claim under test.
+      const refresh = await openMenu(ctx, "research-menu-button", "refresh-sources-button");
+      if (!refresh) throw new Error("the research menu has no refresh item, so it never opened");
+      if (dom.window.document.querySelector('[data-testid="research-new-draft-button"]')) {
+        throw new Error("the fork item shows with no store listing to research");
       }
     });
   });
 }
 
 /**
- * "Save App Profile" and "Review complete" are review affordances over a
- * machine-written draft, sitting in the research row beside Research. Before
- * research runs there is nothing to review, so the row buttons are withheld.
- * But the row save was also the only save on the page, so gating it alone
- * would quietly remove the ability to store a hand-typed profile -- the one
- * failure mode here is a form you can fill and never save, which no other gate
- * would catch.
+ * "Save profile" and "Approve profile" are review affordances over a
+ * machine-written draft, sitting in the research row beside the Research menu.
+ * Before research runs there is nothing to review, so the row buttons are
+ * withheld. But the row save was also the only save on the page, so gating it
+ * alone would quietly remove the ability to store a hand-typed profile -- the
+ * one failure mode here is a form you can fill and never save, which no other
+ * gate would catch.
+ *
+ * The row is deliberately short, so that is asserted and not assumed: one
+ * Signal Coral commit per state, and the re-runs that carry a consequence
+ * ("needs re-approval", "creates separate draft") behind a single Research
+ * menu instead of two more wide labels. A button per action read as a
+ * paragraph and put two coral primaries on one screen.
  *
  * The signal under test is `last_research_at`, which the server writes on exactly
  * the research and refresh paths and on neither analyze-url nor a manual create.
@@ -5771,6 +5788,15 @@ async function runBrandSetupChecks() {
     // No last_research_at: the founder typed this one.
   };
 
+  // An approved profile: the state the re-runs belong to. Refresh owes a
+  // re-approval, so it is offered only here, and the fork is the other entry
+  // point into the same research run.
+  const approved = {
+    ...researched,
+    status: "approved",
+    approved_at: "2026-09-02T10:00:00Z",
+  };
+
   async function mountWith(ctx, active) {
     await withApi(
       {
@@ -5798,11 +5824,28 @@ async function runBrandSetupChecks() {
       if (!ctx.container.querySelector('[data-testid="approve-profile-button"]')) {
         throw new Error("a researched draft cannot be approved from the research row");
       }
-      // Same row as Research, not pinned to the viewport: the row div holds
-      // the research submit beside the review actions, and nothing here sticks.
+      // Same row as the research controls, not pinned to the viewport: the row
+      // div holds them, and nothing here sticks.
       const row = save.closest("div");
-      if (!row || !row.querySelector('[data-testid="research-app-button"]')) {
-        throw new Error("Save is not in the same row as the Research button");
+      if (!row || !row.querySelector('[data-testid="research-menu-button"]')) {
+        throw new Error("Save is not in the same row as the Research menu");
+      }
+      // The card's own submit is gone once a draft exists: re-running research
+      // is the menu's job, and a submit left beside it would fork a profile on
+      // Enter with no control on screen to explain it.
+      if (row.querySelector('[data-testid="research-app-button"]')) {
+        throw new Error(
+          "a researched draft still carries the card's research submit beside the Research menu"
+        );
+      }
+      // One Signal Coral primary — the state's commit action. Two would leave
+      // the founder choosing between two "main" buttons, which is the palette
+      // rule this row broke when every action had a button of its own.
+      const primaries = row.querySelectorAll(".btn-bevel-brand");
+      if (primaries.length !== 1) {
+        throw new Error(
+          `the research row shows ${primaries.length} Signal Coral primaries; the palette allows one per screen`
+        );
       }
       if (ctx.container.querySelector(".sticky")) {
         throw new Error(
@@ -5824,6 +5867,65 @@ async function runBrandSetupChecks() {
   );
 
   await check(
+    "an approved profile's row is two short controls, and the menu carries the re-runs",
+    async (ctx) => {
+      let refreshed = null;
+      // Everything inside withApi: the override only lives for the callback,
+      // and the click at the end of this check has to reach it.
+      await withApi(
+        {
+          getActiveBrand: async () => approved,
+          getAppProfiles: async () => ({ profiles: [approved] }),
+          refreshAppProfile: async (id) => {
+            refreshed = id;
+            return { ...approved, pending_research: { brand_description: "New words" } };
+          },
+        },
+        async () => {
+          await mount(BrandSetup, {})(ctx);
+          await act(async () => {});
+          const save = ctx.container.querySelector('[data-testid="save-brand-button"]');
+          if (!save) throw new Error("an approved profile offers no way to store an edit");
+          const row = save.closest("div");
+          const labels = [...row.querySelectorAll("button")].map((b) => (b.textContent || "").trim());
+          if (labels.join(" | ") !== "Save profile | Research") {
+            throw new Error(
+              `the approved row reads ${JSON.stringify(labels)}, not two short controls`
+            );
+          }
+          // The sentences this row used to carry are gone from the page, not
+          // just from the row: a label that long is what made it unreadable,
+          // and the fork a label promised is now promised by the item it opens.
+          expectAbsent(ctx, "Refresh from sources (needs re-approval)", "the long refresh label is still on the page");
+          expectAbsent(ctx, "Review complete", "the reviewed-to-approve label is still on the page");
+          expectAbsent(ctx, "Research into a new draft", "a button label still promises the fork");
+          // Each re-run states its consequence beside the item, where it is read
+          // at the moment of choosing rather than a screen earlier.
+          const refreshItem = await openMenu(ctx, "research-menu-button", "refresh-profile-button");
+          if (!refreshItem) throw new Error("the Research menu offers no refresh item on an approved profile");
+          if (!/Needs re-approval/.test(refreshItem.textContent || "")) {
+            throw new Error("the refresh item does not say it owes a re-approval");
+          }
+          const forkItem = dom.window.document.querySelector('[data-testid="research-new-draft-button"]');
+          if (!forkItem) throw new Error("the Research menu offers no research-into-new-draft item");
+          if (!/Creates separate draft/.test(forkItem.textContent || "")) {
+            throw new Error("the fork item does not say it creates a separate draft");
+          }
+          // Wired to the page's own handler, not merely present: the refresh
+          // item has to stage the proposal the alert on this page reviews.
+          await clickEl(ctx, refreshItem, "no refresh item to click");
+          if (refreshed !== "p1") {
+            throw new Error(`refreshAppProfile was called with ${JSON.stringify(refreshed)}`);
+          }
+          if (!ctx.container.querySelector('[data-testid="pending-refresh-alert"]')) {
+            throw new Error("the refreshed proposal has no review path on this page");
+          }
+        }
+      );
+    }
+  );
+
+  await check(
     "a hand-typed profile keeps a Save even though it gets no research-row actions",
     async (ctx) => {
       await mountWith(ctx, handTyped);
@@ -5831,6 +5933,12 @@ async function runBrandSetupChecks() {
         throw new Error(
           "research-row review actions are showing for a profile research never ran. " +
             "There is no generated draft to review."
+        );
+      }
+      if (ctx.container.querySelector('[data-testid="research-menu-button"]')) {
+        throw new Error(
+          "a hand-typed profile is offered the re-run menu. Nothing was researched, " +
+            "so neither the proposal refresh nor the fork applies."
         );
       }
       const manualSave = ctx.container.querySelector(
@@ -5870,6 +5978,7 @@ async function runBrandSetupChecks() {
         "brand-url-card",
         "save-brand-button",
         "save-manual-profile-button",
+        "research-menu-button",
       ]) {
         if (ctx.container.querySelector(`[data-testid="${gone}"]`)) {
           throw new Error(
@@ -7501,6 +7610,31 @@ async function clickEl(ctx, el, why) {
     el.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
   });
   await act(async () => {});
+}
+
+/**
+ * Open a Radix menu the way its own trigger does, and return the item inside.
+ *
+ * Menu content is portaled onto document.body, so the check's container cannot
+ * see it, and jsdom has no pointer pipeline to press the trigger with: the
+ * trigger's ArrowDown path is the open route that works here. Opening it
+ * matters — a check that reached for an item without opening would be reading
+ * markup no founder can get to, and force-mounting the content in every render
+ * would leave an invisible menu sitting over the page.
+ *
+ * Returns null when the item is missing, so a check can assert an item is
+ * absent from a menu that did open.
+ */
+async function openMenu(ctx, triggerTestId, itemTestId) {
+  const trigger = ctx.container.querySelector(`[data-testid="${triggerTestId}"]`);
+  if (!trigger) throw new Error(`no ${triggerTestId} to open the menu from`);
+  await act(async () => {
+    trigger.dispatchEvent(
+      new dom.window.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })
+    );
+  });
+  await act(async () => {});
+  return dom.window.document.querySelector(`[data-testid="${itemTestId}"]`);
 }
 
 /**

@@ -12,6 +12,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "../components/ui/dropdown-menu";
 import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
 import PageHeader from "../components/PageHeader";
@@ -420,10 +428,7 @@ return (
         description={profile?.brand_description ? sentenceCase(profile.brand_description) : undefined}
         actions={
           <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-3">
-            {/* Brand hierarchy, left to right: semantic status badge, secondary
-                edits, destructive icon. Wraps under the title on narrow screens
-                instead of squeezing. Create Video starts from the sidebar —
-                this header only manages the profile. */}
+            {/* Brand hierarchy: status badge, primary edit, research dropdown, delete */}
             {approved ? (
               <Badge className="border-green-500/25 bg-green-500/10 px-3 py-1 font-semibold text-green-300 transition-none">Approved</Badge>
             ) : (
@@ -433,57 +438,81 @@ return (
               <Link to="/brand">Edit</Link>
             </Button>
             {approved && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleRegenerateEverything}
-                disabled={regeneratingEverything}
-                title="Re-research this app, apply the refreshed profile, and regenerate its audience angles"
-              >
-                {regeneratingEverything ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                Refresh research & angles
-              </Button>
-            )}
-            {/* Refresh from sources stages a proposal and owes re-approval;
-                Refresh research & angles above applies immediately instead.
-                The two share a row because both re-read the listings, and the
-                labels say which one waits for the founder. */}
-            {approved && researched && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleRefreshFromSources}
-                disabled={refreshing}
-                title="Re-read the store listings into a proposal. Your approved profile is unchanged until you approve it."
-                data-testid="refresh-sources-button"
-              >
-                {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                {refreshing ? "Re-researching..." : "Refresh from sources (needs re-approval)"}
-              </Button>
-            )}
-            {/* A second research pass as its own draft, beside the delete
-                control: forking never touches this profile, which is why it
-                sits with the destructive action rather than the safe ones.
-                Brand indigo, not red — red is delete's alone. */}
-            {hasStoreUrl && (
-              <Button
-                variant="brand"
-                size="sm"
-                onClick={handleResearchNewDraft}
-                disabled={researchingNew}
-                title="Research this app's store listing again as a separate draft. This profile is untouched; the editor opens on the new draft."
-                data-testid="research-new-draft-button"
-              >
-                {researchingNew ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                {researchingNew ? "Researching..." : "Research into a new draft"}
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={regeneratingEverything || refreshing || researchingNew}
+                    className="gap-1.5"
+                    data-testid="research-menu-button"
+                  >
+                    {regeneratingEverything || refreshing || researchingNew ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-3.5 w-3.5" />
+                    )}
+                    Research
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[220px]">
+                  <DropdownMenuLabel className="text-xs">Research actions</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={handleRegenerateEverything}
+                    disabled={regeneratingEverything || refreshing || researchingNew}
+                    className="text-sm"
+                  >
+                    {regeneratingEverything ? (
+                      <> <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> Refreshing… </> 
+                    ) : (
+                      <> <RefreshCw className="h-3.5 w-3.5 mr-2" /> Refresh research & angles </>
+                    )}
+                    <span className="ml-auto text-xs text-muted-foreground">Applies immediately</span>
+                  </DropdownMenuItem>
+                  {researched && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={handleRefreshFromSources}
+                        disabled={refreshing || regeneratingEverything || researchingNew}
+                        className="text-sm"
+                        data-testid="refresh-sources-button"
+                      >
+                        {refreshing ? (
+                          <> <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> Re-researching… </>
+                        ) : (
+                          <> <RefreshCw className="h-3.5 w-3.5 mr-2" /> Refresh from sources </>
+                        )}
+                        <span className="ml-auto text-xs text-muted-foreground">Needs re-approval</span>
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  {hasStoreUrl && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={handleResearchNewDraft}
+                        disabled={researchingNew || regeneratingEverything || refreshing}
+                        className="text-sm"
+                        data-testid="research-new-draft-button"
+                      >
+                        {researchingNew ? (
+                          <> <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> Researching… </>
+                        ) : (
+                          <> <Sparkles className="h-3.5 w-3.5 mr-2" /> Research into new draft </>
+                        )}
+                        <span className="ml-auto text-xs text-muted-foreground">Creates separate draft</span>
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
             {/* Deletes the profile and everything scoped to it: content angles,
                 studio projects, generations, assets and their recorded
-                results. The endpoint and the api client both already existed
-                and nothing called them; this is the control that reaches them.
-                Type-to-confirm rather than window.confirm because the blast
-                radius is every finished video, not one regenerable row. */}
+                results. Type-to-confirm because the blast radius is every
+                finished video, not one regenerable row. */}
             <Button
               variant="ghost"
               size="icon"

@@ -102,10 +102,10 @@ export const TOURS = {
           "Save stores your work; it approves nothing and generates nothing. Only the app name is required — but richer detail writes stronger scripts."
       },
       {
-        target: '[data-testid="approve-profile-button"], [data-testid="refresh-profile-button"]',
+        target: '[data-testid="approve-profile-button"], [data-testid="research-menu-button"]',
         title: "Approve a reviewed profile",
         body:
-          "Approval unlocks Create Video: audience angles and template suggestions come alive with it. Refreshing builds a proposal instead — review it, then approve before it replaces your current profile.",
+          "Approval unlocks Create Video: audience angles and template suggestions come alive with it. Refresh from the Research menu builds a proposal instead — review it, then approve before it replaces your current profile.",
       },
       {
         target: '[data-testid="find-video-to-remix-button"]',

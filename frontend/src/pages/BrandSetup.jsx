@@ -6,6 +6,14 @@ import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "../components/ui/dropdown-menu";
 import PageHeader from "../components/PageHeader";
 import { SectionCard, GroupLabel } from "../components/SectionCard";
 import { SectionGroup } from "../components/profileUi";
@@ -295,8 +303,18 @@ export default function BrandSetup() {
       .catch((err) => toast.error(getErrorMessage(err)));
   };
 
-  const handleResearchApp = async (e) => {
-    e.preventDefault();
+  /**
+   * One research run, shared by the card's submit and the Research menu's
+   * "Research into new draft" item — both send the URLs in this box and land
+   * on whatever the server returns.
+   *
+   * With a profile already open the server stores a separate draft rather than
+   * updating it, so the toast names which happened. The menu's "Creates
+   * separate draft" caption is off screen by then, and a fork reported as an
+   * ordinary re-research is exactly the surprise this page must not hand over.
+   */
+  const runResearch = async () => {
+    const forking = Boolean(brand?.id);
     if (!appstoreUrl.trim() && !playUrl.trim()) {
       toast.error("Enter your app's App Store URL, Google Play URL, or both.");
       return;
@@ -312,7 +330,11 @@ export default function BrandSetup() {
       });
       applyProfile(data);
       refreshProfilesList();
-      toast.success("App research complete — review the draft profile, then approve it.");
+      toast.success(
+        forking
+          ? "New draft researched from these URLs — your other profile is untouched."
+          : "App research complete — review the draft profile, then approve it."
+      );
       // The details card only renders once a profile exists. Scroll it into
       // view now that research just created one, so the founder lands on the
       // draft instead of staring at the form they just submitted.
@@ -324,6 +346,11 @@ export default function BrandSetup() {
     } finally {
       setResearching(false);
     }
+  };
+
+  const handleResearchApp = async (e) => {
+    e.preventDefault();
+    await runResearch();
   };
 
   const handleFieldChange = (key) => (e) => {
@@ -549,24 +576,44 @@ export default function BrandSetup() {
               className="min-h-[60px]"
               data-testid="app-notes-input"
             />
-            {/* Save and Approve sit in this row, beside Research — the sticky
-                bottom bar is gone, so review actions live where the draft is
-                made rather than pinned to the viewport. Gated exactly as the
-                bar was: only a researched profile has review affordances, so
-                a hand-typed profile keeps its single manual Save further down
-                and a profile-less page offers research alone. type="button"
-                on each: inside this form an untyped button submits research. */}
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-              <Button
-                type="submit"
-                disabled={researching}
-                variant="brand"
-                className="w-full sm:w-auto"
-                data-testid="research-app-button"
-              >
-                {researching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                {researching ? "Researching..." : brand?.id ? "Research into a new draft" : "Research app"}
-              </Button>
+            {/* One row of short actions, not a sentence per action.
+
+                Research is the submit while no machine draft exists: it is the
+                only way to create one, and a hand-typed profile keeps it. Once
+                research has produced a draft, re-running it is an occasional
+                move with a consequence attached — "needs re-approval",
+                "creates separate draft" — so both re-runs collapse behind one
+                Research menu that states the consequence beside the item, the
+                shape the App Profile page's header already uses. Three wide
+                labels read as a paragraph in one row, and two of them were
+                Signal Coral at once; the palette reserves coral for the single
+                commit action of a screen, which here is Approve while the
+                profile is still a draft.
+
+                Save and Approve sit in this row, beside the research controls —
+                the sticky bottom bar is gone, so review actions live where the
+                draft is made rather than pinned to the viewport. Gated exactly
+                as the bar was: only a researched profile has review
+                affordances, so a hand-typed one keeps its single manual Save
+                further down. type="button" on each: inside this form an untyped
+                button submits research.
+
+                A hairline above the row separates the fields from the actions:
+                at the form's own 8px rhythm the buttons read as one more field,
+                which is what made the row look crowded into the notes box. */}
+            <div className="flex flex-col gap-2 border-t border-[color:var(--hairline)] pt-4 sm:flex-row sm:flex-wrap sm:items-center">
+              {!researchedProfile && (
+                <Button
+                  type="submit"
+                  disabled={researching}
+                  variant="brand"
+                  className="w-full sm:w-auto"
+                  data-testid="research-app-button"
+                >
+                  {researching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                  {researching ? "Researching..." : "Research app"}
+                </Button>
+              )}
               {researchedProfile && (
                 <Button
                   type="button"
@@ -577,7 +624,7 @@ export default function BrandSetup() {
                   data-testid="save-brand-button"
                 >
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {saving ? "Saving..." : "Save App Profile"}
+                  {saving ? "Saving..." : "Save profile"}
                 </Button>
               )}
               {researchedProfile && status !== "approved" && (
@@ -590,21 +637,61 @@ export default function BrandSetup() {
                   data-testid="approve-profile-button"
                 >
                   {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
-                  {approving ? "Approving..." : "Review complete — approve profile"}
+                  {approving ? "Approving..." : "Approve profile"}
                 </Button>
               )}
-              {researchedProfile && status === "approved" && (
-                <Button
-                  type="button"
-                  onClick={handleRefresh}
-                  disabled={refreshing}
-                  variant="secondary"
-                  className="w-full sm:w-auto"
-                  data-testid="refresh-profile-button"
-                >
-                  {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                  {refreshing ? "Re-researching..." : "Refresh from sources (needs re-approval)"}
-                </Button>
+              {/* Refresh from sources is offered only on an approved profile: a
+                  draft owes no approval, and re-reading the listings into a
+                  proposal for one would have nothing to compare against. */}
+              {researchedProfile && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="w-full sm:w-auto"
+                      disabled={researching || refreshing}
+                      title="Re-run research from these listings: read them into a proposal, or fork a separate draft"
+                      data-testid="research-menu-button"
+                    >
+                      {researching || refreshing ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-4 w-4" />
+                      )}
+                      Research
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="min-w-[240px]">
+                    <DropdownMenuLabel className="text-xs">Research actions</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {status === "approved" && (
+                      <DropdownMenuItem
+                        onClick={handleRefresh}
+                        disabled={refreshing || researching}
+                        className="text-sm"
+                        data-testid="refresh-profile-button"
+                      >
+                        <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                        Refresh from sources
+                        <span className="ml-auto text-xs text-muted-foreground">Needs re-approval</span>
+                      </DropdownMenuItem>
+                    )}
+                    {/* The run the card's submit used to make, landing as a
+                        separate draft row: forking never touches this profile,
+                        which is the part worth reading before choosing it. */}
+                    <DropdownMenuItem
+                      onClick={runResearch}
+                      disabled={researching || refreshing}
+                      className="text-sm"
+                      data-testid="research-new-draft-button"
+                    >
+                      <Sparkles className="mr-2 h-3.5 w-3.5" />
+                      Research into new draft
+                      <span className="ml-auto text-xs text-muted-foreground">Creates separate draft</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </div>
           </form>
