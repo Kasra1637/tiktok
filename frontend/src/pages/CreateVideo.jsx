@@ -573,7 +573,7 @@ function AngleGoalPicker({
                 onClick={() => onSelectAngle?.(option.id)}
                 className="w-full rounded-xl border border-[color:var(--hairline)] p-3 text-left text-sm"
               >
-                {option.label}
+                {(option.label || "").replace(/\.\s*$/, "")}
               </button>
             ))}
           </div>
@@ -2001,9 +2001,11 @@ setObjective("");
                               title made the list something you read rather than
                               scan. Nothing is lost: the picked row still opens
                               onto every field the strategy is written from, so
-                              the detail sits one click deeper, not gone. */}
+                              the detail sits one click deeper, not gone. The
+                              label's trailing period is trimmed: labels arrive
+                              as sentences, but a title is not one. */}
                           <span className="min-w-0 flex-1 truncate text-sm font-semibold uppercase leading-[22px] tracking-[0.08em] text-muted-foreground">
-                            {sentenceCase(a.label)}
+                            {sentenceCase(a.label).replace(/\.\s*$/, "")}
                           </span>
                           <ChevronDown
                             className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
