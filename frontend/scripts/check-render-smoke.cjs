@@ -3487,7 +3487,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
     // ...and it must say what is missing and how to fix it, rather than
     // rendering an empty step.
-    if (!text.includes("Choose what this video is for")) {
+    if (!text.includes("Set the goal first, then templates are ranked for it.")) {
       throw new Error("the template step does not explain that the objective is required");
     }
     const back = [...ctx.container.querySelectorAll("button")]

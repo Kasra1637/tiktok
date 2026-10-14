@@ -724,7 +724,7 @@ function stepCompletion({ profileId, objective, angleId, templateId, project, mi
 }
 
 /** The one sentence under the pills. Names the first thing actually waiting. */
-function nextStepMessage(stepStates, step, angleId) {
+function nextStepMessage(stepStates, step, angleId, objective) {
   const current = stepStates[step];
   if (current.state === "blocked") {
     if (current.step.key === "angle") {
@@ -732,9 +732,13 @@ function nextStepMessage(stepStates, step, angleId) {
         ? "Next: choose a video goal for this audience angle. Six suggested goals are ranked for its problem and promise."
         : "Next: pick an audience angle first. Then choose from six goal suggestions tailored to it.";
     }
-    // The template step shows no next-up line: the step card itself is titled
-    // "Choose a template and add your photo", so a sentence repeating it
-    // under the pills said the same thing twice.
+    // The template gate names its missing prerequisite, the way the angle
+    // gate does — where to go, not what the step is, so it never repeats the
+    // card title. Gated on the objective alone: a picked-but-unranked list
+    // below has its own content to browse, and needs no sentence.
+    if (current.step.key === "template" && !objective) {
+      return "Next: set the goal on the previous step to unlock ranked templates.";
+    }
   }
   if (step === 0) return "Choose an approved App Profile to start. Your free script plan appears in Review; Hook + Story renders in the final step.";
   // "Everything is ready" has to be measured against the steps that CAN be
@@ -1737,7 +1741,7 @@ setObjective("");
     missingIdentity,
     hasEdits,
   });
-  const nextUp = nextStepMessage(stepStates, step, angleId);
+  const nextUp = nextStepMessage(stepStates, step, angleId, objective);
 
   /* What a satisfied pill names beside its tick. Derived like the states, so
      a changed pick renames its pill on the next render instead of going
@@ -2082,15 +2086,19 @@ setObjective("");
                 founder could pick the top card from reasons that did not mention
                 their goal at all. */}
             {!objective && (
-              <EmptyState
-                icon={Target}
-                title="Choose what this video is for — templates are ranked for it."
-                action={
-                  <Button variant="brand" onClick={() => setStep(1)}>
-                    <Target className="h-3.5 w-3.5" /> Set the goal
-                  </Button>
-                }
-              />
+              <div className="inset-panel space-y-2">
+                {/* Same recessed sub-card as the angle picker: eyebrow label,
+                    one helper line, the coral action beneath. The dashed
+                    centered box said the same thing with more chrome and a
+                    quieter button. */}
+                <GroupLabel icon={LayoutTemplate}>Template</GroupLabel>
+                <p className="text-xs text-muted-foreground">
+                  Set the goal first, then templates are ranked for it.
+                </p>
+                <Button variant="brand" onClick={() => setStep(1)} className="gap-1.5">
+                  <Target className="h-3.5 w-3.5" /> Set the goal
+                </Button>
+              </div>
             )}
             {profileId && objective && (
               <div className="flex flex-wrap items-center gap-2">
@@ -2216,16 +2224,17 @@ setObjective("");
                 eagerly from the profile and template (see ensureProject), so by
                 the time anyone reaches this there is almost always something to
                 attach to. */}
-            <div id="template-photo" className="space-y-3 border-t border-[color:var(--hairline)] pt-4">
+            {/* Second sub-card in the same style, not a divided-off section:
+                the parent's gap separates it, the way the angle picker's
+                groups sit apart. One helper line: the always-true upload
+                sentence with the gated consequence appended while gated. */}
+            <div id="template-photo" className="inset-panel space-y-2">
               <GroupLabel icon={ImageIcon}>Presenter photo</GroupLabel>
               <p className="text-sm text-muted-foreground">
                 Upload a clear photo of the person you want on camera. It guides the generated presenter; the scene is created from your App Profile.
+                {!templateId && " Pick a template above first; your photo attaches to this draft."}
               </p>
-              {!templateId ? (
-                <p className="text-sm text-muted-foreground">
-                  Pick a template above first — your photo attaches to this draft.
-                </p>
-              ) : !project ? (
+              {!templateId ? null : !project ? (
                 <>
                   <p className="text-sm text-muted-foreground">
                     Preparing the video draft for your photo…
