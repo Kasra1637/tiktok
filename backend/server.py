@@ -9562,15 +9562,64 @@ async def serve_video(filename: str, request: Request, sig: str = "", exp: str =
             (filename[:-4],),
         )
         if row and storage_service.is_configured():
+            # Local bytes are gone, so the durable R2 copy is served through
+            # this same-origin route, exactly as the download route already
+            # does. A 307 to the presigned cloud URL stood here, but reading
+            # its body needs CORS on the bucket, which R2 does not grant by
+            # default — fetch().blob() in the Demo + CTA editor (and any
+            # cross-origin <video> read) then failed as "Failed to fetch"
+            # for a clip that was never missing. Proxying costs container
+            # egress instead; at this app's volume it is immaterial.
             try:
-                cloud_url = await asyncio.to_thread(
-                    storage_service.signed_read_url, row["user_id"], row["id"])
+                head = await asyncio.to_thread(
+                    storage_service.cloud_video_head, row["user_id"], row["id"])
+            except storage_service.CloudObjectMissing:
+                head = None
             except Exception as error:
                 logger.warning("Cloud playback failed for %s (%s)", row["id"], type(error).__name__)
                 raise HTTPException(status_code=503, detail="Cloud video is temporarily unavailable")
-            if cloud_url:
-                return RedirectResponse(cloud_url, status_code=307,
-                                        headers={"Cache-Control": "private, no-store"})
+            if head is not None:
+                total, content_type = head
+                cloud_headers = {
+                    "Accept-Ranges": "bytes",
+                    "Content-Type": content_type,
+                    "Cache-Control": "private, max-age=31536000, immutable",
+                }
+                verdict, span = _parse_byte_range(request.headers.get("range"), total)
+                if verdict == "unsatisfiable":
+                    return Response(
+                        status_code=416,
+                        headers={**cloud_headers, "Content-Range": f"bytes */{total}"},
+                    )
+                try:
+                    if verdict == "none":
+                        _, body = await asyncio.to_thread(
+                            storage_service.open_video_for_download, row["user_id"], row["id"])
+                        return StreamingResponse(
+                            _iter_r2_object(body),
+                            headers={**cloud_headers, "Content-Length": str(total)},
+                        )
+                    start, end = span
+                    body = await asyncio.to_thread(
+                        storage_service.open_cloud_range, row["user_id"], row["id"], start, end)
+                    return StreamingResponse(
+                        _iter_r2_object(body),
+                        status_code=206,
+                        headers={
+                            **cloud_headers,
+                            "Content-Range": f"bytes {start}-{end}/{total}",
+                            "Content-Length": str(end - start + 1),
+                        },
+                    )
+                except storage_service.CloudObjectMissing:
+                    # Vanished between HEAD and GET; fall through to the
+                    # external copy and the 404 below.
+                    pass
+                except HTTPException:
+                    raise
+                except Exception as error:
+                    logger.warning("Cloud playback failed for %s (%s)", row["id"], type(error).__name__)
+                    raise HTTPException(status_code=503, detail="Cloud video is temporarily unavailable")
         if row:
             external = _http_video_source(row.get("r2_url"))
             if external and not storage_service.is_managed_url(external):

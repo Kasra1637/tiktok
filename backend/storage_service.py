@@ -571,6 +571,54 @@ def open_video_for_download(user_id: str, job_id: str):
     return total, body
 
 
+def cloud_video_head(user_id: str, job_id: str):
+    """
+    Total bytes and content type of the owner's clip, via HEAD.
+
+    Returns (total_bytes, content_type), or None when storage is
+    unconfigured. Raises CloudObjectMissing when the object is genuinely
+    absent; service errors propagate -- they are not "missing".
+    """
+    client = _get_client()
+    if client is None:
+        return None
+    key = _object_key(user_id, job_id)
+    try:
+        head = client.head_object(Bucket=R2_BUCKET_NAME, Key=key)
+    except ClientError as error:
+        if _missing_object(error):
+            raise CloudObjectMissing(key) from error
+        raise
+    try:
+        total = int(head.get("ContentLength") or 0)
+    except (TypeError, ValueError) as error:
+        raise CloudObjectMissing(key) from error
+    return total, head.get("ContentType") or "video/mp4"
+
+
+def open_cloud_range(user_id: str, job_id: str, start: int, end: int):
+    """
+    Open bytes[start..end] of the owner's clip for streaming.
+
+    The caller clamps the span first -- it knows the total from
+    cloud_video_head -- so S3 answers the exact span. Returns the open body,
+    or None when storage is unconfigured. Raises CloudObjectMissing when the
+    object is genuinely absent; service errors propagate.
+    """
+    client = _get_client()
+    if client is None:
+        return None
+    key = _object_key(user_id, job_id)
+    try:
+        return client.get_object(
+            Bucket=R2_BUCKET_NAME, Key=key, Range=f"bytes={start}-{end}"
+        )["Body"]
+    except ClientError as error:
+        if _missing_object(error):
+            raise CloudObjectMissing(key) from error
+        raise
+
+
 def restore_video(user_id: str, job_id: str, target: Path) -> tuple:
     """Restore exact stored bytes atomically, never destroying a surviving file."""
     client = _get_client()

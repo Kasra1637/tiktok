@@ -165,25 +165,41 @@ class TestRecoverySources:
 
 
 class TestCloudPlayback:
-    def test_private_cloud_redirect_uses_owner_and_no_cache(self, api, monkeypatch):
+    def test_private_cloud_copy_streams_same_origin_not_redirect(self, api, monkeypatch, clips):
+        """The 307 to a presigned cloud URL stood here, but reading its body
+        needs CORS on the bucket, which R2 does not grant by default — the
+        Demo + CTA editor's fetch().blob() then failed as "Failed to fetch"
+        for a clip that was never missing. Bytes now transit this route."""
         generation_id = seed(api, user_id="specific-owner", r2_url="https://private.invalid/clip")
         seen = []
         monkeypatch.setattr(storage_service, "is_configured", lambda: True)
-        def signed(owner, key):
-            seen.append((owner, key))
-            return "https://cloud.invalid/clip?temporary-signature=yes"
-        monkeypatch.setattr(storage_service, "signed_read_url", signed)
+        monkeypatch.setattr(storage_service, "cloud_video_head",
+                            lambda owner, key: (len(clips["mp4"]), "video/mp4"))
+        def ranged(owner, key, start, end):
+            seen.append((owner, key, start, end))
+            return io.BytesIO(clips["mp4"][start:end + 1])
+        monkeypatch.setattr(storage_service, "open_cloud_range", ranged)
         response = serve(api, generation_id)
-        assert response.status_code == 307
-        assert seen == [("specific-owner", generation_id)]
-        assert response.headers["cache-control"] == "private, no-store"
+        assert response.status_code == 206
+        assert "location" not in response.headers
+        assert seen == [("specific-owner", generation_id, 0, 99)]
+        assert response.headers["content-range"] == f"bytes 0-99/{len(clips['mp4'])}"
+        assert response.headers["content-type"] == "video/mp4"
+        async def body():
+            return b"".join([part async for part in response.body_iterator])
+        assert run(body()) == clips["mp4"][:100]
 
-    def test_empty_local_file_uses_surviving_cloud_copy(self, api, monkeypatch):
+    def test_empty_local_file_uses_surviving_cloud_copy(self, api, monkeypatch, clips):
         generation_id = seed(api)
         (api.pipeline.VIDEOS_DIR / f"{generation_id}.mp4").write_bytes(b"")
         monkeypatch.setattr(storage_service, "is_configured", lambda: True)
-        monkeypatch.setattr(storage_service, "signed_read_url", lambda owner, key: "https://cloud.invalid/signed")
-        assert serve(api, generation_id).status_code == 307
+        monkeypatch.setattr(storage_service, "cloud_video_head",
+                            lambda owner, key: (len(clips["mp4"]), "video/mp4"))
+        monkeypatch.setattr(storage_service, "open_cloud_range",
+                            lambda owner, key, start, end: io.BytesIO(clips["mp4"][start:end + 1]))
+        response = serve(api, generation_id)
+        assert response.status_code == 206
+        assert "location" not in response.headers
 
     def test_invalid_signature_does_not_lookup_storage(self, api, monkeypatch):
         lookup = Mock(side_effect=AssertionError("must authenticate first"))
@@ -203,11 +219,20 @@ class TestCloudPlayback:
     def test_cloud_service_failure_is_not_missing_file(self, api, monkeypatch):
         generation_id = seed(api)
         monkeypatch.setattr(storage_service, "is_configured", lambda: True)
-        monkeypatch.setattr(storage_service, "signed_read_url", Mock(side_effect=RuntimeError("private details")))
+        monkeypatch.setattr(storage_service, "cloud_video_head", Mock(side_effect=RuntimeError("private details")))
         with pytest.raises(api.HTTPException) as error:
             serve(api, generation_id)
         assert error.value.status_code == 503
         assert "private details" not in error.value.detail
+
+    def test_missing_cloud_copy_falls_back_to_external_before_404(self, api, monkeypatch):
+        generation_id = seed(api, r2_url="https://cdn.invalid/owner/clip.mp4")
+        monkeypatch.setattr(storage_service, "is_configured", lambda: True)
+        monkeypatch.setattr(storage_service, "cloud_video_head",
+                            Mock(side_effect=storage_service.CloudObjectMissing("gone")))
+        response = serve(api, generation_id)
+        assert response.status_code == 307
+        assert response.headers["location"].startswith("https://cdn.invalid/")
 
     def test_other_owner_cannot_obtain_playback_link_or_retry(self, api):
         generation_id = seed(api)
@@ -253,6 +278,34 @@ class TestStorageHelpers:
         assert storage_service.signed_read_url("owner", "id") is None
         client.get_object.side_effect = ClientError({"Error": {"Code": "AccessDenied"}}, "GetObject")
         with pytest.raises(ClientError): storage_service.signed_read_url("owner", "id")
+
+    def test_cloud_head_reports_size_and_type(self, monkeypatch):
+        client = Mock()
+        client.head_object.return_value = {"ContentLength": 1000, "ContentType": "video/mp4"}
+        monkeypatch.setattr(storage_service, "_get_client", lambda: client)
+        assert storage_service.cloud_video_head("owner", "id") == (1000, "video/mp4")
+        assert client.head_object.call_args.kwargs["Key"] == "owner/id.mp4"
+
+    def test_cloud_head_missing_and_unconfigured(self, monkeypatch):
+        client = Mock()
+        monkeypatch.setattr(storage_service, "_get_client", lambda: client)
+        client.head_object.side_effect = ClientError({"Error": {"Code": "NoSuchKey"}}, "HeadObject")
+        with pytest.raises(storage_service.CloudObjectMissing):
+            storage_service.cloud_video_head("owner", "id")
+        monkeypatch.setattr(storage_service, "_get_client", lambda: None)
+        assert storage_service.cloud_video_head("owner", "id") is None
+        assert storage_service.open_cloud_range("owner", "id", 0, 99) is None
+
+    def test_cloud_range_sends_the_exact_span(self, monkeypatch, clips):
+        client = Mock()
+        client.get_object.return_value = {"Body": io.BytesIO(clips["mp4"][:100])}
+        monkeypatch.setattr(storage_service, "_get_client", lambda: client)
+        body = storage_service.open_cloud_range("owner", "id", 0, 99)
+        assert client.get_object.call_args.kwargs["Range"] == "bytes=0-99"
+        assert body.read() == clips["mp4"][:100]
+        client.get_object.side_effect = ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
+        with pytest.raises(storage_service.CloudObjectMissing):
+            storage_service.open_cloud_range("owner", "id", 0, 99)
 
     def test_presign_uses_real_boto3_signing_and_configured_bucket(self, monkeypatch, clips):
         import boto3

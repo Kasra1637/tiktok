@@ -264,6 +264,20 @@ function TransportButton({ label, onClick, disabled, children, testId }) {
  *   from the sidebar with no generation it is the whole input, and the export
  *   is saved standalone. Either way it never creates a Hook + Story.
  */
+/**
+ * A browser network failure surfaces as the raw TypeError text "Failed to
+ * fetch", which names the mechanism instead of the remedy. Say what happened
+ * and what fixes it: the clip's link may have expired or the connection may
+ * have dropped, and refreshing loads it fresh.
+ */
+function sourceErrorMessage(err, fallback) {
+  const message = err?.message || "";
+  if (/failed to fetch|network error/i.test(message)) {
+    return "The clip couldn't be reached over the network. Check your connection, then refresh for a fresh link.";
+  }
+  return message || fallback;
+}
+
 export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) {
   // A programmatic scroll cannot be switched off by a Tailwind motion-reduce
   // variant, so the preference is read here and honoured in JS.
@@ -465,7 +479,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         setVideoUrl(url);
         setSourceReplaced(false);
       } catch (e) {
-        if (!cancelled) setError(e?.message || "The finished render could not be loaded.");
+        if (!cancelled) setError(sourceErrorMessage(e, "The finished render could not be loaded."));
       } finally {
         if (!cancelled) setLoadingSource(false);
       }
@@ -527,7 +541,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         sourceObjectUrlRef.current = url;
         setVideoUrl(url);
       } catch (e) {
-        setError(e?.message || "The finished render could not be reloaded.");
+        setError(sourceErrorMessage(e, "The finished render could not be reloaded."));
       } finally {
         setLoadingSource(false);
       }
