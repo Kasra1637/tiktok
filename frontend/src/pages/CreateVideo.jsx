@@ -96,8 +96,7 @@ const STEPS = [
    different words, and the step stalled on reading instead of moving. The
    verb is deliberately neutral — "get" covers generating fresh angles and
    revealing pre-generated ones, so the line never disagrees with its button. */
-const ANGLES_CTA_COPY =
-  "Click below to get your six audience angles, then pick one to move forward — the strategy and the render follow your pick.";
+const ANGLES_CTA_COPY = "Get your six audience angles, then pick one.";
 
 function formatTemplateUse(n) {
   if (!n) return "Never used";
@@ -1827,7 +1826,7 @@ setObjective("");
         <StepShell
           icon={Target}
           title="Audience & goal"
-          description="Two required choices: the problem this video speaks to, and the goal it aims at."
+          description="Two choices: the problem this video speaks to, and the goal it aims at."
         >
           <div className="space-y-4" data-testid="audience-goal-step">
             {/* The description frames the step and stops there. It used to
@@ -1867,8 +1866,7 @@ setObjective("");
                     </Alert>
                   )}
                   <Button
-                    variant="secondary"
-                    size="sm"
+                    variant="brand"
                     className="gap-1.5"
                     onClick={handleGenerateAngles}
                     disabled={generatingAngles}
@@ -2846,7 +2844,7 @@ if (step === 3) {
           with the rest of the row — and the distinction never needed color,
           because the sentence underneath already names what is waiting and the
           pills already announce it. */}
-      <nav aria-label="Progress" className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+      <nav aria-label="Progress" className="flex flex-wrap items-center gap-1.5">
         {stepStates.map((s, i) => {
           const active = i === step;
           const Icon = s.state === "done" ? Check : s.step.icon;
@@ -2864,7 +2862,7 @@ if (step === 3) {
               data-testid={`step-pill-${s.step.key}`}
               className={`pill-studio inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${
                 active
-                  ? "border-[color:var(--indigo-35)] bg-primary/15 text-[color:var(--brand-indigo)]"
+                  ? "border-[color:var(--indigo-35)] bg-primary/15 text-[color:var(--brand-indigo)] shadow-[0_0_10px_var(--brand-indigo)]"
                   : s.state === "done"
                     ? "border-[color:var(--hairline)] text-foreground/80 hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)] hover:text-foreground"
                     : "border-dashed border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)] hover:text-foreground"

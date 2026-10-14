@@ -3016,7 +3016,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       });
       await act(async () => {});
       const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
-      if (!step?.textContent.includes("Click below to get your six audience angles")) {
+      if (!step?.textContent.includes("Get your six audience angles, then pick one.")) {
         throw new Error("the empty angle state does not carry the single CTA copy");
       }
       const button = step.querySelector('[data-testid="generate-angles-button"]');
