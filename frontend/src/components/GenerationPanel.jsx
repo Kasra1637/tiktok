@@ -391,7 +391,7 @@ const handleGenerate = async () => {
       {error && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="break-words whitespace-pre-wrap">{error}</AlertDescription>
         </Alert>
       )}
       {notice && (
@@ -722,7 +722,7 @@ const handleGenerate = async () => {
 
           {generation.status === "failed" && (
             <div className="space-y-2">
-              <p className="text-xs text-destructive">{generation.error}</p>
+              <p className="text-xs text-destructive break-words whitespace-pre-wrap">{generation.error}</p>
               {generation.retryable ? (
                 <Button variant="secondary" size="sm" onClick={handleRetry} disabled={busy}>
                   <RotateCcw className="h-3.5 w-3.5" /> Render it again

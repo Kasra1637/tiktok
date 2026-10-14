@@ -1261,9 +1261,10 @@ class TestRefusalNamesWhereThePhotoWent:
         import ai_service
 
         sent = self._refusing_client(monkeypatch)
+        kwargs.setdefault("duration", 10)
+        kwargs.setdefault("prompt", "A founder reaches for their phone.")
         with pytest.raises(RuntimeError) as err:
-            asyncio.run(ai_service.generate_video(
-                prompt="A founder reaches for their phone.", duration=10, **kwargs))
+            asyncio.run(ai_service.generate_video(**kwargs))
         return str(err.value), sent
 
     def test_a_reference_render_says_the_photo_was_attached(self, monkeypatch):
@@ -1303,6 +1304,47 @@ class TestRefusalNamesWhereThePhotoWent:
         message, sent = self._refusal(monkeypatch, model="minimax-h3")
         assert "frame_images" not in sent[0]
         assert "without your photo" in message
+
+    def test_grok_400_quotes_the_provider_and_names_the_request(self, monkeypatch):
+        # The Oct 2026 Grok failure arrived as "The full p…" — truncated before
+        # the provider's words. A loud failure must carry both: what we sent
+        # (model, duration, resolution, aspect, photo route) and what the
+        # provider said, with no silent fallback to another model.
+        self._refusing_client(monkeypatch)
+        message, sent = self._refusal(
+            monkeypatch,
+            model="grok-imagine-video-1.5-lite",
+            duration=15,
+            resolution="480p",
+            input_references=[{
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{self._PNG.hex()}"},
+            }],
+        )
+        assert "Grok Imagine" in message
+        assert "15s" in message
+        assert "480p" in message
+        assert "reference image" in message
+        assert "Provider said:" in message
+        assert "unsupported parameter: input_references" in message
+        assert "nothing was charged" in message
+
+    def test_provider_excerpt_never_raises(self):
+        import ai_service
+        assert ai_service._extract_provider_message("") == ""
+        assert "oops" in ai_service._extract_provider_message("oops").lower()
+        nested = '{"error": {"code": "X", "message": "does not support image input references"}}'
+        assert "does not support" in ai_service._extract_provider_message(nested)
+
+
+class TestGrokSubmitFailureIsPermanent:
+    @pytest.mark.parametrize("message", [
+        "The provider rejected this render before it started (HTTP 400), so no clip was produced",
+        '{"error":{"message":"does not support image input references"}}',
+        "Grok Imagine Video 1.5 Lite, 15s, 480p, 9:16, with your photo attached as a reference image",
+    ])
+    def test_grok_400_is_not_retryable(self, message):
+        assert gp.is_recoverable_error(message) is False
 
 
 class TestPerProviderPromptBudget:

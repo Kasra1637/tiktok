@@ -693,12 +693,21 @@ def is_recoverable_error(message: str) -> bool:
         "inputimage",
         "input_image",
         "unsupported",
+        "not supported",
+        "not support",
+        "does not support",
         "invalid parameter",
         "invalid_parameter",
+        "invalid resolution",
+        "invalid duration",
+        "input_references",
+        "frame_images",
+        "aspect_ratio",
         "validation",
         "not found (404)",
         "expired",
         "prompt is too long",
+        "rejected this render before it started",
     )
     if any(marker in text for marker in permanent_markers):
         return False

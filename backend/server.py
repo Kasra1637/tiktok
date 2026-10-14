@@ -6411,11 +6411,15 @@ async def _submit_generation(
         message = str(e)
         await _execute(
             "UPDATE generations SET status = 'failed', error = ?, retryable = ?, completed_at = ? WHERE id = ?",
-            (message[:1000], 1 if generation_planning.is_recoverable_error(message) else 0,
+            (message[:2000], 1 if generation_planning.is_recoverable_error(message) else 0,
              now_iso(), generation_id),
         )
         logger.error(f"Generation {generation_id} submission failed: {message}")
-        raise HTTPException(status_code=502, detail=f"Video generation failed to submit: {message[:200]}")
+        # Fail loudly with the provider's own words. The old message[:200] cut
+        # the request summary mid-sentence ("The full p…") and hid the provider
+        # excerpt ai_service now attaches. 800 chars keeps the summary +
+        # excerpt intact; the full text stays in generations.error above.
+        raise HTTPException(status_code=502, detail=f"Video generation failed to submit: {message[:800]}")
 
     job_id = submitted.get("id") or ""
     # Fold in what the provider actually accepted, so the record reflects the
@@ -7031,10 +7035,10 @@ async def poll_generation(
         message = str(e)
         await _execute(
             "UPDATE generations SET error = ?, retryable = ?, updated_at = ? WHERE id = ?",
-            (message[:1000], 1 if generation_planning.is_recoverable_error(message) else 0,
+            (message[:2000], 1 if generation_planning.is_recoverable_error(message) else 0,
              now_iso(), generation_id),
         )
-        raise HTTPException(status_code=502, detail=f"Could not check generation status: {message[:200]}")
+        raise HTTPException(status_code=502, detail=f"Could not check generation status: {message[:800]}")
 
     status = str(response.get("status") or "").lower()
     urls = response.get("unsigned_urls") or response.get("urls") or []

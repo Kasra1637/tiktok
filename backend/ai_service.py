@@ -222,10 +222,12 @@ VIDEO_MODELS = {
     #
     # input_references carries the same caveat HeyGen's did at entry: the field
     # is the generic OpenRouter videos mechanism (proven live on Hailuo 3,
-    # refused live on H3 Max), not a per-model listing, so "accepted" is
-    # unproven for this model until the first render. A refusal fails the submit
-    # loudly with the provider's words rather than silently pinning the opening
-    # on the photograph.
+    # refused live on H3 Max), not a per-model listing. First live report
+    # (Oct 2026): a 15s 480p 9:16 render with a reference image was refused
+    # with HTTP 400 before starting — likely this field or the 480p/duration
+    # combo, exact provider wording now quoted in the submit error. Founder
+    # decision: keep selectable, fail loudly with the provider's words, never
+    # silently fall back to another model or pin the opening on the photo.
     #
     # Opt-in, default stays Hailuo 3: fastest and cheapest per listed SKU, but
     # likeness and prompt adherence are unproven until the first renders.
@@ -1426,6 +1428,42 @@ _PROVIDER_REFUSAL_MARKERS = (
     "input_image",
 )
 
+def _extract_provider_message(error_text: str, limit: int = 500) -> str:
+    """Short founder-readable excerpt of a raw provider error body.
+
+    The body is usually nested JSON ({"error": {"code": ..., "message": ...}}).
+    Raw JSON names fields the founder cannot set, so prefer the innermost
+    message/code and fall back to whitespace-collapsed text. Never raises:
+    an unparseable body still returns something useful rather than a second
+    exception on the submit path.
+    """
+    if not error_text:
+        return ""
+    try:
+        parsed = json.loads(error_text)
+    except Exception:
+        parsed = None
+    candidate = ""
+    if isinstance(parsed, dict):
+        node = parsed.get("error") if isinstance(parsed.get("error"), dict) else parsed
+        if isinstance(node, dict):
+            # Prefer the provider's own message, then code; some bodies nest
+            # one more level ({"error": {"error": {...}}}).
+            inner = node.get("error") if isinstance(node.get("error"), dict) else node
+            if isinstance(inner, dict):
+                candidate = str(inner.get("message") or inner.get("code") or "")
+            if not candidate:
+                candidate = str(node.get("message") or node.get("code") or "")
+        if not candidate:
+            candidate = str(parsed.get("message") or parsed.get("error") or "")
+    if not candidate:
+        candidate = str(error_text)
+    candidate = re.sub(r"\s+", " ", candidate).strip()
+    if len(candidate) > limit:
+        candidate = candidate[:limit].rstrip() + "…"
+    return candidate
+
+
 def describe_provider_refusal(error_text: str) -> Optional[str]:
     """
     Founder-facing message for a provider content refusal, or None when the
@@ -1708,16 +1746,19 @@ async def generate_video(
                 continue
 
             if resp.status_code >= 400:
-                error_text = resp.text[:500]
-                logger.error(f"Video generation submission failed: HTTP {resp.status_code}: {error_text}")
+                error_text = resp.text[:2000]
+                logger.error(f"Video generation submission failed: HTTP {resp.status_code}: {error_text[:500]}")
                 human = describe_provider_refusal(error_text)
                 if human:
                     raise RuntimeError(human)
-                # Nothing here matched a known signature, so do not hand the
-                # founder a wall of nested provider JSON: it names fields they
-                # cannot set and offers no action. Describe the request we
-                # actually sent instead — that is what makes the next step
-                # obvious — and leave the provider's own words in the log above.
+                # Nothing here matched a known signature, so describe the request
+                # we actually sent AND quote the provider's own words. The old
+                # message ended with "The full provider response is in the
+                # server log" — true, but the founder never sees that log, so a
+                # Grok 400 arrived as a cut-off sentence ("The full p…") after
+                # server.py truncated it to 200 chars. Fail loudly instead: no
+                # silent fallback to another model (founder decision), and the
+                # excerpt below is what makes the next step obvious.
                 #
                 # Where the photo went is part of that description, and it is
                 # read from the payload rather than assumed: keying off
@@ -1733,13 +1774,18 @@ async def generate_video(
                     photo_route = "with your photo attached as a reference image"
                 else:
                     photo_route = "without your photo"
+                provider_excerpt = _extract_provider_message(error_text)
                 raise RuntimeError(
                     f"The provider rejected this render before it started "
-                    f"(HTTP {resp.status_code}), so no clip was produced. We sent "
+                    f"(HTTP {resp.status_code}), so no clip was produced and nothing "
+                    f"was charged. We sent "
                     f"{model_config.get('name', model_id)}, {payload['duration']}s, "
                     f"{payload['resolution']}, {payload['aspect_ratio']}, "
                     f"{photo_route}. "
-                    f"The full provider response is in the server log."
+                    f"Provider said: {provider_excerpt or 'no detail returned'}. "
+                    f"Try the default model or another resolution, or retry unchanged "
+                    f"to confirm — retrying the identical request is safe because "
+                    f"nothing was produced."
                 )
             break
 

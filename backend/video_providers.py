@@ -137,9 +137,12 @@ _CAPABILITY_NOTES = {
         # Identity therefore rides in input_references, and the whole clip is
         # generated from the plan from its first frame. The field is the generic
         # OpenRouter videos mechanism rather than a per-model listing — proven
-        # live on Hailuo 3, refused live on H3 Max — so acceptance here is
-        # unproven until the first render: a refusal fails the submit loudly
-        # with the provider's words rather than silently pinning the opening.
+        # live on Hailuo 3, refused live on H3 Max — so acceptance here was
+        # unproven at entry. First live report (Oct 2026): a 15s 480p 9:16
+        # render with a reference image was refused with HTTP 400 before
+        # starting. Founder decision: keep the model selectable, fail loudly
+        # with the provider's own words (ai_service quotes the excerpt in the
+        # submit error), never silently fall back to another model.
         "max_reference_images": 1,
         "max_reference_videos": 0,
         "max_reference_audio": 0,
