@@ -1,10 +1,9 @@
 # 0001 — Provider 400s fail loudly with the provider's quoted words
 
-- **Status:** accepted
+- **Status:** accepted (Grok eligibility superseded by [0006](0006-retire-grok-video-model.md); loud-400 rule still active)
 - **Date:** 2026-10-14
 - **Anchors:** commit `6a0b320`; `backend/ai_service.py` (`generate_video` submit path,
-  `_extract_provider_message`); `backend/server.py` (`_submit_generation` error path);
-  `backend/video_providers.py` (`grok-imagine-video-1.5-lite` notes)
+  `_extract_provider_message`); `backend/server.py` (`_submit_generation` error path)
 
 ## Context
 

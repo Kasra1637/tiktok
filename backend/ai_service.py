@@ -197,59 +197,6 @@ VIDEO_MODELS = {
         "supported_resolutions": ["480p", "768p"],
         "supports_combined_refs": False,
     },
-    # Grok Imagine Video 1.5 Lite: xAI's distilled fast/cheap video model, served
-    # on the same OpenRouter key and the same /videos endpoint. Third generative
-    # entry, offered for comparison against the default the way H3 Max is.
-    #
-    # Facts below come from OpenRouter's own video model endpoint
-    # (GET /api/v1/videos/models), verified live at entry time:
-    #   supported_resolutions  480p, 720p, 1080p  -> 720p, with 480p offered.
-    #     1080p stays unlisted the way HeyGen's 2K did: the live price SKUs
-    #     charge 1080p at ~5x 720p (14c/s vs 3c/s) for detail no render has
-    #     proven real, and 480p is the explicit test choice below TikTok's
-    #     720x1280 floor (the finalize upscale carries it, softer).
-    #   supported_durations  1-15  -> min 5 / max 15. The listing starts at 1,
-    #     but the studio's floor is 5 and it only ever renders 8-15, so every
-    #     studio duration sits inside the listing with no new trim edge cases.
-    #   supported_frame_images  first_frame  -> listed, and deliberately NOT
-    #     sent: same lesson as HeyGen, where pinning the opening to the uploaded
-    #     photograph made the first second of every clip that photo's own room
-    #     and light. Identity rides as an input_references image instead, so the
-    #     clip is generated from the plan from its first frame.
-    #   generate_audio  null (not accepted at all)  -> supports_native_audio is
-    #     False and the studio omits the field, letting the provider apply its
-    #     own default, exactly the H3 Max rule: an unlisted field is a 400.
-    #
-    # input_references carries the same caveat HeyGen's did at entry: the field
-    # is the generic OpenRouter videos mechanism (proven live on Hailuo 3,
-    # refused live on H3 Max), not a per-model listing. First live report
-    # (Oct 2026): a 15s 480p 9:16 render with a reference image was refused
-    # with HTTP 400 before starting — likely this field or the 480p/duration
-    # combo, exact provider wording now quoted in the submit error. Founder
-    # decision: keep selectable, fail loudly with the provider's words, never
-    # silently fall back to another model or pin the opening on the photo.
-    #
-    # Opt-in, default stays Hailuo 3: fastest and cheapest per listed SKU, but
-    # likeness and prompt adherence are unproven until the first renders.
-    # Promote only on evidence.
-    "grok-imagine-video-1.5-lite": {
-        "id": "x-ai/grok-imagine-video-1.5-lite",
-        "name": "Grok Imagine Video 1.5 Lite",
-        "description": (
-            "xAI's distilled fast/cheap video model: text-to-video and "
-            "image-to-video, trading some quality for speed. The cropped "
-            "founder photo rides as an identity reference, so the clip is "
-            "generated from the plan from its first frame. 720p, 5-15s. Opt-in."
-        ),
-        "max_duration": 15,
-        "min_duration": 5,
-        "supports_references": True,
-        "supports_native_audio": False,  # generate_audio unlisted for this model
-        "supports_v2v_motion": False,  # not documented for Grok on OpenRouter
-        "resolution": "720p",
-        "supported_resolutions": ["480p", "720p"],
-        "supports_combined_refs": False,
-    },
 }
 # Default for new template-studio generations. The provider remains
 # configurable through VIDEO_MODEL_DEFAULT and VIDEO_MODEL_ALLOWLIST, but

@@ -2994,20 +2994,6 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  await check("the studio says the demo and the close are the founder's own", async (ctx) => {
-    global.__SMOKE_PARAMS = "";
-    await mount(CreateVideo, {})(ctx);
-    const note = ctx.container.querySelector('[data-testid="create-no-autopost-note"]');
-    if (!note) throw new Error("the studio no longer carries its no-autopost note");
-    const text = note.textContent;
-    if (!text.includes("Record and assemble your product demo and closing CTA separately")) {
-      throw new Error("the studio does not tell the founder the demo and the close are theirs to record");
-    }
-    if (!text.includes("Nothing is published for you")) {
-      throw new Error("the studio does not tell the founder publishing is their own move");
-    }
-  });
-
   // -------------------------------------------------------------------------
   // The optional angle is usable from in here.
   //

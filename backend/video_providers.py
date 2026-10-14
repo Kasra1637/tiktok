@@ -125,51 +125,6 @@ _CAPABILITY_NOTES = {
             "Opt-in: Hailuo 3 is still the default."
         ),
     },
-    "grok-imagine-video-1.5-lite": {
-        "vertical": True,
-        # One reference image, and it is a REFERENCE — not the opening frame.
-        # The HeyGen lesson, applied from day one rather than learned live:
-        # a first frame pins the opening to the uploaded photograph, so the
-        # render begins on that photo's own room, light and framing, and the
-        # planned scene only appears once the model has morphed away from it.
-        # That is the one thing a prompt cannot overrule.
-        #
-        # Identity therefore rides in input_references, and the whole clip is
-        # generated from the plan from its first frame. The field is the generic
-        # OpenRouter videos mechanism rather than a per-model listing — proven
-        # live on Hailuo 3, refused live on H3 Max — so acceptance here was
-        # unproven at entry. First live report (Oct 2026): a 15s 480p 9:16
-        # render with a reference image was refused with HTTP 400 before
-        # starting. Founder decision: keep the model selectable, fail loudly
-        # with the provider's own words (ai_service quotes the excerpt in the
-        # submit error), never silently fall back to another model.
-        "max_reference_images": 1,
-        "max_reference_videos": 0,
-        "max_reference_audio": 0,
-        # Accepted per the listing, and deliberately never sent, for the reason
-        # above. It stays True because it is a fact about the model that the
-        # drift check verifies against OpenRouter's listing — never sending it
-        # is recorded by the absence of identity_via_first_frame, not by lying
-        # about support.
-        "supports_first_frame": True,
-        "supports_last_frame": False,
-        # No live measurement exists, so the conservative ceiling — the same
-        # 4,090 the fallback assumes for an unknown provider. A tighter prompt
-        # still renders; an over-long one is refused before anything is spent.
-        # Revisit on a live refusal or a measured figure.
-        "prompt_char_limit": 4090,
-        # Tight ceiling, so the spoken script holds its full budget while the
-        # direction absorbs the squeeze. See script_is_sacred.
-        "script_sacred": True,
-        "notes": (
-            "xAI's distilled fast/cheap video model (720p at ~$0.03/s per listed "
-            "SKU, 480p ~$0.02/s) — the cheapest entry in the catalog. "
-            "For fast comparison renders against the default. The cropped "
-            "founder photo rides as an identity reference, so the video is "
-            "generated from the plan from its first frame. "
-            "Opt-in: Hailuo 3 is still the default."
-        ),
-    },
 }
 
 # Providers the template workflow can actually drive. Aleph is excluded
@@ -179,12 +134,11 @@ _CAPABILITY_NOTES = {
 #
 # H3 Max sits alongside H3 rather than replacing it: both are generative and
 # both take the same face reference, so the founder can render the same script
-# on either and compare. Grok Imagine Video 1.5 Lite sits alongside both for
-# the same reason: the fastest and cheapest entry, for comparison renders.
+# on either and compare.
 # Order here does not decide the default — that is
 # ai_service.DEFAULT_VIDEO_MODEL, and it stays Hailuo 3. Listing a model
 # only makes it selectable in the studio's model dropdown.
-STUDIO_ELIGIBLE = ("minimax-h3", "minimax-h3-max", "heygen-video-1", "grok-imagine-video-1.5-lite")
+STUDIO_ELIGIBLE = ("minimax-h3", "minimax-h3-max", "heygen-video-1")
 
 # The hook length used when nothing states one. 5s is the lowest length the
 # current provider can render, so it needs no trim; a template's own

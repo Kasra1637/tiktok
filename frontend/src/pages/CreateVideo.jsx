@@ -40,7 +40,7 @@ import {
 } from "../lib/videoLength";
 // FileText was the "Creative plan" step's icon. That step held nothing but a
 // button and is now the top of Review, so the icon went with it.
-import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, LayoutTemplate, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, Star, ChevronDown, FileText, AudioLines, ListChecks, ShieldCheck, Ruler } from "lucide-react";
+import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, LayoutTemplate, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, FileText, AudioLines, ListChecks, ShieldCheck, Ruler } from "lucide-react";
 // toast left with AttachedPhoto, the only place on this page that raised one.
 // Detaching now happens inside the photo section, which reports its own
 // outcome.
@@ -2931,25 +2931,6 @@ if (step === 3) {
           </Button>
         </div>
       )}
-
-      {template && (
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Star className="h-3 w-3" />
-          Templates are curated structures, not proven performers.
-        </p>
-      )}
-
-      {/* This line used to live on the Dashboard, which is gone. It is the only
-          place in the app that tells the founder their finished video is never
-          posted for them, so it moved here — the studio, at the moment they are
-          actually making the video — rather than being dropped. The structural
-          TestNoPlatformAutomation proves it; this says so where it is read.
-          It also names the half of the job that never leaves this page: the
-          demo and the close are footage the founder records, not something a
-          render can supply. */}
-      <p className="text-xs text-muted-foreground" data-testid="create-no-autopost-note">
-        This studio creates the Hook + Story clip only. Record and assemble your product demo and closing CTA separately; Demo + CTA styles one clip at a time and does not combine clips. Nothing is published for you.
-      </p>
     </PageFrame>
   );
 }

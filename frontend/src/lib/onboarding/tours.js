@@ -72,12 +72,6 @@ export const TOURS = {
         body:
           "The app-specific strategy is built here and shown before you spend anything. Read it, then render the clip from your approved plan and presenter photo. One short clip, exactly as long as its template says. No demo, no CTA, no on-screen text — this is the hook and the story only.",
       },
-      {
-        target: '[data-testid="create-no-autopost-note"]',
-        title: "Finish the promo separately",
-        body:
-          "After Hook + Story, film your demo and add your closing CTA in Demo + CTA. It styles one clip at a time; join clips in your own editor. Renders land in History, and nothing ever posts itself.",
-      },
     ],
   },
 

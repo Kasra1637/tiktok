@@ -52,14 +52,6 @@ def _healthy_records() -> dict:
             "generate_audio": False,
             "allowed_passthrough_parameters": [],
         },
-        "x-ai/grok-imagine-video-1.5-lite": {
-            "id": "x-ai/grok-imagine-video-1.5-lite",
-            "supported_resolutions": ["480p", "720p", "1080p"],
-            "supported_durations": list(range(1, 16)),
-            "supported_frame_images": ["first_frame"],
-            "generate_audio": None,
-            "allowed_passthrough_parameters": [],
-        },
     }
 
 

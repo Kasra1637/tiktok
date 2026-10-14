@@ -18,8 +18,9 @@ the alternatives we rejected and why. Git records *what* changed; these record
 
 | # | Decision | Status |
 |---|----------|--------|
-| [0001](0001-grok-submit-failures-are-loud.md) | Provider 400s fail loudly with the provider's quoted words; no silent fallback | accepted |
+| [0001](0001-grok-submit-failures-are-loud.md) | Provider 400s fail loudly with the provider's quoted words; no silent fallback | accepted (Grok eligibility superseded by 0006) |
 | [0002](0002-h3max-identity-via-first-frame.md) | H3 Max identity rides as the opening frame, not `input_references` | accepted |
 | [0003](0003-temperature-from-endpoint-declaration.md) | Temperature support is read from the endpoint declaration, not a model list | accepted |
 | [0004](0004-single-pass-generation-only.md) | Generation is single-pass only; durations clamp, never chain | accepted |
 | [0005](0005-per-provider-prompt-ceilings.md) | Each provider gets its own prompt ceiling; the spoken script is sacred on tight ones | accepted |
+| [0006](0006-retire-grok-video-model.md) | Retire Grok Imagine Video 1.5 Lite (`input_references` unsupported) | accepted |

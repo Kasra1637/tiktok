@@ -86,13 +86,11 @@ class TestCapabilities:
         """
         The point of this list is that every entry can generate a video from a
         prompt, so no in-context editor is ever offered. H3 Max is a second
-        MiniMax generative model and Grok Imagine Video a third, both offered
-        for comparison against the default. Aleph stays out because it edits a
-        clip rather than making one.
+        MiniMax generative model offered for comparison against the default.
+        Aleph stays out because it edits a clip rather than making one.
         """
         keys = [c["key"] for c in vp.list_capabilities()]
-        assert keys == ["minimax-h3", "minimax-h3-max", "heygen-video-1",
-                        "grok-imagine-video-1.5-lite"]
+        assert keys == ["minimax-h3", "minimax-h3-max", "heygen-video-1"]
         assert "aleph-2" not in keys
         for cap in vp.list_capabilities():
             assert cap["is_video_editor"] is False
@@ -199,67 +197,14 @@ class TestCapabilities:
         # Listed by OpenRouter, deliberately unused — see above.
         assert cap["supports_first_frame"] is True
 
-    def test_grok_imagine_is_opt_in_and_not_the_default(self):
+    def test_heygen_script_is_sacred_on_its_tight_ceiling(self):
         """
-        Fastest and cheapest per listed SKU, but likeness and prompt adherence
-        are unproven until the first renders. Listing it must not move
-        production spend, so the default stays Hailuo 3 and explicit requests
-        are honoured, not swapped.
-        """
-        assert vp.is_studio_eligible("grok-imagine-video-1.5-lite") is True
-        assert vp.default_model_key() == "minimax-h3"
-        assert vp.resolve("grok-imagine-video-1.5-lite")[0] == "grok-imagine-video-1.5-lite"
-
-    def test_grok_imagine_is_registered_at_its_real_id(self):
-        cap = vp.capability("grok-imagine-video-1.5-lite")
-        assert cap["id"] == "x-ai/grok-imagine-video-1.5-lite"
-        assert cap["max_duration"] == 15
-        assert cap["min_duration"] == 5
-
-    def test_grok_imagine_requests_720p_with_480p_offered(self):
-        """
-        1080p is listed but costs ~5x 720p per the live price SKUs (14c/s vs
-        3c/s) for detail no render has proven real — the same call HeyGen's 2K
-        got. 720p clears TikTok's 720x1280 floor, so it is the default; 480p
-        is the explicit test choice below that floor (the finalize upscale
-        carries it, softer).
-        """
-        cap = vp.capability("grok-imagine-video-1.5-lite")
-        assert cap["resolution"] == "720p"
-        assert cap["supported_resolutions"] == ["480p", "720p"]
-
-    def test_grok_imagine_never_sends_generate_audio(self):
-        """
-        OpenRouter lists generate_audio as null for this model — the field is
-        not accepted at all. The studio omits it and lets the provider apply
-        its own default; sending it would 400. Same rule as H3 Max, opposite
-        of HeyGen.
-        """
-        assert vp.capability("grok-imagine-video-1.5-lite")["supports_native_audio"] is False
-
-    def test_grok_imagine_never_pins_the_photo_as_its_opening_frame(self):
-        """
-        The HeyGen lesson, applied from day one rather than learned live:
-        identity rides as an input_references image so the whole clip is
-        generated from the plan. first_frame stays listed-but-unsent; only
-        Hailuo 3 Max pins one, and only because its provider refuses the field.
-        """
-        cap = vp.capability("grok-imagine-video-1.5-lite")
-        assert cap.get("identity_via_first_frame") is not True
-        assert cap["max_reference_images"] == 1
-        assert cap["supports_first_frame"] is True
-        assert cap["supports_last_frame"] is False
-        assert vp.accepts_identity_reference("grok-imagine-video-1.5-lite") is True
-
-    def test_grok_imagine_script_is_sacred_on_its_tight_ceiling(self):
-        """
-        4,090 is the same ceiling that tripped HeyGen's protection withdrawal
+        4,090 is the ceiling that tripped HeyGen's protection withdrawal
         on ordinary strategies. The founder's spoken words hold their full
         budget on every attempt and only the direction absorbs the squeeze —
         recorded per model so a future tight-ceiling entry does not inherit
         it silently, and a future loose one does not keep it pointlessly.
         """
-        assert vp.script_is_sacred("grok-imagine-video-1.5-lite") is True
         assert vp.script_is_sacred("heygen-video-1") is True
         assert vp.script_is_sacred("minimax-h3") is False
         assert vp.script_is_sacred("minimax-h3-max") is False
@@ -271,7 +216,7 @@ class TestCapabilities:
         existed, capability() and resolve() must degrade to a working provider
         rather than raise or 400.
         """
-        for gone in ("heygen-avatar-iv", "heygen-video-9", "some-retired-model"):
+        for gone in ("heygen-avatar-iv", "heygen-video-9", "grok-imagine-video-1.5-lite", "some-retired-model"):
             assert vp.is_known(gone) is False
             assert vp.is_studio_eligible(gone) is False
             assert vp.capability(gone)["key"] == vp.default_model_key()
@@ -535,91 +480,6 @@ class TestHailuo3MaxPayload:
                                              resolution="480p"))
         assert seen[0]["model"] == "heygen/heygen-video-1"
         assert seen[0]["resolution"] == "480p"
-
-    def test_grok_sends_720p_and_no_audio(self, monkeypatch):
-        """
-        The entry's two defining facts at the payload boundary: the default is
-        720p, and generate_audio is never sent — OpenRouter does not list the
-        field for this model, so even an explicit True must not reach it.
-        """
-        import asyncio
-
-        import ai_service
-
-        seen = self._capture(monkeypatch)
-        asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
-                                             duration=10, model="grok-imagine-video-1.5-lite",
-                                             generate_audio=True))
-        assert seen[0]["model"] == "x-ai/grok-imagine-video-1.5-lite"
-        assert seen[0]["resolution"] == "720p"
-        assert seen[0]["aspect_ratio"] == "9:16"
-        assert "generate_audio" not in seen[0]
-
-    def test_grok_resolution_override_reaches_the_payload(self, monkeypatch):
-        """
-        480p is the explicit test choice: a requested override must reach the
-        payload verbatim rather than being overwritten by the default.
-        """
-        import asyncio
-
-        import ai_service
-
-        seen = self._capture(monkeypatch)
-        asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
-                                             duration=10, model="grok-imagine-video-1.5-lite",
-                                             resolution="480p"))
-        assert seen[0]["model"] == "x-ai/grok-imagine-video-1.5-lite"
-        assert seen[0]["resolution"] == "480p"
-
-    def test_grok_unlisted_resolution_falls_back_to_720p(self, monkeypatch):
-        """
-        1080p is listed by OpenRouter but deliberately unoffered — ~5x the 720p
-        price per the live SKUs — so it must fall back to the catalog default
-        rather than reach the provider.
-        """
-        import asyncio
-
-        import ai_service
-
-        seen = self._capture(monkeypatch)
-        asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
-                                             duration=10, model="grok-imagine-video-1.5-lite",
-                                             resolution="1080p"))
-        assert seen[0]["resolution"] == "720p"
-
-    def test_grok_face_rides_as_reference_not_first_frame(self, monkeypatch, tmp_path):
-        """
-        The whole point of the entry's reference design — asserted at the two
-        levels that enforce it.
-
-        The studio submit path routes the photo by capability: only a model
-        with identity_via_first_frame gets it as the opening frame (Hailuo 3
-        Max, whose provider refuses the field). Grok sets no such flag, so it
-        rides as a pre-built input_references identity guide — the same field
-        Hailuo 3 uses — and the clip is generated from the plan from its first
-        frame. This test pins the payload layer accepting that routing: a
-        caller-supplied input_references list passes through untouched, with no
-        frame_images manufactured beside it.
-        """
-        import asyncio
-
-        import ai_service
-
-        face = tmp_path / "face.png"
-        face.write_bytes(bytes.fromhex(
-            "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
-            "0000000d49444154789c626001000000ffff0300000600055d3866680000000049454e44ae426082"))
-        from ai_service import image_data_uri
-        refs = [{
-            "type": "image_url",
-            "image_url": {"url": image_data_uri(face)},
-        }]
-        seen = self._capture(monkeypatch)
-        asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
-                                             duration=10, model="grok-imagine-video-1.5-lite",
-                                             input_references=refs))
-        assert "frame_images" not in seen[0]
-        assert seen[0]["input_references"] == refs
 
     def test_unlisted_resolution_falls_back_to_the_catalog_default(self, monkeypatch):
         """
@@ -1305,15 +1165,14 @@ class TestRefusalNamesWhereThePhotoWent:
         assert "frame_images" not in sent[0]
         assert "without your photo" in message
 
-    def test_grok_400_quotes_the_provider_and_names_the_request(self, monkeypatch):
-        # The Oct 2026 Grok failure arrived as "The full p…" — truncated before
-        # the provider's words. A loud failure must carry both: what we sent
-        # (model, duration, resolution, aspect, photo route) and what the
-        # provider said, with no silent fallback to another model.
+    def test_400_quotes_the_provider_and_names_the_request(self, monkeypatch):
+        # A loud failure must carry both: what we sent (model, duration,
+        # resolution, aspect, photo route) and what the provider said, with no
+        # silent fallback to another model.
         self._refusing_client(monkeypatch)
         message, sent = self._refusal(
             monkeypatch,
-            model="grok-imagine-video-1.5-lite",
+            model="heygen-video-1",
             duration=15,
             resolution="480p",
             input_references=[{
@@ -1321,7 +1180,7 @@ class TestRefusalNamesWhereThePhotoWent:
                 "image_url": {"url": f"data:image/png;base64,{self._PNG.hex()}"},
             }],
         )
-        assert "Grok Imagine" in message
+        assert "HeyGen Video" in message
         assert "15s" in message
         assert "480p" in message
         assert "reference image" in message
@@ -1337,13 +1196,12 @@ class TestRefusalNamesWhereThePhotoWent:
         assert "does not support" in ai_service._extract_provider_message(nested)
 
 
-class TestGrokSubmitFailureIsPermanent:
+class TestSubmitFailureIsPermanent:
     @pytest.mark.parametrize("message", [
         "The provider rejected this render before it started (HTTP 400), so no clip was produced",
         '{"error":{"message":"does not support image input references"}}',
-        "Grok Imagine Video 1.5 Lite, 15s, 480p, 9:16, with your photo attached as a reference image",
     ])
-    def test_grok_400_is_not_retryable(self, message):
+    def test_400_is_not_retryable(self, message):
         assert gp.is_recoverable_error(message) is False
 
 
