@@ -6,8 +6,13 @@
 #
 # NOTE: pushes reach this file through .github/workflows/deploy.yml (push to
 # main -> `gcloud builds submit` as the hookforge-build service account).
-# There is no Cloud Build GitHub trigger connected (needs the console OAuth
-# flow), so do not expect console-listed triggers — Actions is the trigger.
+# Actions is the trigger, and it must stay the ONLY trigger. A regional
+# `hookforge-main` GitHub trigger was connected 2026-10-07 and fired on every
+# push beside Actions: both built the same image, then both ran `gcloud run
+# deploy`, and the loser aborted with a Cloud Run version conflict — which is
+# the red check on 7f2bb100 despite a healthy deploy. It was disabled
+# 2026-10-14. Do not re-enable it; re-enabling brings back two deploys per
+# push and a red commit on every one of them.
 #
 # The Clerk publishable key is a BUILD-time input, not a runtime one: CRA inlines
 # process.env.REACT_APP_* into the bundle when it compiles, so the key has to be
