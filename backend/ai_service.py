@@ -311,28 +311,85 @@ def _headers():
     }
 
 
-# Model families that must NOT be sent a temperature. Two different reasons,
-# one rule — never send a field that can turn every call into a refusal:
-#
-# 1. The family REJECTS it. GPT-5 and the o-series 400 on any value but 1
-#    ("Unsupported value: 'temperature' ... Only the default (1) value is
-#    supported").
-# 2. Sending it is UNVERIFIED. Claude Haiku 5.5 accepts temperature on
-#    Anthropic's own API, but it runs adaptive thinking by default and the
-#    interaction between a non-default temperature and default-on thinking is
-#    not documented anywhere we could check. Omitting the field costs only
-#    sampling determinism; sending a rejected one costs the whole call.
-#    verify_chat_model.py probes exactly this — promote "claude" out of this set
-#    only on a live call that proves the combination is accepted.
-_TEMPERATURE_OMITTED_PREFIXES = ("gpt-5", "o1", "o3", "o4", "claude")
+# The sampling temperature sent to the chat models. 0.4 is low enough that
+# structured output stays stable and high enough that the copy does not read as
+# templated. Flows that want a different value still pass one explicitly.
+CHAT_TEMPERATURE = 0.4
+
+# Model families that must NOT be sent a temperature at all, because the family
+# rejects any value but its own default: GPT-5 and the o-series 400 on anything
+# other than 1 ("Unsupported value: 'temperature' ... Only the default (1) value
+# is supported").
+_TEMPERATURE_OMITTED_PREFIXES = ("gpt-5", "o1", "o3", "o4")
+
+# Model families that DO get a temperature, but where the provider may refuse
+# it. Claude Haiku 5.5 accepts temperature on Anthropic's own API, yet it runs
+# adaptive thinking by default and whether a non-default value is accepted
+# alongside that is undocumented. Rather than withhold the field on a guess, the
+# field is sent and _post_chat drops it and retries the identical request once if
+# the provider refuses — so an unverified combination costs the temperature,
+# never the call. verify_chat_model.py settles the question live; once it reports
+# the field is accepted, "claude" can be removed from this set.
+_TEMPERATURE_FALLBACK_PREFIXES = ("claude",)
+
+
+def _is_family(model: str, prefixes: tuple) -> bool:
+    """Whether a model slug belongs to one of the given families."""
+    name = (model or "").strip().lower().split("/")[-1]
+    return name.startswith(prefixes)
 
 
 def _temperature_param(model: str, temperature: float) -> dict:
     """{"temperature": t} for models that accept it, else {} (never raises)."""
-    name = (model or "").strip().lower().split("/")[-1]
-    if name.startswith(_TEMPERATURE_OMITTED_PREFIXES):
+    if _is_family(model, _TEMPERATURE_OMITTED_PREFIXES):
         return {}
     return {"temperature": temperature}
+
+
+def _temperature_refused(resp) -> bool:
+    """
+    Whether a 4xx response is specifically about the temperature field.
+
+    Read from the body rather than assumed from the status code: a 400 can be
+    many things, and only a refusal that NAMES temperature is safe to retry
+    without it. A 5xx or a transport error is not this.
+    """
+    if not (400 <= getattr(resp, "status_code", 0) < 500):
+        return False
+    try:
+        body = json.dumps(resp.json())
+    except Exception:
+        body = getattr(resp, "text", "") or ""
+    return "temperature" in body.lower()
+
+
+async def _post_chat(client, payload: dict):
+    """
+    POST one chat completion, dropping the temperature field once if the
+    provider refuses it.
+
+    Sending a temperature is a preference; getting the answer back is the job.
+    A refusal that names the field costs the field and not the call: the
+    identical request is retried without it exactly once. Any other failure is
+    left to the caller's raise_for_status.
+    """
+    resp = await client.post(
+        f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload
+    )
+    if (
+        "temperature" in payload
+        and _is_family(payload.get("model", ""), _TEMPERATURE_FALLBACK_PREFIXES)
+        and _temperature_refused(resp)
+    ):
+        logger.warning(
+            "%s refused temperature=%s; retrying the same request without it.",
+            payload.get("model"), payload.get("temperature"),
+        )
+        retry = {k: v for k, v in payload.items() if k != "temperature"}
+        resp = await client.post(
+            f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=retry
+        )
+    return resp
 
 
 def _response_format(name: str, schema: dict, strict: bool = True) -> dict:
@@ -751,7 +808,7 @@ async def _chat_json(
     system_message: str,
     prompt: str,
     context: str,
-    temperature: float = 0.4,
+    temperature: float = CHAT_TEMPERATURE,
     max_tokens: int = 3000,
     attempts: int = 2,
     timeout: int = 120,
@@ -773,8 +830,9 @@ async def _chat_json(
 
     Only after the retries are exhausted does it raise.
 
-    `temperature` is accepted but only sent to models that take it (GPT-5
-    Mini did not; Claude Haiku 5.5 does); `json_schema`, when given, is sent as
+    `temperature` is sent to models that take it (GPT-5 Mini does not; Claude
+    Haiku 5.5 does), and a provider that refuses the field costs the field
+    rather than the call — see _post_chat; `json_schema`, when given, is sent as
     OpenRouter structured output (strict JSON Schema) while the parse-and-retry
     below stays as defense-in-depth for provider errors, refusals and truncation.
     """
@@ -806,9 +864,7 @@ async def _chat_json(
             payload["response_format"] = _response_format(context, json_schema, strict)
 
         async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.post(
-                f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload
-            )
+            resp = await _post_chat(client, payload)
             resp.raise_for_status()
             data = resp.json()
 
@@ -1063,7 +1119,7 @@ async def analyze_hook(frame_paths: list, session_id: str, music_context: dict =
     }
 
     async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
+        resp = await _post_chat(client, payload)
         resp.raise_for_status()
         data = resp.json()
 
@@ -1186,7 +1242,7 @@ async def generate_video_prompt(analysis: dict, brand_context: dict, target_dura
     }
 
     async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
+        resp = await _post_chat(client, payload)
         resp.raise_for_status()
         data = resp.json()
 
@@ -1258,7 +1314,7 @@ async def analyze_image_for_hook(image_path: Path, session_id: str) -> dict:
     }
 
     async with httpx.AsyncClient(timeout=45) as client:
-        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
+        resp = await _post_chat(client, payload)
         resp.raise_for_status()
         data = resp.json()
 
@@ -4435,7 +4491,7 @@ async def generate_remix_script(analysis: dict, brand_profile: dict, target_dura
     }
 
     async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload)
+        resp = await _post_chat(client, payload)
         resp.raise_for_status()
         data = resp.json()
 
