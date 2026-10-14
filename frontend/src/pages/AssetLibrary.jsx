@@ -96,7 +96,7 @@ function AssetThumb({ asset, isVideo, isAudio }) {
 function AttachedReference({ attachment, onDetach, busy }) {
   const name = attachment.label || String(attachment.asset_id || "").slice(0, 8);
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-3">
+    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-5">
       <span className="min-w-0 flex-1 truncate text-sm font-medium">{name}</span>
       <span className="shrink-0 text-xs text-muted-foreground">Used for the whole video</span>
       {onDetach && (

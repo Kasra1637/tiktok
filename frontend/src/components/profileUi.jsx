@@ -45,13 +45,14 @@ export const profileToneClass = {
 };
 
 export function ProfileCard({ eyebrow, eyebrowClassName, icon, tone = "default", testid, className, children }) {
-  // Fixed 16px gutter (not the shared row-pad): the group content already
-  // brings 16/24, so card text lands at 32/40 from the group edge — exactly
-  // where text inside a Create Video step card's inset-panel sits.
+  // The shared row-pad gutter (12px block, 16px inline — same values as the
+  // px-4 py-3 it replaces): the group content already brings 16/24, so card
+  // text lands at 32/40 from the group edge — exactly where text inside a
+  // Create Video step card's inset-panel sits.
   return (
     <section
       className={cn(
-        "flex h-full flex-col gap-2 rounded-xl border border-[color:var(--hairline)] bg-card/70 px-4 py-3",
+        "flex h-full flex-col gap-2 rounded-xl border border-[color:var(--hairline)] bg-card/70 row-pad",
         profileToneClass[tone],
         className
       )}

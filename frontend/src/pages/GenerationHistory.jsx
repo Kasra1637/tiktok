@@ -375,7 +375,7 @@ function GenerationRow({ row, siblings = [], onChanged }) {
                  copy exists at all because the durable save failed — and in the
                  second case there is nothing to download either, so promising
                  one was a dead end. The repair below is the way through both. */
-              <div className="rounded-xl border border-dashed border-[color:var(--hairline-strong)] p-4">
+              <div className="rounded-xl border border-dashed border-[color:var(--hairline-strong)] p-5">
                 <p className="text-sm">
                   {stuckGenerating
                     ? "Still marked as generating"
@@ -615,7 +615,7 @@ function GenerationRow({ row, siblings = [], onChanged }) {
               <li key={s.id}>
                 <a
                   href={`#generation-${s.id}`}
-                  className="flex items-center gap-3 rounded-xl border border-[color:var(--hairline)] bg-card/70 px-4 py-3 text-left transition-colors hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)]"
+                  className="flex items-center gap-3 rounded-xl border border-[color:var(--hairline)] bg-card/70 row-pad text-left transition-colors hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)]"
                 >
                   <span className="min-w-0 flex-1 truncate text-sm text-foreground/90">
                     {s.hook_line ? sentenceCase(s.hook_line) : humanize(s.status)}

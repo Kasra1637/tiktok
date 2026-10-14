@@ -166,7 +166,7 @@ click target and it is what an in-place expansion opens inside. A row you
 *open* is part of a card, so it stays inside one `.surface` and is separated
 from its neighbours by a hairline. That is why the angle list draws a box per
 angle and `SectionGroup` (App Profile) does not: same bar chrome on both sides
-(`px-4 py-3`, 16px glyph, uppercase tracked muted title, chevron, indigo hover —
+(`.row-pad`, 16px glyph, uppercase tracked muted title, chevron, indigo hover —
 `SectionGroup`'s own comment says it borrows the angle row's chrome), different
 container. `RecommendationCard`'s 2-up grid is the same rule as the angle list:
 picked things are objects, so they are framed.

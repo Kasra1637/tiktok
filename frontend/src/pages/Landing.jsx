@@ -380,7 +380,7 @@ export default function Landing() {
                 key={s.step}
                 className="surface surface-interactive shimmer-on-hover group rounded-2xl text-center"
               >
-                <div className="relative mx-auto mb-4 flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-gradient-to-br from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] font-bold text-white shadow-[var(--glow-indigo)]">
+                <div className="relative mx-auto mb-5 flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-gradient-to-br from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] font-bold text-white shadow-[var(--glow-indigo)]">
                   <span className="font-display text-lg">{s.step}</span>
                   <span className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-b from-white/25 to-transparent" />
                 </div>
@@ -451,7 +451,7 @@ export default function Landing() {
               key={f.title}
               className="surface surface-interactive shimmer-on-hover group rounded-2xl text-center"
             >
-              <div className="relative mx-auto mb-4 flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-gradient-to-br from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] text-white shadow-[var(--glow-indigo)]">
+              <div className="relative mx-auto mb-5 flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-gradient-to-br from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] text-white shadow-[var(--glow-indigo)]">
                 <f.icon className="h-5 w-5" />
                 <span className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-b from-white/25 to-transparent" />
               </div>
@@ -480,7 +480,7 @@ export default function Landing() {
                 data-testid={`landing-capability-${block.kicker === "Hook + Story" ? "generation" : block.kicker === "Demo + CTA" ? "editor" : "review"}`}
                 className="surface surface-interactive rounded-2xl"
               >
-                <div className="flex flex-col gap-4 sm:flex-row sm:gap-5">
+                <div className="flex flex-col gap-5 sm:flex-row sm:gap-5">
                   <div
                     className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${
                       isCoral
@@ -514,7 +514,7 @@ export default function Landing() {
 
           <div className="surface rounded-2xl" data-testid="landing-questions">
             <h3 className="font-display text-lg font-semibold">A few things worth knowing</h3>
-            <div className="mt-4 divide-y divide-border/60">
+            <div className="mt-5 divide-y divide-border/60">
               {QUESTIONS.map((q) => (
                 <details key={q.question} className="py-4">
                   <summary className="cursor-pointer font-display text-sm font-semibold text-foreground">

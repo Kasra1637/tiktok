@@ -163,7 +163,7 @@ function RecommendationCard({ r, selected, onSelect }) {
         }
       }}
       aria-pressed={selected}
-      className={`w-full rounded-xl border p-3 text-left transition-colors ${
+      className={`w-full rounded-xl border p-5 text-left transition-colors ${
         selected
           ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
           : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
@@ -544,7 +544,7 @@ function AngleGoalPicker({
                 aria-pressed={false}
                 data-testid={`review-angle-${option.id}`}
                 onClick={() => onSelectAngle?.(option.id)}
-                className="w-full rounded-xl border border-[color:var(--hairline)] p-3 text-left text-sm"
+                className="w-full rounded-xl border border-[color:var(--hairline)] p-5 text-left text-sm"
               >
                 {(option.label || "").replace(/\.\s*$/, "")}
               </button>
@@ -598,7 +598,7 @@ function AngleGoalPicker({
               aria-pressed={selected}
               data-testid={`recommended-goal-${goal}`}
               onClick={() => onPick(goal)}
-              className={`rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-35)] ${
+              className={`rounded-xl border p-5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-35)] ${
                 selected
                   ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
                   : "border-[color:var(--hairline)]"
@@ -1768,7 +1768,7 @@ setObjective("");
                   key={p.id}
                   type="button"
                   onClick={() => selectProfile(p.id)}
-                  className={`rounded-2xl border p-4 text-left transition-colors ${
+                  className={`rounded-2xl border p-5 text-left transition-colors ${
                     profileId === p.id
                       ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
                       : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
@@ -1787,7 +1787,7 @@ setObjective("");
           )}
 
           {unapproved.length > 0 && (
-            <div className="rounded-2xl border border-[color:var(--hairline)] bg-secondary/20 p-4">
+            <div className="rounded-2xl border border-[color:var(--hairline)] bg-secondary/20 p-5">
               <div className="flex items-start gap-2">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
@@ -1950,7 +1950,7 @@ setObjective("");
                           aria-controls={picked ? `angle-details-${a.id}` : undefined}
                           onClick={() => setAngleId(a.id)}
                           data-testid={`angle-option-${a.id}`}
-                          className={`flex w-full min-w-0 items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[color:var(--indigo-6)] ${
+                          className={`flex w-full min-w-0 items-center gap-3 row-pad text-left transition-colors hover:bg-[color:var(--indigo-6)] ${
                             picked ? "bg-[color:var(--indigo-6)]" : ""
                           }`}
                         >
@@ -1990,7 +1990,7 @@ setObjective("");
                           <dl
                             id={`angle-details-${a.id}`}
                             data-testid={`angle-details-${a.id}`}
-                            className="space-y-2 border-t border-[color:var(--hairline)] px-4 py-3"
+                            className="space-y-2 border-t border-[color:var(--hairline)] row-pad"
                           >
                             {details.map((row) => (
                               <div key={row.label} className="min-w-0">
@@ -2548,7 +2548,7 @@ if (step === 3) {
                 script is shorter than the model wrote it, and silence about
                 that reads as the studio losing words. */}
             {project?.plan_trim?.dropped_chars > 0 && (
-              <div className="rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] p-4" data-testid="plan-trimmed-note">
+              <div className="rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] p-5" data-testid="plan-trimmed-note">
                 <p className="text-sm">
                   I shortened your script by {project.plan_trim.dropped_chars} characters so it
                   fits the {project.plan_trim.middle_seconds}-second middle
