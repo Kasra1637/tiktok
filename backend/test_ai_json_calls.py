@@ -75,6 +75,25 @@ def _patch_client(monkeypatch, responses):
     return rec
 
 
+class _GetRecorder:
+    """Stands in for httpx.AsyncClient for the capability lookup (GET only)."""
+
+    def __init__(self, payload, status=200):
+        self._payload = payload
+        self._status = status
+        self.urls = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def get(self, url):
+        self.urls.append(url)
+        return _Response(self._payload, status=self._status)
+
+
 class TestChatJson:
     def test_a_clean_object_parses_on_the_first_attempt(self, monkeypatch):
         import ai_service
@@ -228,16 +247,94 @@ class TestModelConfiguration:
         assert ai_service._model_from_env("AI_VISION_MODEL", "fallback/model") == "vendor/other-model"
 
 
+class TestTemperatureIsDataDriven:
+    """
+    Whether a model accepts a `temperature` field is read from OpenRouter's
+    per-endpoint supported_parameters rather than guessed from the model family,
+    so pointing the service at a new model needs no code change and no
+    discovery-by-400. The prefix list is only the offline fallback.
+    """
+
+    def test_the_declaration_beats_the_offline_fallback(self, monkeypatch):
+        import ai_service
+        monkeypatch.setattr(ai_service, "_TEMPERATURE_SUPPORT", {})
+        # A family the fallback omits, declared as accepting it.
+        monkeypatch.setitem(
+            ai_service._TEMPERATURE_SUPPORT, "anthropic/claude-haiku-5.5", True)
+        assert ai_service._temperature_param(
+            "anthropic/claude-haiku-5.5", 0.4) == {"temperature": 0.4}
+        # A family the fallback sends to, declared as refusing it.
+        monkeypatch.setitem(ai_service._TEMPERATURE_SUPPORT, "z-ai/glm-5.3-flash", False)
+        assert ai_service._temperature_param("z-ai/glm-5.3-flash", 0.4) == {}
+
+    def test_an_unknown_model_falls_back_to_the_prefix_list(self, monkeypatch):
+        import ai_service
+        monkeypatch.setattr(ai_service, "_TEMPERATURE_SUPPORT", {})
+        assert ai_service.temperature_support("anthropic/claude-haiku-5.5") is None
+        assert ai_service._temperature_param("anthropic/claude-haiku-5.5", 0.4) == {}
+        assert ai_service._temperature_param("z-ai/glm-5.3-flash", 0.4) == {"temperature": 0.4}
+
+    def test_the_lookup_reads_the_declared_parameters(self, monkeypatch):
+        import ai_service
+        monkeypatch.setattr(ai_service, "_TEMPERATURE_SUPPORT", {})
+        rec = _GetRecorder({"data": {"endpoints": [
+            {"supported_parameters": ["reasoning", "temperature"]},
+            {"supported_parameters": ["reasoning", "temperature"]},
+        ]}})
+        monkeypatch.setattr(ai_service.httpx, "AsyncClient", lambda *a, **k: rec)
+        out = _run(ai_service.refresh_temperature_support(["vendor/takes-temp"]))
+        assert out["vendor/takes-temp"] is True
+        assert rec.urls == [
+            "https://openrouter.ai/api/v1/models/vendor/takes-temp/endpoints"]
+
+    def test_one_endpoint_without_it_is_enough_to_omit(self, monkeypatch):
+        """
+        OpenRouter routes to one endpoint, so a partial listing is a coin flip.
+        The conservative reading is the one that cannot 400.
+        """
+        import ai_service
+        monkeypatch.setattr(ai_service, "_TEMPERATURE_SUPPORT", {})
+        rec = _GetRecorder({"data": {"endpoints": [
+            {"supported_parameters": ["temperature"]},
+            {"supported_parameters": ["reasoning"]},
+        ]}})
+        monkeypatch.setattr(ai_service.httpx, "AsyncClient", lambda *a, **k: rec)
+        out = _run(ai_service.refresh_temperature_support(["vendor/mixed"]))
+        assert out["vendor/mixed"] is False
+
+    def test_a_failed_lookup_keeps_the_fallback(self, monkeypatch):
+        import ai_service
+        monkeypatch.setattr(ai_service, "_TEMPERATURE_SUPPORT", {})
+        rec = _GetRecorder({"error": "nope"}, status=500)
+        monkeypatch.setattr(ai_service.httpx, "AsyncClient", lambda *a, **k: rec)
+        out = _run(ai_service.refresh_temperature_support(["vendor/down"]))
+        assert "vendor/down" not in out
+        # ...and the offline fallback still answers.
+        assert ai_service._temperature_param("vendor/down", 0.4) == {"temperature": 0.4}
+
+    def test_a_lookup_that_raises_is_swallowed(self, monkeypatch):
+        """The boot path must never be taken down by this lookup."""
+        import ai_service
+        monkeypatch.setattr(ai_service, "_TEMPERATURE_SUPPORT", {})
+
+        def boom(*a, **k):
+            raise RuntimeError("network down")
+
+        monkeypatch.setattr(ai_service.httpx, "AsyncClient", boom)
+        out = _run(ai_service.refresh_temperature_support(["vendor/boom"]))
+        assert "vendor/boom" not in out
+
+
 class TestChatModelRequestShape:
     """
     Claude Haiku 5.5 replaces GPT-5 Mini on every chat flow. The consequences
     that travel with the family are pinned here rather than re-discovered as
     production 400s:
 
-    - temperature IS sent, 0.4 by default. Claude accepts it on Anthropic's own
-      API, but it runs adaptive thinking by default and that combination is
-      undocumented, so the field is also armed for a safe retry without it — see
-      _TEMPERATURE_FALLBACK_PREFIXES and the fallback tests below;
+    - temperature is sent ONLY where the endpoint declares it. Haiku 5.5
+      declares none on any of its endpoints, so the field is omitted for it and
+      nothing is spent finding that out; _post_chat's retry stays as the net
+      under both the declared data and the offline fallback;
     - max_tokens stays (OpenRouter maps it), and thinking tokens are billed
       against the same budget, which the truncation retry already covers.
     """
@@ -247,34 +344,47 @@ class TestChatModelRequestShape:
         assert ai_service.TEXT_MODEL == "anthropic/claude-haiku-5.5"
         assert ai_service.VISION_MODEL == "anthropic/claude-haiku-5.5"
 
-    def test_temperature_defaults_to_the_configured_value(self, monkeypatch):
+    def test_the_shipped_default_gets_no_temperature(self, monkeypatch):
+        """
+        Claude Haiku 5.5 declares no temperature on any of its endpoints, so the
+        field is omitted and nothing is spent discovering that by 400.
+        """
         import ai_service
         rec = _patch_client(monkeypatch, [_completion('{"a": 1}')])
         assert _run(ai_service._chat_json("sys", "prompt", "Ctx")) == {"a": 1}
-        assert ai_service.CHAT_TEMPERATURE == 0.4
         assert rec.payloads[0]["model"] == "anthropic/claude-haiku-5.5"
-        assert rec.payloads[0]["temperature"] == 0.4
+        assert "temperature" not in rec.payloads[0]
 
-    def test_an_explicit_temperature_reaches_the_model(self, monkeypatch):
+    def test_an_explicit_temperature_reaches_a_model_that_takes_it(self, monkeypatch):
         import ai_service
+        monkeypatch.setitem(
+            ai_service._TEMPERATURE_SUPPORT, "anthropic/claude-haiku-5.5", True)
         rec = _patch_client(monkeypatch, [_completion('{"a": 1}')])
         assert _run(ai_service._chat_json("sys", "prompt", "Ctx", temperature=0.5)) == {"a": 1}
         assert rec.payloads[0]["temperature"] == 0.5
 
-    def test_the_gpt5_family_is_still_never_sent_a_temperature(self):
+    def test_chat_temperature_is_the_documented_default(self):
         import ai_service
-        assert ai_service._temperature_param("openai/gpt-5-mini", 0.4) == {}
-        assert ai_service._temperature_param("o3-mini", 0.4) == {}
+        assert ai_service.CHAT_TEMPERATURE == 0.4
+
+    def test_the_offline_fallback_omits_for_the_known_families(self, monkeypatch):
+        import ai_service
+        monkeypatch.setattr(ai_service, "_TEMPERATURE_SUPPORT", {})
+        for slug in ("openai/gpt-5-mini", "openai/gpt-6-sol", "o3-mini",
+                     "anthropic/claude-haiku-5.5", "anthropic/claude-opus-5.5"):
+            assert ai_service._temperature_param(slug, 0.4) == {}, slug
         assert ai_service._temperature_param(
-            "anthropic/claude-haiku-5.5", 0.4) == {"temperature": 0.4}
+            "z-ai/glm-5.3-flash", 0.4) == {"temperature": 0.4}
 
     def test_a_refused_temperature_is_retried_without_it(self, monkeypatch):
         """
-        The safety net behind _TEMPERATURE_FALLBACK_PREFIXES. If the provider
-        refuses the field, the identical request goes again without it, so an
-        unverified temperature costs the field and never the call.
+        The net under both the declared data and the offline fallback. If the
+        provider refuses the field, the identical request goes again without it,
+        so a wrong answer costs the field and never the call.
         """
         import ai_service
+        monkeypatch.setitem(
+            ai_service._TEMPERATURE_SUPPORT, "anthropic/claude-haiku-5.5", True)
         refusal = _Response(
             {"error": {"message": "Unsupported value: temperature"}}, status=400)
         rec = _patch_client(monkeypatch, [refusal, _completion('{"a": 1}')])
@@ -347,8 +457,7 @@ class TestChatModelRequestShape:
     def test_direct_flows_send_response_format(self, monkeypatch):
         """
         The flows that post httpx directly (not through _chat_json) must
-        still carry the envelope: app research, angles, plan. Each also carries
-        a temperature now that Claude Haiku 5.5 accepts one.
+        still carry the envelope: app research, angles, plan.
         """
         import ai_service
 
@@ -385,7 +494,7 @@ class TestChatModelRequestShape:
         assert len(rec.payloads) == 3
         for payload in rec.payloads:
             assert payload["response_format"]["type"] == "json_schema"
-            assert 0 <= payload["temperature"] <= 1
+            assert "temperature" not in payload
 
 
 class TestAngleFeedbackPromptWiring:

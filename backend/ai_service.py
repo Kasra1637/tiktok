@@ -316,21 +316,23 @@ def _headers():
 # templated. Flows that want a different value still pass one explicitly.
 CHAT_TEMPERATURE = 0.4
 
-# Model families that must NOT be sent a temperature at all, because the family
-# rejects any value but its own default: GPT-5 and the o-series 400 on anything
-# other than 1 ("Unsupported value: 'temperature' ... Only the default (1) value
-# is supported").
-_TEMPERATURE_OMITTED_PREFIXES = ("gpt-5", "o1", "o3", "o4")
+# Whether an endpoint accepts a `temperature` field is a MEASURED fact, not a
+# property of the model family, and it moves: every Claude 5.x and GPT-5/6
+# endpoint declares no temperature, while Gemini, Qwen, GLM and DeepSeek all
+# declare it — and older models inside those same families differ again. A
+# hand-maintained prefix list cannot be right for all of them, so the decision
+# is read from OpenRouter's per-endpoint declaration (supported_parameters) and
+# cached. See refresh_temperature_support().
+#
+# The prefix list below is only the OFFLINE fallback, for when that listing has
+# not been fetched: a cold process, a network failure, the test suite. The retry
+# in _post_chat covers whatever it gets wrong, so a bad fallback costs one round
+# trip and never a call.
+_TEMPERATURE_OMITTED_PREFIXES = ("gpt-5", "gpt-6", "claude", "o1", "o3", "o4")
 
-# Model families that DO get a temperature, but where the provider may refuse
-# it. Claude Haiku 5.5 accepts temperature on Anthropic's own API, yet it runs
-# adaptive thinking by default and whether a non-default value is accepted
-# alongside that is undocumented. Rather than withhold the field on a guess, the
-# field is sent and _post_chat drops it and retries the identical request once if
-# the provider refuses — so an unverified combination costs the temperature,
-# never the call. verify_chat_model.py settles the question live; once it reports
-# the field is accepted, "claude" can be removed from this set.
-_TEMPERATURE_FALLBACK_PREFIXES = ("claude",)
+# {normalized slug: True when EVERY declared endpoint accepts a temperature}.
+# Empty until refresh_temperature_support() runs.
+_TEMPERATURE_SUPPORT: dict = {}
 
 
 def _is_family(model: str, prefixes: tuple) -> bool:
@@ -339,8 +341,77 @@ def _is_family(model: str, prefixes: tuple) -> bool:
     return name.startswith(prefixes)
 
 
+def _normalize_slug(model: str) -> str:
+    return (model or "").strip().lower()
+
+
+def temperature_support(model: str):
+    """
+    What the provider declares for this model: True, False, or None (unknown).
+
+    None means the listing has not been read — NOT that the model refuses the
+    field. Callers must treat it as "use the fallback", never as "no".
+    """
+    return _TEMPERATURE_SUPPORT.get(_normalize_slug(model))
+
+
+async def refresh_temperature_support(models) -> dict:
+    """
+    Read each model's declared parameters from OpenRouter and cache the answer.
+
+    Best-effort and never raises: a failure leaves the cache empty, which sends
+    _temperature_param to the offline prefix list rather than taking the boot
+    path down. Unauthenticated and free, like the video capability check.
+
+    A model counts as accepting temperature only when EVERY endpoint it is
+    served from declares the field. OpenRouter routes a request to one of them,
+    so a partial listing would be a coin flip; the conservative reading is the
+    one that cannot 400.
+    """
+    for slug in sorted({_normalize_slug(m) for m in models if m}):
+        if "/" not in slug:
+            continue
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(f"{OPENROUTER_BASE}/models/{slug}/endpoints")
+            if resp.status_code != 200:
+                logger.warning(
+                    "Temperature lookup for %s: HTTP %s; keeping the fallback.",
+                    slug, resp.status_code,
+                )
+                continue
+            endpoints = (resp.json().get("data") or {}).get("endpoints") or []
+            if not endpoints:
+                logger.warning(
+                    "Temperature lookup for %s: no endpoints listed; keeping the fallback.",
+                    slug,
+                )
+                continue
+            declared = all(
+                "temperature" in (e.get("supported_parameters") or [])
+                for e in endpoints
+            )
+            _TEMPERATURE_SUPPORT[slug] = declared
+            logger.info(
+                "Temperature for %s: %s (%d endpoint(s)).",
+                slug, "declared" if declared else "not declared", len(endpoints),
+            )
+        except Exception as e:
+            logger.warning("Temperature lookup for %s failed: %s", slug, e)
+    return dict(_TEMPERATURE_SUPPORT)
+
+
 def _temperature_param(model: str, temperature: float) -> dict:
-    """{"temperature": t} for models that accept it, else {} (never raises)."""
+    """
+    {"temperature": t} for endpoints that accept it, else {} (never raises).
+
+    Precedence is the declared data over the offline fallback, so pointing the
+    service at a model that takes a temperature needs no code change, and
+    pointing it at one that does not needs no discovery-by-400.
+    """
+    declared = temperature_support(model)
+    if declared is not None:
+        return {"temperature": temperature} if declared else {}
     if _is_family(model, _TEMPERATURE_OMITTED_PREFIXES):
         return {}
     return {"temperature": temperature}
@@ -369,18 +440,17 @@ async def _post_chat(client, payload: dict):
     provider refuses it.
 
     Sending a temperature is a preference; getting the answer back is the job.
-    A refusal that names the field costs the field and not the call: the
-    identical request is retried without it exactly once. Any other failure is
-    left to the caller's raise_for_status.
+    The declared capability data decides whether the field is sent at all (see
+    refresh_temperature_support); this is the net under BOTH that data and the
+    offline fallback, because OpenRouter has listed a parameter a provider then
+    refused. A refusal that names the field costs the field and not the call:
+    the identical request is retried without it exactly once. Any other failure
+    is left to the caller's raise_for_status.
     """
     resp = await client.post(
         f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=payload
     )
-    if (
-        "temperature" in payload
-        and _is_family(payload.get("model", ""), _TEMPERATURE_FALLBACK_PREFIXES)
-        and _temperature_refused(resp)
-    ):
+    if "temperature" in payload and _temperature_refused(resp):
         logger.warning(
             "%s refused temperature=%s; retrying the same request without it.",
             payload.get("model"), payload.get("temperature"),

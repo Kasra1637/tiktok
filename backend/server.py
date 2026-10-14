@@ -9304,6 +9304,19 @@ async def on_startup():
     except Exception as e:  # defensive: the helper already swallows its own
         logger.warning(f"Provider capability check did not complete: {e}")
 
+    # Whether the chat endpoints accept a `temperature` field is read from
+    # OpenRouter's own per-endpoint listing rather than guessed from the model
+    # family, so swapping AI_TEXT_MODEL / AI_VISION_MODEL to a model that takes
+    # one (or does not) needs no code change. Same shape as the check above:
+    # free, unauthenticated, best-effort, and never able to fail the boot — a
+    # failed lookup just leaves the offline fallback in place.
+    try:
+        await ai_service.refresh_temperature_support(
+            [ai_service.TEXT_MODEL, ai_service.VISION_MODEL]
+        )
+    except Exception as e:  # defensive: the helper already swallows its own
+        logger.warning(f"Temperature support lookup did not complete: {e}")
+
     # Reconcile renders stranded by a dead container (see _sweep_stranded_generations).
     # As a background task, NOT awaited, for two reasons: a sweep that polls a
     # provider and runs ffmpeg would hold the cold start open for minutes and
