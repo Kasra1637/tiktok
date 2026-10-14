@@ -7014,6 +7014,40 @@ async function runDemoCtaChecks() {
       );
     }
   );
+  await check(
+    "History keeps all four work actions in one tile row",
+    async (ctx) => {
+      const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+      await withApi(
+        {
+          getGenerationHistory: async () => ({
+            generations: [{ ...COMPLETED, id: "gen-tiles", status: "completed" }],
+          }),
+          getAppProfiles: async () => ({ profiles: [PROFILE] }),
+          getVariationKinds: async () => ({ variations: [] }),
+        },
+        async () => {
+          await mount(GenerationHistory, { onChanged: () => {} })(ctx);
+          // Beside the 152px rail the context column is only ~240px at its
+          // narrowest, where a wrapping flex row stranded Demo + CTA alone
+          // on a second row. grid-cols-4 never wraps, so the row is one row
+          // at every viewport.
+          const group = ctx.container.querySelector('[role="group"][aria-label="Work with this render"]');
+          if (!group) {
+            throw new Error("the Work with this render action group is gone");
+          }
+          if (!group.className.includes("grid-cols-4")) {
+            throw new Error("the work actions can wrap again instead of holding one row");
+          }
+          for (const label of ["Variations", "Details", "Duplicate", "Demo + CTA"]) {
+            if (!group.textContent.includes(label)) {
+              throw new Error(`the one-row action group lost ${label}`);
+            }
+          }
+        }
+      );
+    }
+  );
 await check(
     "History plays the durable copy the API signed, not a stripped path",
     async (ctx) => {

@@ -583,13 +583,20 @@ function GenerationRow({ row, siblings = [], onChanged }) {
               not the navigation, and the rail under the clip now holds Delete
               beside Download where the thing being destroyed is visible. The
               status filter still offers "archived", so a row archived before
-              this change remains findable — just not archivable again. */}
+              this change remains findable — just not archivable again.
+
+              The four actions sit in one `grid-cols-4` tile row, icon over
+              label, rather than a wrapping flex row: beside the 152px rail the
+              context column is only ~240px at its narrowest, where four
+              side-by-side text buttons wrapped 3+1 and stranded Demo + CTA on
+              its own row. Tiles stay one row at every viewport, and `min-w-0`
+              + truncate keeps a long "Variations (12)" inside its cell. */}
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-4">
             <GroupLabel icon={Clapperboard}>Work with this render</GroupLabel>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={loadChildren}>
-                <GitBranch className="h-3.5 w-3.5" /> Variations
-                {children.length > 0 && ` (${children.length})`}
+            <div className="grid grid-cols-4 gap-1.5" role="group" aria-label="Work with this render">
+              <Button variant="ghost" size="sm" onClick={loadChildren} className="h-auto min-w-0 flex-col gap-1 px-1 py-2">
+                <GitBranch className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">Variations{children.length > 0 && ` (${children.length})`}</span>
               </Button>
               <Button
                 variant="ghost"
@@ -597,8 +604,10 @@ function GenerationRow({ row, siblings = [], onChanged }) {
                 disabled={busy}
                 onClick={() => setShowDetails(true)}
                 data-testid="generation-details-button"
+                className="h-auto min-w-0 flex-col gap-1 px-1 py-2"
               >
-                <Info className="h-3.5 w-3.5" /> Details
+                <Info className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">Details</span>
               </Button>
               <Button
                 variant="ghost"
@@ -606,16 +615,19 @@ function GenerationRow({ row, siblings = [], onChanged }) {
                 disabled={busy}
                 onClick={handleDuplicate}
                 title="Copy this setup unchanged into a new draft, for a fresh render of the same video"
+                className="h-auto min-w-0 flex-col gap-1 px-1 py-2"
               >
-                <Copy className="h-3.5 w-3.5" /> Duplicate
+                <Copy className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">Duplicate</span>
               </Button>
               {/* Only a finished clip has anything to wrap, so the entry rides
                   hasClip rather than status alone: offering it on a queued or failed
                   render would open an editor with no source. */}
               {hasClip && (
-                <Button variant="ghost" size="sm" asChild data-testid={`demo-cta-history-${row.id}`}>
+                <Button variant="ghost" size="sm" asChild data-testid={`demo-cta-history-${row.id}`} className="h-auto min-w-0 flex-col gap-1 px-1 py-2">
                   <Link to={`/demo-cta/${row.id}`} title="Wrap this clip in a phone mockup and add your close">
-                    <Smartphone className="h-3.5 w-3.5" /> Demo + CTA
+                    <Smartphone className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">Demo + CTA</span>
                   </Link>
                 </Button>
               )}
