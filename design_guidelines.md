@@ -157,6 +157,17 @@ card is `.inset-panel`.
 | Pickable option | its own frame — `rounded-xl border bg-card/70`, bar is `px-4 py-3`, `space-y-2` between them | 16px, its own | `text-sm` uppercase tracked, muted |
 | Field / detail row | label + control | none | 14px semibold label |
 
+**Every topic-page subtitle fits a 54-60 character budget.** The line under the
+page title is the first thing read on a page and it is read at a glance: one
+sentence naming what the page is for. The six topic pages — App Profile,
+Demo + CTA, Create Video, Asset Library, Generation History, Analytics — share
+one length so the subtitle never becomes a paragraph that pushes the page's own
+content below the fold, and so its length is not re-decided per page. A detail
+page whose subtitle is the user's own text (App Profile detail renders the
+researched description) is exempt: that is the founder's app talking, not page
+chrome. `frontend/scripts/check-render-smoke.cjs` asserts the budget for all
+six and fails on a page that drops its subtitle entirely.
+
 **App Profile is the reference for workspace section headings.** Every section
 uses `SectionHeading`: body family, 14px/600, 22px line-height, all caps,
 0.08em tracking and full muted color, beside a 16px unboxed outline glyph.

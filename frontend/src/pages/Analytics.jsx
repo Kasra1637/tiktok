@@ -14,7 +14,7 @@ import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
 import { TrendingUp, AlertTriangle, Activity } from "lucide-react";
 
 /**
- * What happened as you worked, captured automatically.
+ * Facts about your work, captured automatically as you go.
  *
  * Manual result logging is gone, so this page no longer answers "what did my
  * videos do" — nothing is typed in, nothing is scraped, and no per-template
@@ -100,7 +100,7 @@ export default function Analytics() {
       <PageHeader
         icon={TrendingUp}
         title="Analytics"
-        description="What happened as you worked, captured automatically — facts about the workflow, not judgments about why."
+        description="Facts about your work, captured automatically as you go."
         data-testid="analytics-header"
         actions={
           profiles.length > 1 ? (

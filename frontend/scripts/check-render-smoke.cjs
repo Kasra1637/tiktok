@@ -4830,8 +4830,23 @@ async function runAnalyticsChecks() {
   await check("Analytics mounts and shows the header for the selected app", async (ctx) => {
     await mountAnalytics(ctx);
     expectText(ctx, "Analytics", "the page has no title");
-    if (!ctx.container.querySelector('[data-testid="analytics-header"]')) {
+    const header = ctx.container.querySelector('[data-testid="analytics-header"]');
+    if (!header) {
       throw new Error("the analytics header is not on the page");
+    }
+    // The subtitle as rendered, not just as written: the budget is asserted
+    // against the painted line (see "every topic page subtitle fits the
+    // masthead budget" for the other five pages) so a description that never
+    // reaches the DOM cannot pass on the source alone.
+    const lede = (header.querySelector("p") || {}).textContent;
+    const copy = (lede || "").trim();
+    if (!copy) {
+      throw new Error("the analytics subtitle is missing from the rendered header");
+    }
+    if (copy.length < 54 || copy.length > 60) {
+      throw new Error(
+        `the analytics subtitle is ${copy.length} chars, outside the 54-60 budget`
+      );
     }
   });
 
@@ -6218,12 +6233,15 @@ async function runDemoCtaChecks() {
         );
       }
       // The standalone header describes the page in one sentence, on the same
-      // 95-99 char budget as every other page masthead.
+      // 54-60 char budget as every other topic page masthead (that budget is
+      // asserted for all six pages by "every topic page subtitle fits the
+      // masthead budget" below; this one is repeated here because the rendered
+      // string is what a founder actually reads).
       const STANDALONE_COPY =
-        "Style any clip in a phone mockup, combine clips separately, then export that result to History.";
-      if (STANDALONE_COPY.length < 95 || STANDALONE_COPY.length > 99) {
+        "Style any clip in a phone mockup, then export to History.";
+      if (STANDALONE_COPY.length < 54 || STANDALONE_COPY.length > 60) {
         throw new Error(
-          `the standalone copy is ${STANDALONE_COPY.length} chars, outside the 95-99 budget`
+          `the standalone copy is ${STANDALONE_COPY.length} chars, outside the 54-60 budget`
         );
       }
       if (!ctx.text().includes(STANDALONE_COPY)) {
@@ -6242,6 +6260,73 @@ async function runDemoCtaChecks() {
       }
     }
   );
+
+  // The subtitle under a topic name is the first line a founder reads, and it
+  // had drifted: six pages carried a 56-104 char sentence under the same 24px
+  // title, so "a subtitle" meant a different amount of reading per page and the
+  // longest ones pushed the page's own content further down than the title had
+  // promised. One budget for all six makes the line scan at a glance and stops
+  // the length being re-decided, differently, every time a page is touched.
+  //
+  // Read from the source rather than from a mount, because two of these
+  // subtitles are route-dependent variants and the rest would need six sets of
+  // API mocks to render a copy rule. The guard against a silent pass is a
+  // missing-page report: a page that stops declaring a description fails here
+  // instead of quietly leaving the budget.
+  await check("every topic page subtitle fits the masthead budget", async () => {
+    const MIN = 54;
+    const MAX = 60;
+    // Page file -> the nav label it serves, so a failure names the page a founder
+    // would be looking at rather than a path.
+    const PAGES = {
+      "src/pages/BrandSetup.jsx": "App Profile",
+      "src/pages/DemoCtaStudio.jsx": "Demo + CTA",
+      "src/pages/CreateVideo.jsx": "Create Video",
+      "src/pages/AssetLibrary.jsx": "Asset Library",
+      "src/pages/GenerationHistory.jsx": "Generation History",
+      "src/pages/Analytics.jsx": "Analytics",
+    };
+    const problems = [];
+    const missing = [];
+    for (const [rel, label] of Object.entries(PAGES)) {
+      const text = fs.readFileSync(path.join(__dirname, "..", rel), "utf8");
+      const subtitles = [];
+      for (const block of text.match(/<PageHeader[\s\S]*?\n\s*\/>/g) || []) {
+        // Only a page-level masthead: one that carries a literal title.
+        if (!/title="[^"]+"/.test(block)) continue;
+        for (const m of block.matchAll(/description="([^"]*)"/g)) subtitles.push(m[1]);
+        // A braced description is a state or route variant ("on this route, this
+        // sentence"). Its string literals are the copy; a computed one is not on
+        // the budget and contributes nothing here.
+        const braced = block.match(/description=\{([\s\S]*?)\n\s*\}/);
+        if (braced) {
+          for (const m of braced[1].matchAll(/"([^"]+)"/g)) subtitles.push(m[1]);
+        }
+      }
+      if (!subtitles.length) {
+        missing.push(label);
+        continue;
+      }
+      for (const copy of subtitles) {
+        if (copy.length < MIN || copy.length > MAX) {
+          problems.push(`${label}: ${copy.length} chars — "${copy}"`);
+        }
+      }
+    }
+    if (missing.length) {
+      throw new Error(
+        `no masthead subtitle found for: ${missing.join(", ")}. Each topic page ` +
+          "must still pass a description to PageHeader; a page that drops it would " +
+          "otherwise leave this budget without being noticed."
+      );
+    }
+    if (problems.length) {
+      throw new Error(
+        `masthead subtitles outside the ${MIN}-${MAX} char budget:\n        ` +
+          problems.join("\n        ")
+      );
+    }
+  });
 
   await check(
     "the preview column is pinned, and the settings column is what scrolls",
@@ -7002,6 +7087,30 @@ async function runDemoCtaChecks() {
         if (!first.textContent.includes(label)) throw new Error(`History lost ${label}`);
       }
     });
+  });
+
+  await check("History's subtitle renders within the masthead budget", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    await withApi(
+      {
+        getGenerationHistory: async () => ({ generations: [] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        getVariationKinds: async () => ({ variations: [] }),
+      },
+      async () => {
+        await mount(GenerationHistory)(ctx);
+        const lede = ctx.container.querySelector('[data-testid="history-header"] p');
+        const copy = ((lede && lede.textContent) || "").trim();
+        if (!copy) {
+          throw new Error("the History subtitle is missing from the rendered header");
+        }
+        if (copy.length < 54 || copy.length > 60) {
+          throw new Error(
+            `the History subtitle is ${copy.length} chars, outside the 54-60 budget`
+          );
+        }
+      }
+    );
   });
 
   await check(

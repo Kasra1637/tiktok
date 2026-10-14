@@ -2830,7 +2830,7 @@ if (step === 3) {
       <PageHeader
         icon={Clapperboard}
         title="Create Video"
-        description="Choose an approved app and goal, pick a template, then review the free script plan for accuracy."
+        description="Pick an approved app and goal, then review the script plan."
       />
 
       {/* Progress that tracks state rather than position.

@@ -495,7 +495,7 @@ export default function BrandSetup() {
       <PageHeader
         icon={Briefcase}
         title="App Profile"
-        description="Research a mobile app from its store listing, review the draft for accuracy, then approve the app."
+        description="Research a mobile app from its store listing, then approve."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {profiles.length > 1 && (

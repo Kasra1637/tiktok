@@ -624,7 +624,7 @@ export default function AssetLibrary({
             data-testid="asset-library-header"
             icon={Images}
             title="Asset Library"
-            description="Upload the presenter photo for each app; that photo decides who appears on camera in your videos."
+            description="Upload one presenter photo per app — the face on camera."
           />
         )}
         {loading ? (
@@ -691,7 +691,7 @@ export default function AssetLibrary({
           data-testid="asset-library-header"
           icon={Images}
           title="Asset Library"
-          description="Upload the presenter photo for each app; that photo decides who appears on camera in your videos."
+          description="Upload one presenter photo per app — the face on camera."
           actions={
             <div className="flex flex-wrap items-center gap-2">
               {/* Shown whenever there is something to switch between. With a

@@ -765,7 +765,7 @@ export default function GenerationHistory() {
         data-testid="history-header"
         icon={HistoryIcon}
         title="Generation History"
-        description="Review renders and exports, and download your clips."
+        description="Review every render and export, and download your clips."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <AppPicker
