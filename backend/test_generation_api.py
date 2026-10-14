@@ -953,7 +953,8 @@ class TestListingAndCapabilities:
         """
         result = _run(api.list_studio_video_models())
         keys = [m["key"] for m in result["models"]]
-        assert keys == ["minimax-h3", "minimax-h3-max", "heygen-video-1"]
+        assert keys == ["minimax-h3", "minimax-h3-max", "heygen-video-1",
+                        "grok-imagine-video-1.5-lite"]
         assert "aleph-2" not in keys
         assert result["default"] == "minimax-h3"
 
@@ -1334,6 +1335,57 @@ class TestModelSelectionAtTheApiBoundary:
         assert hook_script in prompt, "the hook script lost its tail"
         assert middle_script in prompt, "the middle script lost its tail"
         assert big not in prompt, "direction wording survived whole"
+
+    def test_grok_submit_routes_the_photo_to_references_at_480p(self, api, monkeypatch):
+        """
+        End to end through the studio submit path: the founder picks Grok at
+        480p, and the request that reaches the provider carries the OpenRouter
+        id, the chosen resolution, and the photo as an input_references entry —
+        never as the opening frame.
+
+        The unit tests pin each of those facts separately; this pins them
+        together at the one call site that has to get all three right at once,
+        because a render that bills at the wrong resolution or opens on the
+        photograph is a founder charged for the wrong video.
+        """
+        calls = _mock_submit(api, monkeypatch)
+        from models import StudioGenerationRequest
+        project, _, _ = _ready_project(api, "Grok Submit", duration=12)
+        _run(api.submit_project_generation(
+            project_id=project["id"],
+            payload=StudioGenerationRequest(model="grok-imagine-video-1.5-lite",
+                                            resolution="480p"),
+            user_id=ANON))
+        assert len(calls) == 1
+        call = calls[0]
+        assert call["model"] == "grok-imagine-video-1.5-lite"
+        assert call["resolution"] == "480p"
+        assert call["reference_image_path"] is None, (
+            "the photo would ride as the opening frame"
+        )
+        refs = call["input_references"]
+        assert len(refs) == 1
+        assert refs[0]["image_url"]["url"].startswith("data:image/")
+
+    def test_grok_submit_refuses_1080p_with_the_allowed_list(self, api, monkeypatch):
+        """
+        1080p is listed by OpenRouter but deliberately unoffered. The endpoint
+        refuses it naming 480p and 720p, rather than letting the payload layer
+        silently fall back to 720p while the founder believes they are testing
+        1080p.
+        """
+        _mock_submit(api, monkeypatch)
+        from models import StudioGenerationRequest
+        from fastapi import HTTPException
+        project, _, _ = _ready_project(api, "Grok Refused", duration=12)
+        with pytest.raises(HTTPException) as err:
+            _run(api.submit_project_generation(
+                project_id=project["id"],
+                payload=StudioGenerationRequest(model="grok-imagine-video-1.5-lite",
+                                                resolution="1080p"),
+                user_id=ANON))
+        assert err.value.status_code == 400
+        assert "480p" in str(err.value.detail) and "720p" in str(err.value.detail)
 
     def test_heygen_renders_a_long_app_name_on_a_full_strategy(self, api, monkeypatch):
         """
