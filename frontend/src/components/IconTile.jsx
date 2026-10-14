@@ -13,7 +13,7 @@ export function IconTile({ icon: Icon, size = "section", className }) {
     <span
       aria-hidden="true"
       className={cn(
-        "flex shrink-0 items-center justify-center border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] text-[color:var(--brand-indigo)]",
+        "flex shrink-0 items-center justify-center border border-[color:var(--indigo-25)] bg-gradient-to-b from-[color:var(--indigo-15)] to-[color:var(--indigo-6)] text-[color:var(--brand-indigo)] shadow-[inset_0_1px_0_0_rgba(129,140,248,0.28),var(--shadow-xs)]",
         s.box,
         className
       )}

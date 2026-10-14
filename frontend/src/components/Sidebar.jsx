@@ -100,11 +100,11 @@ function NavItem({ item, collapsed, active, onNavigate, testId }) {
       data-testid={testId}
       aria-current={active ? "page" : undefined}
       title={collapsed ? item.label : undefined}
-      className={`group relative flex items-center rounded-xl outline-none transition-colors duration-200 ${
+      className={`group relative flex items-center rounded-xl outline-none transition-[background-color,color,box-shadow] duration-200 ${
         collapsed ? "h-10 w-10 justify-center" : "gap-3 px-3 py-2.5"
       } ${
         active
-          ? "bg-[color:var(--indigo-10)] text-foreground"
+          ? "bg-[color:var(--indigo-10)] text-foreground shadow-[inset_0_1px_0_0_rgba(129,140,248,0.2),var(--shadow-xs)]"
           : "text-muted-foreground hover:bg-[color:var(--indigo-6)] hover:text-foreground"
       }`}
     >
@@ -112,11 +112,11 @@ function NavItem({ item, collapsed, active, onNavigate, testId }) {
       <span
         aria-hidden="true"
         className={`absolute left-0 top-1/2 -translate-y-1/2 rounded-r-full bg-[color:var(--brand-indigo)] transition-all duration-200 ${
-          active ? "h-5 w-[3px] opacity-100" : "h-2 w-[3px] opacity-0"
+          active ? "h-5 w-[3px] opacity-100 shadow-[0_0_10px_var(--brand-indigo)]" : "h-2 w-[3px] opacity-0"
         } ${collapsed ? "-left-2" : "-left-3"}`}
       />
       <Icon
-        className={`h-[18px] w-[18px] shrink-0 transition-colors ${
+        className={`h-[18px] w-[18px] shrink-0 transition-[color,transform] duration-200 group-hover:scale-105 ${
           active ? "text-[color:var(--brand-indigo)]" : "text-muted-foreground group-hover:text-foreground"
         }`}
       />
@@ -205,7 +205,7 @@ function SidebarFooter({ collapsed }) {
         <button
           type="button"
           onClick={replayCurrentPageTour}
-          className="flex w-full items-center gap-2 rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3.5 py-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:border-[color:var(--indigo-35)] hover:text-[color:var(--brand-indigo)]"
+          className="pill-studio flex w-full items-center gap-2 rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3.5 py-2.5 text-xs font-semibold text-muted-foreground hover:border-[color:var(--indigo-35)] hover:text-[color:var(--brand-indigo)]"
         >
           <HelpCircle className="h-3.5 w-3.5" />
           <span>Show me around</span>

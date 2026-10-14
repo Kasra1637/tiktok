@@ -122,6 +122,9 @@ Composite classes in `index.css`; prefer them over ad-hoc borders and shadows.
 | `.surface-flush` | A card that owns its own inner padding — accordion groups and list rows |
 | `.row-pad` | The row rhythm inside a card: 16px gutter, 12px block |
 | `.border-gradient` | Masked pseudo-element for a lit top-left edge |
+| `.pill-studio` | Raised beveled pill (`Chip`, wizard step pills, `AppPicker`) with top specular rim + `-1px` hover lift + icon scale |
+| `.card-pickable` | Selectable option card (`aria-pressed`) with lit indigo top rim when selected |
+| `.input-well` | Recessed studio field (`Input`, `Textarea`, `CONTROL_CLASS` `<select>`) with inner top shadow and 3px indigo focus aura |
 
 Elevation ramp: `--shadow-xs` → `--shadow-sm` → `--shadow-md` → `--shadow-lg` →
 `--shadow-xl` (layered, not a single flat blur). Brand glows `--glow-indigo` /

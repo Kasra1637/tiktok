@@ -29,8 +29,8 @@ export function Chip({
 
   const activeTone =
     tone === "coral"
-      ? "border-transparent bg-[color:var(--brand-coral)] text-white shadow-[var(--glow-coral)]"
-      : "border-transparent bg-[color:var(--brand-indigo)] text-white shadow-[var(--glow-indigo)]";
+      ? "btn-bevel-brand border-white/15 bg-[color:var(--brand-coral)] text-white"
+      : "btn-bevel-accent border-white/15 bg-[color:var(--brand-indigo)] text-white";
 
   return (
     <button
@@ -41,7 +41,7 @@ export function Chip({
       aria-label={ariaLabel}
       title={title}
       data-testid={testId}
-      className={`inline-flex shrink-0 items-center rounded-full border font-semibold transition-[background-color,border-color,color,box-shadow] duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${sizing} ${
+      className={`pill-studio inline-flex shrink-0 items-center rounded-full border font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${sizing} ${
         active
           ? activeTone
           : "border-[color:var(--hairline)] bg-secondary/40 text-muted-foreground hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] hover:text-foreground"

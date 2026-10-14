@@ -5232,6 +5232,31 @@ async function runIconChecks() {
     }
   });
 
+  await check("pills, pickable cards, inputs, icon tiles, and alerts share the studio material system", async () => {
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    for (const token of [".pill-studio", ".card-pickable", ".input-well"]) {
+      if (!css.includes(token)) {
+        throw new Error(`index.css is missing studio material rule: ${token}`);
+      }
+    }
+    const expectations = [
+      ["components/Chip.jsx", "pill-studio"],
+      ["components/AppPicker.jsx", "pill-studio"],
+      ["components/ui/input.jsx", "input-well"],
+      ["components/ui/textarea.jsx", "input-well"],
+      ["components/formControls.js", "input-well"],
+      ["components/IconTile.jsx", "from-[color:var(--indigo-15)]"],
+      ["components/Sidebar.jsx", "shadow-[0_0_10px_var(--brand-indigo)]"],
+      ["pages/CreateVideo.jsx", "card-pickable"],
+    ];
+    for (const [rel, token] of expectations) {
+      const src = fs.readFileSync(path.join(SRC, rel), "utf8");
+      if (!src.includes(token)) {
+        throw new Error(`${rel} is missing expected studio material token: ${token}`);
+      }
+    }
+  });
+
   await check("no block doubles its parent's spacing with mt-*", async () => {
     // A block that opens with `border-t` gets its gutter from `pt-4` — the
     // padding below its own rule. An `mt-*` next to that rule is a second gap

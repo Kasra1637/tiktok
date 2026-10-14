@@ -22,7 +22,7 @@ export function FactChip({ children, className }) {
   return (
     <span
       className={cn(
-        "select-none rounded-full border border-[color:var(--hairline)] px-2 py-0.5 text-xs text-muted-foreground",
+        "select-none rounded-full border border-[color:var(--hairline)] bg-secondary/20 px-2 py-0.5 text-xs text-muted-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]",
         className
       )}
     >

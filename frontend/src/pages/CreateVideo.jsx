@@ -163,7 +163,7 @@ function RecommendationCard({ r, selected, onSelect }) {
         }
       }}
       aria-pressed={selected}
-      className={`w-full rounded-xl border p-5 text-left transition-colors ${
+      className={`card-pickable w-full rounded-xl border p-5 text-left ${
         selected
           ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
           : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
@@ -598,7 +598,7 @@ function AngleGoalPicker({
               aria-pressed={selected}
               data-testid={`recommended-goal-${goal}`}
               onClick={() => onPick(goal)}
-              className={`rounded-xl border p-5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-35)] ${
+              className={`card-pickable rounded-xl border p-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-35)] ${
                 selected
                   ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
                   : "border-[color:var(--hairline)]"
@@ -1766,8 +1766,9 @@ setObjective("");
                 <button
                   key={p.id}
                   type="button"
+                  aria-pressed={profileId === p.id}
                   onClick={() => selectProfile(p.id)}
-                  className={`rounded-2xl border p-5 text-left transition-colors ${
+                  className={`card-pickable rounded-2xl border p-5 text-left ${
                     profileId === p.id
                       ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
                       : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
@@ -2861,7 +2862,7 @@ if (step === 3) {
               title={STEP_STATE_COPY[s.state]}
               data-state={s.state}
               data-testid={`step-pill-${s.step.key}`}
-              className={`inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+              className={`pill-studio inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${
                 active
                   ? "border-[color:var(--indigo-35)] bg-primary/15 text-[color:var(--brand-indigo)]"
                   : s.state === "done"
