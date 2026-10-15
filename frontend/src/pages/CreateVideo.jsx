@@ -656,13 +656,12 @@ function AngleGoalPicker({
   );
 }
 
-function StepShell({ icon: Icon, title, description, children }) {
+function StepShell({ icon: Icon, title, children }) {
   return (
     <div className="space-y-5">
       {Icon && (
         <div className="space-y-1">
           {title && <SectionHeading icon={Icon}>{title}</SectionHeading>}
-          {description && <p className="text-sm text-muted-foreground">{description}</p>}
         </div>
       )}
       {children}
@@ -721,40 +720,6 @@ function stepCompletion({ profileId, objective, angleId, templateId, project, mi
     }
     return { step, state };
   });
-}
-
-/** The one sentence under the pills. Names the first thing actually waiting. */
-function nextStepMessage(stepStates, step, angleId, objective) {
-  const current = stepStates[step];
-  if (current.state === "blocked") {
-    if (current.step.key === "angle") {
-      return angleId
-        ? "Next: choose a video goal for this audience angle. Six suggested goals are ranked for its problem and promise."
-        : "Next: pick an audience angle first. Then choose from six goal suggestions tailored to it.";
-    }
-    // The template gate names its missing prerequisite, the way the angle
-    // gate does — where to go, not what the step is, so it never repeats the
-    // card title. Gated on the objective alone: a picked-but-unranked list
-    // below has its own content to browse, and needs no sentence.
-    if (current.step.key === "template" && !objective) {
-      return "Next: set the goal on the previous step to unlock ranked templates.";
-    }
-  }
-  if (step === 0) return "Choose an approved App Profile to start. Your free script plan appears in Review; Hook + Story renders in the final step.";
-  // "Everything is ready" has to be measured against the steps that CAN be
-  // ready. The render step is deliberately never marked done -- it has no
-  // completion state, because a project stays renderable and gets re-rendered
-  // -- so `every(s => s.state === "done")` was permanently false and this line
-  // was unreachable. Comparing only the steps before it makes the message
-  // reachable, and says it at the point where it is true.
-  if (stepStates.slice(0, step).every((s) => s.state === "done")) {
-    return "";
-  }
-  const first = stepStates.findIndex((s) => s.state !== "done");
-  if (first > step) {
-    return `${stepStates[first].step.label} is still ahead of you.`;
-  }
-  return "The free script plan appears in Review. The Hook + Story video renders in the final step.";
 }
 
 export default function CreateVideo() {
@@ -1741,7 +1706,6 @@ setObjective("");
     missingIdentity,
     hasEdits,
   });
-  const nextUp = nextStepMessage(stepStates, step, angleId, objective);
 
   /* What a satisfied pill names beside its tick. Derived like the states, so
      a changed pick renames its pill on the next render instead of going
@@ -1861,18 +1825,13 @@ setObjective("");
         <StepShell
           icon={Target}
           title="Audience & goal"
-          description="Two choices: the problem this video speaks to, and the goal it aims at."
         >
           <div className="space-y-4" data-testid="audience-goal-step">
-            {/* The description frames the step and stops there. It used to
-                read "Choose an audience angle, then a recommended video
-                goal..." — the progress rail's own sentence directly above it
-                ("Next: pick an audience angle first. Then choose from six goal
-                suggestions tailored to it"), with the same consequence the
-                angle's hint below states. That stacked one instruction three
-                deep in a single viewport. What is left names the two choices in
-                plain words and claims nothing the rail or the hints already
-                say.
+            {/* No description on this shell. It carried one three times over:
+                the progress rail's own sentence above it, and the angle's hint
+                below it, both named the same instruction. The rail's sentence is
+                gone now too, and what remains here is text specific to what is
+                on screen — the angle you picked, and the goals ranked for it.
 
                 The angle is required: the strategy and the render are built
                 around it, so a video without one is the generic framing this
@@ -2073,14 +2032,12 @@ setObjective("");
         <StepShell
           icon={LayoutTemplate}
           title="Choose a template & add your photo"
-          description="Compare goal-matched suggestions by fit reasons and caveats. Keep the preselected suggestion or choose another."
         >
           <div className="space-y-4">
-            {/* The description stops at the template. "Then add a clear photo
-                of the presenter below" repeated the rail's "pick a template
-                and add your photo" and then pre-empted the Presenter photo
-                section's own instruction, which sits directly under it. The
-                photo is described where it is attached, not twice above it. */}
+            {/* No description here either: it restated the rail and then
+                pre-empted the Presenter photo section's own instruction, which
+                sits directly under it. The photo is described where it is
+                attached, not twice above it. */}
             {/* No objective means no honest scoring to show. The card list used
                 to render anyway with the empty rationale the scorer returns, so a
                 founder could pick the top card from reasons that did not mention
@@ -2270,23 +2227,23 @@ setObjective("");
         <StepShell
           icon={Sparkles}
           title="Hook + Story"
-          description="Your approved plan becomes the strategy below, and the strategy becomes this one clip."
         >
           <div className="space-y-3">
-            {/* The description states the chain — plan, strategy, clip — and
-                stops there. It used to read "Review the app-specific strategy,
-                then render the Hook + Story clip", which is the progress
-                rail's sentence above it almost word for word, followed by the
+            {/* No description on this shell. The one it carried was the
+                progress rail's sentence almost word for word, followed by the
                 piece's scope, which the render panel states itself. Neither
                 fact needed a third copy. */}
             {!canGenerate ? (
               <div className="inset-panel">
-                {/* One sentence: the rail above already names the first
-                    missing piece, so this states the whole prerequisite chain
-                    once and stops — no action lives here because the next
-                    move differs per founder. */}
+                {/* Names what is actually missing, read from the same two
+                    values that gated this panel. It used to spell out the
+                    whole chain ("choose an App Profile, goal, and template,
+                    then review the free plan") — a fourth copy of an
+                    instruction the pills and each step already carry. */}
                 <p className="text-sm text-muted-foreground">
-                  Choose an App Profile, goal, and template first, then review the free plan before rendering.
+                  {!profileId
+                    ? "Pick an approved App Profile on the first step to continue."
+                    : "Pick a template on the Template & photo step to continue."}
                 </p>
               </div>
             ) : blockedOnAssets ? (
@@ -2947,15 +2904,6 @@ if (step === 3) {
           );
         })}
       </nav>
-
-      {/* One sentence saying what is left, rather than making them read the
-          pills. This is the "easy tracking" the pills cannot do on their own:
-          they show state, this says which one needs them. */}
-      {nextUp && (
-        <p className="text-xs text-muted-foreground" data-testid="progress-next-up">
-          {nextUp}
-        </p>
-      )}
 
       {error && (
         <Alert variant="destructive">
