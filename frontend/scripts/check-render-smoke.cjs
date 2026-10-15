@@ -4109,7 +4109,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await openStep(ctx, "Review");
         if (plans !== 0) throw new Error("a plan was generated before an angle was selected");
         if (ctx.text().includes("Generating your plan")) throw new Error("Review spins while missing an angle");
-        await clickEl(ctx, ctx.container.querySelector('[data-testid="review-angle-a1"]'));
+        // The same gate every step uses: reveal the angles, then pick one. The
+        // old Review-only plain list is gone — Review now renders the shared
+        // angle selector, so it is reached exactly the way Audience & goal is.
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="generate-angles-button"]'));
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'));
         await act(async () => {});
         if (plans !== 1) throw new Error(`selecting an angle started ${plans} plans instead of one`);
       });

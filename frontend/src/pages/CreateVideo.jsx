@@ -494,6 +494,175 @@ function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
 }
 
 /**
+ * The studio's one angle-selection control, reused by every step that offers it.
+ *
+ * This was inline on the Audience & goal step alone. Review and Hook + Story
+ * each carried their own plainer version — a flat list of angle names beside a
+ * "Pick a template" pill — so the same choice rendered three ways: no check
+ * mark, no expansion, and no way to regenerate. One control, one behaviour,
+ * wherever the founder is asked for it.
+ *
+ * Landing is always gated: one "Generate angles" action, never a finished list.
+ * The click reveals a pre-generated set for free (the server generates on
+ * approval) and generates fresh only when there is nothing to show, so no
+ * step can spend a call the founder did not ask for. "Regenerate angles"
+ * appears only beside a visible list, where it always has a current generation
+ * to act on.
+ *
+ * `bare` drops the `.inset-panel` frame and renders content only. It exists
+ * because Review and Hook + Story already sit inside an inset-panel of their
+ * own, and a bordered aside inside a bordered aside is the box-in-a-box the
+ * container levels in design_guidelines.md §4 reserve.
+ */
+function AngleSelector({
+  angles,
+  angleId,
+  onSelect,
+  showAngles,
+  generating = false,
+  error = "",
+  onGenerate,
+  onRegenerate,
+  notice = "",
+  bare = false,
+}) {
+  const body = !showAngles || angles.length === 0 ? (
+    <div className="space-y-2">
+      <p className="text-xs text-muted-foreground" data-testid="angles-cta-copy">
+        {ANGLES_CTA_COPY}
+      </p>
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      <Button
+        variant="brand"
+        className="gap-1.5"
+        onClick={onGenerate}
+        disabled={generating}
+        data-testid="generate-angles-button"
+      >
+        {generating ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Sparkles className="h-3.5 w-3.5" />
+        )}
+        {generating ? "Generating…" : "Generate angles"}
+      </Button>
+    </div>
+  ) : (
+    <div className="space-y-2" data-testid="audience-angle-list">
+      {/* Regeneration for a populated app: the endpoint replaces only
+          AI-derived angles and keeps hand-written ones server-side, so this
+          cannot discard founder work. */}
+      <div className="pt-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-1.5"
+          onClick={onRegenerate}
+          disabled={generating}
+          data-testid="regenerate-angles-button"
+        >
+          {generating ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="h-3.5 w-3.5" />
+          )}
+          {generating ? "Regenerating…" : "Regenerate angles"}
+        </Button>
+      </div>
+      {notice && (
+        <Alert data-testid="angle-regen-notice">
+          <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
+          <AlertDescription>{notice}</AlertDescription>
+        </Alert>
+      )}
+      {/* Selection opens the angle. A closed row is its uppercase title and
+          nothing else: the list is scanned by name, and the picked row then
+          shows what the strategy is written from — audience, problem,
+          promise, feature, the emotion it aims at, and any claim bounding it.
+          Only the picked row opens, because two open panels side by side are
+          two half-read angles, and the fields are what the render downstream
+          is held to. */}
+      {angles.map((a) => {
+        const picked = angleId === a.id;
+        const details = picked ? angleDetails(a) : [];
+        return (
+          <div
+            key={a.id}
+            className={`overflow-hidden rounded-xl border bg-card/70 ${
+              picked
+                ? "border-[color:var(--indigo-35)]"
+                : "border-[color:var(--hairline)]"
+            }`}
+          >
+            <button
+              type="button"
+              aria-pressed={picked}
+              aria-expanded={picked}
+              aria-controls={picked ? `angle-details-${a.id}` : undefined}
+              onClick={() => onSelect(a.id)}
+              data-testid={`angle-option-${a.id}`}
+              className={`flex w-full min-w-0 items-center gap-3 row-pad text-left transition-colors hover:bg-[color:var(--indigo-6)] ${
+                picked ? "bg-[color:var(--indigo-6)]" : ""
+              }`}
+            >
+              {/* One check per row, always: muted until picked, indigo once
+                  open. The per-kind glyphs are gone — twelve icons made the
+                  list something you decode rather than scan. */}
+              <Check
+                aria-hidden="true"
+                data-testid="angle-row-check"
+                className={`h-4 w-4 shrink-0 ${
+                  picked ? "text-[color:var(--brand-indigo)]" : "text-muted-foreground"
+                }`}
+              />
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold uppercase leading-[22px] tracking-[0.08em] text-muted-foreground">
+                {sentenceCase(a.label).replace(/\.\s*$/, "")}
+              </span>
+              <ChevronDown
+                className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
+                  picked ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+            {picked && details.length > 0 && (
+              <dl
+                id={`angle-details-${a.id}`}
+                data-testid={`angle-details-${a.id}`}
+                className="space-y-2 border-t border-[color:var(--hairline)] row-pad"
+              >
+                {details.map((row) => (
+                  <div key={row.label} className="min-w-0">
+                    <dt className="eyebrow">{row.label}</dt>
+                    <dd className="mt-1 text-sm leading-[22px] text-foreground/90">
+                      {row.value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  if (bare) return body;
+
+  return (
+    <div className="inset-panel space-y-2">
+      <GroupLabel as="label" icon={Target}>
+        Audience angle <span className="text-muted-foreground">(required)</span>
+      </GroupLabel>
+      {body}
+    </div>
+  );
+}
+
+/**
  * Goal picker shared by the Audience & goal step and Review recovery. Its
  * six angle-conditioned suggestions use the same state, so
  * selecting a goal still triggers the existing template/plan synchronization.
@@ -501,6 +670,11 @@ function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
  * Each card shows the goal's general outcome plus an optional angle-specific
  * fit line explaining why that goal suits the selected angle. The fit line is
  * explanatory text only: it never changes selection, ranking, or saving.
+ *
+ * It picks a GOAL, never an angle. It used to fall back to its own plain list
+ * of angle names when none was picked, which is the second implementation
+ * `AngleSelector` above replaced — that fallback now renders only the waits
+ * marker, and the step above it owns choosing the angle.
  */
 function AngleGoalPicker({
   angle,
@@ -510,8 +684,6 @@ function AngleGoalPicker({
   recommendations,
   outcomes,
   fitReasons,
-  availableAngles = [],
-  onSelectAngle,
   objectiveEvidence = {},
   // The six suggestions in the angle's PERSISTED variant order, from the
   // server (angle.goal_suggestions). Falls back to the static facet list
@@ -532,24 +704,16 @@ function AngleGoalPicker({
   const outsideRecommendation = Boolean(value && !featured.includes(value));
 
   if (!angle) {
+    /* The waits marker only. This used to fall back to a flat list of angle
+       names of its own — no check mark, no expansion, no regenerate — which is
+       the second implementation `AngleSelector` replaced. Every step now picks
+       the angle through that one control, and this picker states plainly that
+       it is waiting for it. */
     return (
       <div className="space-y-2" data-testid="goal-waits-for-angle">
-        {availableAngles.length > 0 && (
-          <div className="space-y-2" role="group" aria-label="Choose an audience angle">
-            {availableAngles.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                aria-pressed={false}
-                data-testid={`review-angle-${option.id}`}
-                onClick={() => onSelectAngle?.(option.id)}
-                className="w-full rounded-xl border border-[color:var(--hairline)] p-5 text-left text-sm"
-              >
-                {(option.label || "").replace(/\.\s*$/, "")}
-              </button>
-            ))}
-          </div>
-        )}
+        <p className="text-xs text-muted-foreground">
+          Pick an audience angle first — the goals below are ranked for it.
+        </p>
       </div>
     );
   }
@@ -1838,154 +2002,17 @@ setObjective("");
                 step exists to prevent. Each block on this step is its own
                 bordered card so the picker and the goal list
                 read as separate organized units. */}
-            <div className="inset-panel space-y-2">
-              <GroupLabel as="label" icon={Target}>
-                Audience angle{" "}
-                <span className="text-muted-foreground">(required)</span>
-              </GroupLabel>
-              {!showAngles || angles.length === 0 ? (
-                /* Landing always starts here: one "Generate angles" CTA, never
-                   a finished list and never "Regenerate". The click reveals a
-                   pre-generated set for free or generates fresh when there is
-                   none; the list below — Regenerate with it — appears only
-                   after that click, beside a current generation. A picked
-                   angle bypasses this entirely via showAngles. */
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground" data-testid="angles-cta-copy">
-                    {ANGLES_CTA_COPY}
-                  </p>
-                  {angleError && (
-                    <Alert variant="destructive">
-                      <AlertDescription>{angleError}</AlertDescription>
-                    </Alert>
-                  )}
-                  <Button
-                    variant="brand"
-                    className="gap-1.5"
-                    onClick={handleGenerateAngles}
-                    disabled={generatingAngles}
-                    data-testid="generate-angles-button"
-                  >
-                    {generatingAngles ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-3.5 w-3.5" />
-                    )}
-                    {generatingAngles ? "Generating…" : "Generate angles"}
-                  </Button>
-                </div>
-              ) : (
-                /* Selection opens the angle. A closed row is its kind's glyph
-                   and its uppercase title: the list is scanned by name, and
-                   the picked row then shows what the strategy is written from:
-                   audience, problem, promise, feature, the emotion it aims at,
-                   and any claim bounding it. Only the picked row opens, because
-                   two open panels side by side are two half-read angles, and
-                   the fields are what the render downstream is held to. */
-                <div className="space-y-2" data-testid="audience-angle-list">
-                  {/* Regeneration for a populated app: the endpoint replaces
-                      only AI-derived angles and keeps hand-written ones
-                      server-side, so this cannot discard founder work. */}
-                  <div className="pt-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="gap-1.5"
-                      onClick={handleRegenerateAngles}
-                      disabled={generatingAngles}
-                      data-testid="regenerate-angles-button"
-                    >
-                      {generatingAngles ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-3.5 w-3.5" />
-                      )}
-                      {generatingAngles ? "Regenerating…" : "Regenerate angles"}
-                    </Button>
-                  </div>
-                  {angleRegenNotice && (
-                    <Alert data-testid="angle-regen-notice">
-                      <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-                      <AlertDescription>{angleRegenNotice}</AlertDescription>
-                    </Alert>
-                  )}
-                  {angles.map((a) => {
-                    const picked = angleId === a.id;
-                    const details = picked ? angleDetails(a) : [];
-                    return (
-                      <div
-                        key={a.id}
-                        className={`overflow-hidden rounded-xl border bg-card/70 ${
-                          picked
-                            ? "border-[color:var(--indigo-35)]"
-                            : "border-[color:var(--hairline)]"
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          aria-pressed={picked}
-                          aria-expanded={picked}
-                          aria-controls={picked ? `angle-details-${a.id}` : undefined}
-                          onClick={() => setAngleId(a.id)}
-                          data-testid={`angle-option-${a.id}`}
-                          className={`flex w-full min-w-0 items-center gap-3 row-pad text-left transition-colors hover:bg-[color:var(--indigo-6)] ${
-                            picked ? "bg-[color:var(--indigo-6)]" : ""
-                          }`}
-                        >
-                          {/* One check per row, always: muted until picked,
-                              indigo once open. The per-kind glyphs are gone —
-                              twelve icons made the list something you decode
-                              rather than scan. The picked row's old right-side
-                              check is folded into this one, so a picked row
-                              never shows two checks. */}
-                          <Check
-                            aria-hidden="true"
-                            data-testid="angle-row-check"
-                            className={`h-4 w-4 shrink-0 ${
-                              picked ? "text-[color:var(--brand-indigo)]" : "text-muted-foreground"
-                            }`}
-                          />
-                          {/* One line per angle: its kind's glyph, then the
-                              uppercase tracked title, and nothing else. The
-                              subtitle, the kind badge and the verdict tally came
-                              off the row — three pieces of meta around a 14px
-                              title made the list something you read rather than
-                              scan. Nothing is lost: the picked row still opens
-                              onto every field the strategy is written from, so
-                              the detail sits one click deeper, not gone. The
-                              label's trailing period is trimmed: labels arrive
-                              as sentences, but a title is not one. */}
-                          <span className="min-w-0 flex-1 truncate text-sm font-semibold uppercase leading-[22px] tracking-[0.08em] text-muted-foreground">
-                            {sentenceCase(a.label).replace(/\.\s*$/, "")}
-                          </span>
-                          <ChevronDown
-                            className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
-                              picked ? "rotate-180" : ""
-                            }`}
-                          />
-                        </button>
-                        {picked && details.length > 0 && (
-                          <dl
-                            id={`angle-details-${a.id}`}
-                            data-testid={`angle-details-${a.id}`}
-                            className="space-y-2 border-t border-[color:var(--hairline)] row-pad"
-                          >
-                            {details.map((row) => (
-                              <div key={row.label} className="min-w-0">
-                                <dt className="eyebrow">{row.label}</dt>
-                                <dd className="mt-1 text-sm leading-[22px] text-foreground/90">
-                                  {row.value}
-                                </dd>
-                              </div>
-                            ))}
-                          </dl>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            <AngleSelector
+              angles={angles}
+              angleId={angleId}
+              onSelect={setAngleId}
+              showAngles={showAngles}
+              generating={generatingAngles}
+              error={angleError}
+              onGenerate={handleGenerateAngles}
+              onRegenerate={handleRegenerateAngles}
+              notice={angleRegenNotice}
+            />
 
             {/* The goal step is intentionally downstream of the angle. The panel
                 only exists once there is an angle to show goals for: before
@@ -2233,7 +2260,25 @@ setObjective("");
                 progress rail's sentence almost word for word, followed by the
                 piece's scope, which the render panel states itself. Neither
                 fact needed a third copy. */}
-            {!canGenerate ? (
+            {!angle ? (
+              /* The render is built around the audience angle, so it is the
+                 first thing asked for here. This step used to have no angle
+                 control at all: it could only point back at Audience & goal
+                 (via the strategy panel) or at Review, leaving the choice
+                 stranded on another screen while the founder was here to make
+                 it. Same control, same gate, same position as step two. */
+              <AngleSelector
+                angles={angles}
+                angleId={angleId}
+                onSelect={setAngleId}
+                showAngles={showAngles}
+                generating={generatingAngles}
+                error={angleError}
+                onGenerate={handleGenerateAngles}
+                onRegenerate={handleRegenerateAngles}
+                notice={angleRegenNotice}
+              />
+            ) : !canGenerate ? (
               <div className="inset-panel">
                 {/* Names what is actually missing, read from the same two
                     values that gated this panel. It used to spell out the
@@ -2341,21 +2386,37 @@ if (step === 3) {
               The plan didn't generate. Fix what's missing below, then try again — still free.
             </p>
             {(!objective || !angle) && (
-              <AngleGoalPicker
-                angle={angle}
-                value={objective}
-                onPick={setObjective}
-                options={objectiveOptions}
-                recommendations={recommendedObjectives}
-                outcomes={objectiveOutcomes}
-                fitReasons={objectiveFitReasons}
-                onChooseAngle={() => setStep(1)}
-                availableAngles={angles}
-                onSelectAngle={setAngleId}
-                suggestions={angle?.goal_suggestions}
-                onRegenerate={handleRegenerateGoals}
-                regenerating={cyclingGoals}
-              />
+              /* The angle is picked here, with the same control every other
+                 step uses. `bare` because this panel is already an
+                 inset-panel, and a bordered aside inside one is the box-in-a-box
+                 the container levels reserve. */
+              <>
+                <AngleSelector
+                  bare
+                  angles={angles}
+                  angleId={angleId}
+                  onSelect={setAngleId}
+                  showAngles={showAngles}
+                  generating={generatingAngles}
+                  error={angleError}
+                  onGenerate={handleGenerateAngles}
+                  onRegenerate={handleRegenerateAngles}
+                  notice={angleRegenNotice}
+                />
+                <AngleGoalPicker
+                  angle={angle}
+                  value={objective}
+                  onPick={setObjective}
+                  options={objectiveOptions}
+                  recommendations={recommendedObjectives}
+                  outcomes={objectiveOutcomes}
+                  fitReasons={objectiveFitReasons}
+                  onChooseAngle={() => setStep(1)}
+                  suggestions={angle?.goal_suggestions}
+                  onRegenerate={handleRegenerateGoals}
+                  regenerating={cyclingGoals}
+                />
+              </>
             )}
             <Button
               variant="brand"
@@ -2415,26 +2476,40 @@ if (step === 3) {
                   </Button>
                 </li>
               )}
-              {(!objective || !angle) && (
-                <li>
-                  <AngleGoalPicker
-                    angle={angle}
-                    value={objective}
-                    onPick={setObjective}
-                    options={objectiveOptions}
-                    recommendations={recommendedObjectives}
-                    outcomes={objectiveOutcomes}
-                    fitReasons={objectiveFitReasons}
+            </ul>
+            {/* The angle is chosen here with the same control every other step
+                uses, not a list of names of its own. It sits outside the <ul>
+                because those two rows are navigation to another step, while
+                this one IS the choice being made right here. */}
+            {(!objective || !angle) && (
+              <>
+                <AngleSelector
+                  bare
+                  angles={angles}
+                  angleId={angleId}
+                  onSelect={setAngleId}
+                  showAngles={showAngles}
+                  generating={generatingAngles}
+                  error={angleError}
+                  onGenerate={handleGenerateAngles}
+                  onRegenerate={handleRegenerateAngles}
+                  notice={angleRegenNotice}
+                />
+                <AngleGoalPicker
+                  angle={angle}
+                  value={objective}
+                  onPick={setObjective}
+                  options={objectiveOptions}
+                  recommendations={recommendedObjectives}
+                  outcomes={objectiveOutcomes}
+                  fitReasons={objectiveFitReasons}
                   onChooseAngle={() => setStep(1)}
-                  availableAngles={angles}
-                  onSelectAngle={setAngleId}
                   suggestions={angle?.goal_suggestions}
                   onRegenerate={handleRegenerateGoals}
                   regenerating={cyclingGoals}
                 />
-              </li>
-              )}
-            </ul>
+              </>
+            )}
             <p className="text-xs text-muted-foreground">
               No extra generate button is needed here. The free plan starts when the required choices are set.
             </p>
