@@ -71,14 +71,14 @@ export function getEffectiveZoom({ keyframes, live, videoTime, isExporting }) {
     if (isExporting) return { ...DEFAULT_LOCKED };
     return liveValues;
   }
-  if (!hasNextKeyframe && !isExporting) return liveValues;
+  void hasNextKeyframe;
   return {
     vScale: active.scale,
     vOffX: active.offX,
     vOffY: active.offY,
     hZoom: active.handZoom,
-    hPanX: active.handPanX,
-    hPanY: active.handPanY,
+    hPanX: active.hPanX,
+    hPanY: active.hPanY,
   };
 }
 

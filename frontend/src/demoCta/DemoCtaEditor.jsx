@@ -2217,7 +2217,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                       {recording ? (
                         <><Loader2 className="h-3.5 w-3.5 animate-spin" /> {Math.round(progress * 100)}%</>
                       ) : (
-                        <><Smartphone className="h-3.5 w-3.5" /> {bg === "transparent" ? "Export WebM" : "Export MP4"}</>
+                        <><Smartphone className="h-3.5 w-3.5" /> Export</>
                       )}
                     </Button>
                     <span aria-hidden="true" className="shrink-0 text-muted-foreground/40">|</span>
