@@ -17,7 +17,7 @@ import { FactChip, FactList } from "../components/FactChip";
 import { recordSignal } from "../lib/feedback";
 import { CONTROL_CLASS } from "../components/formControls";
 import { sentenceCase } from "../lib/copyCase";
-import { History as HistoryIcon, Loader as Loader2, TriangleAlert as AlertTriangle, Download, Trash as Trash2, RotateCcw, GitBranch, RefreshCw, ChevronRight, Film, Info, Copy, X, Smartphone, Target, Briefcase, Clapperboard } from "lucide-react";
+import { History as HistoryIcon, Loader as Loader2, TriangleAlert as AlertTriangle, Download, Trash as Trash2, RotateCcw, ChevronRight, Film, Info, X, Smartphone, Target, Briefcase, Clapperboard } from "lucide-react";
 
 function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -91,9 +91,6 @@ function GenerationDetails({ generationId, onClose }) {
               <DetailRow label="Objective">
                 {detail.objective ? humanize(detail.objective) : null}
               </DetailRow>
-              <DetailRow label="Variance">
-                {detail.variation_kind ? humanize(detail.variation_kind) : "None"}
-              </DetailRow>
             </div>
 
             {detail.hook_line && (
@@ -149,11 +146,6 @@ function GenerationRow({ row, siblings = [], onChanged }) {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const [showVariations, setShowVariations] = useState(false);
-  const [variationKinds, setVariationKinds] = useState([]);
-  const [varKind, setVarKind] = useState("hook_line");
-  const [varValue, setVarValue] = useState("");
-  const [children, setChildren] = useState([]);
   const [showDetails, setShowDetails] = useState(false);
   // Set when the clip cannot be played inline, so the row can say so instead of
   // leaving a player that looks loaded and does nothing.
@@ -204,43 +196,12 @@ function GenerationRow({ row, siblings = [], onChanged }) {
     template_id: row.template_id,
   };
 
-  useEffect(() => {
-    if (row.status !== "completed") return;
-    api.getVariationKinds().then((d) => setVariationKinds(d.variations || [])).catch(() => {});
-  }, [row.status]);
-
   // A new URL means a new attempt. Every history response re-signs the media
   // path, so a failure recorded against the previous signature must not keep
   // the player hidden after the row is reloaded.
   useEffect(() => {
     setPreviewBroken(false);
   }, [downloadUrl]);
-
-  // Duplicating costs nothing and produces a draft, not a video, so it needs no
-  // confirmation. The returned draft is opened directly: telling the founder a
-  // draft exists without a path to it would leave the new project stranded in
-  // the database with no project list to find it from.
-  const handleDuplicate = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await api.duplicateGeneration(row.id);
-      const draft = result?.project;
-      if (!draft?.id || !draft?.brand_profile_id) {
-        throw new Error("The duplicate response did not include a usable draft project.");
-      }
-      toast.success("Draft created. Opening the unchanged setup in the studio.");
-      onChanged?.();
-      navigate(
-        `/create?profile=${encodeURIComponent(draft.brand_profile_id)}` +
-        `&project=${encodeURIComponent(draft.id)}`
-      );
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const act = async (fn) => {
     setBusy(true);
@@ -255,23 +216,6 @@ function GenerationRow({ row, siblings = [], onChanged }) {
     }
   };
 
-  const loadChildren = async () => {
-    setShowVariations((v) => !v);
-    if (!showVariations) {
-      try {
-        const d = await api.getGenerationVariations(row.id);
-        setChildren(d.variations || []);
-      } catch (err) {
-        setError(getErrorMessage(err));
-      }
-    }
-  };
-
-  // Resolve a row stranded in `generating`. This is NOT the storage repair: that
-  // endpoint refuses any row that has not completed (server.py:8632), and a
-  // stranded row never did, so it would answer 409 forever. Polling is the only
-  // path that can move it -- the provider may already hold a finished clip, and
-  // the poll handler is what downloads it, uploads to R2 and flips the status.
   const handleRecheckStranded = async () => {
     setBusy(true);
     setError(null);
@@ -486,16 +430,6 @@ function GenerationRow({ row, siblings = [], onChanged }) {
           <div className="flex flex-wrap items-center gap-2">
             <GroupLabel icon={Briefcase}>{row.brand_name || "Unassigned app"}</GroupLabel>
             <StatusBadge status={row.status} />
-            {row.parent_generation_id && (
-              <Badge variant="outline" className="gap-1 text-xs">
-                <GitBranch className="h-3 w-3" /> Variation
-              </Badge>
-            )}
-            {row.variation_kind && (
-              <Badge variant="secondary" className="text-xs">
-                {humanize(row.variation_kind)}
-              </Badge>
-            )}
           </div>
 
           {row.hook_line && (
@@ -593,11 +527,7 @@ function GenerationRow({ row, siblings = [], onChanged }) {
               + truncate keeps a long "Variations (12)" inside its cell. */}
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-4">
             <GroupLabel icon={Clapperboard}>Work with this render</GroupLabel>
-            <div className="grid grid-cols-4 gap-1.5" role="group" aria-label="Work with this render">
-              <Button variant="ghost" size="sm" onClick={loadChildren} className="h-auto min-w-0 flex-col gap-1 px-1 py-2">
-                <GitBranch className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">Variations{children.length > 0 && ` (${children.length})`}</span>
-              </Button>
+            <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Work with this render">
               <Button
                 variant="ghost"
                 size="sm"
@@ -608,17 +538,6 @@ function GenerationRow({ row, siblings = [], onChanged }) {
               >
                 <Info className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">Details</span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={busy}
-                onClick={handleDuplicate}
-                title="Copy this setup unchanged into a new draft, for a fresh render of the same video"
-                className="h-auto min-w-0 flex-col gap-1 px-1 py-2"
-              >
-                <Copy className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">Duplicate</span>
               </Button>
               {/* Only a finished clip has anything to wrap, so the entry rides
                   hasClip rather than status alone: offering it on a queued or failed
@@ -659,65 +578,6 @@ function GenerationRow({ row, siblings = [], onChanged }) {
 
       {showDetails && (
         <GenerationDetails generationId={row.id} onClose={() => setShowDetails(false)} />
-      )}
-
-      {showVariations && (
-        <div className="space-y-4 border-t border-[color:var(--hairline)] pt-4">
-          {children.length > 0 && (
-            <div className="space-y-2">
-              {children.map((c) => (
-                <div key={c.id} className="flex items-center justify-between gap-2 text-xs">
-                  <span className="truncate text-muted-foreground">
-                    {humanize(c.variation_kind)} &rarr; {c.project_hook ? sentenceCase(c.project_hook) : c.status}
-                  </span>
-                  <StatusBadge status={c.status} />
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
-            <select
-              value={varKind}
-              onChange={(e) => setVarKind(e.target.value)}
-              aria-label="Variation type"
-              className={CONTROL_CLASS}
-            >
-              {variationKinds.map((v) => (
-                <option key={v.key} value={v.key}>{v.label}</option>
-              ))}
-            </select>
-            <Input
-              value={varValue}
-              onChange={(e) => setVarValue(e.target.value)}
-              placeholder="New value"
-              aria-label="Variation value"
-            />
-            <Button
-              variant="accent"
-              size="sm"
-              disabled={busy || !varValue.trim()}
-              onClick={() =>
-                act(async () => {
-                  await api.createVariation(row.id, {
-                    kind: varKind,
-                    value: varValue.trim(),
-                  });
-                  setVarValue("");
-                  const d = await api.getGenerationVariations(row.id);
-                  setChildren(d.variations || []);
-                })
-              }
-            >
-              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              Create
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            A variation makes a draft. You review it and generate the video yourself, so
-            nothing runs until you say so.
-          </p>
-        </div>
       )}
     </article>
   );

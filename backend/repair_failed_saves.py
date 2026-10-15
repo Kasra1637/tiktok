@@ -93,7 +93,7 @@ def describe_recovery(server, row, probe=True):
         lines.append("    source: (none)")
 
     verdict_text, unrecoverable = recovery_verdict(
-        usable, row.get("variation_kind") == "demo_cta", statuses
+        usable, row.get("segment_role") == "demo_cta", statuses
     )
     lines.append(f"    verdict: {verdict_text}")
     return "\n".join(lines), unrecoverable

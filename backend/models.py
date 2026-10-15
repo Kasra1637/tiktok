@@ -436,22 +436,6 @@ class AttachAssetRequest(BaseModel):
     audio_gain: Optional[float] = None
 
 
-class CreateVariationRequest(BaseModel):
-    """
-    Create one controlled variation of an existing generation.
-
-    kind must be a known variation axis. value is interpreted per axis (a
-    number of seconds, a template id, "faster"/"slower", or free text).
-
-    A variation always produces a DRAFT project. Producing the video is a
-    separate, explicit action, so a variation can never render on its own.
-    """
-    kind: str
-    value: Optional[str] = None
-    regenerate_plan: Optional[bool] = None
-    note: Optional[str] = ""
-
-
 class FeedbackRequest(BaseModel):
     """
     Structured feedback captured at the moment something happened.

@@ -7814,7 +7814,7 @@ async function runDemoCtaChecks() {
       const first = grid.querySelector('[data-testid="history-card"]');
       if (!first.querySelector("video.history-preview")) throw new Error("compact preview missing");
       if (!first.querySelector('[data-testid="history-context"]')?.textContent.includes("Record the emotion suggestions.")) throw new Error("useful demo context missing");
-      for (const label of ["Download", "Delete", "Details", "Duplicate", "Variations", "Demo + CTA"]) {
+      for (const label of ["Download", "Delete", "Details", "Demo + CTA"]) {
         if (!first.textContent.includes(label)) throw new Error(`History lost ${label}`);
       }
     });
@@ -7964,7 +7964,7 @@ async function runDemoCtaChecks() {
     }
   );
   await check(
-    "History keeps all four work actions in one tile row",
+    "History keeps three work actions in one tile row",
     async (ctx) => {
       const GenerationHistory = load("pages/GenerationHistory.jsx").default;
       await withApi(
@@ -7973,22 +7973,21 @@ async function runDemoCtaChecks() {
             generations: [{ ...COMPLETED, id: "gen-tiles", status: "completed" }],
           }),
           getAppProfiles: async () => ({ profiles: [PROFILE] }),
-          getVariationKinds: async () => ({ variations: [] }),
         },
         async () => {
           await mount(GenerationHistory, { onChanged: () => {} })(ctx);
           // Beside the 152px rail the context column is only ~240px at its
           // narrowest, where a wrapping flex row stranded Demo + CTA alone
-          // on a second row. grid-cols-4 never wraps, so the row is one row
+          // on a second row. grid-cols-3 never wraps, so the row is one row
           // at every viewport.
           const group = ctx.container.querySelector('[role="group"][aria-label="Work with this render"]');
           if (!group) {
             throw new Error("the Work with this render action group is gone");
           }
-          if (!group.className.includes("grid-cols-4")) {
+          if (!group.className.includes("grid-cols-3")) {
             throw new Error("the work actions can wrap again instead of holding one row");
           }
-          for (const label of ["Variations", "Details", "Duplicate", "Demo + CTA"]) {
+          for (const label of ["Details", "Demo + CTA"]) {
             if (!group.textContent.includes(label)) {
               throw new Error(`the one-row action group lost ${label}`);
             }

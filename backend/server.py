@@ -33,7 +33,6 @@ import video_providers
 import generation_planning
 import recommendation_tags
 import overlays
-import variations
 import provider_capabilities
 import ai_service
 import feedback as feedback_mod
@@ -53,7 +52,6 @@ from models import (
     CreateStudioProjectRequest, UpdateStudioProjectRequest, GeneratePlanRequest,
     ObjectiveTemplatesRequest,
     StudioGenerationRequest,     UpdateAssetRequest, AttachAssetRequest,
-    CreateVariationRequest,
     FeedbackRequest,
     GenerateStrategyRequest,
     APP_PROFILE_LIST_FIELDS,
@@ -770,9 +768,6 @@ async def init_db():
                 -- rather than only the length that was asked of the model.
                 trim_to_seconds INTEGER DEFAULT 0,
                 attempt INTEGER DEFAULT 1,
-                parent_generation_id TEXT,
-                variation_kind TEXT,
-                variation_params TEXT,
                 openrouter_job_id TEXT,
                 polling_url TEXT,
                 video_url TEXT,
@@ -793,8 +788,6 @@ async def init_db():
                 ON generations (user_id, created_at);
             CREATE INDEX IF NOT EXISTS idx_generations_project
                 ON generations (studio_project_id, created_at);
-            CREATE INDEX IF NOT EXISTS idx_generations_parent
-                ON generations (parent_generation_id);
 
             -- Asset library, scoped to one App Profile.
             --
@@ -5858,7 +5851,6 @@ def _public_generation(row: dict) -> dict:
     """
     out = dict(row)
     out["adjustments"] = out.get("adjustments") or []
-    out["variation_params"] = out.get("variation_params") or {}
     out["continuity"] = out.get("continuity") or {}
     out["retryable"] = bool(out.get("retryable"))
     out["approved"] = bool(out.get("approved"))
@@ -6094,12 +6086,9 @@ async def _submit_generation(
     duration: Optional[int] = None,
     segment_role: str = "primary",
     segment_index: int = 0,
-    parent_generation_id: str = "",
     is_extension: bool = False,
     is_hook: bool = False,
     attempt: int = 1,
-    variation_kind: str = "",
-    variation_params: Optional[dict] = None,
     generate_audio: Optional[bool] = None,
     resolution: Optional[str] = None,
     strategy: Optional[dict] = None,
@@ -6148,10 +6137,10 @@ async def _submit_generation(
     # what make the video app-specific, and a video without a strategy is a
     # generic take with a name in it.
     #
-    # `segment_role`, `parent_generation_id`, `is_extension`, `continuity_frame`
+    # `segment_role`, `is_extension`, `continuity_frame`
     # and `previous_summary` are accepted and ignored. Every one of them
     # described chaining a second render onto a first, and a video is one
-    # render: the rows still record segment_role and parent_generation_id so
+    # render: the rows still record segment_role so
     # existing history stays readable, and nothing sets them but "primary".
     #
     # Resolve the project's own strategy when the caller did not hand one over.
@@ -6340,8 +6329,7 @@ async def _submit_generation(
            (id, studio_project_id, brand_profile_id, template_id, template_version,
             script_version, model, model_id, requested_duration, duration, status,
             segment_role, segment_index, strategy_version, continuity, trim_to_seconds,
-            attempt, parent_generation_id, variation_kind, variation_params,
-            prompt_used, adjustments, retryable, approved,
+            attempt, prompt_used, adjustments, retryable, approved,
             requested_at, created_at, updated_at, user_id, idempotency_key)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?)""",
         (generation_id, project["id"], project.get("brand_profile_id"),
@@ -6349,9 +6337,7 @@ async def _submit_generation(
          project.get("script_version"), model_key, cap["id"],
          requested, seconds, segment_role, int(segment_index or 0), strategy_version,
          json.dumps(continuity) if continuity else None, trim_to_seconds,
-         attempt, parent_generation_id or None,
-         variation_kind or None, json.dumps(variation_params or {}),
-         prompt, json.dumps([]), now, now, now, user_id,
+         attempt, prompt, json.dumps([]), now, now, now, user_id,
          claim_key or None),
         )
     except Exception as exc:
@@ -6665,12 +6651,10 @@ async def save_demo_cta_export(
            (id, studio_project_id, brand_profile_id, template_id, template_version,
             script_version, model, model_id, requested_duration, duration, status,
             segment_role, segment_index, strategy_version, attempt,
-            parent_generation_id, variation_kind, variation_params,
             prompt_used, retryable, approved,
             requested_at, completed_at, created_at, updated_at, user_id, video_url, r2_url)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed',
-                   ?, ?, ?, ?, ?, 'demo_cta', '{}',
-                   '', 0, 1, ?, ?, ?, ?, ?, ?, ?)""",
+                   ?, ?, ?, ?, ?, '', 0, 1, ?, ?, ?, ?, ?, ?, ?)""",
         (
             result_id,
             parent.get("studio_project_id") if parent else None,
@@ -6706,7 +6690,6 @@ async def save_demo_cta_export(
     return {
         "id": result_id,
         "status": "completed",
-        "parent_generation_id": parent["id"] if parent else None,
         "video_url": media_signing.build_signed_path(f"{result_id}.mp4"),
         "playback_url": media_signing.build_signed_path(f"{result_id}.mp4"),
         "poster_url": media_signing.build_signed_poster_path(f"{result_id}.jpg"),
@@ -7216,7 +7199,7 @@ def provider_download_candidates(row: dict, fresh_url: str = "") -> list[tuple[s
     rendition, and substituting its parent render would hand back a different
     video than the founder exported. That exclusion is load-bearing.
     """
-    if row.get("variation_kind") == "demo_cta":
+    if row.get("segment_role") == "demo_cta":
         return []
     ordered = [
         ("fresh poll link", fresh_url),
@@ -7819,7 +7802,6 @@ async def retry_generation(generation_id: str, user_id: str = Depends(get_curren
         duration=row.get("duration"),
         segment_role=row.get("segment_role") or "primary",
         segment_index=int(row.get("segment_index") or 0),
-        parent_generation_id=generation_id,
         attempt=int(row.get("attempt") or 1) + 1,
     )
 
@@ -8763,270 +8745,6 @@ async def detach_asset_from_project(
 # Deterministic overlay composition (retired)
 # ---------------------------------------------------------------------------
 # Burned-in captions were removed from the Hook + Story path: the compose
-# endpoint, its renderer, the composition fetcher and the asset resolver
-# lived here. Every finished render now carries the hook-to-middle camera
-# cut from the finalize pass instead, so no second render exists to dress.
-
-
-@api_router.get("/studio/variations")
-async def list_variation_kinds():
-    """The controlled variation axes, for the UI."""
-    return {"variations": variations.list_variations()}
-
-
-@api_router.get("/generations/{generation_id}/variations")
-async def list_generation_variations(generation_id: str, user_id: str = Depends(get_current_user_id)):
-    """Every generation descended from this one, with its variation axis."""
-    parent = await _fetch_one(
-        "SELECT id FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
-    )
-    if not parent:
-        raise HTTPException(status_code=404, detail="Generation not found")
-    # parent_generation_id is historical: a variation is a fresh render, not an
-    # extension, so nothing new sets it. The query is kept so a chain recorded
-    # before this change still lists its children. `project_cta` is gone — a
-    # generated piece carries no call to action.
-    rows = await _fetch_all(
-        """SELECT g.id, g.status, g.model, g.duration, g.variation_kind,
-                  g.variation_params, g.created_at, g.script_version, g.template_version,
-                  p.hook_line AS project_hook, p.demo_brief AS project_demo_brief
-           FROM generations g
-           LEFT JOIN studio_projects p ON p.id = g.studio_project_id
-           WHERE g.parent_generation_id = ? AND g.user_id = ?
-           ORDER BY g.created_at ASC""",
-        (generation_id, user_id),
-    )
-    return {"variations": rows}
-
-
-@api_router.post("/generations/{generation_id}/variations", status_code=201)
-async def create_variation(
-    generation_id: str, payload: CreateVariationRequest, user_id: str = Depends(get_current_user_id)
-):
-    """
-    Create ONE controlled variation of an existing generation.
-
-    Produces a draft project, never a video: producing the video stays a
-    separate, explicit founder decision, so a variation can never spend money
-    on its own. Set regenerate_plan=true to also rewrite the script (a text
-    call) for the axes whose change is creative rather than structural.
-    """
-    parent = await _fetch_one(
-        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
-    )
-    if not parent:
-        raise HTTPException(status_code=404, detail="Generation not found")
-
-    spec = variations.get_variation(payload.kind)
-    if not spec:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown variation '{payload.kind}'. Known kinds: "
-                   f"{', '.join(variations.VARIATIONS)}.",
-        )
-
-    project = await _fetch_one(
-        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?",
-        (parent.get("studio_project_id"), user_id),
-    )
-    if not project:
-        raise HTTPException(
-            status_code=404,
-            detail="The studio project behind this generation is gone, so it cannot be varied.",
-        )
-
-    try:
-        updates, _ = variations.apply_variation(project, spec, payload.value)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    # A template swap must be a real, usable library template.
-    template_version = project.get("template_version")
-    if "template_id" in updates:
-        tpl = await _fetch_one(
-            "SELECT * FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",
-            (updates["template_id"], user_id),
-        )
-        if not tpl:
-            raise HTTPException(status_code=404, detail="Template not found")
-        if tpl.get("review_status") != "approved":
-            raise HTTPException(
-                status_code=409, detail="That template is an unpublished draft."
-            )
-        template_version = tpl.get("version")
-
-    profile = await _fetch_one(
-        "SELECT id FROM brand_profiles WHERE id = ?", (project.get("brand_profile_id"),)
-    )
-    if not profile:
-        raise HTTPException(status_code=409, detail="The App Profile for this project is gone.")
-
-    # Copy the project, applying only the varied fields.
-    new_id = str(uuid.uuid4())
-    now = now_iso()
-    duration = template_library.clamp_duration(
-        updates.get("duration_seconds", project.get("duration_seconds"))
-    )
-    # A variation copies the plan's words and direction so the founder edits a
-    # near-identical video rather than writing one from scratch. `cta` is not
-    # copied — there is no call to action in a generated piece — and
-    # `feature_emphasis` is not copied either; `demo_brief` is what the founder
-    # needs when they record their own demo, so that carries over. `overlays`
-    # is cleared, not copied: burned-in captions are gone and nothing renders
-    # them anymore.
-    await _execute(
-        """INSERT INTO studio_projects
-           (id, brand_profile_id, content_angle_id, template_id, template_version,
-             objective, audience, duration_seconds, tone, hook_line, script,
-             beat_timeline, visual_direction, demo_brief, overlays,
-             voice_direction, sound_direction, assets, hook_seconds, script_version,
-             status, created_at, updated_at, user_id)
-           SELECT ?, brand_profile_id, content_angle_id, ?, ?,
-                  objective, ?, ?, ?,
-                  COALESCE(?, hook_line), COALESCE(?, script),
-                  beat_timeline, COALESCE(?, visual_direction),
-                  COALESCE(?, demo_brief), '[]',
-                  voice_direction, sound_direction, assets, hook_seconds,
-                  0, 'draft', ?, ?, ?
-           FROM studio_projects WHERE id = ?""",
-        # Order MUST match the SELECT placeholder order: id, template_id,
-        # template_version, audience, duration, tone, hook_line, script,
-        # visual_direction, demo_brief, created, updated, user, src.
-        (new_id,
-         updates.get("template_id", project.get("template_id")), template_version,
-         updates.get("audience", project.get("audience")), duration,
-         updates.get("tone", project.get("tone")),
-         updates.get("hook_line"), updates.get("script"),
-         updates.get("visual_direction"), updates.get("demo_brief"),
-         now, now, user_id, project["id"]),
-    )
-
-    # Record the lineage on the project so the derived draft is traceable
-    # before it ever becomes a generation.
-    await _execute(
-        "UPDATE generations SET variation_kind = COALESCE(variation_kind, ?), "
-        "variation_params = ? WHERE id = ?",
-        (spec.key, json.dumps({
-            "kind": spec.key,
-            "value": str(payload.value)[:200],
-            "note": (payload.note or "")[:200],
-            "derived_project_id": new_id,
-        }), parent["id"]),
-    )
-
-    logger.info(
-        f"Created {spec.key} variation project {new_id} from generation {generation_id}"
-    )
-    return {
-        "kind": spec.key,
-        "label": spec.label,
-        "project": _public_project(
-            await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (new_id,))
-        ),
-        "parent_generation_id": generation_id,
-        "regenerate_plan": bool(payload.regenerate_plan) and spec.needs_plan,
-        "note": "Draft only. Generate the video yourself when you are ready.",
-    }
-
-
-@api_router.post("/generations/{generation_id}/duplicate", status_code=201)
-async def duplicate_generation(
-    generation_id: str, user_id: str = Depends(get_current_user_id)
-):
-    """
-    Copy a generation's whole setup into a new draft project, changing nothing.
-
-    The third way to work from an existing video, and the one that keeps every
-    other word for it:
-
-    - retry re-runs a failure, and only a failure.
-    - a variation changes exactly one axis on purpose.
-    - a duplicate changes nothing at all. Same script, same template, same
-      assets, same plan version, so the only thing that differs is the render.
-      That is the re-roll: video models are non-deterministic, so an identical
-      prompt is a genuinely different video.
-
-    The plan is copied rather than regenerated on purpose. Resetting
-    script_version would force a fresh text call and quietly change the thing
-    being duplicated.
-
-    Returns a draft, never a video. Producing it stays an explicit decision, so
-    a duplicate cannot spend money on its own.
-    """
-    parent = await _fetch_one(
-        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
-    )
-    if not parent:
-        raise HTTPException(status_code=404, detail="Generation not found")
-
-    project = await _fetch_one(
-        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?",
-        (parent.get("studio_project_id"), user_id),
-    )
-    if not project:
-        raise HTTPException(
-            status_code=404,
-            detail="The studio project behind this generation is gone, so it cannot be duplicated.",
-        )
-
-    if not await _fetch_one(
-        "SELECT id FROM brand_profiles WHERE id = ? AND user_id = ?",
-        (project.get("brand_profile_id"), user_id),
-    ):
-        raise HTTPException(status_code=409, detail="The App Profile for this project is gone.")
-
-    new_id = str(uuid.uuid4())
-    now = now_iso()
-    # Copies the approved plan verbatim so the founder can re-render the same
-    # setup unchanged. `cta` is dropped (a generated piece has no call to action)
-    # and `feature_emphasis` is replaced by `demo_brief`. `overlays` is cleared
-    # rather than copied: burned-in captions are gone and nothing renders them
-    # anymore. The duration is
-    # re-clamped, because a project saved before this change may carry a 20s or
-    # 30s target that no single pass can produce.
-    await _execute(
-        """INSERT INTO studio_projects
-           (id, brand_profile_id, content_angle_id, template_id, template_version,
-             objective, audience, duration_seconds, tone, hook_line, script,
-             beat_timeline, visual_direction, demo_brief, overlays,
-             voice_direction, sound_direction, assets, hook_seconds, safety_report,
-             safety_summary, script_version, status, created_at, updated_at, user_id)
-           SELECT ?, brand_profile_id, content_angle_id, template_id, template_version,
-                  objective, ?, ?, tone, hook_line, script,
-                  beat_timeline, visual_direction, demo_brief, '[]',
-                  voice_direction, sound_direction, assets, ?, safety_report,
-                  safety_summary, script_version, 'draft', ?, ?, ?
-           FROM studio_projects WHERE id = ?""",
-        (new_id, project.get("audience"),
-         template_library.clamp_duration(project.get("duration_seconds")),
-         int(project.get("hook_seconds") or 0),
-         now, now, user_id, project["id"]),
-    )
-
-    # Lineage on the parent, the same channel variations use, so the duplicate
-    # is traceable from the video that spawned it.
-    await _execute(
-        "UPDATE generations SET variation_kind = COALESCE(variation_kind, 'duplicate'), "
-        "variation_params = ? WHERE id = ?",
-        (json.dumps({
-            "kind": "duplicate",
-            "derived_project_id": new_id,
-            "note": "Exact copy, nothing changed.",
-        }), parent["id"]),
-    )
-
-    logger.info(f"Duplicated generation {generation_id} into project {new_id}")
-    return {
-        "kind": "duplicate",
-        "label": "Duplicate",
-        "project": _public_project(
-            await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (new_id,))
-        ),
-        "parent_generation_id": generation_id,
-        "note": "Draft only. Nothing changed, so this is a fresh render of the same setup.",
-    }
-
-
 @api_router.get("/history/generations")
 async def generation_history(
     brand_profile_id: str = "",
@@ -9051,8 +8769,7 @@ async def generation_history(
     rows = await _fetch_all(
         f"""SELECT g.id, g.studio_project_id, g.brand_profile_id, g.template_id,
                    g.template_version, g.script_version, g.model, g.duration,
-                   g.status, g.segment_role, g.attempt, g.parent_generation_id,
-                   g.variation_kind, g.video_url,
+                   g.status, g.segment_role, g.attempt, g.video_url,
                    g.r2_url, g.error, g.retryable, g.created_at, g.completed_at,
                    b.brand_name, p.objective, p.hook_line, p.demo_brief, p.audience
             FROM generations g
