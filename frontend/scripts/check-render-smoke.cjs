@@ -3116,6 +3116,29 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
+  // A pick that names nothing must not open the gate either. A stale ?angle=
+  // param or a draft pointing at a deleted angle used to read as "viewed"
+  // through the raw id, so first view landed on a list of strangers with no
+  // row picked — the exact failure this rule fixes.
+  await check("a stale angle pick still lands gated", async (ctx) => {
+    const FRESH = { ...PROFILE, id: "b9", brand_name: "Freshly" };
+    await withApi({
+      getAppProfiles: async () => ({ profiles: [FRESH] }),
+      getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B] }),
+    }, async () => {
+      global.__SMOKE_PARAMS = "?angle=ghost-id";
+      await mount(CreateVideo, {})(ctx);
+      await openStep(ctx, "Audience & goal");
+      const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
+      if (step.querySelector('[data-testid^="angle-option-"]')) {
+        throw new Error("a dangling pick opened the list on first view");
+      }
+      if (!step.querySelector('[data-testid="generate-angles-button"]')) {
+        throw new Error("a dangling pick left no Generate CTA to recover through");
+      }
+    });
+  });
+
   await check("a failed angle generation is named and stays retryable", async (ctx) => {
     await withApi({
       getContentAngles: async () => ({ angles: [] }),
@@ -3516,8 +3539,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     await withApi({
       getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, content_angle_id: "" }),
     }, async () => {
-      global.__SMOKE_PARAMS = "?project=p1";
-      try {
+  await check("an unknown angle kind provides six fallback goals without all-goals controls", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
         await mount(CreateVideo, {})(ctx);
         await act(async () => {});
       } finally {
@@ -4120,7 +4144,33 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     } finally { global.__SMOKE_PARAMS = ""; }
   });
 
-  await check("an unknown angle kind provides six fallback goals without all-goals controls", async (ctx) => {
+  // The still-missing panel offers one red button to the first missing choice
+  // in flow order — never a generate action while anything is missing, and
+  // never two black buttons naming their destinations beside two subtitles.
+  await check("Review sends a missing profile back to its step on one red button", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    try {
+      await withApi({
+        getAppProfiles: async () => ({ profiles: [] }),
+        getStudioProject: async () => ({ ...BASE_PROJECT, brand_profile_id: "", content_angle_id: "", objective: "" }),
+        updateStudioProject: async (id, payload) => ({ ...BASE_PROJECT, ...payload }),
+        getContentAngles: async () => ({ angles: [] }),
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openStep(ctx, "Review");
+        const btn = ctx.container.querySelector('[data-testid="goto-first-gap-button"]');
+        if (!btn) throw new Error("no single red button on the still-missing panel");
+        if (!/Choose an App Profile/.test(btn.textContent || "")) {
+          throw new Error(`the button does not name the first gap: ${JSON.stringify(btn.textContent)}`);
+        }
+        await clickEl(ctx, btn);
+        const pill = ctx.container.querySelector('[data-testid="step-pill-profile"]');
+        if (!pill || pill.getAttribute("aria-current") !== "step") {
+          throw new Error("the red button did not land on the App Profile step");
+        }
+      });
+    } finally { global.__SMOKE_PARAMS = ""; }
+  });
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await withApi({ getContentAngles: async () => ({ angles: [{ ...ANGLE, kind: "legacy" }] }) }, async () => {

@@ -982,9 +982,12 @@ export default function CreateVideo() {
     setAnglesRevealed(false);
   }, [profileId]);
   const angle = angles.find((a) => a.id === angleId) || null;
-  // The list reads revealed when the gate was clicked, or whenever a pick
-  // exists — selecting an angle is itself the viewing the gate asks for.
-  const showAngles = anglesRevealed || Boolean(angleId);
+  // The list reads revealed when the gate was clicked, or when the pick names
+  // a real row — selecting an angle is itself the viewing the gate asks for.
+  // A pick alone is deliberately not enough: a stale ?angle= param or a draft
+  // pointing at a deleted angle must not open a list of strangers on first
+  // view, which is the exact screenshot this rule fixes.
+  const showAngles = anglesRevealed || Boolean(angle);
   const template = templates.find((t) => t.id === templateId) || null;
   const objectiveOptions = facets?.objectives || [];
   const recommendedObjectives = angle
@@ -1706,6 +1709,20 @@ setObjective("");
   const effectiveTemplateId = templateId || project?.template_id;
   const canGenerate = Boolean(profileId && effectiveTemplateId);
 
+  // First missing choice in flow order, for the one red button on panels that
+  // refuse to generate until the plan's inputs exist. Profile, then angle,
+  // then goal (both live on step 1), then template. The button below names
+  // the destination, so this stays data — never a second copy of the labels.
+  const firstGap = !profileId
+    ? { step: 0, label: "Choose an App Profile" }
+    : !angle
+      ? { step: 1, label: "Pick an audience angle" }
+      : !objective
+        ? { step: 1, label: "Set the video goal" }
+        : !effectiveTemplateId
+          ? { step: 2, label: "Pick a template" }
+          : null;
+
   // Face-only product: every template requires exactly the character
   // reference, and the backend refuses a generation without one (see
   // _studio_identity_references) as well as any project still holding
@@ -2315,7 +2332,24 @@ setObjective("");
                   variant="brand"
                   className="mt-3"
                   disabled={busy}
-                  onClick={() => ensureProject()}
+                  onClick={() => {
+                    /* Redirect before generating, same rule as every other red
+                       button on a gated step: a click that cannot create must
+                       take the founder to what is missing instead of dying
+                       silently inside ensureProject's early return. The gates
+                       above currently guarantee both values here, so these two
+                       branches are backstops, not live paths. */
+                    if (!profileId) {
+                      setStep(0);
+                      return;
+                    }
+                    if (!templateId) {
+                      setStep(2);
+                      return;
+                    }
+                    ensureProject();
+                  }}
+                  data-testid="create-draft-button"
                 >
                   {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                   Create the draft
@@ -2464,33 +2498,30 @@ if (step === 3) {
              the goal is missing. Name it and fix it here — choosing the goal
              starts the plan on its own, no button press. */
           <div className="inset-panel space-y-3">
-            {/* The label carries "still missing" so the paragraph doesn't
-                have to end on it: one voice names the gap, the other states
-                when the plan appears. */}
+            {/* One red button to the first missing choice, in flow order. The
+                two black navigation buttons this replaces named their
+                destinations but sat beside two different subtitles, so the
+                panel read as three separate asks. The button names where it
+                goes; the single subtitle below stays constant. Angle and goal
+                stay fixable in place just beneath it. */}
             <GroupLabel icon={ListChecks}>Still missing</GroupLabel>
             <p className="text-xs text-muted-foreground" data-subtitle="">
-              Your plan appears once an app, angle, and template are set.
+              Your free plan starts once all required choices are set.
             </p>
-            <ul className="space-y-2 text-sm">
-              {!profileId && (
-                <li>
-                  <Button variant="secondary" size="sm" onClick={() => setStep(0)}>
-                    Choose an App Profile
-                  </Button>
-                </li>
-              )}
-              {!effectiveTemplateId && (
-                <li>
-                  <Button variant="secondary" size="sm" onClick={() => setStep(2)}>
-                    Pick a template
-                  </Button>
-                </li>
-              )}
-            </ul>
+            {firstGap && (
+              <Button
+                variant="brand"
+                size="sm"
+                onClick={() => setStep(firstGap.step)}
+                data-testid="goto-first-gap-button"
+              >
+                {firstGap.label}
+              </Button>
+            )}
             {/* The angle is chosen here with the same control every other step
-                uses, not a list of names of its own. It sits outside the <ul>
-                because those two rows are navigation to another step, while
-                this one IS the choice being made right here. */}
+                uses. It sits below the red button because that button jumps
+                to another step, while this one IS the choice being made
+                right here. */}
             {(!objective || !angle) && (
               <>
                 <AngleSelector
@@ -2520,9 +2551,6 @@ if (step === 3) {
                 />
               </>
             )}
-            <p className="text-xs text-muted-foreground" data-subtitle="">
-              The free plan starts on its own once the choices are set.
-            </p>
           </div>
         ) : (
           <div className="space-y-4">
