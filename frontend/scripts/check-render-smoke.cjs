@@ -3139,6 +3139,48 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
+  // Generation narrates fresh work while in flight, then the rows arrive as
+  // a staggered cascade — never a spinner-to-list blink, and never a frozen
+  // count beside an error.
+  await check("angle generation counts up in flight, then cascades rows in", async (ctx) => {
+    const FRESH = { ...PROFILE, id: "b9", brand_name: "Freshly" };
+    let release;
+    const flight = new Promise((r) => { release = r; });
+    await withApi({
+      getAppProfiles: async () => ({ profiles: [FRESH] }),
+      getContentAngles: async () => ({ angles: [] }),
+      generateContentAngles: () => flight,
+    }, async () => {
+      global.__SMOKE_PARAMS = "";
+      await mount(CreateVideo, {})(ctx);
+      await openStep(ctx, "Audience & goal");
+      const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
+      await clickEl(ctx, step.querySelector('[data-testid="generate-angles-button"]'), "no Generate CTA on empty angles");
+      const progress = step.querySelector('[data-testid="angles-progress"]');
+      if (!progress) throw new Error("no live count while the generation is in flight");
+      if (!/Reading angle \d+ of 6/.test(progress.textContent || "")) {
+        throw new Error(`the count does not read as fresh work: ${JSON.stringify(progress.textContent)}`);
+      }
+      await act(async () => {
+        release({ angles: [ANGLE, ANGLE_B] });
+      });
+      await act(async () => {});
+      if (step.querySelector('[data-testid="angles-progress"]')) {
+        throw new Error("the count survived its own generation");
+      }
+      const rows = [...step.querySelectorAll('[data-testid^="angle-option-"]')];
+      if (rows.length !== 2) throw new Error(`expected two fresh rows, saw ${rows.length}`);
+      const delays = rows.map((row) => {
+        const host = row.closest("div.animate-fade-up");
+        if (!host) throw new Error("a fresh row carries no arrival animation");
+        return host.style.animationDelay;
+      });
+      if (new Set(delays).size !== delays.length) {
+        throw new Error(`rows do not arrive staggered: ${JSON.stringify(delays)}`);
+      }
+    });
+  });
+
   await check("a failed angle generation is named and stays retryable", async (ctx) => {
     await withApi({
       getContentAngles: async () => ({ angles: [] }),

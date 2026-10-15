@@ -526,6 +526,33 @@ function AngleSelector({
   notice = "",
   bare = false,
 }) {
+  // Live count-up while a generation is in flight ("Reading angle 3 of 6…").
+  // It answers the only question a spinner cannot — is this fresh work or a
+  // cached list — and it unmounts the moment `generating` clears, so a
+  // failure can never leave a frozen count beside the error alert. Capped at
+  // the six-row contract; the interval is wall-clock display only, and the
+  // rows below still arrive on the endpoint's real response.
+  const [genCount, setGenCount] = useState(0);
+  const genTimer = useRef(null);
+  useEffect(() => {
+    if (!generating) {
+      setGenCount(0);
+      return undefined;
+    }
+    setGenCount(1);
+    genTimer.current = setInterval(() => {
+      setGenCount((c) => (c >= 6 ? 6 : c + 1));
+    }, 450);
+    return () => {
+      clearInterval(genTimer.current);
+      genTimer.current = null;
+    };
+  }, [generating]);
+  const progressLine = generating ? (
+    <p className="text-xs text-muted-foreground" role="status" data-testid="angles-progress">
+      Reading angle {genCount} of 6…
+    </p>
+  ) : null;
   const body = !showAngles || angles.length === 0 ? (
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground" data-testid="angles-cta-copy" data-subtitle="">
@@ -549,9 +576,10 @@ function AngleSelector({
           <Sparkles className="h-3.5 w-3.5" />
         )}
         {generating ? "Generating…" : "Generate angles"}
-      </Button>
-    </div>
-  ) : (
+          </Button>
+          {progressLine}
+        </div>
+      ) : (
     <div className="space-y-2" data-testid="audience-angle-list">
       {/* Regeneration for a populated app: the endpoint replaces only
           AI-derived angles and keeps hand-written ones server-side, so this
@@ -571,8 +599,9 @@ function AngleSelector({
             <RefreshCw className="h-3.5 w-3.5" />
           )}
           {generating ? "Regenerating…" : "Regenerate angles"}
-        </Button>
-      </div>
+            </Button>
+          </div>
+          {progressLine}
       {notice && (
         <Alert data-testid="angle-regen-notice">
           <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
@@ -586,13 +615,19 @@ function AngleSelector({
           Only the picked row opens, because two open panels side by side are
           two half-read angles, and the fields are what the render downstream
           is held to. */}
-      {angles.map((a) => {
+      {angles.map((a, i) => {
         const picked = angleId === a.id;
         const details = picked ? angleDetails(a) : [];
         return (
+          // Staggered arrival: each row fades up ~70ms after the previous, so
+          // a fresh set is watched arriving instead of blinking in at once.
+          // Keyed by row id, so the cascade plays on mount and on genuinely
+          // new sets — never on a re-render of the same rows. Collapses to
+          // instant under prefers-reduced-motion via .animate-fade-up.
           <div
             key={a.id}
-            className={`overflow-hidden rounded-xl border bg-card/70 ${
+            style={{ animationDelay: `${Math.min(i, 8) * 70}ms` }}
+            className={`animate-fade-up overflow-hidden rounded-xl border bg-card/70 ${
               picked
                 ? "border-[color:var(--indigo-35)]"
                 : "border-[color:var(--hairline)]"
