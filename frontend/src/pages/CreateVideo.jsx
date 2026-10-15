@@ -1713,14 +1713,17 @@ setObjective("");
   // refuse to generate until the plan's inputs exist. Profile, then angle,
   // then goal (both live on step 1), then template. The button below names
   // the destination, so this stays data — never a second copy of the labels.
+  // Each label carries "first" on purpose: the founder is being sent back
+  // because this action gates everything after it, and the button must say
+  // so rather than reading as a plain navigation link.
   const firstGap = !profileId
-    ? { step: 0, label: "Choose an App Profile" }
+    ? { step: 0, label: "Choose an App Profile first" }
     : !angle
-      ? { step: 1, label: "Pick an audience angle" }
+      ? { step: 1, label: "Pick an audience angle first" }
       : !objective
-        ? { step: 1, label: "Set the video goal" }
+        ? { step: 1, label: "Set the video goal first" }
         : !effectiveTemplateId
-          ? { step: 2, label: "Pick a template" }
+          ? { step: 2, label: "Pick a template first" }
           : null;
 
   // Face-only product: every template requires exactly the character
