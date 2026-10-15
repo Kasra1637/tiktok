@@ -2281,8 +2281,12 @@ setObjective("");
                 fact needed a third copy. */}
             {!canGenerate ? (
               <div className="inset-panel">
+                {/* One sentence: the rail above already names the first
+                    missing piece, so this states the whole prerequisite chain
+                    once and stops — no action lives here because the next
+                    move differs per founder. */}
                 <p className="text-sm text-muted-foreground">
-                  Choose an approved App Profile, a video goal, and a template first. Review the free script plan before rendering.
+                  Choose an App Profile, goal, and template first, then review the free plan before rendering.
                 </p>
               </div>
             ) : blockedOnAssets ? (
@@ -2297,7 +2301,6 @@ setObjective("");
                 </p>
                 <Button
                   variant="brand"
-                  size="sm"
                   className="mt-3"
                   disabled={busy}
                   onClick={() => ensureProject()}
@@ -2314,12 +2317,11 @@ setObjective("");
                       There's no plan yet. Generate one on Review first — it is free.
                     </p>
                     <Button
-                      variant="secondary"
-                      size="sm"
-                      className="mt-3"
+                      variant="brand"
+                      className="mt-3 gap-1.5"
                       onClick={() => setStep(3)}
                     >
-                      Go to Review
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Go to Review
                     </Button>
                   </div>
                 ) : (
@@ -2434,8 +2436,12 @@ if (step === 3) {
              the goal is missing. Name it and fix it here — choosing the goal
              starts the plan on its own, no button press. */
           <div className="inset-panel space-y-3">
+            {/* The label carries "still missing" so the paragraph doesn't
+                have to end on it: one voice names the gap, the other states
+                when the plan appears. */}
+            <GroupLabel icon={ListChecks}>Still missing</GroupLabel>
             <p className="text-sm text-muted-foreground">
-              Your free script plan appears once an App Profile, audience angle, template, and video goal are set. Still missing:
+              Your free script plan appears once an App Profile, audience angle, template, and video goal are set.
             </p>
             <ul className="space-y-2 text-sm">
               {!profileId && (
