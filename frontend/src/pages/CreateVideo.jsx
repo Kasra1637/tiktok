@@ -498,13 +498,10 @@ function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
 }
 
 /**
- * The studio's one angle-selection control, reused by every step that offers it.
- *
- * This was inline on the Audience & goal step alone. Review and Hook + Story
- * each carried their own plainer version — a flat list of angle names beside a
- * "Pick a template" pill — so the same choice rendered three ways: no check
- * mark, no expansion, and no way to regenerate. One control, one behaviour,
- * wherever the founder is asked for it.
+ * The studio's angle-selection control. It lives on Audience & goal and on
+ * Hook + Story — one control, one behaviour, wherever the founder is asked
+ * for it. Review picks the angle through the red jump back to step 1 plus
+ * the goal picker's waits marker, never a second copy of this list.
  *
  * Landing is always gated: one "Generate angles" action, never a finished list.
  * The click reveals a pre-generated set for free (the server generates on
@@ -512,11 +509,6 @@ function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
  * step can spend a call the founder did not ask for. "Regenerate angles"
  * appears only beside a visible list, where it always has a current generation
  * to act on.
- *
- * `bare` drops the `.inset-panel` frame and renders content only. It exists
- * because Review and Hook + Story already sit inside an inset-panel of their
- * own, and a bordered aside inside a bordered aside is the box-in-a-box the
- * container levels in design_guidelines.md §4 reserve.
  */
 function AngleSelector({
   angles,
@@ -528,7 +520,12 @@ function AngleSelector({
   onGenerate,
   onRegenerate,
   notice = "",
-  bare = false,
+  // Steps other than Audience & goal never generate inline: their red button
+  // sends the founder to step 1, where selection lives, instead of spending
+  // a call from a screen whose job is something else. The label names the
+  // destination so the redirect never reads as a broken Generate.
+  generateLabel = "Generate angles",
+  generatingLabel = "Generating…",
 }) {
   // Live count-up while a generation is in flight ("Reading angle 3 of 6…").
   // It answers the only question a spinner cannot — is this fresh work or a
@@ -579,7 +576,7 @@ function AngleSelector({
         ) : (
           <Sparkles className="h-3.5 w-3.5" />
         )}
-        {generating ? "Generating…" : "Generate angles"}
+            {generating ? generatingLabel : generateLabel}
           </Button>
           {progressLine}
         </div>
@@ -689,8 +686,6 @@ function AngleSelector({
     </div>
   );
 
-  if (bare) return body;
-
   return (
     <div className="inset-panel space-y-2">
       <GroupLabel as="label" icon={Target}>
@@ -730,6 +725,9 @@ function AngleGoalPicker({
   suggestions,
   onRegenerate,
   regenerating = false,
+  // Jump back to step 1. Only Review passes it — step 1's own selector sits
+  // directly above, so rendering it there would duplicate the way there.
+  onChooseAngle,
 }) {
   const knownGoals = Array.isArray(options) ? options : [];
   const orderedGoals =
@@ -764,16 +762,20 @@ function AngleGoalPicker({
   }, [regenerating, shuffleTotal]);
 
   if (!angle) {
-    /* The waits marker only. This used to fall back to a flat list of angle
-       names of its own — no check mark, no expansion, no regenerate — which is
-       the second implementation `AngleSelector` replaced. Every step now picks
-       the angle through that one control, and this picker states plainly that
-       it is waiting for it. */
+    /* The waits marker only, plus the red jump back when the caller provides
+       one. Step 1 does not pass onChooseAngle — its selector sits directly
+       above — so this button only ever renders on Review, where no angle
+       control remains and the marker alone would strand the founder. */
     return (
       <div className="space-y-2" data-testid="goal-waits-for-angle">
         <p className="text-xs text-muted-foreground" data-subtitle="">
           Pick an audience angle first — goals are ranked for it.
         </p>
+        {onChooseAngle && (
+          <Button variant="brand" size="sm" onClick={onChooseAngle} className="gap-1.5" data-testid="goto-angle-step-button">
+            <Target className="h-3.5 w-3.5" /> Pick an audience angle first
+          </Button>
+        )}
       </div>
     );
   }
@@ -1821,22 +1823,17 @@ setObjective("");
   const effectiveTemplateId = templateId || project?.template_id;
   const canGenerate = Boolean(profileId && effectiveTemplateId);
 
-  // First missing choice in flow order, for the one red button on panels that
-  // refuse to generate until the plan's inputs exist. Profile, then angle,
-  // then goal (both live on step 1), then template. The button below names
-  // the destination, so this stays data — never a second copy of the labels.
-  // Each label carries "first" on purpose: the founder is being sent back
-  // because this action gates everything after it, and the button must say
-  // so rather than reading as a plain navigation link.
+  // First missing choice that has no fix in place, for the one red button on
+  // panels that refuse to generate until the plan's inputs exist. Profile and
+  // template can only be chosen on their own steps; angle and goal are fixed
+  // right here through the waits marker's own jump and the inline goal list,
+  // so they never route through this button. The label names the destination,
+  // and each carries "first" because the action gates everything after it.
   const firstGap = !profileId
     ? { step: 0, label: "Choose an App Profile first" }
-    : !angle
-      ? { step: 1, label: "Pick an audience angle first" }
-      : !objective
-        ? { step: 1, label: "Set the video goal first" }
-        : !effectiveTemplateId
-          ? { step: 2, label: "Pick a template first" }
-          : null;
+    : !effectiveTemplateId
+      ? { step: 2, label: "Pick a template first" }
+      : null;
 
   // Face-only product: every template requires exactly the character
   // reference, and the backend refuses a generation without one (see
@@ -2212,7 +2209,7 @@ setObjective("");
                   Set the goal first, then the templates are ranked for it.
                 </p>
                 <Button variant="brand" onClick={() => setStep(1)} className="gap-1.5">
-                  <Target className="h-3.5 w-3.5" /> Set the goal
+                  <Target className="h-3.5 w-3.5" /> Set the goal first
                 </Button>
               </div>
             )}
@@ -2410,11 +2407,11 @@ setObjective("");
                 fact needed a third copy. */}
             {!angle ? (
               /* The render is built around the audience angle, so it is the
-                 first thing asked for here. This step used to have no angle
-                 control at all: it could only point back at Audience & goal
-                 (via the strategy panel) or at Review, leaving the choice
-                 stranded on another screen while the founder was here to make
-                 it. Same control, same gate, same position as step two. */
+                 first thing asked for here. This step never generates: its red
+                 button sends the founder to Audience & goal, where selection
+                 lives, instead of spending a call from a screen whose job is
+                 the render. Same control and gate as step two; only the red
+                 action differs, and its label names the destination. */
               <AngleSelector
                 angles={angles}
                 angleId={angleId}
@@ -2422,7 +2419,8 @@ setObjective("");
                 showAngles={showAngles}
                 generating={generatingAngles}
                 error={angleError}
-                onGenerate={handleGenerateAngles}
+                onGenerate={() => setStep(1)}
+                generateLabel="Pick an audience angle first"
                 onRegenerate={handleRegenerateAngles}
                 notice={angleRegenNotice}
               />
@@ -2488,7 +2486,7 @@ setObjective("");
                       className="mt-3 gap-1.5"
                       onClick={() => setStep(3)}
                     >
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Go to Review
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Go to Review first
                     </Button>
                   </div>
                 ) : (
@@ -2551,37 +2549,23 @@ if (step === 3) {
               The plan didn't generate. Fix what's missing below, then try again — still free.
             </p>
             {(!objective || !angle) && (
-              /* The angle is picked here, with the same control every other
-                 step uses. `bare` because this panel is already an
-                 inset-panel, and a bordered aside inside one is the box-in-a-box
-                 the container levels reserve. */
-              <>
-                <AngleSelector
-                  bare
-                  angles={angles}
-                  angleId={angleId}
-                  onSelect={setAngleId}
-                  showAngles={showAngles}
-                  generating={generatingAngles}
-                  error={angleError}
-                  onGenerate={handleGenerateAngles}
-                  onRegenerate={handleRegenerateAngles}
-                  notice={angleRegenNotice}
-                />
-                <AngleGoalPicker
-                  angle={angle}
-                  value={objective}
-                  onPick={setObjective}
-                  options={objectiveOptions}
-                  recommendations={recommendedObjectives}
-                  outcomes={objectiveOutcomes}
-                  fitReasons={objectiveFitReasons}
-                  onChooseAngle={() => setStep(1)}
-                  suggestions={angle?.goal_suggestions}
-                  onRegenerate={handleRegenerateGoals}
-                  regenerating={cyclingGoals}
-                />
-              </>
+              /* Angle and goal are chosen on step 1, not here: this panel used
+                 to carry the shared selector, but a second full copy beside
+                 the retry button split the flow in two. The goal picker below
+                 states what it waits for, and its own control jumps there. */
+              <AngleGoalPicker
+                angle={angle}
+                value={objective}
+                onPick={setObjective}
+                options={objectiveOptions}
+                recommendations={recommendedObjectives}
+                outcomes={objectiveOutcomes}
+                fitReasons={objectiveFitReasons}
+                onChooseAngle={() => setStep(1)}
+                suggestions={angle?.goal_suggestions}
+                onRegenerate={handleRegenerateGoals}
+                regenerating={cyclingGoals}
+              />
             )}
             <Button
               variant="brand"
@@ -2639,38 +2623,23 @@ if (step === 3) {
                 {firstGap.label}
               </Button>
             )}
-            {/* The angle is chosen here with the same control every other step
-                uses. It sits below the red button because that button jumps
-                to another step, while this one IS the choice being made
-                right here. */}
+            {/* Angle and goal are chosen on step 1, not here. The goal picker
+                below states what it waits for and carries the red jump back;
+                angle selection itself lives in exactly one place. */}
             {(!objective || !angle) && (
-              <>
-                <AngleSelector
-                  bare
-                  angles={angles}
-                  angleId={angleId}
-                  onSelect={setAngleId}
-                  showAngles={showAngles}
-                  generating={generatingAngles}
-                  error={angleError}
-                  onGenerate={handleGenerateAngles}
-                  onRegenerate={handleRegenerateAngles}
-                  notice={angleRegenNotice}
-                />
-                <AngleGoalPicker
-                  angle={angle}
-                  value={objective}
-                  onPick={setObjective}
-                  options={objectiveOptions}
-                  recommendations={recommendedObjectives}
-                  outcomes={objectiveOutcomes}
-                  fitReasons={objectiveFitReasons}
-                  onChooseAngle={() => setStep(1)}
-                  suggestions={angle?.goal_suggestions}
-                  onRegenerate={handleRegenerateGoals}
-                  regenerating={cyclingGoals}
-                />
-              </>
+              <AngleGoalPicker
+                angle={angle}
+                value={objective}
+                onPick={setObjective}
+                options={objectiveOptions}
+                recommendations={recommendedObjectives}
+                outcomes={objectiveOutcomes}
+                fitReasons={objectiveFitReasons}
+                onChooseAngle={() => setStep(1)}
+                suggestions={angle?.goal_suggestions}
+                onRegenerate={handleRegenerateGoals}
+                regenerating={cyclingGoals}
+              />
             )}
           </div>
         ) : (

@@ -3248,6 +3248,37 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
+  // Hook + Story never generates angles: its red button names Audience & goal
+  // and jumps there, so no call goes out from a screen whose job is the render.
+  await check("Hook + Story redirects angle-less founders instead of generating", async (ctx) => {
+    const FRESH = { ...PROFILE, id: "b9", brand_name: "Freshly" };
+    await withApi({
+      getAppProfiles: async () => ({ profiles: [FRESH] }),
+      getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B] }),
+    }, async () => {
+      global.__SMOKE_PARAMS = "";
+      await mount(CreateVideo, {})(ctx);
+      await openStep(ctx, "Hook + Story");
+      const btn = ctx.container.querySelector('[data-testid="generate-angles-button"]');
+      if (!btn) throw new Error("no angle CTA on Hook + Story with no angle picked");
+      if (!/Pick an audience angle/.test(btn.textContent || "")) {
+        throw new Error(`the CTA does not name its destination: ${JSON.stringify(btn.textContent)}`);
+      }
+      apiCalls.length = 0;
+      await clickEl(ctx, btn);
+      if (apiCalls.includes("generateContentAngles") || apiCalls.includes("regenerateContentAngles")) {
+        throw new Error("Hook + Story spent an angle call instead of redirecting");
+      }
+      const pill = ctx.container.querySelector('[data-testid="step-pill-angle"]');
+      if (!pill || pill.getAttribute("aria-current") !== "step") {
+        throw new Error("the red button did not land on the Audience & goal step");
+      }
+      if (ctx.container.querySelector('[data-testid^="angle-option-"]')) {
+        throw new Error("an angle list rendered outside its home step");
+      }
+    });
+  });
+
   await check("a failed angle generation is named and stays retryable", async (ctx) => {
     await withApi({
       getContentAngles: async () => ({ angles: [] }),
@@ -4293,11 +4324,16 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await openStep(ctx, "Review");
         if (plans !== 0) throw new Error("a plan was generated before an angle was selected");
         if (ctx.text().includes("Generating your plan")) throw new Error("Review spins while missing an angle");
-        // The same gate every step uses: reveal the angles, then pick one. The
-        // old Review-only plain list is gone — Review now renders the shared
-        // angle selector, so it is reached exactly the way Audience & goal is.
-        await clickEl(ctx, ctx.container.querySelector('[data-testid="generate-angles-button"]'));
+        // No angle control lives here anymore: one red jump back to step 1,
+        // where selection happens, then back to Review for the plan.
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="goto-angle-step-button"]'));
+        const pill = ctx.container.querySelector('[data-testid="step-pill-angle"]');
+        if (!pill || pill.getAttribute("aria-current") !== "step") {
+          throw new Error("the red button did not land on the Audience & goal step");
+        }
+        await passAngleGate(ctx);
         await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'));
+        await openStep(ctx, "Review");
         await act(async () => {});
         if (plans !== 1) throw new Error(`selecting an angle started ${plans} plans instead of one`);
       });
