@@ -26,6 +26,11 @@ One render path, single-pass video generation via OpenRouter.
   (retry policy). Prompt budget + sacred-script rule live here.
 - `frontend/src/components/GenerationPanel.jsx` — the render panel; errors via
   `lib/errorMessage.js`. Card padding/spacing tokens live in `index.css`.
+- `frontend/src/demoCta/` — canvas overlay system; `overlays.js` motion is a
+  pure function of video time (export matches preview), faces come from
+  `OVERLAY_FONTS` (vendored woff2 only). See ADR 0007.
+- `frontend/src/pages/CreateVideo.jsx` — the 5-step wizard; `AngleSelector` is
+  the only angle control (step 1 selects, other steps navigate).
 
 ## Conventions
 
@@ -36,12 +41,18 @@ One render path, single-pass video generation via OpenRouter.
 - Significant trade-offs add or supersede a record in `docs/adr/` same-commit
   (see `docs/adr/README.md` for the rules).
 - Fail loudly, never silently: no fallback model, no invented lookalike, no
-  generic take. A refusal must name the next step.
+  generic take. A refusal must name the next step. A red button that cannot
+  act must navigate to what's missing instead of dying silently.
+- Wizard subtitles carry `data-subtitle`, stay `text-xs` and 55–60 chars,
+  enforced by the smoke suite. Loading indicators narrate fresh work and
+  unmount on settle *and* error; lists arrive staggered, collapsing to
+  instant under reduced motion.
 - `memory/` is an empty stub, not a system. `test_reports/` holds committed
   review evidence; scratch logs stay untracked.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first — decisions 0001–0005 constrain the submit
-path, identity routing, temperature handling, single-pass scope, and prompt
-ceilings. Frontend design constraints live in `design_guidelines.md`.
+Read `docs/adr/README.md` first — decisions 0001–0007 constrain the submit
+path, identity routing, temperature handling, single-pass scope, prompt
+ceilings, Grok retirement, and overlay fonts/motion. Frontend design
+constraints live in `design_guidelines.md`.
