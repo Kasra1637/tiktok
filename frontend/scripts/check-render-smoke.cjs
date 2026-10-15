@@ -3047,7 +3047,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       });
       await act(async () => {});
       const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
-      if (!step?.textContent.includes("Get your six audience angles, then pick one.")) {
+      if (!step?.textContent.includes("Get your six audience angles, then pick one to move forward.")) {
         throw new Error("the empty angle state does not carry the single CTA copy");
       }
       const button = step.querySelector('[data-testid="generate-angles-button"]');
@@ -3487,7 +3487,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
     // ...and it must say what is missing and how to fix it, rather than
     // rendering an empty step.
-    if (!text.includes("Set the goal first, then templates are ranked for it.")) {
+    if (!text.includes("Set the goal first, then the templates are ranked for it.")) {
       throw new Error("the template step does not explain that the objective is required");
     }
     const back = [...ctx.container.querySelectorAll("button")]
@@ -6358,6 +6358,73 @@ async function runDemoCtaChecks() {
     if (problems.length) {
       throw new Error(
         `masthead subtitles outside the ${MIN}-${MAX} char budget:\n        ` +
+          problems.join("\n        ")
+      );
+    }
+  });
+
+  // The same budget, one level down: the helper sentence under a group label
+  // or a field label inside a wizard step. It had drifted the way the masthead
+  // did, and worse — the Template card and the Presenter photo card sit side by
+  // side in the same step, and their subtitles rendered at 12px and 14px while
+  // running 53 and 197 characters. A different size read as a different kind of
+  // control, and a two-sentence subtitle pushed its own card's content down.
+  //
+  // Read from source with `data-subtitle` as the selector, not from a mount:
+  // these sit behind four different API states and a render would only cover
+  // whichever one a fixture happened to set up. The marker is the point — a
+  // subtitle added later without it fails the marker-count below rather than
+  // quietly joining the set with no budget.
+  //
+  // Scope is deliberate. This covers label-attached helper copy ONLY. Spinner
+  // text, error strings and whole state panels ("The plan didn't generate…")
+  // are body copy with a job of their own, and padding them to 55 would cost
+  // the founder the instruction. They are not tagged, so they stay out.
+  await check("every wizard subtitle fits the shared size and length budget", async () => {
+    const MIN = 55;
+    const MAX = 60;
+    const FILE = path.join(__dirname, "..", "src/pages/CreateVideo.jsx");
+    const text = fs.readFileSync(FILE, "utf8");
+    const found = [];
+    for (const m of text.matchAll(/<p className="([^"]*)"[^>]*data-subtitle=""[^>]*>([\s\S]*?)<\/p>/g)) {
+      const copy = m[2]
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&apos;/g, "'")
+        .replace(/&amp;/g, "&")
+        .replace(/\s+/g, " ")
+        .trim();
+      // This element renders a shared constant, so its own text is the
+      // identifier, not the sentence. Counted once, resolved, below.
+      if (/^\{[A-Z_]+\}$/.test(copy)) continue;
+      found.push({ cls: m[1], copy });
+    }
+    // The angles CTA copy renders from a shared constant, so its own <p> holds
+    // only the identifier. Count it separately rather than pretending it is
+    // empty: a constant that drifts out of budget must still be caught.
+    const cta = /const ANGLES_CTA_COPY = "([^"]*)"/.exec(text);
+    if (cta) found.push({ cls: "text-xs", copy: cta[1] });
+
+    if (!found.length) {
+      throw new Error(
+        "no data-subtitle elements found in CreateVideo.jsx. The marker is what this " +
+          "check selects on; if the subtitles moved, re-mark them rather than " +
+          "deleting the check."
+      );
+    }
+
+    const problems = [];
+    for (const { cls, copy } of found) {
+      const line = text.split("\n").findIndex((l) => l.includes(`data-subtitle=""`) && l.includes(cls.split(" ").pop()));
+      if (/\btext-sm\b|\btext-base\b|\btext-lg\b/.test(cls)) {
+        problems.push(`not text-xs (class "${cls.trim()}") — "${copy}"`);
+      }
+      if (copy.length < MIN || copy.length > MAX) {
+        problems.push(`${copy.length} chars — "${copy}"`);
+      }
+    }
+    if (problems.length) {
+      throw new Error(
+        `wizard subtitles outside text-xs + ${MIN}-${MAX} chars:\n        ` +
           problems.join("\n        ")
       );
     }

@@ -168,6 +168,30 @@ researched description) is exempt: that is the founder's app talking, not page
 chrome. `frontend/scripts/check-render-smoke.cjs` asserts the budget for all
 six and fails on a page that drops its subtitle entirely.
 
+**Every wizard subtitle is `text-xs` and fits a 55-60 character budget.** This
+is the same rule one level down from the masthead budget above: the helper
+sentence under a group label or a field label inside a Create Video step. It
+existed because the Template and Presenter photo cards — which sit side by side
+in the same step — rendered their subtitles at 12px and 14px while running 53 and
+197 characters, so a different size read as a different kind of control and a
+two-sentence subtitle pushed its own card's content down. `text-xs` is the size
+because §3 assigns 12px to hints, and a subtitle is a hint.
+
+A subtitle is marked `data-subtitle=""`, and
+`frontend/scripts/check-render-smoke.cjs` asserts the size and the band for every
+marked line — so a subtitle added later is either in budget or fails, rather than
+re-deciding its own length. The marker is what the check selects on: if the
+subtitles move, re-mark them instead of deleting the check.
+
+Scope is label-attached helper copy only. Spinner text, error strings and whole
+state panels ("The plan didn't generate…") are body copy doing a job of their
+own, and padding them to 55 would cost the founder the instruction. They carry no
+marker and stay out of the budget. One consequence worth naming: because a
+subtitle is now too short to carry a second idea, a second thing that belongs to
+the same card gets its own marked line — which is how the outcome card keeps its
+"a framing, not a result this video can promise" guardrail after the budget
+forced it out of the subtitle.
+
 **App Profile is the reference for workspace section headings.** Every section
 uses `SectionHeading`: body family, 14px/600, 22px line-height, all caps,
 0.08em tracking and full muted color, beside a 16px unboxed outline glyph.

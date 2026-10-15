@@ -96,7 +96,7 @@ const STEPS = [
    different words, and the step stalled on reading instead of moving. The
    verb is deliberately neutral — "get" covers generating fresh angles and
    revealing pre-generated ones, so the line never disagrees with its button. */
-const ANGLES_CTA_COPY = "Get your six audience angles, then pick one.";
+const ANGLES_CTA_COPY = "Get your six audience angles, then pick one to move forward.";
 
 function formatTemplateUse(n) {
   if (!n) return "Never used";
@@ -314,8 +314,8 @@ function MissingRequirements({ identity, onGoToTemplatePhoto }) {
       <p className="text-sm font-semibold">
         This template needs a character reference before it can generate
       </p>
-      <p className="text-xs text-muted-foreground">
-        The video is generated from your photograph.
+      <p className="text-xs text-muted-foreground" data-subtitle="">
+        Your photograph is what the generated video is built from.
       </p>
       {/* The button says where the upload is, and the upload is on the template
           step now. It used to point at a step called "Assets" whose only
@@ -528,7 +528,7 @@ function AngleSelector({
 }) {
   const body = !showAngles || angles.length === 0 ? (
     <div className="space-y-2">
-      <p className="text-xs text-muted-foreground" data-testid="angles-cta-copy">
+      <p className="text-xs text-muted-foreground" data-testid="angles-cta-copy" data-subtitle="">
         {ANGLES_CTA_COPY}
       </p>
       {error && (
@@ -711,8 +711,8 @@ function AngleGoalPicker({
        it is waiting for it. */
     return (
       <div className="space-y-2" data-testid="goal-waits-for-angle">
-        <p className="text-xs text-muted-foreground">
-          Pick an audience angle first — the goals below are ranked for it.
+        <p className="text-xs text-muted-foreground" data-subtitle="">
+          Pick an audience angle first — goals are ranked for it.
         </p>
       </div>
     );
@@ -1970,8 +1970,8 @@ setObjective("");
                       {unapproved.map(profileLabel).join(", ")}
                     </p>
                   )}
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Draft profiles need review and approval before you can use them in a video.
+                  <p className="mt-2 text-xs text-muted-foreground" data-subtitle="">
+                    Draft profiles need review before a video can use them.
                   </p>
                   <Button variant="secondary" size="sm" asChild className="mt-3">
                     <Link to="/brand">Review in App Profile</Link>
@@ -2076,8 +2076,8 @@ setObjective("");
                     centered box said the same thing with more chrome and a
                     quieter button. */}
                 <GroupLabel icon={LayoutTemplate}>Template</GroupLabel>
-                <p className="text-xs text-muted-foreground">
-                  Set the goal first, then templates are ranked for it.
+                <p className="text-xs text-muted-foreground" data-subtitle="">
+                  Set the goal first, then the templates are ranked for it.
                 </p>
                 <Button variant="brand" onClick={() => setStep(1)} className="gap-1.5">
                   <Target className="h-3.5 w-3.5" /> Set the goal
@@ -2210,15 +2210,25 @@ setObjective("");
                 attach to. */}
             {/* Second sub-card in the same style, not a divided-off section:
                 the parent's gap separates it, the way the angle picker's
-                groups sit apart. One helper line: the always-true upload
-                sentence with the gated consequence appended while gated. */}
+                groups sit apart. Same one-line helper at the same size as the
+                template card above — the two sit side by side, so a different
+                type size read as a different kind of control. The gated
+                consequence moved off this line and into the empty state below,
+                which is where a founder blocked on a missing template already
+                reads why. */}
             <div id="template-photo" className="inset-panel space-y-2">
               <GroupLabel icon={ImageIcon}>Presenter photo</GroupLabel>
-              <p className="text-sm text-muted-foreground">
-                Upload a clear photo of the person you want on camera. It guides the generated presenter; the scene is created from your App Profile.
-                {!templateId && " Pick a template above first; your photo attaches to this draft."}
+              <p className="text-xs text-muted-foreground" data-subtitle="">
+                Upload one clear photo of the person you want on camera.
               </p>
-              {!templateId ? null : !project ? (
+              {!templateId ? (
+                /* Gated, the card would otherwise be a label and a sentence
+                   with nothing under them. This says what is waiting, on the
+                   same size and budget as the subtitle above. */
+                <p className="text-xs text-muted-foreground" data-subtitle="">
+                  Pick a template above first; your photo attaches to it.
+                </p>
+              ) : !project ? (
                 <>
                   <p className="text-sm text-muted-foreground">
                     Preparing the video draft for your photo…
@@ -2426,7 +2436,7 @@ if (step === 3) {
               <Sparkles className="h-4 w-4" />
               Try again
             </Button>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground" data-subtitle="">
               Writes hook, script, shots, and demo note. Editable below.
             </p>
           </div>
@@ -2458,8 +2468,8 @@ if (step === 3) {
                 have to end on it: one voice names the gap, the other states
                 when the plan appears. */}
             <GroupLabel icon={ListChecks}>Still missing</GroupLabel>
-            <p className="text-sm text-muted-foreground">
-              Your free script plan appears once an App Profile, audience angle, template, and video goal are set.
+            <p className="text-xs text-muted-foreground" data-subtitle="">
+              Your plan appears once an app, angle, and template are set.
             </p>
             <ul className="space-y-2 text-sm">
               {!profileId && (
@@ -2510,8 +2520,8 @@ if (step === 3) {
                 />
               </>
             )}
-            <p className="text-xs text-muted-foreground">
-              No extra generate button is needed here. The free plan starts when the required choices are set.
+            <p className="text-xs text-muted-foreground" data-subtitle="">
+              The free plan starts on its own once the choices are set.
             </p>
           </div>
         ) : (
@@ -2578,8 +2588,8 @@ if (step === 3) {
                 testId="review-thumb"
                 onChange={handleReviewThumb}
               />
-              <p className="text-xs text-muted-foreground">
-                Thumbs up moves to Hook + Story. Thumbs down writes a fresh plan (claim-checked, up to three per version). Editing by hand still works.
+              <p className="text-xs text-muted-foreground" data-subtitle="">
+                Thumbs up moves on; thumbs down writes a fresh plan for you.
               </p>
             </div>
             <GroupLabel icon={FileText}>Script</GroupLabel>
@@ -2596,9 +2606,16 @@ if (step === 3) {
               <div className="inset-panel">
                 <GroupLabel icon={Target}>What this is aiming to leave them with</GroupLabel>
                 <p className="mt-1 text-sm">{sentenceCase(template.outcome.trim())}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  The outcome this template is built for, in the viewer&apos;s terms. The script
-                  below is written to it — a framing, not a result this video can promise.
+                <p className="mt-1 text-xs text-muted-foreground" data-subtitle="">
+                  The outcome this template is built for, in their terms.
+                </p>
+                {/* Its own line, not a clause of the subtitle above: this is the
+                    honesty guardrail — the outcome is a framing to write toward,
+                    never a promise about what the video will do. Folding it into
+                    the subtitle is exactly how it got cut once already, and the
+                    budget would have taken it again. */}
+                <p className="text-xs text-muted-foreground" data-subtitle="">
+                  A framing to aim at, not a result this video can promise.
                 </p>
               </div>
             )}
@@ -2622,7 +2639,7 @@ if (step === 3) {
             )}
             <div className="space-y-2">
               <label className="text-sm font-semibold">Hook line</label>
-              <p className="text-xs text-muted-foreground">The opening line spoken in your generated Hook + Story clip.</p>
+              <p className="text-xs text-muted-foreground" data-subtitle="">The opening line spoken in your generated Hook + Story clip.</p>
               <Input
                 value={editValue("hook_line", "")}
                 onChange={(e) => setEdits({ ...edits, hook_line: e.target.value })}
@@ -2630,7 +2647,7 @@ if (step === 3) {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-semibold">Script</label>
-              <p className="text-xs text-muted-foreground">The spoken story after the hook. The generated clip does not include your filmed product demo or closing CTA.</p>
+              <p className="text-xs text-muted-foreground" data-subtitle="">The spoken story after the hook — demo and CTA stay yours.</p>
               <Textarea
                 value={editValue("script", "")}
                 onChange={(e) => setEdits({ ...edits, script: e.target.value })}
@@ -2705,8 +2722,8 @@ if (step === 3) {
                     rewritten to fit, or shorten the script above and rebuild the strategy.
                   </p>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Your whole script fits in the middle — every word above is spoken.
+                  <p className="text-xs text-muted-foreground" data-subtitle="">
+                    Your whole script fits the middle — every word is spoken.
                   </p>
                 )}
               </div>
@@ -2734,14 +2751,14 @@ if (step === 3) {
                 className="min-h-[70px]"
                 placeholder="For example: Record yourself tapping the timer once, hands only"
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground" data-subtitle="">
                 A note to you, not the model — never reaches the render.
               </p>
             </div>
             <GroupLabel icon={AudioLines}>Visual &amp; audio direction</GroupLabel>
             <div className="space-y-2">
               <label className="text-sm font-semibold">Visual direction</label>
-              <p className="text-xs text-muted-foreground">Describe the generated scene and look. This is guidance for the rendered Hook + Story, not footage of your app demo.</p>
+              <p className="text-xs text-muted-foreground" data-subtitle="">Guidance for the generated clip, not footage of your demo.</p>
               <Textarea
                 value={editValue("visual_direction", "")}
                 onChange={(e) => setEdits({ ...edits, visual_direction: e.target.value })}
@@ -2851,8 +2868,8 @@ if (step === 3) {
               )}
             </div>
             {hasEdits && (
-              <p className="text-xs text-muted-foreground">
-                Save your edits before rendering. Your saved changes run through the claim check again.
+              <p className="text-xs text-muted-foreground" data-subtitle="">
+                Save your edits before rendering. Edits are claim-checked.
               </p>
             )}
             <MissingRequirements
