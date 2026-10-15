@@ -762,20 +762,11 @@ function AngleGoalPicker({
   }, [regenerating, shuffleTotal]);
 
   if (!angle) {
-    /* The waits marker, and nothing to read in it. It used to carry one line
-       — "Pick an audience angle first — goals are ranked for it." — which was
-       the third restatement of an instruction already on screen everywhere
-       this marker renders: on Audience & goal the angle picker sits directly
-       above with "(required)" and its one CTA sentence, and on Review the
-       single red firstGap button beside it names the missing angle and jumps
-       there. The red jump back lives in the owning panel, never here — one
-       gap, one button, or two missing prerequisites render two competing
-       "first" actions. Step 1 needs no jump at all: its selector sits directly
-       above.
-
-       The element stays because it is a contract, not copy: no goal button
-       may render before an angle exists, and this is what the smoke suite
-       asserts in their place. */
+    /* The waits marker, and nothing to read in it: no goal button may render
+       before an angle exists, and this is what the smoke suite asserts in
+       their place. The red jump back lives in the owning panel, never here —
+       one gap, one button, or two missing prerequisites render two competing
+       "first" actions. */
     return <div data-testid="goal-waits-for-angle" />;
   }
 
