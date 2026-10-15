@@ -2004,11 +2004,14 @@ setObjective("");
   /* What a satisfied pill names beside its tick. Derived like the states, so
      a changed pick renames its pill on the next render instead of going
      stale. Only done pills carry one: anything earlier has nothing picked
-     yet, and the render step never completes. */
+     yet, and the render step never completes.
+
+     The profile pill names nothing. It used to echo the chosen app's name
+     beside its "App Profile" label, which repeated the name the picker card
+     on step one already carries and read as a second label on the same
+     thing. Angle, template and plan keep their picks — those are choices
+     made here that nothing else on the page restates. */
   function pillValue(key) {
-    if (key === "profile") {
-      return profiles.find((p) => p.id === profileId)?.brand_name || null;
-    }
     if (key === "angle") {
       return angles.find((a) => a.id === angleId)?.label || objective || null;
     }
@@ -2310,7 +2313,7 @@ setObjective("");
                     immediately underneath is where the photo actually lives, so
                     the card's job is to say whether anything is still owed and
                     point at it. */}
-                {template.required_assets?.length > 0 && project && missingIdentity.length > 0 && (
+                {showAngles && template.required_assets?.length > 0 && project && missingIdentity.length > 0 && (
                   <Button
                     variant="secondary"
                     size="sm"
@@ -2353,6 +2356,15 @@ setObjective("");
                 consequence moved off this line and into the empty state below,
                 which is where a founder blocked on a missing template already
                 reads why. */}
+            {/* The photo is the identity input the render needs, and there is
+                nothing for it to attach to until the audience angles have
+                been generated: landing on this step straight from the pill,
+                before any angle exists, shows the template ask alone rather
+                than a section asking for a photograph nothing can use yet.
+                The card's "Add your photo below" pointer above is gated the
+                same way, so it can never scroll to a section that is not
+                there. */}
+            {showAngles && (
             <div id="template-photo" className="inset-panel space-y-2">
               <GroupLabel icon={ImageIcon}>Presenter photo</GroupLabel>
               <p className="text-xs text-muted-foreground" data-subtitle="">
@@ -2391,6 +2403,7 @@ setObjective("");
                 </>
               )}
             </div>
+            )}
           </div>
         </StepShell>
       );
@@ -2556,7 +2569,7 @@ if (step === 3) {
             {firstGap && (
               <Button
                 variant="brand"
-                size="sm"
+                className="gap-1.5"
                 onClick={() => setStep(firstGap.step)}
                 data-testid="plan-first-gap-button"
               >
@@ -2632,7 +2645,7 @@ if (step === 3) {
             {firstGap && (
               <Button
                 variant="brand"
-                size="sm"
+                className="gap-1.5"
                 onClick={() => setStep(firstGap.step)}
                 data-testid="goto-first-gap-button"
               >
