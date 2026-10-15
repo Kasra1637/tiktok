@@ -969,6 +969,31 @@ async function main() {
     }
   });
 
+  // The photo is the identity input the render needs, so it only makes sense
+  // once there is a story to put it in. Landing on the template step straight
+  // from the pill, with no audience angles generated, shows the template ask
+  // alone -- not a section asking for a photograph nothing can use yet.
+  await check("the presenter photo section waits for the audience angles", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await mount(CreateVideo, {})(ctx);
+    await openStep(ctx, "Template & photo");
+    if (ctx.text().includes("Presenter photo")) {
+      throw new Error("the presenter photo section shows before the audience angles are generated");
+    }
+    // Generating and picking an angle is what proceeds the photo: the same
+    // step now offers the section.
+    await openStep(ctx, "Audience & goal");
+    await passAngleGate(ctx);
+    const angleButton = [...ctx.container.querySelectorAll('[data-testid="audience-goal-step"] button')]
+      .find((button) => button.textContent.includes(ANGLE.label));
+    if (!angleButton) throw new Error("the audience step has no selectable audience angle");
+    await clickEl(ctx, angleButton);
+    await openStep(ctx, "Template & photo");
+    if (!ctx.text().includes("Presenter photo")) {
+      throw new Error("the presenter photo section did not appear after an angle was picked");
+    }
+  });
+
   await check("no step offers time-range or audio controls for an asset", async (ctx) => {
     // The video is one render with no compositing, so an asset has
     // no on-screen window and there is nothing to mix. The row used to carry
@@ -3700,6 +3725,26 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
+  // The profile pill names the step, not the app. Echoing the chosen app's
+  // name beside "App Profile" repeated what the step's own picker card already
+  // says and read as a second label on the same thing.
+  await check("the progress pill for the app does not echo the app name", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await mount(CreateVideo, {})(ctx);
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+    const pill = ctx.container.querySelector('[data-testid="step-pill-profile"]');
+    if (!pill) throw new Error("the progress pills carry no profile step");
+    if ((pill.textContent || "").trim() !== "App Profile") {
+      throw new Error(`the profile pill still names the app: ${JSON.stringify(pill.textContent)}`);
+    }
+    if (pill.getAttribute("aria-label") !== "App Profile: done") {
+      throw new Error(`the profile pill announces the app: ${pill.getAttribute("aria-label")}`);
+    }
+  });
+
   await check("goal options wait until the founder picks an audience angle", async (ctx) => {
     await withApi({ getContentAngles: async () => ({ angles: [] }) }, async () => {
       global.__SMOKE_PARAMS = "";
@@ -4403,6 +4448,35 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         }
         if (!/Pick an audience angle first/.test(firsts[0].textContent || "")) {
           throw new Error(`the lone action does not name the missing angle: ${JSON.stringify(firsts[0].textContent)}`);
+        }
+      });
+    } finally { global.__SMOKE_PARAMS = ""; }
+  });
+
+  // The red "Pick an audience angle first" on Review is the same ask as the
+  // one on Hook + Story, so it must be the same control: the small size read
+  // as a lesser action than the button it duplicates.
+  await check("Review's first-gap button is the Hook + Story control", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi({
+        getStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openStep(ctx, "Hook + Story");
+        const hookBtn = ctx.container.querySelector('[data-testid="generate-angles-button"]');
+        if (!hookBtn) throw new Error("Hook + Story has no angle CTA to compare against");
+        await openStep(ctx, "Review");
+        const reviewBtn = ctx.container.querySelector('[data-testid="goto-first-gap-button"]');
+        if (!reviewBtn) throw new Error("Review has no first-gap button");
+        if (!/Pick an audience angle first/.test(reviewBtn.textContent || "")) {
+          throw new Error(`Review's first-gap button names something else: ${JSON.stringify(reviewBtn.textContent)}`);
+        }
+        if (reviewBtn.className !== hookBtn.className) {
+          throw new Error(
+            "Review's first-gap button is not the Hook + Story control:\n" +
+              `  review: ${reviewBtn.className}\n  hook:   ${hookBtn.className}`
+          );
         }
       });
     } finally { global.__SMOKE_PARAMS = ""; }
