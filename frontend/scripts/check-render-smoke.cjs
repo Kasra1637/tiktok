@@ -6518,13 +6518,17 @@ async function runDemoCtaChecks() {
         path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
         "utf8"
       );
+      // The Zoom Lock label carries layout classes beside `eyebrow`
+      // (shrink-0 so the flexible description wraps before the label does),
+      // so match it by pattern, not by exact class string.
       const order = [
         "demo-cta-player",
         "demo-cta-scrubber",
         "transport-play",
         'data-testid="demo-cta-export"',
-        '<span className="eyebrow">Zoom Lock</span>',
       ].map((m) => src.indexOf(m));
+      const zoomMatch = /<span className="eyebrow[^"]*">Zoom Lock<\/span>/.exec(src);
+      order.push(zoomMatch ? zoomMatch.index : -1);
       if (order.some((i) => i === -1)) {
         throw new Error("the player card, scrubber, transport, Export, or Zoom Lock is missing from source");
       }
@@ -6571,6 +6575,39 @@ async function runDemoCtaChecks() {
       }
       if (/h-11 w-full[\s\S]{0,120}?demo-cta-export/.test(src)) {
         throw new Error("the Export button reverted to the full-width bar variant");
+      }
+      // The button must not be squeezable by its nowrap flex parent. It
+      // carries .btn-studio, whose overflow:hidden (the sheen sweep) zeroes
+      // the automatic minimum size flex items normally enjoy — so when the
+      // Zoom Lock group runs out of room the button shrinks below its own
+      // text and the same overflow clips "Export MP4" mid-label. shrink-0
+      // keeps its measured width; the flexible description beside it absorbs
+      // the squeeze instead, by wrapping.
+      if (!/shrink-0[\s\S]{0,200}?data-testid="demo-cta-export"/.test(src) && !/data-testid="demo-cta-export"[\s\S]{0,200}?shrink-0/.test(src)) {
+        throw new Error(
+          "the Export button is squeezable in its flex row. Without shrink-0 " +
+            "the row crushes it below its text and .btn-studio's overflow " +
+            "clips the label."
+        );
+      }
+      // The outer row is nowrap at xl by contract, so the Zoom Lock group on
+      // its right must be the part that gives: without min-w-0 + wrap on the
+      // inner group and a flexible description, the long "Hold the current
+      // zoom..." copy forces the row past the 740px column and the Export
+      // button clips at the column edge — shrink-0 alone only chooses WHAT
+      // clips, not whether. This pins the actual fix, not the intent.
+      if (!/ml-auto flex min-w-0 flex-wrap/.test(src)) {
+        throw new Error(
+          "the Zoom Lock group cannot give inside the nowrap row. Without " +
+            "min-w-0 + flex-wrap there, its description forces the row past " +
+            "the column and Export clips at the edge."
+        );
+      }
+      if (!/min-w-\[120px\][\s\S]{0,80}?flex-1[\s\S]{0,80}?text-xs leading-snug/.test(src)) {
+        throw new Error(
+          "the Zoom Lock description is not the flexible item. It must absorb " +
+            "the squeeze by wrapping instead of pushing Export out of the row."
+        );
       }
     }
   );
@@ -6666,7 +6703,8 @@ async function runDemoCtaChecks() {
           }
           // Order inside the player row: transport, time, Export, Zoom Lock.
           const exportIdx = src.indexOf('data-testid="demo-cta-export"');
-          const zoomIdx = src.indexOf('<span className="eyebrow">Zoom Lock</span>');
+          const zoomMatch2 = /<span className="eyebrow[^"]*">Zoom Lock<\/span>/.exec(src);
+          const zoomIdx = zoomMatch2 ? zoomMatch2.index : -1;
           const playIdx = src.indexOf('testId="transport-play"');
           if ([exportIdx, zoomIdx, playIdx].some((i) => i === -1)) {
             throw new Error("the player row is missing transport, Export, or Zoom Lock");
@@ -7643,6 +7681,34 @@ await check(
         if (!new RegExp(`${mode}: "`).test(editor.slice(editor.indexOf("VIDEO_FIT_HINTS")))) {
           throw new Error(`VIDEO_FIT_HINTS is missing the "${mode}" entry.`);
         }
+      }
+      // The hand-view branch once read `palette` above its declaration. A
+      // const in the temporal dead zone throws on ANY access — `?.` guards a
+      // nullish binding, not an undeclared one — so the first hand-mode frame
+      // died before rescheduling the loop and the canvas froze on the old
+      // view. The declaration must precede both renderer branches.
+      const declAt = editor.indexOf("const palette = COLOR_PALETTES[bg]");
+      if (declAt === -1) {
+        throw new Error("the shared palette declaration is gone from the draw path");
+      }
+      // Strip comments and the import line before looking: the explainer above
+      // the declaration names the old `palette` access in prose, and the
+      // module import mentions drawHandView — neither is a live read, but a
+      // naive slice(0, declAt) match treats both as one and fails forever.
+      const beforeDecl = editor
+        .slice(0, declAt)
+        .replace(/\/\/[^\n]*/g, "")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .split("\n")
+        .filter((line) => !/^\s*import\b/.test(line))
+        .join("\n");
+      const early = /palette\?\.\w+/.exec(beforeDecl);
+      if (early && beforeDecl.includes("drawHandView(")) {
+        throw new Error(
+          "the hand-view branch reads `palette` above its declaration. A const " +
+            "in the temporal dead zone throws even through `?.`, killing the " +
+            "draw loop on the first hand-mode frame."
+        );
       }
     }
   );

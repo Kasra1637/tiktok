@@ -702,6 +702,15 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         isExporting: isExportingRef.current,
       });
 
+      // Hoisted above both renderer branches: each draws the phone, and each
+      // needs the palette for the screen behind the footage. Left inside the
+      // float branch, the hand branch above referenced an identifier that did
+      // not exist in its scope — and optional chaining does not save that,
+      // it only guards a declared binding that happens to be nullish. A const
+      // read before its declaration throws, killing the draw loop on the
+      // first hand-mode frame and freezing the canvas.
+      const palette = COLOR_PALETTES[bg] || COLOR_PALETTES.lavender;
+
       if (viewMode === "hand" && video) {
         const t = performance.now() / 1000;
         drawHandView(ctx, cw, ch, video, envBg, t, videoFit, ez.vScale, ez.vOffX, ez.vOffY, { x: screenX, y: screenY, w: screenW, h: screenH }, ez.hZoom, ez.hPanX, ez.hPanY, palette?.bg2);
@@ -711,12 +720,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       }
 
       const isFloat = bg !== "transparent";
-      // Hoisted out of the float branch: both branches draw the phone, and both
-      // need the palette for the screen behind the footage. Left inside, the
-      // second call site referenced an identifier that did not exist in its
-      // scope — and `palette?.bg2` does not save that, optional chaining only
-      // guards a declared binding that happens to be nullish.
-      const palette = COLOR_PALETTES[bg] || COLOR_PALETTES.lavender;
 
       if (isFloat) {
         const t = performance.now() / 1000;
@@ -2049,7 +2052,14 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                       {formatTime(duration)}
                     </span>
                   </div>
-                  <div className="ml-auto flex items-center gap-1.5">
+                  {/* min-w-0 + wrap live here, not on the outer row: at xl the
+                      outer row is nowrap by contract, so without a squeezable
+                      inner group the long Zoom Lock description forced the row
+                      past the 740px column and the Export button clipped at the
+                      column edge. The description is the flexible item — it
+                      wraps onto its own line inside this group while Export,
+                      the label and + Lock keep their measured widths. */}
+                  <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-1.5 gap-y-1">
                     {/* Export lives here, not in a bar of its own. The primary
                         action beside the Zoom Lock controls is where a decision
                         gets made — a separate bottom bar meant the column spent
@@ -2062,6 +2072,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                       disabled={!videoUrl || !videoMeta || recording || saving}
                       onClick={exportVideo}
                       data-testid="demo-cta-export"
+                      className="shrink-0"
                       title={(() => {
                         const pre = PRESETS.find((p) => p.id === preset) || PRESETS[0];
                         return `Export at ${pre.id === "source" ? "the phone's own size" : `${pre.w}x${pre.h}`}`;
@@ -2073,15 +2084,15 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                         <><Smartphone className="h-3.5 w-3.5" /> {bg === "transparent" ? "Export WebM" : "Export MP4"}</>
                       )}
                     </Button>
-                    <span aria-hidden="true" className="text-muted-foreground/40">|</span>
-                    <span className="eyebrow">Zoom Lock</span>
-                    <span className="text-xs text-muted-foreground">Hold the current zoom from this point in the clip.</span>
+                    <span aria-hidden="true" className="shrink-0 text-muted-foreground/40">|</span>
+                    <span className="eyebrow shrink-0">Zoom Lock</span>
+                    <span className="min-w-[120px] max-w-[240px] flex-1 text-xs leading-snug text-muted-foreground">Hold the current zoom from this point in the clip.</span>
                     {zoomKeyframes.length > 0 && (
                       <span className="text-xs tabular-nums text-muted-foreground">
                         {zoomKeyframes.length}
                       </span>
                     )}
-                    <Button type="button" variant="secondary" size="sm" onClick={handleCaptureZoomLock} title={`Lock the current zoom at ${formatTime(currentTime)}`}>
+                    <Button type="button" variant="secondary" size="sm" className="shrink-0" onClick={handleCaptureZoomLock} title={`Lock the current zoom at ${formatTime(currentTime)}`}>
                       + Lock
                     </Button>
                     {zoomKeyframes.length > 0 && (
