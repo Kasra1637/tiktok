@@ -86,8 +86,17 @@ headline treatments.
 | Display | Space Grotesk | `h1`–`h4`, `.font-display` |
 | Body | Figtree | `body` default |
 | Mono | IBM Plex Mono | `code`, `.font-mono` — JSON specs, URLs, IDs |
+| Video overlay | Anton + 10 text faces | Demo + CTA canvas captions/end cards only |
 
 Display text carries tight tracking (`-0.02em`, `-0.03em` on `h1`/`.font-display`).
+
+Video overlay faces are canvas paint, not page type: they live outside the
+3-size workspace scale above. Eleven options (Anton default + ten
+high-legibility text faces), each vendored as latin woff2 with an `@font-face`
+rule — a face the browser must fetch is a face the export can lose. Motion is
+one of ten named entrances computed from video time only, so the recording
+matches the preview; size is a 70–130% multiplier that cannot leave the TikTok
+safe area. See ADR 0007.
 
 ### Type scale: 3 Sizes × 2 Weights (12px floor)
 

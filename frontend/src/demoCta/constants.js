@@ -78,6 +78,49 @@ export const DEFAULT_SCREEN = { x: 0.3275, y: 0.09, w: 0.3608, h: 0.7708 };
 
 export const ACCENT_SWATCHES = ["#c8ff2e", "#ff4d8d", "#4dd8ff", "#ffffff"];
 
+/**
+ * Caption/CTA overlay faces. Anton first: it is the long-standing default,
+ * so existing renders are byte-identical until the founder picks otherwise.
+ * Every other face is a high x-height, open-aperture text face chosen for
+ * on-video legibility at small sizes — display faces are deliberately absent.
+ * `stack` is what the canvas painter requests; the generic fallback keeps a
+ * missing file from ever rendering tofu.
+ */
+export const OVERLAY_FONTS = [
+  { id: "anton", label: "Anton", stack: '"Anton", "Arial Black", sans-serif' },
+  { id: "inter", label: "Inter", stack: '"Inter", system-ui, sans-serif' },
+  { id: "manrope", label: "Manrope", stack: '"Manrope", system-ui, sans-serif' },
+  { id: "archivo", label: "Archivo", stack: '"Archivo", system-ui, sans-serif' },
+  { id: "dm-sans", label: "DM Sans", stack: '"DM Sans", system-ui, sans-serif' },
+  { id: "sora", label: "Sora", stack: '"Sora", system-ui, sans-serif' },
+  { id: "space-grotesk", label: "Space Grotesk", stack: '"Space Grotesk", system-ui, sans-serif' },
+  { id: "poppins", label: "Poppins", stack: '"Poppins", system-ui, sans-serif' },
+  { id: "montserrat", label: "Montserrat", stack: '"Montserrat", system-ui, sans-serif' },
+  { id: "nunito", label: "Nunito", stack: '"Nunito", system-ui, sans-serif' },
+  { id: "public-sans", label: "Public Sans", stack: '"Public Sans", system-ui, sans-serif' },
+];
+
+/**
+ * Caption/CTA entrance styles. One catalog, picked independently per overlay:
+ * the caption and the end card each name one of these ten. Every style is a
+ * pure function of video time (see overlayMotion in overlays.js) — never
+ * wall-clock — so the exported recording matches the preview frame for
+ * frame. `punch` and `rise` are the two behaviours that shipped before this
+ * catalog existed, kept as the defaults so nothing already made changes.
+ */
+export const OVERLAY_ANIMS = [
+  { id: "punch", label: "Punch in" },
+  { id: "fade", label: "Fade" },
+  { id: "rise", label: "Rise" },
+  { id: "slide", label: "Slide in" },
+  { id: "pop", label: "Pop" },
+  { id: "typewriter", label: "Typewriter" },
+  { id: "glow", label: "Glow in" },
+  { id: "underline", label: "Underline draw" },
+  { id: "drop", label: "Drop in" },
+  { id: "steady", label: "Steady" },
+];
+
 export const DEFAULTS = {
   device: "s24",
   preset: "tiktok",
@@ -107,6 +150,12 @@ export const DEFAULTS = {
   ctaOffsetX: 0,
   ctaOffsetY: 0,
   overlayAccent: "#c8ff2e",
+  captionFont: "anton",
+  ctaFont: "anton",
+  captionAnim: "punch",
+  ctaAnim: "rise",
+  captionScale: 1,
+  ctaScale: 1,
 };
 
 export const RANGES = {
@@ -119,6 +168,10 @@ export const RANGES = {
   screen: { min: 0, max: 1, step: 0.001 },
   hookDuration: { min: 0.8, max: 4, step: 0.1 },
   ctaDuration: { min: 1, max: 5, step: 0.1 },
+  // Overlay size multiplier. 1 is the long-standing cw-derived size; the
+  // painters wrap inside maxWidth, so 1.3x reflows lines rather than leaving
+  // the TikTok safe area.
+  overlayScale: { min: 0.7, max: 1.3, step: 0.01 },
 };
 
 export const BASE_PHONE_H = 1800;

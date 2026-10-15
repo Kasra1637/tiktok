@@ -902,6 +902,95 @@ check("the trimmed variant strips leading and trailing whitespace",
   SC.sentenceCaseTrimmed("  stops mid-scroll  "));
 
 // ---------------------------------------------------------------------------
+// Caption/CTA overlay catalogs: every selectable font must resolve to a file
+// on disk (canvas falls back silently otherwise), every animation must be a
+// pure function of video time (wall-clock would make the export differ from
+// the preview), and the two legacy defaults must reproduce their old output
+// exactly so existing renders do not change.
+// ---------------------------------------------------------------------------
+console.log("=".repeat(70));
+console.log("frontend/src/demoCta/overlays.js + constants.js");
+console.log("=".repeat(70));
+
+const OV = loadModule(path.resolve(__dirname, "..", "src", "demoCta", "overlays.js"));
+// DC (demoCta/constants.js) is already loaded above; the overlay catalogs ride it.
+
+check("eleven overlay fonts with unique ids, Anton first",
+  Array.isArray(DC.OVERLAY_FONTS) && DC.OVERLAY_FONTS.length === 11 &&
+  DC.OVERLAY_FONTS[0].id === "anton" &&
+  new Set(DC.OVERLAY_FONTS.map((f) => f.id)).size === 11,
+  DC.OVERLAY_FONTS && DC.OVERLAY_FONTS.map((f) => f.id).join(","));
+
+check("every overlay font file exists under public/fonts with an @font-face rule",
+  (() => {
+    const css = fs.readFileSync(path.resolve(__dirname, "..", "src", "index.css"), "utf8");
+    return DC.OVERLAY_FONTS.every((f) =>
+      css.includes(`font-family: "${f.label}"`) &&
+      fs.existsSync(path.resolve(__dirname, "..", "public", "fonts", `${f.id}-latin-400-normal.woff2`)));
+  })(),
+  "missing woff2 or @font-face block");
+
+check("ten overlay animations with unique ids, punch and rise present",
+  Array.isArray(DC.OVERLAY_ANIMS) && DC.OVERLAY_ANIMS.length === 10 &&
+  new Set(DC.OVERLAY_ANIMS.map((a) => a.id)).size === 10 &&
+  DC.OVERLAY_ANIMS.some((a) => a.id === "punch") &&
+  DC.OVERLAY_ANIMS.some((a) => a.id === "rise"),
+  DC.OVERLAY_ANIMS && DC.OVERLAY_ANIMS.map((a) => a.id).join(","));
+
+check("overlay motion is a pure function of its arguments (deterministic)",
+  JSON.stringify(OV.overlayIntro("slide", 0.2, 2)) === JSON.stringify(OV.overlayIntro("slide", 0.2, 2)) &&
+  JSON.stringify(OV.overlayIntro("glow", 1.1, 3)) === JSON.stringify(OV.overlayIntro("glow", 1.1, 3)),
+  "same inputs diverged");
+
+check("overlay motion reads no wall-clock",
+  !/(performance\.now|Date\.now|new Date\(|Math\.random)/.test(
+    fs.readFileSync(path.resolve(__dirname, "..", "src", "demoCta", "overlays.js"), "utf8")
+      .split("export function overlayIntro")[1].split("export function revealLines")[0]),
+  "time source leaked into overlayIntro");
+
+check("punch at t=0 starts overscaled and invisible",
+  (() => {
+    const m = OV.overlayIntro("punch", 0, 2);
+    return m.alpha === 0 && Math.abs(m.scale - 1.24) < 1e-9;
+  })(),
+  JSON.stringify(OV.overlayIntro("punch", 0, 2)));
+
+check("unknown animation ids fall back to punch",
+  JSON.stringify(OV.overlayIntro("nope", 0.2, 2)) === JSON.stringify(OV.overlayIntro("punch", 0.2, 2)),
+  "unlisted style diverged from punch");
+
+check("rise at rest matches the legacy fade-plus-lift exactly",
+  (() => {
+    const m = OV.overlayIntro("rise", 0.2, 2, 0.4, 0);
+    const e = 1 - Math.pow(1 - Math.min(1, 0.2 / 0.4), 3);
+    return Math.abs(m.alpha - e) < 1e-9 && Math.abs(m.rise01 - (1 - e)) < 1e-9;
+  })(),
+  JSON.stringify(OV.overlayIntro("rise", 0.2, 2, 0.4, 0)));
+
+check("steady has no entrance and typewriter reveals progressively",
+  (() => {
+    const s = OV.overlayIntro("steady", 0.05, 2);
+    const t0 = OV.revealLines(["ab", "cd"], 0);
+    const t1 = OV.revealLines(["ab", "cd"], 1);
+    const half = OV.revealLines(["ab", "cd"], 0.5);
+    return s.alpha === 1 && s.scale === 1 &&
+      JSON.stringify(t0) === JSON.stringify(["", ""]) &&
+      JSON.stringify(t1) === JSON.stringify(["ab", "cd"]) &&
+      half.join("").length === 2;
+  })(),
+  "steady moved or typewriter mis-split");
+
+check("overlay size range is 70-130%",
+  DC.RANGES.overlayScale.min === 0.7 && DC.RANGES.overlayScale.max === 1.3,
+  JSON.stringify(DC.RANGES.overlayScale));
+
+check("overlay defaults preserve the long-standing look",
+  DC.DEFAULTS.captionFont === "anton" && DC.DEFAULTS.ctaFont === "anton" &&
+  DC.DEFAULTS.captionAnim === "punch" && DC.DEFAULTS.ctaAnim === "rise" &&
+  DC.DEFAULTS.captionScale === 1 && DC.DEFAULTS.ctaScale === 1,
+  JSON.stringify({ f: DC.DEFAULTS.captionFont, a: DC.DEFAULTS.captionAnim, s: DC.DEFAULTS.captionScale }));
+
+// ---------------------------------------------------------------------------
 console.log("\n" + "=".repeat(70));
 if (failures.length === 0) {
   console.log("All frontend length/section logic behaves correctly.");

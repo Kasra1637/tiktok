@@ -47,6 +47,8 @@ import {
   PRESETS,
   RANGES,
   ACCENT_SWATCHES,
+  OVERLAY_FONTS,
+  OVERLAY_ANIMS,
   AUDIO_BITS_PER_SECOND,
   VIDEO_BITS_PER_SECOND,
   buildExportFilename,
@@ -56,7 +58,7 @@ import {
   sniffRecordingContainer,
   supportedExportMimes,
 } from "./constants";
-import { drawEndCard, drawHookOverlay, getEndCardBounds, getHookBounds, HOOK_FONT } from "./overlays";
+import { drawEndCard, drawHookOverlay, getEndCardBounds, getHookBounds } from "./overlays";
 import { fitVideoToScreen } from "./fit";
 import { drawHandView, preloadHandViewImages } from "./handView";
 import { captureZoomLock, getEffectiveZoom, removeZoomKeyframe, sortKeyframes, tickInterval } from "./zoom";
@@ -137,6 +139,16 @@ const INPUT_CLASS =
 
 const TEXTAREA_CLASS =
   "w-full resize-none rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3.5 py-2 text-sm leading-snug shadow-[var(--shadow-xs)] transition-colors placeholder:text-muted-foreground hover:border-[color:var(--hairline-strong)] focus-visible:border-[color:var(--indigo-35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-15)]";
+
+/**
+ * Overlay font id → canvas font stack. Unknown ids fall back to the first
+ * catalog entry (Anton) rather than a bare generic: a missing file must never
+ * render tofu, and the default must match what shipped before the picker.
+ */
+function fontStack(id) {
+  const found = OVERLAY_FONTS.find((f) => f.id === id);
+  return (found || OVERLAY_FONTS[0]).stack;
+}
 
 /**
  * One collapsible control group.
@@ -368,6 +380,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const [ctaOffsetX, setCtaOffsetX] = useState(DEFAULTS.ctaOffsetX);
   const [ctaOffsetY, setCtaOffsetY] = useState(DEFAULTS.ctaOffsetY);
   const [overlayAccent, setOverlayAccent] = useState(DEFAULTS.overlayAccent);
+  const [captionFont, setCaptionFont] = useState(DEFAULTS.captionFont);
+  const [ctaFont, setCtaFont] = useState(DEFAULTS.ctaFont);
+  const [captionAnim, setCaptionAnim] = useState(DEFAULTS.captionAnim);
+  const [ctaAnim, setCtaAnim] = useState(DEFAULTS.ctaAnim);
+  const [captionScale, setCaptionScale] = useState(DEFAULTS.captionScale);
+  const [ctaScale, setCtaScale] = useState(DEFAULTS.ctaScale);
 
   const [isPlaying, setIsPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
@@ -409,8 +427,14 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   }, []);
 
   useEffect(() => {
+    // Every selectable overlay face must be ready before the first paint:
+    // canvas falls back silently to a wrong face, and the export would then
+    // bake in a typeface the founder never picked. Fire-and-forget on purpose
+    // — a slow face resolves into later frames, never an error state.
     if (document.fonts?.load) {
-      document.fonts.load(`700 100px ${HOOK_FONT}`).catch(() => {});
+      for (const face of OVERLAY_FONTS) {
+        document.fonts.load(`100px ${face.stack}`).catch(() => {});
+      }
     }
   }, []);
 
@@ -677,7 +701,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       const hookWindow = dur > 0 ? Math.min(hookDuration, dur * 0.45) : hookDuration;
       const ctaWindow = dur > 0 ? Math.min(ctaDuration, dur * 0.45) : ctaDuration;
       if (hookEnabled) {
-        drawHookOverlay(ctx, cw, ch, vt, { text: hookText, duration: hookWindow, accent: overlayAccent, offsetX: hookOffsetX, offsetY: hookOffsetY });
+        drawHookOverlay(ctx, cw, ch, vt, { text: hookText, duration: hookWindow, accent: overlayAccent, offsetX: hookOffsetX, offsetY: hookOffsetY, font: fontStack(captionFont), anim: captionAnim, scale: captionScale });
       }
       if (ctaEnabled && dur > 0) {
         drawEndCard(ctx, cw, ch, dur - vt, {
@@ -687,6 +711,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           accent: overlayAccent,
           offsetX: ctaOffsetX,
           offsetY: ctaOffsetY,
+          font: fontStack(ctaFont),
+          anim: ctaAnim,
+          scale: ctaScale,
         });
       }
     };
@@ -1345,13 +1372,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
 
     let dragTarget = "video";
     if (hookVisible) {
-      const hb = getHookBounds(canvasW, canvasH, hookText, hookOffsetX, hookOffsetY);
+      const hb = getHookBounds(canvasW, canvasH, hookText, hookOffsetX, hookOffsetY, fontStack(captionFont), captionScale);
       if (hb && cx >= hb.x && cx <= hb.x + hb.w && cy >= hb.y && cy <= hb.y + hb.h) {
         dragTarget = "hook";
       }
     }
     if (ctaVisible && dragTarget === "video") {
-      const cb = getEndCardBounds(canvasW, canvasH, ctaHeadline, ctaHandle, ctaOffsetX, ctaOffsetY);
+      const cb = getEndCardBounds(canvasW, canvasH, ctaHeadline, ctaHandle, ctaOffsetX, ctaOffsetY, fontStack(ctaFont), ctaScale);
       if (cb && cx >= cb.x && cx <= cb.x + cb.w && cy >= cb.y && cy <= cb.y + cb.h) {
         dragTarget = "cta";
       }
@@ -1640,6 +1667,53 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             />
           </label>
           <ControlSlider label="On screen" value={hookDuration} min={RANGES.hookDuration.min} max={RANGES.hookDuration.max} step={RANGES.hookDuration.step} onChange={setHookDuration} testId="hook-duration-slider" format={(v) => `${v.toFixed(1)}s`} />
+          {/* Caption face: each tile set in its own face so the choice is
+              visual, not a name to imagine. Selected state is the indigo
+              ring, the same language as the accent swatches below. */}
+          <div className="space-y-2">
+            <SubLabel>Font</SubLabel>
+            <div className="grid grid-cols-2 gap-2" role="group" aria-label="Caption font">
+              {OVERLAY_FONTS.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  data-testid={`caption-font-${f.id}`}
+                  onClick={() => setCaptionFont(f.id)}
+                  aria-pressed={captionFont === f.id}
+                  className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
+                    captionFont === f.id
+                      ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
+                      : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
+                  }`}
+                >
+                  <span aria-hidden="true" style={{ fontFamily: f.stack }} className="text-sm">Aa</span>
+                  <span className="text-xs text-muted-foreground">{f.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <SubLabel>Animation</SubLabel>
+            <div className="grid grid-cols-2 gap-2" role="group" aria-label="Caption animation">
+              {OVERLAY_ANIMS.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  data-testid={`caption-anim-${a.id}`}
+                  onClick={() => setCaptionAnim(a.id)}
+                  aria-pressed={captionAnim === a.id}
+                  className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+                    captionAnim === a.id
+                      ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] text-foreground"
+                      : "border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--hairline-strong)]"
+                  }`}
+                >
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <ControlSlider label="Text size" value={captionScale} min={RANGES.overlayScale.min} max={RANGES.overlayScale.max} step={RANGES.overlayScale.step} onChange={setCaptionScale} testId="caption-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
           {(hookOffsetX !== 0 || hookOffsetY !== 0) && (
             <ResetButton onClick={() => { setHookOffsetX(0); setHookOffsetY(0); }}>Reset position</ResetButton>
           )}
@@ -1673,6 +1747,50 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             />
           </label>
           <ControlSlider label="Visible for" value={ctaDuration} min={RANGES.ctaDuration.min} max={RANGES.ctaDuration.max} step={RANGES.ctaDuration.step} onChange={setCtaDuration} testId="cta-duration-slider" format={(v) => `${v.toFixed(1)}s`} />
+          <div className="space-y-2">
+            <SubLabel>Font</SubLabel>
+            <div className="grid grid-cols-2 gap-2" role="group" aria-label="CTA font">
+              {OVERLAY_FONTS.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  data-testid={`cta-font-${f.id}`}
+                  onClick={() => setCtaFont(f.id)}
+                  aria-pressed={ctaFont === f.id}
+                  className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
+                    ctaFont === f.id
+                      ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
+                      : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
+                  }`}
+                >
+                  <span aria-hidden="true" style={{ fontFamily: f.stack }} className="text-sm">Aa</span>
+                  <span className="text-xs text-muted-foreground">{f.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <SubLabel>Animation</SubLabel>
+            <div className="grid grid-cols-2 gap-2" role="group" aria-label="CTA animation">
+              {OVERLAY_ANIMS.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  data-testid={`cta-anim-${a.id}`}
+                  onClick={() => setCtaAnim(a.id)}
+                  aria-pressed={ctaAnim === a.id}
+                  className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+                    ctaAnim === a.id
+                      ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] text-foreground"
+                      : "border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--hairline-strong)]"
+                  }`}
+                >
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <ControlSlider label="Text size" value={ctaScale} min={RANGES.overlayScale.min} max={RANGES.overlayScale.max} step={RANGES.overlayScale.step} onChange={setCtaScale} testId="cta-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
           {(ctaOffsetX !== 0 || ctaOffsetY !== 0) && (
             <ResetButton onClick={() => { setCtaOffsetX(0); setCtaOffsetY(0); }}>Reset position</ResetButton>
           )}
