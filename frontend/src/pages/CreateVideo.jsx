@@ -725,9 +725,6 @@ function AngleGoalPicker({
   suggestions,
   onRegenerate,
   regenerating = false,
-  // Jump back to step 1. Only Review passes it — step 1's own selector sits
-  // directly above, so rendering it there would duplicate the way there.
-  onChooseAngle,
 }) {
   const knownGoals = Array.isArray(options) ? options : [];
   const orderedGoals =
@@ -762,20 +759,15 @@ function AngleGoalPicker({
   }, [regenerating, shuffleTotal]);
 
   if (!angle) {
-    /* The waits marker only, plus the red jump back when the caller provides
-       one. Step 1 does not pass onChooseAngle — its selector sits directly
-       above — so this button only ever renders on Review, where no angle
-       control remains and the marker alone would strand the founder. */
+    /* The waits marker only. It names what is missing; the red jump back
+       lives beside it in the owning panel (firstGap), never here — one gap,
+       one button, or two missing prerequisites render two competing "first"
+       actions. Step 1 needs no jump at all: its selector sits directly above. */
     return (
       <div className="space-y-2" data-testid="goal-waits-for-angle">
         <p className="text-xs text-muted-foreground" data-subtitle="">
           Pick an audience angle first — goals are ranked for it.
         </p>
-        {onChooseAngle && (
-          <Button variant="brand" size="sm" onClick={onChooseAngle} className="gap-1.5" data-testid="goto-angle-step-button">
-            <Target className="h-3.5 w-3.5" /> Pick an audience angle first
-          </Button>
-        )}
       </div>
     );
   }
@@ -1823,17 +1815,22 @@ setObjective("");
   const effectiveTemplateId = templateId || project?.template_id;
   const canGenerate = Boolean(profileId && effectiveTemplateId);
 
-  // First missing choice that has no fix in place, for the one red button on
-  // panels that refuse to generate until the plan's inputs exist. Profile and
-  // template can only be chosen on their own steps; angle and goal are fixed
-  // right here through the waits marker's own jump and the inline goal list,
-  // so they never route through this button. The label names the destination,
-  // and each carries "first" because the action gates everything after it.
+  // First missing choice in flow order, for the one red button on panels that
+  // refuse to generate until the plan's inputs exist: profile, then angle,
+  // then goal (angle and goal both live on step 1), then template. Exactly
+  // one button ever renders — it names whichever prerequisite is actually
+  // missing and jumps there — so two gaps can never show two competing
+  // "first" actions. The label carries "first" because the action gates
+  // everything after it.
   const firstGap = !profileId
     ? { step: 0, label: "Choose an App Profile first" }
-    : !effectiveTemplateId
-      ? { step: 2, label: "Pick a template first" }
-      : null;
+    : !angle
+      ? { step: 1, label: "Pick an audience angle first" }
+      : !objective
+        ? { step: 1, label: "Set the video goal first" }
+        : !effectiveTemplateId
+          ? { step: 2, label: "Pick a template first" }
+          : null;
 
   // Face-only product: every template requires exactly the character
   // reference, and the backend refuses a generation without one (see
@@ -2209,7 +2206,8 @@ setObjective("");
                   Set the goal first, then the templates are ranked for it.
                 </p>
                 <Button variant="brand" onClick={() => setStep(1)} className="gap-1.5">
-                  <Target className="h-3.5 w-3.5" /> Set the goal first
+                <Target className="h-3.5 w-3.5" />
+                {firstGap ? firstGap.label : "Set the goal first"}
                 </Button>
               </div>
             )}
@@ -2548,11 +2546,24 @@ if (step === 3) {
             <p className="text-sm text-muted-foreground">
               The plan didn't generate. Fix what's missing below, then try again — still free.
             </p>
+            {/* One red button naming the single gap, then the goal list (which
+                shows its waits marker until the angle is picked). Button and
+                subtitle sit in one panel so the ask never splits in two. */}
+            {firstGap && (
+              <Button
+                variant="brand"
+                size="sm"
+                onClick={() => setStep(firstGap.step)}
+                data-testid="plan-first-gap-button"
+              >
+                {firstGap.label}
+              </Button>
+            )}
             {(!objective || !angle) && (
               /* Angle and goal are chosen on step 1, not here: this panel used
                  to carry the shared selector, but a second full copy beside
                  the retry button split the flow in two. The goal picker below
-                 states what it waits for, and its own control jumps there. */
+                 states what it waits for. */
               <AngleGoalPicker
                 angle={angle}
                 value={objective}
@@ -2560,13 +2571,12 @@ if (step === 3) {
                 options={objectiveOptions}
                 recommendations={recommendedObjectives}
                 outcomes={objectiveOutcomes}
-                fitReasons={objectiveFitReasons}
-                onChooseAngle={() => setStep(1)}
-                suggestions={angle?.goal_suggestions}
-                onRegenerate={handleRegenerateGoals}
-                regenerating={cyclingGoals}
-              />
-            )}
+                  fitReasons={objectiveFitReasons}
+                  suggestions={angle?.goal_suggestions}
+                  onRegenerate={handleRegenerateGoals}
+                  regenerating={cyclingGoals}
+                />
+              )}
             <Button
               variant="brand"
               onClick={handleGeneratePlan}
@@ -2635,7 +2645,6 @@ if (step === 3) {
                 recommendations={recommendedObjectives}
                 outcomes={objectiveOutcomes}
                 fitReasons={objectiveFitReasons}
-                onChooseAngle={() => setStep(1)}
                 suggestions={angle?.goal_suggestions}
                 onRegenerate={handleRegenerateGoals}
                 regenerating={cyclingGoals}

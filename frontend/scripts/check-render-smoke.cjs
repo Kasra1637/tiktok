@@ -3654,8 +3654,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       throw new Error("the template step does not explain that the objective is required");
     }
     const back = [...ctx.container.querySelectorAll("button")]
-      .find((b) => (b.textContent || "").includes("Set the goal"));
-    if (!back) throw new Error("there is no way from the template step to set the goal");
+      .find((b) => /first/.test((b.textContent || "")));
+    if (!back) throw new Error("there is no way from the template step to fix the missing choice");
   });
 
   await check("no objective is silently reported as done on the progress pills", async (ctx) => {
@@ -4326,7 +4326,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         if (ctx.text().includes("Generating your plan")) throw new Error("Review spins while missing an angle");
         // No angle control lives here anymore: one red jump back to step 1,
         // where selection happens, then back to Review for the plan.
-        await clickEl(ctx, ctx.container.querySelector('[data-testid="goto-angle-step-button"]'));
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="goto-first-gap-button"]'), "no first-gap button on Review");
         const pill = ctx.container.querySelector('[data-testid="step-pill-angle"]');
         if (!pill || pill.getAttribute("aria-current") !== "step") {
           throw new Error("the red button did not land on the Audience & goal step");
@@ -4363,6 +4363,37 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         const pill = ctx.container.querySelector('[data-testid="step-pill-profile"]');
         if (!pill || pill.getAttribute("aria-current") !== "step") {
           throw new Error("the red button did not land on the App Profile step");
+        }
+      });
+    } finally { global.__SMOKE_PARAMS = ""; }
+  });
+
+  // One gap, one button — never two competing "first" asks. With a profile and
+  // template present but no angle or goal, the panel shows the angle action
+  // only; the goal waits for the angle that would rank it.
+  await check("Review shows only the gap actually missing, never two firsts", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi({
+        getStudioProject: async () => ({
+          ...BASE_PROJECT,
+          brand_profile_id: "b1",
+          template_id: "t1",
+          content_angle_id: "",
+          objective: "",
+        }),
+        updateStudioProject: async (id, payload) => ({ ...BASE_PROJECT, ...payload }),
+        getContentAngles: async () => ({ angles: [] }),
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openStep(ctx, "Review");
+        const firsts = [...ctx.container.querySelectorAll("button")]
+          .filter((b) => /first/.test((b.textContent || "")));
+        if (firsts.length !== 1) {
+          throw new Error(`expected exactly one 'first' action, saw ${firsts.length}: ${JSON.stringify(firsts.map((b) => b.textContent))}`);
+        }
+        if (!/Pick an audience angle first/.test(firsts[0].textContent || "")) {
+          throw new Error(`the lone action does not name the missing angle: ${JSON.stringify(firsts[0].textContent)}`);
         }
       });
     } finally { global.__SMOKE_PARAMS = ""; }
