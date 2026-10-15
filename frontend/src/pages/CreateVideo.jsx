@@ -555,7 +555,10 @@ function AngleSelector({
     </p>
   ) : null;
   const body = !showAngles || angles.length === 0 ? (
-    <div className="space-y-2">
+    // 12px, matching the Review step's "what's missing" panel: the helper line
+    // and the red action under it are one gate section, and a tighter stack
+    // here made the same ask read as a different control two steps later.
+    <div className="space-y-3">
       <p className="text-xs text-muted-foreground" data-testid="angles-cta-copy" data-subtitle="">
         {ANGLES_CTA_COPY}
       </p>
@@ -687,7 +690,7 @@ function AngleSelector({
   );
 
   return (
-    <div className="inset-panel space-y-2">
+    <div className="inset-panel space-y-3">
       <GroupLabel as="label" icon={Target}>
         Audience angle <span className="text-muted-foreground">(required)</span>
       </GroupLabel>
@@ -2203,11 +2206,12 @@ setObjective("");
                 founder could pick the top card from reasons that did not mention
                 their goal at all. */}
             {!objective && (
-              <div className="inset-panel space-y-2">
+              <div className="inset-panel space-y-3">
                 {/* Same recessed sub-card as the angle picker: eyebrow label,
-                    one helper line, the coral action beneath. The dashed
-                    centered box said the same thing with more chrome and a
-                    quieter button. */}
+                    one helper line, the coral action beneath — and the same
+                    12px stack, so the two gates read as one control. The
+                    dashed centered box said the same thing with more chrome
+                    and a quieter button. */}
                 <GroupLabel icon={LayoutTemplate}>Template</GroupLabel>
                 <p className="text-xs text-muted-foreground" data-subtitle="">
                   Set the goal first, then the templates are ranked for it.
@@ -2440,17 +2444,30 @@ setObjective("");
                 notice={angleRegenNotice}
               />
             ) : !canGenerate ? (
-              <div className="inset-panel">
+              <div className="inset-panel space-y-3">
                 {/* Names what is actually missing, read from the same two
                     values that gated this panel. It used to spell out the
                     whole chain ("choose an App Profile, goal, and template,
                     then review the free plan") — a fourth copy of an
-                    instruction the pills and each step already carry. */}
+                    instruction the pills and each step already carry. The red
+                    button is the same one Review shows: a gate that cannot act
+                    names the step that fixes it instead of stating the problem
+                    and stopping. */}
                 <p className="text-sm text-muted-foreground">
                   {!profileId
                     ? "Pick an approved App Profile on the first step to continue."
                     : "Pick a template on the Template & photo step to continue."}
                 </p>
+                {firstGap && (
+                  <Button
+                    variant="brand"
+                    className="gap-1.5"
+                    onClick={() => setStep(firstGap.step)}
+                    data-testid="hook-first-gap-button"
+                  >
+                    {firstGap.label}
+                  </Button>
+                )}
               </div>
             ) : blockedOnAssets ? (
               <MissingRequirements

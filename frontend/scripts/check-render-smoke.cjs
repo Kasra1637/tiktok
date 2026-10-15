@@ -4481,6 +4481,67 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       });
     } finally { global.__SMOKE_PARAMS = ""; }
   });
+
+  // The "what's missing" gate is one section on every step: a helper line with
+  // the red action under it, spaced the same everywhere. Review's stack is the
+  // reference, so a step cannot drift tighter and make the same ask read as a
+  // different kind of control.
+  await check("every step spaces its gate hint from the red button the same", async (ctx) => {
+    const gates = [];
+    const record = (label, hint) => {
+      if (!hint) throw new Error(`no gate hint on ${label}`);
+      const token = (/space-y-\d/.exec(hint.parentElement.className) || [""])[0];
+      if (!token) throw new Error(`the gate hint on ${label} shares no spacing token with its button`);
+      const button = hint.nextElementSibling;
+      if (!button || button.tagName !== "BUTTON") {
+        throw new Error(`no button directly under the gate hint on ${label}`);
+      }
+      if (!button.className.includes("bg-[color:var(--brand-coral)]")) {
+        throw new Error(`the gate action on ${label} is not the red button`);
+      }
+      gates.push({ label, token });
+    };
+    const hintStartingWith = (prefix) =>
+      [...ctx.container.querySelectorAll("p")].find((p) => (p.textContent || "").trim().startsWith(prefix));
+
+    // Steps one to three from a blank draft: no angle, no goal, no template.
+    global.__SMOKE_PARAMS = "";
+    await mount(CreateVideo, {})(ctx);
+    await openStep(ctx, "Audience & goal");
+    record("Audience & goal", ctx.container.querySelector('[data-testid="angles-cta-copy"]'));
+    await openStep(ctx, "Template & photo");
+    record("Template & photo", hintStartingWith("Set the goal first"));
+    await openStep(ctx, "Review");
+    record("Review", hintStartingWith("Your free plan starts"));
+
+    // Hook + Story with an angle but no template: the gate that used to state
+    // the problem with no way out. Recommendations are empty so nothing is
+    // preselected into the template slot.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi({
+        getStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "a1", template_id: "" }),
+        getTemplateRecommendations: async () => ({ recommendations: [] }),
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openStep(ctx, "Hook + Story");
+        const button = ctx.container.querySelector('[data-testid="hook-first-gap-button"]');
+        if (!button) throw new Error("the Hook + Story gate has no red button");
+        record("Hook + Story", button.previousElementSibling);
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+
+    const tokens = [...new Set(gates.map((g) => g.token))];
+    if (tokens.length !== 1) {
+      throw new Error(
+        `the gate sections do not share one spacing: ${gates
+          .map((g) => `${g.label}=${g.token}`)
+          .join(", ")}`
+      );
+    }
+  });
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await withApi({ getContentAngles: async () => ({ angles: [{ ...ANGLE, kind: "legacy" }] }) }, async () => {

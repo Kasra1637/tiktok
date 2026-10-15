@@ -253,6 +253,13 @@ switchers use `AppPicker`; generation status uses `StatusBadge`. All caps is
 used on `.eyebrow` group labels and `.section-heading` workspace sections;
 page titles, descriptions and user content retain normal case.
 
+**The wizard's gate section is one 12px stack.** The "what's missing" panel a
+step opens with — a group label, one helper line, and the red action that jumps
+to the missing choice — is `space-y-3` on every step, so the same ask reads as
+the same control wherever the founder meets it. It is related blocks, not a
+field's own stack: the action is a CTA that navigates, not a control the label
+belongs to. `frontend/scripts/check-render-smoke.cjs` asserts the shared token.
+
 ---
 
 ## 5. Layout
