@@ -307,7 +307,7 @@ export default function Landing() {
             <UnauthedOnly>
               <SignUpTrigger>
                 <Button
-                  variant="brand"
+                  variant="accent"
                   size="lg"
                   className="w-full gap-2.5 px-9 sm:w-auto"
                 >
@@ -318,7 +318,7 @@ export default function Landing() {
             <AuthedOnly>
               <Button
                 asChild
-                variant="brand"
+                variant="accent"
                 size="lg"
                 className="w-full gap-2.5 px-9 sm:w-auto"
               >
@@ -550,7 +550,7 @@ export default function Landing() {
                 <UnauthedOnly>
                   <SignUpTrigger>
                     <Button
-                      variant="brand"
+                      variant="accent"
                       size="lg"
                       className="w-full gap-2.5 px-9 sm:w-auto"
                     >
@@ -561,7 +561,7 @@ export default function Landing() {
                 <AuthedOnly>
                   <Button
                     asChild
-                    variant="brand"
+                    variant="accent"
                     size="lg"
                     className="w-full gap-2.5 px-9 sm:w-auto"
                   >

@@ -378,7 +378,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
 
       <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
         <Button
-          variant="brand"
+          variant="accent"
           onClick={handleGenerateStrategy}
           disabled={busy || !projectId || needsAngle}
         >

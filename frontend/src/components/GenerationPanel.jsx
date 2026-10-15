@@ -556,7 +556,7 @@ const handleGenerate = async () => {
       </div>
 
       <Button
-        variant="brand"
+        variant="accent"
         onClick={handleGenerate}
         disabled={
           busy || inFlight || !ready || blocked || tooLong || !projectId || !strategyReady || noPhoto || noAngle
@@ -710,7 +710,7 @@ const handleGenerate = async () => {
                   mockup and your call to action. Exports save beside the original in History.
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="brand" size="sm" asChild>
+                  <Button variant="accent" size="sm" asChild>
                     <Link to={`/demo-cta/${generation.id}`}>
                       <Smartphone className="h-3.5 w-3.5" /> Open in Demo + CTA
                     </Link>

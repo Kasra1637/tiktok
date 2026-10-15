@@ -2028,22 +2028,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               <span className="sr-only">Loading the finished render…</span>
             </div>
 ) : (
-              /* An actual control, not a sentence. "Upload a clip to preview"
-                 read as a caption; the one thing you can do here is pick a
-                 file, so the frame says so with a button that opens the
-                 picker. Deliberately `secondary`, not coral: the Export button
-                 is this screen's one primary action (design_guidelines.md:174),
-                 and two coral buttons would make neither the primary one. */
-              /* One control, and the label the frame used to carry above it.
-                 "Live preview" lived in a caption row above the video, which
-                 cost 16px plus a gap and said nothing while the frame was
-                 empty — the dashed border and this copy both say it. With the
-                 platform label gone the row held one word, which is not worth
-                 a row of the column's height. */
               <div className="px-6 text-center">
                 <Button
                   type="button"
-                  variant="secondary"
+                  variant="accent"
                   size="sm"
                   onClick={() => fileInputRef.current?.click()}
                   data-testid="demo-cta-frame-upload"
@@ -2215,7 +2203,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                         in the row it belongs to. */}
                     <Button
                       type="button"
-                      variant="brand"
+                      variant="accent"
                       size="sm"
                       disabled={!videoUrl || !videoMeta || recording || saving}
                       onClick={exportVideo}
@@ -2363,7 +2351,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   </a>
                 </Button>
                 {saved ? (
-                  <Button variant="brand" size="sm" asChild>
+                  <Button variant="accent" size="sm" asChild>
                     <Link to="/history">View in History</Link>
                   </Button>
                 ) : (

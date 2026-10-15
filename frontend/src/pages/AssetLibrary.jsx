@@ -635,7 +635,7 @@ export default function AssetLibrary({
             title="No app yet"
             description="Assets belong to one App Profile and are used only in that app's videos. Create an app profile first, then add a photo of the person you want on camera."
             action={
-              <Button variant="brand" asChild>
+              <Button variant="accent" asChild>
                 <Link to="/brand">Set up your app</Link>
               </Button>
             }
@@ -662,7 +662,7 @@ export default function AssetLibrary({
                     testId="asset-profile-picker"
                   />
                 ) : (
-                  <Button variant="brand" asChild>
+                  <Button variant="accent" asChild>
                     <Link to={`/app-profiles/${selectableProfiles[0].id}`}>
                       Open {profileLabel(selectableProfiles[0])}
                     </Link>
@@ -778,7 +778,7 @@ export default function AssetLibrary({
             placeholder="Optional label — for example: Founder photo"
             aria-label="Optional photo label"
           />
-          <Button variant="brand" onClick={() => fileRef.current?.click()} disabled={busy}>
+          <Button variant="accent" onClick={() => fileRef.current?.click()} disabled={busy}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             {attachedAsset ? "Upload a different photo" : "Upload"}
           </Button>

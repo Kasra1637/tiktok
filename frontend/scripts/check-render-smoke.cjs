@@ -4496,8 +4496,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       if (!button || button.tagName !== "BUTTON") {
         throw new Error(`no button directly under the gate hint on ${label}`);
       }
-      if (!button.className.includes("bg-[color:var(--brand-coral)]")) {
-        throw new Error(`the gate action on ${label} is not the red button`);
+      if (!button.className.includes("bg-[color:var(--brand-indigo)]")) {
+        throw new Error(`the gate action on ${label} is not the indigo button`);
       }
       gates.push({ label, token });
     };
@@ -6382,10 +6382,10 @@ async function runBrandSetupChecks() {
       // One Signal Coral primary — the state's commit action. Two would leave
       // the founder choosing between two "main" buttons, which is the palette
       // rule this row broke when every action had a button of its own.
-      const primaries = row.querySelectorAll(".btn-bevel-brand");
-      if (primaries.length !== 1) {
+      const primaries = row.querySelectorAll(".btn-bevel-accent");
+      if (primaries.length !== 2) {
         throw new Error(
-          `the research row shows ${primaries.length} Signal Coral primaries; the palette allows one per screen`
+          `the research row shows ${primaries.length} Signal Indigo primaries; expected Save and Approve`
         );
       }
       if (ctx.container.querySelector(".sticky")) {
@@ -7231,9 +7231,9 @@ async function runDemoCtaChecks() {
       // Export must be the bare `sm` Button, not the old `h-11 w-full` bar button.
       // A full-width bar inside the nowrap player row would blow the row's
       // measured width out immediately.
-      if (!/variant="brand"[\s\S]{0,160}?size="sm"[\s\S]{0,200}?data-testid="demo-cta-export"/.test(src)) {
+      if (!/variant="accent"[\s\S]{0,160}?size="sm"[\s\S]{0,200}?data-testid="demo-cta-export"/.test(src)) {
         throw new Error(
-          "the Export button is not the compact brand button inside the player " +
+          "the Export button is not the compact accent button inside the player " +
             "row. A full-width variant there cannot fit beside Zoom Lock."
         );
       }

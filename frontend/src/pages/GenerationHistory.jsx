@@ -694,7 +694,7 @@ function GenerationRow({ row, siblings = [], onChanged }) {
               aria-label="Variation value"
             />
             <Button
-              variant="brand"
+              variant="accent"
               size="sm"
               disabled={busy || !varValue.trim()}
               onClick={() =>
@@ -822,7 +822,7 @@ export default function GenerationHistory() {
           title="Nothing generated yet"
           description="Create Video saves generated Hook + Story clips here."
           action={
-            <Button variant="brand" asChild>
+            <Button variant="accent" asChild>
               <Link to="/create">
                 Create a video <ChevronRight className="h-4 w-4" />
               </Link>

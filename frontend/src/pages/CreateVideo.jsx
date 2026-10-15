@@ -568,7 +568,7 @@ function AngleSelector({
         </Alert>
       )}
       <Button
-        variant="brand"
+        variant="accent"
         className="gap-1.5"
         onClick={onGenerate}
         disabled={generating}
@@ -2040,7 +2040,7 @@ setObjective("");
               title="No approved App Profile"
               description={describeEmptySelection(profiles)}
               action={
-                <Button variant="brand" asChild>
+                <Button variant="accent" asChild>
                   <Link to="/brand">Create or approve an App Profile</Link>
                 </Button>
               }
@@ -2207,7 +2207,7 @@ setObjective("");
                 <p className="text-xs text-muted-foreground" data-subtitle="">
                   Set the goal first, then the templates are ranked for it.
                 </p>
-                <Button variant="brand" onClick={() => setStep(1)} className="gap-1.5">
+                <Button variant="accent" onClick={() => setStep(1)} className="gap-1.5">
                 <Target className="h-3.5 w-3.5" />
                 {firstGap ? firstGap.label : "Set the goal first"}
                 </Button>
@@ -2451,7 +2451,7 @@ setObjective("");
                 </p>
                 {firstGap && (
                   <Button
-                    variant="brand"
+                    variant="accent"
                     className="gap-1.5"
                     onClick={() => setStep(firstGap.step)}
                     data-testid="hook-first-gap-button"
@@ -2471,7 +2471,7 @@ setObjective("");
                   Preparing the video draft for your photo…
                 </p>
                 <Button
-                  variant="brand"
+                  variant="accent"
                   className="mt-3"
                   disabled={busy}
                   onClick={() => {
@@ -2505,7 +2505,7 @@ setObjective("");
                       There's no plan yet. Generate one on Review first — it is free.
                     </p>
                     <Button
-                      variant="brand"
+                      variant="accent"
                       className="mt-3 gap-1.5"
                       onClick={() => setStep(3)}
                     >
@@ -2576,7 +2576,7 @@ if (step === 3) {
                 subtitle sit in one panel so the ask never splits in two. */}
             {firstGap && (
               <Button
-                variant="brand"
+                variant="accent"
                 className="gap-1.5"
                 onClick={() => setStep(firstGap.step)}
                 data-testid="plan-first-gap-button"
@@ -2605,7 +2605,7 @@ if (step === 3) {
                 />
               )}
             <Button
-              variant="brand"
+              variant="accent"
               onClick={handleGeneratePlan}
               disabled={busy || !canGenerate || !objective || !angle}
             >
@@ -2652,7 +2652,7 @@ if (step === 3) {
             </p>
             {firstGap && (
               <Button
-                variant="brand"
+                variant="accent"
                 className="gap-1.5"
                 onClick={() => setStep(firstGap.step)}
                 data-testid="goto-first-gap-button"
@@ -2999,7 +2999,7 @@ if (step === 3) {
             />
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="brand" onClick={handleSaveEdits} disabled={busy || !hasEdits}>
+              <Button variant="accent" onClick={handleSaveEdits} disabled={busy || !hasEdits}>
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 Save edits
               </Button>

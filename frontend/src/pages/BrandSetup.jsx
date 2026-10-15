@@ -610,7 +610,7 @@ export default function BrandSetup() {
                 <Button
                   type="submit"
                   disabled={researching}
-                  variant="brand"
+                  variant="secondary"
                   className="w-full sm:w-auto"
                   data-testid="research-app-button"
                 >
@@ -636,7 +636,7 @@ export default function BrandSetup() {
                   type="button"
                   onClick={() => handleApprove(true)}
                   disabled={approving}
-                  variant="brand"
+                  variant="accent"
                   className="w-full sm:w-auto"
                   data-testid="approve-profile-button"
                 >

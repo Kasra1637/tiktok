@@ -134,7 +134,7 @@ export default function Analytics() {
             title="No app yet"
             description="Create an App Profile to get started. Signals appear here as you work with it."
             action={
-              <Button variant="brand" asChild>
+              <Button variant="accent" asChild>
                 <Link to="/brand">Open App Profile</Link>
               </Button>
             }

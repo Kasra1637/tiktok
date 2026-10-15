@@ -797,7 +797,7 @@ return (
               Cancel
             </Button>
             <Button
-              variant="destructive"
+              variant="accent"
               onClick={handleDeleteProfile}
               disabled={!canDelete}
               data-testid="delete-profile-confirm"

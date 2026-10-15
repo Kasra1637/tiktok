@@ -107,7 +107,7 @@ function SourcePicker() {
             {/* mt-auto pins the actions to the bottom of every card so a row of
                 cards with different quote lengths still lines up. */}
             <div className="mt-auto flex flex-wrap gap-2">
-              <Button variant="brand" size="sm" asChild>
+              <Button variant="accent" size="sm" asChild>
                 <Link to={`/demo-cta/${row.id}`}>
                   <Smartphone className="h-3.5 w-3.5" /> Open in editor
                 </Link>
