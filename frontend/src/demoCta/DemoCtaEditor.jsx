@@ -1480,7 +1480,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     // Radix tooltips need a provider ancestor; the app has none, and the
     // transport buttons are the first tooltips on this page.
     <TooltipProvider delayDuration={200}>
-    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] xl:grid-cols-[minmax(0,1fr)_740px]">
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.3fr)] xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)]">
       <div className="relative min-w-0">
         {/* Own scroll container, own slim scrollbar, and enough right padding that a
             6px bar never sits over a card edge. */}
@@ -1702,7 +1702,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               ring, the same language as the accent swatches below. */}
           <div className="space-y-2">
             <SubLabel>Font</SubLabel>
-            <div className="grid grid-cols-2 gap-2" role="group" aria-label="Caption font">
+            <div className="grid grid-cols-1 gap-2" role="group" aria-label="Caption font">
               {OVERLAY_FONTS.map((f) => (
                 <button
                   key={f.id}
@@ -1779,7 +1779,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           <ControlSlider label="Visible for" value={ctaDuration} min={RANGES.ctaDuration.min} max={RANGES.ctaDuration.max} step={RANGES.ctaDuration.step} onChange={setCtaDuration} testId="cta-duration-slider" format={(v) => `${v.toFixed(1)}s`} />
           <div className="space-y-2">
             <SubLabel>Font</SubLabel>
-            <div className="grid grid-cols-2 gap-2" role="group" aria-label="CTA font">
+            <div className="grid grid-cols-1 gap-2" role="group" aria-label="CTA font">
               {OVERLAY_FONTS.map((f) => (
                 <button
                   key={f.id}

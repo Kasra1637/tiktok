@@ -7208,15 +7208,13 @@ async function runDemoCtaChecks() {
             "in the control row — the scrubber strip carries no text."
         );
       }
-      // Shared-width contract, part 1: the right column is fixed at xl to
-      // whatever the single control row needs (~650px), so the player row
-      // keeps the width it was measured against.
-      if (!/xl:grid-cols-\[minmax\(0,1fr\)_740px\]/.test(src)) {
+      // Shared-width contract, part 1: the right column is fluid at xl (1fr)
+      // with the left panel at 0.8fr, so the preview widens as the window grows
+      // and the settings panel narrows.
+      if (!/xl:grid-cols-\[minmax\(0,0\.8fr\)_minmax\(0,1fr\)\]/.test(src)) {
         throw new Error(
-          "the right column is not fixed at xl. A fluid column lets the frame " +
-            "budget and the cards drift apart, and the player row loses the " +
-            "width it was measured against. 740px is the measured width of the " +
-            "nowrap transport row including the Export button."
+          "the right column is not fluid at xl with left at 0.8fr. " +
+            "The grid should use xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)]."
         );
       }
       // No-wrap binds at xl only, where the 650px column holds the row. Below

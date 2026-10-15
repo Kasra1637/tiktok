@@ -2208,8 +2208,8 @@ setObjective("");
                   Set the goal first, then the templates are ranked for it.
                 </p>
                 <Button variant="accent" onClick={() => setStep(1)} className="gap-1.5">
-                <Target className="h-3.5 w-3.5" />
-                {firstGap ? firstGap.label : "Set the goal first"}
+                  <Sparkles className="h-3.5 w-3.5" />
+                  {firstGap ? firstGap.label : "Set the goal first"}
                 </Button>
               </div>
             )}
@@ -2456,6 +2456,7 @@ setObjective("");
                     onClick={() => setStep(firstGap.step)}
                     data-testid="hook-first-gap-button"
                   >
+                    <Sparkles className="h-3.5 w-3.5" />
                     {firstGap.label}
                   </Button>
                 )}
@@ -2581,6 +2582,7 @@ if (step === 3) {
                 onClick={() => setStep(firstGap.step)}
                 data-testid="plan-first-gap-button"
               >
+                <Sparkles className="h-3.5 w-3.5" />
                 {firstGap.label}
               </Button>
             )}
@@ -2657,6 +2659,7 @@ if (step === 3) {
                 onClick={() => setStep(firstGap.step)}
                 data-testid="goto-first-gap-button"
               >
+                <Sparkles className="h-3.5 w-3.5" />
                 {firstGap.label}
               </Button>
             )}
