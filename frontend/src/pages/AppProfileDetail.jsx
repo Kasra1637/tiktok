@@ -280,10 +280,12 @@ export default function AppProfileDetail() {
     }
   };
 
-  // What the founder has to type to arm the delete. Falls back to the same
-  // "Untitled app" the header shows, because brand_name is optional on a
-  // researched draft — and without the fallback an unnamed profile would match
-  // an empty string, leaving the confirm button permanently enabled.
+  // What the founder has to type to arm the delete. Falls back to "Untitled
+  // app" because brand_name is optional on a researched draft — and without
+  // the fallback an unnamed profile would match an empty string, leaving the
+  // confirm button permanently enabled. The app name is deliberately absent
+  // from the page masthead; this is the one place it still has to appear, since
+  // the founder types it to confirm they are deleting that app and not another.
   const deletableName = profile?.brand_name?.trim() || "Untitled app";
   const canDelete = typedName.trim() === deletableName && !deletingProfile;
 
@@ -424,7 +426,13 @@ return (
       <div data-testid="app-profile-header">
       <PageHeader
         icon={Briefcase}
-        title={profile?.brand_name || "Untitled app"}
+        /* The section, not the app. Every other masthead in the app names its
+           page — Asset Library, Demo + CTA, Generation History — and the app
+           name was the one place a page title carried the user's data instead.
+           It also read twice on screen: the back link above already says
+           "App Profile". The name still appears where it is actionable, in
+           the delete confirmation the founder has to type it. */
+        title="App Profile"
         description={profile?.brand_description ? sentenceCase(profile.brand_description) : undefined}
         actions={
           <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-3">
