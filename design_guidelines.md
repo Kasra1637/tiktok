@@ -86,12 +86,12 @@ headline treatments.
 | Display | Space Grotesk | `h1`–`h4`, `.font-display` |
 | Body | Figtree | `body` default |
 | Mono | IBM Plex Mono | `code`, `.font-mono` — JSON specs, URLs, IDs |
-| Video overlay | Anton + 10 text faces | Demo + CTA canvas captions/end cards only |
+| Video overlay | Anton + 9 text faces | Demo + CTA canvas captions/end cards only |
 
 Display text carries tight tracking (`-0.02em`, `-0.03em` on `h1`/`.font-display`).
 
 Video overlay faces are canvas paint, not page type: they live outside the
-3-size workspace scale above. Eleven options (Anton default + ten
+3-size workspace scale above. Ten options (Anton default + nine
 high-legibility text faces), each vendored as latin woff2 with an `@font-face`
 rule — a face the browser must fetch is a face the export can lose. Motion is
 one of ten named entrances computed from video time only, so the recording

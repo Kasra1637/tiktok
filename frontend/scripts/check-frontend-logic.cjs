@@ -915,10 +915,10 @@ console.log("=".repeat(70));
 const OV = loadModule(path.resolve(__dirname, "..", "src", "demoCta", "overlays.js"));
 // DC (demoCta/constants.js) is already loaded above; the overlay catalogs ride it.
 
-check("eleven overlay fonts with unique ids, Anton first",
-  Array.isArray(DC.OVERLAY_FONTS) && DC.OVERLAY_FONTS.length === 11 &&
+check("ten overlay fonts with unique ids, Anton first",
+  Array.isArray(DC.OVERLAY_FONTS) && DC.OVERLAY_FONTS.length === 10 &&
   DC.OVERLAY_FONTS[0].id === "anton" &&
-  new Set(DC.OVERLAY_FONTS.map((f) => f.id)).size === 11,
+  new Set(DC.OVERLAY_FONTS.map((f) => f.id)).size === 10,
   DC.OVERLAY_FONTS && DC.OVERLAY_FONTS.map((f) => f.id).join(","));
 
 check("every overlay font file exists under public/fonts with an @font-face rule",

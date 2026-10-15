@@ -1044,7 +1044,37 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaOffsetX, ctaOffsetY, overlayAccent, zoomKeyframes]);
+  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, zoomKeyframes]);
+
+  // Every overlay choice replays the clip from the top.
+  //
+  // The six values below are also in the preview loop's deps above, so the
+  // canvas redraws with the new entrance, size or face on the next frame — but
+  // a redraw alone lands mid-clip, where the entrance has already played out
+  // and the only way to see it is to scrub back by hand. Restarting means the
+  // founder watches the same opening twice and compares the two choices
+  // directly, which is the whole reason to change one.
+  const overlayStyleKey = `${captionAnim}:${captionScale}:${captionFont}:${ctaAnim}:${ctaScale}:${ctaFont}`;
+  const lastOverlayStyleRef = useRef(overlayStyleKey);
+  useEffect(() => {
+    if (lastOverlayStyleRef.current === overlayStyleKey) return;
+    lastOverlayStyleRef.current = overlayStyleKey;
+    // Never mid-export: the recorder walks the media element's own timeline,
+    // and a restart here would cut the capture it is writing.
+    if (isExportingRef.current) return;
+    const video = videoRef.current;
+    if (!video) return;
+    video.currentTime = 0;
+    setCurrentTime(0);
+    // Playback only when a clip is actually loaded: the media element is always
+    // in the tree (it is what the recorder captures audio from), so an empty
+    // preview would otherwise ask a sourceless element to play.
+    if (video.src || video.currentSrc) {
+      const played = video.play();
+      if (played && typeof played.catch === "function") played.catch(() => {});
+    }
+    setIsPlaying(true);
+  }, [overlayStyleKey]);
 
   const seekVideo = (video, time) => new Promise((resolve) => {
     const done = () => { video.removeEventListener("seeked", done); resolve(); };

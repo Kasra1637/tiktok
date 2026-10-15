@@ -7041,6 +7041,108 @@ async function runDemoCtaChecks() {
     }
   );
 
+  // Public Sans is off the overlay font catalog. It shipped in both lists (Hook
+  // Text and End Card CTA) and was the least distinct of the text faces, so a
+  // founder could pick it and get something that read as the browser default.
+  await check("Public Sans is gone from both overlay font lists", async (ctx) => {
+    const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+    // One group is open at a time, so each list is opened in turn.
+    const openGroup = async (container, label) => {
+      const btn = [...container.querySelectorAll("button[aria-expanded]")]
+        .find((b) => (b.textContent || "").trim() === label);
+      if (!btn) throw new Error(`no ${label} group header`);
+      if (btn.getAttribute("aria-expanded") === "true") return;
+      await act(async () => {
+        btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      });
+      await act(async () => {});
+    };
+    await withApi(
+      { getGenerations: async () => ({ generations: [COMPLETED] }) },
+      async () => {
+        await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
+        for (const [group, prefix] of [["Hook Text", "caption-font"], ["End Card CTA", "cta-font"]]) {
+          await openGroup(ctx.container, group);
+          const tiles = [...ctx.container.querySelectorAll(`[data-testid^="${prefix}-"]`)];
+          if (tiles.length !== 10) {
+            throw new Error(`expected 10 faces in the ${group} list, saw ${tiles.length}`);
+          }
+          if (tiles.some((t) => t.getAttribute("data-testid") === `${prefix}-public-sans`)) {
+            throw new Error(`Public Sans is still offered in the ${group} font list`);
+          }
+        }
+      }
+    );
+  });
+
+  // Every overlay change replays from the top. The canvas redraws either way —
+  // the six values are in the preview loop's deps — but a redraw lands mid-clip,
+  // where an entrance has already played out, so the founder cannot see the
+  // choice they just made without scrubbing back by hand.
+  await check("an overlay entrance, size or face change replays the preview", async (ctx) => {
+    const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+    // The canvas redraw is what makes a choice visible at all, and jsdom has no
+    // 2d context to assert it against — so the preview loop's dependency
+    // contract is read from source. These six were missing, which is why a new
+    // entrance, size or face never reached the canvas until the clip reloaded.
+    const src = fs.readFileSync(
+      path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
+      "utf8"
+    );
+    const loopDeps = /}, \[device,[^\]]*\]\);/.exec(src);
+    if (!loopDeps) throw new Error("the preview loop's dependency array moved");
+    for (const name of ["captionFont", "ctaFont", "captionAnim", "ctaAnim", "captionScale", "ctaScale"]) {
+      if (!loopDeps[0].includes(name)) {
+        throw new Error(`the preview loop does not depend on ${name}, so the canvas keeps the old choice`);
+      }
+    }
+    await withApi(
+      { getGenerations: async () => ({ generations: [COMPLETED] }) },
+      async () => {
+        await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
+        const video = ctx.container.querySelector("video");
+        if (!video) throw new Error("the preview media element is missing");
+        const group = [...ctx.container.querySelectorAll("button[aria-expanded]")]
+          .find((b) => (b.textContent || "").trim() === "Hook Text");
+        if (!group) throw new Error("no Hook Text group header");
+        await act(async () => {
+          group.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+
+        const change = async (label, el) => {
+          if (!el) throw new Error(`no control for ${label}`);
+          video.currentTime = 4;
+          if (video.currentTime !== 4) throw new Error(`could not seek the preview for ${label}`);
+          await act(async () => {
+            el.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {});
+          if (video.currentTime !== 0) {
+            throw new Error(`${label} did not replay the preview (stuck at ${video.currentTime}s)`);
+          }
+        };
+
+        await change("an entrance", ctx.container.querySelector('[data-testid="caption-anim-fade"]'));
+        await change("a face", ctx.container.querySelector('[data-testid="caption-font-nunito"]'));
+
+        // Text size is a Radix slider, so it takes a key press on the thumb.
+        const thumb = ctx.container.querySelector('[data-testid="caption-size-slider"] [role="slider"]');
+        if (!thumb) throw new Error("no caption size slider thumb");
+        video.currentTime = 4;
+        await act(async () => {
+          thumb.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+        });
+        await act(async () => {});
+        if (video.currentTime !== 0) {
+          throw new Error(`a text size change did not replay the preview (stuck at ${video.currentTime}s)`);
+        }
+      }
+    );
+  });
+
   await check(
     "the export action sits after the preview in the pinned column",
     async (ctx) => {

@@ -97,7 +97,6 @@ export const OVERLAY_FONTS = [
   { id: "poppins", label: "Poppins", stack: '"Poppins", system-ui, sans-serif' },
   { id: "montserrat", label: "Montserrat", stack: '"Montserrat", system-ui, sans-serif' },
   { id: "nunito", label: "Nunito", stack: '"Nunito", system-ui, sans-serif' },
-  { id: "public-sans", label: "Public Sans", stack: '"Public Sans", system-ui, sans-serif' },
 ];
 
 /**

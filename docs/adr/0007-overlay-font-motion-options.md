@@ -4,7 +4,7 @@
 - **Date:** 2026-10-15
 - **Anchors:** `frontend/src/demoCta/overlays.js` (`overlayIntro`, `revealLines`);
   `frontend/src/demoCta/constants.js` (`OVERLAY_FONTS`, `OVERLAY_ANIMS`);
-  `frontend/public/fonts/` (11 vendored faces)
+  `frontend/public/fonts/` (10 vendored faces)
 
 ## Context
 
@@ -17,7 +17,7 @@ readable faces, motion options, and size control.
 - **Faces are vendored, never linked.** Canvas paints from locally available
   fonts, so every selectable face ships as a latin 400 woff2 under
   `public/fonts/` with an `@font-face` rule. 400 only: the painters request no
-  bold weight. Eleven options, Anton first as the unchanged default.
+  bold weight. Ten options, Anton first as the unchanged default.
 - **Motion is a pure function of video time.** Each of the ten styles is
   computed from overlay-local time in `overlayIntro`, with no wall-clock read
   anywhere on the path — so the `captureStream` export matches the preview
