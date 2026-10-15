@@ -193,6 +193,10 @@ export default function AppProfileDetail() {
   const handleRegenerateEverything = async () => {
     setRegeneratingEverything(true);
     setError(null);
+    // Liveness the founder keeps while scrolled away: the button spinner only
+    // reads where it is. Dismissed on settle — the notice below carries the
+    // result, so this toast must never outlive the call.
+    const toastId = toast.loading("Refreshing research and angles…");
     try {
       const updated = await api.regenerateEverything(profileId);
       setProfile(updated);
@@ -211,6 +215,7 @@ export default function AppProfileDetail() {
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
+      toast.dismiss(toastId);
       setRegeneratingEverything(false);
     }
   };
@@ -223,6 +228,7 @@ export default function AppProfileDetail() {
   const handleRefreshFromSources = async () => {
     setRefreshing(true);
     setError(null);
+    const toastId = toast.loading("Re-reading the store listings…");
     try {
       const saved = await api.refreshAppProfile(profileId);
       setProfile(saved);
@@ -230,6 +236,7 @@ export default function AppProfileDetail() {
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
+      toast.dismiss(toastId);
       setRefreshing(false);
     }
   };
@@ -265,15 +272,17 @@ export default function AppProfileDetail() {
     if (!appstoreUrl && !playUrl) return;
     setResearchingNew(true);
     setError(null);
+    const toastId = toast.loading("Researching a new draft…");
     try {
       const created = await api.researchAppProfile({
         ...(appstoreUrl ? { appstore_url: appstoreUrl } : {}),
         ...(playUrl ? { play_url: playUrl } : {}),
       });
       if (created?.id) rememberCurrentAppId(created.id);
-      toast.success("New research draft ready — review it, then approve it.");
+      toast.success("New research draft ready — review it, then approve it.", { id: toastId });
       navigate("/brand");
     } catch (err) {
+      toast.error(getErrorMessage(err), { id: toastId });
       setError(getErrorMessage(err));
     } finally {
       setResearchingNew(false);

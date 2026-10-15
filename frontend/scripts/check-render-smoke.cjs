@@ -695,7 +695,22 @@ function load(relPath) {
         UserButton: () => React.createElement("button", { "aria-label": "Account" }, "Account"),
       };
     }
-    if (spec === "sonner") return { toast: { success: () => {}, error: () => {} } };
+    if (spec === "sonner") {
+      // Mirror the real toast surface the research flows use: loading toasts
+      // resolve in place by id, and dismiss retires one. A mock missing
+      // either would turn every loading toast into a crash rather than a
+      // tested path.
+      const calls = [];
+      const toast = (message) => {
+        calls.push(message);
+        return calls.length;
+      };
+      toast.success = (message, opts) => { calls.push(message); return opts?.id ?? calls.length; };
+      toast.error = (message, opts) => { calls.push(message); return opts?.id ?? calls.length; };
+      toast.loading = toast;
+      toast.dismiss = () => {};
+      return { toast };
+    }
     if (spec.endsWith("lib/api")) {
       // Mirror the real getErrorMessage: checks assert on the surfaced text
       // (e.g. a 409's detail), and a constant would swallow it. mediaUrl is
@@ -1059,6 +1074,11 @@ async function main() {
         const midFlight = text.includes("Generating your plan");
         if (!showingPlan && !midFlight) {
           throw new Error("Review neither shows the fresh plan nor generates it");
+        }
+        // Mid-flight, the generating state narrates which section is being
+        // written — never a bare spinner while the plan is en route.
+        if (midFlight && !ctx.container.querySelector('[data-testid="plan-progress"]')) {
+          throw new Error("the generating state narrates nothing live");
         }
         if (text.includes("No plan yet")) {
           throw new Error("Review still bounces to a separate plan step for its own plan");
@@ -2125,8 +2145,55 @@ async function main() {
     }
   });
 
-  await check("a failed strategy build leaves nothing generated and says so", async (ctx) => {
-    // The build is its own action on the panel above, so its failure is reported
+  // The build narrates liveness while running — dots cycling on a line that
+  // claims motion only, never stages the backend cannot show. It unmounts
+  // with the busy state, so a failure can never strand it beside its error.
+  await check("a strategy build narrates liveness, then clears it", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1";
+    let releaseBuild;
+    const buildGate = new Promise((resolve) => { releaseBuild = resolve; });
+    try {
+      await withApi(
+        {
+          getStudioProject: async () => ({
+            ...PROJECT_WITH_STRATEGY,
+            strategy: {},
+            strategy_version: 0,
+          }),
+          generateStrategy: () => buildGate,
+          generateVideo: async () => {
+            throw new Error("no render should escape a strategy that never built");
+          },
+        },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Hook + Story");
+          const build = buttonByText(ctx, /Build the app-specific strategy|Rebuild strategy/);
+          await act(async () => {
+            build.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {});
+          const live = ctx.container.querySelector('[data-testid="strategy-progress"]');
+          if (!live) throw new Error("no liveness line while the strategy builds");
+          if (!/Building your strategy/.test(live.textContent || "")) {
+            throw new Error(`the liveness line claims stages it cannot see: ${JSON.stringify(live.textContent)}`);
+          }
+          await act(async () => {
+            releaseBuild({ ...PROJECT_WITH_STRATEGY });
+          });
+          await act(async () => {});
+          await act(async () => {});
+          if (ctx.container.querySelector('[data-testid="strategy-progress"]')) {
+            throw new Error("the liveness line survived its own build");
+          }
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("a failed strategy build leaves nothing generated and says so", async (ctx) => {    // The build is its own action on the panel above, so its failure is reported
     // there. What matters from this panel's side is the guarantee that no render
     // went out: nothing is generated for a video that does not exist, and the
     // founder is told why rather than left with a dead button.
@@ -4065,6 +4132,57 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
+  // Shuffle narrates fresh work while cycling, then the six arrive staggered —
+  // never a spinner-to-grid blink, and never a frozen count beside an error.
+  await check("goal shuffle counts up in flight, then cascades cards in", async (ctx) => {
+    const SIX = ANGLE_GOALS.problem_solution;
+    let releaseShuffle;
+    const shuffleGate = new Promise((resolve) => { releaseShuffle = resolve; });
+    await withApi(
+      {
+        getContentAngles: async () => ({
+          angles: [{ ...ANGLE, goal_variant: 0, goal_suggestions: [...SIX] }],
+          objective_evidence: {},
+        }),
+        regenerateContentAngleGoals: () => shuffleGate,
+      },
+      async () => {
+        global.__SMOKE_PARAMS = "";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Audience & goal");
+          await passAngleGate(ctx);
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="regenerate-goals-button"]'), "no shuffle button");
+          const progress = ctx.container.querySelector('[data-testid="goals-progress"]');
+          if (!progress) throw new Error("no live count while goals reshuffle");
+          if (!/Shuffling goal \d+ of 6/.test(progress.textContent || "")) {
+            throw new Error(`the count does not read as fresh work: ${JSON.stringify(progress.textContent)}`);
+          }
+          await act(async () => {
+            releaseShuffle({ goal_variant: 1, suggestions: [...SIX].reverse() });
+          });
+          await act(async () => {});
+          if (ctx.container.querySelector('[data-testid="goals-progress"]')) {
+            throw new Error("the count survived its own reshuffle");
+          }
+          const cards = [...ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]')];
+          if (cards.length !== 6) throw new Error(`expected six goal cards, saw ${cards.length}`);
+          const delays = cards.map((card) => {
+            const host = card.closest(".animate-fade-up");
+            if (!host) throw new Error("a fresh goal card carries no arrival animation");
+            return host.style.animationDelay;
+          });
+          if (new Set(delays).size !== delays.length) {
+            throw new Error(`goal cards do not arrive staggered: ${JSON.stringify(delays)}`);
+          }
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
   // Regenerate angles replaces the list with six fresh serialized rows and
   // keeps the goal step populated: the old pick's id is gone, so the wizard
   // parks on the strongest new angle instead of collapsing to the wait
@@ -4463,6 +4581,76 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (ready.includes("Premade Pick")) {
       throw new Error("a pre-made template is shown alongside the tailored set");
     }
+  });
+
+  // Tailoring narrates fresh work while reading, then the cards arrive
+  // staggered. The count caps at the outgoing list — the only honest total
+  // mid-flight — and unmounts on settle so it never outlives the call.
+  await check("template tailoring counts up in flight, then cascades cards in", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    const PREMADE = { ...TEMPLATE, id: "t-premade", name: "Premade Pick" };
+    const CUSTOM = {
+      ...TEMPLATE,
+      id: "t-custom",
+      name: "Custom Pick",
+      brand_profile_id: "b1",
+      objective: "address_user_problem",
+      origin: "custom",
+    };
+    let releaseTailoring;
+    const tailoringGate = new Promise((resolve) => {
+      releaseTailoring = resolve;
+    });
+    await withApi(
+      {
+        getTemplates: async () => ({ templates: [PREMADE, CUSTOM] }),
+        getTemplateRecommendations: async () => ({
+          recommendations: [
+            { template: PREMADE, score: 9, why_it_fits: ["popular"], limitations: [] },
+            { template: CUSTOM, score: 8, why_it_fits: ["Tailored for Taskly"], limitations: [] },
+          ],
+        }),
+        ensureObjectiveTemplates: async () => tailoringGate,
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openTemplateStep(ctx);
+        const waiting = ctx.text();
+        if (!waiting.includes("Tailoring templates")) {
+          throw new Error("the step does not say it is tailoring before showing templates");
+        }
+        const progress = ctx.container.querySelector('[data-testid="templates-progress"]');
+        if (!progress) throw new Error("no live count while templates tailor");
+        if (!/Reading template \d+ of \d+/.test(progress.textContent || "")) {
+          throw new Error(`the count does not read as fresh work: ${JSON.stringify(progress.textContent)}`);
+        }
+        await act(async () => {
+          releaseTailoring({
+            templates: [CUSTOM],
+            generated: true,
+            objective: "address_user_problem",
+            error: null,
+          });
+        });
+        await act(async () => {});
+        if (ctx.container.querySelector('[data-testid="templates-progress"]')) {
+          throw new Error("the count survived its own tailoring");
+        }
+        if (!ctx.text().includes("Custom Pick")) {
+          throw new Error("the tailored custom template is not shown once ready");
+        }
+        const scores = [...ctx.container.querySelectorAll('[data-testid="template-fit-score"]')];
+        if (!scores.length) throw new Error("no scored template cards after tailoring");
+        const delays = scores.map((s) => {
+          const host = s.closest(".animate-fade-up");
+          if (!host) throw new Error("a fresh template card carries no arrival animation");
+          return host.style.animationDelay;
+        });
+        if (new Set(delays).size !== delays.length) {
+          throw new Error(`template cards do not arrive staggered: ${JSON.stringify(delays)}`);
+        }
+      }
+    );
   });
 
   // The project write is where the retired fields would have gone back in. The

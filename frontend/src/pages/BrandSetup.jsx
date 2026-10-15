@@ -321,6 +321,7 @@ export default function BrandSetup() {
     }
     setResearching(true);
     setAnalyzeError(null);
+    const toastId = toast.loading("Researching the store listings…");
     try {
       const data = await api.researchAppProfile({
         appstore_url: appstoreUrl.trim() || undefined,
@@ -333,7 +334,8 @@ export default function BrandSetup() {
       toast.success(
         forking
           ? "New draft researched from these URLs — your other profile is untouched."
-          : "App research complete — review the draft profile, then approve it."
+          : "App research complete — review the draft profile, then approve it.",
+        { id: toastId }
       );
       // The details card only renders once a profile exists. Scroll it into
       // view now that research just created one, so the founder lands on the
@@ -343,6 +345,7 @@ export default function BrandSetup() {
       });
     } catch (err) {
       setAnalyzeError(getErrorMessage(err));
+      toast.error(getErrorMessage(err), { id: toastId });
     } finally {
       setResearching(false);
     }
@@ -436,12 +439,13 @@ export default function BrandSetup() {
   const handleRefresh = async () => {
     if (!brand?.id) return;
     setRefreshing(true);
+    const toastId = toast.loading("Re-reading the store listings…");
     try {
       const saved = await api.refreshAppProfile(brand.id);
       applyProfile(saved);
-      toast.success("Re-research complete — review the proposal, then approve to apply it.");
+      toast.success("Re-research complete — review the proposal, then approve to apply it.", { id: toastId });
     } catch (err) {
-      toast.error(getErrorMessage(err));
+      toast.error(getErrorMessage(err), { id: toastId });
     } finally {
       setRefreshing(false);
     }

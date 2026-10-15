@@ -128,7 +128,7 @@ function formatTemplateUse(n) {
  * stopPropagation on click but not on keydown, so Enter and Space on the link
  * selected the template instead of expanding it.
  */
-function RecommendationCard({ r, selected, onSelect }) {
+function RecommendationCard({ r, selected, onSelect, index = 0 }) {
   const reasons = Array.isArray(r.why_it_fits) ? r.why_it_fits : [];
   const limits = Array.isArray(r.limitations) ? r.limitations : [];
   const score = Number(r.score);
@@ -151,6 +151,9 @@ function RecommendationCard({ r, selected, onSelect }) {
       ? sentenceCase(r.template.outcome.trim())
       : "";
   return (
+    // Staggered arrival like the angle and goal rows: a fresh ranking is
+    // watched arriving instead of blinking in at once. Keyed by template id
+    // at the call site, so only genuinely new sets replay it.
     <div
       role="button"
       tabIndex={0}
@@ -162,7 +165,8 @@ function RecommendationCard({ r, selected, onSelect }) {
         }
       }}
       aria-pressed={selected}
-      className={`card-pickable w-full rounded-xl border p-5 text-left ${
+      style={{ animationDelay: `${Math.min(index, 8) * 70}ms` }}
+      className={`card-pickable animate-fade-up w-full rounded-xl border p-5 text-left ${
         selected
           ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
           : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
@@ -738,6 +742,27 @@ function AngleGoalPicker({
   const featured = [...new Set([...rankedGoals, ...knownGoals])].slice(0, 6);
   const outsideRecommendation = Boolean(value && !featured.includes(value));
 
+  // Live count-up while the six reshuffle ("Shuffling goal 3 of 6…"). Same
+  // contract as the angle count-up: narrates fresh work, unmounts on settle
+  // or error, capped at the visible total so it never over-counts.
+  const [shuffleCount, setShuffleCount] = useState(0);
+  const shuffleTimer = useRef(null);
+  const shuffleTotal = Math.max(featured.length, 1);
+  useEffect(() => {
+    if (!regenerating) {
+      setShuffleCount(0);
+      return undefined;
+    }
+    setShuffleCount(1);
+    shuffleTimer.current = setInterval(() => {
+      setShuffleCount((c) => (c >= shuffleTotal ? shuffleTotal : c + 1));
+    }, 450);
+    return () => {
+      clearInterval(shuffleTimer.current);
+      shuffleTimer.current = null;
+    };
+  }, [regenerating, shuffleTotal]);
+
   if (!angle) {
     /* The waits marker only. This used to fall back to a flat list of angle
        names of its own — no check mark, no expansion, no regenerate — which is
@@ -786,17 +811,26 @@ function AngleGoalPicker({
           The angle stays the story’s focus; the goal shapes what the overall campaign should achieve.
         </p>
       </div>
+      {regenerating && (
+        <p className="text-xs text-muted-foreground" role="status" data-testid="goals-progress">
+          Shuffling goal {shuffleCount} of {shuffleTotal}…
+        </p>
+      )}
       <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label={`Recommended video goals for ${angle.label}`}>
         {featured.map((goal, index) => {
           const selected = value === goal;
           return (
+            // Staggered arrival, same language as the angle rows: a fresh
+            // order is watched arriving instead of blinking in at once. Keyed
+            // by goal, so only genuinely new sets replay it.
             <button
               key={goal}
               type="button"
               aria-pressed={selected}
               data-testid={`recommended-goal-${goal}`}
               onClick={() => onPick(goal)}
-              className={`card-pickable rounded-xl border p-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-35)] ${
+              style={{ animationDelay: `${Math.min(index, 8) * 70}ms` }}
+              className={`card-pickable animate-fade-up rounded-xl border p-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-35)] ${
                 selected
                   ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
                   : "border-[color:var(--hairline)]"
@@ -852,6 +886,29 @@ function AngleGoalPicker({
         </p>
       )}
     </section>
+  );
+}
+
+/**
+ * Live narration while the plan writes. The artifact arrives whole, so there
+ * is nothing honest to count — but its sections are known up front (hook,
+ * script, shots, demo note), and naming the current one beats a static line
+ * that never moves. Unmounts with its branch, so a failure can never strand
+ * it beside the error; the interval dies with the component.
+ */
+function PlanPhaseLine() {
+  const phases = ["Writing the hook…", "Writing the script…", "Placing the shots…", "Adding the demo note…"];
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setIndex((i) => (i + 1) % phases.length);
+    }, 1800);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <span role="status" data-testid="plan-progress">
+      {phases[index]}
+    </span>
   );
 }
 
@@ -1187,7 +1244,8 @@ export default function CreateVideo() {
   const tailorKeyRef = useRef("");
   const [tailoring, setTailoring] = useState(false);
   const [tailorError, setTailorError] = useState(null);
-
+  const [tailorCount, setTailorCount] = useState(0);
+  const tailorTimer = useRef(null);
   const runTailoring = useCallback(async (regenerate) => {
     if (!profileId || !objective) return;
     const key = `${profileId}:${objective}`;
@@ -1370,6 +1428,25 @@ export default function CreateVideo() {
     return recommendations.filter((r) => tailoredIds.has(r?.template?.id));
   }, [recommendationsVisible, tailoredReady, tailored.templates, recommendations]);
 
+  // Live count-up while templates tailor ("Reading template 2 of 4…"). The
+  // total is the outgoing list — the only honest denominator mid-flight —
+  // and the line unmounts on settle or error, same contract as the other
+  // generation counts.
+  const tailorTotal = Math.max(visibleRecommendations.length, 1);
+  useEffect(() => {
+    if (!tailoring) {
+      setTailorCount(0);
+      return undefined;
+    }
+    setTailorCount(1);
+    tailorTimer.current = setInterval(() => {
+      setTailorCount((c) => (c >= tailorTotal ? tailorTotal : c + 1));
+    }, 450);
+    return () => {
+      clearInterval(tailorTimer.current);
+      tailorTimer.current = null;
+    };
+  }, [tailoring, tailorTotal]);
   // Preselect the top pick only once its key is displayable. Deliberately not
   // "on every reload": a reload must never move a selection the founder made,
   // so the only conditions are that nothing is selected and nothing has ever
@@ -2142,10 +2219,15 @@ setObjective("");
             {profileId && objective && (
               <div className="flex flex-wrap items-center gap-2">
                 {tailoring ? (
-                  <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Tailoring templates for this goal…
-                  </p>
+                  <>
+                    <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Tailoring templates for this goal…
+                    </p>
+                    <p className="text-xs text-muted-foreground" role="status" data-testid="templates-progress">
+                      Reading template {tailorCount} of {tailorTotal}…
+                    </p>
+                  </>
                 ) : (
                   <Button
                     variant="ghost"
@@ -2177,10 +2259,11 @@ setObjective("");
                   {tailoredReady ? "Tailored for this app" : "Recommended"}
                 </span>
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                {visibleRecommendations.map((r) => (
+                {visibleRecommendations.map((r, i) => (
                   <RecommendationCard
                     key={r.template.id}
                     r={r}
+                    index={i}
                     selected={templateId === r.template.id}
                     onSelect={() => {
                       // Latched, so a later reload cannot move this pick.
@@ -2528,7 +2611,7 @@ if (step === 3) {
             <p className="text-xs text-muted-foreground">
               {loading && !busy
                 ? "Picking up where you left off."
-                : "Writing hook, script, shots, and demo note."}
+                : <PlanPhaseLine />}
             </p>
           </div>
         ) : !project?.script_version ? (

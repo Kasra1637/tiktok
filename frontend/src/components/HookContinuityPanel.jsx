@@ -125,6 +125,26 @@ const SECTION_COPY = {
  * always exactly two rows, in render order, because that is what the model was
  * asked for and what the render will produce.
  */
+/**
+ * Liveness line while the strategy builds. Dots cycle; the words do not
+ * change, because the backend steps are not observable and staged copy would
+ * be invented. Unmounts with `busy` via the caller.
+ */
+function StrategyBuildLine() {
+  const [dots, setDots] = useState(1);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setDots((d) => (d >= 3 ? 1 : d + 1));
+    }, 500);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <p className="text-xs text-muted-foreground" role="status" data-testid="strategy-progress">
+      Building your strategy{".".repeat(dots)}
+    </p>
+  );
+}
+
 function SectionRow({ section }) {
   // Model-written, so normalized at display like every other generated field.
   const goal = sentenceCase(section.goal);
@@ -365,6 +385,11 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           {hasStrategy ? "Rebuild strategy" : "Build the app-specific strategy"}
         </Button>
+        {/* Live liveness while the strategy builds. The backend steps are not
+            observable from here, so this claims motion only — never stages.
+            A sibling component so the button keeps its label; it unmounts
+            with `busy`, so an error can never strand it. */}
+        {busy && <StrategyBuildLine />}
         {needsAngle && (
           <p className="text-xs text-muted-foreground" data-testid="strategy-needs-angle">
             Pick an audience angle on the Audience &amp; goal step first — the strategy is built around it.
