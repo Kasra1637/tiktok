@@ -3710,8 +3710,17 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           || !step.textContent.includes("(required)")) {
         throw new Error("the step does not explain that an audience angle is required");
       }
-      if (!step.querySelector('[data-testid="goal-waits-for-angle"]')) {
+      const marker = step.querySelector('[data-testid="goal-waits-for-angle"]');
+      if (!marker) {
         throw new Error("goal suggestions appear before an angle is selected");
+      }
+      // The marker is a contract, not copy. The angle ask is already on screen
+      // above it — "(required)" plus the CTA sentence — so a line restating it
+      // in the marker would be the third copy of the same instruction.
+      if ((marker.textContent || "").trim() !== "") {
+        throw new Error(
+          `the goal waits marker carries copy again: ${JSON.stringify(marker.textContent)}`
+        );
       }
       if (step.querySelector('[data-testid^="recommended-goal-"]')) {
         throw new Error("featured goal buttons appear without an angle");
