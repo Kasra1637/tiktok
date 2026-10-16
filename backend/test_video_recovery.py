@@ -66,12 +66,12 @@ def run(coro):
 def seed(api, **values):
     generation_id = str(uuid.uuid4())
     run(api._execute(
-        "INSERT INTO generations (id, status, user_id, video_url, r2_url, variation_kind, "
+        "INSERT INTO generations (id, status, user_id, video_url, r2_url, segment_role, "
         "openrouter_job_id, duration, created_at, updated_at) "
         "VALUES (?, 'completed', ?, ?, ?, ?, ?, 3, '2026-01-01', '2026-01-01')",
         (generation_id, values.get("user_id", "owner"),
          values.get("video_url", f"/api/media/videos/{generation_id}.mp4"),
-         values.get("r2_url", ""), values.get("variation_kind", "demo_cta"),
+         values.get("r2_url", ""), values.get("segment_role", "demo_cta"),
          values.get("openrouter_job_id")),
     ))
     return generation_id

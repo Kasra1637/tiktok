@@ -132,15 +132,16 @@ class TestStandaloneExport:
     def test_a_standalone_export_is_saved_with_no_parent(self, api):
         result = _run(api.save_demo_cta_export(file=_upload(), user_id=ANON))
         assert result["status"] == "completed"
-        assert result["parent_generation_id"] in (None, "")
 
         stored = _run(api._fetch_one(
-            "SELECT parent_generation_id, studio_project_id, brand_profile_id, "
-            "template_id, status, video_url FROM generations WHERE id = ?",
+            "SELECT studio_project_id, brand_profile_id, template_id, "
+            "status, video_url FROM generations WHERE id = ?",
             (result["id"],)))
-        assert stored["parent_generation_id"] in (None, "")
         # Nothing to inherit, so nothing is invented. A row pointing at a project
-        # it does not belong to would be worse than a null.
+        # it does not belong to would be worse than a null. parent_generation_id
+        # used to be asserted here and went with the variations feature; the
+        # inherited project linkage is what now stands in for "no parent", since
+        # a standalone export has to invent all of it and cannot.
         assert stored["studio_project_id"] in (None, "")
         assert stored["brand_profile_id"] in (None, "")
         assert stored["template_id"] in (None, "")
@@ -187,22 +188,31 @@ class TestStandaloneExport:
 class TestExportSaved:
     def test_an_export_is_filed_beside_its_original(self, api):
         """
-        Filed as a variant with parent_generation_id set, so the finished piece
-        appears next to the hook rather than replacing it. Both keep working as
-        downloads; the founder can see which finished piece came from which hook.
+        Filed as its own row that inherits the render's project, so the finished
+        piece appears next to the hook rather than replacing it. Both keep
+        working as downloads.
+
+        The parent pointer this used to assert on (parent_generation_id) went
+        with the variations feature, so lineage is now carried by the inherited
+        studio_project_id and the export's own segment role. What must not come
+        back is the ORIGINAL being disturbed, which is pinned separately.
         """
-        _, _, gen_id = _completed_generation(api)
+        profile, project, gen_id = _completed_generation(api)
         result = _run(api.save_demo_cta_export(
             generation_id=gen_id, file=_upload(), user_id=ANON))
         assert result["status"] == "completed"
-        assert result["parent_generation_id"] == gen_id
 
         stored = _run(api._fetch_one(
-            "SELECT parent_generation_id, variation_kind, video_url, status "
+            "SELECT studio_project_id, brand_profile_id, video_url, status "
             "FROM generations WHERE id = ?", (result["id"],)))
-        assert stored["parent_generation_id"] == gen_id
-        assert stored["variation_kind"] == "demo_cta"
+        assert stored["studio_project_id"] == project["id"]
+        assert stored["brand_profile_id"] == profile["id"]
         assert stored["status"] == "completed"
+        # Filed beside it, not in place of it.
+        original = _run(api._fetch_one(
+            "SELECT video_url, status FROM generations WHERE id = ?", (gen_id,)))
+        assert original["status"] == "completed"
+        assert original["video_url"] != stored["video_url"]
 
     def test_the_export_really_is_on_disk_and_playable(self, api):
         """
@@ -233,18 +243,27 @@ class TestExportSaved:
             generation_id=gen_id, file=_upload(), user_id=ANON))
         original = _run(api.get_generation(gen_id, user_id=ANON))
         assert original["status"] == "completed"
-        assert original["parent_generation_id"] in (None, "")
         listed = _run(api.generation_history(user_id=ANON))["generations"]
         assert gen_id in {g["id"] for g in listed}
 
-    def test_the_export_appears_in_history_with_its_lineage(self, api):
-        _, _, gen_id = _completed_generation(api)
+    def test_the_export_appears_in_history_alongside_its_original(self, api):
+        """
+        The additive guarantee, restated on the listing: both rows are in
+        history at once.
+
+        The lineage assertions this used to make (parent_generation_id,
+        variation_kind) went with the variations feature. What replaces them is
+        that the export inherits the original's project — so the two sit under
+        the same studio project rather than the export appearing unattached.
+        """
+        _, project, gen_id = _completed_generation(api)
         result = _run(api.save_demo_cta_export(
             generation_id=gen_id, file=_upload(), user_id=ANON))
         listed = _run(api.generation_history(user_id=ANON))["generations"]
+        ids = {g["id"] for g in listed}
+        assert {gen_id, result["id"]} <= ids
         entry = next(g for g in listed if g["id"] == result["id"])
-        assert entry["parent_generation_id"] == gen_id
-        assert entry["variation_kind"] == "demo_cta"
+        assert entry["studio_project_id"] == project["id"]
 
     def test_another_user_cannot_file_against_someone_elses_render(self, api):
         _, _, gen_id = _completed_generation(api)

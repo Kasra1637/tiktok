@@ -115,11 +115,11 @@ def _generation(api, profile, status="completed", **overrides):
         """INSERT INTO generations
            (id, studio_project_id, brand_profile_id, template_id, template_version,
              model, duration, status, attempt,
-             parent_generation_id, created_at, updated_at, started_at, completed_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, 20, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             created_at, updated_at, started_at, completed_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, 20, ?, ?, ?, ?, ?, ?, ?)""",
         (gen_id, project["id"], profile["id"], template["id"], template["version"],
          overrides.pop("model", "minimax-h3"), status,
-         overrides.pop("attempt", 1), overrides.pop("parent_generation_id", None),
+         overrides.pop("attempt", 1),
          now, now, overrides.pop("started_at", now), overrides.pop("completed_at", now),
          ANON)))
     return _run(api.get_generation(gen_id, ANON))

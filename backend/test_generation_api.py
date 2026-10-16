@@ -688,12 +688,20 @@ class TestRetry:
         """
         A replacement is a new row, so the failure stays in history
         instead of being overwritten.
+
+        There is no parent pointer left to assert on: parent_generation_id was
+        retired with the variations feature, and a retry is now traced only by
+        its attempt number. So what is pinned here is the guarantee that still
+        exists — a second row, not an overwrite.
         """
         gen, calls = self._failed(api, monkeypatch, "Retry Child")
         replacement = _run(api.retry_generation(gen["id"], ANON))
         assert replacement["id"] != gen["id"]
-        assert replacement["parent_generation_id"] == gen["id"]
         assert replacement["attempt"] == 2
+        # The failed row is still its own row, which is the whole point: an
+        # overwrite would have left one generation here instead of two.
+        original = _run(api.get_generation(gen["id"], ANON))
+        assert original["status"] == "failed"
         assert len(calls) == 2
 
     def test_original_failure_is_preserved(self, api, monkeypatch):
@@ -816,8 +824,10 @@ class TestOneRenderHasNoChain:
     that they are gone — otherwise a stale frontend build would keep calling
     them and get an opaque 405 instead of an explanation.
 
-    Their columns stay (segment_index, parent_generation_id, approved), so a
-    chain recorded before this change still lists its children in history.
+    Their columns stay (segment_index, approved), so a chain recorded before
+    this change still lists its children in history. parent_generation_id is
+    NOT one of them: it went with the variations feature, so nothing reads a
+    retry's lineage any more except its attempt number.
     """
 
     def test_the_chain_endpoints_are_not_registered(self, api):

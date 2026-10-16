@@ -10,7 +10,7 @@ complete studio journey in order:
   project -> photo upload + attach -> plan -> claim-safety gate -> strategy ->
   ready -> generate (+ idempotency, + bad-model refusal) -> poll to completed
   -> history -> feedback + analytics -> demo-cta export + media serving ->
-  variations -> duplicate -> delete
+  delete
 
 External systems are faked at the boundary, exactly as the unit suites do:
 the AI model layer answers canned rows and the video provider submits and
@@ -412,7 +412,8 @@ class TestE2EFullJourney:
             files={"file": ("demo-cta.mp4", MP4_BYTES, "video/mp4")}),
             "POST demo-cta-result")
         assert export["status"] == "completed"
-        assert export["parent_generation_id"] == gid
+        # parent_generation_id went with the variations feature. What proves the
+        # export belongs to this render now is that history lists both rows.
         state["export_id"] = export["id"]
 
         history = _ok(client.get("/api/history/generations"), "GET history")
@@ -423,32 +424,23 @@ class TestE2EFullJourney:
         assert media.status_code == 200, f"GET {export['video_url']} -> {media.status_code}"
         assert len(media.content) > 0
 
-    def test_10_variations_duplicate_delete(self, journey):
+    def test_10_delete_export_generation(self, journey):
+        """
+        Deleting the export filed in test 09.
+
+        This step used to be variations -> duplicate -> delete, and the first
+        two were removed with the variations feature along with their endpoints
+        (/studio/variations, /generations/{id}/variations,
+        /generations/{id}/duplicate). Delete is still a shipped endpoint and
+        still targeted a generation row, so that half is kept rather than
+        deleted along with the rest of the step.
+        """
         client, state = journey["client"], journey["state"]
-        gid = state["generation_id"]
-        kinds = _ok(client.get("/api/studio/variations"), "GET variation kinds")
-        assert any(k["key"] == "hook_line" for k in kinds["variations"])
 
-        var = _ok(client.post(f"/api/generations/{gid}/variations", json={
-            "kind": "hook_line", "value": "Stop doing this", "note": "e2e",
-        }), "POST variation")
-        assert var["project"]["status"] == "draft"
-        assert var["parent_generation_id"] == gid
-        assert var["project"]["hook_line"] == "Stop doing this"
-
-        dup = _ok(client.post(f"/api/generations/{gid}/duplicate"),
-                  "POST duplicate")
-        assert dup["parent_generation_id"] == gid
-        assert dup["project"]["status"] == "draft"
-        assert dup["project"]["script"]
-
-        children = _ok(client.get(f"/api/generations/{gid}/variations"),
-                       "GET generation variations")
-        assert isinstance(children["variations"], list)
-
-        # Delete the export from test 09 (not the original): deletions target
-        # generations, and theJourney keeps the render that spawned them.
         gone = _ok(client.delete(f"/api/generations/{state['export_id']}"),
                    "DELETE export generation")
         assert gone["deleted"] == state["export_id"]
         assert client.get(f"/api/generations/{state['export_id']}").status_code == 404
+        # And the render that spawned it is still there: deletion targeted one
+        # row, not the journey.
+        assert client.get(f"/api/generations/{state['generation_id']}").status_code == 200
