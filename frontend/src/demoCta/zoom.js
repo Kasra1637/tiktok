@@ -41,8 +41,10 @@ const DEFAULT_LOCKED = { vScale: 1, vOffX: 0, vOffY: 0, hZoom: 1, hPanX: 0, hPan
  * - No keyframes: live sliders, always.
  * - Before the first keyframe: locked defaults during export (so the export is
  *   deterministic), live sliders during preview (so adjustments show).
- * - Past the last keyframe: same split — live during preview, last lock baked
- *   during export.
+ * - Past the last keyframe: the last lock holds, in both modes. The preview
+ *   used to fall back to the live sliders here, which meant it showed a
+ *   framing the export would not bake; the lock applies in preview and export
+ *   alike so the two agree.
  * - Between locks: the active lock, rigidly.
  */
 export function getEffectiveZoom({ keyframes, live, videoTime, isExporting }) {
@@ -58,12 +60,10 @@ export function getEffectiveZoom({ keyframes, live, videoTime, isExporting }) {
   if (sorted.length === 0) return liveValues;
 
   let active = null;
-  let hasNextKeyframe = false;
   for (let i = 0; i < sorted.length; i++) {
     if (sorted[i].time <= videoTime) {
       active = sorted[i];
     } else {
-      hasNextKeyframe = true;
       break;
     }
   }
@@ -71,14 +71,17 @@ export function getEffectiveZoom({ keyframes, live, videoTime, isExporting }) {
     if (isExporting) return { ...DEFAULT_LOCKED };
     return liveValues;
   }
-  void hasNextKeyframe;
+  // Keyframes carry the slider namespaces (scale/offX/offY, handZoom/handPanX/
+  // handPanY); the returned object carries the canvas namespaces (vScale/vOffX/
+  // vOffY, hZoom/hPanX/hPanY). Keep the two apart: reading active.hPanX here
+  // yields undefined on every real keyframe and silently drops hand pan.
   return {
     vScale: active.scale,
     vOffX: active.offX,
     vOffY: active.offY,
     hZoom: active.handZoom,
-    hPanX: active.hPanX,
-    hPanY: active.hPanY,
+    hPanX: active.handPanX,
+    hPanY: active.handPanY,
   };
 }
 

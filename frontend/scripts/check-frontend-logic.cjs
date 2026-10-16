@@ -604,9 +604,12 @@ check("between keyframes the active lock applies",
 check("the second lock takes over at its timestamp",
   Z.getEffectiveZoom({ keyframes: KF, live: LIVE, videoTime: 6, isExporting: true }).vScale === 2.5);
 
-// Past the last lock: preview returns to the sliders, export keeps the lock.
-check("past the last keyframe the preview returns to live sliders",
-  Z.getEffectiveZoom({ keyframes: KF, live: LIVE, videoTime: 9, isExporting: false }).vScale === 2);
+// Past the last lock: the lock holds, in both modes. The preview used to fall
+// back to the sliders here, which showed a framing the export would not bake;
+// locked values apply in preview and export alike so the two agree.
+check("past the last keyframe the preview keeps the last lock",
+  Z.getEffectiveZoom({ keyframes: KF, live: LIVE, videoTime: 9, isExporting: false }).vScale === 2.5
+    && Z.getEffectiveZoom({ keyframes: KF, live: LIVE, videoTime: 9, isExporting: false }).hPanX === 0.5);
 check("past the last keyframe the export keeps the last lock",
   Z.getEffectiveZoom({ keyframes: KF, live: LIVE, videoTime: 9, isExporting: true }).vScale === 2.5
     && Z.getEffectiveZoom({ keyframes: KF, live: LIVE, videoTime: 9, isExporting: true }).hPanX === 0.5);
