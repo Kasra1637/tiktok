@@ -113,6 +113,16 @@ MIN_SCALE = 0.10
 # instructions and the founder's spoken words are untouched either way.
 FINAL_SCALE = 0.02
 
+# How the last fit walks, and how far each step shrinks the scale.
+#
+# This is the stage that decides what a founder's prompt actually says when it
+# will not fit whole, so it steps in measured ratios and checks the result each
+# time rather than computing one scale and trusting the arithmetic. The decay is
+# generous because each step must actually move the assembled length, and many
+# fields do not scale with the clip limit at all.
+FINAL_FIT_STEPS = 8
+FINAL_FIT_DECAY = 0.7
+
 # Whether to use the condensed fixed instructions, set the same way as the
 # scale and for the same reason: it has to reach the assembler without threading
 # a parameter through every helper.
@@ -156,12 +166,12 @@ CONDENSE_BELOW = 4500
 # and it applies in both modes — a music bed under the speech is wrong at any
 # budget.
 #
-# Both rose by 405 and 150 for the one camera move: the hook-boundary lean-in is
+# Both rose by 311 and 150 for the one camera move: the hook-boundary lean-in is
 # fixed text on every studio render, because a move the model may or may not
 # honour is not a move. The condensed twin costs well under half as much, since
 # HeyGen's 4,090 is the only ceiling tight enough to need it and it is the
 # reason the twin exists.
-FULL_PROMPT_FLOOR = 3581
+FULL_PROMPT_FLOOR = 3487
 CONDENSED_PROMPT_FLOOR = 2102
 
 # The same measurement for the OTHER builder, taken at the same duration (10s)
@@ -352,11 +362,10 @@ _CONDENSED_IDENTITY_CLOSE = (
 # a founder's feed does not lean identically every time, and a model told "to her
 # left" would fight it.
 _CAMERA_MOVE = (
-    "THE CAMERA MOVES ONCE, at {beat}s, as the hook line lands: it pushes in and arcs to "
-    "one three-quarter angle while they lean toward the lens{gesture}. One continuous move, "
-    "no cut, landing ON the beat like a real gesture rather than an effect applied "
-    "afterwards — this is the one stated change to the locked angle and framing — then that "
-    "framing holds for the rest of the take. Their eyes stay on the lens throughout."
+    "THE CAMERA MOVES ONCE, at {beat}s as the hook line lands: push in and arc to one "
+    "three-quarter angle as they lean toward the lens{gesture}. One continuous move, no "
+    "cut, ON the beat rather than applied afterwards — the one stated change to the "
+    "locked angle — then hold that framing to the end. Their eyes stay on the lens."
 )
 
 # The same rule for a provider whose ceiling cannot carry the full set. Every
@@ -1214,27 +1223,49 @@ def build_segment_prompt(
         fixed = CONDENSED_PROMPT_FLOOR if condensed else FULL_PROMPT_FLOOR
         variable = max(1, len(prompt) - fixed)
         room = budget - fixed
-        # No longer gated on having room left. It used to be, and that gate is
-        # backwards: a budget at or under the fixed floor leaves nothing for the
-        # variables, which is precisely when squeezing them is the only lever
-        # there is — so refusing to squeeze handed back the full-size prompt and
-        # let the submit guard refuse a render that could have been terse. The
-        # FINAL_SCALE floor already bounds the result, and it covers the
-        # negative room that used to be the reason to skip: max() floors a
-        # negative ratio to FINAL_SCALE, which is the intended behaviour.
-        final_scale = max(FINAL_SCALE, min(MIN_SCALE, room / variable * 0.95))
-        token = _PROMPT_SCALE.set(final_scale)
-        token2 = _PROMPT_CONDENSED.set(condensed)
-        token3 = _PROMPT_PROTECT.set(False)
-        token4 = _PROMPT_SCRIPT_SACRED.set(bool(script_sacred))
-        try:
-            prompt = _assemble_prompt(
-                strategy, profile, template, duration, assets, plan)
-        finally:
-            _PROMPT_SCRIPT_SACRED.reset(token4)
-            _PROMPT_PROTECT.reset(token3)
-            _PROMPT_CONDENSED.reset(token2)
-            _PROMPT_SCALE.reset(token)
+        # Walk the scale down and MEASURE, rather than predicting one value and
+        # hoping. Two things made the old single-shot prediction wrong:
+        #
+        # 1. It clamped its own result to MIN_SCALE, so this fallback could only
+        #    ever be maximally destructive. A prompt over its ceiling by one
+        #    percent and one over by half were clamped to the same 0.1, and
+        #    every variable came back a one-word stub.
+        # 2. It assumed variable text scales linearly with the scale factor. It
+        #    does not: _clip applies an effective limit per field, so a field
+        #    already under its limit does not shrink at all and a field well
+        #    over it shrinks far faster. Measured against a real prompt, the
+        #    arithmetic above predicted reclaiming 133 characters per pass and
+        #    reclaimed 11.
+        #
+        # Between them, a 101-character overflow produced a prompt mangled to
+        # 4,969 characters, with the scene, the spoken words and both sections
+        # truncated to about ten characters each. The correction loop cannot
+        # close a gap that small in the six attempts it has, so every overflow
+        # arrived here regardless of size.
+        #
+        # Stepping down until the assembled prompt actually fits is the only
+        # version of this that can be trusted, and it costs one extra assembly
+        # per step. FINAL_SCALE still bounds a hopeless case: at or below it the
+        # walk stops, and a budget at or under the fixed floor makes room
+        # non-positive so the first scale is already FINAL_SCALE.
+        step = min(1.0, room / variable * 0.95) if room > 0 else 1.0
+        for _ in range(FINAL_FIT_STEPS):
+            final_scale = max(FINAL_SCALE, step)
+            token = _PROMPT_SCALE.set(final_scale)
+            token2 = _PROMPT_CONDENSED.set(condensed)
+            token3 = _PROMPT_PROTECT.set(False)
+            token4 = _PROMPT_SCRIPT_SACRED.set(bool(script_sacred))
+            try:
+                prompt = _assemble_prompt(
+                    strategy, profile, template, duration, assets, plan)
+            finally:
+                _PROMPT_SCRIPT_SACRED.reset(token4)
+                _PROMPT_PROTECT.reset(token3)
+                _PROMPT_CONDENSED.reset(token2)
+                _PROMPT_SCALE.reset(token)
+            if len(prompt) <= budget or final_scale <= FINAL_SCALE:
+                break
+            step *= FINAL_FIT_DECAY
     return prompt
 
 

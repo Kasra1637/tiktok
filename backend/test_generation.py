@@ -1396,6 +1396,51 @@ class TestPerProviderPromptBudget:
         measured = len(gp._assemble_single_pass_prompt({}, {}, {}, 10, "full", False))
         assert measured == gp.SINGLE_PASS_PROMPT_FLOOR
 
+    def test_a_small_overflow_is_squeezed_not_destroyed(self):
+        """
+        The stage that decides what a founder's prompt says when it will not fit
+        whole used to collapse to its most destructive setting every time, so a
+        prompt over its ceiling by 101 characters came back with the scene, the
+        spoken words and both sections truncated to about ten characters each.
+
+        Two faults combined. The final fit clamped its own scale to MIN_SCALE, so
+        it could not be anything but maximally destructive however small the
+        overshoot. And it computed that one scale from a linear model of the
+        variable text, which is wrong: `_clip` applies an effective limit per
+        field, so a field already under its limit does not shrink at all. It
+        predicted reclaiming 133 characters a pass and reclaimed 11, exhausted
+        its six attempts, and fell through to the collapse.
+
+        So this pins the behaviour rather than a constant: an overflow must cost
+        the founder roughly the overflow, not the prompt. A collapse to
+        MIN_SCALE lands far below its budget; a squeeze lands within a few
+        percent of it.
+        """
+        kwargs = self._verbose_kwargs()
+        full = gp.build_segment_prompt(**kwargs, prompt_budget=6800)
+        for overflow in (40, 400):
+            budget = len(full) + overflow
+            squeezed = gp.build_segment_prompt(**kwargs, prompt_budget=budget)
+            assert len(squeezed) <= budget, (
+                f"a {overflow}-character overflow did not fit: {len(squeezed)}"
+            )
+            assert len(squeezed) > budget * 0.9, (
+                f"a {overflow}-character overflow cost the founder most of the prompt: "
+                f"{len(squeezed)} against a budget of {budget}. The final fit collapsed "
+                f"instead of squeezing."
+            )
+
+    def test_a_hopeless_overflow_still_collapses_rather_than_looping(self):
+        """
+        The other end of the same walk. A budget below the fixed floor has no
+        room at all, so the walk must terminate at FINAL_SCALE instead of
+        iterating -- this is what stops the new loop trading a mangled prompt for
+        an unbounded one.
+        """
+        kwargs = self._verbose_kwargs()
+        prompt = gp.build_segment_prompt(**kwargs, prompt_budget=2000, script_sacred=True)
+        assert len(prompt) < 4000, f"final fit did not bound the prompt: {len(prompt)}"
+
     def test_the_app_name_cannot_blow_a_ceiling_on_its_own(self):
         """
         Every value in a prompt scales with the ceiling except the app's name.
