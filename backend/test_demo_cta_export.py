@@ -233,6 +233,43 @@ class TestExportSaved:
             user_id=ANON))
         assert result["status"] == "completed"
 
+    def test_an_export_is_marked_as_one_so_recovery_never_reaches_for_a_provider(self, api):
+        """
+        The native-export marker, asserted on the WRITER.
+
+        Two guards read this value: provider_download_candidates returns nothing
+        for a marked row, and recovery_report verdicts it unrecoverable with
+        "re-export it in the editor". Both are only meaningful if some writer
+        actually stores it.
+
+        It did not. When the variations feature was retired, the marker moved
+        from variation_kind to segment_role and the reader followed -- but the
+        export writer kept inheriting the parent's segment_role, so no row was
+        ever 'demo_cta' and both guards were dead while their own tests kept
+        passing against a hand-built row. That gap is the reason this asserts
+        the stored value rather than the consumer's behaviour.
+        """
+        _, _, gen_id = _completed_generation(api)
+        result = _run(api.save_demo_cta_export(
+            generation_id=gen_id, file=_upload(), user_id=ANON))
+        stored = _run(api._fetch_one(
+            "SELECT segment_role FROM generations WHERE id = ?", (result["id"],)))
+        assert stored["segment_role"] == "demo_cta"
+
+    def test_a_standalone_export_is_marked_too(self, api):
+        """
+        Unconditionally, including with no parent to inherit from: a standalone
+        export has no provider rendition either, and is the clearest case of it.
+        """
+        result = _run(api.save_demo_cta_export(file=_upload(), user_id=ANON))
+        stored = _run(api._fetch_one(
+            "SELECT segment_role FROM generations WHERE id = ?", (result["id"],)))
+        assert stored["segment_role"] == "demo_cta"
+        # And the guard it feeds agrees.
+        assert api.provider_download_candidates(
+            {"segment_role": stored["segment_role"],
+             "video_url": "https://cdn.example/stored.mp4"}) == []
+
     def test_the_original_is_untouched_and_still_listed(self, api):
         """
         The additive guarantee, stated as a test: saving an export must not

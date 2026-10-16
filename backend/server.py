@@ -741,10 +741,11 @@ async def init_db():
                 duration INTEGER,
                 status TEXT DEFAULT 'submitted',
                 segment_role TEXT DEFAULT 'primary',
-                -- Position in the influencer chain: 0 is the hook, 1+ are
-                -- extensions. Distinct from segment_role ('primary' vs
-                -- 'extension') because a one-shot primary generation is also
-                -- segment 0, and the chain assembler orders on this.
+                -- What KIND of row this is: 'primary' for a rendered piece,
+                -- 'demo_cta' for a native export filed in the editor. A native
+                -- export has no provider rendition, so recovery must never
+                -- substitute its parent render for it -- that guard tests this
+                -- value. Distinct from segment_index below.
                 segment_index INTEGER DEFAULT 0,
                 -- Which strategy version produced this segment. A segment
                 -- generated against a stale strategy is refused as a
@@ -6666,7 +6667,18 @@ async def save_demo_cta_export(
             parent.get("model_id") if parent else None,
             seconds,
             seconds,
-            (parent.get("segment_role") or "primary") if parent else "primary",
+            # "demo_cta", never the parent's role. This row IS the marker that
+            # provider_download_candidates and recovery_report both test to keep
+            # the recovery walk off a native export -- substituting the parent
+            # render would hand back a different video than the founder exported.
+            #
+            # It used to inherit the parent's segment_role, which meant a native
+            # export was never marked as one and that whole guard was dead: the
+            # writer was switched from variation_kind when the variations feature
+            # was retired, and the reader followed but the writer did not. Set
+            # unconditionally, because a standalone export with no parent is the
+            # most clearly native of all.
+            "demo_cta",
             int(parent.get("segment_index") or 0) if parent else 0,
             int(parent.get("strategy_version") or 0) if parent else 0,
             1,

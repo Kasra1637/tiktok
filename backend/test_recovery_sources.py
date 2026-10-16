@@ -63,7 +63,7 @@ def provider_row(**overrides):
         "id": "gen-1",
         "video_url": "https://cdn.example/stored.mp4",
         "openrouter_job_id": "job-1",
-        "variation_kind": None,
+        "segment_role": "primary",
         "r2_url": "",
     }
     row.update(overrides)
@@ -114,7 +114,7 @@ class TestCandidateOrder:
         substituting its parent render would hand back a different video than
         the founder exported.
         """
-        assert api.provider_download_candidates(provider_row(variation_kind="demo_cta")) == []
+        assert api.provider_download_candidates(provider_row(segment_role="demo_cta")) == []
 
     def test_an_app_local_path_is_never_offered_as_a_download(self, api):
         got = api.provider_download_candidates(
@@ -213,7 +213,7 @@ class TestTheWalkFallsThrough:
         assert len(recorder.tried) == 2
 
     def test_a_native_export_never_reaches_for_a_provider(self, api, repair_pipeline):
-        row, _local, recorder = repair_pipeline({}, variation_kind="demo_cta")
+        row, _local, recorder = repair_pipeline({}, segment_role="demo_cta")
         _stored, error, _ = asyncio.run(api._persist_generation_clip(row, "anonymous"))
         assert recorder.tried == []
         assert "cannot be recovered" in error
