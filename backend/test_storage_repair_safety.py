@@ -174,13 +174,13 @@ class TestFfmpegIsBounded:
         assert argv[argv.index("-crf") + 1] == "20"
         assert "+faststart" in " ".join(argv)
 
-    def test_the_camera_cut_asks_for_one_thread(self, tmp_path):
+    def test_the_camera_move_asks_for_one_thread(self, tmp_path):
         """
-        The finalize camera cut is a full re-encode at preset medium; uncapped
+        The finalize camera move is a full re-encode at preset medium; uncapped
         threads overlapping a save is what OOM-killed the container.
         """
-        argv = overlays.build_camera_cut_command(
-            tmp_path / "b.mp4", tmp_path / "o.mp4", 3.0, 10.0)
+        argv = overlays.build_camera_move_command(
+            tmp_path / "b.mp4", tmp_path / "o.mp4", 2.1, 10.0)
         assert argv[argv.index("-threads") + 1] == "1"
 
     def test_the_concat_asks_for_one_thread(self, tmp_path):

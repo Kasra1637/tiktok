@@ -21,6 +21,10 @@ stay out of frame.
 from contextvars import ContextVar
 from typing import Optional
 
+# The one camera constant a prompt has to state: the second the hook-boundary
+# move lands on. Shared with the finalize pass on purpose (see overlays).
+from overlays import camera_beat_seconds
+
 # Hard ceiling on the assembled render prompt, in characters.
 #
 # Proven live: a 7,724-char prompt to minimax/hailuo-3-max was refused with
@@ -151,8 +155,14 @@ CONDENSE_BELOW = 4500
 # synthesized in one inseparable pass, the ban has to be explicit fixed text,
 # and it applies in both modes — a music bed under the speech is wrong at any
 # budget.
-FULL_PROMPT_FLOOR = 3176
-CONDENSED_PROMPT_FLOOR = 1952
+#
+# Both rose by 405 and 150 for the one camera move: the hook-boundary lean-in is
+# fixed text on every studio render, because a move the model may or may not
+# honour is not a move. The condensed twin costs well under half as much, since
+# HeyGen's 4,090 is the only ceiling tight enough to need it and it is the
+# reason the twin exists.
+FULL_PROMPT_FLOOR = 3581
+CONDENSED_PROMPT_FLOOR = 2102
 
 # The same measurement for the OTHER builder, taken at the same duration (10s)
 # so the two are comparable, and identical at 8s and 15s: this builder's fixed
@@ -327,6 +337,71 @@ _CONDENSED_IDENTITY_CLOSE = (
     "frame, face and hair exactly as the reference photograph, in the one "
     "outfit this scene specifies, in the same place, under the same light."
 )
+
+# The one camera move, as a standing instruction on every studio render.
+#
+# It has a twin in ffmpeg (see overlays.build_camera_move_command) that reframes
+# on the same second, and the two are deliberately different jobs. The model
+# performs the GESTURE — the lean, the nod, the shoulder turn — because a gesture
+# is a thing a person does and no crop can fake one. ffmpeg does the FRAMING,
+# because only it can put the move on an exact frame. Each covers what the other
+# cannot do, which is also why asking the model to travel further would only
+# double the move rather than improve it.
+#
+# The direction is deliberately unnamed: ffmpeg picks the side per generation so
+# a founder's feed does not lean identically every time, and a model told "to her
+# left" would fight it.
+_CAMERA_MOVE = (
+    "THE CAMERA MOVES ONCE, at {beat}s, as the hook line lands: it pushes in and arcs to "
+    "one three-quarter angle while they lean toward the lens{gesture}. One continuous move, "
+    "no cut, landing ON the beat like a real gesture rather than an effect applied "
+    "afterwards — this is the one stated change to the locked angle and framing — then that "
+    "framing holds for the rest of the take. Their eyes stay on the lens throughout."
+)
+
+# The same rule for a provider whose ceiling cannot carry the full set. Every
+# constraint above survives; only the examples of how to satisfy them go.
+_CONDENSED_CAMERA_MOVE = (
+    "ONE camera move at {beat}s on the hook line: push in and arc to one three-quarter angle "
+    "as they lean toward the lens{gesture}, then hold. Eyes stay on the lens."
+)
+
+
+def camera_move_section(strategy: dict, hook_seconds, condensed: bool = False) -> str:
+    """
+    The camera-move instruction, stated against the beat the render will use.
+
+    Reads the second out of the strategy's camera_beat rather than recomputing it,
+    because the finalize pass reframes at exactly this second and the two have to
+    agree: a model that leans on the last word of the hook line while the frame
+    tightens a beat later is two events, and reads as exactly that.
+
+    `hook_seconds` is only the fallback, for a strategy that predates the field or
+    whose model left it out, and it resolves to the same number the writer would
+    have stamped.
+
+    The strategy's gesture is appended, not spliced in, so the model's own
+    phrasing reads as the detail of the lean rather than as a second, competing
+    instruction about it. The strategy prompt asks for a gesture that names what
+    HER body does -- brows lifting, a nod on the last word -- precisely so that
+    appending it cannot restate the lean this sentence already asked for.
+    """
+    strategy = strategy or {}
+    beat = strategy.get("camera_beat")
+    beat = beat if isinstance(beat, dict) else {}
+    at = camera_beat_seconds(hook_seconds, strategy) or 3.0
+    gesture = _clip(beat.get("gesture"), 90).lstrip()
+    # Models routinely open the gesture with "as ..." because the strategy
+    # prompt's own examples do, and the clause is appended as "landing as X" --
+    # which would read "landing as as her chin dips". Stripped here rather than
+    # by forbidding it in the strategy prompt, because the example earns more
+    # than the phrasing it costs.
+    if gesture[:3].lower() == "as ":
+        gesture = gesture[3:].lstrip(" ,—-")
+    clause = f", landing as {gesture}" if gesture else ""
+    template = _CONDENSED_CAMERA_MOVE if condensed else _CAMERA_MOVE
+    return template.format(beat=f"{at:g}", gesture=clause)
+
 
 # How the opening plays, as a standing instruction on every studio render.
 #
@@ -853,6 +928,16 @@ def character_scene_lock(strategy: dict) -> str:
     trailer below enforceable — the clothing is stated once, by the thing that
     decided it, instead of being left to the photograph and the model to
     reconcile.
+
+    "same camera" used to be in that list and had to go. Every finished render
+    now reframes once at the hook's camera beat (see _CAMERA_MOVE), so a lock
+    demanding an unchanging camera was contradicting the render it was supposed
+    to protect — and a model told both would either ignore the move or drift off
+    the locked angle. The lock's real job is the room, the light and the
+    wardrobe, and those are untouched by a camera move that keeps the same
+    scene. What replaces it is the more specific rule: the one stated move, and
+    no other change of angle. A move to a new angle is not a new scene, so the
+    lock still holds against the drift it exists to prevent.
     """
     strategy = strategy or {}
     lines = []
@@ -874,7 +959,7 @@ def character_scene_lock(strategy: dict) -> str:
         return ""
     lock = (
         "THE SCENE AND THE DELIVERY ARE LOCKED. Reproduce these exactly — same place, "
-        "same light, same camera, same wardrobe and props, same way of moving and speaking:\n"
+        "same light, same wardrobe and props, same way of moving and speaking:\n"
         + "\n".join(lines)
         + "\n\nThese are not suggestions. Do not restyle, re-light, re-wardrobe or relocate "
         "this scene, and do not swap in a different location, prop or outfit, even if the "
@@ -1129,20 +1214,27 @@ def build_segment_prompt(
         fixed = CONDENSED_PROMPT_FLOOR if condensed else FULL_PROMPT_FLOOR
         variable = max(1, len(prompt) - fixed)
         room = budget - fixed
-        if room > 0:
-            final_scale = max(FINAL_SCALE, min(MIN_SCALE, room / variable * 0.95))
-            token = _PROMPT_SCALE.set(final_scale)
-            token2 = _PROMPT_CONDENSED.set(condensed)
-            token3 = _PROMPT_PROTECT.set(False)
-            token4 = _PROMPT_SCRIPT_SACRED.set(bool(script_sacred))
-            try:
-                prompt = _assemble_prompt(
-                    strategy, profile, template, duration, assets, plan)
-            finally:
-                _PROMPT_SCRIPT_SACRED.reset(token4)
-                _PROMPT_PROTECT.reset(token3)
-                _PROMPT_CONDENSED.reset(token2)
-                _PROMPT_SCALE.reset(token)
+        # No longer gated on having room left. It used to be, and that gate is
+        # backwards: a budget at or under the fixed floor leaves nothing for the
+        # variables, which is precisely when squeezing them is the only lever
+        # there is — so refusing to squeeze handed back the full-size prompt and
+        # let the submit guard refuse a render that could have been terse. The
+        # FINAL_SCALE floor already bounds the result, and it covers the
+        # negative room that used to be the reason to skip: max() floors a
+        # negative ratio to FINAL_SCALE, which is the intended behaviour.
+        final_scale = max(FINAL_SCALE, min(MIN_SCALE, room / variable * 0.95))
+        token = _PROMPT_SCALE.set(final_scale)
+        token2 = _PROMPT_CONDENSED.set(condensed)
+        token3 = _PROMPT_PROTECT.set(False)
+        token4 = _PROMPT_SCRIPT_SACRED.set(bool(script_sacred))
+        try:
+            prompt = _assemble_prompt(
+                strategy, profile, template, duration, assets, plan)
+        finally:
+            _PROMPT_SCRIPT_SACRED.reset(token4)
+            _PROMPT_PROTECT.reset(token3)
+            _PROMPT_CONDENSED.reset(token2)
+            _PROMPT_SCALE.reset(token)
     return prompt
 
 
@@ -1308,6 +1400,11 @@ def _assemble_prompt(
         sections.append(f"Visual style: {_clip(tpl['visual_style'], 80)}")
     if tpl.get("camera_pacing"):
         sections.append(f"Camera and pacing: {_clip(tpl['camera_pacing'], 80)}")
+
+    # After the sections it governs and before the general look, which is where
+    # the opening-interrupt directive sits for the same reason: the model reads a
+    # standard immediately before the material it is a standard for.
+    sections.append(camera_move_section(strategy, hook_seconds, condensed))
 
     sections.append(
         "No text appears on screen at all — no captions, no titles, no labels. "

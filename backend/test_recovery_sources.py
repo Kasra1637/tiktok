@@ -17,6 +17,7 @@ live-looking answer for rows that had already lost their only link.
 """
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -218,16 +219,21 @@ class TestTheWalkFallsThrough:
         assert "cannot be recovered" in error
 
 
-class TestCameraCutRunsInFinalize:
+class TestCameraMoveRunsInFinalize:
     """
-    The hook-to-middle cut is baked into the canonical file during finalize,
-    so the preview and the download carry it — not just captioned composites,
-    the only place it used to run (which is why changing its magnitude never
-    showed on a raw clip). Fresh downloads only: re-running it on an
-    already-cut canonical file would punch twice.
+    The hook-boundary camera move is baked into the canonical file during
+    finalize, so the preview and the download carry it — not just captioned
+    composites, the only place it used to run (which is why changing its
+    magnitude never showed on a raw clip). Fresh downloads only: re-running it
+    on an already-moved canonical file would punch twice.
+
+    The boundary asserted here is the BEAT, not the hook length: the move lands
+    at 70% of the hook so it falls under the last words of the hook line rather
+    than on the same instant they land, which is what makes it read as a gesture
+    instead of a cut. A project with no hook_seconds has no beat to place it in.
     """
 
-    def _persist_with_stubs(self, api, monkeypatch, tmp_path, row, project_id="proj-cut", project_hook=3):
+    def _persist_with_stubs(self, api, monkeypatch, tmp_path, row, project_id="proj-move", project_hook=3):
         from pathlib import Path as _Path
 
         downloaded = tmp_path / "dl.mp4"
@@ -241,13 +247,13 @@ class TestCameraCutRunsInFinalize:
 
         calls = []
 
-        async def fake_cut(path, at):
-            calls.append((_Path(path).name, at))
+        async def fake_move(path, at, direction=1):
+            calls.append((_Path(path).name, at, direction))
             return _Path(path), []
 
         monkeypatch.setattr(api, "_download_generation_video", fake_download)
         monkeypatch.setattr(api.overlays, "rescale_to_canvas", fake_rescale)
-        monkeypatch.setattr(api.overlays, "apply_camera_cut", fake_cut)
+        monkeypatch.setattr(api.overlays, "apply_camera_move", fake_move)
         monkeypatch.setattr(api.storage_service, "is_configured", lambda: False)
         monkeypatch.setattr(api.storage_service, "is_usable_video", lambda path: False)
         monkeypatch.setattr(
@@ -262,26 +268,44 @@ class TestCameraCutRunsInFinalize:
         stored, error, _ = asyncio.run(api._persist_generation_clip(row, "anonymous"))
         return stored, error, calls
 
-    def test_cut_runs_once_with_the_project_boundary(self, api, monkeypatch, tmp_path):
-        row = provider_row(studio_project_id="proj-cut-1")
+    def test_move_runs_once_on_the_beat_the_strategy_committed_to(
+        self, api, monkeypatch, tmp_path
+    ):
+        row = provider_row(studio_project_id="proj-move-1")
+        asyncio.run(api._execute(
+            "INSERT INTO studio_projects (id, hook_seconds, strategy) VALUES (?, ?, ?)",
+            ("proj-move-1", 4, json.dumps({"camera_beat": {"at": 2.8, "gesture": "a nod"}})),
+        ))
         stored, error, calls = self._persist_with_stubs(
-            api, monkeypatch, tmp_path, row, project_id="proj-cut-1")
+            api, monkeypatch, tmp_path, row, project_id="proj-move-1", project_hook=None)
         assert not error
         assert stored == "https://cdn.example/saved.mp4"
-        assert calls == [("dl.mp4", 3.0)]
+        # 0.7 * a 4s hook, and the direction this generation resolved to.
+        assert len(calls) == 1
+        assert calls[0][0] == "dl.mp4"
+        assert calls[0][1] == pytest.approx(2.8)
+        assert calls[0][2] in (1, -1)
 
-    def test_no_cut_without_a_known_boundary(self, api, monkeypatch, tmp_path):
-        row = provider_row(studio_project_id="proj-cut-missing")
+    def test_a_strategy_with_no_beat_falls_back_to_the_hook(self, api, monkeypatch, tmp_path):
+        row = provider_row(studio_project_id="proj-move-3")
         stored, error, calls = self._persist_with_stubs(
-            api, monkeypatch, tmp_path, row, project_id="proj-cut-missing", project_hook=None)
+            api, monkeypatch, tmp_path, row, project_id="proj-move-3", project_hook=3)
+        assert not error
+        assert stored == "https://cdn.example/saved.mp4"
+        assert calls == [("dl.mp4", pytest.approx(2.1), calls[0][2])]
+
+    def test_no_move_without_a_known_boundary(self, api, monkeypatch, tmp_path):
+        row = provider_row(studio_project_id="proj-move-missing")
+        stored, error, calls = self._persist_with_stubs(
+            api, monkeypatch, tmp_path, row, project_id="proj-move-missing", project_hook=None)
         assert not error
         assert stored == "https://cdn.example/saved.mp4"
         assert calls == []
 
-    def test_cut_is_not_rerun_on_an_already_saved_clip(self, api, monkeypatch, tmp_path):
+    def test_move_is_not_rerun_on_an_already_saved_clip(self, api, monkeypatch, tmp_path):
         from pathlib import Path as _Path
 
-        row = provider_row(studio_project_id="proj-cut-2")
+        row = provider_row(studio_project_id="proj-move-2")
         local = api.pipeline.VIDEOS_DIR / "gen-1.mp4"
         local.write_bytes(b"already canonical")
         monkeypatch.setattr(api.storage_service, "is_usable_video", lambda path: True)
@@ -292,13 +316,13 @@ class TestCameraCutRunsInFinalize:
         )
         calls = []
 
-        async def fake_cut(path, at):
+        async def fake_move(path, at, direction=1):
             calls.append(at)
             return _Path(path), []
 
-        monkeypatch.setattr(api.overlays, "apply_camera_cut", fake_cut)
+        monkeypatch.setattr(api.overlays, "apply_camera_move", fake_move)
         asyncio.run(api._execute(
-            "INSERT INTO studio_projects (id, hook_seconds) VALUES (?, ?)", ("proj-cut-2", 3),
+            "INSERT INTO studio_projects (id, hook_seconds) VALUES (?, ?)", ("proj-move-2", 3),
         ))
         stored, error, _ = asyncio.run(api._persist_generation_clip(row, "anonymous"))
         assert not error

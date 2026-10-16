@@ -18,6 +18,11 @@ from typing import Optional
 import httpx
 
 from face_crop import crop_face_from_path
+# For the one camera constant the strategy prompt has to state: the second the
+# hook-boundary move lands on. Read from the camera module rather than restated
+# here, because this prompt and the finalize pass have to be given the identical
+# number or the lean and the reframe become two separate events.
+from overlays import camera_beat_seconds
 from template_library import (
     CONTENT_ANGLE_KINDS,
     HOOK_CATEGORIES,
@@ -552,6 +557,19 @@ STRATEGY_SEGMENT_JSON_SCHEMA = _strict_object({
     "action": _str_prop(),
 })
 
+# The beat the hook-boundary camera move lands on.
+#
+# `at` is NOT the model's to choose: the finalize pass reframes on an exact
+# second and the render prompt is told the same one, so the lean the model
+# performs and the reframe ffmpeg applies are a single event rather than two
+# that happen to be nearby. It is stamped by the strategy endpoint from
+# hook_seconds and read back by both. Only `gesture` is the model's, and it is
+# what makes the lean specific to this video instead of a generic push.
+STRATEGY_CAMERA_BEAT_JSON_SCHEMA = _strict_object({
+    "at": {"type": "number"},
+    "gesture": _str_prop(),
+})
+
 STRATEGY_JSON_SCHEMA = _strict_object({
     "strategy_summary": _str_prop(),
     "audience_problem": _str_prop(),
@@ -585,6 +603,7 @@ STRATEGY_JSON_SCHEMA = _strict_object({
         "voice_delivery": _str_prop(),
     }),
     "segments": {"type": "array", "items": STRATEGY_SEGMENT_JSON_SCHEMA},
+    "camera_beat": STRATEGY_CAMERA_BEAT_JSON_SCHEMA,
 })
 # Mirrors normalize_strategy: every key it keeps is listed, retired keys
 # (character, cta_strategy) are absent so the model cannot emit them.
@@ -3071,6 +3090,31 @@ def _normalize_strategy_section(raw, fields) -> dict:
     return {field: _clean_strategy_text(raw.get(field), 300) for field in fields}
 
 
+def _normalize_camera_beat(raw) -> dict:
+    """
+    Coerce the camera-move beat to {"at": float, "gesture": str}.
+
+    `gesture` is the model's and is what makes the lean specific to this video:
+    a brow lift, a nod, a turn of the shoulder. It is capped hard because it is
+    interpolation into fixed prompt text, not prose the founder reads, and a
+    long one would eat HeyGen's 4,090 ceiling to say what one clause says.
+
+    `at` survives normalization but is NOT trusted. It is overwritten by the
+    strategy endpoint with the deterministic value (see
+    overlays.camera_beat_seconds) and clamped into the hook by every reader, so
+    a model inventing "at 99" costs the beat, not the render.
+    """
+    raw = raw if isinstance(raw, dict) else {}
+    try:
+        at = max(0.0, float(raw.get("at") or 0))
+    except (TypeError, ValueError):
+        at = 0.0
+    return {
+        "at": round(at, 3),
+        "gesture": _clean_strategy_text(raw.get("gesture"), 90),
+    }
+
+
 def normalize_strategy(raw: dict) -> dict:
     """
     Validate and normalize a strategy payload.
@@ -3105,6 +3149,7 @@ def normalize_strategy(raw: dict) -> dict:
         str((raw or {}).get("hook_line") or "").strip(),
         _STRATEGY_TEXT_LIMITS["hook_line"])
     result["segments"] = _normalize_sections(raw.get("segments"))
+    result["camera_beat"] = _normalize_camera_beat(raw.get("camera_beat"))
     return result
 
 
@@ -4164,7 +4209,12 @@ async def generate_video_strategy(
         f'    {{"index": 0, "role": "hook", "seconds": {hook_seconds}, "goal": "what these seconds must achieve",'
         ' "script": "words spoken in this segment", "action": "what they do in this segment"}'
         + _two_section_schema(plan_seconds)
-        + '\n  ]\n'
+        + '\n  ],\n'
+        + f'  "camera_beat": {{"at": {round(camera_beat_seconds(hook_seconds), 2)}, '
+        '"gesture": "the specific visible beat the BODY makes as the move lands on the hook '
+        "line finishing -- brows lifting, a nod on the last word, chin dipping as they turn "
+        "into the lean. Name what they do, never the camera move itself, never a wave, and "
+        'never anything that turns their eyes off the lens"},\n'
         "}\n"
         "Rules:\n"
         + "- Every text field is a sentence that starts with a capital letter -- write "

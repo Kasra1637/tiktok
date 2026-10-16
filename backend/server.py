@@ -7561,31 +7561,40 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
                     f"rendered size."
                 )
 
-            # Bake the hook-to-middle camera cut into the canonical file, right
+            # Bake the hook-boundary camera move into the canonical file, right
             # here after the canvas resize and before the R2 upload, so the
-            # preview and the download carry it — not just captioned
+            # preview and the download carry it -- not just captioned
             # composites, the only place it used to run (which is why changing
             # its magnitude never showed on a raw clip). Fresh downloads only,
-            # like trim and rescale above: re-running it on an already-cut
-            # canonical file would punch twice. Soft by design: an uncut clip
+            # like trim and rescale above: re-running it on an already-moved
+            # canonical file would punch twice. Soft by design: an unmoved clip
             # is still a watchable video.
-            hook_at = 0.0
             try:
                 project_row = await _fetch_one(
-                    "SELECT hook_seconds FROM studio_projects WHERE id = ?",
+                    "SELECT hook_seconds, strategy FROM studio_projects WHERE id = ?",
                     (row.get("studio_project_id") or "",),
                 )
-                hook_at = float((project_row or {}).get("hook_seconds") or 0)
+                # The same beat the render prompt was given, read out of the
+                # strategy rather than re-derived here -- see
+                # overlays.camera_beat_seconds for why the two must not each
+                # compute their own.
+                move_at = overlays.camera_beat_seconds(
+                    (project_row or {}).get("hook_seconds"),
+                    _project_strategy(project_row or {}),
+                )
             except (TypeError, ValueError):
-                hook_at = 0.0
-            if hook_at > 0:
-                cut, cut_warnings = await overlays.apply_camera_cut(local_path, hook_at)
-                if cut:
-                    local_path = cut
-                elif cut_warnings:
+                move_at = 0.0
+            if move_at > 0:
+                moved, move_warnings = await overlays.apply_camera_move(
+                    local_path, move_at,
+                    overlays.move_direction_for(generation_id),
+                )
+                if moved:
+                    local_path = moved
+                elif move_warnings:
                     logger.warning(
-                        f"Generation {generation_id}: camera cut skipped "
-                        f"({cut_warnings[0]}); delivering without it."
+                        f"Generation {generation_id}: camera move skipped "
+                        f"({move_warnings[0]}); delivering without it."
                     )
 
     stored_url = await asyncio.to_thread(
@@ -8131,6 +8140,22 @@ async def generate_project_strategy(
         strategy, _overflow = bind_spoken_words(
             strategy, approved_plan, hook_seconds, total_duration
         )
+
+    # The camera move's beat is stamped here rather than left to the model or
+    # re-derived at finalize, because two readers that each compute "when" will
+    # eventually disagree -- and when they do, the lean the model performs and
+    # the reframe ffmpeg applies are two different events, which is precisely
+    # the post-processing read this move exists to avoid. The model contributes
+    # the gesture (already trimmed by normalize_strategy); this decides the
+    # second, and both consumers read it back.
+    strategy = dict(strategy or {})
+    existing_beat = strategy.get("camera_beat")
+    existing_beat = existing_beat if isinstance(existing_beat, dict) else {}
+    strategy["camera_beat"] = {
+        **existing_beat,
+        "at": overlays.camera_beat_seconds(hook_seconds),
+    }
+
     merged = dict(row)
     merged["strategy"] = strategy
     report = claim_safety.build_safety_report(merged, profile)
