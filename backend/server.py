@@ -6331,7 +6331,7 @@ async def _submit_generation(
             segment_role, segment_index, strategy_version, continuity, trim_to_seconds,
             attempt, prompt_used, adjustments, retryable, approved,
             requested_at, created_at, updated_at, user_id, idempotency_key)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?)""",
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?)""",
         (generation_id, project["id"], project.get("brand_profile_id"),
          project.get("template_id"), project.get("template_version"),
          project.get("script_version"), model_key, cap["id"],
@@ -6654,7 +6654,7 @@ async def save_demo_cta_export(
             prompt_used, retryable, approved,
             requested_at, completed_at, created_at, updated_at, user_id, video_url, r2_url)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed',
-                   ?, ?, ?, ?, ?, '', 0, 1, ?, ?, ?, ?, ?, ?, ?)""",
+                   ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?, ?, ?)""",
         (
             result_id,
             parent.get("studio_project_id") if parent else None,
