@@ -628,28 +628,153 @@ h1,
     align-items: start;
     gap: 1rem;
 }
-.history-row-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    align-items: start;
-    gap: 1rem;
+
+/* History tiles: the clip is the content.
+ *
+ * A card opens with the render on a dark stage and one tab beneath it; the
+ * facts, the prompt and every action live in the drawer that tab opens. That
+ * is what lets the preview own the card — the old 152px rail plus a context
+ * column turned a page of finished clips into a stack of admin panels with a
+ * small video attached.
+ *
+ * The stage is full-bleed inside the card, so the card itself is `flush`
+ * (zero padding) and each band brings its own gutter.
+ *
+ * The preview height and the stage's own padding are declared together as
+ * custom properties, because the stage's flat height is the tallest thing it
+ * can hold. Written as literals in two rules they drift, and the flat height is
+ * what keeps a row of tiles even when one render failed and has no frame. */
+.history-card {
+    --history-preview-h: 260px;
+    --history-stage-pad: 20px;
+    overflow: hidden;
+    transition: border-color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.history-card[data-expanded="true"] {
+    border-color: var(--indigo-35);
+}
+.history-stage {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(var(--history-preview-h) + (var(--history-stage-pad) * 2));
+    padding: var(--history-stage-pad);
+    background:
+        radial-gradient(120% 80% at 50% 0%, hsl(var(--primary) / 0.12), transparent 62%),
+        hsl(228 20% 5%);
 }
 .history-preview {
     display: block;
     width: auto;
     max-width: 100%;
-    height: 220px;
-    margin-inline: auto;
+    height: var(--history-preview-h);
     object-fit: contain;
     background: #000;
+    border-radius: 0.75rem;
+    box-shadow: 0 24px 48px -24px rgba(0, 0, 0, 0.95);
 }
-@media (min-width: 480px) {
-    .history-row-layout.has-preview {
-        grid-template-columns: 152px minmax(0, 1fr);
+.history-stage-empty {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    width: 100%;
+    max-width: 340px;
+    padding: 16px;
+    border: 1px dashed var(--hairline-strong);
+    border-radius: 0.75rem;
+    background-color: hsl(var(--secondary) / 0.25);
+}
+/* The one control a collapsed tile shows.
+ *
+ * A button, not a div with a role: click, Space and Enter are free, and the
+ * drag is layered on top of the same target. The progress rule at its bottom
+ * edge is the drag's feedback — it fills as the pointer travels, so the gesture
+ * has a length the eye can follow before anything opens. */
+.history-tab {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    overflow: hidden;
+    padding: 11px 16px;
+    border-top: 1px solid var(--hairline);
+    background-color: hsl(var(--secondary) / 0.18);
+    color: hsl(var(--muted-foreground));
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-align: left;
+    transition: background-color 180ms ease, color 180ms ease;
+}
+.history-tab:hover,
+.history-tab:focus-visible,
+.history-tab[data-dragging="true"] {
+    background-color: hsl(var(--secondary) / 0.32);
+    color: hsl(var(--foreground));
+}
+.history-tab-grip {
+    color: hsl(var(--muted-foreground) / 0.7);
+    cursor: grab;
+    /* Only the grip owns the vertical gesture. On touch, a full-width drag
+       strip at the bottom of every card would fight page scrolling; the tab
+       itself stays a plain click surface. */
+    touch-action: none;
+}
+.history-tab[data-dragging="true"] .history-tab-grip {
+    cursor: grabbing;
+}
+.history-tab-lead {
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 2px;
+    transform-origin: left center;
+    background-color: hsl(var(--primary));
+    transition: transform 140ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+    .history-tab-lead {
+        transition: none;
     }
-    .history-preview {
-        width: 100%;
-        height: 270px;
+}
+/* The drawer is a plain disclosure, not a measured one.
+ *
+ * A height:auto animation needs the card's geometry read back mid-flight,
+ * which is exactly the kind of layout dance that fights the grid it lives in.
+ * The card grows to its real height and the drawer's own contents slide in;
+ * that reads as opening the same panel at a fraction of the cost. Motion is
+ * dropped entirely under `prefers-reduced-motion`, per the app's rule for
+ * entrances. */
+.history-drawer {
+    animation: history-drawer-in 220ms cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+.history-body {
+    padding: 20px;
+}
+@keyframes history-drawer-in {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .history-drawer {
+        animation: none;
+    }
+}
+@media (min-width: 768px) {
+    .history-card {
+        --history-preview-h: 340px;
+        --history-stage-pad: 24px;
+    }
+    .history-body {
+        padding: 24px 24px 28px;
     }
 }
 @media (min-width: 1200px) {

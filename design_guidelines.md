@@ -266,13 +266,32 @@ belongs to. `frontend/scripts/check-render-smoke.cjs` asserts the shared token.
 
 ### History density
 
-History uses a two-column card grid from 1200px viewport width, one column
-below it, with 16px gutters and top-aligned cards (no equal-height stretching).
-Each card has a 152px preview rail and a 270px contained video from 480px up;
-phones stack a 220px preview above the context. Audience and demo brief use
-existing API fields to fill the context column with useful information rather
-than filler. File controls remain under the preview; work actions stay beside
-it. Related-render links are capped at two per card.
+History is a contact sheet: a two-column grid of tiles from 1200px viewport
+width, one column below it, with 16px gutters and top-aligned cards (no
+equal-height stretching). A tile that has a clip to play is the clip and one
+expand tab — a full-bleed stage with a contained video (260px, 340px from
+768px) and nothing else on it: no app name, no status, no facts beside the
+footage. A row with nothing to play is the one exception and keeps a notice in
+place of the video, because a blank tile explains nothing.
+
+Everything else — the app name, the status, the hook, the facts, the audience,
+the demo brief, and every action — lives in the drawer under the tab, so a
+closed tile carries no chrome and nothing reachable by keyboard that nobody
+opened. The preview and the stage padding are custom properties on
+`.history-card` (`--history-preview-h`, `--history-stage-pad`), which is what
+keeps every collapsed tile the same flat height, failed renders included.
+
+The tab is one control with three ways in: click, Enter/Space, and a drag
+toward the open direction that follows the pointer and commits past 60% of
+`DRAG_COMMIT_PX` (56px, in `pages/GenerationHistory.jsx`). Touch dragging is
+restricted to the grip (`touch-action: none`) so the rest of the tab stays a
+click surface a phone can scroll past.
+
+Inside the drawer, actions are grouped by consequence rather than by kind:
+Download and Demo + CTA are the wide pair, Retry render joins them on a failed
+row, and Details and Delete sit on the quieter line beneath — Delete is never
+beside the button that saves the same file. Related-render links are capped at
+two per tile.
 
 - **Shell:** `AppShell` — fixed collapsible left sidebar (264px / 76px collapsed,
   persisted to `localStorage`) plus a mobile-only sticky top bar with a drawer.

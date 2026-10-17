@@ -231,21 +231,21 @@ export const TOURS = {
         target: '[data-testid="history-header"], [data-testid="history-list"]',
         title: "Every render, in one place",
         body:
-          "Filter by app or status in the title bar; each row shows its state and actions. Completed clips gather here — posting is always your move, and nothing publishes itself.",
+          "Filter by app or status in the title bar; every render lands here as its own tile. Completed clips gather here — posting is always your move, and nothing publishes itself.",
       },
       {
         target: '[data-testid="history-list"]',
-        title: "Play, download, or reuse a render",
+        title: "Each tile is the clip",
         optional: true,
         body:
-          "A finished row gives you the video, its model, a download, and ways to duplicate or open it in Demo + CTA. Ratings happen while creating — thumbs on goals, templates, plans, and scripts are what teach the studio.",
+          "History opens as a contact sheet of finished clips: play one right there. Facts, actions, and the paper trail stay folded into the tile's drawer until you ask for them.",
       },
       {
-        target: '[data-testid="generation-details-button"]',
-        title: "Open the render's paper trail",
+        target: '[data-testid="history-expand"]',
+        title: "Expand a render for its details",
         optional: true,
         body:
-          "Details shows the generation prompt and the claim-check saved with this render. Read them before you publish: know what was generated, then back it yourself."
+          "Click the tab at the bottom of a tile — or drag it up — to open the render's facts, its download and Demo + CTA, and Details: the generation prompt and the claim-check saved with it. Read them before you publish."
       },
     ],
   },

@@ -7798,7 +7798,7 @@ async function runDemoCtaChecks() {
     }
   );
 
-  await check("History fills compact cards with existing context and preserves actions", async (ctx) => {
+  await check("History opens as a clip and expands to its context and actions", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi({
       getGenerationHistory: async () => ({ generations: [
@@ -7813,9 +7813,95 @@ async function runDemoCtaChecks() {
       if (!grid || grid.querySelectorAll('[data-testid="history-card"]').length !== 2) throw new Error("history cards are not in the responsive grid");
       const first = grid.querySelector('[data-testid="history-card"]');
       if (!first.querySelector("video.history-preview")) throw new Error("compact preview missing");
-      if (!first.querySelector('[data-testid="history-context"]')?.textContent.includes("Record the emotion suggestions.")) throw new Error("useful demo context missing");
+      const expand = first.querySelector('[data-testid="history-expand"]');
+      if (!expand) throw new Error("a collapsed tile has no expand control to reach its details");
+      if (expand.getAttribute("aria-expanded") !== "false") throw new Error("history tiles do not start collapsed");
+      // Collapsed means the clip and nothing else. Context and actions are what
+      // expanding is for, so finding them on the closed tile means the drawer
+      // is really a restyled card again.
+      if (first.querySelector('[data-testid="history-context"]')) {
+        throw new Error("the collapsed tile already shows the demo context");
+      }
       for (const label of ["Download", "Delete", "Details", "Demo + CTA"]) {
-        if (!first.textContent.includes(label)) throw new Error(`History lost ${label}`);
+        if (first.textContent.includes(label)) {
+          throw new Error(`the collapsed tile already exposes ${label}`);
+        }
+      }
+      // "Only the video" is the entire point of the layout, so it is asserted
+      // literally rather than by sampling a few labels: strip the expand tab's
+      // own text and a playable tile has none left. An app name, a status or a
+      // duration creeping back onto the tile is exactly what this catches.
+      const residue = first.textContent.replace(expand.textContent, "").trim();
+      if (residue) {
+        throw new Error(
+          "a collapsed tile shows more than the clip and its expand tab: " +
+            JSON.stringify(residue.slice(0, 80))
+        );
+      }
+      await clickEl(ctx, expand, "expand a history tile");
+      const opened = ctx.container.querySelector('[data-testid="history-card"]');
+      if (opened.querySelector('[data-testid="history-expand"]').getAttribute("aria-expanded") !== "true") {
+        throw new Error("the expand control does not report the drawer it opened");
+      }
+      if (!opened.querySelector('[data-testid="history-context"]')?.textContent.includes("Record the emotion suggestions.")) throw new Error("useful demo context missing");
+      for (const label of ["Download", "Delete", "Details", "Demo + CTA"]) {
+        if (!opened.textContent.includes(label)) throw new Error(`History lost ${label}`);
+      }
+    });
+  });
+
+  // The tab is two gestures in one control. The click path is covered above;
+  // this covers the drag, because a tab that only answers clicks is a button
+  // with a grip icon drawn on it — and the drag is what a bottom sheet trained
+  // people to try.
+  await check("History's expand tab opens on a drag, not only a click", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    await withApi({
+      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "drag-1" }] }),
+      getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      getVariationKinds: async () => ({ variations: [] }),
+    }, async () => {
+      await mount(GenerationHistory)(ctx);
+      const tab = ctx.container.querySelector('[data-testid="history-expand"]');
+      if (!tab) throw new Error("no expand tab to drag");
+      const send = async (type, clientY) => {
+        await act(async () => {
+          tab.dispatchEvent(new dom.window.MouseEvent(type, { bubbles: true, clientY }));
+        });
+      };
+
+      await send("pointerdown", 400);
+      await send("pointermove", 384);
+      if (tab.getAttribute("data-dragging") !== "true") {
+        throw new Error("a dragged tab does not report the drag, so the gesture has no feedback");
+      }
+      await send("pointerup", 384);
+      if (tab.getAttribute("aria-expanded") !== "false") {
+        throw new Error(
+          "a 16px wobble opened the drawer: the click that a shaky press produces " +
+            "would be spent on a gesture nobody meant"
+        );
+      }
+
+      await send("pointerdown", 400);
+      await send("pointermove", 320);
+      // A real drag ends in a click in the same task, so both go in one act, in
+      // that order. A click arriving later is a separate interaction and is
+      // rightly allowed through.
+      await act(async () => {
+        tab.dispatchEvent(new dom.window.MouseEvent("pointerup", { bubbles: true, clientY: 320 }));
+        tab.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      });
+      if (tab.getAttribute("aria-expanded") !== "true") {
+        throw new Error(
+          "an 80px drag up did not open the drawer, so the tab is a click-only " +
+            "button with a grip painted on it"
+        );
+      }
+
+      await clickEl(ctx, tab, "close the drawer");
+      if (tab.getAttribute("aria-expanded") !== "false") {
+        throw new Error("the expand tab cannot close the drawer it opened");
       }
     });
   });
@@ -7886,6 +7972,11 @@ async function runDemoCtaChecks() {
         },
         async () => {
           await mount(GenerationHistory, { onChanged: () => {} })(ctx);
+          await clickEl(
+            ctx,
+            ctx.container.querySelector('[data-testid="history-expand"]'),
+            "expand the render tile"
+          );
           const entry = [...ctx.container.querySelectorAll("a")].find(
             (a) => (a.textContent || "").trim() === "Demo + CTA"
           );
@@ -7913,6 +8004,11 @@ async function runDemoCtaChecks() {
         },
         async () => {
           await mount(GenerationHistory, { onChanged: () => {} })(ctx);
+          await clickEl(
+            ctx,
+            ctx.container.querySelector('[data-testid="history-expand"]'),
+            "expand the render tile"
+          );
           const entry = [...ctx.container.querySelectorAll("a")].find(
             (a) => (a.textContent || "").trim() === "Demo + CTA"
           );
@@ -7941,9 +8037,14 @@ async function runDemoCtaChecks() {
         },
         async () => {
           await mount(GenerationHistory, { onChanged: () => {} })(ctx);
-          // Failed rows never grow the preview rail that holds the rail
-          // Delete beside Download, so without its own control a failed
-          // render is stuck in history forever.
+          // A failed row has no clip, so its actions live in the drawer like
+          // every other tile's. Open it, then look for the control that keeps a
+          // dead render from sitting in history forever.
+          await clickEl(
+            ctx,
+            ctx.container.querySelector('[data-testid="history-expand"]'),
+            "expand the failed tile"
+          );
           const del = [...ctx.container.querySelectorAll("button")].find(
             (b) => (b.textContent || "").trim() === "Delete"
           );
@@ -7964,7 +8065,7 @@ async function runDemoCtaChecks() {
     }
   );
   await check(
-    "History keeps three work actions in one tile row",
+    "History keeps save and onward actions together and Delete apart from them",
     async (ctx) => {
       const GenerationHistory = load("pages/GenerationHistory.jsx").default;
       await withApi(
@@ -7976,21 +8077,28 @@ async function runDemoCtaChecks() {
         },
         async () => {
           await mount(GenerationHistory, { onChanged: () => {} })(ctx);
-          // Beside the 152px rail the context column is only ~240px at its
-          // narrowest, where a wrapping flex row stranded Demo + CTA alone
-          // on a second row. grid-cols-3 never wraps, so the row is one row
-          // at every viewport.
+          const card = ctx.container.querySelector('[data-testid="history-card"]');
+          await clickEl(
+            ctx,
+            card.querySelector('[data-testid="history-expand"]'),
+            "expand the action test tile"
+          );
           const group = ctx.container.querySelector('[role="group"][aria-label="Work with this render"]');
           if (!group) {
             throw new Error("the Work with this render action group is gone");
           }
-          if (!group.className.includes("grid-cols-3")) {
-            throw new Error("the work actions can wrap again instead of holding one row");
-          }
-          for (const label of ["Details", "Demo + CTA"]) {
+          for (const label of ["Download", "Demo + CTA"]) {
             if (!group.textContent.includes(label)) {
-              throw new Error(`the one-row action group lost ${label}`);
+              throw new Error(`the action bar lost ${label}`);
             }
+          }
+          // Delete destroys the file the drawer sits under. Sharing a row with
+          // Download is how the two end up one slip apart.
+          if (group.textContent.includes("Delete")) {
+            throw new Error("Delete is back in the primary action row beside Download");
+          }
+          if (!card.textContent.includes("Delete")) {
+            throw new Error("History lost Delete on a finished clip");
           }
         }
       );
@@ -8036,6 +8144,11 @@ await check(
               `the player is not using the signed durable copy the API handed it: ${src}`
             );
           }
+          await clickEl(
+            ctx,
+            ctx.container.querySelector('[data-testid="history-expand"]'),
+            "expand the durable copy tile"
+          );
           const download = [...ctx.container.querySelectorAll("a[download]")].find((a) =>
             (a.textContent || "").trim() === "Download"
           );
@@ -8087,6 +8200,13 @@ await check(
                 player.getAttribute("src")
             );
           }
+          // The repair lives in the drawer. Open it the way a founder would,
+          // so the check covers the path that actually offers the button.
+          await clickEl(
+            ctx,
+            ctx.container.querySelector('[data-testid="history-expand"]'),
+            "expand the missing-copy tile"
+          );
           const download = [...ctx.container.querySelectorAll("a")].find((a) =>
             (a.textContent || "").includes("Download video")
           );
@@ -8119,6 +8239,11 @@ await check(
       getGeneration: async () => ({ ...COMPLETED, id: "retry", playback_url: fresh }),
     }, async () => {
       await mount(GenerationHistory, {})(ctx);
+      await clickEl(
+        ctx,
+        ctx.container.querySelector('[data-testid="history-expand"]'),
+        "expand the retry tile"
+      );
       await act(async () => ctx.container.querySelector("video").dispatchEvent(new dom.window.Event("error")));
       expectText(ctx, "Retry durable save");
       expectAbsent(ctx, "Download it to view.", "a failed source is not a guaranteed download");
@@ -8141,6 +8266,11 @@ await check(
       retryGenerationStorage: async () => { throw new Error("No remaining cloud or local copy. Re-upload your export."); },
     }, async () => {
       await mount(GenerationHistory, {})(ctx);
+      await clickEl(
+        ctx,
+        ctx.container.querySelector('[data-testid="history-expand"]'),
+        "expand the lost-copy tile"
+      );
       await clickEl(ctx, ctx.container.querySelector('[data-testid="retry-storage-lost"]'), "retry lost video");
       expectText(ctx, "Re-upload your export", "recovery error must be visible");
       if (ctx.container.querySelector("video")) throw new Error("failed recovery cannot mount a player");
