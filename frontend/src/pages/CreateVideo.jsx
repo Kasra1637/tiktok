@@ -2586,7 +2586,7 @@ if (step === 3) {
                 {firstGap.label}
               </Button>
             )}
-            {(!objective || !angle) && (
+            {angle && !objective && (
               /* Angle and goal are chosen on step 1, not here: this panel used
                  to carry the shared selector, but a second full copy beside
                  the retry button split the flow in two. The red button above
@@ -2667,7 +2667,7 @@ if (step === 3) {
                 above names the first missing choice, and the goal list below
                 stays absent until an angle exists; angle selection itself
                 lives in exactly one place. */}
-            {(!objective || !angle) && (
+            {angle && !objective && (
               <AngleGoalPicker
                 angle={angle}
                 value={objective}
