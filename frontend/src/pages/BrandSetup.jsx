@@ -1042,6 +1042,12 @@ export default function BrandSetup() {
               </SectionGroup>
             </div>
 
+            {/* The manual path's own Save, then the Ready alert directly below
+                it. The pair sits in its own stack with a 21px gap: the wizard
+                CTA sits 21px above its panel edge (20px inset gutter + 1px
+                border), so this is the same distance without the panel. The
+                parent stays space-y-4, so the groups above keep their 16px. */}
+            <div className="space-y-[21px]">
             {/* The manual path's own Save. Rendered only when research has not
                 run, because the research row above owns saving for a researched
                 profile and two Saves would leave the founder choosing between
@@ -1082,6 +1088,7 @@ export default function BrandSetup() {
                 </AlertDescription>
               </Alert>
             )}
+            </div>
           </>
         )}
       </div>
