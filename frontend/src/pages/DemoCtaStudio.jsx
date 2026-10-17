@@ -1,132 +1,29 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { TriangleAlert as AlertTriangle, Film, Smartphone } from "lucide-react";
-import { Button } from "../components/ui/button";
-import { Badge } from "../components/ui/badge";
+import { useParams } from "react-router-dom";
+import { TriangleAlert as AlertTriangle, Smartphone } from "lucide-react";
 import { Alert, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import PageFrame from "../components/PageFrame";
-import SectionCard, { GroupLabel, SectionHeading } from "../components/SectionCard";
 import { Skeleton } from "../components/ui/skeleton";
-import { api, getErrorMessage, mediaUrl, durableMediaUrl } from "../lib/api";
-import { sentenceCase } from "../lib/copyCase";
+import { api, getErrorMessage, durableMediaUrl } from "../lib/api";
 import { DemoCtaEditor } from "../demoCta/DemoCtaEditor";
 
 /**
  * Native Product Demo + CTA studio.
  *
- * Two shapes, one page:
+ * One editor, two shapes:
  *
- * - `/demo-cta` — the editor standalone, so Demo + CTA works without first
- *   generating a Hook + Story. Finished renders are listed below it as a way
- *   in with a clip already attached.
+ * - `/demo-cta` — the editor standalone, so Demo + CTA works on the founder's
+ *   own footage.
  * - `/demo-cta/:generationId` — the same editor with that render pinned as the
  *   source and the export filed beside it in History.
  *
  * Reached from the sidebar, from a finished render in the studio, and from a
- * finished clip in History. At `/demo-cta` the editor opens standalone so it can
- * be used on its own footage, and the finished renders are offered underneath
- * as a way in with a Hook + Story already attached.
+ * finished clip in History. The list of finished renders that used to sit under
+ * the standalone editor is gone: History is where a finished clip is chosen,
+ * and the editor already takes its own footage, so a second way in below it was
+ * a competing entry point rather than a shortcut.
  */
-function SourcePicker() {
-  const [rows, setRows] = useState(null);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .getGenerationHistory({ status: "completed", limit: 50 })
-      .then((data) => {
-        if (cancelled) return;
-        // Only rows that actually carry a fetchable copy: an R2 URL, or a local
-        // /api/media/videos/{id}.mp4 path (a signed demo-cta export). A render
-        // that still only has its provider link is not openable from the
-        // browser, so omitting it avoids a 401 the user cannot recover from.
-        const list = (data?.generations || []).filter((r) =>
-          r?.r2_url || (r?.video_url && r?.video_url.startsWith("/api/media/videos/"))
-        );
-        setRows(list);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(getErrorMessage(err));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (error) {
-    return (
-      <Alert variant="destructive">
-        <AlertTriangle className="h-4 w-4" />
-        <AlertDescription>{error}</AlertDescription>
-      </Alert>
-    );
-  }
-
-  if (!rows) {
-    return (
-      <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]" aria-label="Finding finished renders">
-        <Skeleton className="h-36 rounded-2xl" />
-        <Skeleton className="h-36 rounded-2xl" />
-      </div>
-    );
-  }
-
-  // Empty renders nothing at all. The editor above is already usable on its own
-  // footage, so an empty-state card under a working editor would be noise, and a
-  // "generate one first" prompt would be wrong now that it is not required.
-  if (rows.length === 0) {
-    return null;
-  }
-
-  return (
-    <section className="space-y-4">
-      <div className="space-y-1">
-        <SectionHeading icon={Film}>Start from a finished render</SectionHeading>
-        <p className="text-sm text-muted-foreground">Or pick one of your Hook + Story renders instead of uploading a clip.</p>
-      </div>
-      <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
-        {rows.map((row) => (
-          <SectionCard key={row.id} compact className="flex h-full flex-col">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <GroupLabel>{row.brand_name || "Unassigned app"}</GroupLabel>
-              {typeof row.duration === "number" && (
-                <Badge variant="secondary" className="font-mono text-xs tabular-nums">
-                  {row.duration}s
-                </Badge>
-              )}
-            </div>
-            {row.hook_line ? (
-              <p className="line-clamp-2 text-xs text-muted-foreground" title={sentenceCase(row.hook_line)}>
-                &ldquo;{sentenceCase(row.hook_line)}&rdquo;
-              </p>
-            ) : (
-              <p className="text-xs text-muted-foreground">No hook line recorded.</p>
-            )}
-            {/* mt-auto pins the actions to the bottom of every card so a row of
-                cards with different quote lengths still lines up. */}
-            <div className="mt-auto flex flex-wrap gap-2">
-              <Button variant="accent" size="sm" asChild>
-                <Link to={`/demo-cta/${row.id}`}>
-                  <Smartphone className="h-3.5 w-3.5" /> Open in editor
-                </Link>
-              </Button>
-              {(row.video_url || row.r2_url) && (
-                <Button variant="secondary" size="sm" asChild>
-                  <a href={mediaUrl(row.r2_url || row.video_url)} download>
-                    Download original
-                  </a>
-                </Button>
-              )}
-            </div>
-          </SectionCard>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function EditorRoute({ generationId }) {
   const [generation, setGeneration] = useState(null);
   const [error, setError] = useState(null);
@@ -210,9 +107,6 @@ export function DemoCtaStudio() {
       ) : (
         <DemoCtaEditor />
       )}
-      {/* Full-width and below the two-column editor: a second way in, not a
-          competing column competing for the same height. */}
-      {!generationId && <SourcePicker />}
     </PageFrame>
   );
 }

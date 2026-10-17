@@ -6658,17 +6658,6 @@ async function runDemoCtaChecks() {
     );
   }
 
-  async function mountPicker(ctx, generations) {
-    await withApi(
-      {
-        getGenerationHistory: async () => ({ generations }),
-      },
-      async () => {
-        await mount(DemoCtaStudio, {})(ctx);
-      }
-    );
-  }
-
   await check(
     "a finished render offers the native Demo + CTA editor",
     async (ctx) => {
@@ -6756,28 +6745,9 @@ async function runDemoCtaChecks() {
   );
 
   await check(
-    "the Demo + CTA page lists finished renders and opens each in the editor",
-    async (ctx) => {
-      await mountPicker(ctx, [COMPLETED]);
-      // By text, not testid: the harness shims Link down to a bare anchor and
-      // drops every prop but children, so a testid placed on the link cannot
-      // survive the mount. Text is what the founder reads anyway.
-      const open = [...ctx.container.querySelectorAll("a")].find((a) =>
-        (a.textContent || "").includes("Open in editor")
-      );
-      if (!open) {
-        throw new Error(
-          "the page does not list the finished render. With no entry point, " +
-            "the sidebar link is a dead end."
-        );
-      }
-    }
-  );
-
-  await check(
     "Demo + CTA works on its own, without a Hook + Story",
     async (ctx) => {
-      await mountPicker(ctx, []);
+      await mount(DemoCtaStudio, {})(ctx);
       // The whole point of the sidebar entry: no generation, no finished render,
       // and the editor is still there with a file picker as its input.
       const input = ctx.container.querySelector('[data-testid="demo-cta-file-input"]');
@@ -6787,6 +6757,12 @@ async function runDemoCtaChecks() {
             "would make this unreachable for anyone who just wants to wrap their own clip."
         );
       }
+      // The finished-render list lived here and its "Open in editor" links were
+      // the only anchors on this page. Gone on purpose: History chooses the clip.
+      const pickerLink = [...ctx.container.querySelectorAll("a")].find((a) =>
+        (a.textContent || "").includes("Open in editor")
+      );
+      if (pickerLink) throw new Error("the finished-render list is back on the standalone page");
       // The section carries no picker button of its own: the frame's upload
       // button drives the input above by ref in both routes, so a second
       // button here was two doors to the same input. The input stays.
@@ -7340,13 +7316,15 @@ async function runDemoCtaChecks() {
             "must always load from the durable copy and refuse rows with none."
         );
       }
-      // SourcePicker must not offer renders that have no fetchable copy: a
-      // row that only has the provider link (no durable r2_url, no local
-      // media path) is not openable and would only serve to 401.
-      if (!src.match(/r2_url\s*\|\|\s*\(\s*r\?\.video_url\s*\&\&\s*r\?\.video_url\.startsWith/)) {
+      // The "Start from a finished render" picker was removed from this page
+      // on purpose: the editor is standalone, and History is where a finished
+      // clip is chosen. Asserted as absent so the list cannot be rebuilt here
+      // by habit — it was a second, competing entry point under an editor that
+      // already takes its own footage.
+      if (/SourcePicker|Start from a finished render/.test(src)) {
         throw new Error(
-          "the picker does not filter to rows with a durable fetchable copy. " +
-            "It must require r2_url or a local /api/media/videos/ path."
+          "the finished-render picker is back in Demo + CTA. History is where " +
+            "a finished clip is chosen; the editor below the header takes its own footage."
         );
       }
       // The backend signs both stored media paths on the way out, so an R2
