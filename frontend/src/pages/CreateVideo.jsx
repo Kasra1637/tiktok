@@ -2046,32 +2046,40 @@ setObjective("");
               }
             />
           ) : (
-            <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),20rem))]">
-              {/* Auto-fit with a capped column: one app sits in a single tidy
-                  card instead of stretching full width, and more apps flow
-                  into further columns as the frame allows — no breakpoint to
-                  update when the second or fifth app arrives. */}
-              {approved.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  aria-pressed={profileId === p.id}
-                  onClick={() => selectProfile(p.id)}
-                  className={`card-pickable rounded-2xl border p-5 text-left ${
-                    profileId === p.id
-                      ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
-                      : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-display text-sm font-semibold">{p.brand_name}</span>
-                    {profileId === p.id && <Check className="h-4 w-4 text-[color:var(--brand-indigo)]" />}
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {p.app_category || p.niche || "Category not set"}
-                  </p>
-                </button>
-              ))}
+            /* The nested box is the Review step's inset panel, not a capped
+               tile: one eyebrow, one line of helper copy, then the choice.
+               A 20rem tile inside a full-width card read as a different kind
+               of control from the "Still missing" panel two steps later, so
+               the same shell now carries both. The rows stay full width
+               because the app list is the panel's content, not a gallery. */
+            <div className="inset-panel space-y-4" data-testid="app-profile-picker">
+              <GroupLabel icon={ListChecks}>Choose an app</GroupLabel>
+              <p className="text-xs text-muted-foreground" data-subtitle="">
+                Only approved App Profiles can make a video in this studio.
+              </p>
+              <div className="space-y-2">
+                {approved.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    aria-pressed={profileId === p.id}
+                    onClick={() => selectProfile(p.id)}
+                    className={`card-pickable row-pad w-full rounded-xl border text-left ${
+                      profileId === p.id
+                        ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
+                        : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-display text-sm font-semibold">{p.brand_name}</span>
+                      {profileId === p.id && <Check className="h-4 w-4 text-[color:var(--brand-indigo)]" />}
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {p.app_category || p.niche || "Category not set"}
+                    </p>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
