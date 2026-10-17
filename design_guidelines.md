@@ -353,8 +353,8 @@ All `<Button>` variants in `components/ui/button.jsx` share the `.btn-studio` sy
 
 | Variant | Appearance | Use |
 |---|---|---|
-| `accent` / `default` | Indigo bevel (`.btn-bevel-accent`) + 1px top specular rim + `--glow-indigo` | The action a screen commits to |
-| `brand` | Dark slate bevel (`.btn-bevel-brand`) + indigo hairline | **Selected** state — an active thumb verdict, the onward Demo + CTA |
+| `accent` / `default` | Indigo bevel (`.btn-bevel-accent`) + 1px top specular rim + `--glow-indigo` | The action a screen commits to — including History's onward Demo + CTA (ADR 0011) |
+| `brand` | Dark slate bevel (`.btn-bevel-brand`) + indigo hairline | **Selected** state — an active thumb verdict |
 | `outline` / `secondary` | Hairline border + `.btn-bevel-neutral` top rim | Neutral actions |
 | `destructive` | Dark slate fill + red label, icon and hover | Actions that cannot be undone |
 | `ghost` / `link` | No fill, no sweep (`after:hidden`) | Back links, tertiary |

@@ -599,9 +599,11 @@ function GenerationRow({ row, siblings = [], onChanged }) {
                     </a>
                   </Button>
                 )}
+                {/* The onward action wears the acting colour (accent/indigo),
+                    never the retired warm fill — ADR 0011. */}
                 {hasClip && (
                   <Button
-                    variant="brand"
+                    variant="accent"
                     asChild
                     data-testid={`demo-cta-history-${row.id}`}
                     className="min-w-[150px] flex-1"
