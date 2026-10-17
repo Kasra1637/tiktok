@@ -11,20 +11,32 @@ const buttonVariants = cva(
       variant: {
         default:
           "btn-bevel-accent bg-primary text-primary-foreground",
+        /* Destructive: a dark button that says what it does.
+         *
+         * The fill was `--destructive` (a solid red), which made the one
+         * button in the app that cannot be undone the loudest thing on the
+         * screen. The surface is the studio's dark material now, and the red
+         * survives where it carries meaning — the label, the icon, and the
+         * hover — so the action still reads as destructive without shouting
+         * across the page. */
         destructive:
-          "bg-destructive text-destructive-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),var(--shadow-sm)] hover:bg-destructive/90 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.3),var(--shadow-md)]",
+          "btn-bevel-neutral border border-[color:var(--hairline-strong)] bg-secondary/70 text-destructive hover:border-destructive/45 hover:bg-destructive/10 hover:text-destructive",
         outline:
           "btn-bevel-neutral border border-[color:var(--hairline-strong)] bg-secondary/30 text-foreground hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] hover:text-foreground",
         secondary:
           "btn-bevel-neutral border border-[color:var(--hairline)] bg-secondary/70 text-secondary-foreground hover:border-[color:var(--indigo-35)] hover:bg-secondary hover:text-foreground",
         ghost: "hover:bg-[color:var(--indigo-8)] hover:text-foreground hover:-translate-y-0 after:hidden",
         link: "text-[color:var(--brand-indigo)] underline-offset-4 hover:underline hover:-translate-y-0 after:hidden",
-        /* Brand variants — Signal Coral is the single primary CTA color;
-           indigo accent is the secondary brand action. Soft top bevel +
-           gentle hover sheen are shared across all studio pages and Landing.
-           Text and icons never animate. */
+        /* Brand variants — indigo is the studio's action colour; coral was
+           retired from button surfaces (ADR 0010). `brand` is now the dark
+           *selected* surface: the same slate family as `secondary` with the
+           indigo hairline that marks selection everywhere else. Its two call
+           sites mean "this one is chosen" (an active thumb verdict, the
+           onward Demo + CTA), which a second CTA colour never expressed.
+           Soft top bevel + gentle hover sheen are shared across all studio
+           pages and Landing. Text and icons never animate. */
         brand:
-          "btn-bevel-brand border border-white/15 bg-[color:var(--brand-coral)] font-semibold text-white hover:border-white/25",
+          "btn-bevel-brand border border-[color:var(--indigo-35)] bg-secondary font-semibold text-foreground hover:border-[color:var(--indigo-45)] hover:bg-secondary",
         accent:
           "btn-bevel-accent border border-white/15 bg-[color:var(--brand-indigo)] font-semibold text-white hover:border-white/25",
       },

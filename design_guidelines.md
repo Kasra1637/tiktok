@@ -37,11 +37,13 @@ Defined in `:root` in `frontend/src/index.css`. Two accents only.
 |---|---|---|
 | `--brand-indigo` | `#818CF8` | Navigation, selection, active state, links |
 | `--brand-indigo-dark` | `#6366F1` | Hover state for indigo surfaces |
-| `--brand-coral` | `#FE2C55` | Primary CTAs only (TikTok's own red) |
+| `--brand-coral` | `#FE2C55` | Badges, landing accents, brand artwork — **never a button** |
 
 **The split is load-bearing:** indigo means *"this is selected / where you
-are,"* coral means *"this performs the action."* Never use coral for a filter
-chip or nav item, or a CTA stops being unambiguous.
+are"*; coral was the "this performs the action" colour and is retired from
+button surfaces (ADR 0010). Buttons are indigo (`.btn-bevel-accent`) when they
+act and the dark studio material otherwise, so a CTA is still unambiguous —
+because the loudest thing on the screen is no longer a colour.
 
 > Naming history: these were `--brand-teal`, `--brand-teal-dark` and
 > `--brand-mint` even though all three resolved to indigo. They are renamed and
@@ -136,8 +138,9 @@ Composite classes in `index.css`; prefer them over ad-hoc borders and shadows.
 | `.input-well` | Recessed studio field (`Input`, `Textarea`, `CONTROL_CLASS` `<select>`) with inner top shadow and 3px indigo focus aura |
 
 Elevation ramp: `--shadow-xs` → `--shadow-sm` → `--shadow-md` → `--shadow-lg` →
-`--shadow-xl` (layered, not a single flat blur). Brand glows `--glow-indigo` /
-`--glow-coral` are for primary CTAs and active states **only**.
+`--shadow-xl` (layered, not a single flat blur). The indigo glow (`--glow-indigo`)
+is for the acting button on a screen and active states **only**; `--glow-coral`
+is left with the brand tokens and no button surface uses it (ADR 0010).
 
 Radii: cards `rounded-2xl` (16px), asides and rows `rounded-xl` (12px), pills
 `rounded-full`. **`.surface` owns its own radius and padding** — do not re-type
@@ -350,12 +353,23 @@ All `<Button>` variants in `components/ui/button.jsx` share the `.btn-studio` sy
 
 | Variant | Appearance | Use |
 |---|---|---|
-| `brand` | Coral bevel (`.btn-bevel-brand`) + 1px top specular rim + `--glow-coral` | **The** primary action on a screen |
-| `accent` / `default` | Indigo bevel (`.btn-bevel-accent`) + 1px top specular rim + `--glow-indigo` | Secondary brand action |
+| `accent` / `default` | Indigo bevel (`.btn-bevel-accent`) + 1px top specular rim + `--glow-indigo` | The action a screen commits to |
+| `brand` | Dark slate bevel (`.btn-bevel-brand`) + indigo hairline | **Selected** state — an active thumb verdict, the onward Demo + CTA |
 | `outline` / `secondary` | Hairline border + `.btn-bevel-neutral` top rim | Neutral actions |
+| `destructive` | Dark slate fill + red label, icon and hover | Actions that cannot be undone |
 | `ghost` / `link` | No fill, no sweep (`after:hidden`) | Back links, tertiary |
 
-**Signal Coral primary rule:** `brand` (`#FE2C55`, white text) is the single primary CTA color — one per screen for the commit action (Generate, Research, Approve, Create draft, Save edits, Export, Landing hero/final CTA). `accent` (indigo) is the secondary brand action (tour Next, Save App Profile, paired secondary); `outline` / `secondary` cover navigation and retries; `ghost` / `link` cover tertiary and destructive-adjacent actions. Never hand-roll `bg-[color:var(--brand-coral)]` or `bg-[color:var(--brand-indigo)]` on a clickable button — use the variant.
+**No warm fills on buttons.** Coral (`#FE2C55`) filled every primary CTA and
+made the commit action the loudest surface on its screen, and `destructive`
+painted a solid red button. Both are dark surfaces now: `accent` (indigo) is
+how a button says "this performs the action", `brand` is how it says "this one
+is selected", and `destructive` keeps the red in the label, the icon and the
+hover rather than in the fill — the button still reads as destructive without
+shouting across the page. `check-render-smoke.cjs` asserts that no variant, the
+shared bevel, or the chip's pressed state paints coral or red. Never hand-roll
+`bg-[color:var(--brand-coral)]` or `bg-[color:var(--brand-indigo)]` on a
+clickable button — use the variant. Coral stays a badge, landing and artwork
+accent, and `--glow-coral` stays with the brand tokens, unused by buttons.
 
 **Sizes (roomy inner spacing):** `default` `h-11 px-5 py-2.5`, `sm` `h-9 px-4 py-1.5`, `lg` `h-[52px] px-10 py-3`, `icon` `h-11 w-11`. Header action rows wrap with `gap-x-3 gap-y-3` so wrapped rows clear by 12px top-to-bottom.
 

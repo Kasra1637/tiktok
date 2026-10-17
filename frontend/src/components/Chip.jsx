@@ -4,6 +4,11 @@
  * Consolidates the hand-rolled chip styles used across filter and
  * category pickers. Purely presentational: it renders a <button> and forwards
  * click/aria state.
+ *
+ * The pressed state is the indigo accent, always. A `tone="coral"` option used
+ * to paint the pressed pill Signal Coral; coral is retired from button surfaces
+ * (ADR 0010) and no call site ever asked for it, so the option is gone rather
+ * than left as a colour that no longer exists.
  */
 export function Chip({
   children,
@@ -11,7 +16,6 @@ export function Chip({
   onClick,
   icon: Icon,
   size = "sm",
-  tone = "indigo",
   title,
   testId,
   type = "button",
@@ -27,10 +31,7 @@ export function Chip({
   const sizing =
     size === "md" ? "px-3.5 py-1.5 text-sm gap-1.5" : "px-2.5 py-1 text-xs gap-1";
 
-  const activeTone =
-    tone === "coral"
-      ? "btn-bevel-brand border-white/15 bg-[color:var(--brand-coral)] text-white"
-      : "btn-bevel-accent border-white/15 bg-[color:var(--brand-indigo)] text-white";
+  const activeTone = "btn-bevel-accent border-white/15 bg-[color:var(--brand-indigo)] text-white";
 
   return (
     <button

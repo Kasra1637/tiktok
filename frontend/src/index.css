@@ -883,13 +883,22 @@ h1,
     animation: shimmer-sweep 850ms ease-out;
 }
 
+/* The dark bevel the brand/selected variant wears.
+ *
+ * This was the coral gradient — the loudest surface in the app, and the one
+ * colour the palette reserved for "this performs the action". Coral is retired
+ * from button surfaces (ADR 0010), so the class keeps its name (call sites and
+ * the check suite reference it) and paints the dark studio material instead: a
+ * slate gradient with a hairline rim, the same family as `.btn-bevel-neutral`,
+ * lifted a step brighter on hover. No brand glow: a dark button is meant to sit
+ * back, and `--glow-coral` stays with the brand tokens rather than a fill. */
 .btn-bevel-brand {
-    background-image: linear-gradient(180deg, #ff3b63 0%, var(--brand-coral) 100%);
-    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.28), var(--glow-coral);
+    background-image: linear-gradient(180deg, hsl(228 12% 20%) 0%, hsl(228 12% 13%) 100%);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.08), var(--shadow-xs);
 }
 .btn-bevel-brand:hover:not(:disabled) {
-    background-image: linear-gradient(180deg, #ff4d72 0%, #e0264c 100%);
-    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.38), 0 0 0 1px rgba(254, 44, 85, 0.4), 0 12px 32px rgba(254, 44, 85, 0.38);
+    background-image: linear-gradient(180deg, hsl(228 12% 24%) 0%, hsl(228 12% 16%) 100%);
+    box-shadow: inset 0 1px 0 0 rgba(129, 140, 248, 0.22), var(--shadow-sm);
 }
 
 .btn-bevel-accent {

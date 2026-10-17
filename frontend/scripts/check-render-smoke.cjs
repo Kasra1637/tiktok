@@ -5787,6 +5787,47 @@ async function runIconChecks() {
     }
   });
 
+  await check("no button paints coral or red, and the destructive fill stays dark", async (ctx) => {
+    // Every CTA in the app used to be the loudest surface on its screen,
+    // because the palette reserved coral for "this performs the action". The
+    // button system is indigo for actions and the dark material for everything
+    // else now; this pins that so a warm fill cannot come back through a
+    // variant, the shared bevel, or the chip's pressed state.
+    const { buttonVariants } = load("components/ui/button.jsx");
+    for (const variant of ["default", "brand", "accent", "secondary", "outline", "destructive", "ghost", "link"]) {
+      const cls = buttonVariants({ variant });
+      if (/(^|\s)bg-destructive(\s|$)/.test(cls) || cls.includes("bg-[color:var(--brand-coral)]")) {
+        throw new Error(`button variant "${variant}" still paints a warm fill: ${cls}`);
+      }
+    }
+    // The intent behind the dark destructive fill, asserted rather than
+    // described: the surface is dark, the label is what says "destructive".
+    const destructive = buttonVariants({ variant: "destructive" });
+    if (!destructive.includes("bg-secondary/70") || !destructive.includes("text-destructive")) {
+      throw new Error("the destructive variant lost its dark fill or its red label");
+    }
+    const cls = buttonVariants({ variant: "brand" });
+    if (!cls.includes("bg-secondary") || !cls.includes("btn-bevel-brand")) {
+      throw new Error(`the brand variant does not wear the dark studio material: ${cls}`);
+    }
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    const start = css.indexOf(".btn-bevel-brand {");
+    const end = css.indexOf(".btn-bevel-accent {");
+    if (start === -1 || end === -1 || end < start) {
+      throw new Error("the brand bevel block could not be read out of index.css");
+    }
+    const bevel = css.slice(start, end);
+    for (const forbidden of ["brand-coral", "glow-coral", "#ff3b63", "#ff4d72", "254, 44, 85", "#e0264c"]) {
+      if (bevel.includes(forbidden)) {
+        throw new Error(`the brand button bevel still paints coral: ${forbidden}`);
+      }
+    }
+    const chipSrc = fs.readFileSync(path.join(SRC, "components", "Chip.jsx"), "utf8");
+    if (chipSrc.includes("brand-coral")) {
+      throw new Error("the chip's pressed state still paints coral instead of the indigo accent");
+    }
+  });
+
   await check("pills, pickable cards, inputs, icon tiles, and alerts share the studio material system", async () => {
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
     for (const token of [".pill-studio", ".card-pickable", ".input-well"]) {
