@@ -2146,7 +2146,7 @@ setObjective("");
                 that the picker renders just its waits marker, and wrapping an
                 empty marker in an inset-panel is how the stray empty box below
                 the angle panel happened. */}
-            <div className={angle ? "inset-panel" : undefined}>
+            <div className={angle ? "inset-panel" : "hidden"}>
 <AngleGoalPicker
               angle={angle}
               value={objective}
