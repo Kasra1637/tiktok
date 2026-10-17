@@ -282,7 +282,7 @@ function HistoryExpandTab({ expanded, onToggle, controls, testId, id }) {
  * place of the video: a blank tile explains nothing, and each of those four
  * states has its own repair.
  */
-function GenerationRow({ row, siblings = [], onChanged }) {
+function GenerationRow({ row, onChanged }) {
   const [expanded, setExpanded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -726,28 +726,8 @@ function GenerationRow({ row, siblings = [], onChanged }) {
               )}
             </div>
 
-            {siblings.length > 0 && (
-              <div className="space-y-2 border-t border-[color:var(--hairline)] pt-4">
-                <GroupLabel icon={Film}>More from this app</GroupLabel>
-                <ul className="space-y-2">
-                  {siblings.map((s) => (
-                    <li key={s.id}>
-                      <a
-                        href={`#generation-${s.id}`}
-                        className="flex items-center gap-3 rounded-xl border border-[color:var(--hairline)] bg-card/70 row-pad text-left transition-colors hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)]"
-                      >
-                        <span className="min-w-0 flex-1 truncate text-sm text-foreground/90">
-                          {s.hook_line ? sentenceCase(s.hook_line) : humanize(s.status)}
-                        </span>
-                        <StatusBadge status={s.status} />
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
             {/* Footer close: the drawer can run long (script + prompt +
-                siblings), so the top Expand/Collapse tab is a scroll away once
+                actions), so the top Expand/Collapse tab is a scroll away once
                 the user reaches the bottom. Same state, same word, quiet
                 treatment so it never competes with Download / Demo + CTA. */}
             <div className="border-t border-[color:var(--hairline)] pt-4">
@@ -936,9 +916,6 @@ export default function GenerationHistory() {
             <GenerationRow
               key={row.id}
               row={row}
-              siblings={rows
-                .filter((r) => r.id !== row.id && r.brand_profile_id && r.brand_profile_id === row.brand_profile_id)
-                .slice(0, 2)}
               onChanged={load}
             />
           ))}

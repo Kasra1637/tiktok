@@ -655,10 +655,6 @@ h1,
     --history-preview-h: 260px;
     --history-stage-pad: 20px;
     overflow: hidden;
-    transition: border-color 200ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-.history-card[data-expanded="true"] {
-    border-color: var(--indigo-35);
 }
 .history-stage {
     position: relative;
