@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "../components/ui/button";
 import { Alert, AlertDescription } from "../components/ui/alert";
@@ -300,6 +300,43 @@ function GenerationRow({ row, siblings = [], onChanged }) {
   const [strandedNote, setStrandedNote] = useState(null);
 
   const drawerId = `generation-detail-${row.id}`;
+  const expandTabId = `generation-expand-${row.id}`;
+  const wasExpanded = useRef(false);
+
+  // Shared close for the footer button and Esc, so focus and scroll settle
+  // in one place instead of diverging per trigger.
+  const collapseRow = useCallback(() => {
+    setExpanded(false);
+  }, []);
+
+  // Esc closes the open drawer. The listener lives only while expanded so a
+  // closed row never steals Esc from the Details modal or other UI.
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (event) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        collapseRow();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [expanded, collapseRow]);
+
+  // Closing from the footer (which unmounts) or Esc must not drop focus to
+  // <body> or leave the card stranded mid-list. Return focus to the tab and
+  // bring the card back into view — instant under reduced motion.
+  useEffect(() => {
+    if (wasExpanded.current && !expanded) {
+      document.getElementById(expandTabId)?.focus?.({ preventScroll: true });
+      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+      document.getElementById(`generation-${row.id}`)?.scrollIntoView?.({
+        block: "nearest",
+        behavior: reduce ? "auto" : "smooth",
+      });
+    }
+    wasExpanded.current = expanded;
+  }, [expanded, expandTabId, row.id]);
 
   // The copy the browser can actually fetch, chosen by the same rule every
   // other screen uses (see durableMediaUrl): the durable upload, or the signed
@@ -496,7 +533,7 @@ function GenerationRow({ row, siblings = [], onChanged }) {
         onToggle={() => setExpanded((open) => !open)}
         controls={drawerId}
         testId="history-expand"
-        id={`generation-expand-${row.id}`}
+        id={expandTabId}
       />
 
       {expanded && (
@@ -718,7 +755,7 @@ function GenerationRow({ row, siblings = [], onChanged }) {
                 variant="ghost"
                 size="sm"
                 className="w-full"
-                onClick={() => setExpanded(false)}
+                onClick={collapseRow}
                 aria-controls={drawerId}
                 aria-label="Collapse this render"
                 title="Collapse this render"
@@ -743,8 +780,23 @@ export default function GenerationHistory() {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [profileFilter, setProfileFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  // Filters mirror into ?profile=&status=&q= so a view like "failed renders
+  // for this app" is a shareable link, not a re-click every visit. State
+  // stays the source of truth; the URL is a mirror updated below.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [profileFilter, setProfileFilter] = useState(() => searchParams.get("profile") || "");
+  const [statusFilter, setStatusFilter] = useState(() => searchParams.get("status") || "");
+  const [query, setQuery] = useState(() => searchParams.get("q") || "");
+
+  useEffect(() => {
+    const next = {};
+    if (profileFilter) next.profile = profileFilter;
+    if (statusFilter) next.status = statusFilter;
+    if (query.trim()) next.q = query.trim();
+    setSearchParams(next, { replace: true });
+    // setSearchParams is stable; mirroring state -> URL only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileFilter, statusFilter, query]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -771,8 +823,20 @@ export default function GenerationHistory() {
     api.getAppProfiles().then((d) => setProfiles(d.profiles || [])).catch(() => setProfiles([]));
   }, []);
 
-  const completed = rows.filter((r) => r.status === "completed").length;
-  const failed = rows.filter((r) => r.status === "failed").length;
+  // Hook-text search is client-side: founders remember "the plumber one",
+  // not its status, and the endpoint only filters by app + status.
+  const visible = (() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) =>
+      [r.hook_line, r.model, r.audience, r.demo_brief].some((v) =>
+        String(v || "").toLowerCase().includes(q)
+      )
+    );
+  })();
+
+  const completed = visible.filter((r) => r.status === "completed").length;
+  const failed = visible.filter((r) => r.status === "failed").length;
 
   return (
     <PageFrame className="space-y-6">
@@ -789,6 +853,17 @@ export default function GenerationHistory() {
               onChange={setProfileFilter}
               allLabel="All apps"
               ariaLabel="Filter by app"
+            />
+            <label className="sr-only" htmlFor="history-search">Search by hook text</label>
+            <input
+              id="history-search"
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search hooks…"
+              aria-label="Search by hook text"
+              data-testid="history-search"
+              className={PILL_SELECT_CLASS}
             />
             <label className="sr-only" htmlFor="history-status-filter">Filter by status</label>
             <select
@@ -847,12 +922,17 @@ export default function GenerationHistory() {
         />
       ) : (
         <div className="history-grid" data-testid="history-list">
-          {rows.length > 1 && (
+          {visible.length > 1 && (
             <p className="col-span-full text-xs text-muted-foreground">
-              {rows.length} results · {completed} completed · {failed} failed
+              {visible.length} results · {completed} completed · {failed} failed
             </p>
           )}
-          {rows.map((row) => (
+          {visible.length === 0 && rows.length > 0 && (
+            <p className="col-span-full text-xs text-muted-foreground" role="status">
+              No renders match “{query.trim()}”. Clear the search to see everything.
+            </p>
+          )}
+          {visible.map((row) => (
             <GenerationRow
               key={row.id}
               row={row}

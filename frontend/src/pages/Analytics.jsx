@@ -141,7 +141,7 @@ export default function Analytics() {
           />
         )
       ) : feedback?.summary?.top_signals?.length ? (
-        <SignalCounts summary={feedback.summary} />
+        <SignalCounts summary={feedback.summary} events={feedback.feedback || []} profileId={selectedId} />
       ) : (
         <EmptyState
           icon={Activity}
@@ -161,9 +161,18 @@ export default function Analytics() {
  * why, and pairing them with a reason would be inventing one, so this card
  * stays a count list.
  */
-function SignalCounts({ summary }) {
+function SignalCounts({ summary, events = [], profileId = "" }) {
   const signals = summary?.top_signals || [];
   if (!signals.length) return null;
+  // Rows arrive newest-first, so the first generation_id seen per signal is
+  // the latest render behind it. Counts stay counts; the link just answers
+  // "which clip" without inventing a mapping the backend never stored.
+  const latestGenBySignal = {};
+  for (const row of events) {
+    const sig = row?.signal;
+    const gen = row?.generation_id;
+    if (sig && gen && !latestGenBySignal[sig]) latestGenBySignal[sig] = gen;
+  }
   return (
     <SectionCard
       title="What happened"
@@ -172,12 +181,28 @@ function SignalCounts({ summary }) {
       data-testid="analytics-signals"
     >
       <ul className="divide-y divide-[color:var(--hairline)]">
-        {signals.map((s) => (
-          <li key={s.signal} className="flex items-center justify-between gap-4 py-2 text-sm">
-            <span className="min-w-0 truncate text-muted-foreground">{humanize(s.signal)}</span>
-            <FactChip>{s.count}</FactChip>
-          </li>
-        ))}
+        {signals.map((s) => {
+          const genId = latestGenBySignal[s.signal];
+          const href = genId
+            ? `/history?profile=${encodeURIComponent(profileId)}#generation-${genId}`
+            : (profileId ? `/history?profile=${encodeURIComponent(profileId)}` : "/history");
+          return (
+            <li key={s.signal} className="flex items-center justify-between gap-4 py-2 text-sm">
+              <span className="min-w-0 truncate text-muted-foreground">{humanize(s.signal)}</span>
+              <span className="flex shrink-0 items-center gap-2">
+                <FactChip>{s.count}</FactChip>
+                <Link
+                  to={href}
+                  data-testid={`analytics-signal-${s.signal}`}
+                  title={genId ? "Open the latest render behind this signal" : "Open this app in History"}
+                  className="shrink-0 text-xs text-muted-foreground underline-offset-2 transition hover:text-foreground hover:underline"
+                >
+                  {genId ? "View render" : "View in History"}
+                </Link>
+              </span>
+            </li>
+          );
+        })}
       </ul>
     </SectionCard>
   );

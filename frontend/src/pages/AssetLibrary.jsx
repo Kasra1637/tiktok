@@ -126,6 +126,8 @@ function AssetRow({
   attachDisabled,
   attachBusy,
   busy,
+  highlight = false,
+  uploadWarning = "",
 }) {
   const isVideo = asset.kind === "screen_recording" || asset.kind === "background_video";
   const isAudio = asset.kind === "audio";
@@ -147,7 +149,10 @@ function AssetRow({
   // question of what went wrong.
   const slotHeldByAnother = attachDisabled && !busy && asset.kind === "character_reference";
   return (
-    <div className="inset-panel space-y-2">
+    <div
+      className={`inset-panel space-y-2${highlight ? " ring-2 ring-[color:var(--brand-indigo)]/40" : ""}`}
+      data-new-upload={highlight ? "true" : undefined}
+    >
       <div className="flex items-center gap-3">
         <AssetThumb asset={asset} isVideo={isVideo} isAudio={isAudio} />
         <div className="min-w-0 flex-1">
@@ -181,6 +186,11 @@ function AssetRow({
             )}
           </div>
           {asset.notes && <p className="mt-0.5 text-xs text-muted-foreground">{asset.notes}</p>}
+          {uploadWarning && (
+            <p className="mt-0.5 text-xs text-muted-foreground" role="status">
+              {uploadWarning}
+            </p>
+          )}
           {/* Facts as chips, not a middot sentence. The badges above are status
               ("Archived", "Rights unconfirmed") and stay badges; a date and a
               duration are measurements, and this is the same vocabulary the
@@ -375,6 +385,10 @@ export default function AssetLibrary({
   const [includeArchived, setIncludeArchived] = useState(false);
   const [attachBusyId, setAttachBusyId] = useState("");
   const [showAllPhotos, setShowAllPhotos] = useState(false);
+  // The upload just made, so its row can carry the server's face warning
+  // inline instead of only in the notice line above the list.
+  const [lastUploadedId, setLastUploadedId] = useState(null);
+  const [uploadWarnings, setUploadWarnings] = useState({});
   const fileRef = useRef(null);
   const attachedIds = new Set(
     (projectAssets || []).map((a) => a?.asset_id).filter(Boolean)
@@ -518,7 +532,9 @@ export default function AssetLibrary({
 // likely to refuse a render built on it and that refusal costs an attempt.
       if (created?.face_warning) {
         setNotice((current) => `${current || ""} ${created.face_warning}`.trim());
+        setUploadWarnings((prev) => ({ ...prev, [created.id]: created.face_warning }));
       }
+      if (created?.id) setLastUploadedId(created.id);
       load();
       onChanged?.();
     } catch (err) {
@@ -850,6 +866,8 @@ export default function AssetLibrary({
                     attachDisabled={busy || characterSlotTaken}
                     attachBusy={attachBusyId === a.id}
                     busy={busy}
+                    highlight={a.id === lastUploadedId}
+                    uploadWarning={uploadWarnings[a.id] || ""}
                   />
                 ))}
               </div>
@@ -912,6 +930,8 @@ export default function AssetLibrary({
               attachDisabled={busy || (characterSlotTaken && a.kind === "character_reference")}
               attachBusy={attachBusyId === a.id}
               busy={busy}
+              highlight={a.id === lastUploadedId}
+              uploadWarning={uploadWarnings[a.id] || ""}
             />
           ))}
         </div>

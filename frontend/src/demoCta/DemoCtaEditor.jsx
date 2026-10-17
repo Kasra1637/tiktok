@@ -69,6 +69,41 @@ const SECTIONS_KEY = "hookforge.demoCta.openSections.v3";
 // stored value somehow has more than one open (older versions allowed it).
 const SECTION_ORDER = ["source", "hook", "cta", "output", "advanced"];
 
+// Remembered overlay taste: font, entrance and size for the hook + CTA
+// overlays, plus the accent. Stored per app with a global fallback, so a
+// founder's look survives reloads without one app imposing it on another.
+// Empty storage yields DEFAULTS, which is what the smoke suite asserts.
+const OVERLAY_PREFS_KEY = "hookforge.demoCta.overlayPrefs.v1";
+function readOverlayPrefs() {
+  try {
+    const raw = window.localStorage.getItem(OVERLAY_PREFS_KEY);
+    if (!raw) return {};
+    const saved = JSON.parse(raw);
+    return saved && typeof saved === "object" ? saved : {};
+  } catch {
+    return {};
+  }
+}
+function prefFor(profileKey, field, fallback) {
+  const all = readOverlayPrefs();
+  const scoped = all?.byProfile?.[profileKey]?.[field];
+  if (scoped !== undefined && scoped !== null && scoped !== "") return scoped;
+  const global = all?.global?.[field];
+  return global !== undefined && global !== null && global !== "" ? global : fallback;
+}
+function prefFont(profileKey, field, fallback) {
+  const value = prefFor(profileKey, field, fallback);
+  return OVERLAY_FONTS.some((f) => f.id === value) ? value : fallback;
+}
+function prefAnim(profileKey, field, fallback) {
+  const value = prefFor(profileKey, field, fallback);
+  return OVERLAY_ANIMS.some((a) => a.id === value) ? value : fallback;
+}
+function prefScale(profileKey, field, fallback) {
+  const value = Number(prefFor(profileKey, field, fallback));
+  return Number.isFinite(value) ? value : fallback;
+}
+
 /** The one-open shape: every key present, exactly one true (or none). */
 function singleOpen(openKey) {
   return SECTION_ORDER.reduce((acc, key) => {
@@ -379,13 +414,33 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const [ctaDuration, setCtaDuration] = useState(DEFAULTS.ctaDuration);
   const [ctaOffsetX, setCtaOffsetX] = useState(DEFAULTS.ctaOffsetX);
   const [ctaOffsetY, setCtaOffsetY] = useState(DEFAULTS.ctaOffsetY);
-  const [overlayAccent, setOverlayAccent] = useState(DEFAULTS.overlayAccent);
-  const [captionFont, setCaptionFont] = useState(DEFAULTS.captionFont);
-  const [ctaFont, setCtaFont] = useState(DEFAULTS.ctaFont);
-  const [captionAnim, setCaptionAnim] = useState(DEFAULTS.captionAnim);
-  const [ctaAnim, setCtaAnim] = useState(DEFAULTS.ctaAnim);
-  const [captionScale, setCaptionScale] = useState(DEFAULTS.captionScale);
-  const [ctaScale, setCtaScale] = useState(DEFAULTS.ctaScale);
+  // Scope for remembered overlay taste. Resolved once at mount: the editor
+  // remounts per route, and reseeding mid-edit would clobber live changes.
+  const overlayScope = generation?.brand_profile_id || "global";
+  const [overlayAccent, setOverlayAccent] = useState(() => prefFor(overlayScope, "overlayAccent", DEFAULTS.overlayAccent));
+  const [captionFont, setCaptionFont] = useState(() => prefFont(overlayScope, "captionFont", DEFAULTS.captionFont));
+  const [ctaFont, setCtaFont] = useState(() => prefFont(overlayScope, "ctaFont", DEFAULTS.ctaFont));
+  const [captionAnim, setCaptionAnim] = useState(() => prefAnim(overlayScope, "captionAnim", DEFAULTS.captionAnim));
+  const [ctaAnim, setCtaAnim] = useState(() => prefAnim(overlayScope, "ctaAnim", DEFAULTS.ctaAnim));
+  const [captionScale, setCaptionScale] = useState(() => prefScale(overlayScope, "captionScale", DEFAULTS.captionScale));
+  const [ctaScale, setCtaScale] = useState(() => prefScale(overlayScope, "ctaScale", DEFAULTS.ctaScale));
+
+  // Persist taste on change, per app with a global fallback. Convenience
+  // only: private mode or quota failures must never break the editor.
+  useEffect(() => {
+    try {
+      const all = readOverlayPrefs();
+      const prefs = { overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale };
+      const next = {
+        ...all,
+        global: { ...(all.global || {}), ...prefs },
+        byProfile: { ...(all.byProfile || {}), [overlayScope]: { ...((all.byProfile || {})[overlayScope] || {}), ...prefs } },
+      };
+      window.localStorage.setItem(OVERLAY_PREFS_KEY, JSON.stringify(next));
+    } catch {
+      // Nothing to do: persistence is a convenience, not the feature.
+    }
+  }, [overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, overlayScope]);
 
   const [isPlaying, setIsPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
