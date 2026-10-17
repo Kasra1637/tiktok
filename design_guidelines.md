@@ -150,7 +150,7 @@ forgotten utility produced a square card.
 Card padding is unified in `index.css`: `.surface` / `.surface-solid` are
 `20px` on phones and `28px` from 768px up; `.surface-compact` (cards that are
 items in a grid) stays `16px`; `.inset-panel` is `20px`; `.surface-flush` is `0` for a card whose first
-child is a full-bleed row. Do not add `p-*` to card JSX.
+child is a full-bleed row. `.surface-step` is the Create Video step card: `20px` at every width, the same gutter as the `.inset-panel` asides inside it, so a step's container and its containers share one padding. Do not add `p-*` to card JSX.
 
 **Never nest `.surface` inside `.surface`.** A card inside an identical card
 is a box in a box: same fill, same border, same gutter. The level inside a
@@ -236,8 +236,8 @@ Spacing, in these steps and no others:
 | Gap | Token | Job |
 |---|---|---|
 | 24px | `space-y-6` / `gap-6` | between page sections — every sidebar page's `PageFrame` |
-| 20px | `space-y-5` | between blocks inside a card (`SectionCard`, `StepShell`) |
-| 16px | `space-y-4` / `gap-4` | between cards in a list; flush accordion bodies |
+| 20px | `space-y-5` | between blocks inside a card (`SectionCard`) |
+| 16px | `space-y-4` / `gap-4` | between cards in a list; flush accordion bodies; every block of a wizard step (`StepShell`, the gate) |
 | 12px | `space-y-3` / `gap-3` | between related blocks that are not one stack |
 | 8px | `space-y-2` / `gap-2` | items in a list; a label to its control; a field's own stack (label, hint, control) |
 | 6px | `gap-1.5` | inline clusters only — a glyph beside its label, two controls in a row |
@@ -256,12 +256,12 @@ switchers use `AppPicker`; generation status uses `StatusBadge`. All caps is
 used on `.eyebrow` group labels and `.section-heading` workspace sections;
 page titles, descriptions and user content retain normal case.
 
-**The wizard's gate section is one 12px stack.** The "what's missing" panel a
+**The wizard's blocks share one 16px rhythm.** The "what's missing" panel a
 step opens with — a group label, one helper line, and the red action that jumps
-to the missing choice — is `space-y-3` on every step, so the same ask reads as
+to the missing choice — is `space-y-4` on every step, so the same ask reads as
 the same control wherever the founder meets it. It is related blocks, not a
 field's own stack: the action is a CTA that navigates, not a control the label
-belongs to. `frontend/scripts/check-render-smoke.cjs` asserts the shared token.
+belongs to. Every step sits in the one `.surface-step` card, and every aside in it is `.inset-panel`, so the padding is identical on all five steps. `frontend/scripts/check-render-smoke.cjs` asserts the shared token.
 
 ---
 

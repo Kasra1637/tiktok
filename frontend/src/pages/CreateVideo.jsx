@@ -314,7 +314,7 @@ function MissingRequirements({ identity, onGoToTemplatePhoto }) {
   if (!identity || identity.length === 0) return null;
 
   return (
-    <div className="inset-panel space-y-2">
+    <div className="inset-panel space-y-4">
       <p className="text-sm font-semibold">
         This template needs a character reference before it can generate
       </p>
@@ -481,7 +481,7 @@ function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
 
   return (
     <div
-      className="inset-panel space-y-2"
+      className="inset-panel space-y-4"
       data-testid="review-revisions"
     >
       <span className="eyebrow block">Revisions &amp; consequences</span>
@@ -558,7 +558,7 @@ function AngleSelector({
     // 12px, matching the Review step's "what's missing" panel: the helper line
     // and the red action under it are one gate section, and a tighter stack
     // here made the same ask read as a different control two steps later.
-    <div className="space-y-3">
+    <div className="space-y-4">
       <p className="text-xs text-muted-foreground" data-testid="angles-cta-copy" data-subtitle="">
         {ANGLES_CTA_COPY}
       </p>
@@ -584,7 +584,7 @@ function AngleSelector({
           {progressLine}
         </div>
       ) : (
-    <div className="space-y-2" data-testid="audience-angle-list">
+    <div className="space-y-4" data-testid="audience-angle-list">
       {/* Regeneration for a populated app: the endpoint replaces only
           AI-derived angles and keeps hand-written ones server-side, so this
           cannot discard founder work. */}
@@ -690,7 +690,7 @@ function AngleSelector({
   );
 
   return (
-    <div className="inset-panel space-y-3">
+    <div className="inset-panel space-y-4">
       <GroupLabel as="label" icon={Target}>
         Audience angle <span className="text-muted-foreground">(required)</span>
       </GroupLabel>
@@ -771,7 +771,7 @@ function AngleGoalPicker({
   }
 
   return (
-    <section className="space-y-2" aria-labelledby="video-goal-label" data-testid="angle-goal-picker">
+    <section className="space-y-4" aria-labelledby="video-goal-label" data-testid="angle-goal-picker">
       <div className="space-y-1">
         <div className="flex items-start justify-between gap-2">
           <GroupLabel as="h3" icon={Target} id="video-goal-label">
@@ -906,7 +906,7 @@ function PlanPhaseLine() {
 
 function StepShell({ icon: Icon, title, children }) {
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {Icon && (
         <div className="space-y-1">
           {title && <SectionHeading icon={Icon}>{title}</SectionHeading>}
@@ -2076,7 +2076,7 @@ setObjective("");
           )}
 
           {unapproved.length > 0 && (
-            <div className="rounded-2xl border border-[color:var(--hairline)] bg-secondary/20 p-5">
+            <div className="inset-panel">
               <div className="flex items-start gap-2">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
@@ -2097,10 +2097,10 @@ setObjective("");
                       {unapproved.map(profileLabel).join(", ")}
                     </p>
                   )}
-                  <p className="mt-2 text-xs text-muted-foreground" data-subtitle="">
+                  <p className="mt-4 text-xs text-muted-foreground" data-subtitle="">
                     Draft profiles need review before a video can use them.
                   </p>
-                  <Button variant="secondary" size="sm" asChild className="mt-3">
+                  <Button variant="secondary" size="sm" asChild className="mt-4">
                     <Link to="/brand">Review in App Profile</Link>
                   </Button>
                 </div>
@@ -2197,7 +2197,7 @@ setObjective("");
                 founder could pick the top card from reasons that did not mention
                 their goal at all. */}
             {!objective && (
-              <div className="inset-panel space-y-3">
+              <div className="inset-panel space-y-4">
                 {/* Same recessed sub-card as the angle picker: eyebrow label,
                     one helper line, the coral action beneath — and the same
                     12px stack, so the two gates read as one control. The
@@ -2251,7 +2251,7 @@ setObjective("");
               </div>
             )}
             {objective && recommendationsVisible && visibleRecommendations.length > 0 && (
-              <div className="space-y-2">
+              <div className="space-y-4">
                 <span className="eyebrow block">
                   {tailoredReady ? "Tailored for this app" : "Recommended"}
                 </span>
@@ -2360,7 +2360,7 @@ setObjective("");
                 same way, so it can never scroll to a section that is not
                 there. */}
             {showAngles && (
-            <div id="template-photo" className="inset-panel space-y-2">
+            <div id="template-photo" className="inset-panel space-y-4">
               <GroupLabel icon={ImageIcon}>Presenter photo</GroupLabel>
               <p className="text-xs text-muted-foreground" data-subtitle="">
                 Upload one clear photo of the person you want on camera.
@@ -2410,7 +2410,7 @@ setObjective("");
           icon={Sparkles}
           title="Hook + Story"
         >
-          <div className="space-y-3">
+          <div className="space-y-4">
             {/* No description on this shell. The one it carried was the
                 progress rail's sentence almost word for word, followed by the
                 piece's scope, which the render panel states itself. Neither
@@ -2435,7 +2435,7 @@ setObjective("");
                 notice={angleRegenNotice}
               />
             ) : !canGenerate ? (
-              <div className="inset-panel space-y-3">
+              <div className="inset-panel space-y-4">
                 {/* Names what is actually missing, read from the same two
                     values that gated this panel. It used to spell out the
                     whole chain ("choose an App Profile, goal, and template,
@@ -2473,7 +2473,7 @@ setObjective("");
                 </p>
                 <Button
                   variant="accent"
-                  className="mt-3"
+                  className="mt-4"
                   disabled={busy}
                   onClick={() => {
                     /* Redirect before generating, same rule as every other red
@@ -2507,7 +2507,7 @@ setObjective("");
                     </p>
                     <Button
                       variant="accent"
-                      className="mt-3 gap-1.5"
+                      className="mt-4 gap-1.5"
                       onClick={() => setStep(3)}
                     >
                       <CheckCircle2 className="h-3.5 w-3.5" /> Go to Review first
@@ -2568,7 +2568,7 @@ if (step === 3) {
              this offers the retry. Manual and enabled: the auto latch already
              consumed this selection-set, so nothing here fires on its own. The
              photo is not listed: it is required to render, never to plan. */
-          <div className="inset-panel space-y-3">
+          <div className="inset-panel space-y-4">
             <p className="text-sm text-muted-foreground">
               The plan didn't generate. Fix what's missing below, then try again — still free.
             </p>
@@ -2624,7 +2624,7 @@ if (step === 3) {
              next — reading the stored goal too, so a draft that already holds
              one spins instead of flashing the picker. Only these three cases
              may show a spinner. */
-          <div className="inset-panel space-y-3">
+          <div className="inset-panel space-y-4">
             <div className="flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
               <span className="text-sm font-semibold">
@@ -2641,7 +2641,7 @@ if (step === 3) {
           /* No plan and the auto effect cannot fire: a profile, a template or
              the goal is missing. Name it and fix it here — choosing the goal
              starts the plan on its own, no button press. */
-          <div className="inset-panel space-y-3">
+          <div className="inset-panel space-y-4">
             {/* One red button to the first missing choice, in flow order. The
                 two black navigation buttons this replaces named their
                 destinations but sat beside two different subtitles, so the
@@ -2736,7 +2736,7 @@ if (step === 3) {
               hasEdits={hasEdits}
               onGoToHookStory={() => setStep(4)}
             />
-            <div className="inset-panel space-y-2" data-testid="review-thumb-loop">
+            <div className="inset-panel space-y-4" data-testid="review-thumb-loop">
               <span className="eyebrow block">Does this plan work?</span>
               <ThumbPair
                 value={reviewThumb}
@@ -2795,7 +2795,7 @@ if (step === 3) {
                 </p>
               </div>
             )}
-            <div className="space-y-2">
+            <div className="space-y-4">
               <label className="text-sm font-semibold">Hook line</label>
               <p className="text-xs text-muted-foreground" data-subtitle="">The opening line spoken in your generated Hook + Story clip.</p>
               <Input
@@ -2803,7 +2803,7 @@ if (step === 3) {
                 onChange={(e) => setEdits({ ...edits, hook_line: e.target.value })}
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-4">
               <label className="text-sm font-semibold">Script</label>
               <p className="text-xs text-muted-foreground" data-subtitle="">The spoken story after the hook — demo and CTA stay yours.</p>
               <Textarea
@@ -2833,7 +2833,7 @@ if (step === 3) {
                 render validates — rather than a second arithmetic in the
                 browser that could disagree with what the render does. */}
             {project?.spoken_check && (
-              <div className="inset-panel space-y-2" data-testid="spoken-counts">
+              <div className="inset-panel space-y-4" data-testid="spoken-counts">
                 <GroupLabel icon={Ruler}>How the two lines measure up</GroupLabel>
                 {[
                   { key: "hook", label: "Hook line" },
@@ -2864,7 +2864,7 @@ if (step === 3) {
               </div>
             )}
             {project?.strategy?.hook_line && typeof project?.spoken_middle === "string" && project.spoken_middle && (
-              <div className="inset-panel space-y-2" data-testid="spoken-partition">
+              <div className="inset-panel space-y-4" data-testid="spoken-partition">
                 <GroupLabel icon={FileText}>What the middle will say</GroupLabel>
                 <p className="text-sm">{sentenceCase(project.spoken_middle)}</p>
                 {/* What is not spoken is counted by the server, not sliced out
@@ -2898,7 +2898,7 @@ if (step === 3) {
                 the founder should record, and it is deliberately never passed to
                 the render, so correcting it here cannot smuggle a feature
                 instruction back into the video. */}
-            <div className="inset-panel space-y-2">
+            <div className="inset-panel space-y-4">
               <label htmlFor="review-demo-brief" className="text-sm font-semibold">
                 What you record for the demo
               </label>
@@ -2914,7 +2914,7 @@ if (step === 3) {
               </p>
             </div>
             <GroupLabel icon={AudioLines}>Visual &amp; audio direction</GroupLabel>
-            <div className="space-y-2">
+            <div className="space-y-4">
               <label className="text-sm font-semibold">Visual direction</label>
               <p className="text-xs text-muted-foreground" data-subtitle="">Guidance for the generated clip, not footage of your demo.</p>
               <Textarea
@@ -2964,7 +2964,7 @@ if (step === 3) {
                 were clamped to that number, so the only way to a different
                 length is a different template and a regenerated plan. */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
+              <div className="space-y-4">
                 <span className="text-sm font-semibold">Length of the generated piece</span>
                 <p className="rounded-lg border border-[color:var(--hairline)] px-3 py-2 text-sm">
                   {pieceSeconds} seconds
@@ -2975,7 +2975,7 @@ if (step === 3) {
                     : "Set by the hook template you pick."}
                 </p>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-4">
                 <label htmlFor="review-tone" className="text-sm font-semibold">Tone</label>
                 <Input
                   id="review-tone"
@@ -2986,7 +2986,7 @@ if (step === 3) {
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-4">
               <label className="text-sm font-semibold">Voice direction</label>
               <Textarea
                 value={editValue("voice_direction", "")}
@@ -3163,7 +3163,7 @@ if (step === 3) {
         </Alert>
       )}
 
-<div className="surface rounded-2xl">
+<div className="surface surface-step rounded-2xl">
           {/* The step card is the ONLY card on a step. Its blocks — the angle
               picker, "What you get", and the goal list — were
               `.surface` too, so a card sat inside an identical card: same fill,

@@ -372,6 +372,13 @@ body {
     }
 }
 
+/* The Create Video step card. Same 20px gutter as the `.inset-panel` asides
+   inside it at every width, so a step's container and its containers share one
+   padding. Declared after the `.surface` media query so it wins on desktop. */
+.surface-step {
+    padding: 20px;
+}
+
 /* A small bordered aside inside a card (ratings, warnings, pre-render notes).
    Never a full card nested inside a card. 20px gutter, same step as cards. */
 .inset-panel {
