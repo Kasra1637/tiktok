@@ -23,6 +23,7 @@ import {
   RotateCcw,
   ChevronRight,
   ChevronDown,
+  ChevronUp,
   Film,
   Info,
   X,
@@ -708,6 +709,24 @@ function GenerationRow({ row, siblings = [], onChanged }) {
                 </ul>
               </div>
             )}
+            {/* Footer close: the drawer can run long (script + prompt +
+                siblings), so the top Expand/Collapse tab is a scroll away once
+                the user reaches the bottom. Same state, same word, quiet
+                treatment so it never competes with Download / Demo + CTA. */}
+            <div className="border-t border-[color:var(--hairline)] pt-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full"
+                onClick={() => setExpanded(false)}
+                aria-controls={drawerId}
+                aria-label="Collapse this render"
+                title="Collapse this render"
+                data-testid={`history-collapse-${row.id}`}
+              >
+                <ChevronUp className="h-3.5 w-3.5" /> Collapse
+              </Button>
+            </div>
           </div>
         </div>
       )}
