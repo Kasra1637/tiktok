@@ -5343,6 +5343,11 @@ async function runAnalyticsChecks() {
   const stub = (extra = {}) => ({
     getAppProfiles: async () => ({ profiles: [PROFILE] }),
     getFeedback: async () => SIGNALS,
+    // The page also reads the generations list for the funnel and weekly
+    // activity cards. Without this the stub leaks the real HTTP client, the
+    // mount never settles, and every empty-state check below reads the
+    // loading skeleton instead of the page.
+    getGenerations: async () => ({ generations: [] }),
     ...extra,
   });
 
@@ -5409,6 +5414,79 @@ async function runAnalyticsChecks() {
     if (!ctx.container.querySelector('a[href="/brand"]')) {
       throw new Error("there is no way forward from an empty Analytics page");
     }
+  });
+
+  // The funnel, activity and reasons cards below are the Analytics depth:
+  // renders counted by status off the same rows History shows, renders per
+  // week, and the founder's own reason codes. Each hides when its data is
+  // missing rather than rendering an empty card, the same rule the signals
+  // card follows above.
+  const dayAgo = new Date(Date.now() - 86400000).toISOString();
+
+  await check("the render funnel counts every clip by status", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getFeedback: async () => ({
+        feedback: [],
+        summary: { total: 0, top_signals: [], top_reasons: [] },
+      }),
+      getGenerations: async () => ({
+        generations: [
+          { id: "g1", status: "completed", created_at: dayAgo },
+          { id: "g2", status: "completed", created_at: dayAgo },
+          { id: "g3", status: "failed", created_at: dayAgo },
+        ],
+      }),
+    });
+    const card = ctx.container.querySelector('[data-testid="analytics-funnel"]');
+    if (!card) throw new Error("the render funnel is not on the page");
+    for (const row of ["Completed", "Failed", "In progress", "Archived", "3 total"]) {
+      if (!card.textContent.includes(row)) {
+        throw new Error(`the funnel does not count "${row}"`);
+      }
+    }
+    if (!card.querySelector('[data-testid="analytics-funnel-history"]')) {
+      throw new Error("the funnel has no way back to the History rows it counts");
+    }
+    if (ctx.text().includes("Nothing captured yet")) {
+      throw new Error("renders exist but the page still claims nothing was captured");
+    }
+  });
+
+  await check("renders per week buckets clips into Monday-start weeks", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getFeedback: async () => ({
+        feedback: [],
+        summary: { total: 0, top_signals: [], top_reasons: [] },
+      }),
+      getGenerations: async () => ({
+        generations: [{ id: "g1", status: "completed", created_at: dayAgo }],
+      }),
+    });
+    const card = ctx.container.querySelector('[data-testid="analytics-activity"]');
+    if (!card) throw new Error("the weekly activity card is not on the page");
+    expectText(ctx, "This week", "a recent render is not bucketed into this week");
+  });
+
+  await check("reasons list the founder's own codes with an explained count", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getFeedback: async () => ({
+        feedback: [],
+        summary: {
+          total: 5,
+          top_signals: [],
+          top_reasons: [{ reason: "hook_weak", count: 2 }],
+          explained: 2,
+        },
+      }),
+    });
+    const card = ctx.container.querySelector('[data-testid="analytics-reasons"]');
+    if (!card) throw new Error("the reasons card is not on the page");
+    expectText(ctx, "Hook Weak", "a recorded reason is not shown");
+    expectText(
+      ctx,
+      "2 of 5 signals explained.",
+      "a thin reasons list is not readable as unexplained"
+    );
   });
 }
 
