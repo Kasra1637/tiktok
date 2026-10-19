@@ -675,7 +675,10 @@ function load(relPath) {
         // `undefined` and settle on its error state, and its delete dialog
         // could never be exercised.
         useParams: () => global.__SMOKE_ROUTE_PARAMS || {},
-        useLocation: () => ({ pathname: "/create", search: searchParams().toString() }),
+        // Hash rides alongside for #generation- deep links: History opens the
+        // named render on load, and without this the mount would always read
+        // "no hash" no matter what the check asked for.
+        useLocation: () => ({ pathname: "/create", search: searchParams().toString(), hash: global.__SMOKE_HASH || "" }),
       };
     }
     // Exercise the real AuthControls branches without contacting Clerk or
@@ -973,6 +976,42 @@ async function main() {
   // once there is a story to put it in. Landing on the template step straight
   // from the pill, with no audience angles generated, shows the template ask
   // alone -- not a section asking for a photograph nothing can use yet.
+  // The step mirrors into ?step= so a step with its draft is a shareable
+  // link. The write half is unobservable here (the harness setter is a noop
+  // by design), so this pins the readable half — landing on the named step —
+  // in the DOM and the write half in source, including the guard that keeps
+  // the mirror from re-firing the deep-link load it shares the URL with.
+  await check("the wizard lands on its ?step= and mirrors it back", async (ctx) => {
+    global.__SMOKE_PARAMS = "?step=template";
+    try {
+      await mount(CreateVideo, {})(ctx);
+      const pill = ctx.container.querySelector('[data-testid="step-pill-template"]');
+      if (!pill || pill.getAttribute("aria-current") !== "step") {
+        throw new Error("a ?step=template link does not land on the template step");
+      }
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+    const src = fs.readFileSync(
+      path.join(SRC, "pages", "CreateVideo.jsx"),
+      "utf8"
+    );
+    for (const part of [
+      'next.set("step", STEPS[step].key)',
+      "{ replace: true }",
+      "}, [projectParam, profileParam]);",
+    ]) {
+      if (!src.includes(part)) {
+        throw new Error(`the step mirror is missing from source: ${part}`);
+      }
+    }
+    // The deep-link load depending on the whole params object would re-fire
+    // on every mirror write and drag the founder back to step 1 mid-flow.
+    if (src.includes("}, [params]);")) {
+      throw new Error("the deep-link load still depends on the params object, so a mirror write reloads it");
+    }
+  });
+
   await check("the presenter photo section waits for the audience angles", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await mount(CreateVideo, {})(ctx);
@@ -7265,6 +7304,33 @@ async function runDemoCtaChecks() {
   );
 
   await check(
+    "Space toggles preview playback outside text entry",
+    async () => {
+      // The player only mounts with a real clip's metadata, which jsdom
+      // cannot supply — the order check above says so at length — so a DOM
+      // query here would silently pass forever. Asserted in source instead:
+      // a Space keydown that calls the play toggle, skips text entry, and
+      // leaves focused buttons and links to their native activation (a
+      // second toggle there would undo the click).
+      const src = fs.readFileSync(
+        path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
+        "utf8"
+      );
+      for (const part of [
+        'event.code !== "Space"',
+        "togglePlayPause()",
+        'tag === "INPUT"',
+        'tag === "TEXTAREA"',
+        'tag === "BUTTON"',
+      ]) {
+        if (!src.includes(part)) {
+          throw new Error(`the Space transport shortcut is missing from source: ${part}`);
+        }
+      }
+    }
+  );
+
+  await check(
     "the player stacks scrubber, one control row, then export",
     async () => {
       // The player only mounts once a real clip supplies metadata, and jsdom
@@ -8084,6 +8150,32 @@ async function runDemoCtaChecks() {
         }
       }
     );
+  });
+
+  await check("History opens the render a #generation- link names", async (ctx) => {
+    // Analytics "View render" links land here with a hash, but the rows only
+    // arrive after the fetch — so the browser's native anchor scroll has
+    // nothing to land on and the named render sits below the fold, closed.
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    global.__SMOKE_HASH = "#generation-deep-1";
+    try {
+      await withApi(
+        {
+          getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "deep-1" }] }),
+          getAppProfiles: async () => ({ profiles: [PROFILE] }),
+          getVariationKinds: async () => ({ variations: [] }),
+        },
+        async () => {
+          await mount(GenerationHistory)(ctx);
+        }
+      );
+    } finally {
+      global.__SMOKE_HASH = "";
+    }
+    const tab = ctx.container.querySelector('[data-testid="history-expand"]');
+    if (!tab || tab.getAttribute("aria-expanded") !== "true") {
+      throw new Error("the deep-linked render is not opened on arrival");
+    }
   });
 
   await check("Asset Library searches its photos by name", async (ctx) => {

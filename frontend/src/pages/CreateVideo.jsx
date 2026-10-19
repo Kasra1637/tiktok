@@ -971,7 +971,7 @@ function stepCompletion({ profileId, objective, angleId, templateId, project, mi
 }
 
 export default function CreateVideo() {
-  const [params] = useSearchParams();
+  const [params, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
   // The server's updated_at for each project this wizard has adopted from a
@@ -981,7 +981,29 @@ export default function CreateVideo() {
   // long before the Review step that first needed it was in view.
   const syncedProjectsRef = useRef({});
 
-  const [step, setStep] = useState(0);
+  // The step mirrors into ?step= so "the Review step with this draft" is a
+  // shareable link, the same mirror History keeps for its filters. State stays
+  // the source of truth: the URL is read once here on load and follows state
+  // after that, so a ?step= pointing past the founder's progress still lands
+  // on a step whose guards say what is missing.
+  const [step, setStep] = useState(() => {
+    const at = STEPS.findIndex((s) => s.key === params.get("step"));
+    return at >= 0 ? at : 0;
+  });
+  useEffect(() => {
+    // No write when the URL already says where we are: without this the
+    // mount-time write would change params, re-fire the deep-link load below
+    // (it depends on the params it reads), and loop the load on every step.
+    if (params.get("step") === STEPS[step].key) return;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("step", STEPS[step].key);
+        return next;
+      },
+      { replace: true }
+    );
+  }, [step, setSearchParams, params]);
   const [profiles, setProfiles] = useState([]);
   const [angles, setAngles] = useState([]);
   // The GOAL axis of the verdict tally, keyed by objective name and fetched
@@ -1082,6 +1104,13 @@ export default function CreateVideo() {
     ? facets?.angle_goal_fit_reasons?.[angle.kind] || {}
     : {};
 
+  // The deep-link inputs as plain strings, so the load below depends on what
+  // it reads rather than on the params object: the ?step= mirror rewriting
+  // the URL must not re-fire this (it would re-pick the profile and drag the
+  // founder back to step 1 mid-flow).
+  const projectParam = params.get("project") || "";
+  const profileParam = params.get("profile") || "";
+
   useEffect(() => {
     let cancelled = false;
     api.getTemplateFacets().then(setFacets).catch(() => setFacets(null));
@@ -1096,7 +1125,7 @@ export default function CreateVideo() {
         // handled further down. Both must agree on what counts as approved, so
         // both go through the same partition rather than repeating the filter.
         const approved = partitionProfiles(list).approved;
-        const requestedProjectId = params.get("project");
+        const requestedProjectId = projectParam;
         if (requestedProjectId) {
           try {
             const draft = await api.getStudioProject(requestedProjectId);
@@ -1140,7 +1169,7 @@ export default function CreateVideo() {
           }
           return;
         }
-        const preselected = params.get("profile");
+        const preselected = profileParam;
         const chosen =
           approved.find((p) => p.id === preselected) || approved[0] || null;
         if (chosen) {
@@ -1148,7 +1177,10 @@ export default function CreateVideo() {
           // canGenerate, and draft creation, and selectProfile is the only
           // other writer. Reading it from URL params alone left it empty.
           setSelectedProfileId(chosen.id);
-          setStep(1);
+          // A ?step= link names the step explicitly; only advance to the
+          // angle step when none was asked for, so the link survives the
+          // profiles load instead of being overridden by it.
+          if (!params.get("step")) setStep(1);
           api.getContentAngles(chosen.id).then((d) => adoptAngles(d)).catch(() => {
             setAngles([]);
             setObjectiveEvidence({});
@@ -1164,7 +1196,10 @@ export default function CreateVideo() {
     return () => {
       cancelled = true;
     };
-  }, [params]);
+    // projectParam / profileParam only: a ?step= mirror write changes the
+    // params object but neither input this load reads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectParam, profileParam]);
 
   useEffect(() => {
     api

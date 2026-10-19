@@ -676,7 +676,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     };
   }, [isSeeking]);
 
-  const togglePlayPause = () => {
+  // Stable so the Space shortcut below subscribes once: it closes over the
+  // video ref and a state setter only, so an empty dep array is complete.
+  const togglePlayPause = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
@@ -686,7 +688,26 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       video.pause();
       setIsPlaying(false);
     }
-  };
+  }, []);
+
+  // Space toggles preview playback from anywhere that is not text entry, the
+  // way every video editor answers it. A focused button or link already
+  // answers Space with a click, so it is left to the native activation — a
+  // second toggle here would undo the click. Sliders answer arrows, not
+  // Space, so they keep the shortcut.
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.code !== "Space" || event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
+      const el = document.activeElement;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el?.isContentEditable) return;
+      if (tag === "BUTTON" || tag === "A") return;
+      event.preventDefault();
+      togglePlayPause();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [togglePlayPause]);
 
   const handleSeek = (time) => {
     const video = videoRef.current;

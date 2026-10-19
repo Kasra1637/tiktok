@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "../components/ui/button";
 import { Alert, AlertDescription } from "../components/ui/alert";
@@ -311,8 +311,8 @@ function HistoryExpandTab({ expanded, onToggle, controls, testId, id }) {
  * place of the video: a blank tile explains nothing, and each of those four
  * states has its own repair.
  */
-function GenerationRow({ row, onChanged }) {
-  const [expanded, setExpanded] = useState(false);
+function GenerationRow({ row, onChanged, defaultExpanded = false }) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
@@ -795,6 +795,7 @@ export default function GenerationHistory() {
   // for this app" is a shareable link, not a re-click every visit. State
   // stays the source of truth; the URL is a mirror updated below.
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const [profileFilter, setProfileFilter] = useState(() => searchParams.get("profile") || "");
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get("status") || "");
   const [query, setQuery] = useState(() => searchParams.get("q") || "");
@@ -851,6 +852,19 @@ export default function GenerationHistory() {
 
   const completed = visible.filter((r) => r.status === "completed").length;
   const failed = visible.filter((r) => r.status === "failed").length;
+
+  // A #generation-<id> deep link (Analytics "View render") lands on a page
+  // whose rows arrive after the fetch, so the browser's native anchor scroll
+  // has nothing to land on. Settle it here once rows exist: bring the card
+  // into view and open its drawer, so the link names a render that is
+  // actually shown rather than a card somewhere below the fold.
+  const hashId = (location.hash || "").startsWith("#generation-")
+    ? location.hash.slice("#generation-".length)
+    : "";
+  useEffect(() => {
+    if (!hashId || rows.length === 0) return;
+    document.getElementById(`generation-${hashId}`)?.scrollIntoView?.({ block: "nearest" });
+  }, [hashId, rows]);
 
   return (
     <PageFrame className="space-y-6">
@@ -951,6 +965,7 @@ export default function GenerationHistory() {
               key={row.id}
               row={row}
               onChanged={load}
+              defaultExpanded={hashId !== "" && hashId === row.id}
             />
           ))}
           {rows.length >= limit && limit < 200 && (
