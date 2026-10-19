@@ -84,6 +84,18 @@ backend/storage/posters/
 # deployment. Test runs leave real binaries here, so they stay untracked.
 backend/storage/assets/
 
+# Render pipeline output (finished clips, extracted frames, generated images,
+# source uploads), written at runtime per deployment. Twenty-five of these were
+# once committed and had to be untracked; nothing reads them from git.
+backend/storage/videos/
+backend/storage/frames/
+backend/storage/generated/
+backend/storage/uploads/
+
+# backend/storage/samples/ is the exception: test_portrait.jpg is a test
+# fixture read by test_asset_persistence.py and test_overlay_api.py, so it
+# stays tracked. Nothing else belongs under backend/storage/.
+
 # Manual DB backups taken before a migration
 backend/storage/*.stale-*
 
@@ -106,9 +118,6 @@ memory/test_credentials.md
 backend/.rec_tmp/
 .freebuff/
 
-# Mobile development
-android-sdk/frontend/node_modules/.cache/default-development/4.pack
-frontend/node_modules/.cache/default-development/4.pack
 .env
 .env.*
 *.env
@@ -118,7 +127,6 @@ frontend/node_modules/.cache/default-development/4.pack
 credentials.json
 *.key
 .credentials
-frontend/node_modules/.cache/default-development/8.pack
 
 # Cloud Run service spec. Once the <FILL: ...> placeholders are replaced this file
 # holds live credentials for Turso, R2 and Modal, and unlike service.yaml's
