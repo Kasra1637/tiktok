@@ -8027,6 +8027,110 @@ async function runDemoCtaChecks() {
     );
   });
 
+  await check("History pages past the first hundred renders", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const seen = [];
+    const rows = Array.from({ length: 101 }, (_, i) => ({ ...COMPLETED, id: `page-${i}` }));
+    await withApi(
+      {
+        getGenerationHistory: async (params) => {
+          seen.push(params?.limit);
+          return { generations: rows.slice(0, params?.limit || 100) };
+        },
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        getVariationKinds: async () => ({ variations: [] }),
+      },
+      async () => {
+        await mount(GenerationHistory)(ctx);
+        const more = ctx.container.querySelector('[data-testid="history-show-more"]');
+        if (!more) {
+          throw new Error("a full first page of history offers no way to see the rest");
+        }
+        await clickEl(ctx, more, "show the second page of history");
+        if (seen.join(",") !== "100,200") {
+          throw new Error(`show-more fetched limits [${seen.join(",")}], expected 100 then 200`);
+        }
+        if (ctx.container.querySelector('[data-testid="history-show-more"]')) {
+          throw new Error("show-more stays on screen after the last page arrived");
+        }
+      }
+    );
+  });
+
+  await check("History's details modal answers Escape", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    await withApi(
+      {
+        getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "esc-1" }] }),
+        getGeneration: async () => ({ ...COMPLETED, id: "esc-1", model: "minimax" }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        getVariationKinds: async () => ({ variations: [] }),
+      },
+      async () => {
+        await mount(GenerationHistory)(ctx);
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="history-expand"]'), "open the drawer");
+        await clickEl(
+          ctx,
+          ctx.container.querySelector('[data-testid="generation-details-button"]'),
+          "open generation details"
+        );
+        const dialog = ctx.container.querySelector('[role="dialog"]');
+        if (!dialog) throw new Error("the details modal did not open");
+        await act(async () => {
+          dialog.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        });
+        if (ctx.container.querySelector('[role="dialog"]')) {
+          throw new Error("Escape leaves the details modal open, stranding keyboard users");
+        }
+      }
+    );
+  });
+
+  await check("Asset Library searches its photos by name", async (ctx) => {
+    const AssetLibrary = load("pages/AssetLibrary.jsx").default;
+    await withApi(
+      {
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        getAssets: async () => ({
+          assets: [
+            { id: "a1", kind: "character_reference", status: "active", rights_confirmed: true, label: "Founder photo", created_at: new Date().toISOString(), used_in: [] },
+            { id: "a2", kind: "character_reference", status: "active", rights_confirmed: true, label: "Group shot", created_at: new Date().toISOString(), used_in: [] },
+          ],
+        }),
+      },
+      async () => {
+        await mount(AssetLibrary, { profileId: "p1" })(ctx);
+        const search = ctx.container.querySelector('[data-testid="asset-search"]');
+        if (!search) throw new Error("the standalone library has no photo search");
+        await typeInto(ctx, search, "founder", "search the photo library");
+        const text = ctx.container.textContent || "";
+        if (!text.includes("Founder photo") || text.includes("Group shot")) {
+          throw new Error("the search does not narrow the photo list to the match");
+        }
+        if (!text.includes("1 of 2 match")) {
+          throw new Error("the search reports no count of what matched");
+        }
+      }
+    );
+  });
+
+  await check("app chrome offers a skip link to the content", async () => {
+    // Source-level, like the sidebar order check: mounting AppShell means
+    // mounting the sidebar, Clerk and the tour provider for one anchor.
+    // The guard against a silent pass is asserting both ends — a link whose
+    // target id is gone is a skip link that skips nowhere.
+    const src = fs.readFileSync(
+      path.join(SRC, "components", "AppShell.jsx"),
+      "utf8"
+    );
+    if (!src.includes('href="#main-content"')) {
+      throw new Error("no skip link targets the main content");
+    }
+    if (!src.includes('id="main-content"')) {
+      throw new Error("the skip link's target id is missing from the main element");
+    }
+  });
+
   await check(
     "History no longer asks for a verdict on a finished video",
     async (ctx) => {

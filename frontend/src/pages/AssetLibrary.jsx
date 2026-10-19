@@ -8,7 +8,7 @@ import PageHeader from "../components/PageHeader";
 import PageFrame from "../components/PageFrame";
 import EmptyState from "../components/EmptyState";
 import { SectionCard } from "../components/SectionCard";
-import { AppPicker } from "../components/AppPicker";
+import { AppPicker, PILL_SELECT_CLASS } from "../components/AppPicker";
 import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, mediaUrl } from "../lib/api";
 import { FactChip, FactList } from "../components/FactChip";
@@ -309,6 +309,57 @@ function AssetRow({
 }
 
 /**
+ * The standalone list with a hook-text-style search.
+ *
+ * One photo per app is the norm, but retired kinds and archives accumulate,
+ * and a founder hunting "the group shot to delete" should not scroll for it.
+ * The filter is client-side over the loaded list — the endpoint has no text
+ * query — and a query that matches nothing says so instead of rendering an
+ * empty list.
+ */
+function AssetSearchList({ assets, query, onQueryChange, renderRow }) {
+  const q = query.trim().toLowerCase();
+  const listed = q
+    ? assets.filter((a) =>
+        [a.label, a.name, a.kind, a.notes].some((v) =>
+          String(v || "").toLowerCase().includes(q)
+        )
+      )
+    : assets;
+  return (
+    <div className="space-y-4">
+      {(assets.length > 1 || q) && (
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="sr-only" htmlFor="asset-search">Search assets</label>
+          <input
+            id="asset-search"
+            type="search"
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
+            placeholder="Search photos…"
+            aria-label="Search assets by name or kind"
+            data-testid="asset-search"
+            className={PILL_SELECT_CLASS}
+          />
+          {q && (
+            <span className="text-xs text-muted-foreground" role="status">
+              {listed.length} of {assets.length} match “{query.trim()}”
+            </span>
+          )}
+        </div>
+      )}
+      {listed.length === 0 ? (
+        <p className="text-sm text-muted-foreground" role="status">
+          No assets match “{query.trim()}”. Clear the search to see everything.
+        </p>
+      ) : (
+        listed.map((a) => <div key={a.id}>{renderRow(a)}</div>)
+      )}
+    </div>
+  );
+}
+
+/**
  * Where this asset is already in use, on one line.
  *
  * This listed one project per row with its own status badge, so a single use
@@ -383,6 +434,10 @@ export default function AssetLibrary({
   const [notice, setNotice] = useState(null);
   const [label, setLabel] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
+  // Standalone only: the library reads like History, so it searches like it.
+  // Embedded in the wizard the section is one face plus a footnote, and a
+  // search box there would be a second way to do what the count button does.
+  const [assetQuery, setAssetQuery] = useState("");
   const [attachBusyId, setAttachBusyId] = useState("");
   const [showAllPhotos, setShowAllPhotos] = useState(false);
   // The upload just made, so its row can carry the server's face warning
@@ -916,8 +971,11 @@ export default function AssetLibrary({
         // shows when there is nothing attached yet.
         null
       ) : (
-        <div className="space-y-4">
-          {assets.map((a) => (
+        <AssetSearchList
+          assets={assets}
+          query={assetQuery}
+          onQueryChange={setAssetQuery}
+          renderRow={(a) => (
             <AssetRow
               key={a.id}
               asset={a}
@@ -933,8 +991,8 @@ export default function AssetLibrary({
               highlight={a.id === lastUploadedId}
               uploadWarning={uploadWarnings[a.id] || ""}
             />
-          ))}
-        </div>
+          )}
+        />
       )}
       </div>
     </PageFrame>

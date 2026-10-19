@@ -175,6 +175,7 @@ function SidebarFooter({ collapsed }) {
             type="button"
             onClick={replayCurrentPageTour}
             title="Show me around"
+            aria-label="Show me around"
             className="flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-[color:var(--indigo-6)] hover:text-foreground"
           >
             <HelpCircle className="h-[18px] w-[18px]" />

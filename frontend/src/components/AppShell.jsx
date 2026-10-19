@@ -68,6 +68,13 @@ export function AppShell({ children }) {
       className="relative min-h-screen hero-wash"
       style={{ "--sb-w": collapsed ? `${SIDEBAR_W_COLLAPSED}px` : `${SIDEBAR_W}px` }}
     >
+      {/* Skip link: without it keyboard users tab through the whole sidebar on every page before reaching the content. Visible only on focus. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-lg focus:bg-[color:var(--brand-indigo)] focus:px-4 focus:py-2 focus:text-sm focus:text-white"
+      >
+        Skip to content
+      </a>
       <Sidebar collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
       <MobileSidebar open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
 
@@ -94,7 +101,7 @@ export function AppShell({ children }) {
           </span>
         </div>
 
-        <main className="relative z-10 mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 md:px-6 md:py-8 lg:px-8">
+        <main id="main-content" tabIndex={-1} className="relative z-10 mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 outline-none md:px-6 md:py-8 lg:px-8">
           {children}
         </main>
       </div>

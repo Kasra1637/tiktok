@@ -49,6 +49,20 @@ function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/**
+ * A render timestamp that never reads "Invalid Date".
+ *
+ * Old rows can carry a created_at the browser cannot parse; the previous code
+ * rendered whatever Date produced, so a corrupt timestamp showed up as the
+ * literal words "Invalid Date" in the fact row. An unparseable date contributes
+ * no fact, so it contributes no chip.
+ */
+function formatRenderDate(value) {
+  const t = Date.parse(value);
+  if (Number.isNaN(t)) return "";
+  return new Date(t).toLocaleString();
+}
+
 function DetailRow({ label, children }) {
   if (children === null || children === undefined || children === "") return null;
   return (
@@ -70,6 +84,7 @@ function DetailRow({ label, children }) {
 function GenerationDetails({ generationId, onClose }) {
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState(null);
+  const closeRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,6 +93,20 @@ function GenerationDetails({ generationId, onClose }) {
       .catch((err) => { if (!cancelled) setError(getErrorMessage(err)); });
     return () => { cancelled = true; };
   }, [generationId]);
+
+  // Esc closes, matching the row drawer below. Focus lands on Close when the
+  // modal opens so keyboard users start inside it instead of behind it.
+  useEffect(() => {
+    closeRef.current?.focus?.();
+    const onKey = (event) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   return (
     <div
@@ -93,7 +122,7 @@ function GenerationDetails({ generationId, onClose }) {
       >
         <div className="flex items-start justify-between gap-3">
           <SectionHeading icon={Film}>Generation details</SectionHeading>
-          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close details">
+          <Button ref={closeRef} variant="ghost" size="sm" onClick={onClose} aria-label="Close details">
             <X className="h-3.5 w-3.5" />
           </Button>
         </div>
@@ -576,7 +605,9 @@ function GenerationRow({ row, onChanged }) {
               {row.objective ? <FactChip>{humanize(row.objective)}</FactChip> : null}
               {row.template_id ? <FactChip>template v{row.template_version}</FactChip> : null}
               <FactChip>script v{row.script_version}</FactChip>
-              <FactChip>{new Date(row.created_at).toLocaleString()}</FactChip>
+              {formatRenderDate(row.created_at) ? (
+                <FactChip>{formatRenderDate(row.created_at)}</FactChip>
+              ) : null}
             </FactList>
 
             {(row.audience || row.demo_brief) && (
@@ -767,6 +798,9 @@ export default function GenerationHistory() {
   const [profileFilter, setProfileFilter] = useState(() => searchParams.get("profile") || "");
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get("status") || "");
   const [query, setQuery] = useState(() => searchParams.get("q") || "");
+  // The endpoint caps at 200 and the page first asks for 100: a history that
+  // outgrows the first page says so with a second page, not a silent cut.
+  const [limit, setLimit] = useState(100);
 
   useEffect(() => {
     const next = {};
@@ -785,7 +819,7 @@ export default function GenerationHistory() {
       const data = await api.getGenerationHistory({
         brand_profile_id: profileFilter || undefined,
         status: statusFilter || undefined,
-        limit: 100,
+        limit,
       });
       setRows(data.generations || []);
     } catch (err) {
@@ -793,7 +827,7 @@ export default function GenerationHistory() {
     } finally {
       setLoading(false);
     }
-  }, [profileFilter, statusFilter]);
+  }, [profileFilter, statusFilter, limit]);
 
   useEffect(() => {
     load();
@@ -919,6 +953,18 @@ export default function GenerationHistory() {
               onChanged={load}
             />
           ))}
+          {rows.length >= limit && limit < 200 && (
+            <div className="col-span-full flex justify-center pt-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setLimit(200)}
+                data-testid="history-show-more"
+              >
+                Show more <ChevronDown className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </PageFrame>
