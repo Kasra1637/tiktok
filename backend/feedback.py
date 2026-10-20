@@ -29,8 +29,8 @@ from collections import Counter
 
 # What happened.
 # thumb_up / thumb_down are founder verdicts on ONE component (goal, template,
-# plan or script), named in the `step` column. The finished video is never
-# rated: each component's verdicts feed only the AI stage that produces it.
+# plan, script, or video), named in the `step` column. Each component's
+# verdicts feed only the stage that produces it.
 EVENTS = (
     "template_rejected",
     "script_edited",
@@ -40,13 +40,14 @@ EVENTS = (
     "thumb_down",
 )
 
-COMPONENTS = ("goal", "template", "plan", "script")
+COMPONENTS = ("goal", "template", "plan", "script", "video")
 
 COMPONENT_LABELS = {
     "goal": "content goal",
     "template": "hook template",
     "plan": "script plan",
     "script": "spoken script",
+    "video": "generated video",
 }
 
 # Rows recorded before component voting named the wizard step instead.

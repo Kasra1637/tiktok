@@ -12,6 +12,7 @@ import { GroupLabel, SectionHeading } from "../components/SectionCard";
 import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } from "../lib/api";
 import { FactChip, FactList } from "../components/FactChip";
+import { ComponentThumbs } from "../components/ComponentThumbs";
 import { recordSignal } from "../lib/feedback";
 import { sentenceCase } from "../lib/copyCase";
 import {
@@ -634,6 +635,62 @@ function GenerationRow({ row, onChanged, defaultExpanded = false }) {
             {strandedNote && (
               <p className="text-xs text-muted-foreground" role="status">{strandedNote}</p>
             )}
+
+            <div className="space-y-2 border-t border-[color:var(--hairline)] pt-5" data-testid={`history-feedback-${row.id}`}>
+              <GroupLabel icon={Clapperboard}>Rate this render &amp; its parts</GroupLabel>
+              <ComponentThumbs
+                component="video"
+                question="Generated video"
+                hint="Rates the generated video clip itself."
+                resetKey={row.id}
+                refs={{
+                  ...signalRefs,
+                  detail: row.model ? `model=${row.model}` : "",
+                }}
+                testId={`history-video-feedback-${row.id}`}
+              />
+              <ComponentThumbs
+                component="goal"
+                question="Content goal"
+                hint="Shapes future goal suggestions for this app."
+                resetKey={`${row.id}:goal`}
+                refs={{
+                  ...signalRefs,
+                  detail: `objective=${row.objective || ""};kind=${row.angle_kind || ""}`,
+                }}
+                testId={`history-goal-feedback-${row.id}`}
+              />
+              <ComponentThumbs
+                component="template"
+                question="Hook template"
+                hint="Reorders and reshapes future template suggestions."
+                resetKey={`${row.id}:template`}
+                refs={signalRefs}
+                testId={`history-template-feedback-${row.id}`}
+              />
+              <ComponentThumbs
+                component="plan"
+                question="Script plan"
+                hint="Steers future script plans for this app."
+                resetKey={`${row.id}:plan`}
+                refs={{
+                  ...signalRefs,
+                  detail: `plan v${Number(row.script_version) || 0}`,
+                }}
+                testId={`history-plan-feedback-${row.id}`}
+              />
+              <ComponentThumbs
+                component="script"
+                question="Spoken script"
+                hint="Guides future spoken scripts for this app."
+                resetKey={`${row.id}:script`}
+                refs={{
+                  ...signalRefs,
+                  detail: `strategy v${Number(row.strategy_version) || 0}`,
+                }}
+                testId={`history-script-feedback-${row.id}`}
+              />
+            </div>
 
             {/* Actions, in two tiers.
 

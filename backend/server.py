@@ -8371,9 +8371,11 @@ async def generation_history(
                    g.template_version, g.script_version, g.model, g.duration,
                    g.status, g.segment_role, g.attempt, g.video_url,
                    g.r2_url, g.error, g.retryable, g.created_at, g.completed_at,
-                   b.brand_name, p.objective, p.hook_line, p.demo_brief, p.audience
+                   b.brand_name, p.objective, p.hook_line, p.demo_brief, p.audience,
+                   p.strategy_version, ca.kind AS angle_kind
             FROM generations g
             LEFT JOIN studio_projects p ON p.id = g.studio_project_id
+            LEFT JOIN content_angles ca ON ca.id = p.content_angle_id
             LEFT JOIN brand_profiles b ON b.id = g.brand_profile_id
             WHERE {' AND '.join(clauses)}
             ORDER BY g.created_at DESC LIMIT ?""",

@@ -6,6 +6,7 @@ import { StatusBadge } from "./StatusBadge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage, mediaUrl, downloadMediaUrl } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
+import { ComponentThumbs } from "./ComponentThumbs";
 import { CONTROL_CLASS } from "./formControls";
 import {
   exceedsSinglePass, readPieceSeconds, singlePassCeiling,
@@ -673,6 +674,20 @@ const handleGenerate = async () => {
                   </a>
                 </Button>
               </div>
+              <ComponentThumbs
+                component="video"
+                question="Did this generated video turn out well?"
+                hint="Rates the generated video clip itself."
+                resetKey={generation.id}
+                refs={{
+                  brand_profile_id: generation?.brand_profile_id || project?.brand_profile_id || "",
+                  studio_project_id: generation?.studio_project_id || project?.id || "",
+                  generation_id: generation?.id || "",
+                  template_id: generation?.template_id || project?.template_id || "",
+                  detail: generation?.model ? `model=${generation.model}` : "",
+                }}
+                testId="video-feedback"
+              />
               {/* What they got, and what is still theirs to do. The old copy here
                   promised a call to action on an end card, which made this file
                   look finished. It is not: the middle deliberately ends where

@@ -221,7 +221,7 @@ class TestFeedbackCatalog:
             else:
                 assert event["reasons"], event["key"]
         import feedback as fb
-        assert catalog["components"] == ["goal", "template", "plan", "script"]
+        assert catalog["components"] == ["goal", "template", "plan", "script", "video"]
 
     def test_catalog_has_no_video_level_verdicts(self, api):
         """The finished video is never rated; only its components are."""
@@ -362,12 +362,15 @@ class TestRecordFeedback:
         per = fb.summarize_component_feedback([
             {"event": "thumb_down", "step": "script"},
             {"event": "thumb_down", "step": "script"},
+            {"event": "thumb_up", "step": "video"},
         ])
         script = fb.build_component_feedback_section(per, "script")
         plan = fb.build_component_feedback_section(per, "plan")
+        video = fb.build_component_feedback_section(per, "video")
         assert "spoken script" in script and "2 thumbs down" in script
         assert "none recorded" in plan
-        assert fb.build_component_feedback_section(per, "video") == ""
+        assert "generated video" in video and "1 thumbs up" in video
+        assert fb.build_component_feedback_section(per, "unknown") == ""
 
     def test_listing_is_scoped_to_user(self, api):
         from models import FeedbackRequest

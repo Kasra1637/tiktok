@@ -5492,18 +5492,45 @@ async function runAnalyticsChecks() {
   });
 
   await check("renders per week buckets clips into Monday-start weeks", async (ctx) => {
+    // dayAgo is not guaranteed to share this Monday-start week with today: on
+    // a Monday it falls on the previous Sunday, so it buckets to last week.
+    // Everything below is one mount: re-rendering the same root keeps the
+    // first mount's state (the effect does not refetch), so a second mount
+    // would still show the first mount's buckets.
+    // justBefore/justAfter are computed in local wall time so timezones
+    // cannot collapse them: 30 min before this Monday midnight (Sunday) and
+    // 30 min after it (Monday) share a Sunday-start week but fall on either
+    // side of a Monday boundary, so two buckets proves Monday-start. Fixed
+    // UTC strings cannot do this — a UTC midnight pair lands on the same
+    // local Sunday either side of the Atlantic.
+    const thisMondayMidnight = new Date();
+    thisMondayMidnight.setDate(
+      thisMondayMidnight.getDate() - ((thisMondayMidnight.getDay() + 6) % 7)
+    );
+    thisMondayMidnight.setHours(0, 0, 0, 0);
+    const justBefore = new Date(thisMondayMidnight.getTime() - 30 * 60000).toISOString();
+    const justAfter = new Date(thisMondayMidnight.getTime() + 30 * 60000).toISOString();
     await mountAnalytics(ctx, {
       getFeedback: async () => ({
         feedback: [],
         summary: { total: 0, top_signals: [], top_reasons: [] },
       }),
       getGenerations: async () => ({
-        generations: [{ id: "g1", status: "completed", created_at: dayAgo }],
+        generations: [
+          { id: "g1", status: "completed", created_at: justAfter },
+          { id: "g2", status: "completed", created_at: justBefore },
+        ],
       }),
     });
     const card = ctx.container.querySelector('[data-testid="analytics-activity"]');
     if (!card) throw new Error("the weekly activity card is not on the page");
     expectText(ctx, "This week", "a recent render is not bucketed into this week");
+    const buckets = [...ctx.container.querySelectorAll('[data-testid="analytics-activity"] li')];
+    if (buckets.length !== 2) {
+      throw new Error(
+        `a Sunday/Monday pair straddling a Monday boundary buckets into ${buckets.length} week(s), expected 2`
+      );
+    }
   });
 
   await check("reasons list the founder's own codes with an explained count", async (ctx) => {
@@ -8224,28 +8251,56 @@ async function runDemoCtaChecks() {
   });
 
   await check(
-    "History no longer asks for a verdict on a finished video",
+    "History offers thumbs for the generated video and its four components",
     async (ctx) => {
       const GenerationHistory = load("pages/GenerationHistory.jsx").default;
-      await withApi(
-        {
-          getGenerationHistory: async () => ({
-            generations: [{ ...COMPLETED, brand_name: "Test App", duration: 10 }],
-          }),
-          getAppProfiles: async () => ({ profiles: [PROFILE] }),
-          getVariationKinds: async () => ({ variations: [] }),
-        },
-        async () => {
-          await mount(GenerationHistory, { onChanged: () => {} })(ctx);
-          if (ctx.container.querySelector('[data-testid="history-verdict"]')) {
-            throw new Error("History still shows the per-video verdict controls");
+      global.__SMOKE_THUMBS = [];
+      try {
+        await withApi(
+          {
+            getGenerationHistory: async () => ({
+              generations: [
+                {
+                  ...COMPLETED,
+                  brand_name: "Test App",
+                  duration: 10,
+                  objective: "demonstrate_feature",
+                  angle_kind: "problem_solution",
+                  script_version: 2,
+                  strategy_version: 3,
+                },
+              ],
+            }),
+            getAppProfiles: async () => ({ profiles: [PROFILE] }),
+            getVariationKinds: async () => ({ variations: [] }),
+          },
+          async () => {
+            await mount(GenerationHistory, { onChanged: () => {} })(ctx);
+            await clickEl(
+              ctx,
+              ctx.container.querySelector('[data-testid="history-expand"]'),
+              "expand the render tile"
+            );
+            for (const part of ["video", "goal", "template", "plan", "script"]) {
+              const up = ctx.container.querySelector(
+                `[data-testid="history-${part}-feedback-${COMPLETED.id}-thumb-up"]`
+              );
+              if (!up) {
+                throw new Error(`History is missing thumbs-up for ${part}`);
+              }
+              await clickEl(ctx, up, `click ${part} thumbs-up`);
+            }
+            const recorded = global.__SMOKE_THUMBS.map((t) => `${t.step}:${t.verdict}`);
+            for (const expected of ["video:1", "goal:1", "template:1", "plan:1", "script:1"]) {
+              if (!recorded.includes(expected)) {
+                throw new Error(`Expected ${expected} in recorded thumbs, got ${recorded.join(", ")}`);
+              }
+            }
           }
-          const text = ctx.container.textContent || "";
-          if (text.includes("How did this turn out?") || text.includes("Looks good")) {
-            throw new Error("History still asks the founder to rate the finished video");
-          }
-        }
-      );
+        );
+      } finally {
+        global.__SMOKE_THUMBS = [];
+      }
     }
   );
 

@@ -75,13 +75,13 @@ export async function recordSignal(event, signal, refs = {}) {
 }
 
 /**
- * Record a thumbs verdict on one component of the video.
+ * Record a thumbs verdict on one component of the video (or the video itself).
  *
  * Thumbs are standalone judgments: no signal, no reason. Each component's
  * votes only steer the AI step that produces it. Detail optionally names
  * the item version (e.g. "plan v3").
  *
- * @param {string} step One of goal | template | plan | script.
+ * @param {string} step One of goal | template | plan | script | video.
  * @param {number} verdict 1 for up, -1 for down, 0 clears without recording.
  * @returns {Promise<boolean>} whether it was recorded.
  */
