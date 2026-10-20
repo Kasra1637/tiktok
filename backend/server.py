@@ -871,6 +871,8 @@ async def init_db():
                 ON feedback_events (brand_profile_id, created_at);
             CREATE INDEX IF NOT EXISTS idx_feedback_event
                 ON feedback_events (event, reason);
+            CREATE INDEX IF NOT EXISTS idx_feedback_generation
+                ON feedback_events (user_id, generation_id, created_at);
 
             -- Persistent video storage registry. Each row tracks a generated
             -- video uploaded to Cloudflare R2 so it survives container redeploys
@@ -3124,6 +3126,50 @@ async def _component_feedback_for_profile(
         (brand_profile_id, user_id),
     )
     return {component: feedback_mod.summarize_component_feedback(rows)[component]}
+
+
+async def _generation_verdicts(generation_ids: list, user_id: str) -> dict:
+    """
+    Each generation's saved thumb verdicts, as {generation_id: {component: 1|-1}}.
+
+    One query for the whole page: rows come back newest-first so the first row
+    seen per (generation, component) is the founder's current verdict. Only
+    rows naming a generation count — wizard-time thumbs without one stay in
+    the aggregates but never highlight a render. Scoped to the caller so one
+    account's votes can never light up another's buttons.
+    """
+    ids = [g for g in (generation_ids or []) if g]
+    if not ids:
+        return {}
+    placeholders = ",".join("?" for _ in ids)
+    rows = await _fetch_all(
+        "SELECT generation_id, step, event FROM feedback_events"
+        f" WHERE user_id = ? AND generation_id IN ({placeholders})"
+        " AND event IN ('thumb_up', 'thumb_down')"
+        " ORDER BY created_at DESC",
+        tuple([user_id] + ids),
+    )
+    out: dict = {}
+    for row in rows or []:
+        gen_id = row.get("generation_id") or ""
+        component = feedback_mod.normalize_component(row.get("step") or "")
+        if not gen_id or not component:
+            continue
+        bucket = out.setdefault(gen_id, {})
+        if component in bucket:
+            continue
+        bucket[component] = 1 if (row.get("event") or "") == "thumb_up" else -1
+    return out
+
+
+async def _with_verdicts(entries, user_id: str):
+    """Attach each generation's saved thumb verdicts for thumb-state restore."""
+    single = isinstance(entries, dict)
+    items = [entries] if single else list(entries or [])
+    verdicts = await _generation_verdicts([e.get("id") for e in items], user_id)
+    for entry in items:
+        entry["verdicts"] = verdicts.get(entry.get("id") or "", {})
+    return entries
 
 
 async def _auto_generate_content_angles(profile: dict, user_id: str) -> None:
@@ -5883,7 +5929,7 @@ async def _submit_generation(
                 "Idempotent repeat of generation %s (key %s): no second render",
                 already.get("id"), claim_key,
             )
-            existing = _public_generation(already)
+            existing = await _with_verdicts(_public_generation(already), user_id)
             existing["idempotent_replay"] = True
             return existing
 
@@ -5921,7 +5967,7 @@ async def _submit_generation(
                     "returning generation %s, no second render",
                     claim_key, winner.get("id"),
                 )
-                adopted = _public_generation(winner)
+                adopted = await _with_verdicts(_public_generation(winner), user_id)
                 adopted["idempotent_replay"] = True
                 return adopted
         raise
@@ -5997,9 +6043,9 @@ async def _submit_generation(
         f"attempt {attempt}) model={model_key} duration={seconds}s "
         f"continuity={reported.get('guarantee') or 'n/a'}"
     )
-    detail = _public_generation_detail(
+    detail = await _with_verdicts(_public_generation_detail(
         await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
-    )
+    ), user_id)
     # What was rewritten, when anything was. The words in the render are not
     # quite the approved words, and the founder is told rather than left to hear
     # the difference once the clip comes back.
@@ -6053,7 +6099,9 @@ async def list_generations(
             ORDER BY created_at DESC LIMIT ?""",
         tuple(params) + (max(1, min(int(limit or 50), 200)),),
     )
-    return {"generations": [_public_generation(r) for r in rows]}
+    out = [_public_generation(r) for r in rows]
+    await _with_verdicts(out, user_id)
+    return {"generations": out}
 
 
 @api_router.get("/generations/{generation_id}")
@@ -6063,7 +6111,7 @@ async def get_generation(generation_id: str, user_id: str = Depends(get_current_
     )
     if not row:
         raise HTTPException(status_code=404, detail="Generation not found")
-    return _public_generation_detail(row)
+    return await _with_verdicts(_public_generation_detail(row), user_id)
 
 
 def health_database_report(active_backend: str | None) -> dict:
@@ -6570,7 +6618,7 @@ async def poll_generation(
     if not row:
         raise HTTPException(status_code=404, detail="Generation not found")
     if row.get("status") in ("completed", "archived"):
-        return _public_generation_detail(row)
+        return await _with_verdicts(_public_generation_detail(row), user_id)
 
     job_id = row.get("openrouter_job_id")
     if not job_id:
@@ -6680,9 +6728,9 @@ async def poll_generation(
             (now, generation_id),
         )
 
-    return _public_generation_detail(
+    return await _with_verdicts(_public_generation_detail(
         await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
-    )
+    ), user_id)
 
 
 # Provider-clip download hardening: attempts, per-attempt timeout, and backoff
@@ -7792,9 +7840,9 @@ async def archive_generation(generation_id: str, user_id: str = Depends(get_curr
         "UPDATE generations SET status = 'archived', updated_at = ? WHERE id = ?",
         (now_iso(), generation_id),
     )
-    return _public_generation_detail(
+    return await _with_verdicts(_public_generation_detail(
         await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
-    )
+    ), user_id)
 
 
 # ---------------------------------------------------------------------------
@@ -8400,6 +8448,7 @@ async def generation_history(
         entry["poster_url"] = _poster_url(row)
         entry["composition"] = None
         out.append(entry)
+    await _with_verdicts(out, user_id)
     return {"generations": out}
 
 
@@ -8491,9 +8540,9 @@ async def record_feedback(payload: FeedbackRequest, user_id: str = Depends(get_c
             detail=f"Reason '{payload.reason}' is not valid for {event}. "
                    f"Allowed: {', '.join(allowed) or 'none'}.",
         )
-    # Thumbs verdicts judge one component (goal, template, plan, script) and
-    # carry no signal or reason, so a thumb can never be miscounted as an
-    # automatic trigger or a stated cause.
+    # Thumbs verdicts judge one component (goal, template, plan, script or
+    # video) and carry no signal or reason, so a thumb can never be miscounted
+    # as an automatic trigger or a stated cause.
     is_thumb = event in ("thumb_up", "thumb_down")
     step = feedback_mod.normalize_component(payload.step)
     if is_thumb:

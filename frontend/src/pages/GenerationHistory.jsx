@@ -13,7 +13,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } from "../lib/api";
 import { FactChip, FactList } from "../components/FactChip";
 import { ComponentThumbs } from "../components/ComponentThumbs";
-import { recordSignal } from "../lib/feedback";
+import { recordSignal, verdictFor } from "../lib/feedback";
 import { sentenceCase } from "../lib/copyCase";
 import {
   History as HistoryIcon,
@@ -368,6 +368,17 @@ function GenerationRow({ row, onChanged, defaultExpanded = false }) {
     wasExpanded.current = expanded;
   }, [expanded, expandTabId, row.id]);
 
+  // Votes cast during this visit, ahead of the next fetch. The drawer
+  // unmounts on collapse, so without this a thumb just pressed would reopen
+  // unpressed until the list reloads — even though the vote already saved.
+  const [voteOverrides, setVoteOverrides] = useState({});
+  const savedVerdicts = row.verdicts || {};
+  const thumbValue = (component) =>
+    voteOverrides[component] ?? verdictFor(savedVerdicts, component);
+  const rememberVote = useCallback((component, verdict) => {
+    setVoteOverrides((prev) => ({ ...prev, [component]: verdict }));
+  }, []);
+
   // The copy the browser can actually fetch, chosen by the same rule every
   // other screen uses (see durableMediaUrl): the durable upload, or the signed
   // local fallback path. It deliberately returns null for a row whose only URL
@@ -643,6 +654,8 @@ function GenerationRow({ row, onChanged, defaultExpanded = false }) {
                 question="Generated video"
                 hint="Rates the generated video clip itself."
                 resetKey={row.id}
+                initialValue={thumbValue("video")}
+                onVoted={rememberVote}
                 refs={{
                   ...signalRefs,
                   detail: row.model ? `model=${row.model}` : "",
@@ -654,6 +667,8 @@ function GenerationRow({ row, onChanged, defaultExpanded = false }) {
                 question="Content goal"
                 hint="Shapes future goal suggestions for this app."
                 resetKey={`${row.id}:goal`}
+                initialValue={thumbValue("goal")}
+                onVoted={rememberVote}
                 refs={{
                   ...signalRefs,
                   detail: `objective=${row.objective || ""};kind=${row.angle_kind || ""}`,
@@ -665,6 +680,8 @@ function GenerationRow({ row, onChanged, defaultExpanded = false }) {
                 question="Hook template"
                 hint="Reorders and reshapes future template suggestions."
                 resetKey={`${row.id}:template`}
+                initialValue={thumbValue("template")}
+                onVoted={rememberVote}
                 refs={signalRefs}
                 testId={`history-template-feedback-${row.id}`}
               />
@@ -673,6 +690,8 @@ function GenerationRow({ row, onChanged, defaultExpanded = false }) {
                 question="Script plan"
                 hint="Steers future script plans for this app."
                 resetKey={`${row.id}:plan`}
+                initialValue={thumbValue("plan")}
+                onVoted={rememberVote}
                 refs={{
                   ...signalRefs,
                   detail: `plan v${Number(row.script_version) || 0}`,
@@ -684,6 +703,8 @@ function GenerationRow({ row, onChanged, defaultExpanded = false }) {
                 question="Spoken script"
                 hint="Guides future spoken scripts for this app."
                 resetKey={`${row.id}:script`}
+                initialValue={thumbValue("script")}
+                onVoted={rememberVote}
                 refs={{
                   ...signalRefs,
                   detail: `strategy v${Number(row.strategy_version) || 0}`,

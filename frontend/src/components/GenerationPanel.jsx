@@ -5,7 +5,7 @@ import { Badge } from "./ui/badge";
 import { StatusBadge } from "./StatusBadge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage, mediaUrl, downloadMediaUrl } from "../lib/api";
-import { recordSignal } from "../lib/feedback";
+import { recordSignal, verdictFor } from "../lib/feedback";
 import { ComponentThumbs } from "./ComponentThumbs";
 import { CONTROL_CLASS } from "./formControls";
 import {
@@ -70,6 +70,11 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [retryingStorage, setRetryingStorage] = useState(false);
+  // A vote cast on this visit, ahead of the next poll: without it the thumb
+  // just pressed would reopen unpressed on the next generation refresh even
+  // though the vote already saved. Cleared when tracking moves to another
+  // render, so one clip's vote can never highlight the next.
+  const [videoOverride, setVideoOverride] = useState(null);
   const timer = useRef(null);
 
   const projectId = project?.id;
@@ -233,6 +238,12 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
     };
   }, [projectId, schedulePoll]);
 
+
+  // A new render starts unvoted: the override belongs to the previous clip.
+  const trackedGenerationId = generation?.id || "";
+  useEffect(() => {
+    setVideoOverride(null);
+  }, [trackedGenerationId]);
 
 const handleGenerate = async () => {
     // "Generate another" runs a second render on a video the founder has
@@ -679,6 +690,8 @@ const handleGenerate = async () => {
                 question="Did this generated video turn out well?"
                 hint="Rates the generated video clip itself."
                 resetKey={generation.id}
+                initialValue={videoOverride ?? verdictFor(generation?.verdicts, "video")}
+                onVoted={(_component, verdict) => setVideoOverride(verdict)}
                 refs={{
                   brand_profile_id: generation?.brand_profile_id || project?.brand_profile_id || "",
                   studio_project_id: generation?.studio_project_id || project?.id || "",

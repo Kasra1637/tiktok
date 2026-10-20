@@ -388,6 +388,74 @@ class TestRecordFeedback:
         assert summary["by_event"]["script_edited"] >= 2
 
 
+class TestGenerationVerdicts:
+    """
+    Saved thumb votes ride on generation payloads so the UI can restore the
+    highlighted state after a reload or a return visit — the vote itself
+    already worked, this is purely the visual restore.
+    """
+
+    def _thumb(self, api, event, step, profile, generation):
+        from models import FeedbackRequest
+        return _run(api.record_feedback(FeedbackRequest(
+            event=event, step=step,
+            brand_profile_id=profile["id"],
+            generation_id=generation["id"]), ANON))
+
+    def test_history_detail_and_list_carry_saved_verdicts(self, api):
+        profile = _profile(api, "Verdicts Ride Along")
+        gen = _generation(api, profile, status="completed")
+        self._thumb(api, "thumb_up", "video", profile, gen)
+        self._thumb(api, "thumb_down", "plan", profile, gen)
+        row = next(
+            g for g in _run(api.generation_history(user_id=ANON))["generations"]
+            if g["id"] == gen["id"])
+        assert row["verdicts"] == {"video": 1, "plan": -1}
+        assert _run(api.get_generation(gen["id"], ANON))["verdicts"] == {
+            "video": 1, "plan": -1}
+        listed = _run(api.list_generations(user_id=ANON))["generations"]
+        assert next(
+            g for g in listed if g["id"] == gen["id"])["verdicts"] == {
+            "video": 1, "plan": -1}
+
+    def test_latest_vote_wins_per_generation_and_component(self, api):
+        profile = _profile(api, "Verdicts Latest Wins")
+        gen = _generation(api, profile, status="completed")
+        self._thumb(api, "thumb_down", "video", profile, gen)
+        self._thumb(api, "thumb_up", "video", profile, gen)
+        row = next(
+            g for g in _run(api.generation_history(user_id=ANON))["generations"]
+            if g["id"] == gen["id"])
+        assert row["verdicts"] == {"video": 1}
+
+    def test_verdicts_stay_on_their_generation_and_user(self, api):
+        profile = _profile(api, "Verdicts Scoped")
+        voted = _generation(api, profile, status="completed")
+        unvoted = _generation(api, profile, status="completed")
+        self._thumb(api, "thumb_up", "video", profile, voted)
+        rows = {g["id"]: g for g in
+                _run(api.generation_history(user_id=ANON))["generations"]}
+        assert rows[voted["id"]]["verdicts"] == {"video": 1}
+        assert rows[unvoted["id"]]["verdicts"] == {}
+        assert _run(api.generation_history(
+            user_id=OTHER_USER))["generations"] == []
+        stranger = _run(api.list_feedback(user_id=OTHER_USER))
+        assert stranger["feedback"] == []
+
+    def test_non_thumb_events_never_highlight_a_render(self, api):
+        from models import FeedbackRequest
+        profile = _profile(api, "Verdicts Ignore Signals")
+        gen = _generation(api, profile, status="completed")
+        _run(api.record_feedback(FeedbackRequest(
+            event="video_downloaded", signal="downloaded",
+            brand_profile_id=profile["id"],
+            generation_id=gen["id"]), ANON))
+        row = next(
+            g for g in _run(api.generation_history(user_id=ANON))["generations"]
+            if g["id"] == gen["id"])
+        assert row["verdicts"] == {}
+
+
 class TestRecordSignal:
     """
     Signals are the automatic half of the feedback loop: factual triggers the

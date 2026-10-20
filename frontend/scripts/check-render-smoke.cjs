@@ -606,6 +606,24 @@ const durableMediaUrl = (() => {
   return new Function("mediaUrl", `${decl} return durableMediaUrl;`)((mediaPath) => mediaPath);
 })();
 
+// The saved-vote highlight must also be the shipped implementation: it maps a
+// generation's server-attached verdicts onto the pressed thumb, so the
+// restore checks below assert the rule that actually ships.
+const verdictFor = (() => {
+  const source = fs.readFileSync(path.join(SRC, "lib", "feedback.js"), "utf8");
+  const start = source.indexOf("export function verdictFor(verdicts, component) {");
+  const end = start === -1 ? -1 : source.indexOf("\n}", start);
+  if (start === -1 || end === -1) {
+    throw new Error(
+      "verdictFor could not be read out of src/lib/feedback.js, so the thumb-restore " +
+        "checks would be asserting against a stub instead of the shipped rule"
+    );
+  }
+  const decl = source.slice(start, end + 2).replace("export ", "");
+  // eslint-disable-next-line no-new-func
+  return new Function(`${decl} return verdictFor;`)();
+})();
+
 // The History download helper must also be the shipped implementation: it
 // chooses the signed same-origin download route rather than reusing a
 // cross-origin playback href.
@@ -733,13 +751,16 @@ function load(relPath) {
     if (spec.endsWith("lib/feedback")) {
       // recordThumb must mirror the real module: CreateVideo's review loop
       // calls it unguarded, so a stub without it turns every thumbs tap into
-      // a TypeError and no check could ever exercise the loop.
+      // a TypeError and no check could ever exercise the loop. verdictFor is
+      // the shipped implementation, evaluated above, because it decides which
+      // thumb renders pressed on a revisited render.
       return {
         recordSignal: () => {},
         recordThumb: async (step, verdict, refs) => {
           (global.__SMOKE_THUMBS = global.__SMOKE_THUMBS || []).push({ step, verdict, refs });
           return true;
         },
+        verdictFor,
         classifyScriptEdit: () => ({ kind: "other" }),
       };
     }
@@ -6839,6 +6860,31 @@ async function runDemoCtaChecks() {
     }
   );
 
+  // The vote already saves; this is the visual restore after a reload. The
+  // panel reads the verdicts riding on the generation it already fetched, so
+  // no extra request is needed and none may be recorded by the mount itself.
+  await check(
+    "a finished render restores its saved video thumb without a new vote",
+    async (ctx) => {
+      global.__SMOKE_THUMBS = [];
+      try {
+        await mountStudio(ctx, [{ ...COMPLETED, verdicts: { video: -1 } }]);
+        const down = ctx.container.querySelector(
+          '[data-testid="video-feedback-thumb-down"]'
+        );
+        if (!down) throw new Error("the post-render video thumb is missing");
+        if (down.getAttribute("aria-pressed") !== "true") {
+          throw new Error("a saved thumbs-down on the video is not highlighted");
+        }
+        if ((global.__SMOKE_THUMBS || []).length !== 0) {
+          throw new Error("restoring the highlight recorded a vote that was never cast");
+        }
+      } finally {
+        global.__SMOKE_THUMBS = [];
+      }
+    }
+  );
+
   await check(
     "the studio download never points at raw cloud storage",
     async (ctx) => {
@@ -8295,6 +8341,63 @@ async function runDemoCtaChecks() {
               if (!recorded.includes(expected)) {
                 throw new Error(`Expected ${expected} in recorded thumbs, got ${recorded.join(", ")}`);
               }
+            }
+          }
+        );
+      } finally {
+        global.__SMOKE_THUMBS = [];
+      }
+    }
+  );
+
+  // Votes save already; this is the visual restore. A founder returning to a
+  // rated render must see their thumbs still pressed, without the mount
+  // itself recording a single new event.
+  await check(
+    "History restores saved thumb highlights without recording new votes",
+    async (ctx) => {
+      const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+      global.__SMOKE_THUMBS = [];
+      try {
+        await withApi(
+          {
+            getGenerationHistory: async () => ({
+              generations: [
+                {
+                  ...COMPLETED,
+                  brand_name: "Test App",
+                  duration: 10,
+                  verdicts: { video: 1, goal: -1 },
+                },
+              ],
+            }),
+            getAppProfiles: async () => ({ profiles: [PROFILE] }),
+            getVariationKinds: async () => ({ variations: [] }),
+          },
+          async () => {
+            await mount(GenerationHistory, { onChanged: () => {} })(ctx);
+            await clickEl(
+              ctx,
+              ctx.container.querySelector('[data-testid="history-expand"]'),
+              "expand the render tile"
+            );
+            const up = ctx.container.querySelector(
+              `[data-testid="history-video-feedback-${COMPLETED.id}-thumb-up"]`
+            );
+            const down = ctx.container.querySelector(
+              `[data-testid="history-goal-feedback-${COMPLETED.id}-thumb-down"]`
+            );
+            if (!up || !down) {
+              throw new Error("History is missing the saved thumb controls");
+            }
+            if (up.getAttribute("aria-pressed") !== "true") {
+              throw new Error("a saved thumbs-up on the video is not highlighted");
+            }
+            if (down.getAttribute("aria-pressed") !== "true") {
+              throw new Error("a saved thumbs-down on the goal is not highlighted");
+            }
+            if ((global.__SMOKE_THUMBS || []).length !== 0) {
+              throw new Error("restoring highlights recorded votes that were never cast");
             }
           }
         );

@@ -85,6 +85,20 @@ export async function recordSignal(event, signal, refs = {}) {
  * @param {number} verdict 1 for up, -1 for down, 0 clears without recording.
  * @returns {Promise<boolean>} whether it was recorded.
  */
+/**
+ * A generation's saved vote for one component, as the thumb control reads it.
+ *
+ * The server attaches `verdicts` ({component: 1|-1}) to generation rows; a
+ * missing entry, a stale shape, or no verdicts at all all read as unvoted
+ * rather than crashing the highlight.
+ *
+ * @returns {number} 1 for up, -1 for down, 0 for unvoted.
+ */
+export function verdictFor(verdicts, component) {
+  const v = verdicts?.[component];
+  return v > 0 ? 1 : v < 0 ? -1 : 0;
+}
+
 export async function recordThumb(step, verdict, refs = {}) {
   if (verdict !== 1 && verdict !== -1) return false;
   try {
