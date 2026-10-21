@@ -249,6 +249,20 @@ const HERO_STEPS = [
   "Hook + Story",
 ];
 
+/**
+ * Discrete Ken Burns zoom per step, eased over ~1s when the step flips.
+ * Step 1 opens wide to establish the interface, the middle steps lean into
+ * the upper cards where the choices live, and step 5 pulls back out so the
+ * payoff card shows whole. Origins are percentages of the video frame.
+ */
+const HERO_ZOOMS = [
+  { scale: 1, origin: "50% 50%" },
+  { scale: 1.25, origin: "50% 30%" },
+  { scale: 1.4, origin: "50% 55%" },
+  { scale: 1.25, origin: "50% 40%" },
+  { scale: 1, origin: "50% 50%" },
+];
+
 export default function Landing() {
   // Which fifth of the hero loop is on screen, driven by the video's own
   // clock so the overlay can never drift from the footage. Updates only on
@@ -410,15 +424,19 @@ export default function Landing() {
                   </span>
                   <span className="ml-auto shrink-0 text-xs text-muted-foreground">8× loop</span>
                 </div>
-                <div className="relative aspect-[9/13] w-full">
-                  <video
-                    className="absolute inset-0 block h-full w-full object-contain"
-                    autoPlay
-                    muted
-                    loop
-                    playsInline
-                    preload="metadata"                poster={`${process.env.PUBLIC_URL}/hero-demo-poster.jpg`}
+                <div className="relative aspect-[9/13] w-full">              <video
+                className="absolute inset-0 block h-full w-full object-contain transition-transform duration-1000 ease-in-out will-change-transform"
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="metadata"
+                poster={`${process.env.PUBLIC_URL}/hero-demo-poster.jpg`}
                 aria-label="Screen recording at 8x speed: the Create Video wizard interface and the Demo CTA canvas, full interface with no page header or footer"
+                style={{
+                  transform: `scale(${HERO_ZOOMS[heroStep].scale})`,
+                  transformOrigin: HERO_ZOOMS[heroStep].origin,
+                }}
                 ref={(v) => {
                   if (!v) return;
                   v.muted = true;
