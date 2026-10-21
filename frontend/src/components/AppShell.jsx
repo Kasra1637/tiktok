@@ -7,10 +7,6 @@ const SIDEBAR_COLLAPSED_KEY = "hookforge_sidebar_collapsed";
 const SIDEBAR_W = 264;
 const SIDEBAR_W_COLLAPSED = 76;
 
-const SHOW_BUILD_STAMP =
-  process.env.NODE_ENV !== "production" ||
-  process.env.REACT_APP_SHOW_BUILD_STAMP === "true";
-
 export function AppShell({ children }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
@@ -106,23 +102,6 @@ export function AppShell({ children }) {
         </main>
       </div>
 
-      {/* Build stamp — visual proof of which deploy is live.
-          Hidden in production builds: it is fixed to the bottom-right corner
-          and was overlapping real page content (e.g. empty-state copy on
-          Discover at narrow widths). Still available where it's actually
-          useful — always in development, and in a production build when
-          REACT_APP_SHOW_BUILD_STAMP=true is set at build time to verify a
-          deploy. CRA inlines both values, so this branch is dead-code
-          eliminated from the normal production bundle. */}
-      {SHOW_BUILD_STAMP && (
-        <div
-          className="pointer-events-none fixed bottom-2 right-2 z-50 select-none rounded-full bg-black/70 px-2.5 py-1 font-mono text-xs text-white/75"
-          data-testid="build-stamp"
-          title="Build version — confirms the deployed frontend matches the latest source"
-        >
-          build:hookflow-v2
-        </div>
-      )}
     </div>
   );
 }
