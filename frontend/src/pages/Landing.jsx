@@ -367,28 +367,30 @@ export default function Landing() {
               Autoplay is silent and loops; under reduced motion it stays
               paused on the poster frame. */}
           <figure
-            className="animate-fade-up mx-auto mt-12 w-full max-w-2xl overflow-hidden rounded-2xl border border-[color:var(--hairline)] lg:mx-0 lg:mt-0"
+            className="animate-fade-up mx-auto mt-12 w-full max-w-none overflow-hidden rounded-2xl border border-[color:var(--hairline)] bg-black shadow-[0_24px_80px_-24px_rgb(0_0_0/0.8)] lg:mx-0 lg:mt-0"
             style={{ animationDelay: "280ms" }}
             data-testid="landing-hero-shot"
           >
-            <video
-              className="block h-auto w-full"
-              autoPlay
-              muted
-              loop
-              playsInline
-              preload="metadata"
-              poster={`${process.env.PUBLIC_URL}/hero-demo-poster.jpg`}
-              aria-label="Screen recording: stepping through the Create Video wizard, then the editable Demo CTA canvas"
-              ref={(v) => {
-                if (!v) return;
-                v.muted = true;
-                if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) v.pause();
-              }}
-            >
-              <source src={`${process.env.PUBLIC_URL}/hero-demo.webm`} type="video/webm" />
-              <source src={`${process.env.PUBLIC_URL}/hero-demo.mp4`} type="video/mp4" />
-            </video>
+            <div className="relative aspect-video w-full">
+              <video
+                className="absolute inset-0 block h-full w-full object-cover"
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="metadata"
+                poster={`${process.env.PUBLIC_URL}/hero-demo-poster.jpg`}
+                aria-label="Screen recording: the Create Video wizard interface and the Demo CTA canvas, interface only with no page header or footer"
+                ref={(v) => {
+                  if (!v) return;
+                  v.muted = true;
+                  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) v.pause();
+                }}
+              >
+                <source src={`${process.env.PUBLIC_URL}/hero-demo.webm`} type="video/webm" />
+                <source src={`${process.env.PUBLIC_URL}/hero-demo.mp4`} type="video/mp4" />
+              </video>
+            </div>
           </figure>
         </div>
       </section>

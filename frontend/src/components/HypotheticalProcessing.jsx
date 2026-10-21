@@ -165,27 +165,39 @@ export function HypotheticalProcessing({ pieceSeconds = 12, modelName = "" }) {
 
       {phase === "done" && (
         <div className="space-y-3" aria-live="polite">
-          <div className="grid gap-3 sm:grid-cols-[160px_1fr]">
-            <div className="relative mx-auto aspect-[9/16] w-full max-w-[160px] overflow-hidden rounded-xl border border-[color:var(--hairline-strong)] bg-gradient-to-b from-[color:var(--indigo-15)] via-[hsl(228_14%_10%)] to-[hsl(228_14%_7%)]">
+          {/* Clean interface mock: the recorded wizard + Demo CTA canvas fills
+              a full-bleed 16:9 frame. No app header, footer, or browser chrome
+              inside the video — the frame maximizes the interface itself. */}
+          <div className="overflow-hidden rounded-xl border border-[color:var(--hairline-strong)] bg-black">
+            <div className="relative aspect-video w-full">
+              <video
+                className="absolute inset-0 block h-full w-full object-cover"
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="metadata"
+                poster={`${process.env.PUBLIC_URL}/hero-demo-poster.jpg`}
+                aria-label="Hypothetical preview: the Create Video wizard interface and the Demo CTA canvas, interface only"
+                ref={(v) => {
+                  if (!v) return;
+                  v.muted = true;
+                  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) v.pause();
+                }}
+              >
+                <source src={`${process.env.PUBLIC_URL}/hero-demo.webm`} type="video/webm" />
+                <source src={`${process.env.PUBLIC_URL}/hero-demo.mp4`} type="video/mp4" />
+              </video>
               <span className="absolute left-2 top-2 rounded-full border border-[color:var(--hairline-strong)] bg-black/60 px-2 py-0.5 text-xs font-semibold text-white">
-                0:{String(pieceSeconds).padStart(2, "0")} hypothetical
-              </span>
-              <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center">
-                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[color:var(--brand-indigo)] text-white shadow-[var(--glow-indigo)]">
-                  <Play className="h-5 w-5" />
-                </span>
-                <span className="px-3 text-xs font-semibold text-white">
-                  Hook + Story
-                  {modelName ? ` · ${modelName}` : ""}
-                </span>
-                <span className="px-3 text-xs text-white/70">Mock frame — no playback</span>
+                0:{String(pieceSeconds).padStart(2, "0")} hypothetical{modelName ? ` · ${modelName}` : ""}
               </span>
               <span className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1 text-center text-xs font-semibold uppercase tracking-wide text-white">
                 Hypothetical — not a real render
               </span>
             </div>
+          </div>
 
-            <div className="space-y-3">
+          <div className="space-y-3">
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold">Single-pass timeline</p>
                 <div
@@ -241,7 +253,6 @@ export function HypotheticalProcessing({ pieceSeconds = 12, modelName = "" }) {
                 </Button>
               </div>
             </div>
-          </div>
         </div>
       )}
     </div>
