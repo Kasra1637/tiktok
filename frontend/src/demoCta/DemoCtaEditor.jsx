@@ -49,16 +49,21 @@ import {
   ACCENT_SWATCHES,
   OVERLAY_FONTS,
   OVERLAY_ANIMS,
+  HOOK_COPY_VARIANTS,
+  CTA_COPY_VARIANTS,
+  CTA_TIMING_PRESETS,
+  BUILTIN_LOOK_PRESETS,
   AUDIO_BITS_PER_SECOND,
   VIDEO_BITS_PER_SECOND,
   buildExportFilename,
   extensionForMime,
   formatTime,
   isPlausibleRecordingSize,
+  resolveCtaWindow,
   sniffRecordingContainer,
   supportedExportMimes,
 } from "./constants";
-import { drawEndCard, drawHookOverlay, getEndCardBounds, getHookBounds } from "./overlays";
+import { checkOverlaySafety, drawEndCard, drawHookOverlay, getEndCardBounds, getHookBounds } from "./overlays";
 import { fitVideoToScreen } from "./fit";
 import { drawHandView, preloadHandViewImages } from "./handView";
 import { captureZoomLock, getEffectiveZoom, removeZoomKeyframe, sortKeyframes, tickInterval } from "./zoom";
@@ -102,6 +107,20 @@ function prefAnim(profileKey, field, fallback) {
 function prefScale(profileKey, field, fallback) {
   const value = Number(prefFor(profileKey, field, fallback));
   return Number.isFinite(value) ? value : fallback;
+}
+function prefVariants(profileKey, field, fallbackList) {
+  const value = prefFor(profileKey, field, null);
+  if (Array.isArray(value) && value.length === fallbackList.length && value.every((v) => typeof v === "string")) {
+    return value;
+  }
+  return [...fallbackList];
+}
+function prefLookPresets(profileKey) {
+  const all = readOverlayPrefs();
+  const scoped = all?.byProfile?.[profileKey]?.lookPresets;
+  if (Array.isArray(scoped)) return scoped;
+  const global = all?.global?.lookPresets;
+  return Array.isArray(global) ? global : [];
 }
 
 /** The one-open shape: every key present, exactly one true (or none). */
@@ -250,6 +269,45 @@ function ControlSlider({ label, value, min, max, step, onChange, testId, format 
         step={step}
         onValueChange={([next]) => onChange(next)}
       />
+    </div>
+  );
+}
+
+/**
+ * One-tap text-size presets beside the fine slider. S/M/L map onto the same
+ * 70–130% scale the slider drives, so the preview, the export and the
+ * remembered prefs all follow without a second path. A preset reads pressed
+ * only when the slider sits exactly on it — a dragged value in between
+ * presses nothing, which is the truth.
+ */
+const SCALE_PRESETS = [
+  { id: "s", label: "S", value: 0.85 },
+  { id: "m", label: "M", value: 1 },
+  { id: "l", label: "L", value: 1.15 },
+];
+
+function ScalePresets({ value, onChange, testPrefix, ariaLabel }) {
+  return (
+    <div className="flex items-center gap-2" role="group" aria-label={ariaLabel}>
+      {SCALE_PRESETS.map((p) => {
+        const active = Math.abs(value - p.value) < 1e-9;
+        return (
+          <button
+            key={p.id}
+            type="button"
+            data-testid={`${testPrefix}-${p.id}`}
+            onClick={() => onChange(p.value)}
+            aria-pressed={active}
+            className={`flex-1 rounded-xl border px-3 py-2 text-xs transition-colors ${
+              active
+                ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] text-foreground"
+                : "border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--hairline-strong)]"
+            }`}
+          >
+            {p.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -424,13 +482,31 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const [ctaAnim, setCtaAnim] = useState(() => prefAnim(overlayScope, "ctaAnim", DEFAULTS.ctaAnim));
   const [captionScale, setCaptionScale] = useState(() => prefScale(overlayScope, "captionScale", DEFAULTS.captionScale));
   const [ctaScale, setCtaScale] = useState(() => prefScale(overlayScope, "ctaScale", DEFAULTS.ctaScale));
+  const [hookVariants, setHookVariants] = useState(() => prefVariants(overlayScope, "hookVariants", HOOK_COPY_VARIANTS));
+  const [activeHookVariant, setActiveHookVariant] = useState(0);
+  const [ctaVariants, setCtaVariants] = useState(() => prefVariants(overlayScope, "ctaVariants", CTA_COPY_VARIANTS));
+  const [activeCtaVariant, setActiveCtaVariant] = useState(0);
+  const [ctaTimingMode, setCtaTimingMode] = useState("custom");
+  const [customLookPresets, setCustomLookPresets] = useState(() => prefLookPresets(overlayScope));
+  const [newLookName, setNewLookName] = useState("");
 
   // Persist taste on change, per app with a global fallback. Convenience
   // only: private mode or quota failures must never break the editor.
   useEffect(() => {
     try {
       const all = readOverlayPrefs();
-      const prefs = { overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale };
+      const prefs = {
+        overlayAccent,
+        captionFont,
+        ctaFont,
+        captionAnim,
+        ctaAnim,
+        captionScale,
+        ctaScale,
+        hookVariants,
+        ctaVariants,
+        lookPresets: customLookPresets,
+      };
       const next = {
         ...all,
         global: { ...(all.global || {}), ...prefs },
@@ -440,7 +516,88 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     } catch {
       // Nothing to do: persistence is a convenience, not the feature.
     }
-  }, [overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, overlayScope]);
+  }, [overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, hookVariants, ctaVariants, customLookPresets, overlayScope]);
+
+  const selectHookVariant = (idx) => {
+    setActiveHookVariant(idx);
+    setHookText(hookVariants[idx] ?? "");
+  };
+
+  const updateHookText = (val) => {
+    setHookText(val);
+    setHookVariants((prev) => prev.map((v, i) => (i === activeHookVariant ? val : v)));
+  };
+
+  const selectCtaVariant = (idx) => {
+    setActiveCtaVariant(idx);
+    setCtaHeadline(ctaVariants[idx] ?? "");
+  };
+
+  const updateCtaHeadline = (val) => {
+    setCtaHeadline(val);
+    setCtaVariants((prev) => prev.map((v, i) => (i === activeCtaVariant ? val : v)));
+  };
+
+  const selectCtaTimingPreset = (presetId) => {
+    setCtaTimingMode(presetId);
+    const dur = videoMeta?.d || 0;
+    if (presetId === "last2") {
+      setCtaDuration(2);
+    } else if (presetId === "last3") {
+      setCtaDuration(3);
+    } else if (presetId === "full") {
+      setCtaDuration(dur > 0 ? Math.min(RANGES.ctaDuration.max, Math.max(RANGES.ctaDuration.min, Number(dur.toFixed(1)))) : RANGES.ctaDuration.max);
+    }
+  };
+
+  const allLookPresets = [...BUILTIN_LOOK_PRESETS, ...customLookPresets];
+
+  const isLookPresetActive = (look) =>
+    captionFont === look.captionFont &&
+    ctaFont === look.ctaFont &&
+    captionAnim === look.captionAnim &&
+    ctaAnim === look.ctaAnim &&
+    Math.abs(captionScale - look.captionScale) < 1e-6 &&
+    Math.abs(ctaScale - look.ctaScale) < 1e-6 &&
+    overlayAccent.toLowerCase() === String(look.overlayAccent || "").toLowerCase();
+
+  const applyLookPreset = (look) => {
+    if (!look) return;
+    setCaptionFont(look.captionFont);
+    setCtaFont(look.ctaFont);
+    setCaptionAnim(look.captionAnim);
+    setCtaAnim(look.ctaAnim);
+    setCaptionScale(look.captionScale);
+    setCtaScale(look.ctaScale);
+    setOverlayAccent(look.overlayAccent);
+  };
+
+  const handleSaveLookPreset = () => {
+    const trimmed = newLookName.trim();
+    if (!trimmed) return;
+    const slug = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || `look-${Date.now()}`;
+    const entry = {
+      id: `custom-${slug}`,
+      name: trimmed,
+      builtin: false,
+      captionFont,
+      ctaFont,
+      captionAnim,
+      ctaAnim,
+      captionScale,
+      ctaScale,
+      overlayAccent,
+    };
+    setCustomLookPresets((prev) => {
+      const filtered = prev.filter((p) => p.name.toLowerCase() !== trimmed.toLowerCase());
+      return [...filtered, entry];
+    });
+    setNewLookName("");
+  };
+
+  const handleDeleteLookPreset = (id) => {
+    setCustomLookPresets((prev) => prev.filter((p) => p.id !== id));
+  };
 
   const [isPlaying, setIsPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
@@ -775,7 +932,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       const vt = video.currentTime || 0;
       const dur = videoMeta.d || 0;
       const hookWindow = dur > 0 ? Math.min(hookDuration, dur * 0.45) : hookDuration;
-      const ctaWindow = dur > 0 ? Math.min(ctaDuration, dur * 0.45) : ctaDuration;
+      const ctaWindow = resolveCtaWindow(ctaDuration, dur, ctaTimingMode);
       if (hookEnabled) {
         drawHookOverlay(ctx, cw, ch, vt, { text: hookText, duration: hookWindow, accent: overlayAccent, offsetX: hookOffsetX, offsetY: hookOffsetY, font: fontStack(captionFont), anim: captionAnim, scale: captionScale });
       }
@@ -1120,7 +1277,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, zoomKeyframes]);
+  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, zoomKeyframes]);
 
   // Every overlay choice replays the clip from the top.
   //
@@ -1130,7 +1287,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   // and the only way to see it is to scrub back by hand. Restarting means the
   // founder watches the same opening twice and compares the two choices
   // directly, which is the whole reason to change one.
-  const overlayStyleKey = `${captionAnim}:${captionScale}:${captionFont}:${ctaAnim}:${ctaScale}:${ctaFont}`;
+  const overlayStyleKey = `${captionAnim}:${captionScale}:${captionFont}:${ctaAnim}:${ctaScale}:${ctaFont}:${activeHookVariant}:${activeCtaVariant}:${ctaTimingMode}`;
   const lastOverlayStyleRef = useRef(overlayStyleKey);
   useEffect(() => {
     if (lastOverlayStyleRef.current === overlayStyleKey) return;
@@ -1472,7 +1629,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     const vt = video ? video.currentTime : 0;
     const dur = videoMeta?.d ?? 0;
     const hookWindow = hookDuration + 0.28;
-    const ctaWindow = ctaDuration + 0.4;
+    const ctaWindow = resolveCtaWindow(ctaDuration, dur, ctaTimingMode) + 0.4;
     const hookVisible = hookEnabled && vt <= hookWindow;
     const ctaVisible = ctaEnabled && dur > 0 && (dur - vt) <= ctaWindow && (dur - vt) >= 0;
 
@@ -1537,6 +1694,33 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     for (let t = 0; t <= duration; t += interval) ticks.push(t);
     if (ticks[ticks.length - 1] < duration - interval * 0.3) ticks.push(duration);
   }
+
+  const activeDevice = DEVICES.find((d) => d.id === device) || DEVICES[0];
+  const activePreset = PRESETS.find((p) => p.id === preset) || PRESETS[0];
+  const safetyCw = activePreset.id === "source" ? Math.round(BASE_PHONE_H * activeDevice.aspect) : activePreset.w;
+  const safetyCh = activePreset.id === "source" ? Math.round(BASE_PHONE_H * mockupStretchY) : activePreset.h;
+  const hookSafety = hookEnabled
+    ? checkOverlaySafety(
+        getHookBounds(safetyCw, safetyCh, hookText, hookOffsetX, hookOffsetY, fontStack(captionFont), captionScale),
+        safetyCw,
+        safetyCh,
+        captionScale,
+        "hook",
+        hookOffsetX,
+        hookOffsetY
+      )
+    : { ok: true, issues: [], message: null };
+  const ctaSafety = ctaEnabled
+    ? checkOverlaySafety(
+        getEndCardBounds(safetyCw, safetyCh, ctaHeadline, ctaHandle, ctaOffsetX, ctaOffsetY, fontStack(ctaFont), ctaScale),
+        safetyCw,
+        safetyCh,
+        ctaScale,
+        "cta",
+        ctaOffsetX,
+        ctaOffsetY
+      )
+    : { ok: true, issues: [], message: null };
 
   // The settings panel is its own scroll container and the preview column is
   // pinned beside it.
@@ -1753,6 +1937,59 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               </ResetButton>
             </div>
           )}
+          <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="look-presets-block">
+            <SubLabel>Named looks</SubLabel>
+            <p className="text-xs text-muted-foreground">Save font, entrance, size &amp; accent as a reusable brand look across clips.</p>
+            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Look presets">
+              {allLookPresets.map((look) => {
+                const active = isLookPresetActive(look);
+                return (
+                  <div key={look.id} className="inline-flex items-center gap-1">
+                    <Chip
+                      active={active}
+                      onClick={() => applyLookPreset(look)}
+                      testId={`look-preset-${look.id}`}
+                      ariaLabel={look.name}
+                    >
+                      {look.name}
+                    </Chip>
+                    {!look.builtin && (
+                      <button
+                        type="button"
+                        data-testid={`delete-look-preset-${look.id}`}
+                        aria-label={`Remove ${look.name}`}
+                        onClick={() => handleDeleteLookPreset(look.id)}
+                        className="rounded-full p-1 text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                data-testid="look-preset-name-input"
+                value={newLookName}
+                onChange={(e) => setNewLookName(e.target.value)}
+                placeholder="Name current look (e.g. Founder raw)"
+                className={INPUT_CLASS}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                data-testid="look-preset-save-btn"
+                disabled={!newLookName.trim()}
+                onClick={handleSaveLookPreset}
+                className="shrink-0"
+              >
+                Save look
+              </Button>
+            </div>
+          </div>
         </EditorSection>
 
         <EditorSection title="Hook Text" icon={Type} open={openSections.hook} onToggle={() => toggleSection("hook")} testId="hook-controls">
@@ -1761,17 +1998,33 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             Show opening hook text
           </label>
           <p className="text-xs text-muted-foreground">This is an on-screen text overlay; it does not change the clip&apos;s spoken script.</p>
-          <label className="space-y-2">
-            <span className="text-xs text-muted-foreground">Text to show at the opening</span>
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs text-muted-foreground">Text to show at the opening</span>
+              <div className="flex items-center gap-1.5" role="group" aria-label="Hook copy variants">
+                {hookVariants.map((_, idx) => (
+                  <Chip
+                    key={idx}
+                    active={activeHookVariant === idx}
+                    onClick={() => selectHookVariant(idx)}
+                    testId={`hook-variant-${idx}`}
+                    ariaLabel={`Hook variant ${idx + 1}`}
+                  >
+                    {`Option ${idx + 1}`}
+                  </Chip>
+                ))}
+              </div>
+            </div>
             <textarea
               data-testid="hook-text-input"
+              aria-label="Text to show at the opening"
               value={hookText}
-              onChange={(e) => setHookText(e.target.value)}
+              onChange={(e) => updateHookText(e.target.value)}
               rows={3}
               placeholder="I built this so I'd stop journaling in Notes app"
               className={TEXTAREA_CLASS}
             />
-          </label>
+          </div>
           <ControlSlider label="On screen" value={hookDuration} min={RANGES.hookDuration.min} max={RANGES.hookDuration.max} step={RANGES.hookDuration.step} onChange={setHookDuration} testId="hook-duration-slider" format={(v) => `${v.toFixed(1)}s`} />
           {/* Caption face: each tile set in its own face so the choice is
               visual, not a name to imagine. Selected state is the indigo
@@ -1819,7 +2072,32 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               ))}
             </div>
           </div>
-          <ControlSlider label="Text size" value={captionScale} min={RANGES.overlayScale.min} max={RANGES.overlayScale.max} step={RANGES.overlayScale.step} onChange={setCaptionScale} testId="caption-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
+          <div className="space-y-2">
+            <ControlSlider label="Text size" value={captionScale} min={RANGES.overlayScale.min} max={RANGES.overlayScale.max} step={RANGES.overlayScale.step} onChange={setCaptionScale} testId="caption-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
+            <ScalePresets value={captionScale} onChange={setCaptionScale} testPrefix="caption-size-preset" ariaLabel="Caption size presets" />
+          </div>
+          {!hookSafety.ok && (
+            <div
+              role="status"
+              data-testid="hook-safety-warning"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-foreground"
+            >
+              <span className="flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+                <span>{hookSafety.message}</span>
+              </span>
+              <ResetButton
+                testId="hook-safety-fix"
+                onClick={() => {
+                  setHookOffsetX(0);
+                  setHookOffsetY(0);
+                  if (captionScale < 0.8) setCaptionScale(1);
+                }}
+              >
+                Fit safe area
+              </ResetButton>
+            </div>
+          )}
           {(hookOffsetX !== 0 || hookOffsetY !== 0) && (
             <ResetButton onClick={() => { setHookOffsetX(0); setHookOffsetY(0); }}>Reset position</ResetButton>
           )}
@@ -1832,16 +2110,32 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             Show closing call-to-action card
           </label>
           <p className="text-xs text-muted-foreground">Adds an on-screen card to the end of this clip. Write a clear next step, such as downloading your app or visiting your link.</p>
-          <label className="space-y-2">
-            <span className="text-xs text-muted-foreground">Call-to-action text</span>
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs text-muted-foreground">Call-to-action text</span>
+              <div className="flex items-center gap-1.5" role="group" aria-label="CTA copy variants">
+                {ctaVariants.map((_, idx) => (
+                  <Chip
+                    key={idx}
+                    active={activeCtaVariant === idx}
+                    onClick={() => selectCtaVariant(idx)}
+                    testId={`cta-variant-${idx}`}
+                    ariaLabel={`CTA variant ${idx + 1}`}
+                  >
+                    {`Option ${idx + 1}`}
+                  </Chip>
+                ))}
+              </div>
+            </div>
             <input
               data-testid="cta-headline-input"
+              aria-label="Call-to-action text"
               value={ctaHeadline}
-              onChange={(e) => setCtaHeadline(e.target.value)}
+              onChange={(e) => updateCtaHeadline(e.target.value)}
               placeholder="Try it free — link in bio"
               className={INPUT_CLASS}
             />
-          </label>
+          </div>
           <label className="space-y-2">
             <span className="text-xs text-muted-foreground">Social handle (optional)</span>
             <input
@@ -1852,7 +2146,44 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               className={INPUT_CLASS}
             />
           </label>
-          <ControlSlider label="Visible for" value={ctaDuration} min={RANGES.ctaDuration.min} max={RANGES.ctaDuration.max} step={RANGES.ctaDuration.step} onChange={setCtaDuration} testId="cta-duration-slider" format={(v) => `${v.toFixed(1)}s`} />
+          <div className="space-y-2">
+            <ControlSlider
+              label="Visible for"
+              value={ctaDuration}
+              min={RANGES.ctaDuration.min}
+              max={RANGES.ctaDuration.max}
+              step={RANGES.ctaDuration.step}
+              onChange={(val) => {
+                setCtaTimingMode("custom");
+                setCtaDuration(val);
+              }}
+              testId="cta-duration-slider"
+              format={(v) => (ctaTimingMode === "full" ? (duration > 0 ? `${duration.toFixed(1)}s` : "Full") : `${v.toFixed(1)}s`)}
+            />
+            <div className="flex items-center gap-2" role="group" aria-label="End-card timing presets">
+              {CTA_TIMING_PRESETS.map((p) => {
+                const active =
+                  ctaTimingMode === p.id ||
+                  (ctaTimingMode === "custom" && p.seconds !== null && Math.abs(ctaDuration - p.seconds) < 1e-6);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    data-testid={`cta-timing-${p.id}`}
+                    onClick={() => selectCtaTimingPreset(p.id)}
+                    aria-pressed={active}
+                    className={`flex-1 rounded-xl border px-3 py-2 text-xs transition-colors ${
+                      active
+                        ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] text-foreground"
+                        : "border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--hairline-strong)]"
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <div className="space-y-2">
             <SubLabel>Font</SubLabel>
             <div className="grid grid-cols-1 gap-2" role="group" aria-label="CTA font">
@@ -1896,7 +2227,32 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               ))}
             </div>
           </div>
-          <ControlSlider label="Text size" value={ctaScale} min={RANGES.overlayScale.min} max={RANGES.overlayScale.max} step={RANGES.overlayScale.step} onChange={setCtaScale} testId="cta-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
+          <div className="space-y-2">
+            <ControlSlider label="Text size" value={ctaScale} min={RANGES.overlayScale.min} max={RANGES.overlayScale.max} step={RANGES.overlayScale.step} onChange={setCtaScale} testId="cta-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
+            <ScalePresets value={ctaScale} onChange={setCtaScale} testPrefix="cta-size-preset" ariaLabel="CTA size presets" />
+          </div>
+          {!ctaSafety.ok && (
+            <div
+              role="status"
+              data-testid="cta-safety-warning"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-foreground"
+            >
+              <span className="flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+                <span>{ctaSafety.message}</span>
+              </span>
+              <ResetButton
+                testId="cta-safety-fix"
+                onClick={() => {
+                  setCtaOffsetX(0);
+                  setCtaOffsetY(0);
+                  if (ctaScale < 0.8) setCtaScale(1);
+                }}
+              >
+                Fit safe area
+              </ResetButton>
+            </div>
+          )}
           {(ctaOffsetX !== 0 || ctaOffsetY !== 0) && (
             <ResetButton onClick={() => { setCtaOffsetX(0); setCtaOffsetY(0); }}>Reset position</ResetButton>
           )}

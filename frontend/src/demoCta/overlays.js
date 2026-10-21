@@ -15,6 +15,8 @@
 export const SAFE_X = 0.09;
 export const SAFE_RIGHT = 0.22;
 export const SAFE_BOTTOM = 0.24;
+export const SAFE_TOP = 0.07;
+export const MIN_LEGIBLE_SCALE = 0.8;
 
 export const HOOK_FONT = '"Anton", "Arial Black", sans-serif';
 
@@ -284,22 +286,61 @@ export function drawEndCard(ctx, cw, ch, timeLeft, { headline, handle, duration,
   ctx.restore();
 }
 
+function getMeasureCtx() {
+  if (typeof OffscreenCanvas !== "undefined") {
+    try {
+      const c = new OffscreenCanvas(1, 1);
+      const ctx = c.getContext("2d");
+      if (ctx) return ctx;
+    } catch {
+      /* fallback below */
+    }
+  }
+  return null;
+}
+
+function estimateLines(text, maxWidth, fontSize) {
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  if (!words.length) return { lines: [], maxLineWidth: 0 };
+  const charW = fontSize * 0.56;
+  const lines = [];
+  let line = "";
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word;
+    if (next.length * charW > maxWidth && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  }
+  if (line) lines.push(line);
+  const maxLineWidth = Math.min(maxWidth, Math.max(...lines.map((l) => l.length * charW)));
+  return { lines, maxLineWidth };
+}
+
 /** Returns bounding box (in canvas coords) for the hook text overlay. */
 export function getHookBounds(cw, ch, text, offsetX, offsetY, font = HOOK_FONT, scale = 1) {
   if (!String(text || "").trim()) return null;
   const fontSize = Math.round(cw * 0.108 * scale);
   const maxWidth = cw * (1 - SAFE_X * 2 - 0.02);
-  const canvas = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(1, 1) : null;
-  if (!canvas) return null;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  ctx.font = `${fontSize}px ${font}`;
-  const lines = wrap(ctx, String(text).toUpperCase(), maxWidth);
+  const ctx = getMeasureCtx();
+  let lines;
+  let maxLineW;
+  if (ctx) {
+    ctx.font = `${fontSize}px ${font}`;
+    lines = wrap(ctx, String(text).toUpperCase(), maxWidth);
+    maxLineW = Math.min(maxWidth, Math.max(...lines.map((l) => ctx.measureText(l).width)));
+  } else {
+    const est = estimateLines(String(text).toUpperCase(), maxWidth, fontSize);
+    lines = est.lines;
+    maxLineW = est.maxLineWidth;
+  }
   const lineH = fontSize * 1.16;
   const padX = fontSize * 0.3;
   const padY = fontSize * 0.16;
   const blockH = lines.length * lineH;
-  const blockW = Math.min(maxWidth, Math.max(...lines.map((l) => ctx.measureText(l).width))) + padX * 2;
+  const blockW = maxLineW + padX * 2;
   const top = ch * 0.13 + offsetY * ch;
   const left = cw / 2 - blockW / 2 + offsetX * cw;
   return { x: left, y: top - padY, w: blockW, h: blockH + padY * 2 };
@@ -312,12 +353,14 @@ export function getEndCardBounds(cw, ch, headline, handle, offsetX, offsetY, fon
   const headFont = Math.round(cw * 0.082 * scale);
   const subFont = Math.round(cw * 0.046 * scale);
   const boxW = cw * (1 - SAFE_X - SAFE_RIGHT);
-  const canvas = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(1, 1) : null;
-  if (!canvas) return null;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  ctx.font = `${headFont}px ${font}`;
-  const lines = wrap(ctx, String(headline).toUpperCase(), boxW - headFont * 0.6);
+  const ctx = getMeasureCtx();
+  let lines;
+  if (ctx) {
+    ctx.font = `${headFont}px ${font}`;
+    lines = wrap(ctx, String(headline).toUpperCase(), boxW - headFont * 0.6);
+  } else {
+    lines = estimateLines(String(headline).toUpperCase(), boxW - headFont * 0.6, headFont).lines;
+  }
   const lineH = headFont * 1.14;
   const blockH = lines.length * lineH + subFont * 2.6;
   const x = cw * SAFE_X + offsetX * cw;
@@ -326,4 +369,58 @@ export function getEndCardBounds(cw, ch, headline, handle, offsetX, offsetY, fon
   const bottom = ch * (1 - SAFE_BOTTOM) + offsetY * cw;
   const top = bottom - blockH;
   return { x, y: top, w: boxW, h: blockH };
+}
+
+/**
+ * Checks whether an overlay bounding box collides with TikTok's UI rails
+ * (right icon rail, bottom caption strip, left/top status margins) or drops
+ * below legible mobile scale.
+ */
+export function checkOverlaySafety(bounds, cw, ch, scale = 1, kind = "hook", offsetX = 0, offsetY = 0) {
+  if (!bounds || !cw || !ch) return { ok: true, issues: [], message: null };
+  const issues = [];
+  const label = kind === "cta" ? "End card" : "Hook text";
+
+  if (scale < MIN_LEGIBLE_SCALE - 1e-6) {
+    issues.push({
+      code: "small_text",
+      message: `${label} is below 80% size & may be hard to read on mobile.`,
+    });
+  }
+  const rightLimit = kind === "hook" && Math.abs(offsetX) < 0.02
+    ? cw * (1 - SAFE_X * 0.5) + 4
+    : cw * (1 - SAFE_RIGHT) + 4;
+  if (bounds.x + bounds.w > rightLimit) {
+    issues.push({
+      code: "right_rail",
+      message: `${label} overlaps TikTok's right icon rail.`,
+    });
+  }
+  if (bounds.y + bounds.h > ch * (1 - SAFE_BOTTOM) + 4) {
+    issues.push({
+      code: "bottom_caption",
+      message: `${label} reaches into the bottom caption strip.`,
+    });
+  }
+  const leftLimit = kind === "hook" && Math.abs(offsetX) < 0.02
+    ? cw * SAFE_X * 0.5 - 4
+    : cw * SAFE_X - 4;
+  if (bounds.x < leftLimit) {
+    issues.push({
+      code: "left_edge",
+      message: `${label} crosses the left safe margin.`,
+    });
+  }
+  if (bounds.y < ch * SAFE_TOP - 4 || (offsetY < -0.06 && bounds.y < ch * 0.09)) {
+    issues.push({
+      code: "top_edge",
+      message: `${label} reaches into the top status bar area.`,
+    });
+  }
+
+  return {
+    ok: issues.length === 0,
+    issues,
+    message: issues.map((i) => i.message).join(" "),
+  };
 }

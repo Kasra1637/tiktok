@@ -8034,6 +8034,114 @@ async function runDemoCtaChecks() {
     }
   );
 
+  await check(
+    "Demo + CTA offers S/M/L size presets, safe-area guard, copy flipper, timing presets, and named looks",
+    async (ctx) => {
+      const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+      dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+      dom.window.localStorage.removeItem("hookforge.demoCta.overlayPrefs.v1");
+      const openGroup = async (label) => {
+        const btn = [...ctx.container.querySelectorAll("button[aria-expanded]")]
+          .find((b) => (b.textContent || "").trim() === label);
+        if (!btn) throw new Error(`no ${label} group header`);
+        if (btn.getAttribute("aria-expanded") === "true") return;
+        await clickEl(ctx, btn, `open ${label}`);
+      };
+      await withApi(
+        { getGenerations: async () => ({ generations: [COMPLETED] }) },
+        async () => {
+          await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
+
+          // #5 Named look presets in Source & Look (open by default)
+          const ugcPreset = ctx.container.querySelector('[data-testid="look-preset-ugc"]');
+          if (!ugcPreset) throw new Error("missing built-in UGC style look preset");
+          await clickEl(ctx, ugcPreset, "apply UGC style preset");
+          if (ugcPreset.getAttribute("aria-pressed") !== "true") {
+            throw new Error("UGC style preset did not become active after click");
+          }
+          const nameInput = ctx.container.querySelector('[data-testid="look-preset-name-input"]');
+          const saveBtn = ctx.container.querySelector('[data-testid="look-preset-save-btn"]');
+          if (!nameInput || !saveBtn) throw new Error("missing custom look preset input or save button");
+          await typeInto(ctx, nameInput, "My Brand Look", "type custom look name");
+          await clickEl(ctx, saveBtn, "save custom look");
+          const savedLook = ctx.container.querySelector('[data-testid="look-preset-custom-my-brand-look"]');
+          if (!savedLook) throw new Error("custom named look preset did not render after saving");
+
+          // #1 & #2 & #3 on Hook Text
+          await openGroup("Hook Text");
+          const hookSizeS = ctx.container.querySelector('[data-testid="caption-size-preset-s"]');
+          const hookSizeM = ctx.container.querySelector('[data-testid="caption-size-preset-m"]');
+          const hookSizeL = ctx.container.querySelector('[data-testid="caption-size-preset-l"]');
+          if (!hookSizeS || !hookSizeM || !hookSizeL) {
+            throw new Error("Hook Text is missing S/M/L size preset buttons");
+          }
+          await clickEl(ctx, hookSizeL, "select L size on Hook Text");
+          if (hookSizeL.getAttribute("aria-pressed") !== "true" || !ctx.text().includes("115%")) {
+            throw new Error("clicking L size preset did not update Hook Text scale to 115%");
+          }
+
+          // #3 Hook copy variant flipper
+          const hookVar1 = ctx.container.querySelector('[data-testid="hook-variant-1"]');
+          if (!hookVar1) throw new Error("missing Hook copy variant 2 chip");
+          await clickEl(ctx, hookVar1, "flip to Hook variant 2");
+          const hookInput = ctx.container.querySelector('[data-testid="hook-text-input"]');
+          if (!hookInput || !hookInput.value.includes("Apple Notes")) {
+            throw new Error("flipping to Hook Option 2 did not load its copy into the textarea");
+          }
+
+          // #2 Safe-area legibility guard when slider pushed below 80%
+          const hookSliderThumb = ctx.container.querySelector('[data-testid="caption-size-slider"] [role="slider"]');
+          if (!hookSliderThumb) throw new Error("no caption size slider thumb");
+          await clickEl(ctx, hookSizeS, "set Hook size to 85%");
+          for (let i = 0; i < 8; i++) {
+            await act(async () => {
+              hookSliderThumb.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+            });
+          }
+          const hookWarn = ctx.container.querySelector('[data-testid="hook-safety-warning"]');
+          if (!hookWarn) {
+            throw new Error("Safe-area guard did not warn when Hook Text size dropped below 80%");
+          }
+          const hookFix = ctx.container.querySelector('[data-testid="hook-safety-fix"]');
+          await clickEl(ctx, hookFix, "click Fit safe area on Hook Text");
+          if (ctx.container.querySelector('[data-testid="hook-safety-warning"]')) {
+            throw new Error("Fit safe area did not clear the Hook Text safety warning");
+          }
+
+          // #1, #3, #4 on End Card CTA
+          await openGroup("End Card CTA");
+          const ctaSizeS = ctx.container.querySelector('[data-testid="cta-size-preset-s"]');
+          const ctaSizeL = ctx.container.querySelector('[data-testid="cta-size-preset-l"]');
+          if (!ctaSizeS || !ctaSizeL) throw new Error("End Card CTA is missing S/M/L size presets");
+          await clickEl(ctx, ctaSizeS, "select S size on End Card CTA");
+          if (ctaSizeS.getAttribute("aria-pressed") !== "true" || !ctx.text().includes("85%")) {
+            throw new Error("clicking S size preset did not update End Card CTA scale to 85%");
+          }
+
+          const ctaVar2 = ctx.container.querySelector('[data-testid="cta-variant-2"]');
+          if (!ctaVar2) throw new Error("missing CTA copy variant 3 chip");
+          await clickEl(ctx, ctaVar2, "flip to CTA variant 3");
+          const ctaInput = ctx.container.querySelector('[data-testid="cta-headline-input"]');
+          if (!ctaInput || !ctaInput.value.includes("first entry")) {
+            throw new Error("flipping to CTA Option 3 did not update the headline input");
+          }
+
+          const timingLast3 = ctx.container.querySelector('[data-testid="cta-timing-last3"]');
+          const timingFull = ctx.container.querySelector('[data-testid="cta-timing-full"]');
+          if (!timingLast3 || !timingFull) throw new Error("missing End Card timing presets");
+          await clickEl(ctx, timingLast3, "select Last 3s timing preset");
+          if (timingLast3.getAttribute("aria-pressed") !== "true" || !ctx.text().includes("3.0s")) {
+            throw new Error("Last 3s timing preset did not set CTA duration to 3.0s");
+          }
+          await clickEl(ctx, timingFull, "select Full clip timing preset");
+          if (timingFull.getAttribute("aria-pressed") !== "true") {
+            throw new Error("Full clip timing preset did not become active");
+          }
+        }
+      );
+    }
+  );
+
   await check("History opens as a clip and expands to its context and actions", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi({

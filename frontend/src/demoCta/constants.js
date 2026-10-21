@@ -120,6 +120,78 @@ export const OVERLAY_ANIMS = [
   { id: "steady", label: "Steady" },
 ];
 
+export const HOOK_COPY_VARIANTS = [
+  "I built this so I'd stop journaling in Notes app",
+  "How I stopped losing my best thoughts in Apple Notes",
+  "The 10-second check-in that replaced my messy journal",
+];
+
+export const CTA_COPY_VARIANTS = [
+  "Try it free — link in bio",
+  "Download free on the App Store",
+  "Start your first entry — link in bio",
+];
+
+export const CTA_TIMING_PRESETS = [
+  { id: "last2", label: "Last 2s", seconds: 2 },
+  { id: "last3", label: "Last 3s", seconds: 3 },
+  { id: "full", label: "Full clip", seconds: null },
+];
+
+export const BUILTIN_LOOK_PRESETS = [
+  {
+    id: "launch",
+    name: "Launch style",
+    builtin: true,
+    captionFont: "anton",
+    ctaFont: "anton",
+    captionAnim: "punch",
+    ctaAnim: "rise",
+    captionScale: 1,
+    ctaScale: 1,
+    overlayAccent: "#c8ff2e",
+  },
+  {
+    id: "ugc",
+    name: "UGC style",
+    builtin: true,
+    captionFont: "nunito",
+    ctaFont: "nunito",
+    captionAnim: "pop",
+    ctaAnim: "fade",
+    captionScale: 1,
+    ctaScale: 1,
+    overlayAccent: "#ff4d8d",
+  },
+  {
+    id: "editorial",
+    name: "Editorial clean",
+    builtin: true,
+    captionFont: "space-grotesk",
+    ctaFont: "inter",
+    captionAnim: "rise",
+    ctaAnim: "steady",
+    captionScale: 0.85,
+    ctaScale: 0.85,
+    overlayAccent: "#4dd8ff",
+  },
+];
+
+export function resolveCtaWindow(ctaDuration, clipDuration, ctaTimingMode = "custom") {
+  const dur = Number(clipDuration) || 0;
+  if (ctaTimingMode === "full") {
+    return dur > 0 ? dur : Number(ctaDuration) || DEFAULTS.ctaDuration;
+  }
+  if (ctaTimingMode === "last2") {
+    return dur > 0 ? Math.min(2, dur) : 2;
+  }
+  if (ctaTimingMode === "last3") {
+    return dur > 0 ? Math.min(3, dur) : 3;
+  }
+  const d = Number(ctaDuration) || DEFAULTS.ctaDuration;
+  return dur > 0 ? Math.min(d, dur * 0.45) : d;
+}
+
 export const DEFAULTS = {
   device: "s24",
   preset: "tiktok",

@@ -993,6 +993,52 @@ check("overlay defaults preserve the long-standing look",
   DC.DEFAULTS.captionScale === 1 && DC.DEFAULTS.ctaScale === 1,
   JSON.stringify({ f: DC.DEFAULTS.captionFont, a: DC.DEFAULTS.captionAnim, s: DC.DEFAULTS.captionScale }));
 
+check("checkOverlaySafety passes default centered hook and end card",
+  (() => {
+    const hb = OV.getHookBounds(1080, 1920, DC.DEFAULTS.hookText, 0, 0, OV.HOOK_FONT, 1);
+    const cb = OV.getEndCardBounds(1080, 1920, DC.DEFAULTS.ctaHeadline, DC.DEFAULTS.ctaHandle, 0, 0, OV.HOOK_FONT, 1);
+    const hs = OV.checkOverlaySafety(hb, 1080, 1920, 1, "hook");
+    const cs = OV.checkOverlaySafety(cb, 1080, 1920, 1, "cta");
+    return Boolean(hb && cb && hs.ok && cs.ok);
+  })(),
+  "default overlay bounds tripped safe-area guard");
+
+check("checkOverlaySafety flags right-rail, bottom-strip, and small-scale issues",
+  (() => {
+    const hbRight = OV.getHookBounds(1080, 1920, DC.DEFAULTS.hookText, 0.35, 0, OV.HOOK_FONT, 1);
+    const hsRight = OV.checkOverlaySafety(hbRight, 1080, 1920, 1, "hook", 0.35, 0);
+    const cbBottom = OV.getEndCardBounds(1080, 1920, DC.DEFAULTS.ctaHeadline, DC.DEFAULTS.ctaHandle, 0, 0.3, OV.HOOK_FONT, 1);
+    const csBottom = OV.checkOverlaySafety(cbBottom, 1080, 1920, 1, "cta", 0, 0.3);
+    const hsSmall = OV.checkOverlaySafety(
+      OV.getHookBounds(1080, 1920, DC.DEFAULTS.hookText, 0, 0, OV.HOOK_FONT, 0.72),
+      1080,
+      1920,
+      0.72,
+      "hook",
+      0,
+      0
+    );
+    return (
+      !hsRight.ok && hsRight.issues.some((i) => i.code === "right_rail") &&
+      !csBottom.ok && csBottom.issues.some((i) => i.code === "bottom_caption") &&
+      !hsSmall.ok && hsSmall.issues.some((i) => i.code === "small_text")
+    );
+  })(),
+  "safe-area guard missed right_rail, bottom_caption, or small_text");
+
+check("resolveCtaWindow anchors last2, last3, and full clip to loaded duration",
+  DC.resolveCtaWindow(2, 12, "last2") === 2 &&
+  DC.resolveCtaWindow(2, 12, "last3") === 3 &&
+  DC.resolveCtaWindow(2, 12, "full") === 12 &&
+  DC.resolveCtaWindow(4, 6, "custom") === 6 * 0.45,
+  "resolveCtaWindow miscomputed anchored window");
+
+check("copy variants and builtin look presets are populated",
+  Array.isArray(DC.HOOK_COPY_VARIANTS) && DC.HOOK_COPY_VARIANTS.length === 3 &&
+  Array.isArray(DC.CTA_COPY_VARIANTS) && DC.CTA_COPY_VARIANTS.length === 3 &&
+  Array.isArray(DC.BUILTIN_LOOK_PRESETS) && DC.BUILTIN_LOOK_PRESETS.length >= 3,
+  "missing copy variants or look presets");
+
 // ---------------------------------------------------------------------------
 console.log("\n" + "=".repeat(70));
 if (failures.length === 0) {
