@@ -358,6 +358,21 @@ export default function Landing() {
               <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Publish on your terms
             </span>
           </div>
+          {/* The app itself, below the pitch: a real screenshot of the
+              Demo + CTA editor. Frame-only — no new type, buttons, or
+              background; everything else on this hero is untouched. */}
+          <figure
+            className="animate-fade-up mx-auto mt-12 max-w-4xl overflow-hidden rounded-2xl border border-[color:var(--hairline)]"
+            style={{ animationDelay: "280ms" }}
+            data-testid="landing-hero-shot"
+          >
+            <img
+              src={`${process.env.PUBLIC_URL}/hero-app-shot.png`}
+              alt="Demo + CTA editor styling a clip in a phone mockup"
+              className="block h-auto w-full"
+              loading="lazy"
+            />
+          </figure>
         </div>
       </section>
 
