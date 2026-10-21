@@ -4795,8 +4795,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  await check("pre-made templates stay hidden until the tailored set is ready", async (ctx) => {
+  await check("below-bar pre-made templates stay hidden once the tailored set is ready", async (ctx) => {
     global.__SMOKE_PARAMS = "";
+    // Scores below the tailored minimum (8) stay filtered out: 5 never
+    // meets the bar, so only the custom card may show.
     const PREMADE = { ...TEMPLATE, id: "t-premade", name: "Premade Pick" };
     const CUSTOM = {
       ...TEMPLATE,
@@ -4815,7 +4817,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         getTemplates: async () => ({ templates: [PREMADE, CUSTOM] }),
         getTemplateRecommendations: async () => ({
           recommendations: [
-            { template: PREMADE, score: 9, why_it_fits: ["popular"], limitations: [] },
+            { template: PREMADE, score: 5, why_it_fits: ["popular"], limitations: [] },
             { template: CUSTOM, score: 8, why_it_fits: ["Tailored for Taskly"], limitations: [] },
           ],
         }),
@@ -4850,7 +4852,54 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       throw new Error("the ready list is not labelled as the tailored set");
     }
     if (ready.includes("Premade Pick")) {
-      throw new Error("a pre-made template is shown alongside the tailored set");
+      throw new Error("a below-bar pre-made template is shown alongside the tailored set");
+    }
+  });
+
+  // A pre-made row whose fit meets the tailored minimum earned its card:
+  // the ready list is the tailored set plus qualifiers, in ranked order.
+  await check("a pre-made template meeting the tailored minimum appears alongside the tailored set", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    const PREMADE = { ...TEMPLATE, id: "t-premade", name: "Premade Pick" };
+    const CUSTOM = {
+      ...TEMPLATE,
+      id: "t-custom",
+      name: "Custom Pick",
+      brand_profile_id: "b1",
+      objective: "address_user_problem",
+      origin: "custom",
+    };
+    await withApi(
+      {
+        getTemplates: async () => ({ templates: [PREMADE, CUSTOM] }),
+        getTemplateRecommendations: async () => ({
+          recommendations: [
+            { template: PREMADE, score: 9, why_it_fits: ["popular"], limitations: [] },
+            { template: CUSTOM, score: 8, why_it_fits: ["Tailored for Taskly"], limitations: [] },
+          ],
+        }),
+        ensureObjectiveTemplates: async () => ({
+          templates: [CUSTOM],
+          generated: true,
+          objective: "address_user_problem",
+          error: null,
+        }),
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openTemplateStep(ctx);
+        await act(async () => {});
+      }
+    );
+    const ready = ctx.text();
+    if (!ready.includes("Custom Pick")) {
+      throw new Error("the tailored custom template is not shown once ready");
+    }
+    if (!ready.includes("Premade Pick")) {
+      throw new Error("a pre-made template scoring at/above the tailored minimum is filtered out");
+    }
+    if (!ready.includes("Tailored for this app")) {
+      throw new Error("the ready list is not labelled as the tailored set");
     }
   });
 

@@ -1443,7 +1443,13 @@ export default function CreateVideo() {
       recKey === recRequestKey &&
       (tailoredReady || tailorFallbackVisible)
   );
-  // Once the custom set is ready, only its templates are shown. The ranked
+  // Once the custom set is ready, its templates lead — but a curated row
+  // whose fit meets the set's own bar stays visible instead of being
+  // filtered out. The bar is the lowest fit among the tailored rows in this
+  // response (the minimum threshold this objective run set): a pre-made pick
+  // scoring at or above the weakest custom pick earned its card, so hiding
+  // it would bury a qualifying option. Rows below the bar stay hidden, so a
+  // weak generic pick never crowds the custom set it lost to. The ranked
   // curated fallback remains available when tailoring fails with no custom
   // set, so a model outage does not strand the step.
   const visibleRecommendations = useMemo(() => {
@@ -1452,7 +1458,19 @@ export default function CreateVideo() {
     const tailoredIds = new Set(
       (tailored.templates || []).map((t) => t?.id).filter(Boolean)
     );
-    return recommendations.filter((r) => tailoredIds.has(r?.template?.id));
+    const tailoredRows = recommendations.filter((r) => tailoredIds.has(r?.template?.id));
+    // The ranked rows have not caught up with the fresh custom set yet (the
+    // re-fetch lands after tailoring resolves): filtering now would empty
+    // the step, so the ranked list shows unfiltered until it does.
+    if (tailoredRows.length === 0) return recommendations;
+    const bar = Math.min(
+      ...tailoredRows.map((r) => Number(r?.score)).filter((n) => Number.isFinite(n))
+    );
+    // Order is the server's rank, not tailored-first: the scores on the
+    // cards are comparable across the whole list, so the order must be too.
+    return recommendations.filter(
+      (r) => tailoredIds.has(r?.template?.id) || (Number.isFinite(bar) && Number(r?.score) >= bar)
+    );
   }, [recommendationsVisible, tailoredReady, tailored.templates, recommendations]);
 
   // Live count-up while templates tailor ("Reading template 2 of 4…"). The
