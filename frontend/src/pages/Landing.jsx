@@ -281,7 +281,8 @@ export default function Landing() {
       <section className="relative overflow-hidden" data-testid="landing-hero">
         <Aurora />
         <div className="grid-overlay" />
-        <div className="relative z-10 mx-auto max-w-5xl px-5 pb-24 pt-20 text-center sm:pt-28">
+        <div className="relative z-10 mx-auto max-w-6xl px-5 pb-24 pt-20 text-center sm:pt-28 lg:grid lg:grid-cols-[1.02fr_1fr] lg:items-center lg:gap-14 lg:text-left">
+        <div className="min-w-0">
           <h1
             className="animate-fade-up font-display text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-[4.5rem]"
             style={{ animationDelay: "60ms" }}
@@ -301,9 +302,10 @@ export default function Landing() {
           </p>
 
           <div
-            className="animate-fade-up mt-10 flex flex-col items-center justify-center gap-3.5 sm:flex-row"
+            className="animate-fade-up mt-10 flex flex-col items-center justify-center gap-3.5 sm:flex-row lg:justify-start"
             style={{ animationDelay: "180ms" }}
           >
+
             <UnauthedOnly>
               <SignUpTrigger>
                 <Button
@@ -345,7 +347,7 @@ export default function Landing() {
           </UnauthedOnly>
 
           <div
-            className="animate-fade-up mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground"
+            className="animate-fade-up mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground lg:justify-start"
             style={{ animationDelay: "220ms" }}
           >
             <span className="inline-flex items-center gap-1.5">
@@ -358,20 +360,34 @@ export default function Landing() {
               <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" /> Publish on your terms
             </span>
           </div>
-          {/* The app itself, below the pitch: a real screenshot of the
-              Demo + CTA editor. Frame-only — no new type, buttons, or
-              background; everything else on this hero is untouched. */}
+          </div>
+          {/* The app itself, beside the pitch: the real Create Video
+              journey (profile → angle → goal → ranked templates) recorded
+              from the running app. Autoplay is silent and loops; under
+              reduced motion it stays paused on the poster frame. */}
           <figure
-            className="animate-fade-up mx-auto mt-12 max-w-4xl overflow-hidden rounded-2xl border border-[color:var(--hairline)]"
+            className="animate-fade-up mx-auto mt-12 w-full max-w-2xl overflow-hidden rounded-2xl border border-[color:var(--hairline)] lg:mx-0 lg:mt-0"
             style={{ animationDelay: "280ms" }}
             data-testid="landing-hero-shot"
           >
-            <img
-              src={`${process.env.PUBLIC_URL}/hero-app-shot.png`}
-              alt="Demo + CTA editor styling a clip in a phone mockup"
+            <video
               className="block h-auto w-full"
-              loading="lazy"
-            />
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              poster={`${process.env.PUBLIC_URL}/hero-app-shot.png`}
+              aria-label="Screen recording: stepping through the Create Video wizard from profile to ranked templates"
+              ref={(v) => {
+                if (!v) return;
+                v.muted = true;
+                if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) v.pause();
+              }}
+            >
+              <source src={`${process.env.PUBLIC_URL}/hero-demo.webm`} type="video/webm" />
+              <source src={`${process.env.PUBLIC_URL}/hero-demo.mp4`} type="video/mp4" />
+            </video>
           </figure>
         </div>
       </section>
