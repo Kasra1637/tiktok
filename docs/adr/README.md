@@ -29,4 +29,3 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0009](0009-history-tiles-expand-on-demand.md) | History tiles open on demand: the clip first, the record behind a tab | accepted |
 | [0010](0010-no-warm-button-fills.md) | No warm fills on buttons: coral and red move out of the surface | partially superseded by 0011 (Demo + CTA wears accent) |
 | [0011](0011-history-onward-wears-accent.md) | History's onward Demo + CTA wears accent, not brand | accepted |
-| [0012](0012-tailored-minimum-keeps-qualifying-premade.md) | Ready template list keeps pre-made rows at/above the tailored minimum | accepted |
