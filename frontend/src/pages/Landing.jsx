@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AuthedOnly,
@@ -234,7 +235,26 @@ function EyebrowPill({ strong = false, className, children }) {
   );
 }
 
+/**
+ * The five wizard steps the hero demo walks through, in playback order.
+ * The overlay chip inside the hero player highlights one per fifth of the
+ * loop so a viewer can follow where the recording is, the way a pressed
+ * button shows where a click landed.
+ */
+const HERO_STEPS = [
+  "App Profile",
+  "Audience & goal",
+  "Template & photo",
+  "Review",
+  "Hook + Story",
+];
+
 export default function Landing() {
+  // Which fifth of the hero loop is on screen, driven by the video's own
+  // clock so the overlay can never drift from the footage. Updates only on
+  // a step change, not on every timeupdate tick.
+  const [heroStep, setHeroStep] = useState(0);
+  const heroStepRef = useRef(0);
   return (
     <div className="relative min-h-screen hero-wash">
       <div className="noise-overlay" />
@@ -368,8 +388,11 @@ export default function Landing() {
               pill naming where this lives, and a portrait viewport matching
               the capture so the whole interface shows with no cropping.
               The card grows on wide screens and sits on a soft indigo glow
-              so it holds its own next to the headline. Playback runs at 4x
-              so the full journey fits the loop. Autoplay is silent and
+              so it holds its own next to the headline. A step chip rides the
+              bottom of the player, lit by the video's own clock, so the
+              viewer sees which of the five steps is on screen the way a
+              pressed button shows where a click landed. Playback runs at 8x
+              so the full journey fits a short loop. Autoplay is silent and
               loops; under reduced motion it stays paused on the poster
               frame. */}
           <figure
@@ -385,7 +408,7 @@ export default function Landing() {
                   <span className="truncate rounded-full border border-[color:var(--hairline)] bg-white/[0.03] px-2.5 py-0.5 text-xs text-muted-foreground">
                     hookforge.app/create
                   </span>
-                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">4× loop</span>
+                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">8× loop</span>
                 </div>
                 <div className="relative aspect-[9/13] w-full">
                   <video
@@ -394,18 +417,52 @@ export default function Landing() {
                     muted
                     loop
                     playsInline
-                    preload="metadata"
-                    poster={`${process.env.PUBLIC_URL}/hero-demo-poster.jpg`}
-                    aria-label="Screen recording at 4x speed: the Create Video wizard interface and the Demo CTA canvas, full interface with no page header or footer"
-                    ref={(v) => {
-                      if (!v) return;
-                      v.muted = true;
-                      if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) v.pause();
-                    }}
-                  >
-                    <source src={`${process.env.PUBLIC_URL}/hero-demo.webm`} type="video/webm" />
-                    <source src={`${process.env.PUBLIC_URL}/hero-demo.mp4`} type="video/mp4" />
-                  </video>
+                    preload="metadata"                poster={`${process.env.PUBLIC_URL}/hero-demo-poster.jpg`}
+                aria-label="Screen recording at 8x speed: the Create Video wizard interface and the Demo CTA canvas, full interface with no page header or footer"
+                ref={(v) => {
+                  if (!v) return;
+                  v.muted = true;
+                  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) v.pause();
+                  v.ontimeupdate = () => {
+                    if (!v.duration) return;
+                    const s = Math.min(
+                      HERO_STEPS.length - 1,
+                      Math.floor((v.currentTime / v.duration) * HERO_STEPS.length)
+                    );
+                    if (s !== heroStepRef.current) {
+                      heroStepRef.current = s;
+                      setHeroStep(s);
+                    }
+                  };
+                }}
+              >
+                <source src={`${process.env.PUBLIC_URL}/hero-demo.webm`} type="video/webm" />
+                <source src={`${process.env.PUBLIC_URL}/hero-demo.mp4`} type="video/mp4" />
+              </video>
+              {/* Step position, read off the footage: five segments fill as
+                  the loop walks the wizard, and the live one pulses like a
+                  pressed button. Decorative — the video's own label carries
+                  the description for assistive tech. */}
+              <div aria-hidden="true" className="pointer-events-none absolute inset-x-3 bottom-3">
+                <div className="rounded-xl border border-white/10 bg-black/65 px-2.5 pb-2 pt-2 backdrop-blur-sm">
+                  <div className="flex items-center gap-1">
+                    {HERO_STEPS.map((s, i) => (
+                      <span key={s} className="relative h-1.5 flex-1 rounded-full bg-white/15">
+                        {i <= heroStep && (
+                          <span className="absolute inset-0 rounded-full bg-[color:var(--brand-indigo)]">
+                            {i === heroStep && (
+                              <span className="absolute inset-0 animate-ping rounded-full bg-[color:var(--brand-indigo)]" />
+                            )}
+                          </span>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="mt-1.5 text-center text-xs font-semibold text-white">
+                    Step {heroStep + 1} of {HERO_STEPS.length} · {HERO_STEPS[heroStep]}
+                  </p>
+                </div>
+              </div>
                 </div>
               </div>
             </div>

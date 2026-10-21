@@ -168,7 +168,7 @@ export function HypotheticalProcessing({ pieceSeconds = 12, modelName = "" }) {
           {/* Clean interface mock: the recorded wizard + Demo CTA canvas in a
               portrait frame that matches the capture, so the whole interface
               shows with no cropping. No app header, footer, or browser chrome
-              inside the video — playback runs at 4x. */}
+              inside the video — playback runs at 8x. */}
           <div className="mx-auto w-full max-w-[300px] overflow-hidden rounded-xl border border-[color:var(--hairline-strong)] bg-black">
             <div className="relative aspect-[9/13] w-full">
               <video
@@ -179,7 +179,7 @@ export function HypotheticalProcessing({ pieceSeconds = 12, modelName = "" }) {
                 playsInline
                 preload="metadata"
                 poster={`${process.env.PUBLIC_URL}/hero-demo-poster.jpg`}
-                aria-label="Hypothetical preview at 4x speed: the Create Video wizard interface and the Demo CTA canvas, full interface"
+                aria-label="Hypothetical preview at 8x speed: the Create Video wizard interface and the Demo CTA canvas, full interface"
                 ref={(v) => {
                   if (!v) return;
                   v.muted = true;
