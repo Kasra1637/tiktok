@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=960, initial-scale=1" />
+<title>Tail — simulated generation</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 960px; height: 1420px; background: #0c0d12; color: #fff;
+    font-family: -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+  .stage { width: 960px; height: 1420px; background: #14151c; padding: 120px 90px; }
+  h1 { font-size: 44px; text-align: center; letter-spacing: -0.01em; }
+  .bar { margin: 40px auto 0; width: 600px; height: 26px; border-radius: 999px; background: #262838; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; border-radius: 999px; background: #7c7cf4; transition: width 1s linear; }
+  .steps { margin: 48px auto 0; width: 600px; font-size: 28px; color: #9aa0b4; line-height: 2.1; opacity: 0; transition: opacity .4s; }
+  .steps.show { opacity: 1; }
+  .steps li { list-style: none; opacity: 0; transition: opacity .4s; }
+  .steps li.on { opacity: 1; }
+  .steps b { color: #3ddc84; margin-right: 10px; }
+  .card { margin: 120px auto 0; width: 600px; background: #1b1d27; border: 1px solid #2a2d3a;
+    border-radius: 20px; padding: 40px; opacity: 0; transform: translateY(24px); transition: all .5s; }
+  .card.show { opacity: 1; transform: none; }
+  .badge { display: inline-block; font-size: 24px; font-weight: 800; color: #0c0d12;
+    background: #b9c4ff; border-radius: 999px; padding: 8px 20px; }
+  .quote { margin-top: 32px; font-size: 34px; line-height: 1.45; }
+  .fine { margin-top: 28px; font-size: 24px; color: #8b90a5; }
+  .foot { margin-top: 200px; text-align: center; font-size: 22px; color: #6f7488; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <h1 id="title">Rendering your Hook + Story</h1>
+  <div class="bar"><i id="fill"></i></div>
+  <ul class="steps" id="steps"><li>✓ Script locked</li><li>✓ Presenter photo set</li><li>✓ First frame rendering</li></ul>
+  <div class="card" id="card">
+    <span class="badge">SIMULATED PREVIEW</span>
+    <p class="quote">“POV: you open the app and it already knows what you wanted to log.”</p>
+    <p class="fine">First frame — not a real render.</p>
+  </div>
+  <p class="foot">HookForge demo · simulated preview</p>
+</div>
+<script>
+  const fill = document.getElementById('fill');
+  const steps = document.getElementById('steps');
+  const items = [...steps.querySelectorAll('li')];
+  const card = document.getElementById('card');
+  const title = document.getElementById('title');
+  setTimeout(() => { steps.classList.add('show'); }, 400);
+  [900, 1900, 2900, 3900].forEach((t, i) => setTimeout(() => {
+    fill.style.width = ((i + 1) * 25) + '%';
+    if (items[i]) items[i].classList.add('on');
+    if (i === 3) setTimeout(() => {
+      title.textContent = 'First frame ready';
+      card.classList.add('show');
+    }, 600);
+  }, t));
+</script>
+</body>
+</html>

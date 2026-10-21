@@ -8,7 +8,7 @@ import {
 } from "../components/auth/AuthControls";
 import {
   Sparkles, Clapperboard, Film, Zap, Target,
-  FileText, X, Check, Wand2, Briefcase, LayoutTemplate, ShieldCheck, Video,
+  FileText, X, Check, Wand2, Briefcase, LayoutTemplate, ShieldCheck, Video, Globe,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 
@@ -364,32 +364,48 @@ export default function Landing() {
           {/* The app itself, beside the pitch: the real Create Video
               journey (profile → angle → goal → ranked templates) plus the
               editable Demo + CTA canvas, recorded from the running app.
-              Autoplay is silent and loops; under reduced motion it stays
-              paused on the poster frame. */}
+              A minimal floating card frames it: gradient hairline, a URL
+              pill naming where this lives, and a portrait viewport matching
+              the capture so the whole interface shows with no cropping.
+              Playback runs at 4x so the full journey fits the loop. Autoplay
+              is silent and loops; under reduced motion it stays paused on
+              the poster frame. */}
           <figure
-            className="animate-fade-up mx-auto mt-12 w-full max-w-none overflow-hidden rounded-2xl border border-[color:var(--hairline)] bg-black shadow-[0_24px_80px_-24px_rgb(0_0_0/0.8)] lg:mx-0 lg:mt-0"
+            className="animate-fade-up mx-auto mt-12 w-full max-w-[360px] lg:mx-0 lg:mt-0"
             style={{ animationDelay: "280ms" }}
             data-testid="landing-hero-shot"
           >
-            <div className="relative aspect-video w-full">
-              <video
-                className="absolute inset-0 block h-full w-full object-cover"
-                autoPlay
-                muted
-                loop
-                playsInline
-                preload="metadata"
-                poster={`${process.env.PUBLIC_URL}/hero-demo-poster.jpg`}
-                aria-label="Screen recording: the Create Video wizard interface and the Demo CTA canvas, interface only with no page header or footer"
-                ref={(v) => {
-                  if (!v) return;
-                  v.muted = true;
-                  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) v.pause();
-                }}
-              >
-                <source src={`${process.env.PUBLIC_URL}/hero-demo.webm`} type="video/webm" />
-                <source src={`${process.env.PUBLIC_URL}/hero-demo.mp4`} type="video/mp4" />
-              </video>
+            <div className="border-gradient relative rounded-2xl p-[1px] shadow-[0_24px_80px_-24px_rgb(0_0_0/0.8)]">
+              <div className="overflow-hidden rounded-2xl bg-black">
+                <div className="flex items-center gap-2 border-b border-[color:var(--hairline)] bg-white/[0.02] px-3 py-2">
+                  <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
+                  <Globe className="h-3 w-3 shrink-0 text-muted-foreground" />
+                  <span className="truncate rounded-full border border-[color:var(--hairline)] bg-white/[0.03] px-2.5 py-0.5 text-xs text-muted-foreground">
+                    hookforge.app/create
+                  </span>
+                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">4× loop</span>
+                </div>
+                <div className="relative aspect-[9/13] w-full">
+                  <video
+                    className="absolute inset-0 block h-full w-full object-contain"
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    poster={`${process.env.PUBLIC_URL}/hero-demo-poster.jpg`}
+                    aria-label="Screen recording at 4x speed: the Create Video wizard interface and the Demo CTA canvas, full interface with no page header or footer"
+                    ref={(v) => {
+                      if (!v) return;
+                      v.muted = true;
+                      if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) v.pause();
+                    }}
+                  >
+                    <source src={`${process.env.PUBLIC_URL}/hero-demo.webm`} type="video/webm" />
+                    <source src={`${process.env.PUBLIC_URL}/hero-demo.mp4`} type="video/mp4" />
+                  </video>
+                </div>
+              </div>
             </div>
           </figure>
         </div>
