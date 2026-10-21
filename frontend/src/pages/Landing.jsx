@@ -362,9 +362,10 @@ export default function Landing() {
           </div>
           </div>
           {/* The app itself, beside the pitch: the real Create Video
-              journey (profile → angle → goal → ranked templates) recorded
-              from the running app. Autoplay is silent and loops; under
-              reduced motion it stays paused on the poster frame. */}
+              journey (profile → angle → goal → ranked templates) plus the
+              editable Demo + CTA canvas, recorded from the running app.
+              Autoplay is silent and loops; under reduced motion it stays
+              paused on the poster frame. */}
           <figure
             className="animate-fade-up mx-auto mt-12 w-full max-w-2xl overflow-hidden rounded-2xl border border-[color:var(--hairline)] lg:mx-0 lg:mt-0"
             style={{ animationDelay: "280ms" }}
@@ -377,8 +378,8 @@ export default function Landing() {
               loop
               playsInline
               preload="metadata"
-              poster={`${process.env.PUBLIC_URL}/hero-app-shot.png`}
-              aria-label="Screen recording: stepping through the Create Video wizard from profile to ranked templates"
+              poster={`${process.env.PUBLIC_URL}/hero-demo-poster.jpg`}
+              aria-label="Screen recording: stepping through the Create Video wizard, then the editable Demo CTA canvas"
               ref={(v) => {
                 if (!v) return;
                 v.muted = true;
