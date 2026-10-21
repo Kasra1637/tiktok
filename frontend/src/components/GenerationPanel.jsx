@@ -7,6 +7,7 @@ import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage, mediaUrl, downloadMediaUrl } from "../lib/api";
 import { recordSignal, verdictFor } from "../lib/feedback";
 import { ComponentThumbs } from "./ComponentThumbs";
+import { HypotheticalProcessing } from "./HypotheticalProcessing";
 import { CONTROL_CLASS } from "./formControls";
 import {
   exceedsSinglePass, readPieceSeconds, singlePassCeiling,
@@ -601,6 +602,14 @@ const handleGenerate = async () => {
               : "Read the app-specific strategy above, then generate. It guides the Hook + Story clip and is separate from your filmed product demo."}
         </p>
       )}
+
+      {/* Hypothetical preview: front-end only, never a render. Sits below the
+          real Generate button so the paid path keeps its place; shows founders
+          what processing & the result layout look like after the four steps. */}
+      <HypotheticalProcessing
+        pieceSeconds={pieceSeconds}
+        modelName={capability?.name || selectedModel || ""}
+      />
 
       {generation && (
         <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3 text-sm">
