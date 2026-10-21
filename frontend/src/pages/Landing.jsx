@@ -367,11 +367,13 @@ export default function Landing() {
               A minimal floating card frames it: gradient hairline, a URL
               pill naming where this lives, and a portrait viewport matching
               the capture so the whole interface shows with no cropping.
-              Playback runs at 4x so the full journey fits the loop. Autoplay
-              is silent and loops; under reduced motion it stays paused on
-              the poster frame. */}
+              The card grows on wide screens and sits on a soft indigo glow
+              so it holds its own next to the headline. Playback runs at 4x
+              so the full journey fits the loop. Autoplay is silent and
+              loops; under reduced motion it stays paused on the poster
+              frame. */}
           <figure
-            className="animate-fade-up mx-auto mt-12 w-full max-w-[360px] lg:mx-0 lg:mt-0"
+            className="animate-fade-up mx-auto mt-12 w-full max-w-[360px] lg:mx-0 lg:mt-0 lg:max-w-[400px]"
             style={{ animationDelay: "280ms" }}
             data-testid="landing-hero-shot"
           >
@@ -407,6 +409,7 @@ export default function Landing() {
                 </div>
               </div>
             </div>
+            <div aria-hidden="true" className="mx-auto -mt-3 h-12 w-3/4 rounded-[100%] bg-[color:var(--brand-indigo)] opacity-25 blur-2xl" />
           </figure>
         </div>
       </section>
