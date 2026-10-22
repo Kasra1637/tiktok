@@ -149,7 +149,10 @@ function pill(ctx, x, y, w, h, r) {
  *
  * `font` is a canvas font stack from OVERLAY_FONTS, `anim` names an
  * OVERLAY_ANIMS style, and `scale` multiplies the cw-derived size. Defaults
- * reproduce the long-standing look exactly (see overlayIntro).
+ * reproduce the long-standing look exactly (see overlayIntro), except the
+ * text itself paints in `accent`: the swatch recolors the whole text line
+ * (text plus underline), not just the underline, so the line is never stuck
+ * on one color. The pill behind the text stays dark.
  */
 export function drawHookOverlay(ctx, cw, ch, time, { text, duration, accent, offsetX = 0, offsetY = 0, font = HOOK_FONT, anim = "punch", scale = 1 }) {
   if (!String(text || "").trim() || time > duration) return;
@@ -205,7 +208,11 @@ export function drawHookOverlay(ctx, cw, ch, time, { text, duration, accent, off
       ctx.fill();
     }
 
-    ctx.fillStyle = "#ffffff";
+    // The text line takes the accent, not fixed white: picking a swatch
+    // recolors the words themselves, which is the only way to get the line
+    // in anything but one color. Every swatch is bright enough to read on
+    // the dark pill, and white stays one tap away in the row.
+    ctx.fillStyle = accent;
     ctx.fillText(line, cw / 2, cy);
   });
 

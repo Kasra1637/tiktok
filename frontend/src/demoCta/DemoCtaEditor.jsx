@@ -2367,6 +2367,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           )}
           <div className="space-y-2">
             <SubLabel>Accent</SubLabel>
+            <p className="text-xs text-muted-foreground">Colors the hook text line and the end-card handle chip.</p>
             <div className="flex flex-wrap items-center gap-2">
               {ACCENT_SWATCHES.map((c) => (
                 <button
@@ -2750,10 +2751,14 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                       outer row is nowrap by contract, so without a squeezable
                       inner group the long Zoom Lock description forced the row
                       past the 740px column and the Export button clipped at the
-                      column edge. The description is the flexible item — it
-                      wraps onto its own line inside this group while Export,
-                      the label and + Lock keep their measured widths. */}
-                  <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-2">
+                      column edge. w-full drops this cluster onto its own line
+                      below xl, so Export and Zoom Lock never stack on top of
+                      the transport buttons in fragments; xl:w-auto rejoins the
+                      single row where the 650px column holds it. The
+                      description is the flexible item — it wraps onto its own
+                      line inside this group while Export, the label and + Lock
+                      keep their measured widths. */}
+                  <div className="ml-auto flex min-w-0 flex-wrap w-full items-center justify-end gap-x-2 gap-y-2 xl:w-auto">
                     {/* Export lives here, not in a bar of its own. The primary
                         action beside the Zoom Lock controls is where a decision
                         gets made — a separate bottom bar meant the column spent
@@ -2780,7 +2785,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                     </Button>
                     <span aria-hidden="true" className="shrink-0 text-muted-foreground/40">|</span>
                     <span className="eyebrow shrink-0">Zoom Lock</span>
-                    <span className="min-w-[120px] max-w-[240px] flex-1 text-xs leading-snug text-muted-foreground">Hold the current zoom from this point in the clip.</span>
+                    <span className="min-w-[120px] max-w-[240px] flex-1 text-xs leading-snug text-muted-foreground">Hold this zoom from this point on.</span>
                     {zoomKeyframes.length > 0 && (
                       <span className="text-xs tabular-nums text-muted-foreground">
                         {zoomKeyframes.length}
