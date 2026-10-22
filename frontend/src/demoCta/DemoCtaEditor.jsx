@@ -393,21 +393,45 @@ function TransportButton({ label, onClick, disabled, children, testId }) {
 /**
  * Collapsible wrapper for everything from the entrance picker down: the ten
  * entrances plus text size, accent where it lives, and the rest of the
- * section. Open by default; laid out flat it all pushes the section tall,
- * which is why it collapses. Collapsed, the summary still names the current
- * entrance so the choice stays visible. Native <details> keeps every control
- * in the DOM either way, so preview replay, prefs and look matching see no
- * change. The Font grids stay flat above it.
+ * section. Collapsed by default; laid out flat it all pushes the section
+ * tall, which is why it collapses. Collapsed, the summary still names the
+ * current entrance so the choice stays visible. Native <details> keeps every
+ * control in the DOM either way, so preview replay, prefs and look matching
+ * see no change. The "Customize" label names the group; the summary below
+ * it names the current entrance.
  */
 function AnimDisclosure({ testId, currentLabel, children }) {
   return (
     <div className="space-y-2">
-      <details open data-testid={testId} className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-1.5">
+      <SubLabel>Customize</SubLabel>
+      <details data-testid={testId} className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-1.5">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
           <span>Animation · <span className="text-foreground">{currentLabel}</span></span>
           <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
         </summary>
         <div className="space-y-5 pb-1 pt-3">
+          {children}
+        </div>
+      </details>
+    </div>
+  );
+}
+
+/**
+ * Collapsible wrapper for the font tile grid, mirroring AnimDisclosure:
+ * collapsed by default, summary names the current face, native <details>
+ * keeps the tiles in the DOM either way so prefs and look matching see no
+ * change.
+ */
+function FontDisclosure({ testId, groupLabel, currentLabel, children }) {
+  return (
+    <div className="space-y-2">
+      <details data-testid={testId} className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-1.5">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+          <span>Font · <span className="text-foreground">{currentLabel}</span></span>
+          <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
+        </summary>
+        <div className="pb-1 pt-3" role="group" aria-label={groupLabel}>
           {children}
         </div>
       </details>
@@ -2156,9 +2180,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           {/* Caption face: each tile set in its own face so the choice is
               visual, not a name to imagine. Selected state is the indigo
               ring, the same language as the accent swatches below. */}
-          <div className="space-y-2">
-            <SubLabel>Font</SubLabel>
-            <div className="grid grid-cols-1 gap-2" role="group" aria-label="Caption font">
+          <FontDisclosure
+            testId="caption-fonts-disclosure"
+            groupLabel="Caption font"
+            currentLabel={(OVERLAY_FONTS.find((f) => f.id === captionFont) || {}).label}
+          >
+            <div className="grid grid-cols-1 gap-2">
               {OVERLAY_FONTS.map((f) => (
                 <button
                   key={f.id}
@@ -2177,7 +2204,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 </button>
               ))}
             </div>
-          </div>
+          </FontDisclosure>
           <AnimDisclosure
             testId="caption-anim-disclosure"
             currentLabel={(OVERLAY_ANIMS.find((a) => a.id === captionAnim) || {}).label}
@@ -2316,9 +2343,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               })}
             </div>
           </div>
-          <div className="space-y-2">
-            <SubLabel>Font</SubLabel>
-            <div className="grid grid-cols-1 gap-2" role="group" aria-label="CTA font">
+          <FontDisclosure
+            testId="cta-fonts-disclosure"
+            groupLabel="CTA font"
+            currentLabel={(OVERLAY_FONTS.find((f) => f.id === ctaFont) || {}).label}
+          >
+            <div className="grid grid-cols-1 gap-2">
               {OVERLAY_FONTS.map((f) => (
                 <button
                   key={f.id}
@@ -2337,7 +2367,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 </button>
               ))}
             </div>
-          </div>
+          </FontDisclosure>
           <AnimDisclosure
             testId="cta-anim-disclosure"
             currentLabel={(OVERLAY_ANIMS.find((a) => a.id === ctaAnim) || {}).label}
