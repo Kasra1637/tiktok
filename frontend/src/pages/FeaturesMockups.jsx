@@ -24,7 +24,7 @@ function ProfileMockup() {
           <BadgeCheck className="h-3 w-3" /> Approved
         </span>
       </div>
-      <ul className="mt-4 space-y-3">
+      <ul className="mt-4 space-y-2.5">
         {["What it does, in your words", "Who it is for", "Proof moment"].map((line) => (
           <li key={line} className="inset-panel flex items-center gap-2.5">
             <Check className="h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />
@@ -38,29 +38,35 @@ function ProfileMockup() {
 
 function TemplatesMockup() {
   return (
-    <div className="grid gap-3 sm:grid-cols-2" aria-hidden="true">
-      {[
-        { name: "Cold open", fit: 92, picked: true },
-        { name: "Myth vs fact", fit: 84, picked: false },
-      ].map((t) => (
-        <div
-          key={t.name}
-          className={`rounded-xl border p-3.5 ${
-            t.picked
-              ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
-              : "border-[color:var(--hairline)] bg-card/70"
-          }`}
-        >
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-semibold">{t.name}</span>
-            <span className="font-mono text-xs font-semibold text-[color:var(--brand-indigo)]">{t.fit}</span>
+    // The one row whose mockup skipped the .surface shell: without it this
+    // column sat lighter and shallower than the other five. The two options
+    // are .inset-panel asides, never nested cards, so the shared 20px gutter
+    // and 12px radius come from the token, not a local p-3.5.
+    <div className="surface" aria-hidden="true">
+      <div className="grid gap-3 sm:grid-cols-2">
+        {[
+          { name: "Cold open", fit: 92, picked: true },
+          { name: "Myth vs fact", fit: 84, picked: false },
+        ].map((t) => (
+          <div
+            key={t.name}
+            className={`inset-panel ${
+              t.picked
+                ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
+                : ""
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-semibold">{t.name}</span>
+              <span className="font-mono text-xs font-semibold text-[color:var(--brand-indigo)]">{t.fit}</span>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              {t.picked ? "Fits a demo-first story." : "Strong hook, needs your proof."}
+            </p>
+            <p className="mt-1.5 text-xs text-muted-foreground">Caveat: needs a clear photo.</p>
           </div>
-          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-            {t.picked ? "Fits a demo-first story." : "Strong hook, needs your proof."}
-          </p>
-          <p className="mt-1.5 text-xs text-muted-foreground">Caveat: needs a clear photo.</p>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -110,7 +116,7 @@ function OutcomesMockup() {
         <div className="flex h-20 w-11 shrink-0 items-center justify-center rounded-lg border border-[color:var(--hairline)] bg-black/60">
           <Video className="h-4 w-4 text-[color:var(--brand-indigo)]" />
         </div>
-        <div className="min-w-0 flex-1 space-y-2">
+        <div className="min-w-0 flex-1 space-y-2.5">
           <div className="flex gap-4 font-mono text-xs tabular-nums text-muted-foreground">
             <span>1.2k views</span>
             <span>84 likes</span>

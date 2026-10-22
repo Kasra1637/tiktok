@@ -84,8 +84,12 @@ export default function Features() {
         </p>
       </section>
 
-      {/* ---------- Alternating rows ---------- */}
-      <main className="relative z-10 mx-auto max-w-6xl space-y-16 px-5 py-12" data-testid="features-page">
+      {/* ---------- Alternating rows ----------
+          Boundary rhythm matches the row rhythm: the intro carries pb-8
+          below its copy and the closing CTA starts unpadded, so this block
+          brings pt-8 above the first row and pb-16 below the last — 4rem of
+          air on every boundary, the same space-y-16 the rows keep. */}
+      <main className="relative z-10 mx-auto max-w-6xl space-y-16 px-5 pb-16 pt-8" data-testid="features-page">
         {ROWS.map((row, i) => {
           const Mockup = MOCKUPS[row.id];
           const flip = i % 2 === 1;
