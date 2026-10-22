@@ -453,15 +453,15 @@ body {
  * instead of the frame shrinking further. Mobile keeps a 45vh budget, and the
  * player row wraps there because it cannot fit beside a 9:16 frame on a phone.
  *
- * The `* 0.9` headroom factor shrinks the frame 10% below the full budget so
- * the whole preview reads without scrolling the page on typical laptop
- * viewports. The floor stays untouched — small windows scroll instead. */
+ * The `* 0.75` headroom factor holds the frame 25% below the full budget so
+ * the preview stays compact beside the settings panel instead of dominating
+ * it. The floor stays untouched — small windows scroll instead. */
 .demo-cta-column {
     /* 16px is slack, not content. Sub-pixel rounding of a 9:16 ratio, or a
        one-pixel border, otherwise puts the column over its own max-h and a
        scrollbar appears beside a video that fits. */
     --demo-cta-chrome: 16px;
-    --demo-cta-frame-w: min(100%, calc(45vh * 9 / 16 * 0.9));
+    --demo-cta-frame-w: min(100%, calc(45vh * 9 / 16 * 0.75));
 }
 .demo-cta-column[data-player="on"] {
     /* With a clip loaded the column is frame + player bar (104px: scrubber 24,
@@ -475,7 +475,7 @@ body {
 }
 @media (min-width: 1024px) {
     .demo-cta-column {
-        --demo-cta-frame-w: min(100%, max(253px, calc((100vh - 3rem - var(--demo-cta-chrome)) * 9 / 16 * 0.9)));
+        --demo-cta-frame-w: min(100%, max(253px, calc((100vh - 3rem - var(--demo-cta-chrome)) * 9 / 16 * 0.75)));
     }
     /* Width comes from the column height budget, so the 9:16 ratio is exact and
        the frame is centred by its own margin rather than by a grid track. */
