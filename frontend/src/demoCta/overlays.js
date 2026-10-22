@@ -3,7 +3,8 @@
  *
  * Ported faithfully from the standalone app: opening hook punch-in and closing
  * lead-gen end card, both laid out inside TikTok's safe area (right icon rail
- * plus bottom caption strip), with draggable repositioning via offsets.
+ * plus bottom caption strip), with vertical-only repositioning via offsets
+ * (canvas drag locks to Y; steppers nudge it).
  *
  * The one deliberate carry-over worth naming: `getEndCardBounds` applies the
  * vertical offset against the canvas *width*, matching the standalone app's

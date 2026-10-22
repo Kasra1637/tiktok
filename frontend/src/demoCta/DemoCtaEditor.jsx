@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Download,
   Film,
   Info,
@@ -18,6 +19,8 @@ import {
   Smartphone,
   Type,
   Upload,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -326,6 +329,40 @@ function ResetButton({ onClick, children, testId }) {
 }
 
 /**
+ * Up/down stepper for overlay copy. Hook and end-card text travel vertically
+ * only, so this is the keyboard- and touch-accessible path beside vertical
+ * drag: one tap moves 1% of canvas height, Shift+tap jumps 5%.
+ */
+function VerticalNudge({ label, onNudge, upTestId, downTestId }) {
+  const btn =
+    "rounded-lg border border-[color:var(--hairline)] p-1.5 text-muted-foreground transition hover:border-[color:var(--hairline-strong)] hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-indigo)]/40";
+  return (
+    <div className="flex shrink-0 items-center gap-1" role="group" aria-label={label}>
+      <button
+        type="button"
+        data-testid={upTestId}
+        title="Move up (Shift: larger step)"
+        aria-label={`${label}: move up`}
+        onClick={(e) => onNudge(-(e.shiftKey ? 0.05 : 0.01))}
+        className={btn}
+      >
+        <ChevronUp className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        data-testid={downTestId}
+        title="Move down (Shift: larger step)"
+        aria-label={`${label}: move down`}
+        onClick={(e) => onNudge(e.shiftKey ? 0.05 : 0.01)}
+        className={btn}
+      >
+        <ChevronDown className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
+/**
  * A transport control: a real 44px target with a tooltip.
  *
  * These were 28px text buttons, which is below the 44px touch guideline and
@@ -600,6 +637,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   };
 
   const [isPlaying, setIsPlaying] = useState(true);
+  // Preview monitoring only: the source element stays muted so autoplay
+  // never fights browser policy; the speaker toggle below unmutes on tap.
+  // The export unmutes and captures at unity regardless, then restores this.
+  const [previewMuted, setPreviewMuted] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
 
@@ -797,6 +838,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     if (refVideo) {
       refVideo.src = videoUrl;
       refVideo.muted = true;
+      setPreviewMuted(true);
       refVideo.loop = true;
       refVideo.playsInline = true;
       refVideo.load();
@@ -846,6 +888,22 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       setIsPlaying(false);
     }
   }, []);
+
+  const togglePreviewMuted = useCallback(() => {
+    const video = videoRef.current;
+    setPreviewMuted((was) => {
+      const next = !was;
+      if (video) {
+        video.muted = next;
+        if (!next) video.volume = 1;
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.muted = previewMuted;
+  }, [previewMuted]);
 
   // Space toggles preview playback from anywhere that is not text entry, the
   // way every video editor answers it. A focused button or link already
@@ -1647,9 +1705,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       }
     }
 
-    const startHookX = hookOffsetX;
     const startHookY = hookOffsetY;
-    const startCtaX = ctaOffsetX;
     const startCtaY = ctaOffsetY;
     const isHand = viewMode === "hand";
     const startOffX = isHand ? handPanX : videoOffsetX;
@@ -1658,11 +1714,14 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     const move = (ev) => {
       const dx = (ev.clientX - startX) / rect.width;
       const dy = (ev.clientY - startY) / rect.height;
+      // Hook and end-card copy travel vertically only: sideways drift would
+      // push text out of the centered safe column, so dx is ignored here and
+      // X stays pinned at zero. Video/hand framing below keeps both axes.
       if (dragTarget === "hook") {
-        setHookOffsetX(startHookX + dx);
+        setHookOffsetX(0);
         setHookOffsetY(startHookY + dy);
       } else if (dragTarget === "cta") {
-        setCtaOffsetX(startCtaX + dx);
+        setCtaOffsetX(0);
         setCtaOffsetY(startCtaY + dy);
       } else if (isHand) {
         setHandPanX(startOffX + dx);
@@ -2098,10 +2157,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               </ResetButton>
             </div>
           )}
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs italic text-muted-foreground">Drag the hook text up or down on the preview to reposition</p>
+            <VerticalNudge label="Hook text position" upTestId="hook-nudge-up" downTestId="hook-nudge-down" onNudge={(dy) => setHookOffsetY((y) => y + dy)} />
+          </div>
           {(hookOffsetX !== 0 || hookOffsetY !== 0) && (
             <ResetButton onClick={() => { setHookOffsetX(0); setHookOffsetY(0); }}>Reset position</ResetButton>
           )}
-          <p className="text-xs italic text-muted-foreground">Drag the hook text on the preview to reposition</p>
         </EditorSection>
 
         <EditorSection title="End Card CTA" icon={Megaphone} open={openSections.cta} onToggle={() => toggleSection("cta")} testId="cta-controls">
@@ -2253,10 +2315,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               </ResetButton>
             </div>
           )}
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs italic text-muted-foreground">Drag the end card up or down on the preview to reposition</p>
+            <VerticalNudge label="End card position" upTestId="cta-nudge-up" downTestId="cta-nudge-down" onNudge={(dy) => setCtaOffsetY((y) => y + dy)} />
+          </div>
           {(ctaOffsetX !== 0 || ctaOffsetY !== 0) && (
             <ResetButton onClick={() => { setCtaOffsetX(0); setCtaOffsetY(0); }}>Reset position</ResetButton>
           )}
-          <p className="text-xs italic text-muted-foreground">Drag the end card on the preview to reposition</p>
           <div className="space-y-2">
             <SubLabel>Accent</SubLabel>
             <div className="flex flex-wrap items-center gap-2">
@@ -2611,6 +2676,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   >
                     <span className="font-mono text-xs">+1s</span>
                   </TransportButton>
+                  <TransportButton
+                    label={previewMuted ? "Unmute preview audio" : "Mute preview audio"}
+                    onClick={togglePreviewMuted}
+                    testId="transport-mute"
+                  >
+                    {previewMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                  </TransportButton>
                   <div className="flex items-baseline gap-1.5 px-1">
                     <span className="font-mono text-sm font-semibold tabular-nums tracking-tight">
                       {formatTime(currentTime)}
@@ -2747,7 +2819,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           ref={videoRef}
           className="pointer-events-none absolute h-px w-px opacity-0"
           playsInline
-          muted
+          muted={previewMuted}
           loop
           autoPlay
         />
