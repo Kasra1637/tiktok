@@ -8178,7 +8178,6 @@ async function runDemoCtaChecks() {
         { ...COMPLETED, id: "dense-2", brand_name: "Journal", hook_line: "A second render." },
       ] }),
       getAppProfiles: async () => ({ profiles: [PROFILE] }),
-      getVariationKinds: async () => ({ variations: [] }),
     }, async () => {
       await mount(GenerationHistory)(ctx);
       const grid = ctx.container.querySelector('[data-testid="history-list"].history-grid');
@@ -8231,7 +8230,6 @@ async function runDemoCtaChecks() {
     await withApi({
       getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "drag-1" }] }),
       getAppProfiles: async () => ({ profiles: [PROFILE] }),
-      getVariationKinds: async () => ({ variations: [] }),
     }, async () => {
       await mount(GenerationHistory)(ctx);
       const tab = ctx.container.querySelector('[data-testid="history-expand"]');
@@ -8284,8 +8282,7 @@ async function runDemoCtaChecks() {
       {
         getGenerationHistory: async () => ({ generations: [] }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
-        getVariationKinds: async () => ({ variations: [] }),
-      },
+        },
       async () => {
         await mount(GenerationHistory)(ctx);
         const lede = ctx.container.querySelector('[data-testid="history-header"] p');
@@ -8313,8 +8310,7 @@ async function runDemoCtaChecks() {
           return { generations: rows.slice(0, params?.limit || 100) };
         },
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
-        getVariationKinds: async () => ({ variations: [] }),
-      },
+        },
       async () => {
         await mount(GenerationHistory)(ctx);
         const more = ctx.container.querySelector('[data-testid="history-show-more"]');
@@ -8339,8 +8335,7 @@ async function runDemoCtaChecks() {
         getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "esc-1" }] }),
         getGeneration: async () => ({ ...COMPLETED, id: "esc-1", model: "minimax" }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
-        getVariationKinds: async () => ({ variations: [] }),
-      },
+        },
       async () => {
         await mount(GenerationHistory)(ctx);
         await clickEl(ctx, ctx.container.querySelector('[data-testid="history-expand"]'), "open the drawer");
@@ -8372,8 +8367,7 @@ async function runDemoCtaChecks() {
         {
           getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "deep-1" }] }),
           getAppProfiles: async () => ({ profiles: [PROFILE] }),
-          getVariationKinds: async () => ({ variations: [] }),
-        },
+            },
         async () => {
           await mount(GenerationHistory)(ctx);
         }
@@ -8454,8 +8448,7 @@ async function runDemoCtaChecks() {
               ],
             }),
             getAppProfiles: async () => ({ profiles: [PROFILE] }),
-            getVariationKinds: async () => ({ variations: [] }),
-          },
+                },
           async () => {
             await mount(GenerationHistory, { onChanged: () => {} })(ctx);
             await clickEl(
@@ -8508,8 +8501,7 @@ async function runDemoCtaChecks() {
               ],
             }),
             getAppProfiles: async () => ({ profiles: [PROFILE] }),
-            getVariationKinds: async () => ({ variations: [] }),
-          },
+                },
           async () => {
             await mount(GenerationHistory, { onChanged: () => {} })(ctx);
             await clickEl(
@@ -8555,8 +8547,7 @@ async function runDemoCtaChecks() {
           getAppProfiles: async () => ({ profiles: [PROFILE] }),
           // A completed row mounts the variations panel's data fetch, which the
           // base stub does not carry.
-          getVariationKinds: async () => ({ variations: [] }),
-        },
+            },
         async () => {
           await mount(GenerationHistory, { onChanged: () => {} })(ctx);
           await clickEl(
@@ -8691,6 +8682,45 @@ async function runDemoCtaChecks() {
       );
     }
   );
+
+  await check(
+    "History offers a New variation entry into the studio draft",
+    async (ctx) => {
+      const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+      await withApi(
+        {
+          getGenerationHistory: async () => ({
+            generations: [{ ...COMPLETED, id: "gen-vary", studio_project_id: "proj-9", brand_name: "Test App", duration: 10 }],
+          }),
+          getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        },
+        async () => {
+          await mount(GenerationHistory, { onChanged: () => {} })(ctx);
+          await clickEl(
+            ctx,
+            ctx.container.querySelector('[data-testid="history-expand"]'),
+            "expand the render tile"
+          );
+          // The duplicate/variation endpoints were retired, so the entry is a
+          // deep link into the draft project, not a new endpoint call: the
+          // plan arrives intact and the recorded thumbs steer the next plan.
+          const entry = [...ctx.container.querySelectorAll("a")].find(
+            (a) => (a.textContent || "").trim() === "New variation"
+          );
+          if (!entry) {
+            throw new Error(
+              "History has no New variation entry on a finished clip. Without " +
+                "it, recorded thumbs have no path into the next draft."
+            );
+          }
+          const href = entry.getAttribute("href") || "";
+          if (!href.includes("/create?project=proj-9")) {
+            throw new Error(`the variation entry does not reopen the draft: ${href}`);
+          }
+        }
+      );
+    }
+  );
 await check(
     "History plays the durable copy the API signed, not a stripped path",
     async (ctx) => {
@@ -8714,8 +8744,7 @@ await check(
             ],
           }),
           getAppProfiles: async () => ({ profiles: [PROFILE] }),
-          getVariationKinds: async () => ({ variations: [] }),
-        },
+            },
         async () => {
           await mount(GenerationHistory, { onChanged: () => {} })(ctx);
           const player = ctx.container.querySelector("video");
@@ -8776,8 +8805,7 @@ await check(
             ],
           }),
           getAppProfiles: async () => ({ profiles: [PROFILE] }),
-          getVariationKinds: async () => ({ variations: [] }),
-        },
+            },
         async () => {
           await mount(GenerationHistory, { onChanged: () => {} })(ctx);
           const player = ctx.container.querySelector("video");
@@ -8821,7 +8849,6 @@ await check(
     await withApi({
       getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "retry", playback_url: initial }] }),
       getAppProfiles: async () => ({ profiles: [] }),
-      getVariationKinds: async () => ({ variations: [] }),
       retryGenerationStorage: async (id) => { calls.push(id); return { playback_url: fresh }; },
       getGeneration: async () => ({ ...COMPLETED, id: "retry", playback_url: fresh }),
     }, async () => {
@@ -8849,7 +8876,6 @@ await check(
     await withApi({
       getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "lost", video_url: null, r2_url: null, playback_url: null }] }),
       getAppProfiles: async () => ({ profiles: [] }),
-      getVariationKinds: async () => ({ variations: [] }),
       retryGenerationStorage: async () => { throw new Error("No remaining cloud or local copy. Re-upload your export."); },
     }, async () => {
       await mount(GenerationHistory, {})(ctx);

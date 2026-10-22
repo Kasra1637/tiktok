@@ -307,15 +307,6 @@ export const api = {
   detachAsset: (projectId, assetId) =>
     client.delete(`/studio/projects/${projectId}/assets/${assetId}`).then((r) => r.data),
 
-  // Variations
-  getVariationKinds: () => client.get("/studio/variations").then((r) => r.data),
-  createVariation: (generationId, payload) =>
-    client.post(`/generations/${generationId}/variations`, payload).then((r) => r.data),
-  getGenerationVariations: (generationId) =>
-    client.get(`/generations/${generationId}/variations`).then((r) => r.data),
-  duplicateGeneration: (generationId) =>
-    client.post(`/generations/${generationId}/duplicate`).then((r) => r.data),
-
   // Native Product Demo + CTA export. The editor lives inside HookForge, so the
   // finished clip is posted as multipart from the same origin. FormData is
   // passed straight through: the client sets the boundary itself, and setting

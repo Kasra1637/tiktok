@@ -29,6 +29,7 @@ import {
   Info,
   X,
   Smartphone,
+  CopyPlus,
   Target,
   Briefcase,
   Clapperboard,
@@ -768,6 +769,27 @@ function GenerationRow({ row, onChanged, defaultExpanded = false }) {
                     className="min-w-[150px] flex-1"
                   >
                     <RotateCcw className="h-4 w-4" /> Retry render
+                  </Button>
+                )}
+                {/* The thumbs-only results loop: the recorded per-component
+                    verdicts already steer the next plan server-side, so a new
+                    take needs no new endpoint — the retired duplicate/variation
+                    routes are gone. Reopening this generation's draft project
+                    in the studio is the variation: the plan arrives intact and
+                    the next render is a fresh generation. */}
+                {row.studio_project_id && (
+                  <Button
+                    variant="secondary"
+                    asChild
+                    data-testid={`history-variation-${row.id}`}
+                    className="min-w-[150px] flex-1"
+                  >
+                    <Link
+                      to={`/create?project=${row.studio_project_id}`}
+                      title="Open this plan in Create Video for another take — your recorded thumbs steer the next plan"
+                    >
+                      <CopyPlus className="h-4 w-4" /> New variation
+                    </Link>
                   </Button>
                 )}
               </div>
