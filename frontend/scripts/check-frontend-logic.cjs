@@ -708,7 +708,8 @@ check("the preset catalog survived the port",
   DC.PRESETS.length === 6 && DC.PRESETS[0].id === "tiktok" && DC.PRESETS[5].id === "source");
 check("backgrounds, animations, environments and accents survived the port",
   DC.BACKGROUNDS.length === 8 && DC.ANIMATIONS.length === 6
-    && DC.ENVIRONMENTS.length === 5 && DC.ACCENT_SWATCHES.length === 4);
+    && DC.ENVIRONMENTS.length === 5 && DC.ACCENT_SWATCHES.length === 5
+    && DC.ACCENT_SWATCHES.includes("#8b5cf6"));
 check("defaults match the standalone app",
   DC.DEFAULTS.device === "s24" && DC.DEFAULTS.preset === "tiktok" && DC.DEFAULTS.bg === "lavender"
     && DC.DEFAULTS.anim === "float" && DC.DEFAULTS.scale === 0.82

@@ -76,7 +76,7 @@ export const HAND_IMAGE_URL = `${ASSET_BASE}hand.jpg`;
 
 export const DEFAULT_SCREEN = { x: 0.3275, y: 0.09, w: 0.3608, h: 0.7708 };
 
-export const ACCENT_SWATCHES = ["#c8ff2e", "#ff4d8d", "#4dd8ff", "#ffffff"];
+export const ACCENT_SWATCHES = ["#c8ff2e", "#ff4d8d", "#4dd8ff", "#ffffff", "#8b5cf6"];
 
 /**
  * Caption/CTA overlay faces. Anton first: it is the long-standing default,
