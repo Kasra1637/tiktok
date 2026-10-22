@@ -5133,7 +5133,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
 
   for (const authState of ["signed-out", "signed-in", "no-auth"]) {
     await check(`Landing actions work in ${authState} mode`, async (ctx) => {
-      const modules = ["pages/Landing.jsx", "components/auth/AuthControls.jsx", "lib/clerk.js"];
+      // Marketing.jsx is cleared too: it re-exports the header/CTA that read
+      // AuthControls, and a cached copy would hold the previous phase's
+      // isClerkConfigured binding instead of the mock for this mode.
+      const modules = ["pages/Landing.jsx", "components/Marketing.jsx", "components/auth/AuthControls.jsx", "lib/clerk.js"];
       const saved = modules.map((p) => [resolveFile(path.join(SRC, p)), cache.get(resolveFile(path.join(SRC, p)))]);
       global.__SMOKE_LANDING_AUTH = authState;
       global.__SMOKE_AUTH_ACTIONS = [];
@@ -5176,6 +5179,31 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       }
     });
   }
+
+  // Features page: six alternating rows, code-built mockups, nav both ways.
+  // Copy reuses the landing descriptions, so the claim pins above apply to
+  // Landing only — here the shape is pinned: one H1, five rows each with a
+  // heading and a mockup, in-page anchors that all resolve, a Home link back
+  // to landing, and a single closing CTA with no nested interactives.
+  await check("Features showcases six highlights with working nav", async (ctx) => {
+    const Features = load("pages/Features.jsx").default;
+    await mount(Features)(ctx);
+    const h1 = ctx.container.querySelectorAll("h1");
+    if (h1.length !== 1 || h1[0].textContent.trim().length < 20) throw new Error("expected one meaningful H1");
+    const rows = [...ctx.container.querySelectorAll('[data-testid^="features-row-"]')];
+    if (rows.length !== 6) throw new Error(`expected six feature rows, found ${rows.length}`);
+    for (const row of rows) {
+      if (!row.querySelector("h2")?.textContent.trim()) throw new Error("a feature row has no heading");
+    }
+    const header = ctx.container.querySelector("header");
+    if (!header?.querySelector('a[href="/"]')) throw new Error("missing Home link back to landing");
+    for (const link of header.querySelectorAll('a[href^="#"]')) {
+      const target = link.getAttribute("href").slice(1);
+      if (!target || !ctx.container.querySelector(`[id="${target}"]`)) throw new Error(`broken features anchor: ${target}`);
+    }
+    if (!ctx.container.querySelector('[data-testid="features-final-cta"]')) throw new Error("missing closing CTA");
+    if (ctx.container.querySelector("a button, button a")) throw new Error("features actions must not nest interactive elements");
+  });
 
   // Every live route a tour can fire on, and the page component that route
   // serves. "/app-profiles/abc" stands in for the :id parameter; the assets
@@ -5886,8 +5914,8 @@ async function runIconChecks() {
 
   await check("workspace enforces 3 sizes x 2 weights", async () => {
     // Workspace pages and shared components use only text-xs / text-sm / text-2xl
-    // and font-normal / font-semibold (Landing and LegalPage retain their own
-    // marketing and document type scales).
+    // and font-normal / font-semibold (Landing, Features, the Marketing chrome
+    // they share, and LegalPage retain their own marketing and document scales).
     const bad = [];
     function collectSrc(dir, out = []) {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -5898,7 +5926,7 @@ async function runIconChecks() {
       return out;
     }
     for (const abs of collectSrc(SRC)) {
-      if (abs.endsWith("Landing.jsx") || abs.endsWith("LegalPage.jsx")) continue;
+      if (abs.endsWith("Landing.jsx") || abs.endsWith("Features.jsx") || abs.endsWith("Marketing.jsx") || abs.endsWith("LegalPage.jsx")) continue;
       const src = fs.readFileSync(abs, "utf8");
       for (const m of src.matchAll(
         /\b(?:md:|sm:|lg:)?text-(?:base|lg|xl|3xl|4xl|5xl|\[[^\]]+\])\b|\bfont-(?:light|medium|bold|extrabold)\b/g

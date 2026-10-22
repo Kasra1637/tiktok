@@ -7,6 +7,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import ErrorBoundary from "./components/ErrorBoundary";
 import AuthProvider from "./components/auth/AuthProvider";
 import Landing from "./pages/Landing";
+import Features from "./pages/Features";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import SignIn from "./pages/SignIn";
@@ -33,6 +34,7 @@ function App() {
             <Routes>
               {/* Public pages — render immediately, no auth gate */}
               <Route path="/" element={<Landing />} />
+              <Route path="/features" element={<Features />} />
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/terms" element={<Terms />} />
               <Route path="/sign-in/*" element={<SignIn />} />
