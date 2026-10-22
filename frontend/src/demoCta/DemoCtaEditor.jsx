@@ -775,6 +775,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     setError(null);
     setSaveError(null);
     setSaved(null);
+    // The new clip has no metadata until the probe below reads it. Clearing
+    // here (not just on load) keeps a stale duration from the previous clip
+    // from holding Export enabled for a file that may never play.
+    setVideoMeta(null);
     setResult(null);
     if (resultObjectUrlRef.current) {
       URL.revokeObjectURL(resultObjectUrlRef.current);
@@ -793,9 +797,37 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
    * Restoring the pinned bytes rather than clearing the source is what makes
    * "Remove" reversible: without it the panel would sit empty with no way back
    * short of a reload.
+   *
+   * From the standalone route there is no pinned render, so Remove clears to
+   * the empty state instead of doing nothing: a visible button that cannot act
+   * is the silent failure this panel refuses everywhere else.
+   *
+   * Either way the old export goes with the old source. The result card
+   * describes a recording of the removed clip, and keeping it mounted let one
+   * export be saved to History over and over as duplicate rows.
    */
   const clearSource = () => {
-    if (!generation || !sourceUrl) return;
+    // State, not the prop: from the standalone route there is no pinned
+    // sourceUrl, only a founder-supplied object URL in videoUrl.
+    if (!videoUrl && !sourceUrl) return;
+    if (resultObjectUrlRef.current) {
+      URL.revokeObjectURL(resultObjectUrlRef.current);
+      resultObjectUrlRef.current = null;
+    }
+    setVideoMeta(null);
+    setResult(null);
+    setSaved(null);
+    setSaveError(null);
+    if (!generation) {
+      if (sourceObjectUrlRef.current) URL.revokeObjectURL(sourceObjectUrlRef.current);
+      sourceObjectUrlRef.current = null;
+      setVideoUrl(null);
+      setSourceFileName("");
+      setSourceReplaced(false);
+      setError(null);
+      setLoadingSource(false);
+      return;
+    }
     setSourceFileName("");
     setSourceReplaced(false);
     setError(null);
@@ -833,6 +865,17 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     v.muted = true;
     v.onloadedmetadata = () => {
       setVideoMeta({ w: v.videoWidth, h: v.videoHeight, d: v.duration });
+    };
+    // An unloadable file (wrong type, corrupt bytes) never fires
+    // loadedmetadata, which used to leave the previous clip's metadata in
+    // place: the filename looked loaded, Export stayed enabled, and clicking
+    // it silently did nothing. Fail loudly instead, with the file named.
+    v.onerror = () => {
+      setVideoMeta(null);
+      setError(
+        `"${sourceFileName || "That file"}" couldn't be played as video. ` +
+          "Choose an MP4 or WebM clip, or try another file."
+      );
     };
     const refVideo = videoRef.current;
     if (refVideo) {
@@ -2516,6 +2559,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           {videoUrl ? (
             <canvas
               ref={previewCanvasRef}
+              role="img"
+              aria-label="Styled video preview. Drag to adjust the framing, or use the zoom and position sliders."
               className="block h-full w-full cursor-grab touch-none active:cursor-grabbing"
               onPointerDown={handlePointerDown}
               onWheel={handleWheel}
