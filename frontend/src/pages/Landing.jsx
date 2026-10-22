@@ -365,9 +365,10 @@ export default function Landing() {
               journey (profile → angle → goal → ranked templates) plus the
               editable Demo + CTA canvas, recorded from the running app.
               A minimal floating card frames it: gradient hairline and a
-              portrait viewport matching the capture so the whole interface
-              shows with no cropping. The card grows on wide screens and
-              sits on a soft indigo glow so it holds its own next to the
+              portrait viewport at the capture's exact aspect (471:710) with
+              the footage contained, so the whole interface shows with no
+              cropping and no letterbox gap. The card grows on wide screens
+              and sits on a soft indigo glow so it holds its own next to the
               headline. Autoplay is silent and loops; under reduced motion
               it stays paused on the poster frame. */}
           <figure
@@ -377,7 +378,7 @@ export default function Landing() {
           >
             <div className="border-gradient relative rounded-2xl p-[1px] shadow-[0_24px_80px_-24px_rgb(0_0_0/0.8)]">
               <div className="overflow-hidden rounded-2xl bg-black">
-                <div className="relative aspect-[9/13] w-full">
+                <div className="relative aspect-[471/710] w-full">
                   <video
                     className="absolute inset-0 block h-full w-full object-contain"
                     autoPlay
