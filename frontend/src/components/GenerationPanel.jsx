@@ -7,6 +7,7 @@ import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage, mediaUrl, downloadMediaUrl } from "../lib/api";
 import { recordSignal, verdictFor } from "../lib/feedback";
 import { ComponentThumbs } from "./ComponentThumbs";
+import { PostKitSection } from "./PostKitSection";
 import { HypotheticalProcessing } from "./HypotheticalProcessing";
 import { CONTROL_CLASS } from "./formControls";
 import {
@@ -694,6 +695,12 @@ const handleGenerate = async () => {
                   </a>
                 </Button>
               </div>
+              {/* Frozen post copy for this render; pre-kit renders show nothing. */}
+              {generation.post_kit && (
+                <div className="space-y-3 border-t border-[color:var(--hairline)] pt-3">
+                  <PostKitSection postKit={generation.post_kit} />
+                </div>
+              )}
               <ComponentThumbs
                 component="video"
                 question="Did this generated video turn out well?"

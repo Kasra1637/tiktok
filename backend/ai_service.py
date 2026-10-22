@@ -38,7 +38,7 @@ from template_library import (
     clamp_duration,
 )
 import feedback
-from claim_safety import FIRST_PERSON_PATTERNS
+from claim_safety import FIRST_PERSON_PATTERNS, find_banned_violations, find_risk_patterns
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
@@ -2168,6 +2168,111 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
     if not angles:
         raise RuntimeError("Content angles response contained no usable angles.")
     return angles
+
+
+POST_KIT_JSON_SCHEMA = _strict_object({
+    "captions": {"type": "array", "items": _str_prop()},
+    "hashtags": {"type": "array", "items": _str_prop()},
+    "cover_text": _str_prop(),
+})
+
+
+async def generate_post_kit(project: dict, profile: dict) -> dict:
+    """
+    Post kit for one render: 3 captions, a hashtag set, cover text.
+
+    Grounded strictly in this render's own hook, script, and CTA plus the
+    profile's verified facts. Anything outside that fails loudly instead of
+    shipping as post copy: banned claims raise, guarantee language raises,
+    and unmentioned prices/plans/outcomes are forbidden with clamped lengths.
+    """
+    def _list(name):
+        val = profile.get(name)
+        if isinstance(val, list):
+            return [str(v) for v in val if str(v).strip()]
+        if val:
+            return [str(val)]
+        return []
+
+    hook = str((project or {}).get("hook_line") or "").strip()
+    script = str((project or {}).get("script") or "").strip()
+    cta = str((project or {}).get("cta") or "").strip()
+    if not hook or not script:
+        raise RuntimeError("Post kit needs the render's approved hook and script.")
+
+    context = {
+        "app_name": profile.get("brand_name") or "(unnamed app)",
+        "description": profile.get("brand_description") or "(unstated)",
+        "audience": profile.get("target_audience") or "(unstated)",
+        "voice": profile.get("tone_voice") or "(unstated)",
+        "hook_line": hook,
+        "script": script,
+        "call_to_action": cta or "(none)",
+        "approved_claims": _list("claims_approved"),
+        "banned_claims": _list("claims_banned"),
+    }
+
+    system_message = (
+        "You write TikTok post copy for a mobile app's finished clip. Every "
+        "word must be grounded in the render material and profile facts "
+        "below — restate, compress, and rephrase them, never add to them. "
+        "Never state a price, plan name, trial term, follower count, ranking, "
+        "or outcome the inputs do not state. Never promise guaranteed results "
+        "or invent testimonials. Respond with STRICT JSON only, no markdown "
+        "fences."
+    )
+    prompt = (
+        f"RENDER MATERIAL:\n{json.dumps(context, indent=2)}\n\n"
+        "Write the post kit for THIS clip only. Return ONLY a JSON object:\n"
+        "{\n"
+        '  "captions": ["exactly 3 distinct captions, each under 25 words; the first "\n'
+        '    opens with the hook idea in the viewer\u2019s words, the second states what the "\n'
+        '    app does plainly, the third asks the viewer a question"],\n'
+        '  "hashtags": ["5 to 8 tags, #AppName first, then niche and functional tags"],\n'
+        '  "cover_text": "under 8 words for the cover, from the hook line only"\n'
+        "}\n"
+        "Rules: use ONLY the hook, script, CTA, and profile facts above. No "
+        "banned claim may appear. No guaranteed outcomes. Return ONLY valid JSON."
+    )
+    parsed = await _chat_json(
+        system_message=system_message,
+        prompt=prompt,
+        context="Post kit",
+        max_tokens=1500,
+        timeout=90,
+        json_schema=POST_KIT_JSON_SCHEMA,
+    )
+    if not isinstance(parsed, dict):
+        raise RuntimeError("Post kit response was not an object.")
+
+    raw_captions = parsed.get("captions")
+    if isinstance(raw_captions, str):
+        raw_captions = [raw_captions]
+    captions = [str(c).strip()[:300] for c in (raw_captions or []) if str(c).strip()][:3]
+    raw_tags = parsed.get("hashtags")
+    if isinstance(raw_tags, str):
+        raw_tags = raw_tags.split()
+    hashtags = [str(t).strip()[:60] for t in (raw_tags or []) if str(t).strip()][:10]
+    cover_text = str(parsed.get("cover_text") or "").strip()[:100]
+    if len(captions) != 3 or not hashtags or not cover_text:
+        raise RuntimeError("Post kit response was missing captions, hashtags, or cover text.")
+
+    # Grounded means verifiable: a banned claim or a guarantee in post copy
+    # is a bug, not a nuance — the render gate holds the video to this, so
+    # the words posted beside it are held to it too.
+    banned = _list("claims_banned")
+    for text in captions + [cover_text]:
+        hits = find_banned_violations(text, banned)
+        if hits:
+            raise RuntimeError(
+                "Post kit used a banned claim: " + hits[0]["claim"]
+            )
+        risks = find_risk_patterns(text)
+        if risks:
+            raise RuntimeError(
+                "Post kit used guarantee language: " + str(risks[0].get("claim", ""))
+            )
+    return {"captions": captions, "hashtags": hashtags, "cover_text": cover_text}
 
 
 # How many tailored structures each approved profile gets. Ten is a full

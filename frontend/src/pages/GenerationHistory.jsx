@@ -12,6 +12,7 @@ import { GroupLabel, SectionHeading } from "../components/SectionCard";
 import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } from "../lib/api";
 import { FactChip, FactList } from "../components/FactChip";
+import { PostKitSection } from "../components/PostKitSection";
 import { ComponentThumbs } from "../components/ComponentThumbs";
 import { recordSignal, verdictFor } from "../lib/feedback";
 import { sentenceCase } from "../lib/copyCase";
@@ -161,6 +162,9 @@ function GenerationDetails({ generationId, onClose }) {
                 </pre>
               </DetailRow>
             )}
+
+            {/* Same frozen kit as the drawer, read off the detail endpoint. */}
+            {detail.post_kit && <PostKitSection postKit={detail.post_kit} />}
 
             {detail.prompt_used && (
               <DetailRow label="Exact prompt sent to the model">
@@ -622,6 +626,13 @@ function GenerationRow({ row, onChanged, defaultExpanded = false }) {
                 <FactChip>{formatRenderDate(row.created_at)}</FactChip>
               ) : null}
             </FactList>
+
+            {/* Frozen post copy for this render; pre-kit rows show nothing. */}
+            {row.post_kit && (
+              <div className="space-y-3 border-t border-[color:var(--hairline)] pt-5">
+                <PostKitSection postKit={row.post_kit} />
+              </div>
+            )}
 
             {(row.audience || row.demo_brief) && (
               <div className="inset-panel space-y-3" data-testid="history-context">

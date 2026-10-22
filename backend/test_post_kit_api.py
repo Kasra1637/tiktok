@@ -1,0 +1,218 @@
+"""Post kit frozen on completion, read through the existing endpoints.
+
+Seam: submit → poll → get/list/history. No new page or entity.
+"""
+import asyncio
+import importlib
+import json
+import os
+import sys
+import tempfile
+import uuid
+from pathlib import Path
+
+import pytest
+
+BACKEND_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(BACKEND_DIR))
+
+ANON = "anonymous"
+
+KIT = {
+    "captions": [
+        "Stop writing empty pages with one timed start.",
+        "A focus timer that starts in one tap.",
+        "What stalls your first sentence?",
+    ],
+    "hashtags": ["#FocusTimer", "#productivity", "#studytok"],
+    "cover_text": "Stop writing empty pages",
+}
+
+
+@pytest.fixture(scope="module")
+def api():
+    tmpdir = tempfile.mkdtemp(prefix="tiktok-postkit-")
+    os.environ["TURSO_DATABASE_URL"] = ""
+    os.environ["OPENROUTER_API_KEY"] = "test-key-not-real"
+    os.environ["CLERK_JWKS_URL"] = ""
+    os.environ.pop("VIDEO_MODEL_DEFAULT", None)
+    os.environ.pop("VIDEO_MODEL_ALLOWLIST", None)
+
+    if "server" in sys.modules:
+        del sys.modules["server"]
+    server = importlib.import_module("server")
+    server.DB_PATH = Path(tmpdir) / "test.db"
+    server.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    original_dirs = (server.pipeline.VIDEOS_DIR, server.pipeline.GENERATED_DIR)
+    server.pipeline.VIDEOS_DIR = Path(tmpdir) / "videos"
+    server.pipeline.GENERATED_DIR = Path(tmpdir) / "generated"
+    server.pipeline.VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
+    server.pipeline.GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+
+    asyncio.run(server.init_db())
+    try:
+        yield server
+    finally:
+        server.pipeline.VIDEOS_DIR, server.pipeline.GENERATED_DIR = original_dirs
+        sys.modules.pop("server", None)
+
+
+def _run(coro):
+    return asyncio.run(coro)
+
+
+async def _fake_generate_video(**kwargs):
+    return {"id": "job-kit", "status": "queued"}
+
+
+async def _fake_poll(job_id):
+    return {"status": "completed",
+            "unsigned_urls": ["https://example.invalid/clip.mp4"]}
+
+
+def _ready_project(api, name="Post Kit App"):
+    from models import (
+        BrandProfileCreateRequest, ApproveAppProfileRequest,
+        CreateStudioProjectRequest,
+    )
+    profile = _run(api.create_brand(payload=BrandProfileCreateRequest(
+        brand_name=name,
+        app_category="Productivity",
+        brand_description="A focus timer for people who stall on starting.",
+        core_features=["Task timer"],
+        usage_moments=["Starting a task they have been avoiding"],
+        outcome_statements=[{
+            "outcome": "Starting without stalling on setup",
+            "who_feels_it": "people who stall on starting",
+            "from_feature": "Task timer",
+            "how_it_helps": "The timer starts in one tap so there is nothing to set up",
+        }],
+        claims_approved=["3-day free trial"],
+        claims_banned=["cures anxiety"],
+    ), user_id=ANON))
+    _run(api.approve_app_profile(
+        profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=ANON))
+    template = _run(api.list_templates(q="Stop Doing This", user_id=ANON))["templates"][0]
+    project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
+        brand_profile_id=profile["id"],
+        template_id=template["id"],
+        duration_seconds=20,
+        objective="demonstrate_feature",
+    ), user_id=ANON))
+    strategy = {
+        "strategy_summary": "Stop opening a blank page.",
+        "hook_line": "Stop writing empty pages",
+        "hook_promise": "One prompt gets you going.",
+        "hook_action": "Look straight down the lens.",
+        "messaging_pillars": ["one prompt at a time"],
+        "primary_feature": "Task timer",
+        "cta_strategy": "Try it free",
+        "scene": {"environment": "kitchen"},
+        "performance": {"movement": "still"},
+        "segments": [{"index": 0, "role": "hook", "seconds": 5,
+                      "goal": "name the problem",
+                      "script": "Stop writing empty pages",
+                      "action": "hold the look"}],
+        "continuity_contract": {"established": ["kitchen"]},
+    }
+    from models import now_iso
+    face = Path(tempfile.mkdtemp(prefix="tiktok-kit-")) / "face.png"
+    face.write_bytes(bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+        "0000000d49444154789c626001000000ffff0300000600055d3866680000000049454e44ae426082"))
+    asset_id = str(uuid.uuid4())
+    now = now_iso()
+    _run(api._execute(
+        "INSERT INTO assets (id, brand_profile_id, kind, name, file_path, label,"
+        " created_at, updated_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (asset_id, profile["id"], "character_reference", "Founder face",
+         str(face), "Founder face", now, now, ANON)))
+    assets = [{"asset_id": asset_id, "kind": "character_reference",
+               "label": "Founder face", "file_path": str(face)}]
+    _run(api._execute(
+        """UPDATE studio_projects SET assets = ?, hook_line = ?, script = ?,
+              status = 'ready_for_generation', script_version = 1,
+              strategy = ?, strategy_version = 1, strategy_script_version = 1
+           WHERE id = ?""",
+        (json.dumps(assets), "Stop writing empty pages",
+         "A short script for the app.", json.dumps(strategy), project["id"])))
+    return _run(api.get_studio_project(project["id"], ANON))
+
+
+class TestPostKitFrozenOnCompletion:
+    def test_completed_render_persists_and_returns_its_kit(self, api, monkeypatch):
+        from models import StudioGenerationRequest
+
+        async def fake_kit(project, profile):
+            # Grounded in THIS render: the hook the fixture approved.
+            assert project.get("hook_line") == "Stop writing empty pages"
+            return dict(KIT)
+
+        monkeypatch.setattr(api, "generate_video", _fake_generate_video)
+        monkeypatch.setattr(api, "poll_video_job", _fake_poll)
+        monkeypatch.setattr(api.ai_service, "generate_post_kit", fake_kit)
+
+        project = _ready_project(api)
+        gen = _run(api.submit_project_generation(
+            project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        # No kit at submit time: it is written at completion, not at submit.
+        assert gen.get("post_kit") in (None, {}, [])
+
+        completed = _run(api.poll_generation(gen["id"], ANON))
+        assert completed["status"] == "completed"
+        assert completed.get("post_kit") == KIT
+
+        # Frozen: a second poll returns the same kit without regenerating it.
+        async def boom_kit(project, profile):
+            raise AssertionError("post kit must be frozen, not regenerated")
+
+        monkeypatch.setattr(api.ai_service, "generate_post_kit", boom_kit)
+        again = _run(api.poll_generation(gen["id"], ANON))
+        assert again.get("post_kit") == KIT
+
+        # Every existing surface carries the frozen kit.
+        assert _run(api.get_generation(gen["id"], ANON)).get("post_kit") == KIT
+        listed = _run(api.list_generations(
+            studio_project_id=project["id"], user_id=ANON))["generations"]
+        assert listed and listed[0].get("post_kit") == KIT
+        history = _run(api.generation_history(user_id=ANON))["generations"]
+        row = next(g for g in history if g["id"] == gen["id"])
+        assert row.get("post_kit") == KIT
+
+        # And it is really frozen on the row, not re-derived per read.
+        stored = _run(api._fetch_one(
+            "SELECT post_kit FROM generations WHERE id = ?", (gen["id"],)))
+        assert json.loads(stored["post_kit"]) == KIT
+
+    def test_kit_write_runs_after_the_poll_response(self, api, monkeypatch):
+        """The completion poll must not wait on the kit's text call: on HTTP
+        the write is a BackgroundTask, and direct callers stay inline.
+        """
+        from starlette.background import BackgroundTasks
+
+        from models import StudioGenerationRequest
+
+        async def fake_kit(project, profile):
+            return dict(KIT)
+
+        monkeypatch.setattr(api, "generate_video", _fake_generate_video)
+        monkeypatch.setattr(api, "poll_video_job", _fake_poll)
+        monkeypatch.setattr(api.ai_service, "generate_post_kit", fake_kit)
+
+        project = _ready_project(api, "Post Kit Deferred")
+        gen = _run(api.submit_project_generation(
+            project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+
+        tasks = BackgroundTasks()
+        completed = _run(api.poll_generation(gen["id"], ANON, tasks))
+        assert completed["status"] == "completed"
+        # The video is done but the kit has not been written yet: the
+        # response did not wait for it.
+        assert completed.get("post_kit") is None
+        stored = _run(api._fetch_one(
+            "SELECT post_kit FROM generations WHERE id = ?", (gen["id"],)))
+        assert stored["post_kit"] is None
+
+        _run(tasks())
+        assert _run(api.get_generation(gen["id"], ANON)).get("post_kit") == KIT

@@ -2,17 +2,15 @@ import { useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { Button } from "./ui/button";
 import { ChevronDown, Copy, Check, Braces } from "lucide-react";
-import { toast } from "sonner";
+import { useCopyButton } from "../lib/copyClipboard";
 
 export function JsonSpecPanel({ spec }) {
   const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const { copiedKey, copy } = useCopyButton();
+  const copied = copiedKey === "spec";
 
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(JSON.stringify(spec, null, 2));
-    setCopied(true);
-    toast.success("Generation spec copied to clipboard");
-    setTimeout(() => setCopied(false), 1500);
+  const handleCopy = () => {
+    copy("spec", JSON.stringify(spec, null, 2), "Generation spec");
   };
 
   return (

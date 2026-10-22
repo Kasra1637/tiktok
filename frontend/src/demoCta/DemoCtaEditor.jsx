@@ -32,6 +32,7 @@ import { Switch } from "../components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
 import { useReducedMotion } from "framer-motion";
 import { SectionCard, GroupLabel } from "../components/SectionCard";
+import { PostKitSection } from "../components/PostKitSection";
 import { CONTROL_CLASS } from "../components/formControls";
 import { Chip } from "../components/Chip";
 import { api, getErrorMessage } from "../lib/api";
@@ -3016,6 +3017,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   </AlertDescription>
                 </Alert>
               )}
+              {/* The frozen kit the export inherited, already on the save response. */}
+              {saved?.post_kit && <PostKitSection postKit={saved.post_kit} />}
             </SectionCard>
           </div>
         )}

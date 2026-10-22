@@ -758,6 +758,10 @@ async def init_db():
                 -- what the provider was actually given, rather than trusting
                 -- a prompt that merely asked for continuity.
                 continuity TEXT,
+                -- Frozen TikTok post copy for this render, generated at
+                -- completion. JSON TEXT, NULL for rows completed before this
+                -- existed; never re-derived.
+                post_kit TEXT,
                 -- Set once the founder approves this segment. Only approved
                 -- segments are used as continuity anchors and included in the
                 -- assembled video.
@@ -1177,6 +1181,9 @@ async def init_db():
             # row that predates the column degrades to the derived-data rule
             # rather than being wrongly protected from a rewrite.
             ("content_angles", "origin", "TEXT DEFAULT 'generated'"),
+            # Frozen post copy for History. Additive: pre-column rows read
+            # as NULL, which renders as no kit.
+            ("generations", "post_kit", "TEXT"),
         ]
         for table, column, decl in influencer_migrations:
             cursor = await conn.execute(f"PRAGMA table_info({table})")
@@ -5448,6 +5455,19 @@ async def _schedule_poster(
     await _eager_poster(generation_id, user_id)
 
 
+def _parse_post_kit(value) -> Optional[dict]:
+    """The frozen post kit for a generation, or None when never written."""
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return None
+        return parsed if isinstance(parsed, dict) else None
+    return None
+
+
 def _public_generation(row: dict) -> dict:
     """Serialize a generation row, hiding the stored prompt by default.
 
@@ -5467,6 +5487,7 @@ def _public_generation(row: dict) -> dict:
     out["segment_index"] = int(out.get("segment_index") or 0)
     out["strategy_version"] = int(out.get("strategy_version") or 0)
     out["trim_to_seconds"] = int(out.get("trim_to_seconds") or 0)
+    out["post_kit"] = _parse_post_kit(row.get("post_kit"))
     out.pop("prompt_used", None)
     # Stored unsigned so a row never holds a signature that outlives its own
     # expiry; signed fresh on every read. video_url and r2_url are both stored
@@ -6221,7 +6242,7 @@ async def save_demo_cta_export(
         parent = await _fetch_one(
             "SELECT id, studio_project_id, brand_profile_id, template_id, template_version, "
             "script_version, duration, model, model_id, segment_role, segment_index, "
-            "strategy_version FROM generations WHERE id = ? AND user_id = ?",
+            "strategy_version, post_kit FROM generations WHERE id = ? AND user_id = ?",
             (generation_id, user_id),
         )
         if not parent:
@@ -6263,10 +6284,10 @@ async def save_demo_cta_export(
            (id, studio_project_id, brand_profile_id, template_id, template_version,
             script_version, model, model_id, requested_duration, duration, status,
             segment_role, segment_index, strategy_version, attempt,
-            prompt_used, retryable, approved,
+            prompt_used, retryable, approved, post_kit,
             requested_at, completed_at, created_at, updated_at, user_id, video_url, r2_url)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed',
-                   ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?, ?, ?)""",
+                   ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             result_id,
             parent.get("studio_project_id") if parent else None,
@@ -6294,6 +6315,7 @@ async def save_demo_cta_export(
             int(parent.get("strategy_version") or 0) if parent else 0,
             1,
             parent["id"] if parent else None,
+            (parent.get("post_kit") if parent else None),
             now_iso(),
             now_iso(),
             now_iso(),
@@ -6317,6 +6339,7 @@ async def save_demo_cta_export(
         "playback_url": media_signing.build_signed_path(f"{result_id}.mp4"),
         "poster_url": media_signing.build_signed_poster_path(f"{result_id}.jpg"),
         "r2_url": r2_url,
+        "post_kit": _parse_post_kit(parent.get("post_kit") if parent else None),
     }
 
 
@@ -6599,6 +6622,75 @@ async def submit_project_generation(
     return generation
 
 
+async def _schedule_post_kit(
+    background_tasks: BackgroundTasks, generation_id: str, user_id: str
+) -> None:
+    """Kit work runs after the response, never inside it.
+
+    On HTTP the work is deferred to BackgroundTasks; direct (non-HTTP)
+    callers such as tests pass None and run it inline. Same contract as
+    _schedule_poster.
+    """
+    if background_tasks is not None:
+        background_tasks.add_task(_maybe_write_post_kit, generation_id, user_id)
+        return
+    await _maybe_write_post_kit(generation_id, user_id)
+
+
+async def _maybe_write_post_kit(generation_id: str, user_id: str) -> Optional[dict]:
+    """Write the frozen post kit for a freshly completed render, once.
+
+    Best-effort by design: a kit failure logs loudly and leaves the column
+    NULL rather than failing the completion or inventing copy. A later poll
+    finds post_kit set and returns it untouched.
+    """
+    current = await _fetch_one(
+        "SELECT post_kit, studio_project_id, brand_profile_id FROM generations WHERE id = ?",
+        (generation_id,),
+    )
+    if not current:
+        return None
+    if _parse_post_kit(current.get("post_kit")) is not None:
+        return None
+    project = None
+    if current.get("studio_project_id"):
+        project = await _fetch_one(
+            "SELECT hook_line, script, cta FROM studio_projects WHERE id = ? AND user_id = ?",
+            (current["studio_project_id"], user_id),
+        )
+    profile = None
+    if current.get("brand_profile_id"):
+        profile = await _fetch_one(
+            "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?",
+            (current["brand_profile_id"], user_id),
+        )
+    if not project or not profile:
+        logger.warning(
+            "Post kit skipped for generation %s: render material not found.", generation_id)
+        return None
+    try:
+        kit = await _log_model_call(
+            "post_kit", "text", TEXT_MODEL,
+            lambda: ai_service.generate_post_kit(project, profile),
+            user_id,
+            brand_profile_id=current.get("brand_profile_id"),
+            studio_project_id=current.get("studio_project_id"),
+            generation_id=generation_id,
+        )
+    except Exception as e:
+        logger.warning("Post kit generation failed for %s: %s", generation_id, e)
+        return None
+    if not isinstance(kit, dict):
+        logger.warning("Post kit generation returned no kit for %s.", generation_id)
+        return None
+    await _execute(
+        "UPDATE generations SET post_kit = ?, updated_at = ? "
+        "WHERE id = ? AND (post_kit IS NULL OR post_kit = '')",
+        (json.dumps(kit), now_iso(), generation_id),
+    )
+    return kit
+
+
 @api_router.post("/generations/{generation_id}/poll")
 async def poll_generation(
     generation_id: str,
@@ -6695,6 +6787,11 @@ async def poll_generation(
             await _execute(
                 "UPDATE video_assets SET r2_url = ? WHERE job_id = ?", (stored_url, generation_id)
             )
+        # Frozen post copy, written once at completion and deferred past the
+        # response like the poster: a kit failure leaves NULL, never invented
+        # copy. A NULL kit renders as no kit.
+        await _schedule_post_kit(background_tasks, generation_id, user_id)
+        if stored_url:
             # Poster is best-effort and off the critical path: History works
             # without it, it just costs video bytes per thumbnail. Scheduled
             # after the response so the save never stacks two ffmpegs.
@@ -8419,6 +8516,7 @@ async def generation_history(
                    g.template_version, g.script_version, g.model, g.duration,
                    g.status, g.segment_role, g.attempt, g.video_url,
                    g.r2_url, g.error, g.retryable, g.created_at, g.completed_at,
+                   g.post_kit,
                    b.brand_name, p.objective, p.hook_line, p.demo_brief, p.audience,
                    p.strategy_version, ca.kind AS angle_kind
             FROM generations g
@@ -8446,6 +8544,7 @@ async def generation_history(
         entry["r2_url"] = media_signing.sign_stored_path(entry.get("r2_url"))
         entry["playback_url"] = _playback_url(row)
         entry["poster_url"] = _poster_url(row)
+        entry["post_kit"] = _parse_post_kit(entry.get("post_kit"))
         entry["composition"] = None
         out.append(entry)
     await _with_verdicts(out, user_id)

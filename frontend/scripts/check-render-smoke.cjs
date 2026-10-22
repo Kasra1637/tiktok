@@ -6942,6 +6942,59 @@ async function runDemoCtaChecks() {
     }
   );
 
+  // The frozen post kit is written at completion and the output moment reads
+  // the same frozen object History keeps — never re-derived, never invented.
+  const POST_KIT = {
+    captions: [
+      "Stop writing empty pages with one timed start.",
+      "A focus timer that starts in one tap.",
+      "What stalls your first sentence?",
+    ],
+    hashtags: ["#FocusTimer", "#productivity"],
+    cover_text: "Stop writing empty pages",
+  };
+
+  // One owner for the frozen-kit assertions the output moment, the History
+  // drawer, and the details modal all repeat: the same captions, hashtags,
+  // cover text, and copy buttons, with only the site label differing.
+  function assertFrozenKit(section, site) {
+    if (!section) throw new Error(`no frozen post kit at ${site}`);
+    for (const line of POST_KIT.captions) {
+      if (!section.textContent.includes(line)) {
+        throw new Error(`post caption missing at ${site}: ${line.slice(0, 30)}`);
+      }
+    }
+    if (!section.textContent.includes("#FocusTimer")) {
+      throw new Error(`post hashtags missing at ${site}`);
+    }
+    if (!section.textContent.includes("Stop writing empty pages")) {
+      throw new Error(`post cover text missing at ${site}`);
+    }
+    for (const id of ["postkit-copy-all", "postkit-copy-caption-0", "postkit-copy-hashtags", "postkit-copy-cover"]) {
+      if (!section.querySelector(`[data-testid="${id}"]`)) {
+        throw new Error(`post copy button missing at ${site}: ${id}`);
+      }
+    }
+  }
+
+  await check(
+    "a finished render shows its frozen post kit at the output moment",
+    async (ctx) => {
+      await mountStudio(ctx, [{ ...COMPLETED, post_kit: POST_KIT }]);
+      assertFrozenKit(ctx.container.querySelector('[data-testid="post-kit"]'), "output moment");
+    }
+  );
+
+  await check(
+    "a render without a kit shows no post copy at the output moment",
+    async (ctx) => {
+      await mountStudio(ctx);
+      if (ctx.container.querySelector('[data-testid="post-kit"]')) {
+        throw new Error("a pre-kit render invents post copy at the output moment");
+      }
+    }
+  );
+
   await check(
     "no popup, opener or cross-origin message contract remains in the studio",
     async (ctx) => {
@@ -8922,6 +8975,105 @@ await check(
       if (ctx.container.querySelector("video")) throw new Error("failed recovery cannot mount a player");
     });
   });
+
+  // History owns the kit: the drawer and the details modal read the same
+  // frozen object the output moment showed, and a pre-kit row shows nothing.
+  await check("History shows the frozen post kit with copy buttons", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    await withApi({
+      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "kit-1", post_kit: POST_KIT }] }),
+      getAppProfiles: async () => ({ profiles: [PROFILE] }),
+    }, async () => {
+      await mount(GenerationHistory)(ctx);
+      // Collapsed means the clip and nothing else: the kit lives in the
+      // drawer, so finding it on the closed tile means it leaked out.
+      const card = ctx.container.querySelector('[data-testid="history-card"]');
+      if (card.textContent.includes("Caption 1")) {
+        throw new Error("the collapsed tile leaks the post kit");
+      }
+      await clickEl(
+        ctx,
+        ctx.container.querySelector('[data-testid="history-expand"]'),
+        "expand the kit tile"
+      );
+      assertFrozenKit(ctx.container.querySelector('[data-testid="post-kit"]'), "History");
+    });
+  });
+
+  await check("History shows no post copy for a render without a kit", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    await withApi({
+      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "nokit-1" }] }),
+      getAppProfiles: async () => ({ profiles: [PROFILE] }),
+    }, async () => {
+      await mount(GenerationHistory)(ctx);
+      await clickEl(
+        ctx,
+        ctx.container.querySelector('[data-testid="history-expand"]'),
+        "expand the pre-kit tile"
+      );
+      if (ctx.container.querySelector('[data-testid="post-kit"]')) {
+        throw new Error("a pre-kit render invents post copy in History");
+      }
+    });
+  });
+
+  await check("History's details modal shows the same frozen kit", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    await withApi(
+      {
+        getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "kitmodal-1", post_kit: POST_KIT }] }),
+        getGeneration: async () => ({ ...COMPLETED, id: "kitmodal-1", post_kit: POST_KIT }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        },
+      async () => {
+        await mount(GenerationHistory)(ctx);
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="history-expand"]'), "open the drawer");
+        await clickEl(
+          ctx,
+          ctx.container.querySelector('[data-testid="generation-details-button"]'),
+          "open generation details"
+        );
+        const dialog = ctx.container.querySelector('[role="dialog"]');
+        if (!dialog) throw new Error("the details modal did not open");
+        assertFrozenKit(dialog.querySelector('[data-testid="post-kit"]'), "details modal");
+      }
+    );
+  });
+
+  // The export card reads the parent's frozen kit off the save response —
+  // never a second fetch, never re-derived. jsdom has no MediaRecorder or
+  // canvas.captureStream, so this pins the shape, not a driven export.
+  await check(
+    "the Demo + CTA export shows the inherited frozen kit",
+    async () => {
+      const src = fs.readFileSync(
+        path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
+        "utf8"
+      );
+      for (const marker of [
+        'import { PostKitSection } from "../components/PostKitSection"',
+        "saved?.post_kit",
+        "<PostKitSection postKit={saved.post_kit} />",
+      ]) {
+        if (!src.includes(marker)) {
+          throw new Error(
+            `the export result lost a piece of the frozen kit: ${marker}. The ` +
+              "save response already carries the parent's kit, so showing " +
+              "nothing there means the founder leaves the export without post copy."
+          );
+        }
+      }
+      // The kit belongs to the render; anything the editor assembles here
+      // would be a second, unfrozen copy.
+      if (/post_kit:\s*\{|post_kit = \{|generate_post_kit|generatePostKit/i.test(src)) {
+        throw new Error(
+          "the export result builds its own kit instead of reading the " +
+            "frozen one the save response carries."
+        );
+      }
+    }
+  );
 
 await check(
     "a finished export puts itself in view",
