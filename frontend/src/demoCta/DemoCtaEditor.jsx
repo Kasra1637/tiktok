@@ -391,6 +391,31 @@ function TransportButton({ label, onClick, disabled, children, testId }) {
 }
 
 /**
+ * Collapsible wrapper for everything from the entrance picker down: the ten
+ * entrances plus text size, accent where it lives, and the rest of the
+ * section. Open by default; laid out flat it all pushes the section tall,
+ * which is why it collapses. Collapsed, the summary still names the current
+ * entrance so the choice stays visible. Native <details> keeps every control
+ * in the DOM either way, so preview replay, prefs and look matching see no
+ * change. The Font grids stay flat above it.
+ */
+function AnimDisclosure({ testId, currentLabel, children }) {
+  return (
+    <div className="space-y-2">
+      <details open data-testid={testId} className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-1.5">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+          <span>Animation · <span className="text-foreground">{currentLabel}</span></span>
+          <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
+        </summary>
+        <div className="space-y-5 pb-1 pt-3">
+          {children}
+        </div>
+      </details>
+    </div>
+  );
+}
+
+/**
  * The native Product Demo + CTA editor.
  *
  * Behavior is a faithful port of the standalone app: same defaults, ranges,
@@ -2153,71 +2178,62 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               ))}
             </div>
           </div>
-          {/* The ten entrances live in a disclosure, open by default: laid
-              out flat they push Text size and the accent row far down the
-              section. Collapsed, the summary still names the current
-              entrance so the choice stays visible. Native <details> keeps
-              the buttons in the DOM either way, so nothing downstream
-              changes. */}
-          <div className="space-y-2">
-            <details open data-testid="caption-anim-disclosure" className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-1.5">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
-                <span>Animation · <span className="text-foreground">{(OVERLAY_ANIMS.find((a) => a.id === captionAnim) || {}).label}</span></span>
-                <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
-              </summary>
-              <div className="grid grid-cols-2 gap-2 pb-1 pt-2" role="group" aria-label="Caption animation">
-                {OVERLAY_ANIMS.map((a) => (
-                  <button
-                    key={a.id}
-                    type="button"
-                    data-testid={`caption-anim-${a.id}`}
-                    onClick={() => setCaptionAnim(a.id)}
-                    aria-pressed={captionAnim === a.id}
-                    className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
-                      captionAnim === a.id
-                        ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] text-foreground"
-                        : "border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--hairline-strong)]"
-                    }`}
-                  >
-                    {a.label}
-                  </button>
-                ))}
-              </div>
-            </details>
-          </div>
-          <div className="space-y-2">
-            <ControlSlider label="Text size" value={captionScale} min={RANGES.overlayScale.min} max={RANGES.overlayScale.max} step={RANGES.overlayScale.step} onChange={setCaptionScale} testId="caption-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
-            <ScalePresets value={captionScale} onChange={setCaptionScale} testPrefix="caption-size-preset" ariaLabel="Caption size presets" />
-          </div>
-          {!hookSafety.ok && (
-            <div
-              role="status"
-              data-testid="hook-safety-warning"
-              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-foreground"
-            >
-              <span className="flex items-center gap-1.5">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-                <span>{hookSafety.message}</span>
-              </span>
-              <ResetButton
-                testId="hook-safety-fix"
-                onClick={() => {
-                  setHookOffsetX(0);
-                  setHookOffsetY(0);
-                  if (captionScale < 0.8) setCaptionScale(1);
-                }}
-              >
-                Fit safe area
-              </ResetButton>
+          <AnimDisclosure
+            testId="caption-anim-disclosure"
+            currentLabel={(OVERLAY_ANIMS.find((a) => a.id === captionAnim) || {}).label}
+          >
+            <div className="grid grid-cols-2 gap-2" role="group" aria-label="Caption animation">
+              {OVERLAY_ANIMS.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  data-testid={`caption-anim-${a.id}`}
+                  onClick={() => setCaptionAnim(a.id)}
+                  aria-pressed={captionAnim === a.id}
+                  className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+                    captionAnim === a.id
+                      ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] text-foreground"
+                      : "border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--hairline-strong)]"
+                  }`}
+                >
+                  {a.label}
+                </button>
+              ))}
             </div>
-          )}
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs italic text-muted-foreground">Drag the hook text up or down on the preview to reposition</p>
-            <VerticalNudge label="Hook text position" upTestId="hook-nudge-up" downTestId="hook-nudge-down" onNudge={(dy) => setHookOffsetY((y) => y + dy)} />
-          </div>
-          {(hookOffsetX !== 0 || hookOffsetY !== 0) && (
-            <ResetButton onClick={() => { setHookOffsetX(0); setHookOffsetY(0); }}>Reset position</ResetButton>
-          )}
+            <div className="space-y-2">
+              <ControlSlider label="Text size" value={captionScale} min={RANGES.overlayScale.min} max={RANGES.overlayScale.max} step={RANGES.overlayScale.step} onChange={setCaptionScale} testId="caption-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
+              <ScalePresets value={captionScale} onChange={setCaptionScale} testPrefix="caption-size-preset" ariaLabel="Caption size presets" />
+            </div>
+            {!hookSafety.ok && (
+              <div
+                role="status"
+                data-testid="hook-safety-warning"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-foreground"
+              >
+                <span className="flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+                  <span>{hookSafety.message}</span>
+                </span>
+                <ResetButton
+                  testId="hook-safety-fix"
+                  onClick={() => {
+                    setHookOffsetX(0);
+                    setHookOffsetY(0);
+                    if (captionScale < 0.8) setCaptionScale(1);
+                  }}
+                >
+                  Fit safe area
+                </ResetButton>
+              </div>
+            )}
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs italic text-muted-foreground">Drag the hook text up or down on the preview to reposition</p>
+              <VerticalNudge label="Hook text position" upTestId="hook-nudge-up" downTestId="hook-nudge-down" onNudge={(dy) => setHookOffsetY((y) => y + dy)} />
+            </div>
+            {(hookOffsetX !== 0 || hookOffsetY !== 0) && (
+              <ResetButton onClick={() => { setHookOffsetX(0); setHookOffsetY(0); }}>Reset position</ResetButton>
+            )}
+          </AnimDisclosure>
         </EditorSection>
 
         <EditorSection title="End Card CTA" icon={Megaphone} open={openSections.cta} onToggle={() => toggleSection("cta")} testId="cta-controls">
@@ -2321,40 +2337,34 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 </button>
               ))}
             </div>
-          </div>          {/* Same disclosure as the hook entrance above: open by default,
-              collapsible to shorten the end-card section, current choice
-              named in the summary. */}
-          <div className="space-y-2">
-            <details open data-testid="cta-anim-disclosure" className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-1.5">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
-                <span>Animation · <span className="text-foreground">{(OVERLAY_ANIMS.find((a) => a.id === ctaAnim) || {}).label}</span></span>
-                <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
-              </summary>
-              <div className="grid grid-cols-2 gap-2 pb-1 pt-2" role="group" aria-label="CTA animation">
-                {OVERLAY_ANIMS.map((a) => (
-                  <button
-                    key={a.id}
-                    type="button"
-                    data-testid={`cta-anim-${a.id}`}
-                    onClick={() => setCtaAnim(a.id)}
-                    aria-pressed={ctaAnim === a.id}
-                    className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
-                      ctaAnim === a.id
-                        ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] text-foreground"
-                        : "border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--hairline-strong)]"
-                      }`}
-                    >
-                      {a.label}
-                    </button>
-                ))}
-              </div>
-            </details>
           </div>
-          <div className="space-y-2">
-            <ControlSlider label="Text size" value={ctaScale} min={RANGES.overlayScale.min} max={RANGES.overlayScale.max} step={RANGES.overlayScale.step} onChange={setCtaScale} testId="cta-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
-            <ScalePresets value={ctaScale} onChange={setCtaScale} testPrefix="cta-size-preset" ariaLabel="CTA size presets" />
-          </div>
-          {!ctaSafety.ok && (
+          <AnimDisclosure
+            testId="cta-anim-disclosure"
+            currentLabel={(OVERLAY_ANIMS.find((a) => a.id === ctaAnim) || {}).label}
+          >
+            <div className="grid grid-cols-2 gap-2" role="group" aria-label="CTA animation">
+              {OVERLAY_ANIMS.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  data-testid={`cta-anim-${a.id}`}
+                  onClick={() => setCtaAnim(a.id)}
+                  aria-pressed={ctaAnim === a.id}
+                  className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+                    ctaAnim === a.id
+                      ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] text-foreground"
+                      : "border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--hairline-strong)]"
+                    }`}
+                  >
+                    {a.label}
+                  </button>
+              ))}
+            </div>
+            <div className="space-y-2">
+              <ControlSlider label="Text size" value={ctaScale} min={RANGES.overlayScale.min} max={RANGES.overlayScale.max} step={RANGES.overlayScale.step} onChange={setCtaScale} testId="cta-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
+              <ScalePresets value={ctaScale} onChange={setCtaScale} testPrefix="cta-size-preset" ariaLabel="CTA size presets" />
+            </div>
+            {!ctaSafety.ok && (
             <div
               role="status"
               data-testid="cta-safety-warning"
@@ -2376,15 +2386,15 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               </ResetButton>
             </div>
           )}
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs italic text-muted-foreground">Drag the end card up or down on the preview to reposition</p>
-            <VerticalNudge label="End card position" upTestId="cta-nudge-up" downTestId="cta-nudge-down" onNudge={(dy) => setCtaOffsetY((y) => y + dy)} />
-          </div>
-          {(ctaOffsetX !== 0 || ctaOffsetY !== 0) && (
-            <ResetButton onClick={() => { setCtaOffsetX(0); setCtaOffsetY(0); }}>Reset position</ResetButton>
-          )}
-          <div className="space-y-2">
-            <SubLabel>Accent</SubLabel>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs italic text-muted-foreground">Drag the end card up or down on the preview to reposition</p>
+              <VerticalNudge label="End card position" upTestId="cta-nudge-up" downTestId="cta-nudge-down" onNudge={(dy) => setCtaOffsetY((y) => y + dy)} />
+            </div>
+            {(ctaOffsetX !== 0 || ctaOffsetY !== 0) && (
+              <ResetButton onClick={() => { setCtaOffsetX(0); setCtaOffsetY(0); }}>Reset position</ResetButton>
+            )}
+            <div className="space-y-2">
+              <SubLabel>Accent</SubLabel>
             <p className="text-xs text-muted-foreground">Colors the hook text line and the end-card handle chip.</p>
             <div className="flex flex-wrap items-center gap-2">
               {ACCENT_SWATCHES.map((c) => (
@@ -2405,9 +2415,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               ))}
             </div>
           </div>
-          <p className="text-xs leading-snug text-muted-foreground">
-            Laid out inside TikTok&apos;s safe area — clear of the right icon rail and bottom caption strip.
-          </p>
+            <p className="text-xs leading-snug text-muted-foreground">
+              Laid out inside TikTok&apos;s safe area — clear of the right icon rail and bottom caption strip.
+            </p>
+          </AnimDisclosure>
         </EditorSection>
 
         <EditorSection title="Output" icon={Download} open={openSections.output} onToggle={() => toggleSection("output")}>
