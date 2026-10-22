@@ -2590,8 +2590,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           /* A plain bar, not a card: the preview is chromeless, so a boxed
              player under a boxed preview was one box too many. It stays
              full-column — deliberately wider than the frame and the export
-             button, which share a width with each other. */
-          <div className="space-y-2" data-testid="demo-cta-player">
+             button, which share a width with each other. overflow-x-clip trims
+             the 8px the scrubber ticks and the seek knob bleed past 0%/100%:
+             without it the column grows a horizontal bar under a player that
+             otherwise fits. Tooltips are portalled, so clipping here cuts
+             nothing interactive. */
+          <div className="space-y-3 overflow-x-clip" data-testid="demo-cta-player">
               {/* Scrubber first: tick marks and zoom zones stay clickable but lose
                   their text labels — the readout lives once, beside the play
                   button — so the whole block is a compact strip above the one
@@ -2680,54 +2684,59 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 </div>
               </div>
 
-                {/* Single control row: transport on the left, Zoom Lock on the
-                    right. The time readout moved up here from below the
-                    scrubber so nothing reads twice. Wrap below xl so the row
-                    never overflows narrow columns; nowrap at xl where the
-                    650px column is measured to hold it. */}
-                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2 xl:flex-nowrap">
-                  <TransportButton
-                    label={isPlaying ? "Pause" : "Play"}
-                    onClick={togglePlayPause}
-                    testId="transport-play"
-                  >
-                    {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                  </TransportButton>
-                  <TransportButton
-                    label="Back 1 second"
-                    onClick={() => handleSeek(Math.max(0, currentTime - 1))}
-                    testId="transport-back-1s"
-                  >
-                    <span className="font-mono text-xs">−1s</span>
-                  </TransportButton>
-                  <TransportButton
-                    label="Back 1 frame (1/30s)"
-                    onClick={() => handleSeek(Math.max(0, currentTime - 1 / 30))}
-                    testId="transport-back-frame"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </TransportButton>
-                  <TransportButton
-                    label="Forward 1 frame (1/30s)"
-                    onClick={() => handleSeek(Math.min(duration, currentTime + 1 / 30))}
-                    testId="transport-forward-frame"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </TransportButton>
-                  <TransportButton
-                    label="Forward 1 second"
-                    onClick={() => handleSeek(Math.min(duration, currentTime + 1))}
-                    testId="transport-forward-1s"
-                  >
-                    <span className="font-mono text-xs">+1s</span>
-                  </TransportButton>
-                  <TransportButton
-                    label={previewMuted ? "Unmute preview audio" : "Mute preview audio"}
-                    onClick={togglePreviewMuted}
-                    testId="transport-mute"
-                  >
-                    {previewMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                  </TransportButton>
+                {/* Single control row: transport group on the left, Zoom Lock on
+                    the right. The time readout moved up here from below the
+                    scrubber so nothing reads twice. Gaps are gap-x-3/gap-y-3 —
+                    the header-action-row token — so the seven 44px targets stop
+                    reading as one dense block; the buttons keep their measured
+                    size. Wrap below xl so the row never overflows narrow
+                    columns; nowrap at xl where the 650px column is measured to
+                    hold it. */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-3 xl:flex-nowrap">
+                  <div className="flex items-center gap-2" role="group" aria-label="Playback controls">
+                    <TransportButton
+                      label={isPlaying ? "Pause" : "Play"}
+                      onClick={togglePlayPause}
+                      testId="transport-play"
+                    >
+                      {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                    </TransportButton>
+                    <TransportButton
+                      label="Back 1 second"
+                      onClick={() => handleSeek(Math.max(0, currentTime - 1))}
+                      testId="transport-back-1s"
+                    >
+                      <span className="font-mono text-xs">−1s</span>
+                    </TransportButton>
+                    <TransportButton
+                      label="Back 1 frame (1/30s)"
+                      onClick={() => handleSeek(Math.max(0, currentTime - 1 / 30))}
+                      testId="transport-back-frame"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </TransportButton>
+                    <TransportButton
+                      label="Forward 1 frame (1/30s)"
+                      onClick={() => handleSeek(Math.min(duration, currentTime + 1 / 30))}
+                      testId="transport-forward-frame"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </TransportButton>
+                    <TransportButton
+                      label="Forward 1 second"
+                      onClick={() => handleSeek(Math.min(duration, currentTime + 1))}
+                      testId="transport-forward-1s"
+                    >
+                      <span className="font-mono text-xs">+1s</span>
+                    </TransportButton>
+                    <TransportButton
+                      label={previewMuted ? "Unmute preview audio" : "Mute preview audio"}
+                      onClick={togglePreviewMuted}
+                      testId="transport-mute"
+                    >
+                      {previewMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                    </TransportButton>
+                  </div>
                   <div className="flex items-baseline gap-1.5 px-1">
                     <span className="font-mono text-sm font-semibold tabular-nums tracking-tight">
                       {formatTime(currentTime)}
@@ -2744,7 +2753,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                       column edge. The description is the flexible item — it
                       wraps onto its own line inside this group while Export,
                       the label and + Lock keep their measured widths. */}
-                  <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-1.5 gap-y-1">
+                  <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-2">
                     {/* Export lives here, not in a bar of its own. The primary
                         action beside the Zoom Lock controls is where a decision
                         gets made — a separate bottom bar meant the column spent

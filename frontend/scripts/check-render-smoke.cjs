@@ -7453,7 +7453,7 @@ async function runDemoCtaChecks() {
       }
       // No-wrap binds at xl only, where the 650px column holds the row. Below
       // xl the row must still wrap rather than overflow a narrower column.
-      if (!/flex flex-wrap items-center gap-x-1\.5 gap-y-2 xl:flex-nowrap/.test(src)) {
+      if (!/flex flex-wrap items-center gap-x-3 gap-y-3 xl:flex-nowrap/.test(src)) {
         throw new Error(
           "the control row is not wrap-below-xl / nowrap-at-xl. Always-nowrap " +
             "overflows narrow columns; always-wrap reintroduces the two-line " +
@@ -7637,7 +7637,7 @@ async function runDemoCtaChecks() {
           // The player is a plain bar, asserted in source: like the order check
           // below, it only mounts with a real clip's metadata, which jsdom
           // cannot supply, so a DOM query here would silently pass forever.
-          if (!/<div className="space-y-2" data-testid="demo-cta-player">/.test(src)) {
+          if (!/<div className="space-y-3 overflow-x-clip" data-testid="demo-cta-player">/.test(src)) {
             throw new Error(
               "the player is a card again. It must be a plain bar matching the " +
                 "chromeless preview — a surface box under a chromeless frame."

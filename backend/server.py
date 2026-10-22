@@ -9269,10 +9269,16 @@ async def serve_asset(asset_id: str, request: Request, sig: str = "", exp: str =
 
 app.mount("/api/media", StaticFiles(directory=str(pipeline.STORAGE_DIR)), name="media")
 
+# An empty CORS_ORIGINS means "*", not "nobody". os.environ.get with a "*"
+# default only covers the variable being unset; backend/.env ships the key
+# with an empty value, and "".split(",") is [""], which matches no origin
+# and fails every browser call with an opaque "Network Error" while curl
+# keeps working. Strip blanks and fall back to open CORS rather than none.
+_CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "*").split(",") if o.strip()] or ["*"]
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    allow_origins=_CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )

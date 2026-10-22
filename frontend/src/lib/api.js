@@ -6,6 +6,19 @@ import { errorMessageFor } from "./errorMessage";
 const BACKEND_URL = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/+$/, "");
 const API = `${BACKEND_URL}/api`;
 
+// An empty BACKEND_URL is correct in production (Dockerfile builds with it
+// empty so the served bundle calls same-origin), but in development it means
+// the dev server was started without frontend/.env and EVERY call 404s
+// against the dev server itself. That used to surface as a bare 404 per
+// action, so say the remedy once, loudly, where the dev will see it.
+if (!BACKEND_URL && process.env.NODE_ENV !== "production") {
+  // eslint-disable-next-line no-console
+  console.error(
+    "REACT_APP_BACKEND_URL is unset, so API calls go to the dev server itself and fail. " +
+      'From the repo root run: echo "REACT_APP_BACKEND_URL=http://localhost:8000" > frontend/.env, then restart the dev server.'
+  );
+}
+
 export const mediaUrl = (path) => {
   if (!path) return null;
   if (path.startsWith("http")) return path;
