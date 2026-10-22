@@ -7276,6 +7276,39 @@ async function runDemoCtaChecks() {
     }
   );
 
+  // The frame's Upload a clip button drives the file input by ref from OUTSIDE
+  // the collapsible Source & Look group, so the input must survive that group
+  // closing. The regression: the input lived inside the collapsible content,
+  // so opening any other group unmounted it and the button clicked into a
+  // null ref — silently doing nothing, with no dialog and no error.
+  await check(
+    "the frame upload still reaches its file input with Source & Look closed",
+    async (ctx) => {
+      const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+      dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+      await withApi(
+        { getGenerations: async () => ({ generations: [COMPLETED] }) },
+        async () => {
+          await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
+          const header = [...ctx.container.querySelectorAll("button[aria-expanded]")].find(
+            (b) => (b.textContent || "").trim() === "Hook Text"
+          );
+          if (!header) throw new Error("no Hook Text group header");
+          await act(async () => {
+            header.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {});
+          if (!ctx.container.querySelector('[data-testid="demo-cta-file-input"]')) {
+            throw new Error(
+              "closing Source & Look unmounted the file input, so the frame's " +
+                "Upload a clip button clicks into a null ref and silently does nothing."
+            );
+          }
+        }
+      );
+    }
+  );
+
   // Public Sans is off the overlay font catalog. It shipped in both lists (Hook
   // Text and End Card CTA) and was the least distinct of the text faces, so a
   // founder could pick it and get something that read as the browser default.

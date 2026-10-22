@@ -440,6 +440,39 @@ function FontDisclosure({ testId, groupLabel, currentLabel, children }) {
 }
 
 /**
+ * Accent swatch picker, shared by Hook Text and End Card CTA. One global
+ * accent colors both the hook text line and the end-card handle chip, so
+ * both sections offer the same control rather than one hiding it from the
+ * other. `testPrefix` keeps the two instances' testids distinct.
+ */
+function AccentPicker({ testPrefix, accent, onAccentChange }) {
+  return (
+    <div className="space-y-2">
+      <SubLabel>Accent</SubLabel>
+      <p className="text-xs text-muted-foreground">Colors the hook text line and the end-card handle chip.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        {ACCENT_SWATCHES.map((c) => (
+          <button
+            key={c}
+            type="button"
+            data-testid={`${testPrefix}-${c.replace("#", "")}`}
+            onClick={() => onAccentChange(c)}
+            style={{ background: c }}
+            aria-label={`Accent ${c}`}
+            aria-pressed={accent === c}
+            className={`h-10 w-10 shrink-0 rounded-full border-2 transition duration-150 ${
+              accent === c
+                ? "border-[color:var(--brand-indigo)] ring-2 ring-[color:var(--indigo-45)]"
+                : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
  * The native Product Demo + CTA editor.
  *
  * Behavior is a faithful port of the standalone app: same defaults, ranges,
@@ -1899,6 +1932,22 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           ref={settingsRef}
           className="demo-cta-panel-scroll space-y-3 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-2.5"
         >
+        {/* The file input lives outside the collapsible section content on
+            purpose. The preview frame's Upload button drives it by ref from
+            outside every group, and collapsed groups unmount their children —
+            so an input nested in here becomes a null ref the moment another
+            group opens, and the button silently stops working. `sr-only`
+            keeps it out of sight; the aria-label keeps it named for
+            assistive tech. */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="video/*"
+          aria-label="Choose a video file"
+          data-testid="demo-cta-file-input"
+          className="sr-only"
+          onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+        />
         <EditorSection title="Source & Look" icon={Film} open={openSections.source} onToggle={() => toggleSection("source")} testId="demo-cta-source">
           {generation ? (
             <>
@@ -1923,18 +1972,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           <div className="flex flex-wrap items-center gap-2">
             {/* No picker button here. The frame carries the upload action in
                 both routes, so a second button in this group was two doors to
-                the same input. The input itself stays — the frame's button
-                drives it by ref — unwrapped and named, since a `sr-only`
-                input with no label is invisible to assistive tech too. */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="video/*"
-              aria-label="Choose a video file"
-              data-testid="demo-cta-file-input"
-              className="sr-only"
-              onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-            />
+                the same input. The input itself lives above the sections —
+                the frame's button drives it by ref — since collapsed groups
+                unmount their children. */}
             {sourceFileName && (
               <>
                 <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={sourceFileName}>
@@ -2185,7 +2225,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             groupLabel="Caption font"
             currentLabel={(OVERLAY_FONTS.find((f) => f.id === captionFont) || {}).label}
           >
-            <div className="grid grid-cols-1 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {OVERLAY_FONTS.map((f) => (
                 <button
                   key={f.id}
@@ -2205,6 +2245,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               ))}
             </div>
           </FontDisclosure>
+          <AccentPicker testPrefix="hook-accent" accent={overlayAccent} onAccentChange={setOverlayAccent} />
           <AnimDisclosure
             testId="caption-anim-disclosure"
             currentLabel={(OVERLAY_ANIMS.find((a) => a.id === captionAnim) || {}).label}
@@ -2348,7 +2389,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             groupLabel="CTA font"
             currentLabel={(OVERLAY_FONTS.find((f) => f.id === ctaFont) || {}).label}
           >
-            <div className="grid grid-cols-1 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {OVERLAY_FONTS.map((f) => (
                 <button
                   key={f.id}
@@ -2423,28 +2464,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             {(ctaOffsetX !== 0 || ctaOffsetY !== 0) && (
               <ResetButton onClick={() => { setCtaOffsetX(0); setCtaOffsetY(0); }}>Reset position</ResetButton>
             )}
-            <div className="space-y-2">
-              <SubLabel>Accent</SubLabel>
-            <p className="text-xs text-muted-foreground">Colors the hook text line and the end-card handle chip.</p>
-            <div className="flex flex-wrap items-center gap-2">
-              {ACCENT_SWATCHES.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  data-testid={`overlay-accent-${c.replace("#", "")}`}
-                  onClick={() => setOverlayAccent(c)}
-                  style={{ background: c }}
-                  aria-label={`Accent ${c}`}
-                  aria-pressed={overlayAccent === c}
-                  className={`h-10 w-10 shrink-0 rounded-full border-2 transition duration-150 ${
-                    overlayAccent === c
-                      ? "border-[color:var(--brand-indigo)] ring-2 ring-[color:var(--indigo-45)]"
-                      : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
-                  }`}
-                />
-              ))}
-            </div>
-          </div>
+          <AccentPicker testPrefix="overlay-accent" accent={overlayAccent} onAccentChange={setOverlayAccent} />
             <p className="text-xs leading-snug text-muted-foreground">
               Laid out inside TikTok&apos;s safe area — clear of the right icon rail and bottom caption strip.
             </p>
