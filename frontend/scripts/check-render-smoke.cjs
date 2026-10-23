@@ -7417,6 +7417,10 @@ async function runDemoCtaChecks() {
   await check("an overlay entrance, size or face change keeps the playhead", async (ctx) => {
     const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
     dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+    // Overlay prefs persist across checks: a fade picked anywhere earlier
+    // would make the fade click below a same-value no-op that still holds
+    // the playhead — a pass that proves nothing.
+    dom.window.localStorage.removeItem("hookforge.demoCta.overlayPrefs.v1");
     // The canvas redraw is what makes a choice visible at all, and jsdom has no
     // 2d context to assert it against — so the preview loop's dependency
     // contract is read from source. These six were missing, which is why a new
@@ -7454,6 +7458,9 @@ async function runDemoCtaChecks() {
             el.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
           });
           await act(async () => {});
+          if (el.getAttribute("aria-pressed") !== "true") {
+            throw new Error(`${label} did not take the click, so holding the playhead proves nothing`);
+          }
           if (video.currentTime !== 4) {
             throw new Error(`${label} moved the playhead (now at ${video.currentTime}s)`);
           }
@@ -7475,6 +7482,266 @@ async function runDemoCtaChecks() {
         }
       }
     );
+  });
+
+  /**
+   * A loaded clip with zero decoded bytes. jsdom has no canvas 2d and never
+   * fires media metadata, so a no-op context (counting through onClear when
+   * given) and a probe reporting the given fake dimensions stand in for a
+   * real decode the suite must never depend on. clearRect runs once per
+   * paintFrame in the default floating view, which makes it the paint
+   * counter for the paint-on-demand check.
+   *
+   * Component code resolves URL from the global scope (Node's), not the
+   * jsdom window, so the createObjectURL stub lands globally — exactly like
+   * Blob. Node's real createObjectURL rejects a jsdom File and the upload
+   * dies inside handleFile before videoUrl is ever set. drawPhone branches
+   * on `video instanceof HTMLCanvasElement`, which the harness never mapped
+   * to global, so without that mapping the first paint throws instead of
+   * proving anything. Call restore() in a finally.
+   */
+  function installLoadedClipStubs({ width, height, onClear = () => {} }) {
+    const gradientStub = { addColorStop() {} };
+    const fakeCtx = new Proxy({}, {
+      get(t, p) {
+        if (p === "clearRect") return () => onClear();
+        if (p === "measureText") return () => ({ width: 10 });
+        if (typeof p === "string" && p.startsWith("create")) return () => gradientStub;
+        return () => undefined;
+      },
+      set() { return true; },
+    });
+    const origGetContext = dom.window.HTMLCanvasElement.prototype.getContext;
+    const origCreateObjectURL = URL.createObjectURL;
+    const origRevokeObjectURL = URL.revokeObjectURL;
+    const origCreateElement = dom.window.document.createElement.bind(dom.window.document);
+    const createdVideos = [];
+    dom.window.HTMLCanvasElement.prototype.getContext = function () { return fakeCtx; };
+    URL.createObjectURL = () => "blob:fake-clip";
+    URL.revokeObjectURL = () => {};
+    const hadCanvasGlobal = "HTMLCanvasElement" in global;
+    const origCanvasGlobal = global.HTMLCanvasElement;
+    global.HTMLCanvasElement = dom.window.HTMLCanvasElement;
+    const origPlay = dom.window.HTMLMediaElement.prototype.play;
+    const origLoad = dom.window.HTMLMediaElement.prototype.load;
+    dom.window.HTMLMediaElement.prototype.play = () => Promise.resolve();
+    dom.window.HTMLMediaElement.prototype.load = () => {};
+    dom.window.document.createElement = (tag, opts) => {
+      const el = origCreateElement(tag, opts);
+      if (tag === "video") {
+        Object.defineProperties(el, {
+          videoWidth: { value: width, configurable: true },
+          videoHeight: { value: height, configurable: true },
+          duration: { value: 8, configurable: true },
+        });
+        createdVideos.push(el);
+      }
+      return el;
+    };
+    const flush = async () => {
+      await act(async () => {});
+      await new Promise((r) => setTimeout(r, 30));
+      await act(async () => {});
+    };
+    // Overlay prefs and open sections persist across checks through the
+    // stubbed storage: an earlier check that picked fade would make a later
+    // fade click a no-op (same value, no repaint), and a group left open
+    // would make the open click close it instead. Start clean, end clean.
+    const resetUiState = () => {
+      dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+      dom.window.localStorage.removeItem("hookforge.demoCta.overlayPrefs.v1");
+    };
+    const restore = () => {
+      dom.window.HTMLCanvasElement.prototype.getContext = origGetContext;
+      URL.createObjectURL = origCreateObjectURL;
+      URL.revokeObjectURL = origRevokeObjectURL;
+      dom.window.HTMLMediaElement.prototype.play = origPlay;
+      dom.window.HTMLMediaElement.prototype.load = origLoad;
+      dom.window.document.createElement = origCreateElement;
+      if (hadCanvasGlobal) global.HTMLCanvasElement = origCanvasGlobal;
+      else delete global.HTMLCanvasElement;
+      resetUiState();
+    };
+    // Drives the upload path with a fake file: no bytes are decoded.
+    const loadClip = async (ctx) => {
+      const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+      await withApi(
+        { getGenerations: async () => ({ generations: [COMPLETED] }) },
+        async () => {
+          resetUiState();
+          await mount(DemoCtaEditor, {})(ctx);
+          const input = ctx.container.querySelector('[data-testid="demo-cta-file-input"]');
+          if (!input) throw new Error("no file input");
+          const file = new dom.window.File([new Uint8Array(16)], "clip.mp4", { type: "video/mp4" });
+          Object.defineProperty(input, "files", { value: [file], configurable: true });
+          await act(async () => {
+            input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+          });
+          await flush();
+          const probe = createdVideos.find((v) => v.onloadedmetadata);
+          if (!probe) throw new Error("the uploaded clip was never probed");
+          await act(async () => {
+            probe.onloadedmetadata();
+          });
+          await flush();
+          await flush();
+        }
+      );
+    };
+    return { flush, restore, loadClip };
+  }
+
+  // Paused idle schedules zero frames; one settings change or seek paints
+  // exactly one frame.
+  await check("paused preview paints on demand: zero frames idle, one per change and seek", async (ctx) => {
+    let paints = 0;
+    const clip = installLoadedClipStubs({ width: 1280, height: 720, onClear: () => { paints += 1; } });
+    const { flush } = clip;
+    try {
+      await clip.loadClip(ctx);
+      const video = ctx.container.querySelector("video");
+      if (!video) throw new Error("the preview media element is missing");
+      if (!video.paused) throw new Error("the stubbed video is playing, so idle is unmeasurable");
+      const idle = paints;
+      if (idle === 0) throw new Error("no initial paint landed, so parking proves nothing");
+      await flush();
+      await flush();
+      if (paints !== idle) {
+        throw new Error(`paused idle painted ${paints - idle} extra frame(s); the loop is not parked`);
+      }
+      // One settings change paints exactly one frame and holds the playhead.
+      video.currentTime = 4;
+      const hookGroup = [...ctx.container.querySelectorAll("button[aria-expanded]")]
+        .find((b) => (b.textContent || "").trim() === "Hook Text");
+      if (!hookGroup) throw new Error("no Hook Text group header");
+      await act(async () => {
+        hookGroup.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      });
+      await flush();
+      const paintsAfterOpen = paints;
+      const fade = ctx.container.querySelector('[data-testid="caption-anim-fade"]');
+      if (!fade) throw new Error("no caption fade chip");
+      await act(async () => {
+        fade.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      });
+      await flush();
+      if (fade.getAttribute("aria-pressed") !== "true") {
+        throw new Error("the fade chip did not take the click, so a repaint proves nothing");
+      }
+      // Opening the group may itself dirty one frame; the entrance change
+      // must add exactly one more.
+      if (paints !== paintsAfterOpen + 1) {
+        throw new Error(`an entrance change painted ${paints - paintsAfterOpen} frame(s), expected exactly 1`);
+      }
+      if (video.currentTime !== 4) {
+        throw new Error(`an entrance change moved the playhead (now at ${video.currentTime}s)`);
+      }
+      // One paused seek paints exactly one frame.
+      const paintsBeforeSeek = paints;
+      await act(async () => {
+        video.dispatchEvent(new dom.window.Event("seeked"));
+      });
+      await flush();
+      if (paints !== paintsBeforeSeek + 1) {
+        throw new Error(`a paused seek painted ${paints - paintsBeforeSeek} frame(s), expected exactly 1`);
+      }
+      if (video.currentTime !== 4) {
+        throw new Error(`a seek moved the playhead (now at ${video.currentTime}s)`);
+      }
+    } finally {
+      clip.restore();
+    }
+  });
+
+  // The loaded DOM pins the narrow-column overflow contract where it holds —
+  // on the mounted row (reached with zero decoded bytes via the shared stub
+  // above). Order inside the row stays covered by the source-level check
+  // below; this one covers only what source cannot: clipping and wrapping.
+  await check("the loaded player row fits narrow columns without horizontal overflow", async (ctx) => {
+    const clip = installLoadedClipStubs({ width: 720, height: 1280 });
+    try {
+      await clip.loadClip(ctx);
+      // Loaded state genuinely reached: without it every assertion below
+      // would pass on an empty column.
+      const col = ctx.container.querySelector(".demo-cta-column");
+      if (!col) throw new Error("no preview column");
+      if (col.getAttribute("data-player") !== "on") {
+        throw new Error("the column never reported a loaded player, so the row below proves nothing");
+      }
+      const player = ctx.container.querySelector('[data-testid="demo-cta-player"]');
+      if (!player) throw new Error("no loaded player row");
+      if (!player.classList.contains("overflow-x-clip")) {
+        throw new Error("the player row lost overflow-x-clip: scrubber ticks and the seek knob bleed past 0%/100% and grow a horizontal bar");
+      }
+      if (!ctx.container.querySelector('[data-testid="demo-cta-scrubber"]')) {
+        throw new Error("no scrubber strip in the loaded player");
+      }
+      const play = ctx.container.querySelector('[data-testid="transport-play"]');
+      const exp = ctx.container.querySelector('[data-testid="demo-cta-export"]');
+      if (!play || !exp) throw new Error("the loaded player is missing transport or Export");
+      if (!exp.classList.contains("shrink-0")) {
+        throw new Error("the Export button is squeezable in the loaded row: without shrink-0 the nowrap parent crushes it below its text");
+      }
+      const row = play.closest('[class*="flex-nowrap"]');
+      if (!row || !row.classList.contains("flex-wrap")) {
+        throw new Error("the control row does not wrap below xl: always-nowrap overflows narrow columns");
+      }
+      const grid = col.parentElement;
+      if (!grid || !grid.classList.contains("grid") || !grid.className.includes("minmax(0,")) {
+        throw new Error("the settings/preview grid lost its minmax(0, …) columns, so the preview can force the page wider than the viewport");
+      }
+      const frame = ctx.container.querySelector(".demo-cta-frame");
+      if (!frame || !frame.classList.contains("overflow-hidden")) {
+        throw new Error("the preview frame is not clipping its canvas");
+      }
+    } finally {
+      clip.restore();
+    }
+  });
+
+  // The scrub strip is a real slider: arrows move a second (matching the
+  // −1s/+1s buttons), Home/End jump to the clip ends. Ticks and transport
+  // already seek, so this pins the keyboard path on the strip itself — a
+  // pointer-only div would pass every other check here.
+  await check("the scrubber slider seeks from the keyboard", async (ctx) => {
+    const clip = installLoadedClipStubs({ width: 720, height: 1280 });
+    try {
+      await clip.loadClip(ctx);
+      const slider = ctx.container.querySelector('[data-testid="demo-cta-scrubber"] [role="slider"]');
+      if (!slider) throw new Error("no slider in the scrub strip");
+      if (slider.getAttribute("aria-valuemax") !== "8") {
+        throw new Error(`the slider reports the wrong duration: ${slider.getAttribute("aria-valuemax")}`);
+      }
+      const video = ctx.container.querySelector("video");
+      if (!video) throw new Error("the preview media element is missing");
+      const press = async (key) => {
+        await act(async () => {
+          slider.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key, bubbles: true }));
+        });
+        await act(async () => {});
+      };
+      await press("ArrowRight");
+      if (video.currentTime !== 1) {
+        throw new Error(`ArrowRight did not move a second forward (at ${video.currentTime}s)`);
+      }
+      if (slider.getAttribute("aria-valuenow") !== "1") {
+        throw new Error("the slider did not report its new position");
+      }
+      await press("ArrowLeft");
+      if (video.currentTime !== 0) {
+        throw new Error(`ArrowLeft did not move back (at ${video.currentTime}s)`);
+      }
+      await press("End");
+      if (video.currentTime !== 8) {
+        throw new Error(`End did not jump to the clip end (at ${video.currentTime}s)`);
+      }
+      await press("Home");
+      if (video.currentTime !== 0) {
+        throw new Error(`Home did not jump to the clip start (at ${video.currentTime}s)`);
+      }
+    } finally {
+      clip.restore();
+    }
   });
 
   await check(
@@ -7819,6 +8086,16 @@ async function runDemoCtaChecks() {
             throw new Error(
               "the preview frame has no ~450px floor (253px wide at 9:16). Below " +
                 "it the column must scroll rather than the frame shrinking further."
+            );
+          }
+          // Stacked (below lg) the frame spends a 52vh budget with no headroom
+          // factor: beside the panel the 0.75 factor keeps the preview compact,
+          // but stacked the frame IS the preview and headroom shrank it past
+          // usability on phones.
+          if (!/\.demo-cta-column\s*\{[^}]*--demo-cta-frame-w:\s*min\(100%,\s*calc\(52vh/.test(css)) {
+            throw new Error(
+              "the stacked preview frame lost its 52vh no-headroom budget, so " +
+                "phones and narrow windows get a shrunken frame again."
             );
           }
         }

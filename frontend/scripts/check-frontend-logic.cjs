@@ -28,6 +28,15 @@ const SRC = path.resolve(__dirname, "..", "src", "lib", "videoLength.js");
 
 const failures = [];
 function check(label, condition, detail) {
+  // The condition is the contract: a truthy non-boolean (a problems string,
+  // a match array) passes a broken product, which is exactly how two gates
+  // below used to pass forever. Reject anything but a boolean, loudly.
+  if (typeof condition !== "boolean") {
+    console.log(`  [FAIL] ${label}`);
+    console.log(`         broken check: condition is ${typeof condition}, not boolean`);
+    failures.push(label);
+    return;
+  }
   if (condition) {
     console.log(`  [PASS] ${label}`);
   } else {
@@ -666,15 +675,18 @@ check("the device catalog survived the port",
   DC.DEVICES.length === 7 && DC.DEVICES[0].id === "s24" && DC.DEVICES[6].id === "lg_g8");
 check("the preset catalog survived the port",
   DC.PRESETS.length === 1 && DC.PRESETS[0].id === "tiktok");
+// Aurora Waves was removed deliberately (a catalog trim, not port drift),
+// so the animation count is 15 and its absence is pinned below.
 check("backgrounds, animations, environments and accents survived the port",
-  DC.BACKGROUNDS.length === 7 && DC.ANIMATIONS.length === 16
+  DC.BACKGROUNDS.length === 7 && DC.ANIMATIONS.length === 15
     && DC.ENVIRONMENTS.length === 5 && DC.ACCENT_SWATCHES.length === 5
     && DC.ACCENT_SWATCHES.includes("#8b5cf6"));
 
-check("the animation catalog holds the six legacy motions plus ten eye-catching ones",
+check("the animation catalog holds five legacy motions plus ten eye-catching ones, without Aurora",
   DC.ANIMATIONS.some((a) => a.id === "float") && DC.ANIMATIONS.some((a) => a.id === "embers")
     && DC.ANIMATIONS.some((a) => a.id === "meteor")
-    && new Set(DC.ANIMATIONS.map((a) => a.id)).size === 16,
+    && !DC.ANIMATIONS.some((a) => a.id === "aurora")
+    && new Set(DC.ANIMATIONS.map((a) => a.id)).size === 15,
   DC.ANIMATIONS && DC.ANIMATIONS.map((a) => a.id).join(","));
 check("defaults match the standalone app",
   DC.DEFAULTS.device === "s24" && DC.DEFAULTS.preset === "tiktok" && DC.DEFAULTS.bg === "lavender"
@@ -974,6 +986,79 @@ check("overlay defaults preserve the long-standing look",
   DC.DEFAULTS.captionAnim === "punch" && DC.DEFAULTS.ctaAnim === "rise" &&
   DC.DEFAULTS.captionScale === 1 && DC.DEFAULTS.ctaScale === 1,
   JSON.stringify({ f: DC.DEFAULTS.captionFont, a: DC.DEFAULTS.captionAnim, s: DC.DEFAULTS.captionScale }));
+
+// Paused/idle preview paints on demand, not per frame. A paused clip with
+// settled settings renders the same frame forever, so the draw loop must
+// only reschedule while the video plays and paint single dirty frames
+// otherwise; the time-smoothing tick must likewise park when paused. A
+// paused seek repaints through the `seeked` event, not the scrub handler:
+// seekTo sets currentTime and deliberately paints nothing (a synchronous
+// paint would show the stale pre-seek frame), so the landed frame arrives
+// via onSeekedPaint. Each row names one behavior and the source shape that
+// carries it; rows must match, except the one marked "absent". A failing
+// row names the breakage, so a dropped listener or a resurrected always-on
+// loop reads as the behavior that broke.
+const PREVIEW_WIRING_ROWS = [
+  ["draw reschedules only while playing",
+    /if \(playing\) rafRef\.current = requestAnimationFrame\(draw\)/],
+  ["paused changes and seeks paint one dirty frame",
+    /dirtyRef\.current = false;\s*\n\s*paintFrame\(canvas/],
+  ["the smoothing tick parks while paused",
+    /if \(!video \|\| video\.paused\) return;/],
+  // Anchored to line start: the conditional reschedules (`if (playing) …`
+  // and `kick`'s guarded schedule carry an `if` before `rafRef` and must
+  // not match. Only a bare statement-own-line reschedule is the old
+  // always-on loop.
+  ["no unconditional reschedule at the end of draw",
+    /\n\s*rafRef\.current = requestAnimationFrame\(draw\);\s*\n\s*\};/, "absent"],
+  ["the preview video repaints on seeked",
+    /addEventListener\("seeked", onSeekedPaint\)/],
+  ["the seeked handler marks dirty then kicks one frame",
+    /onSeekedPaint = \(\) => \{\s*\n\s*dirtyRef\.current = true;\s*\n\s*kick\(\);/],
+  ["the seeked listener is cleaned up",
+    /removeEventListener\("seeked", onSeekedPaint\)/],
+];
+const previewSrc = fs.readFileSync(path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"), "utf8");
+const brokenPreviewWiring = PREVIEW_WIRING_ROWS
+  .filter(([, re, kind]) => (kind === "absent") === re.test(previewSrc))
+  .map(([name]) => name);
+check("the paused preview paints on demand with no parked per-frame work",
+  brokenPreviewWiring.length === 0,
+  brokenPreviewWiring.length ? `broken: ${brokenPreviewWiring.join("; ")}` : "paused preview paints on demand");
+
+// Keyboard and screen-reader access to the scrub strip. The ticks and the
+// transport buttons already seek, but continuous scrubbing lived on a
+// pointer-only surface; the strip is a slider with arrow/Home/End handling,
+// and every pressable without its own inline ring shares .focus-ring.
+// Rows must match, except the one marked "absent".
+const SCRUB_A11Y_ROWS = [
+  ["the scrub strip exposes a slider", /role="slider"[\s\S]{0,400}tabIndex=\{0\}/, "editor"],
+  ["the slider reports range, position and a spoken value",
+    /aria-valuemin[\s\S]{0,200}aria-valuemax[\s\S]{0,200}aria-valuenow[\s\S]{0,300}aria-valuetext/, "editor"],
+  ["arrow keys scrub a second each way",
+    /"ArrowLeft"[\s\S]{0,120}currentTime - 1[\s\S]{0,300}"ArrowRight"[\s\S]{0,120}currentTime \+ 1/, "editor"],
+  ["Home and End jump to the clip ends",
+    /"Home"\) handleSeek\(0\)[\s\S]{0,60}handleSeek\(duration\)/, "editor"],
+  ["the shared focus ring exists in the stylesheet",
+    /\.focus-ring:focus-visible/, "css"],
+  ["Chip carries the focus ring to every pill",
+    /pill-studio focus-ring/, "chip"],
+];
+const cssSrc = fs.readFileSync(path.join(__dirname, "..", "src", "index.css"), "utf8");
+const chipSrc = fs.readFileSync(path.join(__dirname, "..", "src", "components", "Chip.jsx"), "utf8");
+const scrubA11ySources = { editor: previewSrc, css: cssSrc, chip: chipSrc };
+const brokenScrubA11y = SCRUB_A11Y_ROWS
+  .filter(([, re, where]) => !re.test(scrubA11ySources[where]))
+  .map(([name]) => name);
+// Ten ringless patterns share the class (presets, entrances, fonts, accents,
+// swatches, view modes, scenes, look delete, keyframe jump/remove, summaries);
+// the count pins the habit against wholesale removal without freezing adds.
+if ((previewSrc.match(/focus-ring/g) || []).length < 10) {
+  brokenScrubA11y.push("fewer than ten editor controls share focus-ring");
+}
+check("the scrub strip is keyboard-operable with visible focus",
+  brokenScrubA11y.length === 0,
+  brokenScrubA11y.length ? `broken: ${brokenScrubA11y.join("; ")}` : "scrub strip is a keyboard slider with focus rings");
 
 check("checkOverlaySafety passes default centered hook and end card",
   (() => {
