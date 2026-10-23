@@ -2564,8 +2564,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 </div>
               </div>
 
-                {/* Single control row: transport group on the left, Zoom Lock on
-                    the right. The time readout moved up here from below the
+                {/* Single control row: transport group on the left, Export +
+                    Lock + Clear buttons on the right. The time readout moved up here from below the
                     scrubber so nothing reads twice. Gaps are gap-x-3/gap-y-3 —
                     the header-action-row token — so the seven 44px targets stop
                     reading as one dense block; the buttons keep their measured
@@ -2626,23 +2626,18 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                       {formatTime(duration)}
                     </span>
                   </div>
-                  {/* min-w-0 + wrap live here, not on the outer row: at xl the
-                      outer row is nowrap by contract, so without a squeezable
-                      inner group the long Zoom Lock description forced the row
-                      past the 740px column and the Export button clipped at the
-                      column edge. w-full drops this cluster onto its own line
-                      below xl, so Export and Zoom Lock never stack on top of
-                      the transport buttons in fragments; xl:w-auto rejoins the
-                      single row where the 650px column holds it. The
-                      description is the flexible item — it wraps onto its own
-                      line inside this group while Export, the label and + Lock
-                      keep their measured widths. */}
+                  {/* Button-only cluster on the right: Export, + Lock, Clear.
+                      No label or description — the timeline strip above and the
+                      locked-segments disclosure below already say what locks
+                      exist. w-full drops this cluster onto its own line below
+                      xl; xl:w-auto rejoins the single row where the 650px
+                      column holds it. */}
                   <div className="ml-auto flex min-w-0 flex-wrap w-full items-center justify-end gap-x-2 gap-y-2 xl:w-auto">
                     {/* Export lives here, not in a bar of its own. The primary
-                        action beside the Zoom Lock controls is where a decision
-                        gets made — a separate bottom bar meant the column spent
-                        44px plus a gap on a button that could just as well sit
-                        in the row it belongs to. */}
+                        action beside the lock controls is where a decision gets
+                        made — a separate bottom bar meant the column spent 44px
+                        plus a gap on a button that could just as well sit in
+                        the row it belongs to. */}
                     <Button
                       type="button"
                       variant="accent"
@@ -2659,14 +2654,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                         <><Smartphone className="h-3.5 w-3.5" /> Export</>
                       )}
                     </Button>
-                    <span aria-hidden="true" className="shrink-0 text-muted-foreground/40">|</span>
-                    <span className="eyebrow shrink-0">Zoom Lock</span>
-                    <span className="min-w-[120px] max-w-[240px] flex-1 text-xs leading-snug text-muted-foreground">Hold this zoom from this point on.</span>
-                    {zoomKeyframes.length > 0 && (
-                      <span className="text-xs tabular-nums text-muted-foreground">
-                        {zoomKeyframes.length}
-                      </span>
-                    )}
                     <Button type="button" variant="secondary" size="sm" className="shrink-0" onClick={handleCaptureZoomLock} title={`Lock the current zoom at ${formatTime(currentTime)}`}>
                       + Lock
                     </Button>
