@@ -65,7 +65,8 @@ import { checkOverlaySafety, drawEndCard, drawHookOverlay, drawStoryOverlay, get
 import { fitVideoToScreen } from "./fit";
 import { exportTikTok, TIKTOK_EXPORT } from "./exportTikTok";
 import { drawHandView, preloadHandViewImages, prepareHandViewImages } from "./handView";
-import { captureZoomLock, getEffectiveZoom, removeZoomKeyframe, sortKeyframes, tickInterval } from "./zoom";
+import { getEffectiveZoom, tickInterval } from "./zoom";
+import { useZoomKeyframes } from "./useZoomKeyframes";
 
 const SECTIONS_KEY = "hookforge.demoCta.openSections.v3";
 
@@ -736,7 +737,14 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const [currentTime, setCurrentTime] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
 
-  const [zoomKeyframes, setZoomKeyframes] = useState([]);
+  const {
+    zoomKeyframes,
+    zoomKeyframesRef,
+    sortedKeyframes,
+    captureZoomKeyframe,
+    removeZoomKeyframe,
+    clearZoomKeyframes,
+  } = useZoomKeyframes();
 
   const videoRef = useRef(null);
   const previewCanvasRef = useRef(null);
@@ -749,7 +757,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const exportAbortRef = useRef(null);
   useEffect(() => () => exportAbortRef.current?.abort(), []);
   const isExportingRef = useRef(false);
-  const zoomKeyframesRef = useRef([]);
   const liveZoomRef = useRef({
     scale: 1, offX: 0, offY: 0,
     handZoom: 1, handPanX: 0, handPanY: 0,
@@ -1063,9 +1070,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     setCurrentTime(time);
   };
 
-  useEffect(() => {
-    zoomKeyframesRef.current = sortKeyframes(zoomKeyframes);
-  }, [zoomKeyframes]);
 
   useEffect(() => {
     liveZoomRef.current = {
@@ -1076,24 +1080,21 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
 
   const handleCaptureZoomLock = () => {
     const video = videoRef.current;
-    const t = video ? video.currentTime : 0;
-    setZoomKeyframes((prev) =>
-      captureZoomLock(prev, t, {
-        scale: videoScale,
-        offX: videoOffsetX,
-        offY: videoOffsetY,
-        handZoom,
-        handPanX,
-        handPanY,
-      })
-    );
+    captureZoomKeyframe(video ? video.currentTime : 0, {
+      scale: videoScale,
+      offX: videoOffsetX,
+      offY: videoOffsetY,
+      handZoom,
+      handPanX,
+      handPanY,
+    });
   };
 
   const handleRemoveZoomKeyframe = (id) => {
-    setZoomKeyframes((prev) => removeZoomKeyframe(prev, id));
+    removeZoomKeyframe(id);
   };
 
-  const handleClearZoomKeyframes = () => setZoomKeyframes([]);
+  const handleClearZoomKeyframes = () => clearZoomKeyframes();
 
   // Preview loop
   useEffect(() => {
@@ -1672,7 +1673,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   };
 
   const duration = videoMeta?.d ?? 0;
-  const sortedKeyframes = sortKeyframes(zoomKeyframes);
   const interval = tickInterval(duration);
   const ticks = [];
   if (duration > 0) {
