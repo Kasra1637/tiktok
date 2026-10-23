@@ -6640,11 +6640,9 @@ async def _schedule_post_kit(
 async def _load_post_kit_materials(generation_row: dict, user_id: str):
     """The render material a post kit is grounded in, or (None, None).
 
-    One owner for the two reads every kit path needs: the render's own
-    hook, script and CTA plus the app profile's verified facts. Missing
-    material is not an error here — the frozen writer skips quietly while
-    the explicit regenerate route answers 404 — so the policy difference
-    stays at the call sites and only the reads are shared.
+    One owner for the two reads every kit path needs. Missing material is
+    not an error here — the frozen writer skips quietly while regenerate
+    answers 404 — so that policy stays at the call sites.
     """
     project = None
     if generation_row.get("studio_project_id"):
@@ -6710,10 +6708,8 @@ async def regenerate_post_kit(
 ):
     """Write a fresh post kit for a render and replace the saved one.
 
-    Explicit by construction: nothing else calls generate_post_kit, so the
-    frozen copy only changes when the founder clicks Regenerate. A model or
-    storage failure answers loudly and leaves the stored kit untouched, so
-    the current copy stays on screen instead of being replaced by nothing.
+    Click-only by construction: nothing else calls generate_post_kit. A
+    failure answers loudly and leaves the stored kit untouched.
     """
     row = await _fetch_one(
         "SELECT post_kit, studio_project_id, brand_profile_id, status FROM generations WHERE id = ? AND user_id = ?",
@@ -6723,7 +6719,7 @@ async def regenerate_post_kit(
         raise HTTPException(status_code=404, detail="Generation not found")
     if str(row.get("status") or "") not in ("completed", "archived"):
         raise HTTPException(
-            status_code=409, detail="Only completed renders can regenerate post copy."
+            status_code=409, detail="Only finished renders can regenerate post copy."
         )
     project, profile = await _load_post_kit_materials(row, user_id)
     if not project or not profile:

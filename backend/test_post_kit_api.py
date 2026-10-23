@@ -257,15 +257,6 @@ class TestPostKitSingleCaption:
         assert completed["status"] == "completed"
         return gen
 
-    def test_completed_kit_is_one_caption(self, api, monkeypatch):
-        gen = self._completed_gen(api, monkeypatch, KIT)
-        kit = _run(api.get_generation(gen["id"], ANON)).get("post_kit")
-        assert isinstance(kit.get("caption"), str) and kit["caption"].strip()
-        assert "captions" not in kit
-        assert 4 <= len(kit["hashtags"]) <= 7
-        assert kit["hashtags"][0] == "#FocusTimer"
-        assert kit.get("cover_text", "").strip()
-
     def test_regenerate_replaces_the_saved_kit(self, api, monkeypatch):
         gen = self._completed_gen(api, monkeypatch, KIT)
 

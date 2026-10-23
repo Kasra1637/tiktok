@@ -3103,9 +3103,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   </AlertDescription>
                 </Alert>
               )}
-              {/* The frozen kit the export inherited, already on the save response.
-                  Regenerating here rewrites this export's own copy — the row
-                  carries the parent's project, so the endpoint resolves. */}
+              {/* Inherited kit from the save response; regenerate rewrites this export's own copy. */}
               {saved?.post_kit && (
                 <PostKitSection postKit={saved.post_kit} generationId={saved.id} />
               )}

@@ -16,9 +16,9 @@ the parser carried a branch for a shape the strict schema cannot produce.
 ## Decision
 
 - **The section owns the displayed copy.** Parents pass the starting kit
-  and the row id; a reloaded kit is adopted via render-phase sync, a mere
-  re-render never clobbers a fresh regeneration. Adding the section to a
-  new surface is one element, not a state protocol.
+  and the row id; plain state suffices because every new kit in the app
+  arrives via mount, never via re-render. Adding the section to a new
+  surface is one element, not a state protocol.
 - **The server reads material once.** `_load_post_kit_materials` serves
   both the frozen writer and the regenerate route; the quiet-skip vs loud
   404 difference stays at the call sites.
