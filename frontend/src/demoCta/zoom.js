@@ -1,9 +1,8 @@
 /**
  * Native Product Demo + CTA zoom-keyframe helpers.
  *
- * Ported faithfully from the standalone app. These are pure functions so the
- * preview/export split — live sliders during preview, locked values during
- * export — can be unit-tested without a canvas.
+ * Preview and export resolve the same timestamped locks. Only an explicit
+ * paused edit auditions live framing before the user captures another lock.
  */
 
 export function sortKeyframes(list) {
@@ -33,21 +32,21 @@ export function removeZoomKeyframe(prev, id) {
   return (Array.isArray(prev) ? prev : []).filter((k) => k.id !== id);
 }
 
-const DEFAULT_LOCKED = { vScale: 1, vOffX: 0, vOffY: 0, hZoom: 1, hPanX: 0, hPanY: 0 };
+const DEFAULT_LOCKED = { vScale: 1, vOffX: 0, vOffY: 0, hZoom: 1, hPanX: 0, hPanY: 0, phoneScale: 0.82 };
 
 /**
  * Resolve the zoom in force at `videoTime`.
  *
  * - No keyframes: live sliders, always.
- * - Before the first keyframe: locked defaults during export (so the export is
- *   deterministic), live sliders during preview (so adjustments show).
+ * - Paused edits: live framing for preview only, until Lock, seek or playback.
+ * - Before the first keyframe: defaults in preview and export alike.
  * - Past the last keyframe: the last lock holds, in both modes. The preview
  *   used to fall back to the live sliders here, which meant it showed a
  *   framing the export would not bake; the lock applies in preview and export
  *   alike so the two agree.
  * - Between locks: the active lock, rigidly.
  */
-export function getEffectiveZoom({ keyframes, live, videoTime, isExporting }) {
+export function getEffectiveZoom({ keyframes, live, videoTime, isExporting = false, isEditing = false }) {
   const sorted = sortKeyframes(keyframes);
   const liveValues = {
     vScale: live.scale,
@@ -56,8 +55,9 @@ export function getEffectiveZoom({ keyframes, live, videoTime, isExporting }) {
     hZoom: live.handZoom,
     hPanX: live.handPanX,
     hPanY: live.handPanY,
+    phoneScale: live.phoneScale ?? DEFAULT_LOCKED.phoneScale,
   };
-  if (sorted.length === 0) return liveValues;
+  if (sorted.length === 0 || (isEditing && !isExporting)) return liveValues;
 
   let active = null;
   for (let i = 0; i < sorted.length; i++) {
@@ -67,10 +67,7 @@ export function getEffectiveZoom({ keyframes, live, videoTime, isExporting }) {
       break;
     }
   }
-  if (!active) {
-    if (isExporting) return { ...DEFAULT_LOCKED };
-    return liveValues;
-  }
+  if (!active) return { ...DEFAULT_LOCKED };
   // Keyframes carry the slider namespaces (scale/offX/offY, handZoom/handPanX/
   // handPanY); the returned object carries the canvas namespaces (vScale/vOffX/
   // vOffY, hZoom/hPanX/hPanY). Keep the two apart: reading active.hPanX here
@@ -82,6 +79,7 @@ export function getEffectiveZoom({ keyframes, live, videoTime, isExporting }) {
     hZoom: active.handZoom,
     hPanX: active.handPanX,
     hPanY: active.handPanY,
+    phoneScale: active.phoneScale ?? DEFAULT_LOCKED.phoneScale,
   };
 }
 

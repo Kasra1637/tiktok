@@ -7405,15 +7405,12 @@ async function runDemoCtaChecks() {
     );
   });
 
-  // No option change moves the playhead. The canvas redraws either way —
-  // the six values are in the preview loop's deps — so the choice is visible
-  // on the next frame wherever the clip is paused. The old replay-from-top
-  // meant a founder who paused mid-clip to compare two faces lost their place
-  // on every click, and the forced play() restarted audio they had paused.
-  // Pause-then-replay must resume from the same spot, so the playhead and the
-  // play state are owned by the transport alone. (jsdom cannot observe play(),
-  // so this pins currentTime; the deleted effect set both together, and it is
-  // gone as one.)
+  // With no loaded clip there is no window to replay, so option changes hold
+  // the playhead. The canvas redraws either way — the six values are in the
+  // preview loop's deps — so the choice is visible on the next frame. (This
+  // mounts with a generation but no decoded clip, so videoMeta is empty and
+  // the scoped replay below is a deliberate no-op. jsdom cannot observe
+  // play(), so this pins currentTime.)
   await check("an overlay entrance, size or face change keeps the playhead", async (ctx) => {
     const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
     dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
@@ -7524,8 +7521,13 @@ async function runDemoCtaChecks() {
     global.HTMLCanvasElement = dom.window.HTMLCanvasElement;
     const origPlay = dom.window.HTMLMediaElement.prototype.play;
     const origLoad = dom.window.HTMLMediaElement.prototype.load;
+    const origPause = dom.window.HTMLMediaElement.prototype.pause;
     dom.window.HTMLMediaElement.prototype.play = () => Promise.resolve();
     dom.window.HTMLMediaElement.prototype.load = () => {};
+    dom.window.HTMLMediaElement.prototype.pause = function () {
+      if (Object.getOwnPropertyDescriptor(this, "paused")?.writable) this.paused = true;
+      this.dispatchEvent(new dom.window.Event("pause"));
+    };
     dom.window.document.createElement = (tag, opts) => {
       const el = origCreateElement(tag, opts);
       if (tag === "video") {
@@ -7557,6 +7559,7 @@ async function runDemoCtaChecks() {
       URL.revokeObjectURL = origRevokeObjectURL;
       dom.window.HTMLMediaElement.prototype.play = origPlay;
       dom.window.HTMLMediaElement.prototype.load = origLoad;
+      dom.window.HTMLMediaElement.prototype.pause = origPause;
       dom.window.document.createElement = origCreateElement;
       if (hadCanvasGlobal) global.HTMLCanvasElement = origCanvasGlobal;
       else delete global.HTMLCanvasElement;
@@ -7591,6 +7594,138 @@ async function runDemoCtaChecks() {
     return { flush, restore, loadClip };
   }
 
+  for (const mode of ["hand", "floating"]) {
+    await check(`multiple ${mode} zoom locks preview new edits and replay zoom-in/out`, async (ctx) => {
+      const clip = installLoadedClipStubs({ width: 1280, height: 720 });
+      const zoom = load("demoCta/zoom.js");
+      const originalResolve = zoom.getEffectiveZoom;
+      let paintedZoom;
+      zoom.getEffectiveZoom = (args) => {
+        paintedZoom = originalResolve(args);
+        return paintedZoom;
+      };
+      try {
+        await clip.loadClip(ctx);
+        const video = ctx.container.querySelector("video");
+        const canvas = ctx.container.querySelector("canvas");
+        Object.defineProperty(video, "paused", { configurable: true, value: true, writable: true });
+        const click = async (el) => {
+          if (!el) throw new Error("required zoom control missing");
+          await act(async () => el.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
+          await clip.flush();
+        };
+        const seek = async (time) => {
+          const slider = ctx.container.querySelector('[data-testid="demo-cta-scrubber"] [role="slider"]');
+          await act(async () => slider.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Home", bubbles: true })));
+          for (let t = 0; t < time; t++) {
+            await act(async () => slider.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
+          }
+          await act(async () => video.dispatchEvent(new dom.window.Event("seeked")));
+          await clip.flush();
+        };
+        const wheel = async (deltaY) => {
+          await act(async () => canvas.dispatchEvent(new dom.window.WheelEvent("wheel", { deltaY, bubbles: true, cancelable: true })));
+          await clip.flush();
+        };
+        const lock = async () => click([...ctx.container.querySelectorAll("button")].find((b) => b.textContent.trim() === "+ Lock"));
+        const value = () => mode === "hand" ? paintedZoom.hZoom : paintedZoom.phoneScale;
+        if (mode === "hand") await click(ctx.container.querySelector('[data-testid="view-mode-hand"]'));
+        await seek(0);
+        await lock();
+        const baseline = value();
+        await seek(2);
+        if (mode === "hand") {
+          await wheel(-200);
+        } else {
+          const thumb = ctx.container.querySelector('[data-testid="phone-size-slider"] [role="slider"]');
+          await act(async () => thumb.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "End", bubbles: true })));
+          await clip.flush();
+        }
+        const zoomedIn = value();
+        if (!(zoomedIn > baseline)) throw new Error(`new ${mode} zoom is hidden behind the first lock: ${zoomedIn} <= ${baseline}`);
+        if (video.currentTime !== 2 || !video.paused) throw new Error("framing edits must hold their timestamp");
+        await lock();
+        await seek(5);
+        if (mode === "hand") {
+          await wheel(400);
+        } else {
+          const thumb = ctx.container.querySelector('[data-testid="phone-size-slider"] [role="slider"]');
+          await act(async () => thumb.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Home", bubbles: true })));
+          await clip.flush();
+        }
+        const zoomedOut = value();
+        if (!(zoomedOut < baseline)) throw new Error(`new ${mode} zoom-out is hidden: ${zoomedOut} >= ${baseline}`);
+        await lock();
+        if (!ctx.container.textContent.includes("3 locked segments")) throw new Error("three distinct locks were not saved");
+        for (const [time, expected] of [[0, baseline], [1, baseline], [2, zoomedIn], [4, zoomedIn], [5, zoomedOut], [7, zoomedOut]]) {
+          await seek(time);
+          // Exercise actual playing paint, not just a paused seek.
+          await act(async () => {
+            video.paused = false;
+            video.dispatchEvent(new dom.window.Event("play"));
+          });
+          await clip.flush();
+          if (Math.abs(value() - expected) > 1e-9) throw new Error(`${mode} playback at ${time}s painted ${value()}, expected ${expected}`);
+          await act(async () => {
+            video.paused = true;
+            video.dispatchEvent(new dom.window.Event("pause"));
+          });
+        }
+        await seek(2);
+        if (mode === "hand") {
+          const thumb = ctx.container.querySelector('[data-testid="hand-zoom-slider"] [role="slider"]');
+          if (Number(thumb.getAttribute("aria-valuenow")) !== zoomedIn) throw new Error("hand controls do not reflect the active lock");
+        }
+        // The actual export callback must resolve saved locks too, even if a
+        // paused draft is still being auditioned. No codec/network is needed.
+        await wheel(-10);
+        const encoder = load("demoCta/exportTikTok.js");
+        const originalEncode = encoder.exportTikTok;
+        const originalFetch = global.fetch;
+        const handAssets = load("demoCta/handView.js");
+        const originalPrepare = handAssets.prepareHandViewImages;
+        handAssets.prepareHandViewImages = async () => {};
+        const rendered = [];
+        encoder.exportTikTok = async ({ canvas: target, drawFrame }) => {
+          for (const time of [0, 2, 5, 7]) {
+            drawFrame(time, document.createElement("canvas"));
+            rendered.push(mode === "hand" ? paintedZoom.hZoom : paintedZoom.phoneScale);
+          }
+          throw new Error("Zoom export callback verified");
+        };
+        global.fetch = async () => ({ ok: true, blob: async () => new Blob() });
+        try {
+          await click(ctx.container.querySelector('[data-testid="demo-cta-export"]'));
+          if (JSON.stringify(rendered) !== JSON.stringify([baseline, zoomedIn, zoomedOut, zoomedOut])) {
+            throw new Error(`export did not render the saved ${mode} locks: ${JSON.stringify(rendered)}`);
+          }
+          if (!ctx.container.textContent.includes("Zoom export callback verified")) throw new Error("the export callback was not exercised");
+        } finally {
+          encoder.exportTikTok = originalEncode;
+          global.fetch = originalFetch;
+          handAssets.prepareHandViewImages = originalPrepare;
+        }
+        // Updating the same timestamp replaces one lock; removing it reveals
+        // the preceding lock again instead of leaving a stale live draft.
+        await seek(2);
+        await wheel(-20);
+        const replacement = value();
+        await lock();
+        if (!ctx.container.textContent.includes("3 locked segments")) throw new Error("updating a lock duplicated its timestamp");
+        await seek(3);
+        if (Math.abs(value() - replacement) > 1e-9) throw new Error("updated lock did not play back");
+        const remove = ctx.container.querySelectorAll('[title="Remove this keyframe"]')[1];
+        await click(remove);
+        if (Math.abs(value() - baseline) > 1e-9) throw new Error("removing a lock did not restore its predecessor");
+        await click([...ctx.container.querySelectorAll("button")].find((b) => b.textContent.trim() === "Clear"));
+        if (ctx.container.querySelector('[data-testid="demo-cta-keyframes"]')) throw new Error("Clear did not remove locks");
+      } finally {
+        zoom.getEffectiveZoom = originalResolve;
+        clip.restore();
+      }
+    });
+  }
+
   // Paused idle schedules zero frames; one settings change or seek paints
   // exactly one frame.
   await check("paused preview paints on demand: zero frames idle, one per change and seek", async (ctx) => {
@@ -7609,7 +7744,7 @@ async function runDemoCtaChecks() {
       if (paints !== idle) {
         throw new Error(`paused idle painted ${paints - idle} extra frame(s); the loop is not parked`);
       }
-      // One settings change paints exactly one frame and holds the playhead.
+      // One settings change paints exactly one frame and replays its window.
       video.currentTime = 4;
       const hookGroup = [...ctx.container.querySelectorAll("button[aria-expanded]")]
         .find((b) => (b.textContent || "").trim() === "Hook Text");
@@ -7633,8 +7768,14 @@ async function runDemoCtaChecks() {
       if (paints !== paintsAfterOpen + 1) {
         throw new Error(`an entrance change painted ${paints - paintsAfterOpen} frame(s), expected exactly 1`);
       }
-      if (video.currentTime !== 4) {
-        throw new Error(`an entrance change moved the playhead (now at ${video.currentTime}s)`);
+      // A hook style pick replays the hook window from frame 0 and parks at
+      // the hook end instead of holding mid-clip: loop switches off for the
+      // window so a CTA replay ending at the clip end cannot wrap either.
+      if (video.currentTime !== 0) {
+        throw new Error(`a hook entrance change did not replay the hook window (at ${video.currentTime}s, expected 0)`);
+      }
+      if (video.loop !== false) {
+        throw new Error("a hook entrance change did not hold the scoped window (loop still on)");
       }
       // One paused seek paints exactly one frame.
       const paintsBeforeSeek = paints;
@@ -7645,8 +7786,81 @@ async function runDemoCtaChecks() {
       if (paints !== paintsBeforeSeek + 1) {
         throw new Error(`a paused seek painted ${paints - paintsBeforeSeek} frame(s), expected exactly 1`);
       }
-      if (video.currentTime !== 4) {
-        throw new Error(`a seek moved the playhead (now at ${video.currentTime}s)`);
+      // A landed seek repaints once and holds wherever it lands — here the
+      // replay start the entrance change left behind. (Direct currentTime
+      // assignment is the test-only path; real seeks go through the
+      // transport, which is what ends the scoped window.)
+    } finally {
+      clip.restore();
+    }
+  });
+
+  // A hook style tweak replays the hook window and a CTA tweak replays the
+  // end card — never the middle of the clip. With an 8s stubbed clip the
+  // hook window opens at frame 0 and the default 2s end card opens at 6s,
+  // so each replay lands exactly on its window start with looping held off
+  // (a CTA replay ending at the clip end must not wrap to the top). A
+  // founder seek through the transport then ends the window and hands free
+  // playback back.
+  await check("a hook tweak replays the hook and a CTA tweak replays the end card", async (ctx) => {
+    const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    const clip = installLoadedClipStubs({ width: 1280, height: 720 });
+    try {
+      await clip.loadClip(ctx);
+      const video = ctx.container.querySelector("video");
+      if (!video) throw new Error("the preview media element is missing");
+      const openGroup = async (name) => {
+        const header = [...ctx.container.querySelectorAll("button[aria-expanded]")]
+          .find((b) => (b.textContent || "").trim() === name);
+        if (!header) throw new Error(`no ${name} group header`);
+        if (header.getAttribute("aria-expanded") !== "true") {
+          await act(async () => {
+            header.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {});
+        }
+      };
+      await openGroup("Hook Text");
+      video.currentTime = 4;
+      const fade = ctx.container.querySelector('[data-testid="caption-anim-fade"]');
+      if (!fade) throw new Error("no caption fade chip");
+      await act(async () => {
+        fade.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      });
+      await act(async () => {});
+      if (video.currentTime !== 0) {
+        throw new Error(`a hook tweak did not replay the hook window (at ${video.currentTime}s, expected 0)`);
+      }
+      if (video.loop !== false) {
+        throw new Error("a hook replay did not hold the window (loop still on)");
+      }
+      await openGroup("End Card CTA");
+      video.currentTime = 1;
+      const ctaFade = ctx.container.querySelector('[data-testid="cta-anim-fade"]');
+      if (!ctaFade) throw new Error("no CTA fade chip");
+      await act(async () => {
+        ctaFade.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      });
+      await act(async () => {});
+      if (video.currentTime !== 6) {
+        throw new Error(`a CTA tweak did not replay the end card (at ${video.currentTime}s, expected 6)`);
+      }
+      if (video.loop !== false) {
+        throw new Error("a CTA replay did not hold the window (loop still on)");
+      }
+      // Founder transport ends the window: +1s seeks through handleSeek,
+      // which clears the scope and restores the loop.
+      const fwd = ctx.container.querySelector('[data-testid="transport-forward-1s"]');
+      if (!fwd) throw new Error("no forward-1s transport button");
+      await act(async () => {
+        fwd.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      });
+      await act(async () => {});
+      if (video.currentTime !== 7) {
+        throw new Error(`the transport seek did not land (at ${video.currentTime}s, expected 7)`);
+      }
+      if (video.loop !== true) {
+        throw new Error("a founder seek did not end the scoped window (loop still off)");
       }
     } finally {
       clip.restore();
@@ -8537,6 +8751,60 @@ async function runDemoCtaChecks() {
     }
   );
 
+  await check("finished looks save only after clip review in End Card CTA and remain reusable", async (ctx) => {
+    const clip = installLoadedClipStubs({ width: 720, height: 1280 });
+    const openGroup = async (label) => {
+      const header = [...ctx.container.querySelectorAll("button[aria-expanded]")]
+        .find((b) => b.textContent.trim() === label);
+      if (header.getAttribute("aria-expanded") !== "true") await clickEl(ctx, header, `open ${label}`);
+    };
+    const get = (id) => ctx.container.querySelector(`[data-testid="${id}"]`);
+    try {
+      await clip.loadClip(ctx);
+      if (get("look-preset-save-btn")) throw new Error("Save look must not be in Source & Look");
+      await openGroup("Hook Text");
+      await clickEl(ctx, get("caption-font-nunito"), "pick hook font");
+      await clickEl(ctx, get("caption-anim-fade"), "pick hook entrance");
+      await clickEl(ctx, get("caption-size-preset-l"), "pick hook size");
+      await openGroup("End Card CTA");
+      const review = get("look-save-review");
+      if (!get("cta-controls").contains(review) || review.closest("details")) throw new Error("Save look must finish CTA setup outside its disclosures");
+      if (get("look-preset-save-btn").disabled !== true) throw new Error("Save look enabled before review");
+      await clickEl(ctx, get("cta-font-dm-sans"), "pick CTA font");
+      await clickEl(ctx, get("cta-anim-slide"), "pick CTA entrance");
+      await clickEl(ctx, get("cta-size-preset-s"), "pick CTA size");
+      const accent = ctx.container.querySelector('[data-testid^="overlay-accent-"]');
+      await clickEl(ctx, accent, "pick accent");
+      await typeInto(ctx, get("look-preset-name-input"), "My Brand Look", "name finished look");
+      if (!get("look-preset-save-btn").disabled) throw new Error("name alone enabled saving");
+      await clickEl(ctx, get("look-reviewed-checkbox"), "confirm preview review");
+      if (get("look-preset-save-btn").disabled) throw new Error("reviewed named look cannot be saved");
+      await clickEl(ctx, get("cta-anim-pop"), "change reviewed style");
+      if (get("look-reviewed-checkbox").getAttribute("aria-checked") !== "false" || !get("look-preset-save-btn").disabled) throw new Error("style changes reuse stale review approval");
+      await clickEl(ctx, get("look-reviewed-checkbox"), "review updated style");
+      await clickEl(ctx, get("look-preset-save-btn"), "save finished look");
+      if (!get("look-save-status").textContent.includes("My Brand Look") || get("look-preset-name-input").value) throw new Error("save lacks confirmation or leaves name populated");
+      const prefs = JSON.parse(dom.window.localStorage.getItem("hookforge.demoCta.overlayPrefs.v1"));
+      const saved = prefs.global.lookPresets.find((p) => p.name === "My Brand Look");
+      if (!saved || saved.captionFont !== "nunito" || saved.captionAnim !== "fade" || saved.captionScale !== 1.15 || saved.ctaFont !== "dm-sans" || saved.ctaAnim !== "pop" || saved.ctaScale !== 0.85) throw new Error(`saved styling differs from final choices: ${JSON.stringify(saved)}`);
+      await openGroup("Source & Look");
+      await clickEl(ctx, get("look-preset-launch"), "try another look");
+      await clickEl(ctx, get("look-preset-custom-my-brand-look"), "reuse saved look");
+      if (get("look-preset-custom-my-brand-look").getAttribute("aria-pressed") !== "true") throw new Error("saved look cannot be reapplied");
+      // Remount with no clip: the named look persists, but review/save is
+      // unavailable until there is footage to judge it against.
+      await act(async () => ctx.root.unmount());
+      ctx.root = createRoot(ctx.container);
+      await mount(load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor)(ctx);
+      if (!get("look-preset-custom-my-brand-look")) throw new Error("look was not restored after remount");
+      await openGroup("End Card CTA");
+      if (!get("look-reviewed-checkbox").disabled || !get("look-preset-save-btn").disabled || !get("look-preset-name-input").disabled) throw new Error("no-clip editor allows review or saving");
+      if (!get("look-review-hint").textContent.includes("Upload")) throw new Error("blocked save does not explain next step");
+    } finally {
+      clip.restore();
+    }
+  });
+
   await check(
     "Demo + CTA offers S/M/L size presets, safe-area guard, copy flipper, timing presets, and named looks",
     async (ctx) => {
@@ -8562,13 +8830,9 @@ async function runDemoCtaChecks() {
           if (ugcPreset.getAttribute("aria-pressed") !== "true") {
             throw new Error("UGC style preset did not become active after click");
           }
-          const nameInput = ctx.container.querySelector('[data-testid="look-preset-name-input"]');
-          const saveBtn = ctx.container.querySelector('[data-testid="look-preset-save-btn"]');
-          if (!nameInput || !saveBtn) throw new Error("missing custom look preset input or save button");
-          await typeInto(ctx, nameInput, "My Brand Look", "type custom look name");
-          await clickEl(ctx, saveBtn, "save custom look");
-          const savedLook = ctx.container.querySelector('[data-testid="look-preset-custom-my-brand-look"]');
-          if (!savedLook) throw new Error("custom named look preset did not render after saving");
+          if (ctx.container.querySelector('[data-testid="look-preset-save-btn"]')) {
+            throw new Error("saving a new look is still offered prematurely in Source & Look");
+          }
 
           // #1 & #2 & #3 on Hook Text
           await openGroup("Hook Text");

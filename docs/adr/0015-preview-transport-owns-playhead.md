@@ -1,6 +1,6 @@
 # 0015 — The preview transport owns the playhead; Sora leaves the font catalog
 
-- **Status:** accepted
+- **Status:** partially superseded by 0017 (scoped hook/CTA replay); font retirement remains accepted
 - **Date:** 2026-10-23
 - **Anchors:** `frontend/src/demoCta/DemoCtaEditor.jsx` (preview loop deps;
   transport play/pause; source-load effect);

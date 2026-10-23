@@ -32,4 +32,6 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0012](0012-timestamped-tiktok-export.md) | Timestamped, frame-by-frame encoding delivers one TikTok MP4 without real-time capture drift | accepted |
 | [0013](0013-eye-catching-motion-expansion.md) | Ten new background motions + ten shared overlay entrances; Output group removed | partially superseded by 0014 (picker retires underline, spotlight) |
 | [0014](0014-retire-underline-spotlight-entrances.md) | Retire underline + spotlight from the entrance picker; motion kept for old renders | accepted |
-| [0015](0015-preview-transport-owns-playhead.md) | Preview transport owns the playhead (no replay on option change); Sora leaves the font catalog | accepted |
+| [0015](0015-preview-transport-owns-playhead.md) | Preview transport owns the playhead (no replay on option change); Sora leaves the font catalog | partially superseded by 0017 (scoped overlay replay) |
+| [0016](0016-editable-zoom-lock-preview.md) | Paused zoom drafts remain editable; saved hand/phone locks drive preview and export | accepted |
+| [0017](0017-scoped-overlay-review.md) | Replay overlay windows; save reusable looks after final CTA review | accepted |

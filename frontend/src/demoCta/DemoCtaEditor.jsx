@@ -29,6 +29,7 @@ import { Alert, AlertDescription } from "../components/ui/alert";
 import { Progress } from "../components/ui/progress";
 import { Slider } from "../components/ui/slider";
 import { Switch } from "../components/ui/switch";
+import { Checkbox } from "../components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
 import { useReducedMotion } from "framer-motion";
 import { SectionCard, GroupLabel } from "../components/SectionCard";
@@ -664,6 +665,17 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   }, [storyStart, storyEnd, storyAvailable]);
   const [customLookPresets, setCustomLookPresets] = useState(() => prefLookPresets(overlayScope));
   const [newLookName, setNewLookName] = useState("");
+  const [reviewedLookKey, setReviewedLookKey] = useState(null);
+  const [savedLookNotice, setSavedLookNotice] = useState(null);
+  // Approval belongs to this clip and this exact reusable styling, not to
+  // whichever choices happen to be selected after the next edit.
+  const lookReviewKey = JSON.stringify([
+    videoUrl, captionFont, ctaFont, captionAnim, ctaAnim,
+    captionScale, ctaScale, overlayAccent,
+  ]);
+  const canReviewLook = !!videoUrl && Number.isFinite(videoMeta?.d) && videoMeta.d > 0 && !recording;
+  const lookReviewed = reviewedLookKey === lookReviewKey;
+  const canSaveLook = canReviewLook && lookReviewed && !!newLookName.trim();
 
   // Persist taste on change, per app with a global fallback. Convenience
   // only: private mode or quota failures must never break the editor.
@@ -749,7 +761,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
 
   const handleSaveLookPreset = () => {
     const trimmed = newLookName.trim();
-    if (!trimmed) return;
+    if (!canSaveLook) return;
     const slug = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || `look-${Date.now()}`;
     const entry = {
       id: `custom-${slug}`,
@@ -768,6 +780,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       return [...filtered, entry];
     });
     setNewLookName("");
+    setReviewedLookKey(null);
+    setSavedLookNotice({ name: trimmed, key: lookReviewKey });
   };
 
   const handleDeleteLookPreset = (id) => {
@@ -792,6 +806,19 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   } = useZoomKeyframes();
 
   const videoRef = useRef(null);
+  // Scoped replay: hook/CTA style tweaks (accent, face, entrance, size)
+  // restart playback inside that overlay's window only, then park at the
+  // window end — never playing past it into the middle of the clip. The
+  // ref holds the active window end; null means free transport. The video's
+  // loop is switched off for the replay and restored when it parks or the
+  // founder takes over transport, so a CTA replay ending at the clip end
+  // cannot wrap to the top on its own.
+  const scopedReplayRef = useRef(null);
+  const cancelScopedReplay = useCallback(() => {
+    scopedReplayRef.current = null;
+    const video = videoRef.current;
+    if (video) video.loop = true;
+  }, []);
   const previewCanvasRef = useRef(null);
   // The one file input, referenced so the empty frame's upload button can
   // drive it. Two inputs would mean two sources of truth and a duplicate
@@ -806,9 +833,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const exportAbortRef = useRef(null);
   useEffect(() => () => exportAbortRef.current?.abort(), []);
   const isExportingRef = useRef(false);
+  const editingZoomRef = useRef(false);
   const liveZoomRef = useRef({
     scale: 1, offX: 0, offY: 0,
-    handZoom: 1, handPanX: 0, handPanY: 0,
+    handZoom: 1, handPanX: 0, handPanY: 0, phoneScale: DEFAULTS.scale,
   });
   const sourceObjectUrlRef = useRef(null);
   const resultObjectUrlRef = useRef(null);
@@ -924,6 +952,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     // from holding Export enabled for a file that may never play.
     setVideoMeta(null);
     setResult(null);
+    editingZoomRef.current = false;
+    clearZoomKeyframes();
     if (resultObjectUrlRef.current) {
       URL.revokeObjectURL(resultObjectUrlRef.current);
       resultObjectUrlRef.current = null;
@@ -960,6 +990,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     }
     setVideoMeta(null);
     setResult(null);
+    editingZoomRef.current = false;
+    clearZoomKeyframes();
     setSaved(null);
     setSaveError(null);
     if (!generation) {
@@ -1060,6 +1092,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       raf = requestAnimationFrame(tick);
     };
     const onPlayTick = () => {
+      editingZoomRef.current = false;
       if (!raf) raf = requestAnimationFrame(tick);
     };
     const onPauseTick = () => {
@@ -1081,12 +1114,84 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     };
   }, [isSeeking]);
 
+  // Restart playback inside one overlay window so a style tweak replays
+  // where it lands. Hook replays from frame 0 to the hook end; the end card
+  // replays from its start to the clip end. With no loaded clip there is no
+  // window, so this is a no-op and the on-demand paint carries the change.
+  const startScopedPreview = useCallback((kind) => {
+    if (isExportingRef.current) return;
+    const video = videoRef.current;
+    const dur = videoMeta?.d ?? 0;
+    if (!video || !(dur > 0)) return;
+    let start;
+    let end;
+    if (kind === "hook") {
+      if (!hookEnabled) return;
+      end = Math.min(hookDuration, dur * 0.45);
+      start = 0;
+    } else if (kind === "cta") {
+      if (!ctaEnabled) return;
+      const window = resolveCtaWindow(ctaDuration, dur, ctaTimingMode);
+      end = dur;
+      start = Math.max(0, dur - window);
+    } else {
+      return;
+    }
+    if (!(end > start)) return;
+    scopedReplayRef.current = { end };
+    video.loop = false;
+    try {
+      video.currentTime = start;
+    } catch {
+      // A seekable clip always accepts this; a transient failure leaves the
+      // playhead where it is and the window guard still parks on time.
+    }
+    setCurrentTime(start);
+    video.play().then(() => setIsPlaying(true)).catch(() => {});
+  }, [videoMeta, hookEnabled, hookDuration, ctaEnabled, ctaDuration, ctaTimingMode]);
+
+  // Continuous sliders fire dozens of changes per drag; restarting the
+  // window on every tick would yank the playhead under the founder's hand.
+  // If the clip already plays inside the window, just retarget the end and
+  // let it run — otherwise restart it like a discrete pick.
+  const ensureScopedPreview = useCallback((kind) => {
+    const video = videoRef.current;
+    const dur = videoMeta?.d ?? 0;
+    if (!video || !(dur > 0)) return;
+    let start;
+    let end;
+    if (kind === "hook") {
+      if (!hookEnabled) return;
+      end = Math.min(hookDuration, dur * 0.45);
+      start = 0;
+    } else if (kind === "cta") {
+      if (!ctaEnabled) return;
+      const window = resolveCtaWindow(ctaDuration, dur, ctaTimingMode);
+      end = dur;
+      start = Math.max(0, dur - window);
+    } else {
+      return;
+    }
+    if (!(end > start)) return;
+    const t = video.currentTime;
+    if (!video.paused && t >= start - 0.05 && t < end) {
+      scopedReplayRef.current = { end };
+      video.loop = false;
+      return;
+    }
+    startScopedPreview(kind);
+  }, [videoMeta, hookEnabled, hookDuration, ctaEnabled, ctaDuration, ctaTimingMode, startScopedPreview]);
+
   // Stable so the Space shortcut below subscribes once: it closes over the
   // video ref and a state setter only, so an empty dep array is complete.
+  // An explicit press means free transport, so it always clears a scoped
+  // window first — resuming from a parked hook end must play on past it.
   const togglePlayPause = useCallback(() => {
     if (isExportingRef.current) return;
     const video = videoRef.current;
     if (!video) return;
+    cancelScopedReplay();
+    editingZoomRef.current = false;
     if (video.paused) {
       video.play().catch(() => {});
       setIsPlaying(true);
@@ -1094,7 +1199,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       video.pause();
       setIsPlaying(false);
     }
-  }, []);
+  }, [cancelScopedReplay]);
 
   const togglePreviewMuted = useCallback(() => {
     const video = videoRef.current;
@@ -1134,6 +1239,11 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const handleSeek = (time) => {
     const video = videoRef.current;
     if (!video) return;
+    // Founder-driven seeks own the playhead, so a scoped window ends here.
+    // (Scoped replays set currentTime directly and never call this.)
+    cancelScopedReplay();
+    editingZoomRef.current = false;
+    showZoomValues(zoomValuesAt(time));
     video.currentTime = time;
     setCurrentTime(time);
     // No paint here: the `seeked` event repaints once the seek lands, so a
@@ -1141,30 +1251,68 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   };
 
 
-  useEffect(() => {
-    liveZoomRef.current = {
-      scale: videoScale, offX: videoOffsetX, offY: videoOffsetY,
-      handZoom, handPanX, handPanY,
+  const showZoomValues = useCallback((values) => {
+    liveZoomRef.current = values;
+    setVideoScale(values.scale);
+    setVideoOffsetX(values.offX);
+    setVideoOffsetY(values.offY);
+    setHandZoom(values.handZoom);
+    setHandPanX(values.handPanX);
+    setHandPanY(values.handPanY);
+    setScale(values.phoneScale);
+  }, []);
+
+  const zoomValuesAt = useCallback((time) => {
+    const ez = getEffectiveZoom({
+      keyframes: zoomKeyframesRef.current, live: liveZoomRef.current, videoTime: time,
+    });
+    return {
+      scale: ez.vScale, offX: ez.vOffX, offY: ez.vOffY,
+      handZoom: ez.hZoom, handPanX: ez.hPanX, handPanY: ez.hPanY,
+      phoneScale: ez.phoneScale,
     };
-  }, [videoScale, videoOffsetX, videoOffsetY, handZoom, handPanX, handPanY]);
+  }, [zoomKeyframesRef]);
+
+  // Controls follow the lock under the playhead, rather than stale sliders
+  // from the last edit. A paused draft stays visible until Lock or transport.
+  useEffect(() => {
+    if (editingZoomRef.current || isExportingRef.current) return;
+    showZoomValues(zoomValuesAt(videoRef.current?.currentTime ?? currentTime));
+  }, [currentTime, isPlaying, zoomKeyframes, showZoomValues, zoomValuesAt]);
+
+  const updateZoomDraft = (patch) => {
+    if (isExportingRef.current) return;
+    const video = videoRef.current;
+    const base = editingZoomRef.current ? liveZoomRef.current : zoomValuesAt(video?.currentTime ?? 0);
+    cancelScopedReplay();
+    video?.pause();
+    setIsPlaying(false);
+    editingZoomRef.current = true;
+    showZoomValues({ ...base, ...(typeof patch === "function" ? patch(base) : patch) });
+    dirtyRef.current = true;
+    kickPreviewRef.current?.();
+  };
 
   const handleCaptureZoomLock = () => {
     const video = videoRef.current;
-    captureZoomKeyframe(video ? video.currentTime : 0, {
-      scale: videoScale,
-      offX: videoOffsetX,
-      offY: videoOffsetY,
-      handZoom,
-      handPanX,
-      handPanY,
-    });
+    if (!video || !videoMeta || isExportingRef.current) return;
+    const time = video.currentTime;
+    const snapshot = editingZoomRef.current ? liveZoomRef.current : zoomValuesAt(time);
+    captureZoomKeyframe(time, snapshot);
+    editingZoomRef.current = false;
+    dirtyRef.current = true;
+    kickPreviewRef.current?.();
   };
 
   const handleRemoveZoomKeyframe = (id) => {
+    editingZoomRef.current = false;
     removeZoomKeyframe(id);
   };
 
-  const handleClearZoomKeyframes = () => clearZoomKeyframes();
+  const handleClearZoomKeyframes = () => {
+    editingZoomRef.current = false;
+    clearZoomKeyframes();
+  };
 
   // Preview loop
   useEffect(() => {
@@ -1227,7 +1375,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         keyframes: zoomKeyframesRef.current,
         live: liveZoomRef.current,
         videoTime: vt,
-        isExporting: false,
+        isExporting: target !== canvas,
+        isEditing: editingZoomRef.current,
       });
 
       // Hoisted above both renderer branches: each draws the phone, and each
@@ -1257,7 +1406,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         ctx.fillStyle = bgGrad;
         ctx.fillRect(0, 0, cw, ch);
 
-        const fit = Math.min(cw / phoneW, ch / phoneH) * scale * 0.85;
+        const fit = Math.min(cw / phoneW, ch / phoneH) * ez.phoneScale * 0.85;
         const drawW = phoneW * fit;
         const drawH = phoneH * fit;
         const cx2 = cw / 2;
@@ -1751,7 +1900,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         ctx.restore();
 
       } else {
-        const fit = Math.min(cw / phoneW, ch / phoneH) * scale;
+        const fit = Math.min(cw / phoneW, ch / phoneH) * ez.phoneScale;
         const drawW = phoneW * fit;
         const drawH = phoneH * fit;
         const x = (cw - drawW) / 2;
@@ -1773,9 +1922,22 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       if (isExportingRef.current) return;
       const v = videoRef.current;
       const playing = !!v && !v.paused;
+      if (playing) editingZoomRef.current = false;
       if (playing || dirtyRef.current) {
         dirtyRef.current = false;
         paintFrame(canvas, v ? v.currentTime || 0 : 0, v);
+      }
+      // A scoped replay parks at its window end instead of playing past it:
+      // pausing here lands the scrubber on the exact window frame, and the
+      // loop restore below hands free transport back for the next press.
+      const scoped = scopedReplayRef.current;
+      if (playing && scoped && v && v.currentTime >= scoped.end - 0.08) {
+        scopedReplayRef.current = null;
+        v.pause();
+        v.loop = true;
+        setIsPlaying(false);
+        setCurrentTime(v.currentTime);
+        return;
       }
       if (playing) rafRef.current = requestAnimationFrame(draw);
     };
@@ -1793,6 +1955,15 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     const previewVideo = videoRef.current;
     previewVideo?.addEventListener("play", onPlayPaint);
     previewVideo?.addEventListener("seeked", onSeekedPaint);
+    // A CTA replay ending at the clip end fires `ended` instead of another
+    // frame: clear the window and hand free transport back same as the
+    // guarded park above.
+    const onEndedScoped = () => {
+      scopedReplayRef.current = null;
+      if (previewVideo) previewVideo.loop = true;
+      setIsPlaying(false);
+    };
+    previewVideo?.addEventListener("ended", onEndedScoped);
     dirtyRef.current = true;
     kick();
 
@@ -1801,6 +1972,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       kickPreviewRef.current = null;
       previewVideo?.removeEventListener("play", onPlayPaint);
       previewVideo?.removeEventListener("seeked", onSeekedPaint);
+      previewVideo?.removeEventListener("ended", onEndedScoped);
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
@@ -1809,11 +1981,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, zoomKeyframes]);
 
-  // Option changes never move the playhead. Every overlay value is also in
-  // the preview loop's deps above, so the canvas redraws with the new
-  // entrance, size or face on the next frame wherever the clip is paused —
-  // and pause-then-replay resumes from that same spot. The playhead and the
-  // play state are owned by the transport (and the source-load effect) alone.
+  // Hook/CTA style picks replay their own window; everything else leaves the
+  // playhead alone. Every overlay value is also in the preview loop's deps
+  // above, so the canvas redraws with the new entrance, size or face on the
+  // next frame even with no clip loaded — and pause-then-replay outside a
+  // scoped window still resumes from that same spot. The playhead and the
+  // play state otherwise stay with the transport (and the source-load
+  // effect) alone.
 
   const saveExport = async (blob, name) => {
     setSaving(true);
@@ -1941,8 +2115,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     const startHookY = hookOffsetY;
     const startCtaY = ctaOffsetY;
     const isHand = viewMode === "hand";
-    const startOffX = isHand ? handPanX : videoOffsetX;
-    const startOffY = isHand ? handPanY : videoOffsetY;
+    const framing = editingZoomRef.current ? liveZoomRef.current : zoomValuesAt(vt);
+    const startOffX = isHand ? framing.handPanX : framing.offX;
+    const startOffY = isHand ? framing.handPanY : framing.offY;
 
     const move = (ev) => {
       const dx = (ev.clientX - startX) / rect.width;
@@ -1959,11 +2134,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         setCtaOffsetX(0);
         setCtaOffsetY(startCtaY + dy);
       } else if (isHand) {
-        setHandPanX(startOffX + dx);
-        setHandPanY(startOffY + dy);
+        updateZoomDraft({ handPanX: startOffX + dx, handPanY: startOffY + dy });
       } else {
-        setVideoOffsetX(Math.max(-100, Math.min(100, Math.round(startOffX + dx * 200))));
-        setVideoOffsetY(Math.max(-100, Math.min(100, Math.round(startOffY + dy * 200))));
+        updateZoomDraft({
+          offX: Math.max(-100, Math.min(100, Math.round(startOffX + dx * 200))),
+          offY: Math.max(-100, Math.min(100, Math.round(startOffY + dy * 200))),
+        });
       }
     };
     const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
@@ -1973,11 +2149,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
 
   const handleWheel = (e) => {
     e.preventDefault();
-    if (viewMode === "hand") {
-      setHandZoom((z) => Math.max(0.4, Math.min(3, +(z - e.deltaY * 0.0015).toFixed(3))));
-    } else {
-      setVideoScale((s) => Math.max(0.5, Math.min(3, +(s - e.deltaY * 0.002).toFixed(2))));
-    }
+    updateZoomDraft((values) => viewMode === "hand"
+      ? { handZoom: Math.max(RANGES.handZoom.min, Math.min(RANGES.handZoom.max, +(values.handZoom - e.deltaY * 0.0015).toFixed(3))) }
+      : { phoneScale: Math.max(RANGES.scale.min, Math.min(RANGES.scale.max, +(values.phoneScale - e.deltaY * 0.0015).toFixed(3))) });
   };
 
   const duration = videoMeta?.d ?? 0;
@@ -2225,24 +2399,24 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   ))}
                 </div>
               </div>
-              <ControlSlider label="Phone size" value={scale} min={RANGES.scale.min} max={RANGES.scale.max} step={RANGES.scale.step} onChange={setScale} testId="phone-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
+              <ControlSlider label="Phone size" value={scale} min={RANGES.scale.min} max={RANGES.scale.max} step={RANGES.scale.step} onChange={(phoneScale) => updateZoomDraft({ phoneScale })} testId="phone-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
             </>
           )}
           {viewMode === "hand" && (
             <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
               <SubLabel>Hand size &amp; position</SubLabel>
               <p className="text-xs text-muted-foreground">Drag to move • scroll to zoom</p>
-              <ControlSlider label="Zoom" value={handZoom} min={RANGES.handZoom.min} max={RANGES.handZoom.max} step={RANGES.handZoom.step} onChange={setHandZoom} testId="hand-zoom-slider" format={(v) => `${v.toFixed(2)}x`} />
-              <ControlSlider label="H position" value={handPanX} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={setHandPanX} testId="hand-panx-slider" format={(v) => `${Math.round(v * 100)}%`} />
-              <ControlSlider label="V position" value={handPanY} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={setHandPanY} testId="hand-pany-slider" format={(v) => `${Math.round(v * 100)}%`} />
-              <ResetButton testId="hand-transform-reset-btn" onClick={() => { setHandZoom(1); setHandPanX(0); setHandPanY(0); }}>
+              <ControlSlider label="Zoom" value={handZoom} min={RANGES.handZoom.min} max={RANGES.handZoom.max} step={RANGES.handZoom.step} onChange={(handZoom) => updateZoomDraft({ handZoom })} testId="hand-zoom-slider" format={(v) => `${v.toFixed(2)}x`} />
+              <ControlSlider label="H position" value={handPanX} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={(handPanX) => updateZoomDraft({ handPanX })} testId="hand-panx-slider" format={(v) => `${Math.round(v * 100)}%`} />
+              <ControlSlider label="V position" value={handPanY} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={(handPanY) => updateZoomDraft({ handPanY })} testId="hand-pany-slider" format={(v) => `${Math.round(v * 100)}%`} />
+              <ResetButton testId="hand-transform-reset-btn" onClick={() => updateZoomDraft({ handZoom: 1, handPanX: 0, handPanY: 0 })}>
                 Reset hand framing
               </ResetButton>
             </div>
           )}
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="look-presets-block">
             <SubLabel>Named looks</SubLabel>
-            <p className="text-xs text-muted-foreground">Save font, entrance, size &amp; accent as a reusable look.</p>
+            <p className="text-xs text-muted-foreground">Start with a saved look. Save your finished styling in End Card CTA.</p>
             <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Look presets">
               {allLookPresets.map((look) => {
                 const active = isLookPresetActive(look);
@@ -2250,7 +2424,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   <div key={look.id} className="inline-flex items-center gap-1">
                     <Chip
                       active={active}
-                      onClick={() => applyLookPreset(look)}
+                      onClick={() => { applyLookPreset(look); startScopedPreview(hookEnabled ? "hook" : "cta"); }}
                       testId={`look-preset-${look.id}`}
                       ariaLabel={look.name}
                     >
@@ -2271,33 +2445,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 );
               })}
             </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                data-testid="look-preset-name-input"
-                value={newLookName}
-                onChange={(e) => setNewLookName(e.target.value)}
-                placeholder="Name current look (e.g. Founder raw)"
-                className={INPUT_CLASS}
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                data-testid="look-preset-save-btn"
-                disabled={!newLookName.trim()}
-                onClick={handleSaveLookPreset}
-                className="shrink-0"
-              >
-                Save look
-              </Button>
-            </div>
           </div>
         </EditorSection>
 
         <EditorSection title="Hook Text" icon={Type} open={openSections.hook} onToggle={() => toggleSection("hook")} testId="hook-controls">
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Switch data-testid="hook-toggle" checked={hookEnabled} onCheckedChange={setHookEnabled} />
+            <Switch data-testid="hook-toggle" checked={hookEnabled} onCheckedChange={(next) => { setHookEnabled(next); if (next) startScopedPreview("hook"); }} />
             Show opening hook text
           </label>
           <p className="text-xs text-muted-foreground">On-screen overlay only; spoken script unchanged.</p>
@@ -2309,7 +2462,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   <Chip
                     key={idx}
                     active={activeHookVariant === idx}
-                    onClick={() => selectHookVariant(idx)}
+                    onClick={() => { selectHookVariant(idx); startScopedPreview("hook"); }}
                     testId={`hook-variant-${idx}`}
                     ariaLabel={`Hook variant ${idx + 1}`}
                   >
@@ -2328,7 +2481,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               className={TEXTAREA_CLASS}
             />
           </div>
-          <ControlSlider label="On screen" value={hookDuration} min={RANGES.hookDuration.min} max={RANGES.hookDuration.max} step={RANGES.hookDuration.step} onChange={setHookDuration} testId="hook-duration-slider" format={(v) => `${v.toFixed(1)}s`} />
+          <ControlSlider label="On screen" value={hookDuration} min={RANGES.hookDuration.min} max={RANGES.hookDuration.max} step={RANGES.hookDuration.step} onChange={(val) => { setHookDuration(val); ensureScopedPreview("hook"); }} testId="hook-duration-slider" format={(v) => `${v.toFixed(1)}s`} />
           {/* Caption face: each tile set in its own face so the choice is
               visual, not a name to imagine. Selected state is the indigo
               ring, the same language as the accent swatches below. */}
@@ -2345,7 +2498,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   key={f.id}
                   type="button"
                   data-testid={`caption-font-${f.id}`}
-                  onClick={() => setCaptionFont(f.id)}
+                  onClick={() => { setCaptionFont(f.id); startScopedPreview("hook"); }}
                   aria-pressed={captionFont === f.id}
                   className={`focus-ring flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
                     captionFont === f.id
@@ -2359,17 +2512,17 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               ))}
             </div>
           </FontDisclosure>
-          <AccentPicker testPrefix="hook-accent" accent={overlayAccent} onAccentChange={setOverlayAccent} />
+          <AccentPicker testPrefix="hook-accent" accent={overlayAccent} onAccentChange={(c) => { setOverlayAccent(c); startScopedPreview("hook"); }} />
           <AnimDisclosure
             testId="caption-anim-disclosure"
             open={openDisclosure === "caption-animation"}
             onToggle={() => toggleDisclosure("caption-animation")}
             currentLabel={(OVERLAY_ANIMS.find((a) => a.id === captionAnim) || {}).label}
           >
-            <EntranceGrid value={captionAnim} onChange={setCaptionAnim} testPrefix="caption-anim" ariaLabel="Caption animation" />
+            <EntranceGrid value={captionAnim} onChange={(id) => { setCaptionAnim(id); startScopedPreview("hook"); }} testPrefix="caption-anim" ariaLabel="Caption animation" />
             <div className="space-y-2">
-              <ControlSlider label="Text size" value={captionScale} min={RANGES.overlayScale.min} max={RANGES.overlayScale.max} step={RANGES.overlayScale.step} onChange={setCaptionScale} testId="caption-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
-              <ScalePresets value={captionScale} onChange={setCaptionScale} testPrefix="caption-size-preset" ariaLabel="Caption size presets" />
+              <ControlSlider label="Text size" value={captionScale} min={RANGES.overlayScale.min} max={RANGES.overlayScale.max} step={RANGES.overlayScale.step} onChange={(val) => { setCaptionScale(val); ensureScopedPreview("hook"); }} testId="caption-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
+              <ScalePresets value={captionScale} onChange={(val) => { setCaptionScale(val); startScopedPreview("hook"); }} testPrefix="caption-size-preset" ariaLabel="Caption size presets" />
             </div>
             {!hookSafety.ok && (
               <div
@@ -2443,7 +2596,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
 
         <EditorSection title="End Card CTA" icon={Megaphone} open={openSections.cta} onToggle={() => toggleSection("cta")} testId="cta-controls">
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Switch data-testid="cta-toggle" checked={ctaEnabled} onCheckedChange={setCtaEnabled} />
+            <Switch data-testid="cta-toggle" checked={ctaEnabled} onCheckedChange={(next) => { setCtaEnabled(next); if (next) startScopedPreview("cta"); }} />
             Show closing call-to-action card
           </label>
           <p className="text-xs text-muted-foreground">On-screen end card. Write one clear next step.</p>
@@ -2455,7 +2608,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   <Chip
                     key={idx}
                     active={activeCtaVariant === idx}
-                    onClick={() => selectCtaVariant(idx)}
+                    onClick={() => { selectCtaVariant(idx); startScopedPreview("cta"); }}
                     testId={`cta-variant-${idx}`}
                     ariaLabel={`CTA variant ${idx + 1}`}
                   >
@@ -2493,6 +2646,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               onChange={(val) => {
                 setCtaTimingMode("custom");
                 setCtaDuration(val);
+                ensureScopedPreview("cta");
               }}
               testId="cta-duration-slider"
               format={(v) => (ctaTimingMode === "full" ? (duration > 0 ? `${duration.toFixed(1)}s` : "Full") : `${v.toFixed(1)}s`)}
@@ -2507,7 +2661,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                     key={p.id}
                     type="button"
                     data-testid={`cta-timing-${p.id}`}
-                    onClick={() => selectCtaTimingPreset(p.id)}
+                    onClick={() => { selectCtaTimingPreset(p.id); startScopedPreview("cta"); }}
                     aria-pressed={active}
                     className={`focus-ring flex-1 rounded-xl border px-3 py-2 text-xs transition-colors ${
                       active
@@ -2534,7 +2688,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   key={f.id}
                   type="button"
                   data-testid={`cta-font-${f.id}`}
-                  onClick={() => setCtaFont(f.id)}
+                  onClick={() => { setCtaFont(f.id); startScopedPreview("cta"); }}
                   aria-pressed={ctaFont === f.id}
                   className={`focus-ring flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
                     ctaFont === f.id
@@ -2554,10 +2708,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             onToggle={() => toggleDisclosure("cta-animation")}
             currentLabel={(OVERLAY_ANIMS.find((a) => a.id === ctaAnim) || {}).label}
           >
-            <EntranceGrid value={ctaAnim} onChange={setCtaAnim} testPrefix="cta-anim" ariaLabel="CTA animation" />
+            <EntranceGrid value={ctaAnim} onChange={(id) => { setCtaAnim(id); startScopedPreview("cta"); }} testPrefix="cta-anim" ariaLabel="CTA animation" />
             <div className="space-y-2">
-              <ControlSlider label="Text size" value={ctaScale} min={RANGES.overlayScale.min} max={RANGES.overlayScale.max} step={RANGES.overlayScale.step} onChange={setCtaScale} testId="cta-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
-              <ScalePresets value={ctaScale} onChange={setCtaScale} testPrefix="cta-size-preset" ariaLabel="CTA size presets" />
+              <ControlSlider label="Text size" value={ctaScale} min={RANGES.overlayScale.min} max={RANGES.overlayScale.max} step={RANGES.overlayScale.step} onChange={(val) => { setCtaScale(val); ensureScopedPreview("cta"); }} testId="cta-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
+              <ScalePresets value={ctaScale} onChange={(val) => { setCtaScale(val); startScopedPreview("cta"); }} testPrefix="cta-size-preset" ariaLabel="CTA size presets" />
             </div>
             {!ctaSafety.ok && (
             <div
@@ -2588,11 +2742,57 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             {(ctaOffsetX !== 0 || ctaOffsetY !== 0) && (
               <ResetButton onClick={() => { setCtaOffsetX(0); setCtaOffsetY(0); }}>Reset position</ResetButton>
             )}
-          <AccentPicker testPrefix="overlay-accent" accent={overlayAccent} onAccentChange={setOverlayAccent} />
+          <AccentPicker testPrefix="overlay-accent" accent={overlayAccent} onAccentChange={(c) => { setOverlayAccent(c); startScopedPreview("cta"); }} />
             <p className="text-xs leading-snug text-muted-foreground">
               Laid out inside TikTok&apos;s safe area — clear of the right icon rail and bottom caption strip.
             </p>
           </AnimDisclosure>
+          <div className="space-y-3 border-t border-[color:var(--hairline)] pt-3" data-testid="look-save-review">
+            <SubLabel>Happy with your look?</SubLabel>
+            <p className="text-xs text-muted-foreground">
+              Review the hook &amp; end card in the preview, then save their fonts, entrances, text sizes &amp; accent for your next video. Footage, copy &amp; zoom locks are not included.
+            </p>
+            {!canReviewLook && (
+              <p className="text-xs text-muted-foreground" data-testid="look-review-hint">
+                {recording ? "Wait for export to finish before saving a look." : "Upload a playable clip to review your look before saving."}
+              </p>
+            )}
+            <label className="flex items-start gap-2 text-xs text-muted-foreground">
+              <Checkbox
+                data-testid="look-reviewed-checkbox"
+                checked={lookReviewed}
+                disabled={!canReviewLook}
+                onCheckedChange={(checked) => setReviewedLookKey(checked === true ? lookReviewKey : null)}
+              />
+              I&apos;ve reviewed the current hook &amp; end-card styling in the preview.
+            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                data-testid="look-preset-name-input"
+                aria-label="Name your finished look"
+                value={newLookName}
+                onChange={(e) => setNewLookName(e.target.value)}
+                placeholder="Name current look (e.g. Founder raw)"
+                disabled={!canReviewLook}
+                className={`${INPUT_CLASS} min-w-0 flex-1 basis-40 disabled:opacity-50`}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                data-testid="look-preset-save-btn"
+                disabled={!canSaveLook}
+                onClick={handleSaveLookPreset}
+                className="shrink-0"
+              >
+                Save look
+              </Button>
+            </div>
+            <p role="status" className="text-xs text-muted-foreground" data-testid="look-save-status">
+              {savedLookNotice?.key === lookReviewKey ? `“${savedLookNotice.name}” saved. Apply it from Named looks in Source & Look.` : ""}
+            </p>
+          </div>
         </EditorSection>
 
         {/* The TikTok spec used to live in an Output group of its own, but with
@@ -2662,7 +2862,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   <option value="contain">Contain</option>
                   <option value="fill">Fill</option>
                 </select>
-                <ResetButton onClick={() => { setVideoFit("cover"); setVideoScale(1); setVideoOffsetX(0); setVideoOffsetY(0); }}>Reset</ResetButton>
+                <ResetButton onClick={() => { setVideoFit("cover"); updateZoomDraft({ scale: 1, offX: 0, offY: 0 }); }}>Reset</ResetButton>
               </div>
               {/* What each mode actually does, and the source size it is doing it
                   to. "Fill" reads as a synonym for "Cover" until you have seen
@@ -2673,9 +2873,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 {VIDEO_FIT_HINTS[videoFit] || VIDEO_FIT_HINTS.cover}
                 {videoMeta ? ` Source ${videoMeta.w}×${videoMeta.h}.` : ""}
               </p>
-              <ControlSlider label="Zoom" value={videoScale} min={RANGES.videoScale.min} max={RANGES.videoScale.max} step={RANGES.videoScale.step} onChange={setVideoScale} format={(v) => `${v.toFixed(2)}x`} />
-              <ControlSlider label="H offset" value={videoOffsetX} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => setVideoOffsetX(Math.round(v))} format={(v) => `${Math.round(v)}%`} />
-              <ControlSlider label="V offset" value={videoOffsetY} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => setVideoOffsetY(Math.round(v))} format={(v) => `${Math.round(v)}%`} />
+              <ControlSlider label="Zoom" value={videoScale} min={RANGES.videoScale.min} max={RANGES.videoScale.max} step={RANGES.videoScale.step} onChange={(scale) => updateZoomDraft({ scale })} format={(v) => `${v.toFixed(2)}x`} />
+              <ControlSlider label="H offset" value={videoOffsetX} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => updateZoomDraft({ offX: Math.round(v) })} format={(v) => `${Math.round(v)}%`} />
+              <ControlSlider label="V offset" value={videoOffsetY} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => updateZoomDraft({ offY: Math.round(v) })} format={(v) => `${Math.round(v)}%`} />
             </div>
           )}
         </EditorSection>
@@ -2791,7 +2991,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                           left: `${(seg.time / duration) * 100}%`,
                           width: `${((end - seg.time) / duration) * 100}%`,
                         }}
-                        title={`${formatTime(seg.time)} → ${formatTime(end)}: ${seg.scale.toFixed(2)}x`}
+                        title={`${formatTime(seg.time)} → ${formatTime(end)}: ${viewMode === "hand" ? `${seg.handZoom.toFixed(2)}x hand` : `${Math.round((seg.phoneScale ?? DEFAULTS.scale) * 100)}% phone`} · ${seg.scale.toFixed(2)}x video`}
                       />
                     );
                   })}
@@ -2970,7 +3170,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                     <div className="space-y-2 pb-1 pt-2">
                     {sortedKeyframes[0].time > 0.01 && (
                       <div className="flex items-center gap-2 rounded-lg border border-[color:var(--hairline)] bg-secondary/40 px-3 py-2">
-                        <span className="font-mono text-xs text-muted-foreground">0:00.0 → {formatTime(sortedKeyframes[0].time)} • default (1.00x)</span>
+                        <span className="font-mono text-xs text-muted-foreground">0:00.0 → {formatTime(sortedKeyframes[0].time)} • default framing</span>
                       </div>
                     )}
                     {sortedKeyframes.map((kf, idx, sorted) => {
@@ -2984,7 +3184,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                             className="focus-ring flex-1 rounded text-left font-mono text-xs tabular-nums text-muted-foreground transition hover:text-foreground"
                             title="Jump to this keyframe"
                           >
-                            {formatTime(kf.time)} → {formatTime(nextTime)} • {kf.scale.toFixed(2)}x zoom
+                            {formatTime(kf.time)} → {formatTime(nextTime)} • {viewMode === "hand" ? `${kf.handZoom.toFixed(2)}x hand` : `${Math.round((kf.phoneScale ?? DEFAULTS.scale) * 100)}% phone`} · {kf.scale.toFixed(2)}x video
                           </button>
                           <button
                             type="button"
@@ -2998,7 +3198,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                       );
                     })}
                     <p className="pt-0.5 text-xs text-muted-foreground">
-                      Pause → seek to exact time → adjust zoom → Lock. Each segment displays its locked zoom in the preview and export.
+                      Seek → adjust zoom → Lock. Adjustments pause the preview. Repeat at later times to zoom in or out; Play replays saved locks in preview and export.
                     </p>
                     </div>
                   </details>

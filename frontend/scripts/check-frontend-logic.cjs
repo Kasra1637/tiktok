@@ -573,11 +573,9 @@ check("a non-array requirement never blocks",
 /**
  * Native Product Demo + CTA engine math.
  *
- * The editor's zoom split — live sliders during preview, locked keyframes
- * during export — is the one behavior here that fails silently: get it wrong
- * and the preview lies about what the export will bake. These pin the pure
- * helpers the canvas loop reads, plus the export naming the file carries into
- * History, against the values the standalone app produced.
+ * Preview and export must resolve the same saved locks, while a paused
+ * framing edit can audition a live draft. These pin the pure helpers the
+ * canvas loop reads and the export naming the file carries into History.
  */
 const ZOOM_SRC = path.resolve(__dirname, "..", "src", "demoCta", "zoom.js");
 const DEMO_CONST_SRC = path.resolve(__dirname, "..", "src", "demoCta", "constants.js");
@@ -589,7 +587,7 @@ const LIVE = { scale: 2, offX: 10, offY: -5, handZoom: 1.5, handPanX: 0.2, handP
 // No keyframes: the sliders are the truth, preview or export.
 check("no keyframes means live sliders during preview",
   JSON.stringify(Z.getEffectiveZoom({ keyframes: [], live: LIVE, videoTime: 3, isExporting: false }))
-    === JSON.stringify({ vScale: 2, vOffX: 10, vOffY: -5, hZoom: 1.5, hPanX: 0.2, hPanY: -0.1 }));
+    === JSON.stringify({ vScale: 2, vOffX: 10, vOffY: -5, hZoom: 1.5, hPanX: 0.2, hPanY: -0.1, phoneScale: 0.82 }));
 check("no keyframes means live sliders during export",
   Z.getEffectiveZoom({ keyframes: [], live: LIVE, videoTime: 3, isExporting: true }).vScale === 2);
 
@@ -598,13 +596,14 @@ const KF = [
   { id: "b", time: 5, scale: 2.5, offX: 3, offY: 4, handZoom: 2, handPanX: 0.5, handPanY: 0.5 },
 ];
 
-// Before the first lock: preview shows the sliders so adjustments are visible,
-// export falls back to defaults so the file is deterministic.
-check("before the first keyframe the preview shows live sliders",
-  Z.getEffectiveZoom({ keyframes: KF, live: LIVE, videoTime: 1, isExporting: false }).vScale === 2);
+// Before the first lock, playback and export agree on default framing.
+// An explicit paused edit can still audition a new lock without changing it.
+check("before the first keyframe preview and export share default framing",
+  JSON.stringify(Z.getEffectiveZoom({ keyframes: KF, live: LIVE, videoTime: 1, isExporting: false }))
+    === JSON.stringify(Z.getEffectiveZoom({ keyframes: KF, live: LIVE, videoTime: 1, isExporting: true })));
 check("before the first keyframe the export uses defaults",
   JSON.stringify(Z.getEffectiveZoom({ keyframes: KF, live: LIVE, videoTime: 1, isExporting: true }))
-    === JSON.stringify({ vScale: 1, vOffX: 0, vOffY: 0, hZoom: 1, hPanX: 0, hPanY: 0 }));
+    === JSON.stringify({ vScale: 1, vOffX: 0, vOffY: 0, hZoom: 1, hPanX: 0, hPanY: 0, phoneScale: 0.82 }));
 
 // Between locks: the active lock, rigidly, in both modes.
 check("between keyframes the active lock applies",
@@ -622,6 +621,24 @@ check("past the last keyframe the preview keeps the last lock",
 check("past the last keyframe the export keeps the last lock",
   Z.getEffectiveZoom({ keyframes: KF, live: LIVE, videoTime: 9, isExporting: true }).vScale === 2.5
     && Z.getEffectiveZoom({ keyframes: KF, live: LIVE, videoTime: 9, isExporting: true }).hPanX === 0.5);
+
+check("a paused draft can preview the next zoom after an existing lock",
+  Z.getEffectiveZoom({ keyframes: KF, live: { ...LIVE, phoneScale: 0.95 }, videoTime: 6, isEditing: true, isExporting: false }).hZoom === 1.5
+    && Z.getEffectiveZoom({ keyframes: KF, live: { ...LIVE, phoneScale: 0.95 }, videoTime: 6, isEditing: true, isExporting: false }).phoneScale === 0.95);
+check("export ignores an uncommitted preview draft",
+  Z.getEffectiveZoom({ keyframes: KF, live: LIVE, videoTime: 6, isEditing: true, isExporting: true }).hZoom === 2);
+check("multiple hand and phone locks replay zoom-in and zoom-out at exact boundaries",
+  (() => {
+    let locks = [];
+    for (const [time, handZoom, phoneScale] of [[0, 1, 0.82], [2, 2, 1], [5, 0.8, 0.5]]) {
+      locks = Z.captureZoomLock(locks, time, { ...LIVE, handZoom, phoneScale });
+    }
+    return [[0, 1, 0.82], [1.99, 1, 0.82], [2, 2, 1], [4.99, 2, 1], [5, 0.8, 0.5], [8, 0.8, 0.5]]
+      .every(([videoTime, handZoom, phoneScale]) => [false, true].every((isExporting) => {
+        const actual = Z.getEffectiveZoom({ keyframes: locks, live: LIVE, videoTime, isExporting });
+        return actual.hZoom === handZoom && actual.phoneScale === phoneScale;
+      }));
+  })());
 
 // Capture: a lock within 0.05s updates in place, otherwise it appends.
 const captured = Z.captureZoomLock(KF, 2.02, { scale: 9, offX: 0, offY: 0, handZoom: 1, handPanX: 0, handPanY: 0 });
