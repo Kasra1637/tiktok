@@ -26,11 +26,12 @@ export function ThumbPair({
     onChange?.(current === next ? 0 : next);
   };
   return (
-    <div className="flex flex-wrap items-center gap-2" data-testid={testId}>
+    <div className="thumb-pair flex flex-wrap items-center gap-2" data-testid={testId}>
       <Button
         type="button"
         variant={current === 1 ? "brand" : "secondary"}
         size={size}
+        className={current === 1 ? "thumb-selected" : undefined}
         disabled={disabled}
         aria-pressed={current === 1}
         aria-label={upLabel}
@@ -45,6 +46,7 @@ export function ThumbPair({
         type="button"
         variant={current === -1 ? "brand" : "secondary"}
         size={size}
+        className={current === -1 ? "thumb-selected" : undefined}
         disabled={disabled}
         aria-pressed={current === -1}
         aria-label={downLabel}

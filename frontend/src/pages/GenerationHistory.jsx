@@ -13,8 +13,8 @@ import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } from "../lib/api";
 import { FactChip, FactList } from "../components/FactChip";
 import { PostKitSection } from "../components/PostKitSection";
-import { ComponentThumbs } from "../components/ComponentThumbs";
-import { recordSignal, verdictFor } from "../lib/feedback";
+import { HistoryFeedback } from "../components/HistoryFeedback";
+import { recordSignal } from "../lib/feedback";
 import { sentenceCase } from "../lib/copyCase";
 import {
   History as HistoryIcon,
@@ -373,16 +373,6 @@ function GenerationRow({ row, onChanged, defaultExpanded = false }) {
     wasExpanded.current = expanded;
   }, [expanded, expandTabId, row.id]);
 
-  // Votes cast during this visit, ahead of the next fetch. The drawer
-  // unmounts on collapse, so without this a thumb just pressed would reopen
-  // unpressed until the list reloads — even though the vote already saved.
-  const [voteOverrides, setVoteOverrides] = useState({});
-  const savedVerdicts = row.verdicts || {};
-  const thumbValue = (component) =>
-    voteOverrides[component] ?? verdictFor(savedVerdicts, component);
-  const rememberVote = useCallback((component, verdict) => {
-    setVoteOverrides((prev) => ({ ...prev, [component]: verdict }));
-  }, []);
 
   // The copy the browser can actually fetch, chosen by the same rule every
   // other screen uses (see durableMediaUrl): the durable upload, or the signed
@@ -659,82 +649,7 @@ function GenerationRow({ row, onChanged, defaultExpanded = false }) {
               <p className="text-xs text-muted-foreground" role="status">{strandedNote}</p>
             )}
 
-            <div className="space-y-3 border-t border-[color:var(--hairline)] pt-5" data-testid={`history-feedback-${row.id}`}>
-              <GroupLabel icon={Clapperboard}>Rate this render</GroupLabel>
-              <ComponentThumbs
-                component="video"
-                question="Did this render land?"
-                hint="One vote on the clip as a whole — the vote that counts most."
-                size="default"
-                resetKey={row.id}
-                initialValue={thumbValue("video")}
-                onVoted={rememberVote}
-                refs={{
-                  ...signalRefs,
-                  detail: row.model ? `model=${row.model}` : "",
-                }}
-                testId={`history-video-feedback-${row.id}`}
-              />
-              <details data-testid={`history-parts-feedback-${row.id}`} className="rounded-xl border border-[color:var(--hairline)] px-3 py-1.5">
-                <summary className="cursor-pointer list-none py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
-                  Rate the parts (optional) — goal, template, plan, script
-                </summary>
-                <p className="pb-2 text-xs text-muted-foreground">
-                  Only if one part specifically helped or hurt. Each part&apos;s votes steer only the step that makes it, never the render vote above.
-                </p>
-                <div className="ml-2 space-y-2 border-l-2 border-[color:var(--hairline)]">
-              <ComponentThumbs
-                component="goal"
-                question="Content goal"
-                hint="Shapes future goal suggestions for this app."
-                resetKey={`${row.id}:goal`}
-                initialValue={thumbValue("goal")}
-                onVoted={rememberVote}
-                refs={{
-                  ...signalRefs,
-                  detail: `objective=${row.objective || ""};kind=${row.angle_kind || ""}`,
-                }}
-                testId={`history-goal-feedback-${row.id}`}
-              />
-              <ComponentThumbs
-                component="template"
-                question="Hook template"
-                hint="Reorders and reshapes future template suggestions."
-                resetKey={`${row.id}:template`}
-                initialValue={thumbValue("template")}
-                onVoted={rememberVote}
-                refs={signalRefs}
-                testId={`history-template-feedback-${row.id}`}
-              />
-              <ComponentThumbs
-                component="plan"
-                question="Script plan"
-                hint="Steers future script plans for this app."
-                resetKey={`${row.id}:plan`}
-                initialValue={thumbValue("plan")}
-                onVoted={rememberVote}
-                refs={{
-                  ...signalRefs,
-                  detail: `plan v${Number(row.script_version) || 0}`,
-                }}
-                testId={`history-plan-feedback-${row.id}`}
-              />
-              <ComponentThumbs
-                component="script"
-                question="Spoken script"
-                hint="Guides future spoken scripts for this app."
-                resetKey={`${row.id}:script`}
-                initialValue={thumbValue("script")}
-                onVoted={rememberVote}
-                refs={{
-                  ...signalRefs,
-                  detail: `strategy v${Number(row.strategy_version) || 0}`,
-                }}
-                testId={`history-script-feedback-${row.id}`}
-              />
-                </div>
-              </details>
-            </div>
+            <HistoryFeedback row={row} signalRefs={signalRefs} />
 
             {/* Actions, in two tiers.
 
