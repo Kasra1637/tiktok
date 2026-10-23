@@ -659,12 +659,13 @@ function GenerationRow({ row, onChanged, defaultExpanded = false }) {
               <p className="text-xs text-muted-foreground" role="status">{strandedNote}</p>
             )}
 
-            <div className="space-y-2 border-t border-[color:var(--hairline)] pt-5" data-testid={`history-feedback-${row.id}`}>
-              <GroupLabel icon={Clapperboard}>Rate this render &amp; its parts</GroupLabel>
+            <div className="space-y-3 border-t border-[color:var(--hairline)] pt-5" data-testid={`history-feedback-${row.id}`}>
+              <GroupLabel icon={Clapperboard}>Rate this render</GroupLabel>
               <ComponentThumbs
                 component="video"
-                question="Generated video"
-                hint="Rates the generated video clip itself."
+                question="Did this render land?"
+                hint="One vote on the clip as a whole — the vote that counts most."
+                size="default"
                 resetKey={row.id}
                 initialValue={thumbValue("video")}
                 onVoted={rememberVote}
@@ -674,6 +675,14 @@ function GenerationRow({ row, onChanged, defaultExpanded = false }) {
                 }}
                 testId={`history-video-feedback-${row.id}`}
               />
+              <details data-testid={`history-parts-feedback-${row.id}`} className="rounded-xl border border-[color:var(--hairline)] px-3 py-1.5">
+                <summary className="cursor-pointer list-none py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+                  Rate the parts (optional) — goal, template, plan, script
+                </summary>
+                <p className="pb-2 text-xs text-muted-foreground">
+                  Only if one part specifically helped or hurt. Each part&apos;s votes steer only the step that makes it, never the render vote above.
+                </p>
+                <div className="ml-2 space-y-2 border-l-2 border-[color:var(--hairline)]">
               <ComponentThumbs
                 component="goal"
                 question="Content goal"
@@ -723,6 +732,8 @@ function GenerationRow({ row, onChanged, defaultExpanded = false }) {
                 }}
                 testId={`history-script-feedback-${row.id}`}
               />
+                </div>
+              </details>
             </div>
 
             {/* Actions, in two tiers.

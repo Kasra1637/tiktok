@@ -8558,7 +8558,7 @@ async function runDemoCtaChecks() {
   });
 
   await check(
-    "History offers thumbs for the generated video and its four components",
+    "History offers one primary video vote with optional part ratings",
     async (ctx) => {
       const GenerationHistory = load("pages/GenerationHistory.jsx").default;
       global.__SMOKE_THUMBS = [];
@@ -8587,6 +8587,37 @@ async function runDemoCtaChecks() {
               ctx.container.querySelector('[data-testid="history-expand"]'),
               "expand the render tile"
             );
+            const videoUp = ctx.container.querySelector(
+              `[data-testid="history-video-feedback-${COMPLETED.id}-thumb-up"]`
+            );
+            if (!videoUp) {
+              throw new Error("History is missing the primary video vote");
+            }
+            if (!ctx.container.textContent.includes("Did this render land?")) {
+              throw new Error("the primary vote does not ask about the render as a whole");
+            }
+            if (!/h-11/.test(videoUp.className)) {
+              throw new Error("the primary video vote is not larger than the part votes");
+            }
+            const goalUp = ctx.container.querySelector(
+              `[data-testid="history-goal-feedback-${COMPLETED.id}-thumb-up"]`
+            );
+            if (!goalUp || !/h-9/.test(goalUp.className)) {
+              throw new Error("per-part votes are not subordinate in size to the video vote");
+            }
+            const parts = ctx.container.querySelector(
+              `[data-testid="history-parts-feedback-${COMPLETED.id}"]`
+            );
+            if (!parts || parts.tagName !== "DETAILS") {
+              throw new Error("per-part votes are not demoted into an optional disclosure");
+            }
+            if (parts.open) {
+              throw new Error("per-part votes must start collapsed so they cannot be confused with the video vote");
+            }
+            await clickEl(ctx, parts.querySelector("summary"), "open the optional part ratings");
+            if (!parts.open) {
+              throw new Error("clicking the disclosure summary did not expand the part ratings");
+            }
             for (const part of ["video", "goal", "template", "plan", "script"]) {
               const up = ctx.container.querySelector(
                 `[data-testid="history-${part}-feedback-${COMPLETED.id}-thumb-up"]`

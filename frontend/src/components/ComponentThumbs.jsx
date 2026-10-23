@@ -23,6 +23,7 @@ export function ComponentThumbs({
   initialValue = 0,
   onVoted,
   disabled = false,
+  size = "sm",
   testId,
 }) {
   const startValue = (v) => (v > 0 ? 1 : v < 0 ? -1 : 0);
@@ -78,6 +79,7 @@ export function ComponentThumbs({
       <ThumbPair
         value={value}
         disabled={disabled}
+        size={size}
         upLabel="Good"
         downLabel="Not good"
         testId={`${testId}-thumb`}
