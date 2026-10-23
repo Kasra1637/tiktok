@@ -19,6 +19,26 @@ sys.path.insert(0, str(BACKEND_DIR))
 ANON = "anonymous"
 
 KIT = {
+    "caption": (
+        "Stop writing empty pages with one timed start — "
+        "a focus timer that starts in one tap. "
+        "What stalls your first sentence?"
+    ),
+    "hashtags": ["#FocusTimer", "#productivity", "#studytok", "#focus"],
+    "cover_text": "Stop writing empty pages",
+}
+
+KIT2 = {
+    "caption": (
+        "Stop staring at a blank page — "
+        "this timer starts your session in one tap. "
+        "What will you start first?"
+    ),
+    "hashtags": ["#FocusTimer", "#studywithme", "#deepwork", "#habits"],
+    "cover_text": "Start without stalling",
+}
+
+LEGACY_KIT = {
     "captions": [
         "Stop writing empty pages with one timed start.",
         "A focus timer that starts in one tap.",
@@ -216,3 +236,152 @@ class TestPostKitFrozenOnCompletion:
 
         _run(tasks())
         assert _run(api.get_generation(gen["id"], ANON)).get("post_kit") == KIT
+
+
+class TestPostKitSingleCaption:
+    """One caption per render: grounded, guarded, and exactly one."""
+
+    def _completed_gen(self, api, monkeypatch, kit, name="Post Kit Single"):
+        from models import StudioGenerationRequest
+
+        async def fake_kit(project, profile):
+            return dict(kit)
+
+        monkeypatch.setattr(api, "generate_video", _fake_generate_video)
+        monkeypatch.setattr(api, "poll_video_job", _fake_poll)
+        monkeypatch.setattr(api.ai_service, "generate_post_kit", fake_kit)
+        project = _ready_project(api, name)
+        gen = _run(api.submit_project_generation(
+            project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        completed = _run(api.poll_generation(gen["id"], ANON))
+        assert completed["status"] == "completed"
+        return gen
+
+    def test_completed_kit_is_one_caption(self, api, monkeypatch):
+        gen = self._completed_gen(api, monkeypatch, KIT)
+        kit = _run(api.get_generation(gen["id"], ANON)).get("post_kit")
+        assert isinstance(kit.get("caption"), str) and kit["caption"].strip()
+        assert "captions" not in kit
+        assert 4 <= len(kit["hashtags"]) <= 7
+        assert kit["hashtags"][0] == "#FocusTimer"
+        assert kit.get("cover_text", "").strip()
+
+    def test_regenerate_replaces_the_saved_kit(self, api, monkeypatch):
+        gen = self._completed_gen(api, monkeypatch, KIT)
+
+        async def fresh_kit(project, profile):
+            return dict(KIT2)
+
+        monkeypatch.setattr(api.ai_service, "generate_post_kit", fresh_kit)
+        res = _run(api.regenerate_post_kit(gen["id"], ANON))
+        assert res.get("post_kit") == KIT2
+        assert _run(api.get_generation(gen["id"], ANON)).get("post_kit") == KIT2
+        stored = _run(api._fetch_one(
+            "SELECT post_kit FROM generations WHERE id = ?", (gen["id"],)))
+        assert json.loads(stored["post_kit"]) == KIT2
+
+    def test_regenerate_failure_keeps_the_current_kit(self, api, monkeypatch):
+        gen = self._completed_gen(api, monkeypatch, KIT)
+
+        async def boom_kit(project, profile):
+            raise RuntimeError("text model is down")
+
+        monkeypatch.setattr(api.ai_service, "generate_post_kit", boom_kit)
+        err = None
+        try:
+            _run(api.regenerate_post_kit(gen["id"], ANON))
+        except Exception as e:  # noqa: BLE001 — asserting the loud failure
+            err = e
+        assert err is not None and getattr(err, "status_code", None) == 502
+        assert _run(api.get_generation(gen["id"], ANON)).get("post_kit") == KIT
+
+    def test_regenerate_missing_generation_is_404(self, api):
+        err = None
+        try:
+            _run(api.regenerate_post_kit(str(uuid.uuid4()), ANON))
+        except Exception as e:  # noqa: BLE001 — asserting the loud failure
+            err = e
+        assert err is not None and getattr(err, "status_code", None) == 404
+
+    def test_legacy_three_caption_kit_still_reads_through(self, api, monkeypatch):
+        gen = self._completed_gen(api, monkeypatch, KIT, "Post Kit Legacy")
+        _run(api._execute(
+            "UPDATE generations SET post_kit = ? WHERE id = ?",
+            (json.dumps(LEGACY_KIT), gen["id"])))
+        # The backend passes the frozen row through untouched; the UI shows
+        # the first of the three captions.
+        assert _run(api.get_generation(gen["id"], ANON)).get("post_kit") == LEGACY_KIT
+
+
+class TestPostKitCaptionGuards:
+    """The model response is validated before it can become post copy."""
+
+    def _materials(self):
+        project = {
+            "hook_line": "Stop writing empty pages",
+            "script": "A short script for the app.",
+            "cta": "Try it free",
+        }
+        profile = {
+            "brand_name": "FocusTimer",
+            "brand_description": "A focus timer.",
+            "target_audience": "students",
+            "tone_voice": "plain",
+            "claims_approved": ["3-day free trial"],
+            "claims_banned": ["cures anxiety"],
+        }
+        return project, profile
+
+    def test_happy_path_returns_single_caption(self, api, monkeypatch):
+        async def fake_chat(**kwargs):
+            return {
+                "caption": "Stop writing empty pages — a timer that starts in one tap. What stalls you?",
+                "hashtags": ["#FocusTimer", "#a", "#b", "#c"],
+                "cover_text": "Stop writing empty pages",
+            }
+
+        monkeypatch.setattr(api.ai_service, "_chat_json", fake_chat)
+        project, profile = self._materials()
+        kit = _run(api.ai_service.generate_post_kit(project, profile))
+        assert kit["caption"].startswith("Stop writing empty pages")
+        assert "captions" not in kit
+        assert len(kit["hashtags"]) == 4
+
+    def test_too_few_hashtags_is_loud(self, api, monkeypatch):
+        async def fake_chat(**kwargs):
+            return {
+                "caption": "Stop writing empty pages — a timer that starts in one tap. What stalls you?",
+                "hashtags": ["#FocusTimer"],
+                "cover_text": "Stop writing empty pages",
+            }
+
+        monkeypatch.setattr(api.ai_service, "_chat_json", fake_chat)
+        project, profile = self._materials()
+        with pytest.raises(RuntimeError):
+            _run(api.ai_service.generate_post_kit(project, profile))
+
+    def test_missing_caption_is_loud(self, api, monkeypatch):
+        async def fake_chat(**kwargs):
+            return {
+                "caption": "   ",
+                "hashtags": ["#FocusTimer", "#a", "#b", "#c"],
+                "cover_text": "Stop writing empty pages",
+            }
+
+        monkeypatch.setattr(api.ai_service, "_chat_json", fake_chat)
+        project, profile = self._materials()
+        with pytest.raises(RuntimeError):
+            _run(api.ai_service.generate_post_kit(project, profile))
+
+    def test_banned_claim_in_caption_is_loud(self, api, monkeypatch):
+        async def fake_chat(**kwargs):
+            return {
+                "caption": "Stop writing empty pages — this cures anxiety fast. Ready to try?",
+                "hashtags": ["#FocusTimer", "#a", "#b", "#c"],
+                "cover_text": "Stop writing empty pages",
+            }
+
+        monkeypatch.setattr(api.ai_service, "_chat_json", fake_chat)
+        project, profile = self._materials()
+        with pytest.raises(RuntimeError, match="banned claim"):
+            _run(api.ai_service.generate_post_kit(project, profile))

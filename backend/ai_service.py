@@ -2171,7 +2171,7 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
 
 
 POST_KIT_JSON_SCHEMA = _strict_object({
-    "captions": {"type": "array", "items": _str_prop()},
+    "caption": _str_prop(),
     "hashtags": {"type": "array", "items": _str_prop()},
     "cover_text": _str_prop(),
 })
@@ -2179,7 +2179,7 @@ POST_KIT_JSON_SCHEMA = _strict_object({
 
 async def generate_post_kit(project: dict, profile: dict) -> dict:
     """
-    Post kit for one render: 3 captions, a hashtag set, cover text.
+    Post kit for one render: 1 caption, a hashtag set, cover text.
 
     Grounded strictly in this render's own hook, script, and CTA plus the
     profile's verified facts. Anything outside that fails loudly instead of
@@ -2225,10 +2225,10 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
         f"RENDER MATERIAL:\n{json.dumps(context, indent=2)}\n\n"
         "Write the post kit for THIS clip only. Return ONLY a JSON object:\n"
         "{\n"
-        '  "captions": ["exactly 3 distinct captions, each under 25 words; the first "\n'
-        '    opens with the hook idea in the viewer\u2019s words, the second states what the "\n'
-        '    app does plainly, the third asks the viewer a question"],\n'
-        '  "hashtags": ["5 to 8 tags, #AppName first, then niche and functional tags"],\n'
+        '  "caption": ["one TikTok caption under 50 words: open with the hook idea in the "\n'
+        '    viewer\u2019s words, then state what the app does plainly, then end with "\n'
+        '    a short question"],\n'
+        '  "hashtags": ["4 to 7 tags, #AppName first, then niche and functional tags"],\n'
         '  "cover_text": "under 8 words for the cover, from the hook line only"\n'
         "}\n"
         "Rules: use ONLY the hook, script, CTA, and profile facts above. No "
@@ -2245,23 +2245,23 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
     if not isinstance(parsed, dict):
         raise RuntimeError("Post kit response was not an object.")
 
-    raw_captions = parsed.get("captions")
-    if isinstance(raw_captions, str):
-        raw_captions = [raw_captions]
-    captions = [str(c).strip()[:300] for c in (raw_captions or []) if str(c).strip()][:3]
+    raw_caption = parsed.get("caption")
+    if isinstance(raw_caption, list):
+        raw_caption = " ".join(str(c) for c in raw_caption)
+    caption = str(raw_caption or "").strip()[:300]
     raw_tags = parsed.get("hashtags")
     if isinstance(raw_tags, str):
         raw_tags = raw_tags.split()
-    hashtags = [str(t).strip()[:60] for t in (raw_tags or []) if str(t).strip()][:10]
+    hashtags = [str(t).strip()[:60] for t in (raw_tags or []) if str(t).strip()][:7]
     cover_text = str(parsed.get("cover_text") or "").strip()[:100]
-    if len(captions) != 3 or not hashtags or not cover_text:
-        raise RuntimeError("Post kit response was missing captions, hashtags, or cover text.")
+    if not caption or len(hashtags) < 4 or not cover_text:
+        raise RuntimeError("Post kit response was missing caption, hashtags, or cover text.")
 
     # Grounded means verifiable: a banned claim or a guarantee in post copy
     # is a bug, not a nuance — the render gate holds the video to this, so
     # the words posted beside it are held to it too.
     banned = _list("claims_banned")
-    for text in captions + [cover_text]:
+    for text in [caption, cover_text]:
         hits = find_banned_violations(text, banned)
         if hits:
             raise RuntimeError(
@@ -2272,7 +2272,7 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
             raise RuntimeError(
                 "Post kit used guarantee language: " + str(risks[0].get("claim", ""))
             )
-    return {"captions": captions, "hashtags": hashtags, "cover_text": cover_text}
+    return {"caption": caption, "hashtags": hashtags, "cover_text": cover_text}
 
 
 # How many tailored structures each approved profile gets. Ten is a full

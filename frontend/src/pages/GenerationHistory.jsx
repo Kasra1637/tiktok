@@ -164,7 +164,13 @@ function GenerationDetails({ generationId, onClose }) {
             )}
 
             {/* Same frozen kit as the drawer, read off the detail endpoint. */}
-            {detail.post_kit && <PostKitSection postKit={detail.post_kit} />}
+            {detail.post_kit && (
+              <PostKitSection
+                postKit={detail.post_kit}
+                generationId={detail.id || generationId}
+                onRegenerated={(kit) => setDetail((d) => (d ? { ...d, post_kit: kit } : d))}
+              />
+            )}
 
             {detail.prompt_used && (
               <DetailRow label="Exact prompt sent to the model">
@@ -329,6 +335,8 @@ function GenerationRow({ row, onChanged, defaultExpanded = false }) {
   const [checkingRecovery, setCheckingRecovery] = useState(false);
   const [recoveryStorageError, setRecoveryStorageError] = useState(null);
   const [playerVersion, setPlayerVersion] = useState(0);
+  // A regenerated kit replaces the saved copy in place without a list reload.
+  const [kitOverride, setKitOverride] = useState(null);
   // Set when a stranded row was re-checked and the provider is genuinely still
   // rendering. Distinct from `error`: this is a successful check that found the
   // render unfinished, not a failed action, so it must not read as one.
@@ -618,9 +626,13 @@ function GenerationRow({ row, onChanged, defaultExpanded = false }) {
             </FactList>
 
             {/* Frozen post copy for this render; pre-kit rows show nothing. */}
-            {row.post_kit && (
+            {(kitOverride ?? row.post_kit) && (
               <div className="space-y-3 border-t border-[color:var(--hairline)] pt-5">
-                <PostKitSection postKit={row.post_kit} />
+                <PostKitSection
+                  postKit={kitOverride ?? row.post_kit}
+                  generationId={row.id}
+                  onRegenerated={(kit) => setKitOverride(kit)}
+                />
               </div>
             )}
 

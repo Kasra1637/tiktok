@@ -1,22 +1,37 @@
-import { Check, Copy, MessageSquareText } from "lucide-react";
+import { useState } from "react";
+import { Check, Copy, MessageSquareText, RotateCcw } from "lucide-react";
 import { Button } from "./ui/button";
 import { GroupLabel } from "./SectionCard";
 import { FactChip, FactList } from "./FactChip";
 import { useCopyButton } from "../lib/copyClipboard";
+import { api, getErrorMessage } from "../lib/api";
 
 /**
- * The frozen post copy for one render: 3 captions, a hashtag set, cover text.
+ * The frozen post copy for one render: 1 caption, a hashtag set, cover text.
  *
- * Read-only: `postKit` is the stored object, and a null or empty kit renders
- * nothing — no placeholder, no derived copy. Shared by History's drawer,
- * the Details modal, the studio output moment, and the export card.
+ * Read-only except for Regenerate: `postKit` is the stored object, and a null
+ * or empty kit renders nothing — no placeholder, no derived copy. Old renders
+ * frozen with three `captions` still display their first one. Shared by
+ * History's drawer, the Details modal, the studio output moment, and the
+ * export card.
+ *
+ * Regeneration is explicit: it only runs when the founder clicks Regenerate,
+ * and a failure keeps the current copy on screen with the error instead of
+ * replacing it. `generationId` gates the button — the Demo + CTA export card
+ * shows an inherited copy and omits it there.
  */
-export function PostKitSection({ postKit }) {
+export function PostKitSection({ postKit, generationId, onRegenerated }) {
   const { copiedKey, copy } = useCopyButton();
+  const [regenBusy, setRegenBusy] = useState(false);
+  const [regenError, setRegenError] = useState(null);
 
-  const captions = postKit && Array.isArray(postKit.captions)
-    ? postKit.captions.filter((c) => String(c || "").trim())
-    : [];
+  const legacyFirst = Array.isArray(postKit?.captions)
+    ? postKit.captions.map((c) => String(c || "").trim()).find((c) => c)
+    : "";
+  const caption =
+    (typeof postKit?.caption === "string" && postKit.caption.trim()) ||
+    legacyFirst ||
+    "";
   const hashtags = postKit && Array.isArray(postKit.hashtags)
     ? postKit.hashtags.filter((t) => String(t || "").trim())
     : [];
@@ -25,44 +40,76 @@ export function PostKitSection({ postKit }) {
     : "";
 
   // A null or empty kit renders nothing: there is nothing honest to show.
-  if (captions.length === 0 && hashtags.length === 0 && !coverText) return null;
+  if (!caption && hashtags.length === 0 && !coverText) return null;
 
-  const allText = [...captions, hashtags.join(" ")].filter(Boolean).join("\n\n");
+  const allText = [caption, hashtags.join(" ")].filter(Boolean).join("\n\n");
+  const canRegenerate = !!generationId;
+
+  const handleRegenerate = async () => {
+    if (regenBusy || !canRegenerate) return;
+    setRegenBusy(true);
+    setRegenError(null);
+    try {
+      const res = await api.regeneratePostKit(generationId);
+      const kit = res && typeof res === "object" && res.post_kit ? res.post_kit : res;
+      if (onRegenerated) onRegenerated(kit);
+    } catch (err) {
+      // The stored copy is untouched server-side, so the current copy stays.
+      setRegenError(getErrorMessage(err));
+    } finally {
+      setRegenBusy(false);
+    }
+  };
 
   return (
     <div className="space-y-3" data-testid="post-kit">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <GroupLabel icon={MessageSquareText}>Post copy for this render</GroupLabel>
-        <CopyButton
-          testId="postkit-copy-all"
-          copied={copiedKey === "all"}
-          onCopy={() => copy("all", allText, "Post copy")}
-          label="Copy all"
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          {canRegenerate && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRegenerate}
+              disabled={regenBusy}
+              data-testid="postkit-regenerate"
+            >
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+              {regenBusy ? "Regenerating…" : "Regenerate"}
+            </Button>
+          )}
+          <CopyButton
+            testId="postkit-copy-all"
+            copied={copiedKey === "all"}
+            onCopy={() => copy("all", allText, "Post copy")}
+            label="Copy all"
+          />
+        </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        Written for this clip when it finished, from its approved hook. Paste a
-        caption with the hashtags when you publish.
+        Written for this clip when it finished, from its approved hook. Paste
+        the caption with the hashtags when you publish.
       </p>
+      {regenError && (
+        <p className="text-xs text-destructive" role="alert" data-testid="postkit-regenerate-error">
+          {regenError}
+        </p>
+      )}
 
-      {captions.length > 0 && (
-        <ol className="space-y-2">
-          {captions.map((caption, i) => (
-            <li key={`caption-${i}`} className="inset-panel space-y-1">
-              <div className="flex items-center justify-between gap-2">
-                <span className="eyebrow">Caption {i + 1}</span>
-                <CopyButton
-                  testId={`postkit-copy-caption-${i}`}
-                  copied={copiedKey === `caption-${i}`}
-                  onCopy={() => copy(`caption-${i}`, String(caption), `Caption ${i + 1}`)}
-                />
-              </div>
-              <p className="break-words text-sm leading-relaxed text-foreground/90">
-                {String(caption)}
-              </p>
-            </li>
-          ))}
-        </ol>
+      {caption && (
+        <div className="inset-panel space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className="eyebrow">Caption</span>
+            <CopyButton
+              testId="postkit-copy-caption-0"
+              copied={copiedKey === "caption-0"}
+              onCopy={() => copy("caption-0", String(caption), "Caption")}
+            />
+          </div>
+          <p className="break-words text-sm leading-relaxed text-foreground/90">
+            {String(caption)}
+          </p>
+        </div>
       )}
 
       {hashtags.length > 0 && (

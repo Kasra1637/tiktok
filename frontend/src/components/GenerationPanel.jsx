@@ -698,7 +698,13 @@ const handleGenerate = async () => {
               {/* Frozen post copy for this render; pre-kit renders show nothing. */}
               {generation.post_kit && (
                 <div className="space-y-3 border-t border-[color:var(--hairline)] pt-3">
-                  <PostKitSection postKit={generation.post_kit} />
+                  <PostKitSection
+                    postKit={generation.post_kit}
+                    generationId={generation.id}
+                    onRegenerated={(kit) =>
+                      setGeneration((g) => (g ? { ...g, post_kit: kit } : g))
+                    }
+                  />
                 </div>
               )}
               <ComponentThumbs

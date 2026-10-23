@@ -6691,6 +6691,59 @@ async def _maybe_write_post_kit(generation_id: str, user_id: str) -> Optional[di
     return kit
 
 
+@api_router.post("/generations/{generation_id}/post-kit/regenerate")
+async def regenerate_post_kit(
+    generation_id: str, user_id: str = Depends(get_current_user_id)
+):
+    """Write a fresh post kit for a render and replace the saved one.
+
+    Explicit by construction: nothing else calls generate_post_kit, so the
+    frozen copy only changes when the founder clicks Regenerate. A model or
+    storage failure answers loudly and leaves the stored kit untouched, so
+    the current copy stays on screen instead of being replaced by nothing.
+    """
+    row = await _fetch_one(
+        "SELECT post_kit, studio_project_id, brand_profile_id FROM generations WHERE id = ? AND user_id = ?",
+        (generation_id, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Generation not found")
+    project = None
+    if row.get("studio_project_id"):
+        project = await _fetch_one(
+            "SELECT hook_line, script, cta FROM studio_projects WHERE id = ? AND user_id = ?",
+            (row["studio_project_id"], user_id),
+        )
+    profile = None
+    if row.get("brand_profile_id"):
+        profile = await _fetch_one(
+            "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?",
+            (row["brand_profile_id"], user_id),
+        )
+    if not project or not profile:
+        raise HTTPException(
+            status_code=404, detail="Render material not found for a fresh post kit."
+        )
+    try:
+        kit = await _log_model_call(
+            "post_kit", "text", TEXT_MODEL,
+            lambda: ai_service.generate_post_kit(project, profile),
+            user_id,
+            brand_profile_id=row.get("brand_profile_id"),
+            studio_project_id=row.get("studio_project_id"),
+            generation_id=generation_id,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not regenerate post copy: {str(e)[:800]}")
+    if not isinstance(kit, dict):
+        raise HTTPException(status_code=502, detail="Could not regenerate post copy: empty response.")
+    await _execute(
+        "UPDATE generations SET post_kit = ?, updated_at = ? WHERE id = ?",
+        (json.dumps(kit), now_iso(), generation_id),
+    )
+    return {"post_kit": kit}
+
+
 @api_router.post("/generations/{generation_id}/poll")
 async def poll_generation(
     generation_id: str,

@@ -265,6 +265,8 @@ export const api = {
   getGenerations: (params = {}) => client.get("/generations", { params }).then((r) => r.data),
   getGeneration: (id) => client.get(`/generations/${id}`).then((r) => r.data),
   pollGeneration: (id) => client.post(`/generations/${id}/poll`).then((r) => r.data),
+  regeneratePostKit: (id) =>
+    client.post(`/generations/${id}/post-kit/regenerate`).then((r) => r.data),
   retryGeneration: (id) => client.post(`/generations/${id}/retry`).then((r) => r.data),
   retryGenerationStorage: (id) =>
     // Not a bare re-upload: when the provider download was what failed there is

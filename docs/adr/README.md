@@ -36,3 +36,4 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0016](0016-editable-zoom-lock-preview.md) | Paused zoom drafts remain editable; saved hand/phone locks drive preview and export | accepted |
 | [0017](0017-scoped-overlay-review.md) | Replay overlay windows; save reusable looks after final CTA review | accepted |
 | [0018](0018-retire-six-background-motions.md) | Retire six background motions from the picker; bloom becomes the default | accepted |
+| [0019](0019-one-caption-post-kit.md) | One TikTok caption per post kit, regenerable on demand | accepted |

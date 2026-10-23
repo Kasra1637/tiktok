@@ -6950,6 +6950,12 @@ async function runDemoCtaChecks() {
   // The frozen post kit is written at completion and the output moment reads
   // the same frozen object History keeps — never re-derived, never invented.
   const POST_KIT = {
+    caption:
+      "Stop writing empty pages with one timed start — a focus timer that starts in one tap. What stalls your first sentence?",
+    hashtags: ["#FocusTimer", "#productivity", "#studytok", "#focus"],
+    cover_text: "Stop writing empty pages",
+  };
+  const LEGACY_KIT = {
     captions: [
       "Stop writing empty pages with one timed start.",
       "A focus timer that starts in one tap.",
@@ -6964,10 +6970,11 @@ async function runDemoCtaChecks() {
   // cover text, and copy buttons, with only the site label differing.
   function assertFrozenKit(section, site) {
     if (!section) throw new Error(`no frozen post kit at ${site}`);
-    for (const line of POST_KIT.captions) {
-      if (!section.textContent.includes(line)) {
-        throw new Error(`post caption missing at ${site}: ${line.slice(0, 30)}`);
-      }
+    if (!section.textContent.includes(POST_KIT.caption)) {
+      throw new Error(`post caption missing at ${site}`);
+    }
+    if (section.textContent.includes("Caption 1")) {
+      throw new Error(`three-caption layout leaked at ${site}: one caption only`);
     }
     if (!section.textContent.includes("#FocusTimer")) {
       throw new Error(`post hashtags missing at ${site}`);
@@ -6996,6 +7003,87 @@ async function runDemoCtaChecks() {
       await mountStudio(ctx);
       if (ctx.container.querySelector('[data-testid="post-kit"]')) {
         throw new Error("a pre-kit render invents post copy at the output moment");
+      }
+    }
+  );
+
+  await check(
+    "an old three-caption kit still shows its first caption",
+    async (ctx) => {
+      await mountStudio(ctx, [{ ...COMPLETED, post_kit: LEGACY_KIT }]);
+      const section = ctx.container.querySelector('[data-testid="post-kit"]');
+      if (!section) throw new Error("a legacy kit renders nothing at the output moment");
+      if (!section.textContent.includes(LEGACY_KIT.captions[0])) {
+        throw new Error("a legacy kit lost its first caption");
+      }
+      for (const extra of LEGACY_KIT.captions.slice(1)) {
+        if (section.textContent.includes(extra)) {
+          throw new Error("a legacy kit shows more than its first caption");
+        }
+      }
+    }
+  );
+
+  await check(
+    "regenerate replaces the saved copy only when clicked",
+    async (ctx) => {
+      const FRESH = {
+        caption: "Fresh caption written on demand, never before the click.",
+        hashtags: ["#FocusTimer", "#fresh", "#deepwork", "#habits"],
+        cover_text: "Fresh cover",
+      };
+      let calls = 0;
+      await withApi(
+        {
+          regeneratePostKit: async () => {
+            calls += 1;
+            return { post_kit: FRESH };
+          },
+        },
+        async () => {
+          await mountStudio(ctx, [{ ...COMPLETED, post_kit: POST_KIT }]);
+        }
+      );
+      if (calls !== 0) throw new Error("the kit regenerated without a click");
+      const button = ctx.container.querySelector('[data-testid="postkit-regenerate"]');
+      if (!button) throw new Error("no Regenerate button on the post copy");
+      await withApi(
+        {
+          regeneratePostKit: async () => {
+            calls += 1;
+            return { post_kit: FRESH };
+          },
+        },
+        async () => clickEl(ctx, button, "regenerate the post copy")
+      );
+      if (calls !== 1) throw new Error("regenerate did not run exactly once on click");
+      const section = ctx.container.querySelector('[data-testid="post-kit"]');
+      if (!section || !section.textContent.includes(FRESH.caption)) {
+        throw new Error("regenerate did not replace the saved copy");
+      }
+      if (section.textContent.includes(POST_KIT.caption)) {
+        throw new Error("the old caption survived its replacement");
+      }
+    }
+  );
+
+  await check(
+    "a failed regenerate keeps the current copy and says so",
+    async (ctx) => {
+      await withApi({ regeneratePostKit: async () => { throw new Error("text model is down"); } }, async () => {
+        await mountStudio(ctx, [{ ...COMPLETED, post_kit: POST_KIT }]);
+        await clickEl(
+          ctx,
+          ctx.container.querySelector('[data-testid="postkit-regenerate"]'),
+          "regenerate the post copy"
+        );
+      });
+      const section = ctx.container.querySelector('[data-testid="post-kit"]');
+      if (!section || !section.textContent.includes(POST_KIT.caption)) {
+        throw new Error("a failed regenerate lost the current copy");
+      }
+      if (!ctx.container.querySelector('[data-testid="postkit-regenerate-error"]')) {
+        throw new Error("a failed regenerate shows no error");
       }
     }
   );
