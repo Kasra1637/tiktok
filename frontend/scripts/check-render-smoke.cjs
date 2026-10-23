@@ -10079,7 +10079,8 @@ await check(
       for (const marker of [
         'import { PostKitSection } from "../components/PostKitSection"',
         "saved?.post_kit",
-        "<PostKitSection postKit={saved.post_kit} />",
+        "postKit={saved.post_kit}",
+        "generationId={saved.id}",
       ]) {
         if (!src.includes(marker)) {
           throw new Error(

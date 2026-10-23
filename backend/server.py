@@ -6703,11 +6703,15 @@ async def regenerate_post_kit(
     the current copy stays on screen instead of being replaced by nothing.
     """
     row = await _fetch_one(
-        "SELECT post_kit, studio_project_id, brand_profile_id FROM generations WHERE id = ? AND user_id = ?",
+        "SELECT post_kit, studio_project_id, brand_profile_id, status FROM generations WHERE id = ? AND user_id = ?",
         (generation_id, user_id),
     )
     if not row:
         raise HTTPException(status_code=404, detail="Generation not found")
+    if str(row.get("status") or "") not in ("completed", "archived"):
+        raise HTTPException(
+            status_code=409, detail="Only completed renders can regenerate post copy."
+        )
     project = None
     if row.get("studio_project_id"):
         project = await _fetch_one(

@@ -1,6 +1,6 @@
 # 0019 — One TikTok caption per post kit, regenerable on demand
 
-- **Status:** accepted
+- **Status:** partially superseded by 0020 (export-card regenerate, question guard, completed-only)
 - **Date:** 2026-10-26
 - **Anchors:** `backend/ai_service.py` (`generate_post_kit`);
   `backend/server.py` (`regenerate_post_kit`);

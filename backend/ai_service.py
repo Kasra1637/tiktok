@@ -2227,7 +2227,7 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
         "{\n"
         '  "caption": ["one TikTok caption under 50 words: open with the hook idea in the "\n'
         '    viewer\u2019s words, then state what the app does plainly, then end with "\n'
-        '    a short question"],\n'
+        '    a short question — the caption\u2019s final character must be \u2018?\u2019"],\n'
         '  "hashtags": ["4 to 7 tags, #AppName first, then niche and functional tags"],\n'
         '  "cover_text": "under 8 words for the cover, from the hook line only"\n'
         "}\n"
@@ -2256,6 +2256,8 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
     cover_text = str(parsed.get("cover_text") or "").strip()[:100]
     if not caption or len(hashtags) < 4 or not cover_text:
         raise RuntimeError("Post kit response was missing caption, hashtags, or cover text.")
+    if not caption.endswith("?"):
+        raise RuntimeError("Post kit caption must end with its question.")
 
     # Grounded means verifiable: a banned claim or a guarantee in post copy
     # is a bug, not a nuance — the render gate holds the video to this, so

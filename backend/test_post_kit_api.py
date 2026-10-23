@@ -295,6 +295,21 @@ class TestPostKitSingleCaption:
         assert err is not None and getattr(err, "status_code", None) == 502
         assert _run(api.get_generation(gen["id"], ANON)).get("post_kit") == KIT
 
+    def test_regenerate_non_completed_render_is_loud(self, api, monkeypatch):
+        gen = self._completed_gen(api, monkeypatch, KIT, "Post Kit Gated")
+        _run(api._execute(
+            "UPDATE generations SET status = ?, post_kit = NULL WHERE id = ?",
+            ("failed", gen["id"])))
+        err = None
+        try:
+            _run(api.regenerate_post_kit(gen["id"], ANON))
+        except Exception as e:  # noqa: BLE001 — asserting the loud failure
+            err = e
+        assert err is not None and getattr(err, "status_code", None) == 409
+        stored = _run(api._fetch_one(
+            "SELECT post_kit FROM generations WHERE id = ?", (gen["id"],)))
+        assert stored["post_kit"] is None
+
     def test_regenerate_missing_generation_is_404(self, api):
         err = None
         try:
@@ -371,6 +386,19 @@ class TestPostKitCaptionGuards:
         monkeypatch.setattr(api.ai_service, "_chat_json", fake_chat)
         project, profile = self._materials()
         with pytest.raises(RuntimeError):
+            _run(api.ai_service.generate_post_kit(project, profile))
+
+    def test_caption_without_its_question_is_loud(self, api, monkeypatch):
+        async def fake_chat(**kwargs):
+            return {
+                "caption": "Stop writing empty pages — a timer that starts in one tap.",
+                "hashtags": ["#FocusTimer", "#a", "#b", "#c"],
+                "cover_text": "Stop writing empty pages",
+            }
+
+        monkeypatch.setattr(api.ai_service, "_chat_json", fake_chat)
+        project, profile = self._materials()
+        with pytest.raises(RuntimeError, match="question"):
             _run(api.ai_service.generate_post_kit(project, profile))
 
     def test_banned_claim_in_caption_is_loud(self, api, monkeypatch):

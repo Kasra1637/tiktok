@@ -17,8 +17,9 @@ import { api, getErrorMessage } from "../lib/api";
  *
  * Regeneration is explicit: it only runs when the founder clicks Regenerate,
  * and a failure keeps the current copy on screen with the error instead of
- * replacing it. `generationId` gates the button — the Demo + CTA export card
- * shows an inherited copy and omits it there.
+ * replacing it. `generationId` gates the button and identifies the row the
+ * fresh copy replaces — including the Demo + CTA export card, whose row
+ * inherits the project the endpoint resolves.
  */
 export function PostKitSection({ postKit, generationId, onRegenerated }) {
   const { copiedKey, copy } = useCopyButton();
