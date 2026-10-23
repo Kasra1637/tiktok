@@ -430,6 +430,11 @@ const apiStub = {
   generatePlan: async () => PROJECT_WITH_STRATEGY,
   generateStrategy: async () => PROJECT_WITH_STRATEGY,
   generateVideo: async () => SEGMENT,
+  // The drawer revalidates votes on every expand, so the detail endpoint
+  // must answer everywhere the list does. Empty verdicts by default, exactly
+  // like a render nobody rated; checks with rated rows override this with
+  // their own saved state.
+  getGeneration: async (id) => ({ id, verdicts: {} }),
   retryGeneration: async () => SEGMENT,
   markProjectReady: async () => PROJECT_WITH_STRATEGY,
   recordSignal: () => {},
@@ -7523,31 +7528,38 @@ async function runDemoCtaChecks() {
       // The player only mounts once a real clip supplies metadata, and jsdom
       // has no video pipeline — so no DOM here ever contains it. This asserts
       // the order in source instead: scrubber strip, then the single
-      // transport + Zoom Lock row, then export. A row that drifted above the
+      // transport + Export/Lock row, then export. A row that drifted above the
       // scrubber or a player that drifted below export means the compact
       // layout regressed, and no render test would notice.
       const src = fs.readFileSync(
         path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
         "utf8"
       );
-      // The Zoom Lock label carries layout classes beside `eyebrow`
-      // (shrink-0 so the flexible description wraps before the label does),
-      // so match it by pattern, not by exact class string.
+      // The lock action is a bare `+ Lock` button now — the Zoom Lock label
+      // and its description were removed, so match the button by pattern,
+      // not by exact class string.
       const order = [
         "demo-cta-player",
         "demo-cta-scrubber",
         "transport-play",
         'data-testid="demo-cta-export"',
       ].map((m) => src.indexOf(m));
-      const zoomMatch = /<span className="eyebrow[^"]*">Zoom Lock<\/span>/.exec(src);
-      order.push(zoomMatch ? zoomMatch.index : -1);
+      const lockMatch = />\s*\+ Lock\s*</.exec(src);
+      order.push(lockMatch ? lockMatch.index : -1);
       if (order.some((i) => i === -1)) {
-        throw new Error("the player card, scrubber, transport, Export, or Zoom Lock is missing from source");
+        throw new Error("the player card, scrubber, transport, Export, or + Lock is missing from source");
       }
       if (!order.every((v, i, a) => i === 0 || a[i - 1] < v)) {
         throw new Error(
           "the player is out of order in source. Scrubber first, then the single " +
-            "transport row with Export immediately left of the Zoom Lock label."
+            "transport row with Export immediately left of the + Lock button."
+        );
+      }
+      if (/Zoom Lock<\/span>|Hold this zoom from this point on/.test(src)) {
+        throw new Error(
+          "the Zoom Lock label or its description is back in the player row. " +
+            "The row is buttons only now; lock state reads off the timeline " +
+            "strip and the locked-segments disclosure."
         );
       }
       if (/On screen:|0:00\.0 → \{formatTime\(duration\)\}|justify-between px-0\.5/.test(src)) {
@@ -7580,7 +7592,7 @@ async function runDemoCtaChecks() {
       if (!/variant="accent"[\s\S]{0,160}?size="sm"[\s\S]{0,200}?data-testid="demo-cta-export"/.test(src)) {
         throw new Error(
           "the Export button is not the compact accent button inside the player " +
-            "row. A full-width variant there cannot fit beside Zoom Lock."
+            "row. A full-width variant there cannot fit beside the lock buttons."
         );
       }
       if (/h-11 w-full[\s\S]{0,120}?demo-cta-export/.test(src)) {
@@ -7589,7 +7601,7 @@ async function runDemoCtaChecks() {
       // The button must not be squeezable by its nowrap flex parent. It
       // carries .btn-studio, whose overflow:hidden (the sheen sweep) zeroes
       // the automatic minimum size flex items normally enjoy — so when the
-      // Zoom Lock group runs out of room the button shrinks below its own
+      // button cluster runs out of room the button shrinks below its own
       // text and the same overflow clips "Export MP4" mid-label. shrink-0
       // keeps its measured width; the flexible description beside it absorbs
       // the squeeze instead, by wrapping.
@@ -7600,23 +7612,15 @@ async function runDemoCtaChecks() {
             "clips the label."
         );
       }
-      // The outer row is nowrap at xl by contract, so the Zoom Lock group on
-      // its right must be the part that gives: without min-w-0 + wrap on the
-      // inner group and a flexible description, the long "Hold the current
-      // zoom..." copy forces the row past the 740px column and the Export
-      // button clips at the column edge — shrink-0 alone only chooses WHAT
-      // clips, not whether. This pins the actual fix, not the intent.
+      // The outer row is nowrap at xl by contract, so the button cluster on
+      // its right must still wrap: without min-w-0 + wrap on the inner
+      // group, the buttons force the row past the column and Export clips
+      // at the edge. This pins the actual fix, not the intent.
       if (!/ml-auto flex min-w-0 flex-wrap/.test(src)) {
         throw new Error(
-          "the Zoom Lock group cannot give inside the nowrap row. Without " +
-            "min-w-0 + flex-wrap there, its description forces the row past " +
+          "the button cluster cannot give inside the nowrap row. Without " +
+            "min-w-0 + flex-wrap there, the buttons force the row past " +
             "the column and Export clips at the edge."
-        );
-      }
-      if (!/min-w-\[120px\][\s\S]{0,80}?flex-1[\s\S]{0,80}?text-xs leading-snug/.test(src)) {
-        throw new Error(
-          "the Zoom Lock description is not the flexible item. It must absorb " +
-            "the squeeze by wrapping instead of pushing Export out of the row."
         );
       }
     }
@@ -7713,17 +7717,17 @@ async function runDemoCtaChecks() {
             // this is only a smoke test that the export-specific override is
             // gone rather than restored.
           }
-          // Order inside the player row: transport, time, Export, Zoom Lock.
+          // Order inside the player row: transport, time, Export, + Lock.
           const exportIdx = src.indexOf('data-testid="demo-cta-export"');
-          const zoomMatch2 = /<span className="eyebrow[^"]*">Zoom Lock<\/span>/.exec(src);
-          const zoomIdx = zoomMatch2 ? zoomMatch2.index : -1;
+          const lockMatch2 = />\s*\+ Lock\s*</.exec(src);
+          const lockIdx = lockMatch2 ? lockMatch2.index : -1;
           const playIdx = src.indexOf('testId="transport-play"');
-          if ([exportIdx, zoomIdx, playIdx].some((i) => i === -1)) {
-            throw new Error("the player row is missing transport, Export, or Zoom Lock");
+          if ([exportIdx, lockIdx, playIdx].some((i) => i === -1)) {
+            throw new Error("the player row is missing transport, Export, or + Lock");
           }
-          if (!(playIdx < exportIdx && exportIdx < zoomIdx)) {
+          if (!(playIdx < exportIdx && exportIdx < lockIdx)) {
             throw new Error(
-              "Export must sit left of the Zoom Lock label in the player row."
+              "Export must sit left of the + Lock button in the player row."
             );
           }
           // "Live preview" moved inside the frame, below the upload button, and
@@ -8663,6 +8667,7 @@ async function runDemoCtaChecks() {
               ],
             }),
             getAppProfiles: async () => ({ profiles: [PROFILE] }),
+            getGeneration: async () => ({ verdicts: { video: 1, goal: -1 } }),
                 },
           async () => {
             await mount(GenerationHistory, { onChanged: () => {} })(ctx);
@@ -8688,6 +8693,258 @@ async function runDemoCtaChecks() {
             }
             if ((global.__SMOKE_THUMBS || []).length !== 0) {
               throw new Error("restoring highlights recorded votes that were never cast");
+            }
+          }
+        );
+      } finally {
+        global.__SMOKE_THUMBS = [];
+      }
+    }
+  );
+
+  // A rated part must be visible without opening the disclosure, and the
+  // pressed thumb must carry more than a hairline: the collapsed summary
+  // names the rated count while each chosen thumb keeps its fill.
+  await check(
+    "History names rated parts on the collapsed disclosure with a clear selected state",
+    async (ctx) => {
+      const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+      global.__SMOKE_THUMBS = [];
+      try {
+        await withApi(
+          {
+            getGenerationHistory: async () => ({
+              generations: [
+                {
+                  ...COMPLETED,
+                  brand_name: "Test App",
+                  duration: 10,
+                  verdicts: { video: 1, goal: -1, plan: 1 },
+                },
+              ],
+            }),
+            getAppProfiles: async () => ({ profiles: [PROFILE] }),
+            getGeneration: async () => ({ verdicts: { video: 1, goal: -1, plan: 1 } }),
+          },
+          async () => {
+            await mount(GenerationHistory, { onChanged: () => {} })(ctx);
+            await clickEl(
+              ctx,
+              ctx.container.querySelector('[data-testid="history-expand"]'),
+              "expand the render tile"
+            );
+            const summary = ctx.container.querySelector(
+              `[data-testid="history-parts-feedback-${COMPLETED.id}"] summary`
+            );
+            if (!summary || !summary.textContent.includes("2 of 4 rated")) {
+              throw new Error("the collapsed disclosure does not name the rated part count");
+            }
+            const goalDown = ctx.container.querySelector(
+              `[data-testid="history-goal-feedback-${COMPLETED.id}-thumb-down"]`
+            );
+            const planUp = ctx.container.querySelector(
+              `[data-testid="history-plan-feedback-${COMPLETED.id}-thumb-up"]`
+            );
+            const templateUp = ctx.container.querySelector(
+              `[data-testid="history-template-feedback-${COMPLETED.id}-thumb-up"]`
+            );
+            if (!goalDown || !planUp || !templateUp) {
+              throw new Error("History is missing the part thumb controls");
+            }
+            for (const [el, name] of [[goalDown, "goal thumbs-down"], [planUp, "plan thumbs-up"]]) {
+              if (el.getAttribute("aria-pressed") !== "true" || !el.classList.contains("thumb-selected")) {
+                throw new Error(`a saved vote on ${name} is not unmistakably selected`);
+              }
+            }
+            if (templateUp.getAttribute("aria-pressed") === "true" || templateUp.classList.contains("thumb-selected")) {
+              throw new Error("an unrated part renders as selected");
+            }
+            const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+            if (!css.includes(".thumb-pair .thumb-selected")) {
+              throw new Error("the selected-thumb fill is not defined where it ships");
+            }
+            if (!css.includes(".thumb-pair > button:focus-visible")) {
+              throw new Error("the thumb keyboard focus ring is not defined where it ships");
+            }
+            if (!css.includes(".history-vote-block .thumb-pair .thumb-selected:focus-visible")) {
+              throw new Error("a focused selected thumb is indistinguishable from a selected one");
+            }
+            const voteBlock = ctx.container.querySelector(
+              `[data-testid="history-feedback-${COMPLETED.id}"]`
+            );
+            if (!voteBlock || !voteBlock.classList.contains("history-vote-block")) {
+              throw new Error("the History vote block is missing its focus scope");
+            }
+          }
+        );
+      } finally {
+        global.__SMOKE_THUMBS = [];
+      }
+    }
+  );
+
+  // Changing a saved vote must move the highlight at once: the other option
+  // presses, the old one releases, and exactly one change event is filed.
+  await check(
+    "History moves the highlight immediately when a saved vote is changed",
+    async (ctx) => {
+      const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+      global.__SMOKE_THUMBS = [];
+      try {
+        await withApi(
+          {
+            getGenerationHistory: async () => ({
+              generations: [
+                {
+                  ...COMPLETED,
+                  brand_name: "Test App",
+                  duration: 10,
+                  verdicts: { video: 1 },
+                },
+              ],
+            }),
+            getAppProfiles: async () => ({ profiles: [PROFILE] }),
+            getGeneration: async () => ({ verdicts: { video: 1 } }),
+          },
+          async () => {
+            await mount(GenerationHistory, { onChanged: () => {} })(ctx);
+            await clickEl(
+              ctx,
+              ctx.container.querySelector('[data-testid="history-expand"]'),
+              "expand the render tile"
+            );
+            const up = ctx.container.querySelector(
+              `[data-testid="history-video-feedback-${COMPLETED.id}-thumb-up"]`
+            );
+            const down = ctx.container.querySelector(
+              `[data-testid="history-video-feedback-${COMPLETED.id}-thumb-down"]`
+            );
+            if (!up || !down) {
+              throw new Error("History is missing the saved video vote");
+            }
+            if (up.getAttribute("aria-pressed") !== "true") {
+              throw new Error("the saved video thumbs-up is not highlighted before the change");
+            }
+            await clickEl(ctx, down, "change the video vote to thumbs-down");
+            if (down.getAttribute("aria-pressed") !== "true") {
+              throw new Error("the newly chosen thumbs-down is not highlighted");
+            }
+            if (up.getAttribute("aria-pressed") === "true") {
+              throw new Error("the old thumbs-up stayed highlighted after the change");
+            }
+            const recorded = (global.__SMOKE_THUMBS || []).map((t) => `${t.step}:${t.verdict}`);
+            if (recorded.join(",") !== "video:-1") {
+              throw new Error(`changing the vote should file exactly video:-1, got ${recorded.join(",")}`);
+            }
+          }
+        );
+      } finally {
+        global.__SMOKE_THUMBS = [];
+      }
+    }
+  );
+
+  // The list's verdicts go stale the moment a vote lands anywhere else, so
+  // the drawer revalidates on every expand: fresh server state wins, and a
+  // failed refetch keeps the list's verdicts instead of blanking the thumbs.
+  await check(
+    "History refetches a render's votes when its drawer opens",
+    async (ctx) => {
+      const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+      global.__SMOKE_THUMBS = [];
+      const row = {
+        ...COMPLETED,
+        brand_name: "Test App",
+        duration: 10,
+        verdicts: { video: 1 },
+      };
+      const fresh = { ...row, verdicts: { video: -1, goal: 1 } };
+      try {
+        await withApi(
+          {
+            getGenerationHistory: async () => ({ generations: [row] }),
+            getAppProfiles: async () => ({ profiles: [PROFILE] }),
+            getGeneration: async () => fresh,
+          },
+          async () => {
+            await mount(GenerationHistory, { onChanged: () => {} })(ctx);
+            await clickEl(
+              ctx,
+              ctx.container.querySelector('[data-testid="history-expand"]'),
+              "expand the render tile"
+            );
+            await act(async () => {});
+            const down = ctx.container.querySelector(
+              `[data-testid="history-video-feedback-${COMPLETED.id}-thumb-down"]`
+            );
+            const goalUp = ctx.container.querySelector(
+              `[data-testid="history-goal-feedback-${COMPLETED.id}-thumb-up"]`
+            );
+            if (!down || !goalUp) {
+              throw new Error("History is missing the revalidated thumb controls");
+            }
+            if (down.getAttribute("aria-pressed") !== "true" || !down.classList.contains("thumb-selected")) {
+              throw new Error("the drawer kept the stale list vote instead of the fresh server vote");
+            }
+            if (goalUp.getAttribute("aria-pressed") !== "true") {
+              throw new Error("a fresh saved part vote is not highlighted");
+            }
+            const summary = ctx.container.querySelector(
+              `[data-testid="history-parts-feedback-${COMPLETED.id}"] summary`
+            );
+            if (!summary || !summary.textContent.includes("1 of 4 rated")) {
+              throw new Error("the revalidated part vote is not counted on the collapsed disclosure");
+            }
+            if ((global.__SMOKE_THUMBS || []).length !== 0) {
+              throw new Error("revalidating votes recorded votes that were never cast");
+            }
+          }
+        );
+      } finally {
+        global.__SMOKE_THUMBS = [];
+      }
+    }
+  );
+
+  // A refetch that fails must leave the list's verdicts showing: the drawer
+  // degrades to possibly-stale highlights, never to blank thumbs.
+  await check(
+    "History keeps the list votes when the vote refetch fails",
+    async (ctx) => {
+      const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+      global.__SMOKE_THUMBS = [];
+      try {
+        await withApi(
+          {
+            getGenerationHistory: async () => ({
+              generations: [
+                {
+                  ...COMPLETED,
+                  brand_name: "Test App",
+                  duration: 10,
+                  verdicts: { video: 1 },
+                },
+              ],
+            }),
+            getAppProfiles: async () => ({ profiles: [PROFILE] }),
+            getGeneration: async () => { throw new Error("backend is down"); },
+          },
+          async () => {
+            await mount(GenerationHistory, { onChanged: () => {} })(ctx);
+            await clickEl(
+              ctx,
+              ctx.container.querySelector('[data-testid="history-expand"]'),
+              "expand the render tile"
+            );
+            await act(async () => {});
+            const up = ctx.container.querySelector(
+              `[data-testid="history-video-feedback-${COMPLETED.id}-thumb-up"]`
+            );
+            if (!up) {
+              throw new Error("History is missing the video vote after a failed refetch");
+            }
+            if (up.getAttribute("aria-pressed") !== "true" || !up.classList.contains("thumb-selected")) {
+              throw new Error("a failed refetch cleared the list's saved highlight");
             }
           }
         );
